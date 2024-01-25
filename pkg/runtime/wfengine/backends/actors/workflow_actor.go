@@ -30,7 +30,6 @@ import (
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
-	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/dapr/pkg/actors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -505,7 +504,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
 
-	wf.recordWorkflowExecutionTimestamps(ctx, esHistoryEvent, workflowName)
+	wf.recordWorkflowSchedulingLatency(ctx, esHistoryEvent, workflowName)
 	wfExecutionElapsedTime := float64(0)
 
 	defer func() {
@@ -667,24 +666,22 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 				// Setting executionStatus to failed if workflow has failed/terminated/cancelled
 				executionStatus = diag.StatusFailed
 			}
-			wfExecutionElapsedTime = wf.calculateWorkflowExecutionElapsedTime(state)
+			wfExecutionElapsedTime = wf.calculateWorkflowExecutionLatency(state)
 		}
 	}
 	return nil
 }
 
-func (*workflowActor) calculateWorkflowExecutionElapsedTime(state *workflowState) (wfExecutionElapsedTime float64) {
-	var execStartedTimestamp time.Time
+func (*workflowActor) calculateWorkflowExecutionLatency(state *workflowState) (wfExecutionElapsedTime float64) {
 	for _, e := range state.History {
-		if es := e.GetExecutionStarted(); es != nil {
-			execStartedTimestamp = es.GetExecutionStartedTimestamp().AsTime()
-			return diag.ElapsedSince(execStartedTimestamp)
+		if os := e.GetOrchestratorStarted(); os != nil {
+			return diag.ElapsedSince(e.Timestamp.AsTime())
 		}
 	}
 	return 0
 }
 
-func (*workflowActor) recordWorkflowExecutionTimestamps(ctx context.Context, esHistoryEvent *backend.HistoryEvent, workflowName string) {
+func (*workflowActor) recordWorkflowSchedulingLatency(ctx context.Context, esHistoryEvent *backend.HistoryEvent, workflowName string) {
 	if esHistoryEvent == nil {
 		return
 	}
@@ -692,8 +689,6 @@ func (*workflowActor) recordWorkflowExecutionTimestamps(ctx context.Context, esH
 	// If the event is an execution started event, then we need to record the scheduled start timestamp
 	if es := esHistoryEvent.GetExecutionStarted(); es != nil {
 		currentTimestamp := time.Now()
-		es.ExecutionStartedTimestamp = timestamppb.New(currentTimestamp)
-
 		var scheduledStartTimestamp time.Time
 		timestamp := es.GetScheduledStartTimestamp()
 
