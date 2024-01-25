@@ -675,7 +675,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 func (*workflowActor) calculateWorkflowExecutionLatency(state *workflowState) (wfExecutionElapsedTime float64) {
 	for _, e := range state.History {
 		if os := e.GetOrchestratorStarted(); os != nil {
-			return diag.ElapsedSince(e.Timestamp.AsTime())
+			return diag.ElapsedSince(e.GetTimestamp().AsTime())
 		}
 	}
 	return 0
