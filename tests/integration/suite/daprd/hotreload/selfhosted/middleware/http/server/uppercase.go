@@ -126,7 +126,7 @@ func (u *uppercase) Run(t *testing.T, ctx context.Context) {
 	u.daprd3.WaitUntilAppHealth(t, ctx)
 
 	client := util.HTTPClient(t)
-	assert.Len(t, util.GetMetaComponents(t, ctx, client, u.daprd1.HTTPPort()), 3)
+	assert.Len(t, util.GetMetaComponents(t, ctx, client, u.daprd1.HTTPPort()), 2)
 
 	t.Run("existing middleware should be loaded", func(t *testing.T) {
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, true)
@@ -152,7 +152,7 @@ spec:
 `), 0o600))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, u.daprd2.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(t, ctx, client, u.daprd2.HTTPPort()), 1)
 		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, true)
@@ -178,7 +178,7 @@ spec:
 `), 0o600))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, u.daprd3.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(t, ctx, client, u.daprd3.HTTPPort()), 1)
 		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, true)
@@ -220,7 +220,6 @@ spec:
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, u.daprd1.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "uppercase", Type: "middleware.http.routeralias", Version: "v1"},
 				{Name: "uppercase2", Type: "middleware.http.routeralias", Version: "v1"},
 			}, resp)
@@ -262,7 +261,6 @@ spec:
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, u.daprd1.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "uppercase", Type: "middleware.http.routeralias", Version: "v1"},
 				{Name: "uppercase2", Type: "middleware.http.uppercase", Version: "v1"},
 			}, resp)
@@ -285,12 +283,9 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(u.resDir3, "3.yaml")))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := util.GetMetaComponents(c, ctx, client, u.daprd1.HTTPPort())
-			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{{Name: "dapr", Type: "workflow.dapr", Version: "v1"}}, resp)
-			resp = util.GetMetaComponents(c, ctx, client, u.daprd2.HTTPPort())
-			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{{Name: "dapr", Type: "workflow.dapr", Version: "v1"}}, resp)
-			resp = util.GetMetaComponents(c, ctx, client, u.daprd3.HTTPPort())
-			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{{Name: "dapr", Type: "workflow.dapr", Version: "v1"}}, resp)
+			assert.Empty(c, util.GetMetaComponents(c, ctx, client, u.daprd1.HTTPPort()))
+			assert.Empty(c, util.GetMetaComponents(c, ctx, client, u.daprd2.HTTPPort()))
+			assert.Empty(c, util.GetMetaComponents(c, ctx, client, u.daprd3.HTTPPort()))
 		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, false)
