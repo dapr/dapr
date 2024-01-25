@@ -482,7 +482,15 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
 	}
 
-	pipeline, err := a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
+	var pipeline httpMiddleware.Pipeline
+
+	if a.globalConfig.Spec.HTTPPipelineSpec != nil {
+		pipeline, err = a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
+	} else {
+		comps := a.compStore.ListMatchComponents("middleware.")
+		pipeline, err = a.channels.BuildHTTPPipelineFromComponents(comps, "httpPipeline")
+	}
+
 	if err != nil {
 		log.Warnf("failed to build HTTP pipeline: %s", err)
 	}

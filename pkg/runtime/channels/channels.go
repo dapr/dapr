@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"sort"
 	"strconv"
 	"sync"
 	"time"
@@ -28,6 +29,7 @@ import (
 	contribmiddle "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
+	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	channelhttp "github.com/dapr/dapr/pkg/channel/http"
@@ -107,7 +109,14 @@ func (c *Channels) Refresh() error {
 	log.Debug("Refreshing channels")
 
 	// Create a HTTP channel for external HTTP endpoint invocation
-	pipeline, err := c.buildHTTPPipelineForSpec(c.appHTTPPipelineSpec, "app channel")
+	var pipeline middlehttp.Pipeline
+	var err error
+	if c.appHTTPPipelineSpec != nil {
+		pipeline, err = c.buildHTTPPipelineForSpec(c.appHTTPPipelineSpec, "app channel")
+	} else {
+		comps := c.compStore.ListMatchComponents("middleware.")
+		pipeline, err = c.BuildHTTPPipelineFromComponentsForSpec(comps, "appHttpPipeline")
+	}
 	if err != nil {
 		return fmt.Errorf("failed to build app HTTP pipeline: %w", err)
 	}
@@ -150,6 +159,85 @@ func (c *Channels) Refresh() error {
 	log.Debug("Channels refreshed")
 
 	return nil
+}
+
+func (c *Channels) BuildHTTPPipelineFromComponents(comps []compsv1alpha1.Component, expectedPiplineType string) (middlehttp.Pipeline, error) {
+	c.lock.RLock()
+	defer c.lock.RUnlock()
+	return c.BuildHTTPPipelineFromComponentsForSpec(comps, expectedPiplineType)
+}
+
+func (c *Channels) BuildHTTPPipelineFromComponentsForSpec(comps []compsv1alpha1.Component, expectedPiplineType string) (middlehttp.Pipeline, error) {
+	if len(comps) == 0 {
+		return middlehttp.Pipeline{}, nil
+	}
+	priorityHandlers := make(map[int]func(http.Handler) http.Handler)
+
+	pipeline := middlehttp.Pipeline{
+		Handlers: make([]func(next http.Handler) http.Handler, 0, len(comps)),
+	}
+
+	matchingComps := 0
+	for _, comp := range comps {
+		meta, err := c.meta.ToBaseMetadata(comp)
+		if err != nil {
+			return middlehttp.Pipeline{}, err
+		}
+		pipelineType := meta.Properties["pipelineType"]
+		if pipelineType != expectedPiplineType {
+			continue
+		}
+		priority := meta.Properties["priority"]
+		if priority == "" {
+			return middlehttp.Pipeline{}, fmt.Errorf("priority is not set for component %s", comp.Name)
+		}
+		priorityInt, err := strconv.Atoi(priority)
+		if err != nil {
+			return middlehttp.Pipeline{}, fmt.Errorf("unable to convert priority to integer for component %s: %w", comp.Name, err)
+		}
+		if err != nil {
+			return middlehttp.Pipeline{}, err
+		}
+		matchingComps++
+		md := contribmiddle.Metadata{Base: meta}
+		handler, err := c.registry.Create(comp.Spec.Type, comp.Spec.Version, md, comp.LogName())
+		if err != nil {
+			err = fmt.Errorf("process component %s error: %w", comp.Name, err)
+			if !comp.Spec.IgnoreErrors {
+				return middlehttp.Pipeline{}, err
+			}
+			log.Error(err)
+			continue
+		}
+
+		// priority is the string containing the int value
+		for {
+			// Check if the priority already exists in the map
+			if _, exists := priorityHandlers[priorityInt]; exists {
+				// If exists, increment the priorityInt by 1
+				priorityInt++
+			} else {
+				break // Break the loop when a unique priority is found
+			}
+		}
+		priorityHandlers[priorityInt] = handler
+
+		log.Infof("enabled %s/%s middleware with priority %s", comp.Spec.Type, comp.Spec.Version, priority)
+	}
+	// sort priorities
+	priorities := make([]int, 0, matchingComps)
+	for priority := range priorityHandlers {
+		priorities = append(priorities, priority)
+	}
+	sort.Ints(priorities)
+	// // pass the handler to pipeline.handlers according to priority value
+	// // arrange handlers according to priority
+
+	for _, priority := range priorities {
+		pipeline.Handlers = append(pipeline.Handlers, priorityHandlers[priority])
+	}
+
+	return pipeline, nil
 }
 
 func (c *Channels) BuildHTTPPipeline(spec *config.PipelineSpec) (middlehttp.Pipeline, error) {
@@ -259,7 +347,15 @@ func (c *Channels) initEndpointChannels() (map[string]channel.HTTPEndpointAppCha
 
 	channels := make(map[string]channel.HTTPEndpointAppChannel, len(endpoints))
 	if len(endpoints) > 0 {
-		pipeline, err := c.buildHTTPPipeline(c.appHTTPPipelineSpec)
+		var pipeline middlehttp.Pipeline
+		var err error
+		if c.appHTTPPipelineSpec != nil {
+			pipeline, err = c.buildHTTPPipeline(c.appHTTPPipelineSpec)
+		} else {
+			comps := c.compStore.ListMatchComponents("middleware.")
+			pipeline, err = c.BuildHTTPPipelineFromComponents(comps, "appHttpPipeline")
+		}
+
 		if err != nil {
 			return nil, err
 		}

@@ -16,6 +16,7 @@ package compstore
 import (
 	"errors"
 	"fmt"
+	"strings"
 
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
@@ -87,6 +88,18 @@ func (c *ComponentStore) ListComponents() []compsv1alpha1.Component {
 	defer c.lock.RUnlock()
 	comps := make([]compsv1alpha1.Component, len(c.components))
 	copy(comps, c.components)
+	return comps
+}
+
+func (c *ComponentStore) ListMatchComponents(match string) []compsv1alpha1.Component {
+	c.lock.RLock()
+	var comps []compsv1alpha1.Component
+	defer c.lock.RUnlock()
+	for _, c := range c.components {
+		if strings.HasPrefix(c.Spec.Type, match) {
+			comps = append(comps, c)
+		}
+	}
 	return comps
 }
 
