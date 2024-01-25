@@ -811,3 +811,37 @@ func TestHealthProbe(t *testing.T) {
 	require.NoError(t, err)
 	assert.False(t, success)
 }
+
+func TestNoInvalidTraceContext(t *testing.T) {
+	ctx := context.Background()
+
+	handler := &testHandlerHeaders{}
+	testServer := httptest.NewServer(handler)
+	c := Channel{
+		baseAddress: testServer.URL,
+		client:      http.DefaultClient,
+		compStore:   compstore.New(),
+	}
+	req := invokev1.NewInvokeMethodRequest("method").
+		WithContentType("text/plain").
+		WithMetadata(map[string][]string{invokev1.ContentLengthHeader: {"1"}}).
+		WithHTTPExtension(http.MethodPost, "").
+		WithRawDataString("1")
+	defer req.Close()
+
+	// act
+	resp, err := c.InvokeMethod(ctx, req, "")
+
+	// assert
+	require.NoError(t, err)
+	defer resp.Close()
+	body, _ := resp.RawDataFull()
+	actual := map[string]string{}
+	json.Unmarshal(body, &actual)
+	traceparent, hasTraceparent := actual["Traceparent"]
+	require.NoError(t, err)
+	if hasTraceparent {
+		assert.NotEqual(t, "00-00000000000000000000000000000000-0000000000000000-00", traceparent)
+	}
+	testServer.Close()
+}
