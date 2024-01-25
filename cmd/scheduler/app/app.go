@@ -87,6 +87,7 @@ func Run() {
 				Port:             opts.Port,
 				Security:         secHandler,
 				PlacementAddress: opts.PlacementAddress,
+				Mode:             modes.DaprMode(opts.Mode),
 			})
 
 			return server.Run(ctx)
