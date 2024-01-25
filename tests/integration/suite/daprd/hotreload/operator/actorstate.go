@@ -174,9 +174,7 @@ func (a *actorstate) Run(t *testing.T, ctx context.Context) {
 	httpClient := util.HTTPClient(t)
 
 	comps := util.GetMetaComponents(t, ctx, httpClient, a.daprdCreate.HTTPPort())
-	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
-		{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
-	}, comps)
+	require.ElementsMatch(t, []*rtv1.RegisteredComponents{}, comps)
 	inmemStore := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "mystore"},
@@ -191,7 +189,6 @@ func (a *actorstate) Run(t *testing.T, ctx context.Context) {
 
 	comps = util.GetMetaComponents(t, ctx, httpClient, a.daprdUpdate.HTTPPort())
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
-		{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
 			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
@@ -204,7 +201,6 @@ func (a *actorstate) Run(t *testing.T, ctx context.Context) {
 
 	comps = util.GetMetaComponents(t, ctx, httpClient, a.daprdDelete.HTTPPort())
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
-		{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
 			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},

@@ -157,10 +157,7 @@ func (a *actorstate) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := util.HTTPClient(t)
 
-	comps := util.GetMetaComponents(t, ctx, httpClient, a.daprdCreate.HTTPPort())
-	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
-		{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
-	}, comps)
+	require.Empty(t, util.GetMetaComponents(t, ctx, httpClient, a.daprdCreate.HTTPPort()))
 	require.NoError(t, os.WriteFile(filepath.Join(a.resDirCreate, "state.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -175,9 +172,8 @@ spec:
 `), 0o600))
 	a.loglineCreate.EventuallyFoundAll(t)
 
-	comps = util.GetMetaComponents(t, ctx, httpClient, a.daprdUpdate.HTTPPort())
+	comps := util.GetMetaComponents(t, ctx, httpClient, a.daprdUpdate.HTTPPort())
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
-		{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
 			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
@@ -197,7 +193,6 @@ spec:
 
 	comps = util.GetMetaComponents(t, ctx, httpClient, a.daprdDelete.HTTPPort())
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
-		{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
 			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
