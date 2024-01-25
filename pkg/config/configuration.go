@@ -263,7 +263,7 @@ func (m MetricSpec) GetEnabled() bool {
 func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
 		// The default is true in Dapr 1.13, but will be changed to false in 1.14+
-		// TODO @ItalyPaleAle: Metrics cardinality
+		// TODO @ItalyPaleAle [MetricsCardinality] Change default in 1.14
 		log.Warn("The default value for 'spec.metric.http.increasedCardinality' will change to 'false' in Dapr 1.14")
 		return true
 	}
@@ -274,7 +274,7 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 type MetricHTTP struct {
 	// If false, metrics for the HTTP server are collected with increased cardinality.
 	// The default is true in Dapr 1.13, but will be changed to false in 1.14+
-	// TODO @ItalyPaleAle: Metrics cardinality
+	// TODO @ItalyPaleAle [MetricsCardinality] Change default in 1.14
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
 }
 

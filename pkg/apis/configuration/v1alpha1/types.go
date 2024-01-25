@@ -221,7 +221,7 @@ type MetricSpec struct {
 type MetricHTTP struct {
 	// If false, metrics for the HTTP server are collected with increased cardinality.
 	// The default is true in Dapr 1.13, but will be changed to false in 1.14+
-	// TODO @ItalyPaleAle: Metrics cardinality
+	// TODO @ItalyPaleAle [MetricsCardinality] Change default in 1.14
 	// +optional
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty"`
 }
