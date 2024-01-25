@@ -60,7 +60,7 @@ func (m *httpServerHighCardinality) Run(t *testing.T, ctx context.Context) {
 	m.beforeRun(t, ctx)
 
 	t.Run("service invocation", func(t *testing.T) {
-		reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
+		reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
 		t.Cleanup(reqCancel)
 
 		// Invoke
@@ -74,7 +74,7 @@ func (m *httpServerHighCardinality) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("state stores", func(t *testing.T) {
-		reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
+		reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
 		t.Cleanup(reqCancel)
 
 		// Write state

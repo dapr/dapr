@@ -92,7 +92,7 @@ func (m *base) beforeRun(t *testing.T, ctx context.Context) {
 func (m *base) getMetrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
 
-	reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
+	reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
 	defer reqCancel()
 
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/metrics", m.daprd.MetricsPort()), nil)
@@ -102,7 +102,7 @@ func (m *base) getMetrics(t *testing.T, ctx context.Context) map[string]float64 
 	//nolint:bodyclose
 	res, err := m.httpClient.Do(req)
 	require.NoError(t, err)
-	defer closeBody(res.Body)
+	defer closeBody(t, res.Body)
 	require.Equal(t, http.StatusOK, res.StatusCode)
 
 	// Extract the metrics
@@ -135,15 +135,12 @@ func (m *base) doRequest(t *testing.T, req *http.Request) {
 	//nolint:bodyclose
 	res, err := m.httpClient.Do(req)
 	require.NoError(t, err)
-	defer closeBody(res.Body)
+	defer closeBody(t, res.Body)
 	require.True(t, res.StatusCode >= 200 && res.StatusCode <= 299)
 }
 
 // Drain body before closing
-func closeBody(body io.ReadCloser) error {
+func closeBody(t *testing.T, body io.ReadCloser) {
 	_, err := io.Copy(io.Discard, body)
-	if err != nil {
-		return err
-	}
-	return body.Close()
+	require.NoError(t, err)
 }

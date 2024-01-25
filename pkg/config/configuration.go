@@ -264,7 +264,7 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
 		// The default is true in Dapr 1.13, but will be changed to false in 1.14+
 		// TODO @ItalyPaleAle: Metrics cardinality
-		log.Warn("The default value for 'metric.http.increasedCardinality' will change to 'false' in Dapr 1.14")
+		log.Warn("The default value for 'spec.metric.http.increasedCardinality' will change to 'false' in Dapr 1.14")
 		return true
 	}
 	return *m.HTTP.IncreasedCardinality

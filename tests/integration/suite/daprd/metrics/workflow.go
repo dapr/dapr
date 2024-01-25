@@ -71,8 +71,6 @@ func (m *workflow) Run(t *testing.T, ctx context.Context) {
 	taskhubClient.StartWorkItemListener(taskhubCtx, r)
 	defer cancelTaskhub()
 
-	time.Sleep(5 * time.Second)
-
 	t.Run("successful workflow execution", func(t *testing.T) {
 		id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_success"))
 		require.NoError(t, err)
