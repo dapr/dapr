@@ -79,7 +79,7 @@ spec:
   version: v1
 `),
 		daprd.WithExecOptions(
-			exec.WithEnvVars("NAMESPACE", "mynamespace"),
+			exec.WithEnvVars(t, "NAMESPACE", "mynamespace"),
 		),
 	)
 	return []framework.Option{

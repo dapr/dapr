@@ -70,7 +70,7 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 	e.daprd = procdaprd.New(t,
 		procdaprd.WithAppID("my-app"),
 		procdaprd.WithMode("kubernetes"),
-		procdaprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
+		procdaprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
 		procdaprd.WithSentryAddress(e.sentry.Address()),
 		procdaprd.WithControlPlaneAddress(e.operator.Address(t)),
 		procdaprd.WithDisableK8sSecretStore(true),

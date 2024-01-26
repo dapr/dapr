@@ -79,7 +79,7 @@ func (s *secret) Setup(t *testing.T) []framework.Option {
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(s.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
-		daprd.WithExecOptions(exec.WithEnvVars(
+		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 			"FOO_SEC_1", "bar1",
 			"FOO_SEC_2", "bar2",
