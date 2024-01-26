@@ -110,14 +110,15 @@ func (n *noentities) Run(t *testing.T, ctx context.Context) {
 
 	gclient := n.daprd.GRPCClient(t, ctx)
 
+	//nolint:testifylint
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		meta, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		//nolint:testifylint
 		assert.NoError(c, err)
-		assert.True(c, meta.GetActorRuntime().GetHostReady())
-		assert.Empty(c, meta.GetActorRuntime().GetActiveActors())
-		assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
-		assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
+		actorRuntime := meta.GetActorRuntime()
+		assert.True(c, actorRuntime.GetHostReady())
+		assert.Empty(c, actorRuntime.GetActiveActors())
+		assert.Equal(c, rtv1.ActorRuntime_RUNNING, actorRuntime.GetRuntimeStatus())
+		assert.Equal(c, "placement: connected", actorRuntime.GetPlacement())
 	}, time.Second*15, time.Millisecond*100)
 
 	select {
