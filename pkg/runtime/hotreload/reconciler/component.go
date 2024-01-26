@@ -15,7 +15,6 @@ package reconciler
 
 import (
 	"context"
-	"strings"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
@@ -37,11 +36,6 @@ type component struct {
 //
 //nolint:unused
 func (c *component) update(ctx context.Context, comp componentsapi.Component) {
-	if strings.HasPrefix(comp.Spec.Type, "middleware.") {
-		log.Warnf("Hotreload is not supported for middleware components: %s", comp.LogName())
-		return
-	}
-
 	oldComp, exists := c.store.GetComponent(comp.Name)
 	_, _ = c.proc.Secret().ProcessResource(ctx, comp)
 
