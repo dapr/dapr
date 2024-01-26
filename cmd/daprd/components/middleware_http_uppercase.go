@@ -19,16 +19,16 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/dapr/components-contrib/middleware"
+	contribmiddleware "github.com/dapr/components-contrib/middleware"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/middleware"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
-		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+		return func(metadata contribmiddleware.Metadata) (middleware.HTTP, error) {
 			// Apply to request only by default
 			var request, response bool
 			switch strings.ToLower(metadata.Properties["direction"]) {
