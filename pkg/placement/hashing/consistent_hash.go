@@ -234,20 +234,15 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 //
 // It returns ErrNoHosts if the ring has no hosts in it.
 func (c *Consistent) Get(key string) (string, error) {
-	// Do a cheap check first for an early return
 	c.RLock()
+	defer c.RUnlock()
+
 	if len(c.hosts) == 0 {
 		return "", ErrNoHosts
 	}
-	c.RUnlock()
 
 	h := hash(key)
-	c.RLock()
-	if len(c.hosts) == 0 {
-		return "", ErrNoHosts
-	}
 	idx := c.search(h)
-	c.RUnlock()
 	return c.hosts[c.sortedSet[idx]], nil
 }
 
