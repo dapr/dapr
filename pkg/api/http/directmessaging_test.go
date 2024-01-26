@@ -969,7 +969,7 @@ func TestV1DirectMessagingEndpointsWithResiliency(t *testing.T) {
 
 		assert.Equal(t, 450, resp.StatusCode)
 		assert.Equal(t, 2, failingDirectMessaging.Failure.CallCount("failingKey2"))
-		assert.Equal(t, fakeData, resp.RawBody)
+		assert.Equal(t, string(fakeData), string(resp.RawBody))
 		assert.Equal(t, "val1", resp.RawHeader.Get("header1"))
 		assert.Equal(t, "application/json", resp.ContentType)
 	})

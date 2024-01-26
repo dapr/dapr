@@ -57,6 +57,7 @@ func registerHost(t *testing.T, ctx context.Context, conn *grpc.ClientConn, name
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		client := placementv1pb.NewPlacementClient(conn)
+
 		stream, rErr := client.ReportDaprStatus(ctx)
 		//nolint:testifylint
 		if !assert.NoError(c, rErr) {

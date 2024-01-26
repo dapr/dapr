@@ -14,11 +14,51 @@ limitations under the License.
 package runtime
 
 import (
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 // This file contains additional, hand-written methods added to the generated objects.
+
+func (x *InvokeActorRequest) ToInternalInvokeRequest() *internalv1pb.InternalInvokeRequest {
+	if x == nil {
+		return nil
+	}
+
+	r := &internalv1pb.InternalInvokeRequest{
+		Ver: internalv1pb.APIVersion_V1,
+		Message: &commonv1pb.InvokeRequest{
+			Method: x.Method,
+		},
+	}
+
+	if len(x.Data) > 0 {
+		r.Message.Data = &anypb.Any{
+			Value: x.Data,
+		}
+	}
+
+	if x.ActorType != "" && x.ActorId != "" {
+		r.Actor = &internalv1pb.Actor{
+			ActorType: x.ActorType,
+			ActorId:   x.ActorId,
+		}
+	}
+
+	if len(x.Metadata) > 0 {
+		r.Metadata = make(map[string]*internalv1pb.ListStringValue, len(x.Metadata))
+		for k, v := range x.Metadata {
+			r.Metadata[k] = &internalv1pb.ListStringValue{
+				Values: []string{v},
+			}
+		}
+	}
+
+	return r
+}
 
 // WorkflowRequests is an interface for all a number of *WorkflowRequest structs.
 type WorkflowRequests interface {

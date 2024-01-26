@@ -103,11 +103,11 @@ spec:
 	}
 	j.places = []*placement.Placement{
 		placement.New(t, append(opts, placement.WithID("p1"),
-			placement.WithExecOptions(exec.WithEnvVars("DAPR_SENTRY_TOKEN_FILE", tokenFiles[0])))...),
+			placement.WithExecOptions(exec.WithEnvVars(t, "DAPR_SENTRY_TOKEN_FILE", tokenFiles[0])))...),
 		placement.New(t, append(opts, placement.WithID("p2"),
-			placement.WithExecOptions(exec.WithEnvVars("DAPR_SENTRY_TOKEN_FILE", tokenFiles[1])))...),
+			placement.WithExecOptions(exec.WithEnvVars(t, "DAPR_SENTRY_TOKEN_FILE", tokenFiles[1])))...),
 		placement.New(t, append(opts, placement.WithID("p3"),
-			placement.WithExecOptions(exec.WithEnvVars("DAPR_SENTRY_TOKEN_FILE", tokenFiles[2])))...),
+			placement.WithExecOptions(exec.WithEnvVars(t, "DAPR_SENTRY_TOKEN_FILE", tokenFiles[2])))...),
 	}
 
 	fp.Free(t)
@@ -165,6 +165,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		}
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 		client := v1pb.NewPlacementClient(conn)
+
 		stream, err = client.ReportDaprStatus(ctx)
 		if err != nil {
 			return false
