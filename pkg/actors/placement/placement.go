@@ -161,9 +161,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.serverIndex.Store(0)
 	p.running.Store(true)
 	p.appHealthy.Store(true)
-	p.placementTableLock.Lock()
 	p.resetPlacementTables()
-	p.placementTableLock.Unlock()
 
 	if !p.establishStreamConn(ctx) {
 		return nil
@@ -260,9 +258,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				log.Debug("Disconnecting from placement service by the unhealthy app")
 
 				p.client.disconnect()
-				p.placementTableLock.Lock()
 				p.resetPlacementTables()
-				p.placementTableLock.Unlock()
 				if p.haltAllActorsFn != nil {
 					haltErr := p.haltAllActorsFn()
 					if haltErr != nil {
@@ -435,9 +431,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			if p.haltAllActorsFn != nil {
 				p.haltAllActorsFn()
 			}
-			p.placementTableLock.Lock()
 			p.resetPlacementTables()
-			p.placementTableLock.Unlock()
 
 			// Sleep with an exponential backoff
 			select {
@@ -520,6 +514,9 @@ func (p *actorPlacement) unblockPlacements() {
 // Resets the placement tables.
 // Note that this method should be invoked by a caller that owns a lock.
 func (p *actorPlacement) resetPlacementTables() {
+	p.placementTableLock.Lock()
+	defer p.placementTableLock.Unlock()
+
 	if p.hasPlacementTablesCh != nil {
 		close(p.hasPlacementTablesCh)
 	}
