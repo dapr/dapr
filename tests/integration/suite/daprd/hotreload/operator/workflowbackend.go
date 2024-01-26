@@ -183,7 +183,6 @@ func (w *workflowbackend) Run(t *testing.T, ctx context.Context) {
 
 	comps := util.GetMetaComponents(t, ctx, httpClient, w.daprdCreate.HTTPPort())
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
-		{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
 			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
@@ -200,7 +199,6 @@ func (w *workflowbackend) Run(t *testing.T, ctx context.Context) {
 
 	comps = util.GetMetaComponents(t, ctx, httpClient, w.daprdUpdate.HTTPPort())
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
-		{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
@@ -218,7 +216,6 @@ func (w *workflowbackend) Run(t *testing.T, ctx context.Context) {
 
 	comps = util.GetMetaComponents(t, ctx, httpClient, w.daprdDelete.HTTPPort())
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
-		{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
