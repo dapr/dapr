@@ -16,6 +16,7 @@ package endpoint
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -44,6 +45,14 @@ type path struct {
 	healthzCalled chan struct{}
 	customHealthz chan struct{}
 	rootCalled    atomic.Bool
+}
+
+const (
+	pathMethodFoo = "/actors/myactortype/myactorid/method/foo"
+)
+
+func fooActorURL(daprd *daprd.Daprd) string {
+	return "http://localhost:" + strconv.Itoa(daprd.HTTPPort()) + "/v1.0" + pathMethodFoo
 }
 
 func (p *path) Setup(t *testing.T) []framework.Option {
