@@ -55,10 +55,10 @@ func (k *kubernetes) Setup(t *testing.T) []framework.Option {
 	k.sentry = sentry.New(t,
 		sentry.WithWriteConfig(false),
 		sentry.WithKubeconfig(kubeAPI.KubeconfigPath(t)),
+		sentry.WithNamespace("sentrynamespace"),
 		sentry.WithExecOptions(
 			// Enable Kubernetes validator.
-			exec.WithEnvVars("KUBERNETES_SERVICE_HOST", "anything"),
-			exec.WithEnvVars("NAMESPACE", "sentrynamespace"),
+			exec.WithEnvVars(t, "KUBERNETES_SERVICE_HOST", "anything"),
 		),
 		sentry.WithCABundle(bundle),
 		sentry.WithTrustDomain("integration.test.dapr.io"),
