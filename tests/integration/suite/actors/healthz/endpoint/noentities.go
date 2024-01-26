@@ -16,6 +16,7 @@ package endpoint
 import (
 	"context"
 	"net/http"
+	"strconv"
 	"sync"
 	"testing"
 	"time"
@@ -34,6 +35,14 @@ import (
 
 func init() {
 	suite.Register(new(noentities))
+}
+
+const (
+	pathMethodFoo = "/actors/myactortype/myactorid/method/foo"
+)
+
+func fooActorURL(daprd *daprd.Daprd) string {
+	return "http://localhost:" + strconv.Itoa(daprd.HTTPPort()) + "/v1.0" + pathMethodFoo
 }
 
 // noentities ensures that the daprd `/healthz` endpoint is called and actors
