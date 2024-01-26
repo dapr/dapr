@@ -125,6 +125,10 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		args = append(args, "-config="+configPath)
 	}
 
+	if opts.namespace != nil {
+		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
+	}
+
 	return &Sentry{
 		exec:        exec.New(t, binary.EnvValue("sentry"), args, opts.execOpts...),
 		freeport:    fp,

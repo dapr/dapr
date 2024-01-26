@@ -46,6 +46,7 @@ type Daprd struct {
 	freeport *util.FreePort
 
 	appID            string
+	namespace        string
 	appProtocol      string
 	appPort          int
 	grpcPort         int
@@ -138,11 +139,18 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
 
+	ns := "default"
+	if opts.namespace != nil {
+		ns = *opts.namespace
+		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
+	}
+
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		freeport:         fp,
 		appHTTP:          appHTTP,
 		appID:            opts.appID,
+		namespace:        ns,
 		appProtocol:      opts.appProtocol,
 		appPort:          opts.appPort,
 		grpcPort:         opts.grpcPort,
@@ -243,6 +251,10 @@ func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 
 func (d *Daprd) AppID() string {
 	return d.appID
+}
+
+func (d *Daprd) Namespace() string {
+	return d.namespace
 }
 
 func (d *Daprd) AppPort() int {
