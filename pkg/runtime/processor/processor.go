@@ -33,6 +33,7 @@ import (
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/internal/apis"
+	"github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -105,6 +106,8 @@ type Options struct {
 	Channels *channels.Channels
 
 	OperatorClient operatorv1.OperatorClient
+
+	MiddlewareHTTP *http.HTTP
 }
 
 // Processor manages the lifecycle of all components categories.
@@ -212,7 +215,11 @@ func New(opts Options) *Processor {
 			components.CategorySecretStore:     secret,
 			components.CategoryStateStore:      state,
 			components.CategoryWorkflowBackend: wfbe,
-			components.CategoryMiddleware:      middleware.New(),
+			components.CategoryMiddleware: middleware.New(middleware.Options{
+				Meta:         opts.Meta,
+				RegistryHTTP: opts.Registry.HTTPMiddlewares(),
+				HTTP:         opts.MiddlewareHTTP,
+			}),
 		},
 	}
 }

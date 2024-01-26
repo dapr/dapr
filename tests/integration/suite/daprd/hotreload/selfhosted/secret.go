@@ -66,7 +66,7 @@ spec:
 	s.daprd = daprd.New(t,
 		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(s.resDir1, s.resDir2, s.resDir3),
-		daprd.WithExecOptions(exec.WithEnvVars(
+		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"FOO_SEC_1", "bar1",
 			"FOO_SEC_2", "bar2",
 			"FOO_SEC_3", "bar3",

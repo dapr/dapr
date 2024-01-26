@@ -58,7 +58,7 @@ import (
 	"github.com/dapr/dapr/pkg/httpendpoint"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -108,6 +108,7 @@ type DaprRuntime struct {
 	appHealth           *apphealth.AppHealth
 	appHealthReady      func(context.Context) error // Invoked the first time the app health becomes ready
 	appHealthLock       sync.Mutex
+	httpMiddleware      *middlewarehttp.HTTP
 	compStore           *compstore.ComponentStore
 	meta                *meta.Meta
 	processor           *processor.Processor
@@ -141,7 +142,7 @@ func newDaprRuntime(ctx context.Context,
 ) (*DaprRuntime, error) {
 	compStore := compstore.New()
 
-	namespace := getNamespace()
+	namespace := security.CurrentNamespace()
 	podName := getPodName()
 
 	meta := meta.New(meta.Options{
@@ -175,6 +176,9 @@ func newDaprRuntime(ctx context.Context,
 		GlobalConfig: globalConfig,
 	})
 
+	httpMiddleware := middlewarehttp.New()
+	httpMiddlewareApp := httpMiddleware.BuildPipelineFromSpec("app", globalConfig.Spec.AppHTTPPipelineSpec)
+
 	channels := channels.New(channels.Options{
 		Registry:            runtimeConfig.registry,
 		ComponentStore:      compStore,
@@ -184,25 +188,27 @@ func newDaprRuntime(ctx context.Context,
 		MaxRequestBodySize:  runtimeConfig.maxRequestBodySize,
 		ReadBufferSize:      runtimeConfig.readBufferSize,
 		GRPC:                grpc,
+		AppMiddleware:       httpMiddlewareApp,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:               runtimeConfig.id,
-		Namespace:        namespace,
-		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
+		ID:             runtimeConfig.id,
+		Namespace:      namespace,
+		IsHTTP:         runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:  len(runtimeConfig.actorsService) > 0,
 		SchedulerEnabled: len(runtimeConfig.schedulerAddresses) > 0,
-		Registry:         runtimeConfig.registry,
-		ComponentStore:   compStore,
-		Meta:             meta,
-		GlobalConfig:     globalConfig,
-		Resiliency:       resiliencyProvider,
-		Mode:             runtimeConfig.mode,
-		PodName:          podName,
-		Standalone:       runtimeConfig.standalone,
-		OperatorClient:   operatorClient,
-		GRPC:             grpc,
-		Channels:         channels,
+		Registry:       runtimeConfig.registry,
+		ComponentStore: compStore,
+		Meta:           meta,
+		GlobalConfig:   globalConfig,
+		Resiliency:     resiliencyProvider,
+		Mode:           runtimeConfig.mode,
+		PodName:        podName,
+		Standalone:     runtimeConfig.standalone,
+		OperatorClient: operatorClient,
+		GRPC:           grpc,
+		Channels:       channels,
+		MiddlewareHTTP: httpMiddleware,
 	})
 
 	var reloader *hotreload.Reloader
@@ -254,6 +260,7 @@ func newDaprRuntime(ctx context.Context,
 		initComplete:      make(chan struct{}),
 		isAppHealthy:      make(chan struct{}),
 		clock:             new(clock.RealClock),
+		httpMiddleware:    httpMiddleware,
 	}
 	close(rt.isAppHealthy)
 
@@ -358,10 +365,6 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 	}
 
 	return a.runnerCloser.Run(ctx)
-}
-
-func getNamespace() string {
-	return os.Getenv("NAMESPACE")
 }
 
 func getPodName() string {
@@ -507,11 +510,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
 	}
 
-	pipeline, err := a.channels.BuildHTTPPipeline(a.globalConfig.Spec.HTTPPipelineSpec)
-	if err != nil {
-		log.Warnf("failed to build HTTP pipeline: %s", err)
-	}
-
 	// Setup allow/deny list for secrets
 	a.populateSecretsConfiguration()
 
@@ -557,7 +555,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	// Start HTTP Server
-	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins, pipeline)
+	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins)
 	if err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
@@ -788,7 +786,7 @@ func (a *DaprRuntime) initProxy() {
 	})
 }
 
-func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string, pipeline httpMiddleware.Pipeline) error {
+func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string) error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		Universal:             a.daprUniversal,
 		Channels:              a.channels,
@@ -821,7 +819,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		Config:      serverConf,
 		TracingSpec: a.globalConfig.GetTracingSpec(),
 		MetricSpec:  a.globalConfig.GetMetricsSpec(),
-		Pipeline:    pipeline,
+		Middleware:  a.httpMiddleware.BuildPipelineFromSpec("server", a.globalConfig.Spec.HTTPPipelineSpec),
 		APISpec:     a.globalConfig.GetAPISpec(),
 	})
 	if err := server.StartNonBlocking(); err != nil {

@@ -19,6 +19,7 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/httpserver"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metadata"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/middleware"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/mtls"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/multipleconfigs"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/outbox"

@@ -101,8 +101,8 @@ func (i *informer) Setup(t *testing.T) []framework.Option {
 		daprd.WithControlPlaneAddress(i.operator.Address()),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithEnableMTLS(true),
-		daprd.WithExecOptions(exec.WithEnvVars(
-			"NAMESPACE", "default",
+		daprd.WithNamespace("default"),
+		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 		)),
 	)

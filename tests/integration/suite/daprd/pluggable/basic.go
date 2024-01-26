@@ -77,7 +77,7 @@ spec:
   type: state.%s
   version: v1
 `, store.SocketName())),
-		daprd.WithExecOptions(exec.WithEnvVars(
+		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
 		)),
 	)

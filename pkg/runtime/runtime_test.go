@@ -448,6 +448,7 @@ func TestInitNameResolution(t *testing.T) {
 				AppPort:          rt.runtimeConfig.appConnectionConfig.Port,
 				Address:          rt.hostAddress,
 				AppID:            rt.runtimeConfig.id,
+				Namespace:        "default",
 			},
 		}
 
@@ -846,17 +847,6 @@ func TestGracefulShutdown(t *testing.T) {
 	r, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 	require.NoError(t, err)
 	assert.Equal(t, time.Second, r.runtimeConfig.gracefulShutdownDuration)
-}
-
-func TestNamespace(t *testing.T) {
-	t.Run("empty namespace", func(t *testing.T) {
-		assert.Empty(t, getNamespace())
-	})
-
-	t.Run("non-empty namespace", func(t *testing.T) {
-		t.Setenv("NAMESPACE", "a")
-		assert.Equal(t, "a", getNamespace())
-	})
 }
 
 func TestPodName(t *testing.T) {
