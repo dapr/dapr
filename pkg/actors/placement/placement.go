@@ -512,7 +512,6 @@ func (p *actorPlacement) unblockPlacements() {
 }
 
 // Resets the placement tables.
-// Note that this method should be invoked by a caller that owns a lock.
 func (p *actorPlacement) resetPlacementTables() {
 	p.placementTableLock.Lock()
 	defer p.placementTableLock.Unlock()
