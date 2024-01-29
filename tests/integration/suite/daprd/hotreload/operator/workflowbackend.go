@@ -100,7 +100,7 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 
 	inmemStore := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "mystore"},
+		ObjectMeta: metav1.ObjectMeta{Name: "mystore", Namespace: "default"},
 		Spec: compapi.ComponentSpec{
 			Type: "state.in-memory", Version: "v1",
 			Metadata: []common.NameValuePair{{Name: "actorStateStore", Value: common.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(`"true"`)}}}},
@@ -110,12 +110,12 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 	w.operatorCreate.SetComponents(inmemStore)
 	w.operatorUpdate.SetComponents(inmemStore, compapi.Component{
 		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend"},
+		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend", Namespace: "default"},
 		Spec:       compapi.ComponentSpec{Type: "workflowbackend.actors", Version: "v1"},
 	})
 	w.operatorDelete.SetComponents(inmemStore, compapi.Component{
 		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend"},
+		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend", Namespace: "default"},
 		Spec:       compapi.ComponentSpec{Type: "workflowbackend.actors", Version: "v1"},
 	})
 
@@ -123,7 +123,9 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
+			exec.WithEnvVars(t,
+				"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+			),
 			exec.WithExitCode(1),
 			exec.WithRunError(func(t *testing.T, err error) {
 				require.ErrorContains(t, err, "exit status 1")
@@ -138,7 +140,9 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
+			exec.WithEnvVars(t,
+				"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+			),
 			exec.WithExitCode(1),
 			exec.WithRunError(func(t *testing.T, err error) {
 				require.ErrorContains(t, err, "exit status 1")
@@ -153,7 +157,9 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
+			exec.WithEnvVars(t,
+				"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+			),
 			exec.WithExitCode(1),
 			exec.WithRunError(func(t *testing.T, err error) {
 				require.ErrorContains(t, err, "exit status 1")
@@ -190,7 +196,7 @@ func (w *workflowbackend) Run(t *testing.T, ctx context.Context) {
 	}, comps)
 	actorsComp := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend"},
+		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend", Namespace: "default"},
 		Spec:       compapi.ComponentSpec{Type: "workflowbackend.actors", Version: "v1"},
 	}
 	w.operatorCreate.AddComponents(actorsComp)
@@ -207,7 +213,7 @@ func (w *workflowbackend) Run(t *testing.T, ctx context.Context) {
 	}, comps)
 	sqliteComp := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend"},
+		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend", Namespace: "default"},
 		Spec:       compapi.ComponentSpec{Type: "workflowbackend.sqlite", Version: "v1"},
 	}
 	w.operatorUpdate.SetComponents(sqliteComp)
