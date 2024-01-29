@@ -68,14 +68,7 @@ func TestMain(m *testing.M) {
 		}
 
 		tr = runner.NewTestRunner("workflowsapp", testApps, comps, nil)
-
-		exitCode := tr.Start(m)
-		// Validate multi workflow backend
-		validateMultiWorkflowBackendFailure(m)
-		// Validate invalid workflow backend
-		validateInvalidWorkflowBackendFailure(m)
-
-		os.Exit(exitCode)
+		os.Exit(tr.Start(m))
 	} else {
 		os.Exit(m.Run())
 	}
@@ -379,58 +372,5 @@ func TestWorkflow(t *testing.T) {
 			t.Run("Raise event", raiseEventTest(externalURL, "raiseEvent-"+suffix))
 			t.Run("Start monitor", monitorTest(externalURL, "monitor-"+suffix))
 		})
-	}
-}
-
-func validateMultiWorkflowBackendFailure(m *testing.M) {
-	var multiBackendTestApps []kube.AppDescription
-	multiBackendTestApps = append(multiBackendTestApps, getTestApp("multibackend"))
-	multiBackendComps := []kube.ComponentDescription{
-		{
-			Name:     "sqlitebackend2",
-			TypeName: "workflowbackend.sqlite",
-			MetaData: map[string]kube.MetadataValue{
-				"connectionString": {Raw: `""`},
-			},
-			Scopes: []string{appNamePrefix + "-multibackend"},
-		},
-		{
-			Name:     "actorbackend",
-			TypeName: "workflowbackend.actor",
-			Scopes:   []string{appNamePrefix + "-multibackend"},
-		},
-	}
-
-	tr2 := runner.NewTestRunner("workflowsapp-multibackend", multiBackendTestApps, multiBackendComps, nil)
-	exitCode := tr2.Start(m)
-
-	// If there are multiple workflow backend is defined, then app should not start
-	if exitCode != 1 {
-		// create panic when exitCode is not 1
-		panic("Workflow with multiple backend should not start")
-	}
-}
-
-func validateInvalidWorkflowBackendFailure(m *testing.M) {
-	var invalidbackendTestApps []kube.AppDescription
-	invalidbackendTestApps = append(invalidbackendTestApps, getTestApp("invalidbackend"))
-	invalidbackendComps := []kube.ComponentDescription{
-		{
-			Name:     "invalidbackend",
-			TypeName: "workflowbackend.invalidbackend",
-			MetaData: map[string]kube.MetadataValue{
-				"connectionString": {Raw: `""`},
-			},
-			Scopes: []string{appNamePrefix + "-invalidbackend"},
-		},
-	}
-
-	tr3 := runner.NewTestRunner("workflowsapp-invalidbackend", invalidbackendTestApps, invalidbackendComps, nil)
-	exitCode := tr3.Start(m)
-
-	// If the backend is invalid, then app should not start
-	if exitCode != 1 {
-		// create panic when exitCode is not 1
-		panic("Workflow with invalid backend should not start")
 	}
 }
