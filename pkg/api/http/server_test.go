@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -448,7 +447,7 @@ func TestClose(t *testing.T) {
 			Config:      serverConfig,
 			TracingSpec: config.TracingSpec{},
 			MetricSpec:  config.MetricSpec{},
-			Pipeline:    httpMiddleware.Pipeline{},
+			Middleware:  func(n http.Handler) http.Handler { return n },
 			APISpec:     config.APISpec{},
 		})
 		require.NoError(t, server.StartNonBlocking())
@@ -474,7 +473,7 @@ func TestClose(t *testing.T) {
 			Config:      serverConfig,
 			TracingSpec: config.TracingSpec{},
 			MetricSpec:  config.MetricSpec{},
-			Pipeline:    httpMiddleware.Pipeline{},
+			Middleware:  func(n http.Handler) http.Handler { return n },
 			APISpec:     config.APISpec{},
 		})
 		require.NoError(t, server.StartNonBlocking())

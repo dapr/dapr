@@ -25,7 +25,7 @@ import (
 
 	h "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/dapr/pkg/components/middleware/http"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/middleware"
 	"github.com/dapr/kit/logger"
 )
 
@@ -40,22 +40,24 @@ func TestRegistry(t *testing.T) {
 		)
 
 		// Initiate mock object
-		mock := func(next nethttp.Handler) nethttp.Handler {
+		var mock middleware.HTTP
+		var mockV2 middleware.HTTP
+		mock = func(next nethttp.Handler) nethttp.Handler {
 			return nil
 		}
-		mockV2 := func(next nethttp.Handler) nethttp.Handler {
+		mockV2 = func(next nethttp.Handler) nethttp.Handler {
 			return nil
 		}
 		metadata := h.Metadata{}
 
 		// act
 		testRegistry.RegisterComponent(func(_ logger.Logger) http.FactoryMethod {
-			return func(h.Metadata) (httpMiddleware.Middleware, error) {
+			return func(h.Metadata) (middleware.HTTP, error) {
 				return mock, nil
 			}
 		}, middlewareName)
 		testRegistry.RegisterComponent(func(_ logger.Logger) http.FactoryMethod {
-			return func(h.Metadata) (httpMiddleware.Middleware, error) {
+			return func(h.Metadata) (middleware.HTTP, error) {
 				return mockV2, nil
 			}
 		}, middlewareNameV2)
