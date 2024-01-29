@@ -109,13 +109,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-latest-4-cores
             target_os: linux
             target_arch: amd64
-          - os: windows-2022
+          - os: windows-latest-8-cores
             target_os: windows
             target_arch: amd64
-            windows_version: ltsc2022
           - os: macOS-latest
             target_os: darwin
             target_arch: amd64
@@ -154,13 +153,12 @@ jobs:
       fail-fast: false
       matrix:
         include:
-          - os: ubuntu-latest
+          - os: ubuntu-latest-4-cores
             target_os: linux
             target_arch: amd64
-          - os: windows-2022
+          - os: windows-latest-8-cores
             target_os: windows
             target_arch: amd64
-            windows_version: ltsc2022
           - os: macOS-latest
             target_os: darwin
             target_arch: amd64

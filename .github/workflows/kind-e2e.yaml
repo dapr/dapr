@@ -43,7 +43,7 @@ jobs:
   # workflows.
   e2e:
     name: e2e
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest-4-cores
     env:
       REGISTRY_PORT: 5000
       REGISTRY_NAME: kind-registry
