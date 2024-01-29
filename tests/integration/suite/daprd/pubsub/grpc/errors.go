@@ -116,7 +116,7 @@ spec:
   - name: outboxDiscardWhenMissingState #Optional. Defaults to false
     value: false
 `, pubsubInMem.SocketName())),
-		daprd.WithExecOptions(exec.WithEnvVars(
+		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
 		)),
 	)
