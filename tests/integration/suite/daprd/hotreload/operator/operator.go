@@ -15,5 +15,6 @@ package operator
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/binding"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/middleware"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/pubsub"
 )
