@@ -70,7 +70,7 @@ func (n *noappentities) Setup(t *testing.T) []framework.Option {
 
 	srvNoHealthz := prochttp.New(t,
 		prochttp.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`{}`))
+			w.Write([]byte(`{"entities": []}`))
 		}),
 		prochttp.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
