@@ -15,12 +15,13 @@ package apilevel
 
 import (
 	"context"
-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	placementtests "github.com/dapr/dapr/tests/integration/suite/placement/shared"
 	"log"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	placementtests "github.com/dapr/dapr/tests/integration/suite/placement/shared"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -82,9 +83,9 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 					log.Printf("Received an error in the channel: '%v'", msg)
 					return
 				case *placementv1pb.PlacementTables:
-					newApiLevel := msg.GetApiLevel()
-					oldApiLevel := currentVersion.Swap(newApiLevel)
-					if oldApiLevel != newApiLevel {
+					newAPILevel := msg.GetApiLevel()
+					oldAPILevel := currentVersion.Swap(newAPILevel)
+					if oldAPILevel != newAPILevel {
 						lastVersionUpdate.Store(time.Now().Unix())
 					}
 				}

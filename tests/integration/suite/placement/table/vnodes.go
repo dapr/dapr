@@ -2,16 +2,18 @@ package table
 
 import (
 	"context"
+	"log"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
 	placementtests "github.com/dapr/dapr/tests/integration/suite/placement/shared"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"log"
-	"testing"
-	"time"
 )
 
 func init() {
@@ -43,6 +45,7 @@ func (v *vNodes) Run(t *testing.T, ctx context.Context) {
 
 	// Connect
 	conn1, err := placementtests.EstablishConn(ctx, v.place.Port())
+	require.NoError(t, err)
 	conn2, err := placementtests.EstablishConn(ctx, v.place.Port())
 	require.NoError(t, err)
 
@@ -116,10 +119,9 @@ func (v *vNodes) Run(t *testing.T, ctx context.Context) {
 			case *placementv1pb.PlacementTables:
 				assert.Equal(t, uint32(level2), msg.GetApiLevel())
 				assert.Len(t, msg.GetEntries(), 1)
-				assert.Len(t, msg.GetEntries()["someactor"].GetHosts(), 0)
-				assert.Len(t, msg.GetEntries()["someactor"].GetSortedSet(), 0)
+				assert.Empty(t, msg.GetEntries()["someactor"].GetHosts())
+				assert.Empty(t, msg.GetEntries()["someactor"].GetSortedSet())
 			}
 		}
 	}, 10*time.Second, 100*time.Millisecond)
-
 }
