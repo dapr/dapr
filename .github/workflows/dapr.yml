@@ -103,7 +103,6 @@ jobs:
           make gen-proto check-proto-diff
   unit-tests:
     name: Unit tests
-    needs: lint
     runs-on: "${{ matrix.os }}"
     strategy:
       fail-fast: false
@@ -147,7 +146,6 @@ jobs:
 
   integration-tests:
     name: Integration tests
-    needs: lint
     runs-on: "${{ matrix.os }}"
     strategy:
       fail-fast: false
@@ -182,7 +180,7 @@ jobs:
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
-    needs: [unit-tests, integration-tests]
+    needs: [lint, unit-tests, integration-tests]
     env:
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
