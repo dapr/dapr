@@ -49,7 +49,6 @@ func TestMain(m *testing.M) {
 	// Then run this test with the env var "WORKFLOW_APP_ENDPOINT" pointing to the address of the app. For example:
 	//   WORKFLOW_APP_ENDPOINT=http://localhost:3000 DAPR_E2E_TEST="workflows" make test-clean test-e2e-all |& tee test.log
 	if os.Getenv("WORKFLOW_APP_ENDPOINT") == "" {
-		fmt.Printf("Starting test runner with %d apps\n", len(backends))
 		// Set the configuration as environment variables for the test app.
 		var testApps []kube.AppDescription
 		for _, backend := range backends {
@@ -348,8 +347,6 @@ func monitorTest(url string, instanceID string) func(t *testing.T) {
 }
 
 func TestWorkflow(t *testing.T) {
-	// log message saying starting tests
-	fmt.Println("starting TestWorkflow")
 	for _, backend := range backends {
 		t.Run(backend, func(t *testing.T) {
 			// Get the ingress external url of test app
