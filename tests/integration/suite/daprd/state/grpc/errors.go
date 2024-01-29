@@ -132,7 +132,7 @@ spec:
   type: state.%s
   version: v1
 `, storeWithNoTransactional.SocketName(), storeWithQuerier.SocketName(), storeWithMultiMaxSize.SocketName())),
-		procdaprd.WithExecOptions(exec.WithEnvVars(
+		procdaprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
 		)),
 	)

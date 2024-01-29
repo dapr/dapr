@@ -660,6 +660,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 			}
 		}
 	}
+	if runtimeState.IsCompleted() {
+		wfLogger.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", wf.actorID, runtimeState.RuntimeStatus().String(), workflowName)
+	}
 	return nil
 }
 
