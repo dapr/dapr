@@ -20,8 +20,8 @@ on:
   pull_request:
     branches:
       - master
-      - 'release-*'
-      - 'feature/*'
+      - "release-*"
+      - "feature/*"
 
 defaults:
   run:
@@ -43,7 +43,8 @@ jobs:
   # workflows.
   e2e:
     name: e2e
-    runs-on: ubuntu-latest
+    runs-on:
+      labels: ubuntu-latest-8-cores
     env:
       REGISTRY_PORT: 5000
       REGISTRY_NAME: kind-registry
@@ -62,194 +63,194 @@ jobs:
       fail-fast: false # Keep running if one leg fails.
       matrix:
         k8s-version:
-        - v1.23.13
-        - v1.24.7
-        - v1.25.3
+          - v1.23.13
+          - v1.24.7
+          - v1.25.3
         mode:
-        - ha
-        - non-ha
+          - ha
+          - non-ha
         # Map between K8s and KinD versions.
         # This is attempting to make it a bit clearer what's being tested.
         # See: https://github.com/kubernetes-sigs/kind/releases/tag/v0.11.1
         include:
-        - k8s-version: v1.23.13
-          kind-version: v0.17.0
-          kind-image-sha: sha256:ef453bb7c79f0e3caba88d2067d4196f427794086a7d0df8df4f019d5e336b61
-          dapr-test-config-store: "postgres"
-        - k8s-version: v1.24.7
-          kind-version: v0.17.0
-          kind-image-sha: sha256:577c630ce8e509131eab1aea12c022190978dd2f745aac5eb1fe65c0807eb315
-          dapr-test-config-store: "redis"
-        - k8s-version: v1.25.3
-          kind-version: v0.17.0
-          kind-image-sha: sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
-          dapr-test-config-store: "redis"
+          - k8s-version: v1.23.13
+            kind-version: v0.17.0
+            kind-image-sha: sha256:ef453bb7c79f0e3caba88d2067d4196f427794086a7d0df8df4f019d5e336b61
+            dapr-test-config-store: "postgres"
+          - k8s-version: v1.24.7
+            kind-version: v0.17.0
+            kind-image-sha: sha256:577c630ce8e509131eab1aea12c022190978dd2f745aac5eb1fe65c0807eb315
+            dapr-test-config-store: "redis"
+          - k8s-version: v1.25.3
+            kind-version: v0.17.0
+            kind-image-sha: sha256:f52781bc0d7a19fb6c405c2af83abfeb311f130707a0e219175677e366cc45d1
+            dapr-test-config-store: "redis"
         exclude:
-        - k8s-version: v1.23.13
-          mode: non-ha
+          - k8s-version: v1.23.13
+            mode: non-ha
     steps:
-    - name: Check out code
-      uses: actions/checkout@v4
-    - name: Set up Go
-      id: setup-go
-      uses: actions/setup-go@v5
-      with:
-        go-version-file: 'go.mod'
-    - name: Configure KinD
-      # Generate a KinD configuration file that uses:
-      # (a) a couple of worker nodes: this is needed to run both
-      #     ZooKeeper + Kakfa, and
-      # (b) a local registry: Due to `kind load` performance
-      #     https://github.com/kubernetes-sigs/kind/issues/1165, using
-      #     a local repository speeds up the image pushes into KinD
-      #     significantly.
-      run: |
-        cat > kind.yaml <<EOF
-        apiVersion: kind.x-k8s.io/v1alpha4
-        kind: Cluster
-        nodes:
-        - role: control-plane
-          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
-        - role: worker
-          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
-        - role: worker
-          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
-        - role: worker
-          image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
-        containerdConfigPatches:
-        - |-
-          [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:$REGISTRY_PORT"]
-            endpoint = ["http://$REGISTRY_NAME:$REGISTRY_PORT"]
-        EOF
+      - name: Check out code
+        uses: actions/checkout@v4
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+      - name: Configure KinD
+        # Generate a KinD configuration file that uses:
+        # (a) a couple of worker nodes: this is needed to run both
+        #     ZooKeeper + Kakfa, and
+        # (b) a local registry: Due to `kind load` performance
+        #     https://github.com/kubernetes-sigs/kind/issues/1165, using
+        #     a local repository speeds up the image pushes into KinD
+        #     significantly.
+        run: |
+          cat > kind.yaml <<EOF
+          apiVersion: kind.x-k8s.io/v1alpha4
+          kind: Cluster
+          nodes:
+          - role: control-plane
+            image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+          - role: worker
+            image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+          - role: worker
+            image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+          - role: worker
+            image: kindest/node:${{ matrix.k8s-version }}@${{ matrix.kind-image-sha }}
+          containerdConfigPatches:
+          - |-
+            [plugins."io.containerd.grpc.v1.cri".registry.mirrors."localhost:$REGISTRY_PORT"]
+              endpoint = ["http://$REGISTRY_NAME:$REGISTRY_PORT"]
+          EOF
 
-        # Log the generated kind.yaml for easy reference.
-        cat kind.yaml
+          # Log the generated kind.yaml for easy reference.
+          cat kind.yaml
 
-        # Set log target directories
-        echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
-        echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
+          # Set log target directories
+          echo "DAPR_CONTAINER_LOG_PATH=$GITHUB_WORKSPACE/container_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
+          echo "DAPR_TEST_LOG_PATH=$GITHUB_WORKSPACE/test_logs/${{ matrix.k8s-version }}_${{ matrix.mode }}" >> $GITHUB_ENV
 
-    - name: Create KinD Cluster
-      uses: helm/kind-action@v1.5.0
-      with:
-        config: kind.yaml
-        cluster_name: kind
-        version: ${{ matrix.kind-version }}
+      - name: Create KinD Cluster
+        uses: helm/kind-action@v1.5.0
+        with:
+          config: kind.yaml
+          cluster_name: kind
+          version: ${{ matrix.kind-version }}
 
-    - name: Get KinD info
-      run: |
-        kubectl cluster-info --context kind-kind
-        NODE_IP=$(kubectl get nodes \
-                  -lkubernetes.io/hostname!=kind-control-plane \
-                  -ojsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
-        echo "MINIKUBE_NODE_IP=$NODE_IP" >> $GITHUB_ENV
+      - name: Get KinD info
+        run: |
+          kubectl cluster-info --context kind-kind
+          NODE_IP=$(kubectl get nodes \
+                    -lkubernetes.io/hostname!=kind-control-plane \
+                    -ojsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}')
+          echo "MINIKUBE_NODE_IP=$NODE_IP" >> $GITHUB_ENV
 
-    - name: Setup test output
-      shell: bash
-      run: |
-        export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
-        echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
+      - name: Setup test output
+        shell: bash
+        run: |
+          export TEST_OUTPUT_FILE_PREFIX=$GITHUB_WORKSPACE/test_report
+          echo "TEST_OUTPUT_FILE_PREFIX=$TEST_OUTPUT_FILE_PREFIX" >> $GITHUB_ENV
 
-    - name: Setup local registry
-      run: |
-        # Run a registry.
-        docker run -d --restart=always \
-          -p $REGISTRY_PORT:$REGISTRY_PORT --name $REGISTRY_NAME registry:2
-        # Connect the registry to the KinD network.
-        docker network connect "kind" $REGISTRY_NAME
+      - name: Setup local registry
+        run: |
+          # Run a registry.
+          docker run -d --restart=always \
+            -p $REGISTRY_PORT:$REGISTRY_PORT --name $REGISTRY_NAME registry:2
+          # Connect the registry to the KinD network.
+          docker network connect "kind" $REGISTRY_NAME
 
-    - name: Setup Helm
-      uses: azure/setup-helm@v1
-      with:
-        version: v3.3.4
+      - name: Setup Helm
+        uses: azure/setup-helm@v1
+        with:
+          version: v3.3.4
 
-    - name: Build and push Dapr
-      run: |
-        make build-linux
-        make docker-build
-        make docker-push
+      - name: Build and push Dapr
+        run: |
+          make build-linux
+          make docker-build
+          make docker-push
 
-    - name: Build and push test apps
-      run: |
-        make build-push-e2e-app-all
+      - name: Build and push test apps
+        run: |
+          make build-push-e2e-app-all
 
-    - name: Setup Dapr
-      run: |
-        make setup-helm-init
-        make create-test-namespace
-        export ADDITIONAL_HELM_SET="dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
-        if [[ "${{ matrix.mode }}" == "ha" ]]; then
-          export HA_MODE=true
-        else
-          export HA_MODE=false
-        fi
-        make docker-deploy-k8s
+      - name: Setup Dapr
+        run: |
+          make setup-helm-init
+          make create-test-namespace
+          export ADDITIONAL_HELM_SET="dapr_operator.logLevel=debug,dapr_operator.watchInterval=20s"
+          if [[ "${{ matrix.mode }}" == "ha" ]]; then
+            export HA_MODE=true
+          else
+            export HA_MODE=false
+          fi
+          make docker-deploy-k8s
 
-    - name: Setup Redis
-      run: |
-        make setup-test-env-redis
+      - name: Setup Redis
+        run: |
+          make setup-test-env-redis
 
-    - name: Setup Kafka
-      run: |
-        make setup-test-env-kafka
+      - name: Setup Kafka
+        run: |
+          make setup-test-env-kafka
 
-    - name: Setup Zipkin
-      run: |
-        make setup-test-env-zipkin
+      - name: Setup Zipkin
+        run: |
+          make setup-test-env-zipkin
 
-    - name: Setup postgres
-      run: |
-        make setup-test-env-postgres
+      - name: Setup postgres
+        run: |
+          make setup-test-env-postgres
 
-    - name: Setup test components
-      run: |
-        make setup-test-components
-      env:
-        DAPR_TEST_CONFIG_STORE: ${{ matrix.dapr-test-config-store }}
+      - name: Setup test components
+        run: |
+          make setup-test-components
+        env:
+          DAPR_TEST_CONFIG_STORE: ${{ matrix.dapr-test-config-store }}
 
-    - name: Free up some diskspace
-      run: |
-        docker image prune -a -f
+      - name: Free up some diskspace
+        run: |
+          docker image prune -a -f
 
-    - name: Run tests
-      run: |
-        make test-e2e-all
-      env:
-        DAPR_TEST_CONFIG_STORE: ${{ matrix.dapr-test-config-store }}
+      - name: Run tests
+        run: |
+          make test-e2e-all
+        env:
+          DAPR_TEST_CONFIG_STORE: ${{ matrix.dapr-test-config-store }}
 
-    - name: Save control plane logs
-      if: always()
-      run: |
-        make save-dapr-control-plane-k8s-logs
+      - name: Save control plane logs
+        if: always()
+        run: |
+          make save-dapr-control-plane-k8s-logs
 
-    # Container log files can be bigger than the maximum file size allowed by GitHub
-    - name: Compress logs
-      if: always()
-      run: |
-        gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
-        gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
-      shell: bash
+      # Container log files can be bigger than the maximum file size allowed by GitHub
+      - name: Compress logs
+        if: always()
+        run: |
+          gzip --fast -r ${{ env.DAPR_CONTAINER_LOG_PATH }}
+          gzip --fast -r ${{ env.DAPR_TEST_LOG_PATH }}
+        shell: bash
 
-    - name: Upload container logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_container_logs
-        path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
-        compression-level: 0 # Content is already compressed
+      - name: Upload container logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_container_logs
+          path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+          compression-level: 0 # Content is already compressed
 
-    - name: Upload test logs
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_test_logs
-        path: ${{ env.DAPR_TEST_LOG_PATH }}
-        compression-level: 0 # Content is already compressed
+      - name: Upload test logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_test_logs
+          path: ${{ env.DAPR_TEST_LOG_PATH }}
+          compression-level: 0 # Content is already compressed
 
-    - name: Upload test results
-      if: always()
-      uses: actions/upload-artifact@v4
-      with:
-        #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
-        name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json
-        path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
+      - name: Upload test results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
+          name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json
+          path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*
