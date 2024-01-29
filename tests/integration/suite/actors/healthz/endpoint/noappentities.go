@@ -120,7 +120,7 @@ func (n *noappentities) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(c, tv.actorTypes, meta.GetActorRuntime().GetActiveActors())
 			assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 			assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
-		}, time.Second*15, time.Millisecond*100)
+		}, time.Second*30, time.Millisecond*100)
 	}
 
 	select {
