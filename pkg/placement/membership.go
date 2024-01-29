@@ -177,6 +177,9 @@ func (p *Service) cleanupHeartbeats() {
 // membershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
 func (p *Service) membershipChangeWorker(ctx context.Context) {
+	baselineHeartbeatTimestamp := p.clock.Now().UnixNano()
+	log.Infof("Baseline membership heartbeat timestamp: %v", baselineHeartbeatTimestamp)
+
 	faultyHostDetectTimer := p.clock.NewTicker(faultyHostDetectInterval)
 	defer faultyHostDetectTimer.Stop()
 	disseminateTimer := p.clock.NewTicker(disseminateTimerInterval)
@@ -230,9 +233,16 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 					// connections from each runtime so that lastHeartBeat have no heartbeat timestamp record
 					// from each runtime. Eventually, all runtime will find the leader and connect to the leader
 					// of placement servers.
-					// Before all runtimes connect to the leader of placements, it will record the current
-					// time as heartbeat timestamp.
-					heartbeat, _ := p.lastHeartBeat.LoadOrStore(v.Name, p.clock.Now().UnixNano())
+					// Before all runtimes connect to the leader of placements, it will record the leadership change
+					// timestamp as the latest leadership change.
+					// artursouza: The default heartbeat used to be now() but it is not correct and can lead to scenarios where a
+					// runtime (pod) is terminated while there is also a leadership change in placement, meaning the host entry
+					// in placement table will never have a heartbeat. With this new behavior, it will eventually expire and be
+					// removed.
+					heartbeat, loaded := p.lastHeartBeat.LoadOrStore(v.Name, baselineHeartbeatTimestamp)
+					if !loaded {
+						log.Warnf("Heartbeat not found for host: %s", v.Name)
+					}
 
 					elapsed := t.UnixNano() - heartbeat.(int64)
 					if elapsed < p.faultyHostDetectDuration.Load() {
@@ -266,7 +276,7 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 			switch op.cmdType {
 			case raft.MemberUpsert, raft.MemberRemove:
 				// MemberUpsert updates the state of dapr runtime host whenever
-				// Dapr runtime sends heartbeats every 1 second.
+				// Dapr runtime sends heartbeats every X seconds.
 				// MemberRemove will be queued by faultHostDetectTimer.
 				// Even if ApplyCommand is failed, both commands will retry
 				// until the state is consistent.
