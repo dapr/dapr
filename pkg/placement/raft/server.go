@@ -212,17 +212,33 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 	// Setup Raft configuration.
 	if config == nil {
 		// Set default configuration for raft
-		s.config = &raft.Config{
-			ProtocolVersion:    raft.ProtocolVersionMax,
-			HeartbeatTimeout:   1000 * time.Millisecond,
-			ElectionTimeout:    1000 * time.Millisecond,
-			CommitTimeout:      50 * time.Millisecond,
-			MaxAppendEntries:   64,
-			ShutdownOnRemove:   true,
-			TrailingLogs:       10240,
-			SnapshotInterval:   120 * time.Second,
-			SnapshotThreshold:  8192,
-			LeaderLeaseTimeout: 500 * time.Millisecond,
+
+		if len(s.peers) == 1 {
+			s.config = &raft.Config{
+				ProtocolVersion:    raft.ProtocolVersionMax,
+				HeartbeatTimeout:   5 * time.Millisecond,
+				ElectionTimeout:    5 * time.Millisecond,
+				CommitTimeout:      5 * time.Millisecond,
+				MaxAppendEntries:   64,
+				ShutdownOnRemove:   true,
+				TrailingLogs:       10240,
+				SnapshotInterval:   120 * time.Second,
+				SnapshotThreshold:  8192,
+				LeaderLeaseTimeout: 5 * time.Millisecond,
+			}
+		} else {
+			s.config = &raft.Config{
+				ProtocolVersion:    raft.ProtocolVersionMax,
+				HeartbeatTimeout:   1000 * time.Millisecond,
+				ElectionTimeout:    1000 * time.Millisecond,
+				CommitTimeout:      50 * time.Millisecond,
+				MaxAppendEntries:   64,
+				ShutdownOnRemove:   true,
+				TrailingLogs:       10240,
+				SnapshotInterval:   120 * time.Second,
+				SnapshotThreshold:  8192,
+				LeaderLeaseTimeout: 500 * time.Millisecond,
+			}
 		}
 	} else {
 		s.config = config
