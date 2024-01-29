@@ -126,7 +126,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 	h.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
-		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(h.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
@@ -144,7 +144,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 
 	t.Run("expect 1 component to be loaded", func(t *testing.T) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 2)
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 1)
 		h.expectBinding(t, 0, "binding1")
 	})
 
@@ -173,7 +173,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 3)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 		h.expectBindings(t, []bindingPair{
 			{0, "binding1"},
@@ -205,7 +205,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 4)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
 		h.expectBindings(t, []bindingPair{
 			{0, "binding1"},
@@ -220,7 +220,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_DELETED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 3)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 		h.registered[0].Store(false)
 		h.expectBindings(t, []bindingPair{
@@ -236,7 +236,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp1, EventType: operatorv1.ResourceEventType_DELETED})
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp2, EventType: operatorv1.ResourceEventType_DELETED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 1)
+			assert.Empty(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()))
 		}, time.Second*5, time.Millisecond*100)
 		h.registered[1].Store(false)
 		h.registered[2].Store(false)
@@ -268,7 +268,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		h.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 1)
 		}, time.Second*5, time.Millisecond*100)
 		h.expectBinding(t, 0, "binding1")
 	})

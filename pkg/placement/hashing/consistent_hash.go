@@ -212,7 +212,7 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 	// in 1.13, and the API level was increased to 20, but we still have to support sidecars
 	// running on 1.12 with placement services on 1.13. That's why we are keeping the
 	// vhosts in the store in v1.13.
-	// This should be removed in 1.14.
+	// This should be removed in 1.15.
 	// --Start remove--
 	for i := 0; i < c.replicationFactor; i++ {
 		h := hash(host + strconv.Itoa(i))
