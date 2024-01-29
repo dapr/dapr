@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package apilevel
+package shared
 
 import (
 	"context"
@@ -35,14 +35,14 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-func establishConn(ctx context.Context, port int) (*grpc.ClientConn, error) {
+func EstablishConn(ctx context.Context, port int) (*grpc.ClientConn, error) {
 	return grpc.DialContext(ctx, "localhost:"+strconv.Itoa(port),
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 	)
 }
 
-func registerHost(t *testing.T, ctx context.Context, conn *grpc.ClientConn, name string, apiLevel int, placementMessage chan any, stopCh chan struct{}) {
+func RegisterHost(t *testing.T, ctx context.Context, conn *grpc.ClientConn, name string, apiLevel int, placementMessage chan any, stopCh chan struct{}) {
 	msg := &placementv1pb.Host{
 		Name:     name,
 		Port:     1234,
@@ -116,14 +116,14 @@ func registerHost(t *testing.T, ctx context.Context, conn *grpc.ClientConn, name
 				return
 			}
 			if in.GetOperation() == "update" {
-				placementMessage <- in.GetTables().GetApiLevel()
+				placementMessage <- in.GetTables()
 			}
 		}
 	}()
 }
 
 // Expect the registration to fail with FailedPrecondition.
-func registerHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientConn, apiLevel int) {
+func RegisterHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientConn, apiLevel int) {
 	msg := &placementv1pb.Host{
 		Name:     "myapp-fail",
 		Port:     1234,
@@ -145,8 +145,8 @@ func registerHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientCon
 	require.Equalf(t, codes.FailedPrecondition, status.Code(err), "error was: %v", err)
 }
 
-// Checks the API level reported in the state tables matched.
-func checkAPILevelInState(t require.TestingT, client *http.Client, port int, expectAPILevel int) (tableVersion int) {
+// Checks the API level reported in the state table matched.
+func CheckAPILevelInState(t require.TestingT, client *http.Client, port int, expectAPILevel int) (tableVersion int) {
 	res, err := client.Get(fmt.Sprintf("http://localhost:%d/placement/state", port))
 	require.NoError(t, err)
 	defer res.Body.Close()

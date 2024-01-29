@@ -15,6 +15,8 @@ package apilevel
 
 import (
 	"context"
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	placementtests "github.com/dapr/dapr/tests/integration/suite/placement/shared"
 	"log"
 	"sync/atomic"
 	"testing"
@@ -50,19 +52,16 @@ func (n *withMax) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
+func (n *withMax) Run(t *testing.T, ctx context.Context) {
 	const level1 = 20
 	const level2 = 30
 
 	httpClient := util.HTTPClient(t)
 
-	ctx, cancel := context.WithCancel(parentCtx)
-	defer cancel()
-
 	n.place.WaitUntilRunning(t, ctx)
 
 	// Connect
-	conn, err := establishConn(ctx, n.place.Port())
+	conn, err := placementtests.EstablishConn(ctx, n.place.Port())
 	require.NoError(t, err)
 
 	// Collect messages
@@ -82,9 +81,10 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 				case error:
 					log.Printf("Received an error in the channel: '%v'", msg)
 					return
-				case uint32:
-					old := currentVersion.Swap(msg)
-					if old != msg {
+				case *placementv1pb.PlacementTables:
+					newApiLevel := msg.GetApiLevel()
+					oldApiLevel := currentVersion.Swap(newApiLevel)
+					if oldApiLevel != newApiLevel {
 						lastVersionUpdate.Store(time.Now().Unix())
 					}
 				}
@@ -94,7 +94,7 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 
 	// Register the first host with the lower API level
 	stopCh1 := make(chan struct{})
-	registerHost(t, ctx, conn, "myapp1", level1, placementMessageCh, stopCh1)
+	placementtests.RegisterHost(t, ctx, conn, "myapp1", level1, placementMessageCh, stopCh1)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Equal(t, uint32(level1), currentVersion.Load())
@@ -102,11 +102,11 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 	lastUpdate := lastVersionUpdate.Load()
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
+		placementtests.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Register the second host with API level 20
-	registerHost(t, ctx, conn, "myapp2", level2, placementMessageCh, nil)
+	placementtests.RegisterHost(t, ctx, conn, "myapp2", level2, placementMessageCh, nil)
 
 	// After 3s, we should not receive an update
 	// This can take a while as dissemination happens on intervals
@@ -115,7 +115,7 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 
 	// API level should not increase
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
+		placementtests.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase to the max (25)
@@ -125,6 +125,6 @@ func (n *withMax) Run(t *testing.T, parentCtx context.Context) {
 	}, 15*time.Second, 50*time.Millisecond)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		checkAPILevelInState(t, httpClient, n.place.HealthzPort(), 25)
+		placementtests.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), 25)
 	}, 5*time.Second, 100*time.Millisecond)
 }
