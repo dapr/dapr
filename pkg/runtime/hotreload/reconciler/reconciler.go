@@ -15,7 +15,6 @@ package reconciler
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -54,8 +53,8 @@ type Reconciler[T differ.Resource] struct {
 
 type manager[T differ.Resource] interface {
 	loader.Loader[T]
-	update(context.Context, T) error
-	delete(T) error
+	update(context.Context, T)
+	delete(T)
 }
 
 func NewComponent(opts Options[componentsapi.Component]) *Reconciler[componentsapi.Component] {
@@ -116,22 +115,19 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loade
 				continue
 			}
 
-			if err := r.reconcile(ctx, differ.Diff(resources)); err != nil {
-				return err
-			}
+			r.reconcile(ctx, differ.Diff(resources))
 		case event := <-stream:
-			if err := r.handleEvent(ctx, event); err != nil {
-				return err
-			}
+			r.handleEvent(ctx, event)
 		}
 	}
 }
 
-func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) error {
+func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) {
 	if result == nil {
-		return nil
+		return
 	}
 
+	var wg sync.WaitGroup
 	for _, group := range []struct {
 		resources []T
 		eventType operatorpb.ResourceEventType
@@ -140,42 +136,33 @@ func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T])
 		{result.Updated, operatorpb.ResourceEventType_UPDATED},
 		{result.Created, operatorpb.ResourceEventType_CREATED},
 	} {
-		errCh := make(chan error, len(group.resources))
+		wg.Add(len(group.resources))
 		for _, resource := range group.resources {
 			go func(resource T, eventType operatorpb.ResourceEventType) {
-				errCh <- r.handleEvent(ctx, &loader.Event[T]{
+				defer wg.Done()
+				r.handleEvent(ctx, &loader.Event[T]{
 					Type:     eventType,
 					Resource: resource,
 				})
 			}(resource, group.eventType)
 		}
 
-		errs := make([]error, 0, len(group.resources))
-		for range group.resources {
-			errs = append(errs, <-errCh)
-		}
-		if err := errors.Join(errs...); err != nil {
-			return fmt.Errorf("error reconciling %s: %w", r.kind, err)
-		}
+		wg.Wait()
 	}
-
-	return nil
 }
 
-func (r *Reconciler[T]) handleEvent(ctx context.Context, event *loader.Event[T]) error {
+func (r *Reconciler[T]) handleEvent(ctx context.Context, event *loader.Event[T]) {
 	log.Debugf("Received %s event %s: %s", event.Resource.Kind(), event.Type, event.Resource.LogName())
 
 	switch event.Type {
 	case operatorpb.ResourceEventType_CREATED:
 		log.Infof("Received %s creation: %s", r.kind, event.Resource.LogName())
-		return r.manager.update(ctx, event.Resource)
+		r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_UPDATED:
 		log.Infof("Received %s update: %s", r.kind, event.Resource.LogName())
-		return r.manager.update(ctx, event.Resource)
+		r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_DELETED:
 		log.Infof("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
-		return r.manager.delete(event.Resource)
+		r.manager.delete(event.Resource)
 	}
-
-	return nil
 }

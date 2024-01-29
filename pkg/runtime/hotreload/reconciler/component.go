@@ -15,7 +15,6 @@ package reconciler
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -37,9 +36,9 @@ type component struct {
 // the generic reconciler.
 //
 //nolint:unused
-func (c *component) update(ctx context.Context, comp componentsapi.Component) error {
-	if strings.HasPrefix(comp.Spec.Type, "workflowbackend.") {
-		return fmt.Errorf("aborting to hot-reload a workflowbackend component which is not supported: %s", comp.LogName())
+func (c *component) update(ctx context.Context, comp componentsapi.Component) {
+	if !c.verify(comp) {
+		return
 	}
 
 	oldComp, exists := c.store.GetComponent(comp.Name)
@@ -48,20 +47,20 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) er
 	if exists {
 		if differ.AreSame(oldComp, comp) {
 			log.Debugf("Component update skipped: no changes detected: %s", comp.LogName())
-			return nil
+			return
 		}
 
 		log.Infof("Closing existing Component to reload: %s", oldComp.LogName())
 		// TODO: change close to accept pointer
 		if err := c.proc.Close(oldComp); err != nil {
 			log.Errorf("error closing old component: %s", err)
-			return nil
+			return
 		}
 	}
 
 	if !c.auth.IsObjectAuthorized(comp) {
 		log.Warnf("Received unauthorized component update, ignored: %s", comp.LogName())
-		return nil
+		return
 	}
 
 	log.Infof("Adding Component for processing: %s", comp.LogName())
@@ -70,18 +69,33 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) er
 		c.proc.WaitForEmptyComponentQueue()
 	}
 
-	return nil
+	return
 }
 
 //nolint:unused
-func (c *component) delete(comp componentsapi.Component) error {
-	if strings.HasPrefix(comp.Spec.Type, "workflowbackend.") {
-		return fmt.Errorf("aborting to hot-reload a workflowbackend component which is not supported: %s", comp.LogName())
+func (c *component) delete(comp componentsapi.Component) {
+	if !c.verify(comp) {
+		return
 	}
 
 	if err := c.proc.Close(comp); err != nil {
 		log.Errorf("error closing deleted component: %s", err)
 	}
+}
 
-	return nil
+//nolint:unused
+func (c *component) verify(vcomp componentsapi.Component) bool {
+	for backendName := range c.store.ListWorkflowBackends() {
+		if backendName == vcomp.Name {
+			log.Errorf("Aborting to hot-reload a workflowbackend component which is not supported: %s", vcomp.LogName())
+			return false
+		}
+	}
+
+	if strings.HasPrefix(vcomp.Spec.Type, "workflowbackend.") {
+		log.Errorf("Aborting to hot-reload a workflowbackend component which is not supported: %s", vcomp.LogName())
+		return false
+	}
+
+	return true
 }

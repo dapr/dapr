@@ -62,13 +62,13 @@ spec:
     enabled: true`), 0o600))
 
 	w.loglineCreate = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
+		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
 	))
 	w.loglineUpdate = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.sqlite/v1)",
+		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (pubsub.in-memory/v1)",
 	))
 	w.loglineDelete = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
+		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
 	))
 
 	w.resDirCreate = t.TempDir()
@@ -83,10 +83,6 @@ spec:
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithExecOptions(
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
 			exec.WithStdout(w.loglineCreate.Stdout()),
 		),
 	)
@@ -97,10 +93,6 @@ spec:
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithExecOptions(
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
 			exec.WithStdout(w.loglineUpdate.Stdout()),
 		),
 	)
@@ -121,10 +113,6 @@ spec:
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithExecOptions(
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
 			exec.WithStdout(w.loglineDelete.Stdout()),
 		),
 	)
@@ -187,7 +175,7 @@ kind: Component
 metadata:
  name: wfbackend
 spec:
- type: workflowbackend.sqlite
+ type: pubsub.in-memory
  version: v1
 `), 0o600))
 	w.loglineUpdate.EventuallyFoundAll(t)

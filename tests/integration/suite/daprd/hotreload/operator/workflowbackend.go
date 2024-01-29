@@ -58,13 +58,13 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t)
 
 	w.loglineCreate = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
+		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
 	))
 	w.loglineUpdate = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.sqlite/v1)",
+		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.sqlite/v1)",
 	))
 	w.loglineDelete = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
+		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
 	))
 
 	w.operatorCreate = operator.New(t,
@@ -126,10 +126,6 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 			exec.WithEnvVars(t,
 				"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 			),
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
 			exec.WithStdout(w.loglineCreate.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
@@ -143,10 +139,6 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 			exec.WithEnvVars(t,
 				"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 			),
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
 			exec.WithStdout(w.loglineUpdate.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
@@ -160,10 +152,6 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 			exec.WithEnvVars(t,
 				"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 			),
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
 			exec.WithStdout(w.loglineDelete.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
