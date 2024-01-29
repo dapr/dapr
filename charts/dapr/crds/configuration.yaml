@@ -253,7 +253,7 @@ spec:
                       the HTTP server
                     properties:
                       increasedCardinality:
-                        description: 'If false, metrics for the HTTP server are collected
+                        description: 'If true, metrics for the HTTP server are collected
                           with increased cardinality. The default is true in Dapr 1.13,
                           but will be changed to false in 1.14+'
                         type: boolean
@@ -301,7 +301,7 @@ spec:
                       the HTTP server
                     properties:
                       increasedCardinality:
-                        description: 'If false, metrics for the HTTP server are collected
+                        description: 'If true, metrics for the HTTP server are collected
                           with increased cardinality. The default is true in Dapr 1.13,
                           but will be changed to false in 1.14+'
                         type: boolean
