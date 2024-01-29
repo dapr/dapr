@@ -43,7 +43,7 @@ import (
 	corsDapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/middleware"
 	"github.com/dapr/dapr/pkg/responsewriter"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
@@ -65,7 +65,7 @@ type server struct {
 	config             ServerConfig
 	tracingSpec        config.TracingSpec
 	metricSpec         config.MetricSpec
-	pipeline           httpMiddleware.Pipeline
+	middleware         middleware.HTTP
 	api                API
 	apiSpec            config.APISpec
 	servers            []*http.Server
@@ -79,7 +79,7 @@ type NewServerOpts struct {
 	Config      ServerConfig
 	TracingSpec config.TracingSpec
 	MetricSpec  config.MetricSpec
-	Pipeline    httpMiddleware.Pipeline
+	Middleware  middleware.HTTP
 	APISpec     config.APISpec
 }
 
@@ -91,7 +91,7 @@ func NewServer(opts NewServerOpts) Server {
 		config:      opts.Config,
 		tracingSpec: opts.TracingSpec,
 		metricSpec:  opts.MetricSpec,
-		pipeline:    opts.Pipeline,
+		middleware:  opts.Middleware,
 		apiSpec:     opts.APISpec,
 	}
 }
@@ -358,11 +358,7 @@ func (s *server) useAPILogging(mux chi.Router) {
 }
 
 func (s *server) useComponents(r chi.Router) {
-	if len(s.pipeline.Handlers) == 0 {
-		return
-	}
-
-	r.Use(s.pipeline.Handlers...)
+	r.Use(s.middleware)
 }
 
 func (s *server) useCors(r chi.Router) {
