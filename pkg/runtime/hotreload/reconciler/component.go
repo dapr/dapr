@@ -15,7 +15,6 @@ package reconciler
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -38,9 +37,9 @@ type component struct {
 // the generic reconciler.
 //
 //nolint:unused
-func (c *component) update(ctx context.Context, comp componentsapi.Component) error {
-	if err := c.verify(comp); err != nil {
-		return err
+func (c *component) update(ctx context.Context, comp componentsapi.Component) {
+	if !c.verify(comp) {
+		return
 	}
 
 	oldComp, exists := c.store.GetComponent(comp.Name)
@@ -49,20 +48,20 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) er
 	if exists {
 		if differ.AreSame(oldComp, comp) {
 			log.Debugf("Component update skipped: no changes detected: %s", comp.LogName())
-			return nil
+			return
 		}
 
 		log.Infof("Closing existing Component to reload: %s", oldComp.LogName())
 		// TODO: change close to accept pointer
 		if err := c.proc.Close(oldComp); err != nil {
 			log.Errorf("error closing old component: %s", err)
-			return nil
+			return
 		}
 	}
 
 	if !c.auth.IsObjectAuthorized(comp) {
 		log.Warnf("Received unauthorized component update, ignored: %s", comp.LogName())
-		return nil
+		return
 	}
 
 	log.Infof("Adding Component for processing: %s", comp.LogName())
@@ -70,39 +69,43 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) er
 		log.Infof("Component updated: %s", comp.LogName())
 		c.proc.WaitForEmptyComponentQueue()
 	}
-
-	return nil
 }
 
 //nolint:unused
-func (c *component) delete(comp componentsapi.Component) error {
-	if err := c.verify(comp); err != nil {
-		return err
+func (c *component) delete(comp componentsapi.Component) {
+	if !c.verify(comp) {
+		return
 	}
 
 	if err := c.proc.Close(comp); err != nil {
 		log.Errorf("error closing deleted component: %s", err)
 	}
-
-	return nil
 }
 
 //nolint:unused
-func (c *component) verify(vcomp componentsapi.Component) error {
+func (c *component) verify(vcomp componentsapi.Component) bool {
 	toverify := []componentsapi.Component{vcomp}
 	if comp, ok := c.store.GetComponent(vcomp.Name); ok {
 		toverify = append(toverify, comp)
 	}
 
+	// Reject component if it has the same name as the actor state store.
+	if _, name, ok := c.store.GetStateStoreActor(); ok && name == vcomp.Name {
+		log.Errorf("Aborting to hot-reload a state store component that is used as an actor state store: %s", vcomp.LogName())
+		return false
+	}
+
+	// Reject component if it is being marked as the actor state store.
 	for _, comp := range toverify {
 		if strings.HasPrefix(comp.Spec.Type, "state.") {
 			for _, meta := range comp.Spec.Metadata {
 				if strings.EqualFold(meta.Name, state.PropertyKeyActorStateStore) {
-					return fmt.Errorf("aborting to hot-reload a state store component that is used as an actor state store: %s", comp.LogName())
+					log.Errorf("Aborting to hot-reload a state store component that is used as an actor state store: %s", comp.LogName())
+					return false
 				}
 			}
 		}
 	}
 
-	return nil
+	return true
 }

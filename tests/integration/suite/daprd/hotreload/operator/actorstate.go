@@ -58,13 +58,13 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t)
 
 	a.loglineCreate = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
+		"Aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
 	))
 	a.loglineUpdate = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
+		"Aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
 	))
 	a.loglineDelete = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
+		"Aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
 	))
 
 	a.operatorCreate = operator.New(t,
@@ -100,7 +100,7 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 
 	inmemStore := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "mystore"},
+		ObjectMeta: metav1.ObjectMeta{Name: "mystore", Namespace: "default"},
 		Spec: compapi.ComponentSpec{
 			Type: "state.in-memory", Version: "v1",
 			Metadata: []common.NameValuePair{{Name: "actorStateStore", Value: common.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(`"true"`)}}}},
@@ -115,11 +115,7 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
+			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
 			exec.WithStdout(a.loglineCreate.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
@@ -130,11 +126,7 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
+			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
 			exec.WithStdout(a.loglineUpdate.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
@@ -145,11 +137,7 @@ func (a *actorstate) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
-			exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
+			exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
 			exec.WithStdout(a.loglineDelete.Stdout()),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
@@ -177,7 +165,7 @@ func (a *actorstate) Run(t *testing.T, ctx context.Context) {
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{}, comps)
 	inmemStore := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
-		ObjectMeta: metav1.ObjectMeta{Name: "mystore"},
+		ObjectMeta: metav1.ObjectMeta{Name: "mystore", Namespace: "default"},
 		Spec: compapi.ComponentSpec{
 			Type: "state.in-memory", Version: "v1",
 			Metadata: []common.NameValuePair{{Name: "actorStateStore", Value: common.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(`"true"`)}}}},

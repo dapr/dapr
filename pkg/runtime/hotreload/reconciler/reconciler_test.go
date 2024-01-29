@@ -95,13 +95,11 @@ func Test_Run(t *testing.T) {
 		mngr.Loader = compLoader
 		updateCh := make(chan componentsapi.Component)
 		deleteCh := make(chan componentsapi.Component)
-		mngr.deleteFn = func(c componentsapi.Component) error {
+		mngr.deleteFn = func(c componentsapi.Component) {
 			deleteCh <- c
-			return nil
 		}
-		mngr.updateFn = func(_ context.Context, c componentsapi.Component) error {
+		mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
 			updateCh <- c
-			return nil
 		}
 
 		r.manager = mngr
@@ -182,13 +180,11 @@ func Test_reconcile(t *testing.T) {
 
 	eventCh := make(chan componentsapi.Component)
 	mngr := newFakeManager()
-	mngr.deleteFn = func(c componentsapi.Component) error {
+	mngr.deleteFn = func(c componentsapi.Component) {
 		eventCh <- c
-		return nil
 	}
-	mngr.updateFn = func(_ context.Context, c componentsapi.Component) error {
+	mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
 		eventCh <- c
-		return nil
 	}
 
 	r := &Reconciler[componentsapi.Component]{
@@ -196,9 +192,10 @@ func Test_reconcile(t *testing.T) {
 	}
 
 	t.Run("events should be sent in the correct grouped order", func(t *testing.T) {
-		errCh := make(chan error)
+		recDone := make(chan struct{})
 		go func() {
-			errCh <- r.reconcile(context.Background(), &differ.Result[componentsapi.Component]{
+			defer close(recDone)
+			r.reconcile(context.Background(), &differ.Result[componentsapi.Component]{
 				Deleted: deleted,
 				Updated: updated,
 				Created: created,
@@ -239,8 +236,7 @@ func Test_reconcile(t *testing.T) {
 		assert.ElementsMatch(t, created, got)
 
 		select {
-		case err := <-errCh:
-			require.NoError(t, err)
+		case <-recDone:
 		case <-time.After(time.Second * 3):
 			t.Error("did not get reconcile return in time")
 		}
@@ -253,15 +249,13 @@ func Test_handleEvent(t *testing.T) {
 	updateCalled, deleteCalled := 0, 0
 	comp1 := componentsapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
-	mngr.deleteFn = func(c componentsapi.Component) error {
+	mngr.deleteFn = func(c componentsapi.Component) {
 		assert.Equal(t, comp1, c)
 		deleteCalled++
-		return nil
 	}
-	mngr.updateFn = func(_ context.Context, c componentsapi.Component) error {
+	mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
 		assert.Equal(t, comp1, c)
 		updateCalled++
-		return nil
 	}
 
 	r := &Reconciler[componentsapi.Component]{manager: mngr}
@@ -293,27 +287,23 @@ func Test_handleEvent(t *testing.T) {
 
 type fakeManager struct {
 	loader.Loader[componentsapi.Component]
-	updateFn func(context.Context, componentsapi.Component) error
-	deleteFn func(componentsapi.Component) error
+	updateFn func(context.Context, componentsapi.Component)
+	deleteFn func(componentsapi.Component)
 }
 
 func newFakeManager() *fakeManager {
 	return &fakeManager{
-		updateFn: func(context.Context, componentsapi.Component) error {
-			return nil
-		},
-		deleteFn: func(componentsapi.Component) error {
-			return nil
-		},
+		updateFn: func(context.Context, componentsapi.Component) {},
+		deleteFn: func(componentsapi.Component) {},
 	}
 }
 
 //nolint:unused
-func (f *fakeManager) update(ctx context.Context, comp componentsapi.Component) error {
-	return f.updateFn(ctx, comp)
+func (f *fakeManager) update(ctx context.Context, comp componentsapi.Component) {
+	f.updateFn(ctx, comp)
 }
 
 //nolint:unused
-func (f *fakeManager) delete(comp componentsapi.Component) error {
-	return f.deleteFn(comp)
+func (f *fakeManager) delete(comp componentsapi.Component) {
+	f.deleteFn(comp)
 }

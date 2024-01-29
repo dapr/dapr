@@ -62,13 +62,13 @@ spec:
     enabled: true`), 0o600))
 
 	a.loglineCreate = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
+		"Aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
 	))
 	a.loglineUpdate = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
+		"Aborting to hot-reload a state store component that is used as an actor state store: mystore (pubsub.in-memory/v1)",
 	))
 	a.loglineDelete = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
+		"Aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
 	))
 
 	a.resDirCreate = t.TempDir()
@@ -82,10 +82,6 @@ spec:
 		daprd.WithResourcesDir(a.resDirCreate),
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithExecOptions(
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
 			exec.WithStdout(a.loglineCreate.Stdout()),
 		),
 	)
@@ -95,10 +91,6 @@ spec:
 		daprd.WithResourcesDir(a.resDirUpdate),
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithExecOptions(
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
 			exec.WithStdout(a.loglineUpdate.Stdout()),
 		),
 	)
@@ -121,10 +113,6 @@ spec:
 		daprd.WithResourcesDir(a.resDirDelete),
 		daprd.WithPlacementAddresses(place.Address()),
 		daprd.WithExecOptions(
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
 			exec.WithStdout(a.loglineDelete.Stdout()),
 		),
 	)
@@ -186,8 +174,11 @@ kind: Component
 metadata:
  name: mystore
 spec:
- type: state.in-memory
+ type: pubsub.in-memory
  version: v1
+ metadata:
+ - name: actorstatestore
+   value: "true"
 `), 0o600))
 	a.loglineUpdate.EventuallyFoundAll(t)
 
