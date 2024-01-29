@@ -61,7 +61,7 @@ func (n *noentities) Setup(t *testing.T) []framework.Option {
 	var once sync.Once
 	srvNoEntities := prochttp.New(t,
 		prochttp.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`{}`))
+			w.Write([]byte(`{"entities": []}`))
 		}),
 		prochttp.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
