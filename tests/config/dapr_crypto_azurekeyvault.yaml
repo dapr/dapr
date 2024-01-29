@@ -7,7 +7,7 @@ spec:
   version: v1
   metadata:
     - name: vaultName
-      envRef: AzureKeyVaultName
+      envRef: AZURE_KEY_VAULT_NAME
     - name: azureTenantId
       secretKeyRef:
         name: azurekeyvault-secret
