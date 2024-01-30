@@ -53,6 +53,10 @@ type ComponentStore struct {
 	components              []compsv1alpha1.Component
 	subscriptions           []rtpubsub.Subscription
 	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
+	actorStateStore         struct {
+		name  string
+		store state.Store
+	}
 
 	compPendingLock sync.Mutex
 	compPending     *compsv1alpha1.Component
