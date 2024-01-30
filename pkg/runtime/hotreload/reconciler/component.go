@@ -15,6 +15,7 @@ package reconciler
 
 import (
 	"context"
+	"strings"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
@@ -22,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/processor/state"
 )
 
 type component struct {
@@ -36,6 +38,10 @@ type component struct {
 //
 //nolint:unused
 func (c *component) update(ctx context.Context, comp componentsapi.Component) {
+	if !c.verify(comp) {
+		return
+	}
+
 	oldComp, exists := c.store.GetComponent(comp.Name)
 	_, _ = c.proc.Secret().ProcessResource(ctx, comp)
 
@@ -48,7 +54,7 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) {
 		log.Infof("Closing existing Component to reload: %s", oldComp.LogName())
 		// TODO: change close to accept pointer
 		if err := c.proc.Close(oldComp); err != nil {
-			log.Errorf("error closing old component: %w", err)
+			log.Errorf("error closing old component: %s", err)
 			return
 		}
 	}
@@ -67,7 +73,39 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) {
 
 //nolint:unused
 func (c *component) delete(comp componentsapi.Component) {
-	if err := c.proc.Close(comp); err != nil {
-		log.Errorf("error closing deleted component: %w", err)
+	if !c.verify(comp) {
+		return
 	}
+
+	if err := c.proc.Close(comp); err != nil {
+		log.Errorf("error closing deleted component: %s", err)
+	}
+}
+
+//nolint:unused
+func (c *component) verify(vcomp componentsapi.Component) bool {
+	toverify := []componentsapi.Component{vcomp}
+	if comp, ok := c.store.GetComponent(vcomp.Name); ok {
+		toverify = append(toverify, comp)
+	}
+
+	// Reject component if it has the same name as the actor state store.
+	if _, name, ok := c.store.GetStateStoreActor(); ok && name == vcomp.Name {
+		log.Errorf("Aborting to hot-reload a state store component that is used as an actor state store: %s", vcomp.LogName())
+		return false
+	}
+
+	// Reject component if it is being marked as the actor state store.
+	for _, comp := range toverify {
+		if strings.HasPrefix(comp.Spec.Type, "state.") {
+			for _, meta := range comp.Spec.Metadata {
+				if strings.EqualFold(meta.Name, state.PropertyKeyActorStateStore) {
+					log.Errorf("Aborting to hot-reload a state store component that is used as an actor state store: %s", comp.LogName())
+					return false
+				}
+			}
+		}
+	}
+
+	return true
 }
