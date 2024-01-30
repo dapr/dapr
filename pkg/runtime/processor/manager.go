@@ -61,7 +61,7 @@ type BindingManager interface {
 }
 
 type WorkflowBackendManager interface {
-	GetBackend() (backend.Backend, bool)
+	Backend() (backend.Backend, bool)
 }
 
 func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, error) {

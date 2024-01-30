@@ -19,5 +19,5 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-// WorkflowBackend is a function that returns a workflow backend
-type WorkflowBackend = func(Metadata, logger.Logger) (backend.Backend, error)
+// workflowBackendFactory is a function that returns a workflow backend
+type workflowBackendFactory func(Metadata, logger.Logger) (backend.Backend, error)

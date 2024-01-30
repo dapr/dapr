@@ -145,7 +145,7 @@ func WithAppHealthProbeThreshold(threshold int) Option {
 
 func WithResourceFiles(files ...string) Option {
 	return func(o *options) {
-		o.resourceFiles = files
+		o.resourceFiles = append(o.resourceFiles, files...)
 	}
 }
 
