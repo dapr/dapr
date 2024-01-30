@@ -22,10 +22,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	
-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	placementtests "github.com/dapr/dapr/tests/integration/suite/placement/shared"
 
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/util"
@@ -64,7 +62,7 @@ func (n *withMin) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
 	// Connect
-	conn, err := placementtests.EstablishConn(ctx, n.place.Port())
+	conn, err := n.place.EstablishConn(ctx)
 	require.NoError(t, err)
 
 	// Collect messages
@@ -97,26 +95,40 @@ func (n *withMin) Run(t *testing.T, ctx context.Context) {
 
 	// API level should be lower
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		placementtests.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
+		placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Trying to register a host with version 5 should fail
-	placementtests.RegisterHostFailing(t, ctx, conn, 5)
+	placement.RegisterHostFailing(t, ctx, conn, 5)
 
 	// Register the first host with the lower API level
 	stopCh1 := make(chan struct{})
-	placementtests.RegisterHost(t, ctx, conn, "myapp1", level1, placementMessageCh, stopCh1)
+	msg1 := &placementv1pb.Host{
+		Name:     "myapp1",
+		Port:     1111,
+		Entities: []string{"someactor1"},
+		Id:       "myapp1",
+		ApiLevel: uint32(level1),
+	}
+	placement.RegisterHost(t, ctx, conn, msg1, placementMessageCh, stopCh1)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		placementtests.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
+		placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Register the second host with the higher API level
-	placementtests.RegisterHost(t, ctx, conn, "myapp2", level2, placementMessageCh, nil)
+	msg2 := &placementv1pb.Host{
+		Name:     "myapp2",
+		Port:     2222,
+		Entities: []string{"someactor2"},
+		Id:       "myapp2",
+		ApiLevel: uint32(level2),
+	}
+	placement.RegisterHost(t, ctx, conn, msg2, placementMessageCh, nil)
 
 	// API level should not increase
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		placementtests.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
+		placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase to the higher one (30)
@@ -126,6 +138,6 @@ func (n *withMin) Run(t *testing.T, ctx context.Context) {
 	}, 15*time.Second, 50*time.Millisecond)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		placementtests.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level2)
+		placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level2)
 	}, 5*time.Second, 100*time.Millisecond)
 }

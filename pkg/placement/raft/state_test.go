@@ -275,3 +275,46 @@ func TestRestoreHashingTables(t *testing.T) {
 	// assert
 	assert.Len(t, s.hashingTableMap(), 2)
 }
+
+func TestUpdateAPILevel(t *testing.T) {
+	// arrange
+	s := newDaprHostMemberState(10)
+	s.upsertMember(&DaprHostMember{
+		Name:      "127.0.0.1:8080",
+		AppID:     "FakeID1",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo"},
+		UpdatedAt: 1,
+		APILevel:  10,
+	})
+	s.upsertMember(&DaprHostMember{
+		Name:      "127.0.0.1:8081",
+		AppID:     "FakeID2",
+		Entities:  []string{"actorTypeThree", "actorTypeFour"},
+		UpdatedAt: 2,
+		APILevel:  20,
+	})
+	s.upsertMember(&DaprHostMember{
+		Name:      "127.0.0.1:8082",
+		AppID:     "FakeID3",
+		Entities:  []string{"actorTypeFive"},
+		UpdatedAt: 3,
+		APILevel:  30,
+	})
+
+	assert.Equal(t, uint32(10), s.data.APILevel)
+
+	s.removeMember(&DaprHostMember{
+		Name: "127.0.0.1:8080",
+	})
+	assert.Equal(t, uint32(20), s.data.APILevel)
+
+	s.removeMember(&DaprHostMember{
+		Name: "127.0.0.1:8081",
+	})
+	assert.Equal(t, uint32(30), s.data.APILevel)
+
+	s.removeMember(&DaprHostMember{
+		Name: "127.0.0.1:8082",
+	})
+	assert.Equal(t, uint32(30), s.data.APILevel)
+}

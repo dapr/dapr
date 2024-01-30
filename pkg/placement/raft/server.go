@@ -41,8 +41,9 @@ const (
 
 	commandTimeout = 1 * time.Second
 
-	nameResolveRetryInterval = 2 * time.Second
-	nameResolveMaxRetry      = 120
+	nameResolveRetryInterval                = 2 * time.Second
+	nameResolveMaxRetry                     = 120
+	NoVirtualNodesInPlacementTablesAPILevel = 20
 )
 
 // PeerInfo represents raft peer node information.

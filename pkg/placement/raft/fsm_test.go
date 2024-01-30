@@ -100,10 +100,14 @@ func TestRestore(t *testing.T) {
 
 func TestPlacementStateWithVirtualNodes(t *testing.T) {
 	fsm := newFSM(100)
+
+	// We expect to see the placement table INCLUDE vnodes,
+	// because the only dapr instance in the cluster is at level 10 (pre v1.13)
 	m := DaprHostMember{
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",
 		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		APILevel: 10,
 	}
 	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
 	require.NoError(t, err)
@@ -115,7 +119,7 @@ func TestPlacementStateWithVirtualNodes(t *testing.T) {
 		Data:  cmdLog,
 	})
 
-	newTable := fsm.PlacementState(true)
+	newTable := fsm.PlacementState()
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
 	// The default replicationFactor is 100
@@ -135,6 +139,7 @@ func TestPlacementState(t *testing.T) {
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",
 		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		APILevel: 20,
 	}
 	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
 	require.NoError(t, err)
@@ -146,7 +151,7 @@ func TestPlacementState(t *testing.T) {
 		Data:  cmdLog,
 	})
 
-	newTable := fsm.PlacementState(false)
+	newTable := fsm.PlacementState()
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
 	// The default replicationFactor is 100
