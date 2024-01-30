@@ -54,9 +54,7 @@ func (j *jsonFormat) Setup(t *testing.T) []framework.Option {
 	}
 
 	// Init placement with a maximum API level of 10
-	j.place = placement.New(t,
-		placement.WithMaxAPILevel(10),
-	)
+	j.place = placement.New(t)
 
 	// Create a SQLite database
 	j.db = sqlite.New(t, sqlite.WithActorStateStore(true))
