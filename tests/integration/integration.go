@@ -67,15 +67,16 @@ func RunIntegrationTests(t *testing.T) {
 
 			f := framework.Run(t, ctx, options...)
 
+			t.Cleanup(func() {
+				t.Log("cleaning up framework")
+				f.Cleanup(t)
+				t.Log("done")
+			})
+
 			t.Run("run", func(t *testing.T) {
 				t.Log("running test case")
 				tcase.Run(t, ctx)
 			})
-
-			t.Log("cleaning up framework")
-			f.Cleanup(t)
-
-			t.Log("done")
 		})
 	}
 

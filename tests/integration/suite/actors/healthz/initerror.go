@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
@@ -39,15 +40,19 @@ func init() {
 // initerror tests that Daprd will block actor calls until actors have been
 // initialized.
 type initerror struct {
-	daprd        *daprd.Daprd
-	place        *placement.Placement
-	configCalled chan struct{}
-	blockConfig  chan struct{}
+	daprd         *daprd.Daprd
+	place         *placement.Placement
+	configCalled  chan struct{}
+	blockConfig   chan struct{}
+	healthzCalled chan struct{}
 }
 
 func (i *initerror) Setup(t *testing.T) []framework.Option {
 	i.configCalled = make(chan struct{})
 	i.blockConfig = make(chan struct{})
+	i.healthzCalled = make(chan struct{})
+
+	var once sync.Once
 
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
@@ -57,6 +62,9 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
+		once.Do(func() {
+			close(i.healthzCalled)
+		})
 	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`OK`))
@@ -105,6 +113,12 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, rtv1.ActorRuntime_INITIALIZING, meta.GetActorRuntime().GetRuntimeStatus())
 
 	close(i.blockConfig)
+
+	select {
+	case <-i.healthzCalled:
+	case <-time.After(time.Second * 15):
+		assert.Fail(t, "timed out waiting for healthz call")
+	}
 
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)

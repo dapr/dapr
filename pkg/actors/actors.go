@@ -407,7 +407,16 @@ func (a *actorsRuntime) haltAllActors() error {
 func (a *actorsRuntime) deactivateActor(act *actor) error {
 	// This uses a background context as it should be unrelated from the caller's context
 	// Once the decision to deactivate an actor has been made, we must go through with it or we could have an inconsistent state
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		defer cancel()
+		select {
+		case <-ctx.Done():
+		case <-a.closeCh:
+		}
+	}()
 
 	// Delete the actor from the actor table regardless of the outcome of deactivation the actor in the app
 	actorKey := act.Key()
@@ -1272,7 +1281,7 @@ func (a *actorsRuntime) Close() error {
 
 	var errs []error
 	if a.closed.CompareAndSwap(false, true) {
-		defer func() { close(a.closeCh) }()
+		close(a.closeCh)
 		if a.checker != nil {
 			a.checker.Close()
 		}
