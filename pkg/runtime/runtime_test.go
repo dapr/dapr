@@ -2167,7 +2167,7 @@ func testSecurity(t *testing.T) security.Handler {
 	for _, tc := range tests {
 		t.Run(tc.env, func(t *testing.T) {
 			//Set the environment variable to the test case value
-			os.Setenv("OTEL_SERVICE_NAME", tc.env)
+			t.Setenv("OTEL_SERVICE_NAME", tc.env)
 			//Call the function and check the result
 			got := getOtelServiceName(tc.fallback)
 			if got != tc.expected {
