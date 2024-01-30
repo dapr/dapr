@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	prometheus "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -223,6 +222,8 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
 			assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
 			assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_success|app_id:myapp|namespace:|status:success"]))
+			assert.GreaterOrEqual(t, 1, int(metrics["dapr_runtime_workflow_execution_latency|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
+			assert.GreaterOrEqual(t, 1, int(metrics["dapr_runtime_workflow_scheduling_latency|app_id:myapp|namespace:|workflow_name:workflow"]))
 		})
 		t.Run("failed workflow execution", func(t *testing.T) {
 			id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_failure"))
@@ -266,10 +267,6 @@ func (m *metrics) getMetrics(t *testing.T, ctx context.Context) map[string]float
 
 	metrics := make(map[string]float64)
 	for _, mf := range metricFamilies {
-		if mf.GetType() != prometheus.MetricType_COUNTER {
-			continue
-		}
-
 		for _, m := range mf.GetMetric() {
 			key := mf.GetName()
 			for _, l := range m.GetLabel() {
