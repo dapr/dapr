@@ -2152,8 +2152,6 @@ func testSecurity(t *testing.T) security.Handler {
 
  TestGetOtelServiceName(t *testing.T) {
 	// Save the original value of the OTEL_SERVICE_NAME variable and restore at the end
-	original := os.Getenv("OTEL_SERVICE_NAME")
-	defer os.Setenv("OTEL_SERVICE_NAME", original)
 
 	tests := []struct {
 		env      string //The value of the OTEL_SERVICE_NAME variable
