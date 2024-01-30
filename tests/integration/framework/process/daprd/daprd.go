@@ -238,7 +238,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 	}
 }
 
-func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
+func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
 	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", d.GRPCPort()),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
@@ -246,7 +246,11 @@ func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
-	return rtv1.NewDaprClient(conn)
+	return conn
+}
+
+func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
+	return rtv1.NewDaprClient(d.GRPCConn(t, ctx))
 }
 
 func (d *Daprd) AppID() string {
