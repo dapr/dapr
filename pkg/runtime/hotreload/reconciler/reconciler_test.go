@@ -192,9 +192,10 @@ func Test_reconcile(t *testing.T) {
 	}
 
 	t.Run("events should be sent in the correct grouped order", func(t *testing.T) {
-		errCh := make(chan error)
+		recDone := make(chan struct{})
 		go func() {
-			errCh <- r.reconcile(context.Background(), &differ.Result[componentsapi.Component]{
+			defer close(recDone)
+			r.reconcile(context.Background(), &differ.Result[componentsapi.Component]{
 				Deleted: deleted,
 				Updated: updated,
 				Created: created,
@@ -235,8 +236,7 @@ func Test_reconcile(t *testing.T) {
 		assert.ElementsMatch(t, created, got)
 
 		select {
-		case err := <-errCh:
-			require.NoError(t, err)
+		case <-recDone:
 		case <-time.After(time.Second * 3):
 			t.Error("did not get reconcile return in time")
 		}
@@ -293,10 +293,8 @@ type fakeManager struct {
 
 func newFakeManager() *fakeManager {
 	return &fakeManager{
-		updateFn: func(context.Context, componentsapi.Component) {
-		},
-		deleteFn: func(componentsapi.Component) {
-		},
+		updateFn: func(context.Context, componentsapi.Component) {},
+		deleteFn: func(componentsapi.Component) {},
 	}
 }
 

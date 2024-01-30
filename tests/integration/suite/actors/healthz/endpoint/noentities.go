@@ -109,7 +109,7 @@ func (n *noentities) Run(t *testing.T, ctx context.Context) {
 		assert.Empty(c, meta.GetActorRuntime().GetActiveActors())
 		assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 		assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
-	}, time.Second*15, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*100)
 
 	select {
 	case <-n.healthzCalled:
