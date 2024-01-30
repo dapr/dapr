@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("cryptoapp")
 	utils.InitHTTPClient(true)
 
-	log.Printf("AzureKeyVaultName=%s", os.Getenv("AZURE_KEY_VAULT_NAME"))
+	log.Printf("AZURE_KEY_VAULT_NAME=%s", os.Getenv("AZURE_KEY_VAULT_NAME"))
 
 	// These apps will be deployed before starting actual test
 	// and will be cleaned up after all tests are finished automatically
@@ -74,7 +74,7 @@ func TestMain(m *testing.M) {
 			Replicas:       1,
 			IngressEnabled: true,
 			// This is used by the azurekeyvault component envRef. It will be empty if not running on Azure
-			DaprEnv: "AzureKeyVaultName=" + os.Getenv("AZURE_KEY_VAULT_NAME"),
+			DaprEnv: "AZURE_KEY_VAULT_NAME=" + os.Getenv("AZURE_KEY_VAULT_NAME"),
 		},
 	}
 
