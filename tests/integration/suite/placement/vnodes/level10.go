@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package table
+package vnodes
 
 import (
 	"context"
@@ -37,7 +37,6 @@ type vNodesAPILevel10 struct {
 
 func (v *vNodesAPILevel10) Setup(t *testing.T) []framework.Option {
 	v.place = placement.New(t,
-		placement.WithLogLevel("debug"),
 		placement.WithMetadataEnabled(true),
 	)
 

@@ -41,7 +41,6 @@ type withMax struct {
 
 func (n *withMax) Setup(t *testing.T) []framework.Option {
 	n.place = placement.New(t,
-		placement.WithLogLevel("debug"),
 		placement.WithMaxAPILevel(25),
 		placement.WithMetadataEnabled(true),
 	)

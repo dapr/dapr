@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"strconv"
 	"sync/atomic"
@@ -28,15 +27,14 @@ import (
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	grpcinsecure "google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
-
-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -179,7 +177,7 @@ func (p *Placement) CurrentActorsAPILevel() int {
 func (p *Placement) EstablishConn(ctx context.Context) (*grpc.ClientConn, error) {
 	return grpc.DialContext(ctx, "localhost:"+strconv.Itoa(p.port),
 		grpc.WithBlock(),
-		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 }
 
