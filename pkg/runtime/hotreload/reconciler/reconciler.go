@@ -80,9 +80,7 @@ func (r *Reconciler[T]) Run(ctx context.Context) error {
 		return fmt.Errorf("error starting component stream: %w", err)
 	}
 
-	r.watchForEvents(ctx, stream)
-
-	return nil
+	return r.watchForEvents(ctx, stream)
 }
 
 func (r *Reconciler[T]) Close() error {
@@ -94,7 +92,7 @@ func (r *Reconciler[T]) Close() error {
 	return nil
 }
 
-func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loader.Event[T]) {
+func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loader.Event[T]) error {
 	log.Infof("Starting to watch %s updates", r.kind)
 
 	ticker := r.clock.NewTicker(time.Second * 60)
@@ -106,9 +104,9 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loade
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-r.closeCh:
-			return
+			return nil
 		case <-ticker.C():
 			log.Debugf("Running scheduled %s reconcile", r.kind)
 			resources, err := r.manager.List(ctx)
@@ -117,18 +115,16 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loade
 				continue
 			}
 
-			if err := r.reconcile(ctx, differ.Diff(resources)); err != nil {
-				log.Errorf("Error reconciling %s: %s", r.kind, err)
-			}
+			r.reconcile(ctx, differ.Diff(resources))
 		case event := <-stream:
 			r.handleEvent(ctx, event)
 		}
 	}
 }
 
-func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) error {
+func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) {
 	if result == nil {
-		return nil
+		return
 	}
 
 	var wg sync.WaitGroup
@@ -150,10 +146,9 @@ func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T])
 				})
 			}(resource, group.eventType)
 		}
+
 		wg.Wait()
 	}
-
-	return nil
 }
 
 func (r *Reconciler[T]) handleEvent(ctx context.Context, event *loader.Event[T]) {
