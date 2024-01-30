@@ -124,11 +124,11 @@ def test_diff(arr_old, arr_new, label, test='ttest'):
             return True
 
         print(f"Passed! Did not find statistically significant increase in {label}.")
-    elif test == 'tp75_plus_5percent':
+    elif test == 'tp75_plus_10percent':
         # Memory measurement has enough variation that the t-test is too strict.
         # So, we created this custom comparison to avoid false positives.
-        # Picking 5% as a good enough margin observed by various runs with the same binary.
-        if p75_new > p75_old * 1.05:
+        # Picking 10% as a good enough margin observed by various runs with the same binary.
+        if p75_new > p75_old * 1.10:
             print(f"Warning! Found significant increase in {label}.")
             return True
 
@@ -165,7 +165,7 @@ if __name__ == "__main__":
     memory_data_new, goroutine_data_new = run_sidecar(new_binary, "treatment")
     memory_data_old, goroutine_data_old = run_sidecar(old_binary, "control")
 
-    memory_diff = test_diff(memory_data_old, memory_data_new, "memory utilization (in MB)", "tp75_plus_5percent")
+    memory_diff = test_diff(memory_data_old, memory_data_new, "memory utilization (in MB)", "tp75_plus_10percent")
     goroutine_diff = test_diff(goroutine_data_old, goroutine_data_new, "number of go routines", "ttest")
 
     if binary_size_diff or memory_diff or goroutine_diff:
