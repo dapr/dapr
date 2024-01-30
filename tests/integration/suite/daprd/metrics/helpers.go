@@ -21,7 +21,6 @@ import (
 	"testing"
 	"time"
 
-	prometheus "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -112,10 +111,6 @@ func (m *base) getMetrics(t *testing.T, ctx context.Context) map[string]float64 
 
 	metrics := make(map[string]float64)
 	for _, mf := range metricFamilies {
-		if mf.GetType() != prometheus.MetricType_COUNTER {
-			continue
-		}
-
 		for _, m := range mf.GetMetric() {
 			key := mf.GetName()
 			for _, l := range m.GetLabel() {

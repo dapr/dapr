@@ -222,7 +222,10 @@ func TestExecution(t *testing.T) {
 
 	t.Run("record workflow executions", func(t *testing.T) {
 		countMetricName := "runtime/workflow/execution/count"
+		executionLatencyMetricName := "runtime/workflow/execution/latency"
+		schedulingLatencyMetricName := "runtime/workflow/scheduling/latency"
 		workflowName := "test-workflow"
+
 		t.Run("Failed with retryable error", func(t *testing.T) {
 			w := initWorkflowMetrics()
 
@@ -254,6 +257,30 @@ func TestExecution(t *testing.T) {
 			v := view.Find(countMetricName)
 
 			allTagsPresent(t, v, viewData[0].Tags)
+		})
+
+		t.Run("workflow execution latency", func(t *testing.T) {
+			w := initWorkflowMetrics()
+
+			w.WorkflowExecutionLatency(context.Background(), workflowName, StatusSuccess, 20)
+
+			viewData, _ := view.RetrieveData(executionLatencyMetricName)
+			v := view.Find(executionLatencyMetricName)
+
+			allTagsPresent(t, v, viewData[0].Tags)
+			assert.InEpsilon(t, float64(20), viewData[0].Data.(*view.DistributionData).Min, 0)
+		})
+
+		t.Run("workflow scheduling latency", func(t *testing.T) {
+			w := initWorkflowMetrics()
+
+			w.WorkflowSchedulingLatency(context.Background(), workflowName, 10)
+
+			viewData, _ := view.RetrieveData(schedulingLatencyMetricName)
+			v := view.Find(schedulingLatencyMetricName)
+
+			allTagsPresent(t, v, viewData[0].Tags)
+			assert.InEpsilon(t, float64(10), viewData[0].Data.(*view.DistributionData).Min, 0)
 		})
 	})
 }
