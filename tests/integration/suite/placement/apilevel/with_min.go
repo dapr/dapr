@@ -20,11 +20,11 @@ import (
 	"testing"
 	"time"
 
-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	placementtests "github.com/dapr/dapr/tests/integration/suite/placement/shared"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	placementtests "github.com/dapr/dapr/tests/integration/suite/placement/shared"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
