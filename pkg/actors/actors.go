@@ -1279,7 +1279,7 @@ func (a *actorsRuntime) Close() error {
 
 	var errs []error
 	if a.closed.CompareAndSwap(false, true) {
-		defer func() { close(a.closeCh) }()
+		close(a.closeCh)
 		if a.checker != nil {
 			a.checker.Close()
 		}
