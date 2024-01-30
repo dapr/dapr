@@ -84,6 +84,8 @@ type Options struct {
 	LogStorePath      string
 	Clock             clock.Clock
 	ReplicationFactor int64
+	MinAPILevel       uint32
+	MaxAPILevel       uint32
 }
 
 // New creates Raft server node.
@@ -106,7 +108,11 @@ func New(opts Options) *Server {
 		raftLogStorePath: opts.LogStorePath,
 		clock:            cl,
 		raftReady:        make(chan struct{}),
-		fsm:              newFSM(opts.ReplicationFactor),
+		fsm: newFSM(DaprHostMemberStateConfig{
+			replicationFactor: opts.ReplicationFactor,
+			minAPILevel:       opts.MinAPILevel,
+			maxAPILevel:       opts.MaxAPILevel,
+		}),
 	}
 }
 

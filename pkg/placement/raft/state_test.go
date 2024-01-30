@@ -21,7 +21,11 @@ import (
 
 func TestNewDaprHostMemberState(t *testing.T) {
 	// act
-	s := newDaprHostMemberState(10)
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 
 	// assert
 	assert.Equal(t, uint64(0), s.Index())
@@ -31,7 +35,11 @@ func TestNewDaprHostMemberState(t *testing.T) {
 
 func TestClone(t *testing.T) {
 	// arrange
-	s := newDaprHostMemberState(10)
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	s.upsertMember(&DaprHostMember{
 		Name:     "127.0.0.1:8080",
 		AppID:    "FakeID",
@@ -50,7 +58,11 @@ func TestClone(t *testing.T) {
 
 func TestUpsertMember(t *testing.T) {
 	// arrange
-	s := newDaprHostMemberState(10)
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 
 	t.Run("add new actor member", func(t *testing.T) {
 		// act
@@ -131,7 +143,11 @@ func TestUpsertMember(t *testing.T) {
 
 func TestRemoveMember(t *testing.T) {
 	// arrange
-	s := newDaprHostMemberState(10)
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 
 	t.Run("remove member and clean up consistent hashing table", func(t *testing.T) {
 		// act
@@ -174,7 +190,11 @@ func TestUpdateHashingTable(t *testing.T) {
 	// each subtest has dependency on the state
 
 	// arrange
-	s := newDaprHostMemberState(10)
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 
 	t.Run("add new hashing table per actor types", func(t *testing.T) {
 		testMember := &DaprHostMember{
@@ -227,7 +247,11 @@ func TestRemoveHashingTable(t *testing.T) {
 		{"127.0.0.1:8081", 0},
 	}
 
-	s := newDaprHostMemberState(10)
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	for _, tc := range testcases {
 		testMember.Name = tc.name
 		s.updateHashingTables(testMember)
@@ -278,7 +302,11 @@ func TestRestoreHashingTables(t *testing.T) {
 
 func TestUpdateAPILevel(t *testing.T) {
 	// arrange
-	s := newDaprHostMemberState(10)
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	s.upsertMember(&DaprHostMember{
 		Name:      "127.0.0.1:8080",
 		AppID:     "FakeID1",

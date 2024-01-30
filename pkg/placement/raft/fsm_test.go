@@ -24,7 +24,11 @@ import (
 )
 
 func TestFSMApply(t *testing.T) {
-	fsm := newFSM(100)
+	fsm := newFSM(DaprHostMemberStateConfig{
+		replicationFactor: 100,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 
 	t.Run("upsertMember", func(t *testing.T) {
 		cmdLog, err := makeRaftLogCommand(MemberUpsert, DaprHostMember{
@@ -77,9 +81,17 @@ func TestFSMApply(t *testing.T) {
 
 func TestRestore(t *testing.T) {
 	// arrange
-	fsm := newFSM(100)
+	fsm := newFSM(DaprHostMemberStateConfig{
+		replicationFactor: 100,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 
-	s := newDaprHostMemberState(100)
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 100,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	s.upsertMember(&DaprHostMember{
 		Name:     "127.0.0.1:8080",
 		AppID:    "FakeID",
@@ -99,7 +111,11 @@ func TestRestore(t *testing.T) {
 }
 
 func TestPlacementStateWithVirtualNodes(t *testing.T) {
-	fsm := newFSM(100)
+	fsm := newFSM(DaprHostMemberStateConfig{
+		replicationFactor: 100,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 
 	// We expect to see the placement table INCLUDE vnodes,
 	// because the only dapr instance in the cluster is at level 10 (pre v1.13)
@@ -134,7 +150,11 @@ func TestPlacementStateWithVirtualNodes(t *testing.T) {
 }
 
 func TestPlacementState(t *testing.T) {
-	fsm := newFSM(100)
+	fsm := newFSM(DaprHostMemberStateConfig{
+		replicationFactor: 100,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	m := DaprHostMember{
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",

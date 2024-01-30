@@ -554,7 +554,7 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 			if p.apiLevel < raft.NoVirtualNodesInPlacementTablesAPILevel {
 				entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
 			} else {
-				entries[k] = hashing.NewFromExisting(loadMap, int(in.GetReplicationFactor()), p.virtualNodesCache)
+				entries[k] = hashing.NewFromExisting(loadMap, in.GetReplicationFactor(), p.virtualNodesCache)
 			}
 		}
 
