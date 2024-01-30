@@ -54,6 +54,7 @@ func (j *jsonFormat) Setup(t *testing.T) []framework.Option {
 	}
 
 	// Init placement with a maximum API level of 10
+	// We need to set the max API level to 10, because levels 20 and up with serialise as protobuf
 	j.place = placement.New(t,
 		placement.WithMaxAPILevel(10),
 	)
