@@ -24,7 +24,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/util"

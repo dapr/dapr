@@ -194,14 +194,12 @@ func RegisterHost(t *testing.T, ctx context.Context, conn *grpc.ClientConn, msg 
 		stream, rErr := client.ReportDaprStatus(ctx)
 		//nolint:testifylint
 		if !assert.NoError(c, rErr) {
-			log.Printf("Failed to connect to placement; will retry: %v", rErr)
 			return
 		}
 
 		rErr = stream.Send(msg)
 		//nolint:testifylint
 		if !assert.NoError(c, rErr) {
-			log.Printf("Failed to send message; will retry: %v", rErr)
 			_ = stream.CloseSend()
 			return
 		}
@@ -210,7 +208,6 @@ func RegisterHost(t *testing.T, ctx context.Context, conn *grpc.ClientConn, msg 
 		_, rErr = stream.Recv()
 		//nolint:testifylint
 		if !assert.NoError(c, rErr) {
-			log.Printf("Failed to receive message; will retry: %v", rErr)
 			_ = stream.CloseSend()
 			return
 		}
