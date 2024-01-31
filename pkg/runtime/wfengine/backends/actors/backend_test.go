@@ -153,6 +153,24 @@ func TestLoadSavedState(t *testing.T) {
 	}
 }
 
+func TestDecodeEncodedState(t *testing.T) {
+	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
+	wfstate.AddToInbox(&backend.HistoryEvent{EventId: int32(1)})
+	runtimeState := backend.NewOrchestrationRuntimeState(testAppID, nil)
+	err := runtimeState.AddEvent(&backend.HistoryEvent{EventId: int32(2)})
+	require.NoError(t, err)
+	wfstate.ApplyRuntimeStateChanges(runtimeState)
+	wfstate.CustomStatus = "test-status"
+	encodedState, err := wfstate.EncodeWorkflowState()
+	require.NoError(t, err)
+	decodedState := NewWorkflowState(NewActorsBackendConfig(testAppID))
+	err = decodedState.DecodeWorkflowState(encodedState)
+	require.NoError(t, err)
+	assert.Equal(t, wfstate.Inbox[0].GetEventId(), decodedState.Inbox[0].GetEventId())
+	assert.Equal(t, wfstate.History[0].GetEventId(), decodedState.History[0].GetEventId())
+	assert.Equal(t, wfstate.CustomStatus, decodedState.CustomStatus)
+}
+
 func TestResetLoadedState(t *testing.T) {
 	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
 
