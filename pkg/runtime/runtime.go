@@ -982,7 +982,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
 		RemindersService:  a.runtimeConfig.remindersService,
-		SchedulerService:  os.Getenv("SCHEDULER_ADDRESS"),
+		SchedulerService:  os.Getenv("DAPR_SCHEDULER_ADDRESS"), // TODO: take from cmd args.
 		Port:              a.runtimeConfig.internalGRPCPort,
 		Namespace:         a.namespace,
 		AppConfig:         a.appConfig,
