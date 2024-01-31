@@ -44,6 +44,7 @@ const (
 	GetWorkflowMetadataMethod    = "GetWorkflowMetadata"
 	AddWorkflowEventMethod       = "AddWorkflowEvent"
 	PurgeWorkflowStateMethod     = "PurgeWorkflowState"
+	GetWorkflowStateMethod       = "GetWorkflowState"
 )
 
 type workflowActor struct {
@@ -128,6 +129,12 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, methodName string, re
 		resAny, err = wf.getWorkflowMetadata(ctx)
 		if err == nil {
 			res, err = actors.EncodeInternalActorData(resAny)
+		}
+	case GetWorkflowStateMethod:
+		var state *workflowState
+		state, err = wf.getWorkflowState(ctx)
+		if err == nil {
+			res, err = state.EncodeWorkflowState()
 		}
 	case AddWorkflowEventMethod:
 		err = wf.addWorkflowEvent(ctx, request)
@@ -341,6 +348,18 @@ func (wf *workflowActor) getWorkflowMetadata(ctx context.Context) (*api.Orchestr
 		failureDetuils,
 	)
 	return metadata, nil
+}
+
+func (wf *workflowActor) getWorkflowState(ctx context.Context) (*workflowState, error) {
+	state, err := wf.loadInternalState(ctx)
+	wfLogger.Errorf("Workflow actor '%s': getWorkflowState, state: %s", wf.actorID, state)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		return nil, api.ErrInstanceNotFound
+	}
+	return state, nil
 }
 
 // This method purges all the completed activity data from a workflow associated with the given actorID
