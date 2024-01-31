@@ -335,11 +335,22 @@ func (abe *ActorBackend) GetActivityWorkItem(ctx context.Context) (*backend.Acti
 
 // GetOrchestrationRuntimeState implements backend.Backend
 func (abe *ActorBackend) GetOrchestrationRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
-	state, err := LoadWorkflowState(ctx, abe.actorRuntime, string(owi.InstanceID), abe.config)
+	// Invoke the corresponding actor, which internally stores its own workflow state.
+	req := internalsv1pb.
+		NewInternalInvokeRequest(GetWorkflowStateMethod).
+		WithActor(abe.config.workflowActorType, string(owi.InstanceID)).
+		WithContentType(invokev1.OctetStreamContentType)
+
+	res, err := abe.actorRuntime.Call(ctx, req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load workflow state: %w", err)
+		return nil, err
 	}
-	runtimeState := getRuntimeState(string(owi.InstanceID), state)
+	wfState := &workflowState{}
+	err = wfState.DecodeWorkflowState(res.GetMessage().GetData().GetValue())
+	if err != nil {
+		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
+	}
+	runtimeState := getRuntimeState(string(owi.InstanceID), wfState)
 	return runtimeState, nil
 }
 
