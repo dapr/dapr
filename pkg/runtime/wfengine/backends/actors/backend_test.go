@@ -166,8 +166,8 @@ func TestDecodeEncodedState(t *testing.T) {
 	decodedState := NewWorkflowState(NewActorsBackendConfig(testAppID))
 	err = decodedState.DecodeWorkflowState(encodedState)
 	require.NoError(t, err)
-	assert.Equal(t, wfstate.Inbox[0].EventId, decodedState.Inbox[0].EventId)
-	assert.Equal(t, wfstate.History[0].EventId, decodedState.History[0].EventId)
+	assert.Equal(t, wfstate.Inbox[0].GetEventId(), decodedState.Inbox[0].GetEventId())
+	assert.Equal(t, wfstate.History[0].GetEventId(), decodedState.History[0].GetEventId())
 	assert.Equal(t, wfstate.CustomStatus, decodedState.CustomStatus)
 }
 
