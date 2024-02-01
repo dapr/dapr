@@ -15,7 +15,6 @@ package apilevel
 
 import (
 	"context"
-	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -53,7 +52,6 @@ func (n *withMax) Setup(t *testing.T) []framework.Option {
 func (n *withMax) Run(t *testing.T, ctx context.Context) {
 	const level1 = 20
 	const level2 = 30
-	var lock sync.Mutex
 
 	httpClient := util.HTTPClient(t)
 
@@ -86,7 +84,6 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 				if ctx.Err() != nil {
 					return
 				}
-
 				newAPILevel := pt1.GetApiLevel()
 				oldAPILevel := currentVersion.Swap(newAPILevel)
 				if oldAPILevel != newAPILevel {
@@ -125,13 +122,11 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 					return
 				}
 
-				lock.Lock()
 				newAPILevel := pt2.GetApiLevel()
 				oldAPILevel := currentVersion.Swap(newAPILevel)
 				if oldAPILevel != newAPILevel {
 					lastVersionUpdate.Store(time.Now().Unix())
 				}
-				lock.Unlock()
 			}
 		}
 	}()
