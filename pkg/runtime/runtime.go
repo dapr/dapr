@@ -354,6 +354,13 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 			}
 
 			log.Infof("Blocking graceful shutdown for %s or until app reports unhealthy...", *a.runtimeConfig.blockShutdownDuration)
+
+			// Stop reading from subscriptions and input bindings forever while
+			// blocking graceful shutdown. This will prevent incoming messages from
+			// being processed, but allow outgoing APIs to be processed.
+			a.processor.PubSub().StopSubscriptions(true)
+			a.processor.Binding().StopReadingFromBindings(true)
+
 			select {
 			case <-a.clock.After(*a.runtimeConfig.blockShutdownDuration):
 				log.Info("Block shutdown period expired, entering shutdown...")
@@ -741,8 +748,8 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		}
 
 		// Stop topic subscriptions and input bindings
-		a.processor.PubSub().StopSubscriptions()
-		a.processor.Binding().StopReadingFromBindings()
+		a.processor.PubSub().StopSubscriptions(false)
+		a.processor.Binding().StopReadingFromBindings(false)
 	}
 }
 
@@ -829,10 +836,14 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		return err
 	}
 
-	if err := a.runnerCloser.AddCloser(a.processor.PubSub().StopSubscriptions); err != nil {
+	if err := a.runnerCloser.AddCloser(func() {
+		a.processor.PubSub().StopSubscriptions(true)
+	}); err != nil {
 		return err
 	}
-	if err := a.runnerCloser.AddCloser(a.processor.Binding().StopReadingFromBindings); err != nil {
+	if err := a.runnerCloser.AddCloser(func() {
+		a.processor.Binding().StopReadingFromBindings(true)
+	}); err != nil {
 		return err
 	}
 
