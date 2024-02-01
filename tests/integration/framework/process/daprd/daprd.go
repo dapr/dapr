@@ -145,6 +145,11 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
 	}
 
+	if os.Getenv("DAPR_HOST_IP") != "" {
+		// Propagate DAPR_HOST_IP if host IP override is needed for the test environment.
+		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "DAPR_HOST_IP", os.Getenv("DAPR_HOST_IP")))
+	}
+
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		freeport:         fp,
