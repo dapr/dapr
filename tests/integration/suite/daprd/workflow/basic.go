@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -116,7 +117,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		backendClient.StartWorkItemListener(taskhubCtx, r)
 		defer cancelTaskhub()
 
-		id := api.InstanceID(b.startWorkflow(ctx, t, "SingleActivity", "Dapr"))
+		id := api.InstanceID(b.startWorkflow(ctx, t, "SingleActivity", "Dapr", ""))
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, metadata.IsComplete())
@@ -164,7 +165,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				nonRecursiveBool = true
 			}
 			t.Run(fmt.Sprintf("non_recursive = %v", nonRecursive), func(t *testing.T) {
-				id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
+				id := api.InstanceID(b.startWorkflow(ctx, t, "Root", "", ""))
 
 				// Wait long enough to ensure all orchestrations have started (but not longer than the timer delay)
 				assert.Eventually(t, func() bool {
@@ -236,7 +237,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			}
 			t.Run(fmt.Sprintf("non_recursive = %v", nonRecursive), func(t *testing.T) {
 				// Run the orchestration, which will block waiting for external events
-				id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
+				id := api.InstanceID(b.startWorkflow(ctx, t, "Root", "", ""))
 
 				metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
 				require.NoError(t, err)
@@ -292,15 +293,54 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		backendClient.StartWorkItemListener(taskhubCtx, r)
 		defer cancelTaskhub()
 
-		id := api.InstanceID(b.startWorkflow(ctx, t, "root", "Dapr"))
+		id := api.InstanceID(b.startWorkflow(ctx, t, "root", "Dapr", ""))
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, metadata.IsComplete())
 		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
 	})
+
+	t.Run("schedule workflow", func(t *testing.T) {
+		r := task.NewTaskRegistry()
+		actualStartTime := time.Time{}
+		r.AddOrchestratorN("SingleActivity", func(ctx *task.OrchestrationContext) (any, error) {
+			actualStartTime = time.Now()
+			var input string
+			if err := ctx.GetInput(&input); err != nil {
+				return nil, err
+			}
+			var output string
+			err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
+			return output, err
+		})
+		r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
+			var name string
+			if err := ctx.GetInput(&name); err != nil {
+				return nil, err
+			}
+			return fmt.Sprintf("Hello, %s!", name), nil
+		})
+		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
+		backendClient.StartWorkItemListener(taskhubCtx, r)
+		defer cancelTaskhub()
+
+		// Wait for wfEngine to be ready
+		time.Sleep(5 * time.Second)
+
+		// set scheduledStartTime to be time 5 seconds later than now
+		scheduledStartTime := time.Now().Add(5 * time.Second)
+		scheduledStartTimeStr := url.QueryEscape(scheduledStartTime.Format(time.RFC3339))
+
+		id := api.InstanceID(b.startWorkflow(ctx, t, "SingleActivity", "Dapr", scheduledStartTimeStr))
+		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+		require.NoError(t, err)
+		assert.True(t, metadata.IsComplete())
+		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+		assert.GreaterOrEqual(t, actualStartTime.Unix(), scheduledStartTime.Unix())
+	})
 }
 
-func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, input string) string {
+func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, input string, scheduledStartTime string) string {
 	// use http client to start the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", b.daprd.HTTPPort(), name)
 	data, err := json.Marshal(input)
