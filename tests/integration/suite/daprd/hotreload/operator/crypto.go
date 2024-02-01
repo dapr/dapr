@@ -15,6 +15,7 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"io"
 	"os"
@@ -50,8 +51,10 @@ type crypto struct {
 	daprd    *daprd.Daprd
 	operator *operator.Operator
 
-	cryptoDir1 string
-	cryptoDir2 string
+	cryptoDir1     string
+	cryptoDir2     string
+	cryptoDir1JSON common.DynamicValue
+	cryptoDir2JSON common.DynamicValue
 }
 
 func (c *crypto) Setup(t *testing.T) []framework.Option {
@@ -70,10 +73,17 @@ func (c *crypto) Setup(t *testing.T) []framework.Option {
 
 	c.cryptoDir1, c.cryptoDir2 = t.TempDir(), t.TempDir()
 
+	dir1J, err := json.Marshal(c.cryptoDir1)
+	require.NoError(t, err)
+	dir2J, err := json.Marshal(c.cryptoDir2)
+	require.NoError(t, err)
+	c.cryptoDir1JSON = common.DynamicValue{JSON: apiextv1.JSON{Raw: dir1J}}
+	c.cryptoDir2JSON = common.DynamicValue{JSON: apiextv1.JSON{Raw: dir2J}}
+
 	c.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
-		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(c.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
@@ -108,11 +118,9 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "crypto1"},
 			Spec: compapi.ComponentSpec{
-				Type:    "crypto.dapr.localstorage",
-				Version: "v1",
-				Metadata: []common.NameValuePair{{Name: "path", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(`"` + c.cryptoDir1 + `"`)},
-				}}},
+				Type:     "crypto.dapr.localstorage",
+				Version:  "v1",
+				Metadata: []common.NameValuePair{{Name: "path", Value: c.cryptoDir1JSON}},
 			},
 		}
 		c.operator.SetComponents(newComp)
@@ -120,7 +128,8 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			//nolint:testifylint
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
 		}, time.Second*10, time.Millisecond*100)
 
@@ -140,11 +149,9 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "crypto2"},
 			Spec: compapi.ComponentSpec{
-				Type:    "crypto.dapr.localstorage",
-				Version: "v1",
-				Metadata: []common.NameValuePair{{Name: "path", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(`"` + c.cryptoDir2 + `"`)},
-				}}},
+				Type:     "crypto.dapr.localstorage",
+				Version:  "v1",
+				Metadata: []common.NameValuePair{{Name: "path", Value: c.cryptoDir2JSON}},
 			},
 		}
 		c.operator.AddComponents(newComp)
@@ -152,7 +159,8 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			//nolint:testifylint
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*10, time.Millisecond*100)
 
@@ -172,11 +180,9 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "crypto3"},
 			Spec: compapi.ComponentSpec{
-				Type:    "crypto.dapr.localstorage",
-				Version: "v1",
-				Metadata: []common.NameValuePair{{Name: "path", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(`"` + c.cryptoDir2 + `"`)},
-				}}},
+				Type:     "crypto.dapr.localstorage",
+				Version:  "v1",
+				Metadata: []common.NameValuePair{{Name: "path", Value: c.cryptoDir2JSON}},
 			},
 		}
 		c.operator.AddComponents(newComp)
@@ -184,7 +190,8 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			//nolint:testifylint
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*10, time.Millisecond*100)
 
@@ -207,13 +214,14 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			//nolint:testifylint
+			assert.NoError(c, err)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{Name: "crypto1", Type: "crypto.dapr.localstorage", Version: "v1"},
 				{Name: "crypto3", Type: "crypto.dapr.localstorage", Version: "v1"},
 				{
 					Name: "crypto2", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
 		}, time.Second*10, time.Millisecond*100)
@@ -230,7 +238,8 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			//nolint:testifylint
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*10, time.Millisecond*100)
 
@@ -247,11 +256,12 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			//nolint:testifylint
+			assert.NoError(c, err)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{
 					Name: "crypto3", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
 		}, time.Second*10, time.Millisecond*100)
@@ -266,11 +276,9 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
 			ObjectMeta: metav1.ObjectMeta{Name: "crypto2"},
 			Spec: compapi.ComponentSpec{
-				Type:    "crypto.dapr.localstorage",
-				Version: "v1",
-				Metadata: []common.NameValuePair{{Name: "path", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: []byte(`"` + c.cryptoDir2 + `"`)},
-				}}},
+				Type:     "crypto.dapr.localstorage",
+				Version:  "v1",
+				Metadata: []common.NameValuePair{{Name: "path", Value: c.cryptoDir2JSON}},
 			},
 		}
 		c.operator.AddComponents(newComp)
@@ -278,7 +286,8 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			require.NoError(t, err)
+			//nolint:testifylint
+			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*10, time.Millisecond*100)
 

@@ -119,6 +119,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		}
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 		client := v1pb.NewPlacementClient(conn)
+
 		stream, err = client.ReportDaprStatus(ctx)
 		if err != nil {
 			return false

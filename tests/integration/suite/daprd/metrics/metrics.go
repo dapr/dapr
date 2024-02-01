@@ -22,7 +22,6 @@ import (
 	"testing"
 	"time"
 
-	prometheus "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -99,7 +98,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	t.Run("HTTP", func(t *testing.T) {
 		t.Run("service invocation", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Invoke
 			req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/invoke/myapp/method/hi", m.daprd.HTTPPort()), nil)
@@ -113,7 +112,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 
 		t.Run("state stores", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Write state
 			body := `[{"key":"myvalue", "value":"hello world"}]`
@@ -137,7 +136,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	t.Run("gRPC", func(t *testing.T) {
 		t.Run("service invocation", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Invoke
 			_, err := m.grpcClient.InvokeService(reqCtx, &runtimev1pb.InvokeServiceRequest{
@@ -158,7 +157,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 
 		t.Run("state stores", func(t *testing.T) {
 			reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-			defer reqCancel()
+			t.Cleanup(reqCancel)
 
 			// Write state
 			_, err := m.grpcClient.SaveState(reqCtx, &runtimev1pb.SaveStateRequest{
@@ -209,33 +208,31 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 		taskhubClient.StartWorkItemListener(taskhubCtx, r)
 		defer cancelTaskhub()
 
-		time.Sleep(5 * time.Second)
-
 		t.Run("successful workflow execution", func(t *testing.T) {
 			id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_success"))
 			require.NoError(t, err)
 			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
-			defer cancelTimeout()
+			t.Cleanup(cancelTimeout)
 			metadata, err := taskhubClient.WaitForOrchestrationCompletion(timeoutCtx, id, api.WithFetchPayloads(true))
 			require.NoError(t, err)
 			assert.True(t, metadata.IsComplete())
-			time.Sleep(1 * time.Second)
 
 			// Verify metrics
 			metrics := m.getMetrics(t, ctx)
 			assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
 			assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
 			assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_success|app_id:myapp|namespace:|status:success"]))
+			assert.GreaterOrEqual(t, 1, int(metrics["dapr_runtime_workflow_execution_latency|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
+			assert.GreaterOrEqual(t, 1, int(metrics["dapr_runtime_workflow_scheduling_latency|app_id:myapp|namespace:|workflow_name:workflow"]))
 		})
 		t.Run("failed workflow execution", func(t *testing.T) {
 			id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_failure"))
 			require.NoError(t, err)
 			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
-			defer cancelTimeout()
+			t.Cleanup(cancelTimeout)
 			metadata, err := taskhubClient.WaitForOrchestrationCompletion(timeoutCtx, id, api.WithFetchPayloads(true))
 			require.NoError(t, err)
 			assert.True(t, metadata.IsComplete())
-			time.Sleep(1 * time.Second)
 
 			// Verify metrics
 			metrics := m.getMetrics(t, ctx)
@@ -270,10 +267,6 @@ func (m *metrics) getMetrics(t *testing.T, ctx context.Context) map[string]float
 
 	metrics := make(map[string]float64)
 	for _, mf := range metricFamilies {
-		if mf.GetType() != prometheus.MetricType_COUNTER {
-			continue
-		}
-
 		for _, m := range mf.GetMetric() {
 			key := mf.GetName()
 			for _, l := range m.GetLabel() {

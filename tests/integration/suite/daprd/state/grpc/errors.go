@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -53,6 +54,10 @@ type errors struct {
 }
 
 func (e *errors) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping unix socket based test on windows")
+	}
+
 	// Darwin enforces a maximum 104 byte socket name limit, so we need to be a
 	// bit fancy on how we generate the name.
 	tmp, err := nettest.LocalPath()
@@ -127,7 +132,7 @@ spec:
   type: state.%s
   version: v1
 `, storeWithNoTransactional.SocketName(), storeWithQuerier.SocketName(), storeWithMultiMaxSize.SocketName())),
-		procdaprd.WithExecOptions(exec.WithEnvVars(
+		procdaprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
 		)),
 	)
@@ -140,10 +145,7 @@ spec:
 func (e *errors) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
-	conn, connErr := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", e.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, connErr)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	client := e.daprd.GRPCClient(t, ctx)
 
 	// Covers errutils.StateStoreNotFound()
 	t.Run("state store doesn't exist", func(t *testing.T) {
@@ -235,8 +237,9 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		t.Cleanup(func() { require.NoError(t, connNoStateStore.Close()) })
 		clientNoStateStore := rtv1.NewDaprClient(connNoStateStore)
 
+		storeName := "mystore"
 		req := &rtv1.SaveStateRequest{
-			StoreName: "mystore",
+			StoreName: storeName,
 			States:    []*commonv1.StateItem{{Value: []byte("value1")}},
 		}
 		_, err = clientNoStateStore.SaveState(ctx, req)
@@ -245,7 +248,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.FailedPrecondition, s.Code())
-		require.Equal(t, "state store is not configured", s.Message())
+		require.Equal(t, fmt.Sprintf("state store %s is not configured", storeName), s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)

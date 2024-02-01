@@ -133,7 +133,7 @@ func TestInitPubSub(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
-		ps.StopSubscriptions()
+		ps.StopSubscriptions(false)
 		ps.compStore.SetTopicRoutes(nil)
 		ps.compStore.SetSubscriptions(nil)
 		for name := range ps.compStore.ListPubSubs() {
@@ -227,7 +227,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		require.NoError(t, ps.StartSubscriptions(context.Background()))
-		ps.StopSubscriptions()
+		ps.StopSubscriptions(false)
 
 		// act
 		for _, comp := range pubsubComponents {
@@ -327,7 +327,7 @@ func TestInitPubSub(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
 		require.NoError(t, ps.StartSubscriptions(context.Background()))
-		ps.StopSubscriptions()
+		ps.StopSubscriptions(false)
 
 		// act
 		for _, comp := range pubsubComponents {
@@ -1927,7 +1927,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		comp3 := getPubSub("mockPubSub3")
 		comp3.On("unsubscribed", "topic4").Return(nil).Once()
 
-		ps.StopSubscriptions()
+		ps.StopSubscriptions(false)
 
 		sendMessages(t, 0)
 
@@ -1947,7 +1947,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		comp2.On("unsubscribed", "topic2").Return(nil).Once()
 		comp2.On("unsubscribed", "topic3").Return(nil).Once()
 
-		ps.StopSubscriptions()
+		ps.StopSubscriptions(false)
 		time.Sleep(time.Second / 2)
 
 		comp1.AssertCalled(t, "unsubscribed", "topic1")

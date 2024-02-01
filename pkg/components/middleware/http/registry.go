@@ -17,9 +17,9 @@ import (
 	"fmt"
 	"strings"
 
-	middleware "github.com/dapr/components-contrib/middleware"
+	contribmiddleware "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/dapr/pkg/components"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/middleware"
 	"github.com/dapr/kit/logger"
 )
 
@@ -31,7 +31,7 @@ type (
 	}
 
 	// FactoryMethod is the method creating middleware from metadata.
-	FactoryMethod func(metadata middleware.Metadata) (httpMiddleware.Middleware, error)
+	FactoryMethod func(metadata contribmiddleware.Metadata) (middleware.HTTP, error)
 )
 
 // DefaultRegistry is the singleton with the registry.
@@ -56,7 +56,7 @@ func (p *Registry) RegisterComponent(componentFactory func(logger.Logger) Factor
 }
 
 // Create instantiates a HTTP middleware based on `name`.
-func (p *Registry) Create(name, version string, metadata middleware.Metadata, logName string) (httpMiddleware.Middleware, error) {
+func (p *Registry) Create(name, version string, metadata contribmiddleware.Metadata, logName string) (middleware.HTTP, error) {
 	if method, ok := p.getMiddleware(name, version, logName); ok {
 		mid, err := method(metadata)
 		if err != nil {

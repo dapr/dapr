@@ -79,7 +79,7 @@ spec:
   version: v1
 `),
 		daprd.WithExecOptions(
-			exec.WithEnvVars("NAMESPACE", "mynamespace"),
+			exec.WithEnvVars(t, "NAMESPACE", "mynamespace"),
 		),
 	)
 	return []framework.Option{
@@ -103,11 +103,11 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 	assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
 			Name: "abc", Type: "state.in-memory", Version: "v1",
-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 		},
 		{
 			Name: "def", Type: "state.in-memory", Version: "v1",
-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 		},
 	}, resp.GetRegisteredComponents())
 }

@@ -38,18 +38,7 @@ const (
 	ErrInvokeOutputBinding = "error invoking output binding %s: %s"
 
 	// PubSub.
-	ErrPubsubNotConfigured      = "no pubsub is configured"
-	ErrPubsubEmpty              = "pubsub name is empty"
-	ErrPubsubNotFound           = "pubsub %s not found"
-	ErrTopicEmpty               = "topic is empty in pubsub %s"
-	ErrPubsubCloudEventsSer     = "error when marshalling cloud event envelope for topic %s pubsub %s: %s"
-	ErrPubsubPublishMessage     = "error when publish to topic %s in pubsub %s: %s"
-	ErrPubsubForbidden          = "topic %s is not allowed for app id %s"
-	ErrPubsubCloudEventCreation = "cannot create cloudevent: %s"
-	ErrPubsubUnmarshal          = "error when unmarshaling the request for topic %s pubsub %s: %s"
-	ErrPubsubMarshal            = "error marshaling events to bytes for topic %s pubsub %s: %s"
-	ErrPubsubGetSubscriptions   = "unable to get app subscriptions %s"
-	ErrPublishOutbox            = "error while publishing outbox message: %s"
+	ErrPubsubForbidden = "topic %s is not allowed for app id %s"
 
 	// AppChannel.
 	ErrChannelNotFound       = "app channel is not initialized"
@@ -96,9 +85,6 @@ var (
 	ErrHealthNotReady         = APIError{"dapr is not ready", "ERR_HEALTH_NOT_READY", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrOutboundHealthNotReady = APIError{"dapr outbound is not ready", "ERR_OUTBOUND_HEALTH_NOT_READY", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrHealthAppIDNotMatch    = APIError{"dapr app-id does not match", "ERR_HEALTH_APPID_NOT_MATCH", http.StatusInternalServerError, grpcCodes.Internal}
-
-	// PubSub.
-	ErrPubSubMetadataDeserialize = APIError{"failed deserializing metadata: %v", "ERR_PUBSUB_REQUEST_METADATA", http.StatusBadRequest, grpcCodes.InvalidArgument}
 
 	// Secrets.
 	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", "ERR_SECRET_STORES_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}

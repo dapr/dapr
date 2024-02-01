@@ -25,7 +25,11 @@ type MockWorkflow struct{}
 
 const ErrorInstanceID = "errorInstanceID"
 
-var ErrFakeWorkflowComponentError = errors.New("fake workflow error")
+var (
+	ErrFakeWorkflowComponentError             = errors.New("fake workflow error")
+	ErrFakeWorkflowNonRecursiveTerminateError = errors.New("fake workflow non recursive terminate error")
+	ErrFakeWorkflowNonRecurisvePurgeError     = errors.New("fake workflow non recursive purge error")
+)
 
 func (w *MockWorkflow) Init(metadata workflowContrib.Metadata) error {
 	return nil
@@ -44,6 +48,10 @@ func (w *MockWorkflow) Start(ctx context.Context, req *workflowContrib.StartRequ
 func (w *MockWorkflow) Terminate(ctx context.Context, req *workflowContrib.TerminateRequest) error {
 	if req.InstanceID == ErrorInstanceID {
 		return ErrFakeWorkflowComponentError
+	}
+	if !req.Recursive {
+		// Returning fake error to test non recursive terminate
+		return ErrFakeWorkflowNonRecursiveTerminateError
 	}
 	return nil
 }
@@ -88,6 +96,10 @@ func (w *MockWorkflow) Resume(ctx context.Context, req *workflowContrib.ResumeRe
 func (w *MockWorkflow) Purge(ctx context.Context, req *workflowContrib.PurgeRequest) error {
 	if req.InstanceID == ErrorInstanceID {
 		return ErrFakeWorkflowComponentError
+	}
+	if !req.Recursive {
+		// Returning fake error to test non recursive purge
+		return ErrFakeWorkflowNonRecurisvePurgeError
 	}
 	return nil
 }
