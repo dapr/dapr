@@ -73,6 +73,7 @@ type binding struct {
 
 	lock            sync.Mutex
 	readingBindings bool
+	stopForever     bool
 
 	subscribeBindingList []string
 	inputCancels         map[string]context.CancelFunc
