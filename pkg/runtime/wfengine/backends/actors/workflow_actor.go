@@ -279,7 +279,7 @@ func (wf *workflowActor) createIfCompleted(ctx context.Context, runtimeState *ba
 	return wf.scheduleWorkflowStart(ctx, startEvent, state)
 }
 
-func (wf *workflowActor) scheduleWorkflowStart(ctx context.Context, actorID string, startEvent *backend.HistoryEvent, state *workflowState) error {
+func (wf *workflowActor) scheduleWorkflowStart(ctx context.Context, startEvent *backend.HistoryEvent, state *workflowState) error {
 	// Schedule a reminder to execute. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
