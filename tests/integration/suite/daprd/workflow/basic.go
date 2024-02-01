@@ -343,6 +343,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, input string, scheduledStartTime string) string {
 	// use http client to start the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", b.daprd.HTTPPort(), name)
+	if scheduledStartTime != "" {
+		reqURL += "?dapr.workflow.start_time=" + scheduledStartTime
+	}
 	data, err := json.Marshal(input)
 	require.NoError(t, err)
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
