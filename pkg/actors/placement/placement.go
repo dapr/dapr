@@ -351,6 +351,7 @@ func (p *actorPlacement) LookupActor(ctx context.Context, req internal.LookupAct
 		} else if rAddr == "" {
 			return res, fmt.Errorf("did not find address for actor %s/%s", req.ActorType, req.ActorID)
 		}
+		log.Warnf("RESOLVED ACTOR: %s %s => %s %s", req.ActorType, req.ActorID, rAddr, rAppID)
 		res.Address = rAddr
 		res.AppID = rAppID
 		return res, nil
