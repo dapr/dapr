@@ -48,15 +48,7 @@ func (v *vNodesAPILevel10) Setup(t *testing.T) []framework.Option {
 func (v *vNodesAPILevel10) Run(t *testing.T, ctx context.Context) {
 	v.place.WaitUntilRunning(t, ctx)
 
-	// Connect
-	conn, err := v.place.EstablishConn(ctx)
-	require.NoError(t, err)
-
-	// Collect messages
-	placementMessageCh := make(chan any)
-
 	// Register the host, with API level 10 (pre v1.13)
-	stopCh := make(chan struct{})
 	msg := &placementv1pb.Host{
 		Name:     "myapp",
 		Port:     1234,
@@ -64,25 +56,21 @@ func (v *vNodesAPILevel10) Run(t *testing.T, ctx context.Context) {
 		Id:       "myapp1",
 		ApiLevel: uint32(10),
 	}
-	placement.RegisterHost(t, ctx, conn, msg, placementMessageCh, stopCh)
+	placementMessageCh := v.place.RegisterHost(t, ctx, msg)
+
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		select {
 		case <-ctx.Done():
 			return
-		case msgAny := <-placementMessageCh:
+		case placementTables := <-placementMessageCh:
 			if ctx.Err() != nil {
 				return
 			}
-			switch msg := msgAny.(type) {
-			case error:
-				assert.Fail(t, "Received an error in the placement channel: '%v'", msg)
-			case *placementv1pb.PlacementTables:
-				assert.Equal(t, uint32(10), msg.GetApiLevel())
-				assert.Len(t, msg.GetEntries(), 1)
-				// Check that the placement service sends the vnodes, because of the older cluster API level
-				assert.Len(t, msg.GetEntries()["someactor"].GetHosts(), int(msg.GetReplicationFactor()))
-				assert.Len(t, msg.GetEntries()["someactor"].GetSortedSet(), int(msg.GetReplicationFactor()))
-			}
+			assert.Equal(t, uint32(10), placementTables.GetApiLevel())
+			assert.Len(t, placementTables.GetEntries(), 1)
+			// Check that the placement service sends the vnodes, because of the older cluster API level
+			assert.Len(t, placementTables.GetEntries()["someactor"].GetHosts(), int(placementTables.GetReplicationFactor()))
+			assert.Len(t, placementTables.GetEntries()["someactor"].GetSortedSet(), int(placementTables.GetReplicationFactor()))
 		}
 	}, 10*time.Second, 100*time.Millisecond)
 }

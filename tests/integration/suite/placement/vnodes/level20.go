@@ -48,15 +48,7 @@ func (v *vNodesAPILevel20) Setup(t *testing.T) []framework.Option {
 func (v *vNodesAPILevel20) Run(t *testing.T, ctx context.Context) {
 	v.place.WaitUntilRunning(t, ctx)
 
-	// Connect
-	conn, err := v.place.EstablishConn(ctx)
-	require.NoError(t, err)
-
-	// Collect messages
-	placementMessageCh := make(chan any)
-
-	// Register the host, with API level 10 (pre v1.13)
-	stopCh := make(chan struct{})
+	// Register the host, with API level 20 (v1.13+)
 	msg := &placementv1pb.Host{
 		Name:     "myapp",
 		Port:     1234,
@@ -64,25 +56,21 @@ func (v *vNodesAPILevel20) Run(t *testing.T, ctx context.Context) {
 		Id:       "myapp",
 		ApiLevel: uint32(20),
 	}
-	placement.RegisterHost(t, ctx, conn, msg, placementMessageCh, stopCh)
+	placementMessageCh := v.place.RegisterHost(t, ctx, msg)
+
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		select {
 		case <-ctx.Done():
 			return
-		case msgAny := <-placementMessageCh:
+		case placementTables := <-placementMessageCh:
 			if ctx.Err() != nil {
 				return
 			}
-			switch msg := msgAny.(type) {
-			case error:
-				assert.Fail(t, "Received an error in the placement channel: '%v'", msg)
-			case *placementv1pb.PlacementTables:
-				assert.Equal(t, uint32(20), msg.GetApiLevel())
-				assert.Len(t, msg.GetEntries(), 1)
-				// Check that the vnodes are not sent, because the minimum API level of the cluster is 20+
-				assert.Empty(t, msg.GetEntries()["someactor"].GetHosts())
-				assert.Empty(t, msg.GetEntries()["someactor"].GetSortedSet())
-			}
+			assert.Equal(t, uint32(20), msg.GetApiLevel())
+			assert.Len(t, placementTables.GetEntries(), 1)
+			// Check that the vnodes are not sent, because the minimum API level of the cluster is 20+
+			assert.Empty(t, placementTables.GetEntries()["someactor"].GetHosts())
+			assert.Empty(t, placementTables.GetEntries()["someactor"].GetSortedSet())
 		}
 	}, 10*time.Second, 100*time.Millisecond)
 }

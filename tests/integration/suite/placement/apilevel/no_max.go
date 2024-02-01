@@ -15,7 +15,7 @@ package apilevel
 
 import (
 	"context"
-	"log"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -52,45 +52,16 @@ func (n *noMax) Setup(t *testing.T) []framework.Option {
 func (n *noMax) Run(t *testing.T, ctx context.Context) {
 	const level1 = 20
 	const level2 = 30
+	var lock sync.Mutex
 
 	httpClient := util.HTTPClient(t)
 
 	n.place.WaitUntilRunning(t, ctx)
 
-	// Connect
-	conn, err := n.place.EstablishConn(ctx)
-	require.NoError(t, err)
-
-	// Collect messages
-	placementMessageCh := make(chan any)
 	currentVersion := atomic.Uint32{}
 	lastVersionUpdate := atomic.Int64{}
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msgAny := <-placementMessageCh:
-				if ctx.Err() != nil {
-					return
-				}
-				switch msg := msgAny.(type) {
-				case error:
-					log.Printf("Received an error in the channel: '%v'", msg)
-					return
-				case *placementv1pb.PlacementTables:
-					newAPILevel := msg.GetApiLevel()
-					oldAPILevel := currentVersion.Swap(newAPILevel)
-					if oldAPILevel != newAPILevel {
-						lastVersionUpdate.Store(time.Now().Unix())
-					}
-				}
-			}
-		}
-	}()
 
 	// Register the first host with the lower API level
-	stopCh1 := make(chan struct{})
 	msg1 := &placementv1pb.Host{
 		Name:     "myapp1",
 		Port:     1111,
@@ -98,7 +69,32 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 		Id:       "myapp1",
 		ApiLevel: uint32(level1),
 	}
-	placement.RegisterHost(t, ctx, conn, msg1, placementMessageCh, stopCh1)
+	ctx1, cancel1 := context.WithCancel(ctx)
+	placementMessageCh1 := n.place.RegisterHost(t, ctx1, msg1)
+
+	// Collect messages
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ctx1.Done():
+				return
+			case pt1 := <-placementMessageCh1:
+				if ctx.Err() != nil {
+					return
+				}
+
+				lock.Lock()
+				newAPILevel := pt1.GetApiLevel()
+				oldAPILevel := currentVersion.Swap(newAPILevel)
+				if oldAPILevel != newAPILevel {
+					lastVersionUpdate.Store(time.Now().Unix())
+				}
+				lock.Unlock()
+			}
+		}
+	}()
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Equal(t, uint32(level1), currentVersion.Load())
@@ -107,11 +103,10 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 
 	var tableVersion int
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		tableVersion = placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
+		tableVersion = n.place.CheckAPILevelInState(t, httpClient, level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Register the second host with the higher API level
-	stopCh2 := make(chan struct{})
 	msg2 := &placementv1pb.Host{
 		Name:     "myapp2",
 		Port:     2222,
@@ -119,7 +114,32 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 		Id:       "myapp2",
 		ApiLevel: uint32(level2),
 	}
-	placement.RegisterHost(t, ctx, conn, msg2, placementMessageCh, stopCh2)
+	ctx2, cancel2 := context.WithCancel(ctx)
+	placementMessageCh2 := n.place.RegisterHost(t, ctx2, msg2)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ctx2.Done():
+				return
+			case pt2 := <-placementMessageCh2:
+				if ctx.Err() != nil {
+					return
+				}
+
+				lock.Lock()
+				newAPILevel := pt2.GetApiLevel()
+				oldAPILevel := currentVersion.Swap(newAPILevel)
+				if oldAPILevel != newAPILevel {
+					lastVersionUpdate.Store(time.Now().Unix())
+				}
+				lock.Unlock()
+
+			}
+		}
+	}()
 
 	// After 3s, we should not receive an update
 	// This can take a while as dissemination happens on intervals
@@ -128,32 +148,33 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 
 	// API level should still be lower (20), but table version should have increased
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		newTableVersion := placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
+		newTableVersion := n.place.CheckAPILevelInState(t, httpClient, level1)
 		assert.Greater(t, newTableVersion, tableVersion)
 	}, 10*time.Second, 100*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase
-	close(stopCh1)
+	cancel1()
+
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Equal(t, uint32(level2), currentVersion.Load())
 	}, 10*time.Second, 50*time.Millisecond)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		tableVersion = placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level2)
+		tableVersion = n.place.CheckAPILevelInState(t, httpClient, level2)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Trying to register a host with version 5 should fail
-	placement.RegisterHostFailing(t, ctx, conn, 5)
+	n.place.AssertRegisterHostFails(t, ctx, 5)
 
 	// Stop the second host too
-	close(stopCh2)
+	cancel2()
 
 	// Ensure that the table version increases, but the API level remains the same
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		newTableVersion := placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level2)
+		newTableVersion := n.place.CheckAPILevelInState(t, httpClient, level2)
 		assert.Greater(t, newTableVersion, tableVersion)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Trying to register a host with version 10 should fail
-	placement.RegisterHostFailing(t, ctx, conn, level1)
+	n.place.AssertRegisterHostFails(t, ctx, level1)
 }

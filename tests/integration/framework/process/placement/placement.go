@@ -173,84 +173,93 @@ func (p *Placement) CurrentActorsAPILevel() int {
 	return 20 // Defined in pkg/actors/internal/api_level.go
 }
 
-func (p *Placement) EstablishConn(ctx context.Context) (*grpc.ClientConn, error) {
-	return grpc.DialContext(ctx, "localhost:"+strconv.Itoa(p.port),
+func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host) chan *placementv1pb.PlacementTables {
+	conn, err := grpc.DialContext(parentCtx, p.Address(),
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
-}
+	require.NoError(t, err)
+	client := placementv1pb.NewPlacementClient(conn)
 
-func RegisterHost(t *testing.T, ctx context.Context, conn *grpc.ClientConn, msg *placementv1pb.Host, placementMessage chan any, stopCh chan struct{}) {
-	// Establish a stream and send the initial heartbeat
-	// We need to retry here because this will fail until the instance of placement (the only one) acquires leadership
-	var placementStream placementv1pb.Placement_ReportDaprStatusClient
-
+	var stream placementv1pb.Placement_ReportDaprStatusClient
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		client := placementv1pb.NewPlacementClient(conn)
-
-		stream, rErr := client.ReportDaprStatus(ctx)
+		stream, err = client.ReportDaprStatus(parentCtx)
 		//nolint:testifylint
-		if !assert.NoError(c, rErr) {
+		if !assert.NoError(c, err) {
 			return
 		}
 
-		rErr = stream.Send(msg)
 		//nolint:testifylint
-		if !assert.NoError(c, rErr) {
+		if !assert.NoError(c, stream.Send(msg)) {
 			_ = stream.CloseSend()
 			return
 		}
 
-		// Receive the first message (which can't be an "update" one anyways) to ensure the connection is ready
-		_, rErr = stream.Recv()
+		_, err = stream.Recv()
 		//nolint:testifylint
-		if !assert.NoError(c, rErr) {
+		if !assert.NoError(c, err) {
 			_ = stream.CloseSend()
 			return
 		}
+	}, time.Second*15, time.Millisecond*100)
 
-		placementStream = stream
-	}, time.Second*15, time.Millisecond*500)
+	doneCh := make(chan error)
+	placementUpdateCh := make(chan *placementv1pb.PlacementTables)
+	ctx, cancel := context.WithCancel(parentCtx)
 
-	// Send messages every second
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case err := <-doneCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second * 5):
+			assert.Fail(t, "timeout waiting for stream to close")
+		}
+	})
+
+	// Send dapr status messages every second
 	go func() {
 		for {
 			select {
 			case <-ctx.Done():
-				placementStream.CloseSend()
-				return
-			case <-stopCh:
-				// Disconnect when there's a signal on stopCh
-				placementStream.CloseSend()
+				doneCh <- stream.CloseSend()
 				return
 			case <-time.After(time.Second):
-				placementStream.Send(msg)
-			}
-		}
-	}()
-
-	// Collect all API levels
-	go func() {
-		for {
-			in, rerr := placementStream.Recv()
-			if rerr != nil {
-				if ctx.Err() != nil || errors.Is(rerr, context.Canceled) || errors.Is(rerr, io.EOF) || status.Code(rerr) == codes.Canceled {
-					// Stream ended
-					placementMessage <- nil
+				if err := stream.Send(msg); err != nil {
+					doneCh <- err
 					return
 				}
-				placementMessage <- fmt.Errorf("error from placement: %w", rerr)
-				return
-			}
-			if in.GetOperation() == "update" {
-				placementMessage <- in.GetTables()
 			}
 		}
 	}()
+
+	go func() {
+		defer close(placementUpdateCh)
+		defer cancel()
+		for {
+			in, err := stream.Recv()
+			if err != nil {
+				if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {
+					return
+				}
+				require.NoError(t, err)
+				return
+			}
+
+			if in.GetOperation() == "update" {
+				tables := in.GetTables()
+				require.NotEmptyf(t, tables, "Placement tables is empty")
+
+				placementUpdateCh <- tables
+			}
+		}
+	}()
+
+	return placementUpdateCh
 }
 
-// Expect the registration to fail with FailedPrecondition.
-func RegisterHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientConn, apiLevel int) {
+// AssertRegisterHostFails Expect the registration to fail with FailedPrecondition.
+func (p *Placement) AssertRegisterHostFails(t *testing.T, ctx context.Context, apiLevel int) {
 	msg := &placementv1pb.Host{
 		Name:     "myapp-fail",
 		Port:     1234,
@@ -258,6 +267,12 @@ func RegisterHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientCon
 		Id:       "myapp",
 		ApiLevel: uint32(apiLevel),
 	}
+
+	conn, err := grpc.DialContext(ctx, p.Address(),
+		grpc.WithBlock(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
 
 	client := placementv1pb.NewPlacementClient(conn)
 	stream, err := client.ReportDaprStatus(ctx)
@@ -272,9 +287,9 @@ func RegisterHostFailing(t *testing.T, ctx context.Context, conn *grpc.ClientCon
 	require.Equalf(t, codes.FailedPrecondition, status.Code(err), "error was: %v", err)
 }
 
-// Checks the API level reported in the state table matched.
-func CheckAPILevelInState(t require.TestingT, client *http.Client, port int, expectAPILevel int) (tableVersion int) {
-	res, err := client.Get(fmt.Sprintf("http://localhost:%d/placement/state", port))
+// CheckAPILevelInState Checks the API level reported in the state table matched.
+func (p *Placement) CheckAPILevelInState(t require.TestingT, client *http.Client, expectedAPILevel int) (tableVersion int) {
+	res, err := client.Get(fmt.Sprintf("http://localhost:%d/placement/state", p.HealthzPort()))
 	require.NoError(t, err)
 	defer res.Body.Close()
 
@@ -285,7 +300,7 @@ func CheckAPILevelInState(t require.TestingT, client *http.Client, port int, exp
 	err = json.NewDecoder(res.Body).Decode(&stateRes)
 	require.NoError(t, err)
 
-	assert.Equal(t, expectAPILevel, stateRes.APILevel)
+	assert.Equal(t, expectedAPILevel, stateRes.APILevel)
 
 	return stateRes.TableVersion
 }

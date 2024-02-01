@@ -15,7 +15,7 @@ package apilevel
 
 import (
 	"context"
-	"log"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -55,53 +55,24 @@ func (n *withMin) Run(t *testing.T, ctx context.Context) {
 		level1 = 20
 		level2 = 30
 	)
+	var lock sync.Mutex
 
 	httpClient := util.HTTPClient(t)
 
 	n.place.WaitUntilRunning(t, ctx)
 
-	// Connect
-	conn, err := n.place.EstablishConn(ctx)
-	require.NoError(t, err)
-
-	// Collect messages
-	placementMessageCh := make(chan any)
 	currentVersion := atomic.Uint32{}
 	lastVersionUpdate := atomic.Int64{}
-	go func() {
-		for {
-			select {
-			case <-ctx.Done():
-				return
-			case msgAny := <-placementMessageCh:
-				if ctx.Err() != nil {
-					return
-				}
-				switch msg := msgAny.(type) {
-				case error:
-					log.Printf("Received an error in the channel: '%v'", msg)
-					return
-				case *placementv1pb.PlacementTables:
-					newAPILevel := msg.GetApiLevel()
-					oldAPILevel := currentVersion.Swap(newAPILevel)
-					if oldAPILevel != newAPILevel {
-						lastVersionUpdate.Store(time.Now().Unix())
-					}
-				}
-			}
-		}
-	}()
 
 	// API level should be lower
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
+		n.place.CheckAPILevelInState(t, httpClient, level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Trying to register a host with version 5 should fail
-	placement.RegisterHostFailing(t, ctx, conn, 5)
+	n.place.AssertRegisterHostFails(t, ctx, 5)
 
 	// Register the first host with the lower API level
-	stopCh1 := make(chan struct{})
 	msg1 := &placementv1pb.Host{
 		Name:     "myapp1",
 		Port:     1111,
@@ -109,10 +80,34 @@ func (n *withMin) Run(t *testing.T, ctx context.Context) {
 		Id:       "myapp1",
 		ApiLevel: uint32(level1),
 	}
-	placement.RegisterHost(t, ctx, conn, msg1, placementMessageCh, stopCh1)
+
+	ctx1, cancel1 := context.WithCancel(ctx)
+	placementMessageCh1 := n.place.RegisterHost(t, ctx1, msg1)
+
+	// Collect messages
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-ctx1.Done():
+				return
+			case msg := <-placementMessageCh1:
+				if ctx.Err() != nil {
+					return
+				}
+
+				newAPILevel := msg.GetApiLevel()
+				oldAPILevel := currentVersion.Swap(newAPILevel)
+				if oldAPILevel != newAPILevel {
+					lastVersionUpdate.Store(time.Now().Unix())
+				}
+			}
+		}
+	}()
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
+		n.place.CheckAPILevelInState(t, httpClient, level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Register the second host with the higher API level
@@ -123,20 +118,43 @@ func (n *withMin) Run(t *testing.T, ctx context.Context) {
 		Id:       "myapp2",
 		ApiLevel: uint32(level2),
 	}
-	placement.RegisterHost(t, ctx, conn, msg2, placementMessageCh, nil)
+	placementMessageCh2 := n.place.RegisterHost(t, ctx, msg2)
+
+	go func() {
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case pt2 := <-placementMessageCh2:
+				if ctx.Err() != nil {
+					return
+				}
+
+				lock.Lock()
+				newAPILevel := pt2.GetApiLevel()
+				oldAPILevel := currentVersion.Swap(newAPILevel)
+				if oldAPILevel != newAPILevel {
+					lastVersionUpdate.Store(time.Now().Unix())
+				}
+				lock.Unlock()
+
+			}
+		}
+	}()
 
 	// API level should not increase
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level1)
+		n.place.CheckAPILevelInState(t, httpClient, level1)
 	}, 5*time.Second, 100*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase to the higher one (30)
-	close(stopCh1)
+	cancel1()
+
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Equal(t, uint32(level2), currentVersion.Load())
 	}, 15*time.Second, 50*time.Millisecond)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		placement.CheckAPILevelInState(t, httpClient, n.place.HealthzPort(), level2)
+		n.place.CheckAPILevelInState(t, httpClient, level2)
 	}, 5*time.Second, 100*time.Millisecond)
 }
