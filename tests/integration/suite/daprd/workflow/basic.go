@@ -329,6 +329,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		// set scheduledStartTime to be time 5 seconds later than now
 		scheduledStartTime := time.Now().Add(5 * time.Second)
+		// Query param needs to be URL encoded
 		scheduledStartTimeStr := url.QueryEscape(scheduledStartTime.Format(time.RFC3339))
 
 		id := api.InstanceID(b.startWorkflow(ctx, t, "SingleActivity", "Dapr", scheduledStartTimeStr))
