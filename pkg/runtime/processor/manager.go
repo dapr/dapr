@@ -47,7 +47,7 @@ type PubsubManager interface {
 	BulkPublish(context.Context, *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error)
 
 	StartSubscriptions(context.Context) error
-	StopSubscriptions()
+	StopSubscriptions(forever bool)
 	Outbox() outbox.Outbox
 	manager
 }
@@ -56,7 +56,7 @@ type BindingManager interface {
 	SendToOutputBinding(context.Context, string, *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 
 	StartReadingFromBindings(context.Context) error
-	StopReadingFromBindings()
+	StopReadingFromBindings(forever bool)
 	manager
 }
 

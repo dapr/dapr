@@ -99,6 +99,7 @@ type pubsub struct {
 
 	lock        sync.RWMutex
 	subscribing bool
+	stopForever bool
 
 	topicCancels map[string]context.CancelFunc
 	outbox       outbox.Outbox

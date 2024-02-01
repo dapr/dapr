@@ -29,10 +29,15 @@ import (
 // StartSubscriptions starts the pubsub subscriptions
 func (p *pubsub) StartSubscriptions(ctx context.Context) error {
 	// Clean any previous state
-	p.StopSubscriptions()
+	p.StopSubscriptions(false)
 
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	// If Dapr has stopped subscribing forever, return early.
+	if p.stopForever {
+		return nil
+	}
 
 	p.subscribing = true
 
@@ -47,9 +52,14 @@ func (p *pubsub) StartSubscriptions(ctx context.Context) error {
 }
 
 // StopSubscriptions to all topics and cleans the cached topics
-func (p *pubsub) StopSubscriptions() {
+func (p *pubsub) StopSubscriptions(forever bool) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	if forever {
+		// Mark if Dapr has stopped subscribing forever.
+		p.stopForever = true
+	}
 
 	p.subscribing = false
 
