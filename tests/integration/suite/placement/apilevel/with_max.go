@@ -132,7 +132,6 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 					lastVersionUpdate.Store(time.Now().Unix())
 				}
 				lock.Unlock()
-
 			}
 		}
 	}()

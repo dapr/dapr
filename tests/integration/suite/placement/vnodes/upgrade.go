@@ -127,7 +127,6 @@ func (v *vNodesRollingUpgrade) Run(t *testing.T, ctx context.Context) {
 			// Check that the vnodes are not sent anymore, because the minimum API level of the cluster is 20+
 			assert.Empty(t, placementTables.GetEntries()["someactor2"].GetHosts())
 			assert.Empty(t, placementTables.GetEntries()["someactor2"].GetSortedSet())
-
 		}
 	}, 10*time.Second, 100*time.Millisecond)
 }
