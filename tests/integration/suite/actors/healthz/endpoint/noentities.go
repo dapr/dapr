@@ -15,6 +15,7 @@ package endpoint
 
 import (
 	"context"
+	"io"
 	"net/http"
 	"sync"
 	"testing"
@@ -114,7 +115,7 @@ func (n *noentities) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(c, tv.activeActors, meta.GetActorRuntime().GetActiveActors())
 			assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 			assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
-		}, time.Second*30, time.Millisecond*100)
+		}, 10*time.Second, 1*time.Second)
 	}
 
 	select {
@@ -125,10 +126,17 @@ func (n *noentities) Run(t *testing.T, ctx context.Context) {
 
 	client := util.HTTPClient(t)
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fooActorURL(n.daprd), nil)
-	require.NoError(t, err)
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	require.NoError(t, resp.Body.Close())
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, fooActorURL(n.daprd), nil)
+		require.NoError(c, err)
+		resp, err := client.Do(req)
+		require.NoError(c, err)
+		assert.Equal(c, http.StatusOK, resp.StatusCode)
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(c, err)
+		require.NoError(c, resp.Body.Close())
+		if resp.StatusCode != http.StatusOK {
+			require.Empty(c, body, "Error body")
+		}
+	}, 10*time.Second, 1*time.Second)
 }
