@@ -217,6 +217,8 @@ func newTestActorsRuntimeWithMock(t *testing.T, appChannel channel.AppChannel) *
 		AppConfig: config.ApplicationConfig{
 			Entities: []string{"cat", "dog", "actor2"},
 		},
+		HostAddress: "localhost",
+		Port:        Port,
 	})
 
 	clock := clocktesting.NewFakeClock(startOfTime)
