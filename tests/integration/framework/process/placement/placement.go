@@ -250,7 +250,10 @@ func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *p
 				tables := in.GetTables()
 				require.NotEmptyf(t, tables, "Placement tables is empty")
 
-				placementUpdateCh <- tables
+  select {
+				case placementUpdateCh <- tables:
+				case <-ctx.Done():
+				}
 			}
 		}
 	}()
