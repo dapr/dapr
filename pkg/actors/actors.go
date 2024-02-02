@@ -697,7 +697,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 
 	if imRes.Status().GetCode() != http.StatusOK {
 		respData, _ := imRes.RawDataFull()
-		return nil, fmt.Errorf("error from actor service: %s", string(respData))
+		return nil, fmt.Errorf("error from actor service while invoking %s %s: %s", msg.GetHttpExtension().GetVerb(), msg.GetMethod(), string(respData))
 	}
 
 	// Get the protobuf
