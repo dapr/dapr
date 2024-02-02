@@ -179,10 +179,11 @@ jobs:
           go-version-file: "go.mod"
       - name: Build binaries
         run: make build
-      - name: Override DAPR_HOST_IP for MacOS
+      - name: Fixes for running integration tests on MacOS
         if: matrix.target_os == 'darwin'
         run: |
           echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
+          dscacheutil -q host -a name localhost
       - name: Run make test-integration
         run: make test-integration
   build:
