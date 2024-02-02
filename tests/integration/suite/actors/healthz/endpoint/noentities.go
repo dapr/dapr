@@ -16,6 +16,7 @@ package endpoint
 import (
 	"context"
 	"io"
+	"log"
 	"net/http"
 	"sync"
 	"testing"
@@ -61,6 +62,10 @@ func (n *noentities) Setup(t *testing.T) []framework.Option {
 				close(n.healthzCalled)
 			})
 		}),
+		prochttp.WithHandlerFunc("/*", func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("NO ENTITY GOT CALLED: %s", r.URL.Path)
+			w.WriteHeader(http.StatusOK)
+		}),
 	)
 	srvWithEntities := prochttp.New(t,
 		prochttp.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
@@ -70,6 +75,10 @@ func (n *noentities) Setup(t *testing.T) []framework.Option {
 			w.WriteHeader(http.StatusOK)
 		}),
 		prochttp.WithHandlerFunc(pathMethodFoo, func(w http.ResponseWriter, r *http.Request) {
+			w.WriteHeader(http.StatusOK)
+		}),
+		prochttp.WithHandlerFunc("/*", func(w http.ResponseWriter, r *http.Request) {
+			log.Printf("WITH ENTITY GOT CALLED: %s", r.URL.Path)
 			w.WriteHeader(http.StatusOK)
 		}),
 	)
