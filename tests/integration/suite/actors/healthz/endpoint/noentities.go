@@ -136,7 +136,7 @@ func (n *noentities) Run(t *testing.T, ctx context.Context) {
 		require.NoError(c, err)
 		require.NoError(c, resp.Body.Close())
 		if resp.StatusCode != http.StatusOK {
-			require.Empty(c, body, "Error body")
+			assert.Empty(c, string(body), "Error body")
 		}
 	}, 10*time.Second, 1*time.Second)
 }
