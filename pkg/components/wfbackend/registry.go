@@ -26,7 +26,7 @@ import (
 // Registry is an interface for a component that returns registered workflow backend implementations.
 type Registry struct {
 	Logger                    logger.Logger
-	workflowBackendComponents map[string]WorkflowBackend
+	workflowBackendComponents map[string]workflowBackendFactory
 }
 
 // DefaultRegistry is the singleton with the registry.
@@ -35,12 +35,12 @@ var DefaultRegistry *Registry = NewRegistry()
 // NewRegistry is used to create workflow registry.
 func NewRegistry() *Registry {
 	return &Registry{
-		workflowBackendComponents: make(map[string]WorkflowBackend),
+		workflowBackendComponents: make(map[string]workflowBackendFactory),
 	}
 }
 
 // RegisterComponent adds a new workflow to the registry.
-func (s *Registry) RegisterComponent(componentFactory WorkflowBackend, names ...string) {
+func (s *Registry) RegisterComponent(componentFactory workflowBackendFactory, names ...string) {
 	for _, name := range names {
 		s.workflowBackendComponents[createFullName(name)] = componentFactory
 	}
@@ -69,7 +69,7 @@ func (s *Registry) getWorkflowBackendComponent(name, version, logName string) (f
 	return nil, false
 }
 
-func (s *Registry) wrapFn(componentFactory WorkflowBackend, logName string) func(Metadata) (backend.Backend, error) {
+func (s *Registry) wrapFn(componentFactory workflowBackendFactory, logName string) func(Metadata) (backend.Backend, error) {
 	return func(m Metadata) (backend.Backend, error) {
 		l := s.Logger
 		if logName != "" && l != nil {

@@ -241,7 +241,7 @@ loop:
 			}
 		}
 	}
-	wfLogger.Debugf("Activity actor '%s': activity '%s' completed for workflow with instanceId '%s' ", a.actorID, name, wi.InstanceID)
+	wfLogger.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
 
 	// publish the result back to the workflow actor as a new event to be processed
 	resultData, err := backend.MarshalHistoryEvent(wi.Result)

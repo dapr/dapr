@@ -40,7 +40,6 @@ func TestApplyOptions(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, defaultFailureThreshold, 2)
-		assert.Equal(t, defaultInitialDelay, time.Second)
 		assert.Equal(t, defaultHealthyStateInterval, time.Second*3)
 		assert.Equal(t, defaultUnHealthyStateInterval, time.Second/2)
 		assert.Equal(t, defaultRequestTimeout, time.Second*2)
@@ -48,7 +47,6 @@ func TestApplyOptions(t *testing.T) {
 
 		assert.Equal(t, "http://localhost:8080", checker.address)
 		assert.Equal(t, defaultFailureThreshold, checker.failureThreshold)
-		assert.Equal(t, defaultInitialDelay, checker.initialDelay)
 		assert.Equal(t, defaultHealthyStateInterval, checker.healthyStateInterval)
 		assert.Equal(t, defaultUnHealthyStateInterval, checker.unhealthyStateInterval)
 		assert.Equal(t, defaultRequestTimeout, checker.requestTimeout)
@@ -59,7 +57,6 @@ func TestApplyOptions(t *testing.T) {
 		checker, err := New(
 			WithAddress("http://localhost:8081"),
 			WithFailureThreshold(10),
-			WithInitialDelay(time.Second*11),
 			WithHealthyStateInterval(time.Second*12),
 			WithUnHealthyStateInterval(time.Second*15),
 			WithRequestTimeout(time.Second*13),
@@ -69,7 +66,6 @@ func TestApplyOptions(t *testing.T) {
 
 		assert.Equal(t, "http://localhost:8081", checker.address)
 		assert.Equal(t, 10, checker.failureThreshold)
-		assert.Equal(t, time.Second*11, checker.initialDelay)
 		assert.Equal(t, time.Second*12, checker.healthyStateInterval)
 		assert.Equal(t, time.Second*15, checker.unhealthyStateInterval)
 		assert.Equal(t, time.Second*13, checker.requestTimeout)
@@ -78,26 +74,11 @@ func TestApplyOptions(t *testing.T) {
 }
 
 func TestResponses(t *testing.T) {
-	t.Run("before initial interval should have no signal", func(t *testing.T) {
-		ch, clock, ts := testChecker(t,
-			WithInitialDelay(time.Second*2),
-		)
-
-		ts.statusCode.Store(200)
-		assert.Eventually(t, clock.HasWaiters, time.Second, time.Millisecond*10)
-		clock.Step(time.Second)
-		assertNoHealthSignal(t, clock, ch)
-
-		assert.Equal(t, int64(0), ts.numberOfCalls.Load())
-	})
-
 	t.Run("default success status", func(t *testing.T) {
 		ch, clock, ts := testChecker(t,
-			WithInitialDelay(0),
+			200,
 			WithFailureThreshold(2),
 		)
-
-		ts.statusCode.Store(200)
 
 		clock.Step(1)
 		assert.True(t, assertHealthSignal(t, clock, ch))
@@ -119,12 +100,11 @@ func TestResponses(t *testing.T) {
 
 	t.Run("custom success status", func(t *testing.T) {
 		ch, clock, ts := testChecker(t,
-			WithInitialDelay(0),
+			201,
 			WithFailureThreshold(1),
 			WithSuccessStatusCode(201),
 		)
 
-		ts.statusCode.Store(201)
 		clock.Step(1)
 		assert.True(t, assertHealthSignal(t, clock, ch))
 		assert.Equal(t, int64(1), ts.numberOfCalls.Load())
@@ -138,11 +118,10 @@ func TestResponses(t *testing.T) {
 
 	t.Run("test app recovery", func(t *testing.T) {
 		ch, clock, ts := testChecker(t,
-			WithInitialDelay(0),
+			200,
 			WithFailureThreshold(1),
 		)
 
-		ts.statusCode.Store(200)
 		clock.Step(1)
 		assert.True(t, assertHealthSignal(t, clock, ch))
 		assert.Equal(t, int64(1), ts.numberOfCalls.Load())
@@ -161,8 +140,9 @@ func TestResponses(t *testing.T) {
 	})
 }
 
-func testChecker(t *testing.T, opts ...Option) (<-chan bool, *clocktesting.FakeClock, *testServer) {
+func testChecker(t *testing.T, initialCode int64, opts ...Option) (<-chan bool, *clocktesting.FakeClock, *testServer) {
 	ts := new(testServer)
+	ts.statusCode.Store(initialCode)
 	server := httptest.NewServer(ts)
 	t.Cleanup(server.Close)
 

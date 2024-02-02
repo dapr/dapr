@@ -44,6 +44,7 @@ const (
 	GetWorkflowMetadataMethod    = "GetWorkflowMetadata"
 	AddWorkflowEventMethod       = "AddWorkflowEvent"
 	PurgeWorkflowStateMethod     = "PurgeWorkflowState"
+	GetWorkflowStateMethod       = "GetWorkflowState"
 )
 
 type workflowActor struct {
@@ -128,6 +129,12 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, methodName string, re
 		resAny, err = wf.getWorkflowMetadata(ctx)
 		if err == nil {
 			res, err = actors.EncodeInternalActorData(resAny)
+		}
+	case GetWorkflowStateMethod:
+		var state *workflowState
+		state, err = wf.getWorkflowState(ctx)
+		if err == nil {
+			res, err = state.EncodeWorkflowState()
 		}
 	case AddWorkflowEventMethod:
 		err = wf.addWorkflowEvent(ctx, request)
@@ -343,6 +350,18 @@ func (wf *workflowActor) getWorkflowMetadata(ctx context.Context) (*api.Orchestr
 	return metadata, nil
 }
 
+func (wf *workflowActor) getWorkflowState(ctx context.Context) (*workflowState, error) {
+	state, err := wf.loadInternalState(ctx)
+	wfLogger.Errorf("Workflow actor '%s': getWorkflowState, state: %s", wf.actorID, state)
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		return nil, api.ErrInstanceNotFound
+	}
+	return state, nil
+}
+
 // This method purges all the completed activity data from a workflow associated with the given actorID
 func (wf *workflowActor) purgeWorkflowState(ctx context.Context) error {
 	state, err := wf.loadInternalState(ctx)
@@ -433,6 +452,8 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
 	transactionalRequests := make(map[string][]actors.TransactionalOperation)
+	var esHistoryEvent *backend.HistoryEvent
+
 	for _, e := range state.Inbox {
 		var taskID int32
 		if ts := e.GetTaskCompleted(); ts != nil {
@@ -440,6 +461,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 		} else if tf := e.GetTaskFailed(); tf != nil {
 			taskID = tf.GetTaskScheduledId()
 		} else {
+			if es := e.GetExecutionStarted(); es != nil {
+				esHistoryEvent = e
+			}
 			continue
 		}
 		op := actors.TransactionalOperation{
@@ -498,11 +522,14 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 		}
 		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
-	// Record metrics for workflow execution
+
+	wf.recordWorkflowSchedulingLatency(ctx, esHistoryEvent, workflowName)
+	wfExecutionElapsedTime := float64(0)
+
 	defer func() {
 		if executionStatus != "" {
-			// execution latency for workflow is not supported yet.
 			diag.DefaultWorkflowMonitoring.WorkflowExecutionEvent(ctx, workflowName, executionStatus)
+			diag.DefaultWorkflowMonitoring.WorkflowExecutionLatency(ctx, workflowName, executionStatus, wfExecutionElapsedTime)
 		}
 	}()
 
@@ -658,9 +685,46 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 				// Setting executionStatus to failed if workflow has failed/terminated/cancelled
 				executionStatus = diag.StatusFailed
 			}
+			wfExecutionElapsedTime = wf.calculateWorkflowExecutionLatency(state)
 		}
 	}
+	if runtimeState.IsCompleted() {
+		wfLogger.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", wf.actorID, runtimeState.RuntimeStatus().String(), workflowName)
+	}
 	return nil
+}
+
+func (*workflowActor) calculateWorkflowExecutionLatency(state *workflowState) (wfExecutionElapsedTime float64) {
+	for _, e := range state.History {
+		if os := e.GetOrchestratorStarted(); os != nil {
+			return diag.ElapsedSince(e.GetTimestamp().AsTime())
+		}
+	}
+	return 0
+}
+
+func (*workflowActor) recordWorkflowSchedulingLatency(ctx context.Context, esHistoryEvent *backend.HistoryEvent, workflowName string) {
+	if esHistoryEvent == nil {
+		return
+	}
+
+	// If the event is an execution started event, then we need to record the scheduled start timestamp
+	if es := esHistoryEvent.GetExecutionStarted(); es != nil {
+		currentTimestamp := time.Now()
+		var scheduledStartTimestamp time.Time
+		timestamp := es.GetScheduledStartTimestamp()
+
+		if timestamp != nil {
+			scheduledStartTimestamp = timestamp.AsTime()
+		} else {
+			// if scheduledStartTimestamp is nil, then use the event timestamp to consider scheduling latency
+			// This case will happen when the workflow is created and started immediately
+			scheduledStartTimestamp = esHistoryEvent.GetTimestamp().AsTime()
+		}
+
+		wfSchedulingLatency := float64(currentTimestamp.Sub(scheduledStartTimestamp).Milliseconds())
+		diag.DefaultWorkflowMonitoring.WorkflowSchedulingLatency(ctx, workflowName, wfSchedulingLatency)
+	}
 }
 
 func (wf *workflowActor) loadInternalState(ctx context.Context) (*workflowState, error) {

@@ -43,6 +43,10 @@ func (b *binding) StartReadingFromBindings(ctx context.Context) error {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 
+	if b.stopForever {
+		return nil
+	}
+
 	b.readingBindings = true
 
 	if b.channels.AppChannel() == nil {
@@ -110,10 +114,14 @@ func (b *binding) startInputBinding(comp componentsV1alpha1.Component, binding b
 	return nil
 }
 
-func (b *binding) StopReadingFromBindings() {
+func (b *binding) StopReadingFromBindings(forever bool) {
 	b.lock.Lock()
 	defer b.lock.Unlock()
 	defer b.wg.Wait()
+
+	if forever {
+		b.stopForever = true
+	}
 
 	b.readingBindings = false
 

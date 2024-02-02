@@ -79,7 +79,7 @@ spec:
   version: v1
 `),
 		daprd.WithExecOptions(
-			exec.WithEnvVars("NAMESPACE", "mynamespace"),
+			exec.WithEnvVars(t, "NAMESPACE", "mynamespace"),
 		),
 	)
 	return []framework.Option{
@@ -101,7 +101,6 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 	resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
-		{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 		{
 			Name: "abc", Type: "state.in-memory", Version: "v1",
 			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
