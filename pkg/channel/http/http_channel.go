@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -311,6 +312,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 		uri.WriteString(qs)
 	}
 
+	log.Printf("INVOKE APP CHANNEL HTTP: %s", uri.String())
 	channelReq, err := http.NewRequestWithContext(ctx, verb, uri.String(), req.RawData())
 	if err != nil {
 		return nil, err
