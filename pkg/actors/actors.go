@@ -822,8 +822,18 @@ func (a *actorsRuntime) callRemoteActor(
 }
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
-	return strings.Contains(targetActorAddress, "localhost") || strings.Contains(targetActorAddress, "127.0.0.1") ||
-		targetActorAddress == hostAddress+":"+strconv.Itoa(grpcPort)
+	if targetActorAddress == hostAddress+":"+strconv.Itoa(grpcPort) {
+		// Easy case when there is a perfect match
+		return true
+	}
+
+	if hostAddress == "localhost" || hostAddress == "127.0.0.1" || hostAddress == "[::1]" || hostAddress == "::1" {
+		return targetActorAddress == "localhost:"+strconv.Itoa(grpcPort) ||
+			targetActorAddress == "127.0.0.1:"+strconv.Itoa(grpcPort) ||
+			targetActorAddress == "[::1]:"+strconv.Itoa(grpcPort)
+	}
+
+	return false
 }
 
 func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
