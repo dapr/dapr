@@ -158,3 +158,15 @@ message ConfigurationItem {
   // the metadata which will be passed to/from configuration store component.
   map<string,string> metadata = 3;
 }
+
+// Boolean represents a boolean value which can be defaulted, true, or false.
+enum Boolean {
+  // Unspecified value, used for defaulting.
+  BOOLEAN_UNSPECIFIED = 0;
+
+  // True value.
+  BOOLEAN_TRUE = 1;
+
+  // False value.
+  BOOLEAN_FALSE = 2;
+}

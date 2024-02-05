@@ -100,7 +100,6 @@ const (
 	workflowComponent        = "workflowComponent"
 	workflowName             = "workflowName"
 	instanceID               = "instanceID"
-	nonRecursive             = "non_recursive"
 	eventName                = "eventName"
 	consistencyParam         = "consistency"
 	concurrencyParam         = "concurrency"
@@ -109,6 +108,8 @@ const (
 	tracestateHeader         = "tracestate"
 	daprAppID                = "dapr-app-id"
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
+
+	queryKeyWorkflowRecursive = "recursive"
 )
 
 // APIOpts contains the options for NewAPI.

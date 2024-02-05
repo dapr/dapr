@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
+	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
@@ -243,13 +244,17 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
 
-				// Extract non_recursive option from query string
-				nonRecursive := r.URL.Query().Get(nonRecursive)
-				if nonRecursive != "" {
-					var err error
-					in.NonRecursive, err = strconv.ParseBool(nonRecursive)
+				// Extract recursive option from query string
+				if query := r.URL.Query(); query.Has(queryKeyWorkflowRecursive) {
+					recursive, err := strconv.ParseBool(query.Get(queryKeyWorkflowRecursive))
 					if err != nil {
 						return nil, err
+					}
+
+					if recursive {
+						in.Recursive = commonv1.Boolean_BOOLEAN_TRUE.Enum()
+					} else {
+						in.Recursive = commonv1.Boolean_BOOLEAN_FALSE.Enum()
 					}
 				}
 				return in, nil
@@ -311,13 +316,17 @@ func (a *api) onPurgeWorkflowHandler() http.HandlerFunc {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
 
-				// Extract non_recursive option from query string
-				nonRecursive := r.URL.Query().Get(nonRecursive)
-				if nonRecursive != "" {
-					var err error
-					in.NonRecursive, err = strconv.ParseBool(nonRecursive)
+				// Extract recursive option from query string
+				if query := r.URL.Query(); query.Has(queryKeyWorkflowRecursive) {
+					recursive, err := strconv.ParseBool(query.Get(queryKeyWorkflowRecursive))
 					if err != nil {
 						return nil, err
+					}
+
+					if recursive {
+						in.Recursive = commonv1.Boolean_BOOLEAN_TRUE.Enum()
+					} else {
+						in.Recursive = commonv1.Boolean_BOOLEAN_FALSE.Enum()
 					}
 				}
 				return in, nil

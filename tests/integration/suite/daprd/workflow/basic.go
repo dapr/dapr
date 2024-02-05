@@ -43,6 +43,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -157,13 +158,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		defer cancelTaskhub()
 
 		// Test terminating with and without recursion
-		for _, nonRecursive := range []string{"", "false", "true"} {
-			// `non_recursive` = "" means no query param, which should default to false
-			nonRecursiveBool := false
-			if nonRecursive == "true" {
-				nonRecursiveBool = true
+		for _, recursive := range []*bool{nil, ptr.Of(true), ptr.Of(false)} {
+			// `recursive` = nil means no query param, which should default to true
+			recursiveBool := true
+			recName := "nil"
+			if recursive != nil {
+				recursiveBool = *recursive
+				recName = strconv.FormatBool(recursiveBool)
 			}
-			t.Run(fmt.Sprintf("non_recursive = %v", nonRecursive), func(t *testing.T) {
+			t.Run("recursive = "+recName, func(t *testing.T) {
 				id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
 
 				// Wait long enough to ensure all orchestrations have started (but not longer than the timer delay)
@@ -184,8 +187,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					return true
 				}, 2*time.Second, 100*time.Millisecond)
 
-				// Terminate the root orchestration and mark whether a nonRecursive termination
-				b.terminateWorkflow(ctx, t, string(id), nonRecursive)
+				// Terminate the root orchestration and mark whether a recursive termination
+				b.terminateWorkflow(t, ctx, string(id), recursive)
 
 				// Wait for the root orchestration to complete and verify its terminated status
 				metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
@@ -202,8 +205,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					require.NoError(t, err)
 				}
 
-				// Verify tht none of the L2 suborchestrations executed the activity in case of recursive termination
-				assert.Equal(t, nonRecursiveBool, executedActivity.Load())
+				// Verify that none of the L2 suborchestrations executed the activity in case of recursive termination
+				assert.Equal(t, !recursiveBool, executedActivity.Load())
 			})
 		}
 	})
@@ -228,13 +231,12 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		defer cancelTaskhub()
 
 		// Test purging with and without recursion
-		for _, nonRecursive := range []string{"", "false", "true"} {
-			// `non_recursive` = "" means no query param, which should default to false
-			nonRecursiveBool := false
-			if nonRecursive == "true" {
-				nonRecursiveBool = true
+		for _, recursive := range []*bool{nil, ptr.Of(true), ptr.Of(false)} {
+			recName := "nil"
+			if recursive != nil {
+				recName = strconv.FormatBool(*recursive)
 			}
-			t.Run(fmt.Sprintf("non_recursive = %v", nonRecursive), func(t *testing.T) {
+			t.Run("recursive ="+recName, func(t *testing.T) {
 				// Run the orchestration, which will block waiting for external events
 				id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
 
@@ -243,13 +245,20 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
 
 				// Purge the root orchestration
-				b.purgeWorkflow(ctx, t, string(id), nonRecursive)
+				b.purgeWorkflow(t, ctx, string(id), recursive)
 
 				// Verify that root Orchestration has been purged
 				_, err = backendClient.FetchOrchestrationMetadata(ctx, id)
 				assert.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 
-				if nonRecursiveBool {
+				if recursive == nil || *recursive {
+					// Verify that L1 and L2 orchestrations have been purged
+					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
+					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
+
+					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
+					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
+				} else {
 					// Verify that L1 and L2 orchestrations are not purged
 					metadata, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
 					require.NoError(t, err)
@@ -258,13 +267,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
 					require.NoError(t, err)
 					require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
-				} else {
-					// Verify that L1 and L2 orchestrations have been purged
-					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
-					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
-
-					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
-					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 				}
 			})
 		}
@@ -324,11 +326,11 @@ func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, in
 }
 
 // terminate workflow
-func (b *basic) terminateWorkflow(ctx context.Context, t *testing.T, instanceID string, nonRecursive string) {
+func (b *basic) terminateWorkflow(t *testing.T, ctx context.Context, instanceID string, recursive *bool) {
 	// use http client to terminate the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", b.daprd.HTTPPort(), instanceID)
-	if nonRecursive != "" {
-		reqURL += "?non_recursive=" + nonRecursive
+	if recursive != nil {
+		reqURL += "?recursive=" + strconv.FormatBool(*recursive)
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
@@ -341,11 +343,11 @@ func (b *basic) terminateWorkflow(ctx context.Context, t *testing.T, instanceID 
 }
 
 // purge workflow
-func (b *basic) purgeWorkflow(ctx context.Context, t *testing.T, instanceID string, nonRecursive string) {
+func (b *basic) purgeWorkflow(t *testing.T, ctx context.Context, instanceID string, recursive *bool) {
 	// use http client to purge the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", b.daprd.HTTPPort(), instanceID)
-	if nonRecursive != "" {
-		reqURL += "?non_recursive=" + nonRecursive
+	if recursive != nil {
+		reqURL += "?recursive=" + strconv.FormatBool(*recursive)
 	}
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
