@@ -71,7 +71,7 @@ func (p *MockPlacement) LookupActor(ctx context.Context, req internal.LookupActo
 	}
 
 	return internal.LookupActorResponse{
-		Address: "localhost",
+		Address: "localhost:5000",
 		AppID:   p.testAppID,
 	}, nil
 }
