@@ -26,6 +26,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	kclock "k8s.io/utils/clock"
+	clocktesting "k8s.io/utils/clock/testing"
+
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/health"
 	"github.com/dapr/dapr/pkg/actors/internal"
@@ -40,12 +47,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/ptr"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	kclock "k8s.io/utils/clock"
-	clocktesting "k8s.io/utils/clock/testing"
 )
 
 const (
