@@ -99,6 +99,7 @@ const (
 	nameParam                = "name"
 	workflowComponent        = "workflowComponent"
 	workflowName             = "workflowName"
+	workflowStartTime        = "dapr.workflow.start_time"
 	instanceID               = "instanceID"
 	nonRecursive             = "non_recursive"
 	eventName                = "eventName"
