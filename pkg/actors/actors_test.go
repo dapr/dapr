@@ -26,13 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
-	kclock "k8s.io/utils/clock"
-	clocktesting "k8s.io/utils/clock/testing"
-
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/health"
 	"github.com/dapr/dapr/pkg/actors/internal"
@@ -47,6 +40,12 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/ptr"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+	kclock "k8s.io/utils/clock"
+	clocktesting "k8s.io/utils/clock/testing"
 )
 
 const (
@@ -1546,4 +1545,34 @@ func TestPlacementSwitchIsNotTurnedOn(t *testing.T) {
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
 		assert.Empty(t, testActorsRuntime.compStore.ListStateStores())
 	})
+}
+
+func TestIsActorLocal(t *testing.T) {
+	type args struct {
+		targetActorAddress string
+		hostAddress        string
+		grpcPort           int
+	}
+	tests := []struct {
+		name string
+		args args
+		want bool
+	}{
+		{name: "different addresses", args: args{targetActorAddress: "abc:123", hostAddress: "xyz", grpcPort: 456}, want: false},
+		{name: "same address", args: args{targetActorAddress: "abc:123", hostAddress: "abc", grpcPort: 123}, want: true},
+		{name: "localhost, same port", args: args{targetActorAddress: "localhost:123", hostAddress: "localhost", grpcPort: 123}, want: true},
+		{name: "localhost and 127.0.0.1, same port", args: args{targetActorAddress: "localhost:123", hostAddress: "127.0.0.1", grpcPort: 123}, want: true},
+		{name: "127.0.0.1 and localhost, same port", args: args{targetActorAddress: "127.0.0.1:123", hostAddress: "localhost", grpcPort: 123}, want: true},
+		{name: "localhost and [::1], same port", args: args{targetActorAddress: "localhost:123", hostAddress: "[::1]", grpcPort: 123}, want: true},
+		{name: "[::1] and 127.0.0.1, same port", args: args{targetActorAddress: "[::1]:123", hostAddress: "127.0.0.1", grpcPort: 123}, want: true},
+		{name: "localhost, different port", args: args{targetActorAddress: "localhost:123", hostAddress: "localhost", grpcPort: 456}, want: false},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			a := &actorsRuntime{}
+			if got := a.isActorLocal(tt.args.targetActorAddress, tt.args.hostAddress, tt.args.grpcPort); got != tt.want {
+				t.Errorf("actorsRuntime.isActorLocal() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
