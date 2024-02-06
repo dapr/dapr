@@ -18,6 +18,7 @@ import (
 	"errors"
 	"unicode"
 
+	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -69,6 +70,14 @@ func (a *Universal) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWor
 
 // StartWorkflowBeta1 is the API handler for starting a workflow
 func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
+	// The instance ID is optional. If not specified, we generate a random one.
+	if in.GetInstanceId() == "" {
+		randomID, err := uuid.NewRandom()
+		if err != nil {
+			return nil, err
+		}
+		in.InstanceId = randomID.String()
+	}
 	if err := a.validateInstanceID(in.GetInstanceId(), true /* isCreate */); err != nil {
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
