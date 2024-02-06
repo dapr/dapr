@@ -967,8 +967,6 @@ func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.Workfl
 		AppID:         testAppID,
 		ActorsService: "placement:placement:5050",
 		AppConfig:     config.ApplicationConfig{},
-		HostAddress:   "localhost",
-		Port:          5000, // port for unit tests to pass IsLocalActor
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)

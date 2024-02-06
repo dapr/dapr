@@ -449,7 +449,10 @@ func (c *Consistent) SortedSet() (sortedSet []uint64) {
 	c.RLock()
 	defer c.RUnlock()
 
-	return c.sortedSet
+	for k := range c.sortedSet {
+		sortedSet = append(sortedSet, uint64(k))
+	}
+	return sortedSet
 }
 
 func hash(key string) uint64 {

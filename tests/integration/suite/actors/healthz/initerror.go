@@ -97,7 +97,7 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 
 	rctx, cancel := context.WithTimeout(ctx, time.Second*2)
 	t.Cleanup(cancel)
-	daprdURL := "http://127.0.0.1:" + strconv.Itoa(i.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid/method/foo"
+	daprdURL := "http://localhost:" + strconv.Itoa(i.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid/method/foo"
 
 	req, err := http.NewRequestWithContext(rctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)

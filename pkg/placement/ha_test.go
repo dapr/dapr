@@ -368,7 +368,7 @@ func findLeader(t *testing.T, raftServers []*raft.Server) int {
 		}
 
 		return true
-	}, time.Second*30, time.Second, "no leader elected")
+	}, time.Second*10, time.Second, "no leader elected")
 	return n
 }
 
