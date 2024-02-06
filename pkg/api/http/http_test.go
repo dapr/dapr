@@ -3195,7 +3195,7 @@ func (f *fakeHTTPServer) Shutdown() {
 }
 
 func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body []byte) fakeHTTPResponse {
-	url := fmt.Sprintf("http://localhost/%s", path)
+	url := fmt.Sprintf("http://127.0.0.1/%s", path)
 	r, _ := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("dapr-api-token", token)
@@ -3214,9 +3214,9 @@ func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body 
 }
 
 func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, params map[string]string, headers ...string) fakeHTTPResponse {
-	url := fmt.Sprintf("http://localhost/%s", path)
+	url := fmt.Sprintf("http://127.0.0.1/%s", path)
 	if basicAuth != "" {
-		url = fmt.Sprintf("http://%s@localhost/%s", basicAuth, path)
+		url = fmt.Sprintf("http://%s@127.0.0.1/%s", basicAuth, path)
 	}
 
 	if params != nil {

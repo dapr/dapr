@@ -23,7 +23,6 @@ import (
 	"io"
 	"net"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -833,7 +832,7 @@ func (s *proxyTestSuite) SetupSuite() {
 
 	clientConn, err := grpc.DialContext(
 		context.Background(),
-		strings.Replace(s.proxyListener.Addr().String(), "127.0.0.1", "localhost", 1),
+		s.proxyListener.Addr().String(), // DO NOT USE "localhost" as it does not resolve to loopback in some environments.
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
 	)
