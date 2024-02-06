@@ -248,6 +248,16 @@ spec:
                 properties:
                   enabled:
                     type: boolean
+                  http:
+                    description: MetricHTTP defines configuration for metrics for
+                      the HTTP server
+                    properties:
+                      increasedCardinality:
+                        description: 'If true, metrics for the HTTP server are collected
+                          with increased cardinality. The default is true in Dapr 1.13,
+                          but will be changed to false in 1.14+'
+                        type: boolean
+                    type: object
                   rules:
                     items:
                       description: MetricsRule defines configuration options for a
@@ -286,6 +296,16 @@ spec:
                 properties:
                   enabled:
                     type: boolean
+                  http:
+                    description: MetricHTTP defines configuration for metrics for
+                      the HTTP server
+                    properties:
+                      increasedCardinality:
+                        description: 'If true, metrics for the HTTP server are collected
+                          with increased cardinality. The default is true in Dapr 1.13,
+                          but will be changed to false in 1.14+'
+                        type: boolean
+                    type: object
                   rules:
                     items:
                       description: MetricsRule defines configuration options for a

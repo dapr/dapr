@@ -287,7 +287,7 @@ jobs:
       - name: Login to cache registry for Windows
         if: runner.os == 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
         run: |
-          $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken)
+          $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken --output tsv)
           docker login ${{ env.DAPR_CACHE_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
       - name: Login to cache registry for Linux or Mac
         if: runner.os != 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
@@ -335,7 +335,7 @@ jobs:
       - name: Login to Azure Container Registry for Windows
         if: runner.os == 'Windows' && env.TEST_PREFIX != ''
         run: |
-          $accessToken = (az acr login  -n ${{ env.DAPR_REGISTRY }} --expose-token --query accessToken)
+          $accessToken = (az acr login  -n ${{ env.DAPR_REGISTRY }} --expose-token --query accessToken --output tsv)
           docker login ${{ env.DAPR_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
       - name: Login to Azure Container Registry for Linux or Mac
         if: runner.os != 'Windows' && env.TEST_PREFIX != ''
