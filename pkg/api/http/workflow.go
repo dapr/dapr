@@ -16,7 +16,6 @@ package http
 import (
 	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -232,16 +231,6 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 			InModifier: func(r *http.Request, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
-
-				// Extract non_recursive option from query string
-				nonRecursive := r.URL.Query().Get(nonRecursive)
-				if nonRecursive != "" {
-					var err error
-					in.NonRecursive, err = strconv.ParseBool(nonRecursive)
-					if err != nil {
-						return nil, err
-					}
-				}
 				return in, nil
 			},
 			SuccessStatusCode: http.StatusAccepted,
@@ -300,16 +289,6 @@ func (a *api) onPurgeWorkflowHandler() http.HandlerFunc {
 			InModifier: func(r *http.Request, in *runtimev1pb.PurgeWorkflowRequest) (*runtimev1pb.PurgeWorkflowRequest, error) {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
-
-				// Extract non_recursive option from query string
-				nonRecursive := r.URL.Query().Get(nonRecursive)
-				if nonRecursive != "" {
-					var err error
-					in.NonRecursive, err = strconv.ParseBool(nonRecursive)
-					if err != nil {
-						return nil, err
-					}
-				}
 				return in, nil
 			},
 			SuccessStatusCode: http.StatusAccepted,
