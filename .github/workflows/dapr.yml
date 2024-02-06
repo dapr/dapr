@@ -161,7 +161,7 @@ jobs:
             target_os: windows
             target_arch: amd64
             windows_version: ltsc2022
-          - os: macOS-latest
+          - os: macos-11
             target_os: darwin
             target_arch: amd64
     env:
