@@ -72,7 +72,7 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 	)
 
 	// Init placement
-	i.place = placement.New(t, placement.WithMaxAPILevel(0))
+	i.place = placement.New(t)
 
 	// Init two instances of daprd, each with its own server
 	for j := 0; j < 2; j++ {
@@ -382,6 +382,7 @@ func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placem
 		Port:     1234,
 		Entities: entities,
 		Id:       "invalidapp",
+		ApiLevel: 20,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to send message: %w", err)
