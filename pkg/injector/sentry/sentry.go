@@ -53,18 +53,20 @@ type Requester struct {
 }
 
 // New returns a new instance of the Requester.
-func New(opts Options) *Requester {
+func New(ctx context.Context, opts Options) (*Requester, error) {
 	_, kubeMode := os.LookupEnv("KUBERNETES_SERVICE_HOST")
-	return &Requester{
+	r := &Requester{
 		sentryAddress:  opts.SentryAddress,
 		sentryID:       opts.SentryID,
 		sec:            opts.Security,
 		kubernetesMode: kubeMode,
 	}
+
+	return r, r.dialSentryConnection(ctx)
 }
 
-// DialSentryConnection creates the gRPC connection to the Sentry service and blocks for 1 minute.
-func (r *Requester) DialSentryConnection(ctx context.Context) error {
+// dialSentryConnection creates the gRPC connection to the Sentry service and blocks for 1 minute.
+func (r *Requester) dialSentryConnection(ctx context.Context) error {
 	connCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
@@ -109,7 +111,7 @@ func (r *Requester) RequestCertificateFromSentry(ctx context.Context, namespace 
 			Token:          token,
 			Namespace:      namespace,
 			TokenValidator: tokenValidator,
-		}, grpcRetry.WithMax(3), grpcRetry.WithPerRetryTimeout(time.Second*3))
+		}, grpcRetry.WithMax(10), grpcRetry.WithPerRetryTimeout(time.Second*3))
 	if err != nil {
 		return nil, nil, fmt.Errorf("error from sentry SignCertificate: %w", err)
 	}
