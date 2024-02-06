@@ -122,12 +122,11 @@ func Run() {
 			if err != nil {
 				return rerr
 			}
-			requester := sentry.New(sentry.Options{
+			requester, derr := sentry.New(ctx, sentry.Options{
 				SentryAddress: cfg.SentryAddress,
 				SentryID:      sentryID,
 				Security:      sec,
 			})
-			derr := requester.DialSentryConnection(ctx)
 			if derr != nil {
 				return derr
 			}
