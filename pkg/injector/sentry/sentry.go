@@ -55,14 +55,12 @@ type Requester struct {
 // New returns a new instance of the Requester.
 func New(opts Options) *Requester {
 	_, kubeMode := os.LookupEnv("KUBERNETES_SERVICE_HOST")
-	r := &Requester{
+	return &Requester{
 		sentryAddress:  opts.SentryAddress,
 		sentryID:       opts.SentryID,
 		sec:            opts.Security,
 		kubernetesMode: kubeMode,
 	}
-
-	return r
 }
 
 // DialSentryConnection creates the gRPC connection to the Sentry service and blocks for 1 minute.
