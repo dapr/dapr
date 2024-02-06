@@ -127,6 +127,11 @@ func Run() {
 				SentryID:      sentryID,
 				Security:      sec,
 			})
+			derr := requester.DialSentryConnection(ctx)
+			if derr != nil {
+				return derr
+			}
+
 			return inj.Run(ctx,
 				sec.TLSServerConfigNoClientAuth(),
 				sentryID,
