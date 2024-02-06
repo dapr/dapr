@@ -71,13 +71,6 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 			expectedError:     messages.ErrWorkflowNameMissing,
 		},
 		{
-			testName:          "No instance ID provided in start request",
-			workflowComponent: fakeComponentName,
-			workflowName:      fakeWorkflowName,
-			instanceID:        "",
-			expectedError:     messages.ErrMissingOrEmptyInstance,
-		},
-		{
 			testName:          "Invalid instance ID provided in start request",
 			workflowComponent: fakeComponentName,
 			workflowName:      fakeWorkflowName,
@@ -97,6 +90,12 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 			workflowName:      fakeWorkflowName,
 			instanceID:        daprt.ErrorInstanceID,
 			expectedError:     messages.ErrStartWorkflow.WithFormat(fakeWorkflowName, daprt.ErrFakeWorkflowComponentError),
+		},
+		{
+			testName:          "No instance ID provided in start request",
+			workflowComponent: fakeComponentName,
+			workflowName:      fakeWorkflowName,
+			instanceID:        "",
 		},
 		{
 			testName:          "All is well in start request",

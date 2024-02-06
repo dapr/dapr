@@ -18,6 +18,7 @@ import (
 	"errors"
 	"unicode"
 
+	"github.com/google/uuid"
 	"github.com/microsoft/durabletask-go/api"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -69,6 +70,14 @@ func (a *Universal) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWor
 
 // StartWorkflowBeta1 is the API handler for starting a workflow
 func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowResponse, error) {
+	// The instance ID is optional. If not specified, we generate a random one.
+	if in.GetInstanceId() == "" {
+		randomID, err := uuid.NewRandom()
+		if err != nil {
+			return nil, err
+		}
+		in.InstanceId = randomID.String()
+	}
 	if err := a.validateInstanceID(in.GetInstanceId(), true /* isCreate */); err != nil {
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
@@ -125,7 +134,7 @@ func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.
 
 	req := &workflows.TerminateRequest{
 		InstanceID: in.GetInstanceId(),
-		Recursive:  !in.GetNonRecursive(),
+		Recursive:  true,
 	}
 	if err := workflowComponent.Terminate(ctx, req); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
@@ -248,7 +257,7 @@ func (a *Universal) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Purg
 
 	req := workflows.PurgeRequest{
 		InstanceID: in.GetInstanceId(),
-		Recursive:  !in.GetNonRecursive(),
+		Recursive:  true,
 	}
 
 	err = workflowComponent.Purge(ctx, &req)
