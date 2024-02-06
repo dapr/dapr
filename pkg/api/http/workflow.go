@@ -18,7 +18,6 @@ import (
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
@@ -200,16 +199,7 @@ func (a *api) onStartWorkflowHandler() http.HandlerFunc {
 			InModifier: func(r *http.Request, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowRequest, error) {
 				in.WorkflowName = chi.URLParam(r, workflowName)
 				in.WorkflowComponent = chi.URLParam(r, workflowComponent)
-
-				// The instance ID is optional. If not specified, we generate a random one.
 				in.InstanceId = r.URL.Query().Get(instanceID)
-				if in.GetInstanceId() == "" {
-					randomID, err := uuid.NewRandom()
-					if err != nil {
-						return nil, err
-					}
-					in.InstanceId = randomID.String()
-				}
 
 				// We accept the HTTP request body as the input to the workflow
 				// without making any assumptions about its format.
