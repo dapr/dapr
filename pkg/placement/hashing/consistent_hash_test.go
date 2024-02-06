@@ -31,7 +31,7 @@ func TestReplicationFactor(t *testing.T) {
 	}
 
 	t.Run("varying replication factors, no movement", func(t *testing.T) {
-		factors := []int{1, 100, 1000, 10000}
+		factors := []int64{1, 100, 1000, 10000}
 
 		for _, f := range factors {
 			h := NewConsistentHash(f)

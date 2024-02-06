@@ -108,7 +108,7 @@ func (p *protobufFormat) Run(t *testing.T, ctx context.Context) {
 	storeReminder(t, ctx, baseURL, client)
 
 	// Check the data in the SQLite database
-	// The value must be base64-encoded, and after being decoded it should begin with `\0pb`, which indicates it was serialized as JSON
+	// The value must be base64-encoded, and after being decoded it should begin with `\0pb`, which indicates it was serialized as protobuf
 	storedVal := loadRemindersFromDB(t, ctx, p.db.GetConnection(t))
 	storedValBytes, err := base64.StdEncoding.DecodeString(storedVal)
 	require.NoErrorf(t, err, "Failed to decode value from base64: '%v'", storedVal)
