@@ -33,59 +33,6 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
-// Boolean represents a boolean value which can be defaulted, true, or false.
-type Boolean int32
-
-const (
-	// Unspecified value, used for defaulting.
-	Boolean_BOOLEAN_UNSPECIFIED Boolean = 0
-	// True value.
-	Boolean_BOOLEAN_TRUE Boolean = 1
-	// False value.
-	Boolean_BOOLEAN_FALSE Boolean = 2
-)
-
-// Enum value maps for Boolean.
-var (
-	Boolean_name = map[int32]string{
-		0: "BOOLEAN_UNSPECIFIED",
-		1: "BOOLEAN_TRUE",
-		2: "BOOLEAN_FALSE",
-	}
-	Boolean_value = map[string]int32{
-		"BOOLEAN_UNSPECIFIED": 0,
-		"BOOLEAN_TRUE":        1,
-		"BOOLEAN_FALSE":       2,
-	}
-)
-
-func (x Boolean) Enum() *Boolean {
-	p := new(Boolean)
-	*p = x
-	return p
-}
-
-func (x Boolean) String() string {
-	return protoimpl.X.EnumStringOf(x.Descriptor(), protoreflect.EnumNumber(x))
-}
-
-func (Boolean) Descriptor() protoreflect.EnumDescriptor {
-	return file_dapr_proto_common_v1_common_proto_enumTypes[0].Descriptor()
-}
-
-func (Boolean) Type() protoreflect.EnumType {
-	return &file_dapr_proto_common_v1_common_proto_enumTypes[0]
-}
-
-func (x Boolean) Number() protoreflect.EnumNumber {
-	return protoreflect.EnumNumber(x)
-}
-
-// Deprecated: Use Boolean.Descriptor instead.
-func (Boolean) EnumDescriptor() ([]byte, []int) {
-	return file_dapr_proto_common_v1_common_proto_rawDescGZIP(), []int{0}
-}
-
 // Type of HTTP 1.1 Methods
 // RFC 7231: https://tools.ietf.org/html/rfc7231#page-24
 // RFC 5789: https://datatracker.ietf.org/doc/html/rfc5789
@@ -143,11 +90,11 @@ func (x HTTPExtension_Verb) String() string {
 }
 
 func (HTTPExtension_Verb) Descriptor() protoreflect.EnumDescriptor {
-	return file_dapr_proto_common_v1_common_proto_enumTypes[1].Descriptor()
+	return file_dapr_proto_common_v1_common_proto_enumTypes[0].Descriptor()
 }
 
 func (HTTPExtension_Verb) Type() protoreflect.EnumType {
-	return &file_dapr_proto_common_v1_common_proto_enumTypes[1]
+	return &file_dapr_proto_common_v1_common_proto_enumTypes[0]
 }
 
 func (x HTTPExtension_Verb) Number() protoreflect.EnumNumber {
@@ -193,11 +140,11 @@ func (x StateOptions_StateConcurrency) String() string {
 }
 
 func (StateOptions_StateConcurrency) Descriptor() protoreflect.EnumDescriptor {
-	return file_dapr_proto_common_v1_common_proto_enumTypes[2].Descriptor()
+	return file_dapr_proto_common_v1_common_proto_enumTypes[1].Descriptor()
 }
 
 func (StateOptions_StateConcurrency) Type() protoreflect.EnumType {
-	return &file_dapr_proto_common_v1_common_proto_enumTypes[2]
+	return &file_dapr_proto_common_v1_common_proto_enumTypes[1]
 }
 
 func (x StateOptions_StateConcurrency) Number() protoreflect.EnumNumber {
@@ -243,11 +190,11 @@ func (x StateOptions_StateConsistency) String() string {
 }
 
 func (StateOptions_StateConsistency) Descriptor() protoreflect.EnumDescriptor {
-	return file_dapr_proto_common_v1_common_proto_enumTypes[3].Descriptor()
+	return file_dapr_proto_common_v1_common_proto_enumTypes[2].Descriptor()
 }
 
 func (StateOptions_StateConsistency) Type() protoreflect.EnumType {
-	return &file_dapr_proto_common_v1_common_proto_enumTypes[3]
+	return &file_dapr_proto_common_v1_common_proto_enumTypes[2]
 }
 
 func (x StateOptions_StateConsistency) Number() protoreflect.EnumNumber {
@@ -891,19 +838,15 @@ var file_dapr_proto_common_v1_common_proto_rawDesc = []byte{
 	0x74, 0x61, 0x1a, 0x3b, 0x0a, 0x0d, 0x4d, 0x65, 0x74, 0x61, 0x64, 0x61, 0x74, 0x61, 0x45, 0x6e,
 	0x74, 0x72, 0x79, 0x12, 0x10, 0x0a, 0x03, 0x6b, 0x65, 0x79, 0x18, 0x01, 0x20, 0x01, 0x28, 0x09,
 	0x52, 0x03, 0x6b, 0x65, 0x79, 0x12, 0x14, 0x0a, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x18, 0x02,
-	0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x2a,
-	0x47, 0x0a, 0x07, 0x42, 0x6f, 0x6f, 0x6c, 0x65, 0x61, 0x6e, 0x12, 0x17, 0x0a, 0x13, 0x42, 0x4f,
-	0x4f, 0x4c, 0x45, 0x41, 0x4e, 0x5f, 0x55, 0x4e, 0x53, 0x50, 0x45, 0x43, 0x49, 0x46, 0x49, 0x45,
-	0x44, 0x10, 0x00, 0x12, 0x10, 0x0a, 0x0c, 0x42, 0x4f, 0x4f, 0x4c, 0x45, 0x41, 0x4e, 0x5f, 0x54,
-	0x52, 0x55, 0x45, 0x10, 0x01, 0x12, 0x11, 0x0a, 0x0d, 0x42, 0x4f, 0x4f, 0x4c, 0x45, 0x41, 0x4e,
-	0x5f, 0x46, 0x41, 0x4c, 0x53, 0x45, 0x10, 0x02, 0x42, 0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64,
-	0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0c, 0x43, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x50, 0x72,
-	0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x2f, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d,
-	0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70,
-	0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x63,
-	0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0xaa, 0x02, 0x1b, 0x44, 0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69,
-	0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67, 0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63,
-	0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x20, 0x01, 0x28, 0x09, 0x52, 0x05, 0x76, 0x61, 0x6c, 0x75, 0x65, 0x3a, 0x02, 0x38, 0x01, 0x42,
+	0x69, 0x0a, 0x0a, 0x69, 0x6f, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x76, 0x31, 0x42, 0x0c, 0x43,
+	0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0x50, 0x72, 0x6f, 0x74, 0x6f, 0x73, 0x5a, 0x2f, 0x67, 0x69, 0x74,
+	0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x64, 0x61, 0x70,
+	0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f, 0x63, 0x6f, 0x6d, 0x6d,
+	0x6f, 0x6e, 0x2f, 0x76, 0x31, 0x3b, 0x63, 0x6f, 0x6d, 0x6d, 0x6f, 0x6e, 0xaa, 0x02, 0x1b, 0x44,
+	0x61, 0x70, 0x72, 0x2e, 0x43, 0x6c, 0x69, 0x65, 0x6e, 0x74, 0x2e, 0x41, 0x75, 0x74, 0x6f, 0x67,
+	0x65, 0x6e, 0x2e, 0x47, 0x72, 0x70, 0x63, 0x2e, 0x76, 0x31, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74,
+	0x6f, 0x33,
 }
 
 var (
@@ -918,36 +861,35 @@ func file_dapr_proto_common_v1_common_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_common_v1_common_proto_rawDescData
 }
 
-var file_dapr_proto_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 4)
+var file_dapr_proto_common_v1_common_proto_enumTypes = make([]protoimpl.EnumInfo, 3)
 var file_dapr_proto_common_v1_common_proto_msgTypes = make([]protoimpl.MessageInfo, 10)
 var file_dapr_proto_common_v1_common_proto_goTypes = []interface{}{
-	(Boolean)(0),                       // 0: dapr.proto.common.v1.Boolean
-	(HTTPExtension_Verb)(0),            // 1: dapr.proto.common.v1.HTTPExtension.Verb
-	(StateOptions_StateConcurrency)(0), // 2: dapr.proto.common.v1.StateOptions.StateConcurrency
-	(StateOptions_StateConsistency)(0), // 3: dapr.proto.common.v1.StateOptions.StateConsistency
-	(*HTTPExtension)(nil),              // 4: dapr.proto.common.v1.HTTPExtension
-	(*InvokeRequest)(nil),              // 5: dapr.proto.common.v1.InvokeRequest
-	(*InvokeResponse)(nil),             // 6: dapr.proto.common.v1.InvokeResponse
-	(*StreamPayload)(nil),              // 7: dapr.proto.common.v1.StreamPayload
-	(*StateItem)(nil),                  // 8: dapr.proto.common.v1.StateItem
-	(*Etag)(nil),                       // 9: dapr.proto.common.v1.Etag
-	(*StateOptions)(nil),               // 10: dapr.proto.common.v1.StateOptions
-	(*ConfigurationItem)(nil),          // 11: dapr.proto.common.v1.ConfigurationItem
-	nil,                                // 12: dapr.proto.common.v1.StateItem.MetadataEntry
-	nil,                                // 13: dapr.proto.common.v1.ConfigurationItem.MetadataEntry
-	(*anypb.Any)(nil),                  // 14: google.protobuf.Any
+	(HTTPExtension_Verb)(0),            // 0: dapr.proto.common.v1.HTTPExtension.Verb
+	(StateOptions_StateConcurrency)(0), // 1: dapr.proto.common.v1.StateOptions.StateConcurrency
+	(StateOptions_StateConsistency)(0), // 2: dapr.proto.common.v1.StateOptions.StateConsistency
+	(*HTTPExtension)(nil),              // 3: dapr.proto.common.v1.HTTPExtension
+	(*InvokeRequest)(nil),              // 4: dapr.proto.common.v1.InvokeRequest
+	(*InvokeResponse)(nil),             // 5: dapr.proto.common.v1.InvokeResponse
+	(*StreamPayload)(nil),              // 6: dapr.proto.common.v1.StreamPayload
+	(*StateItem)(nil),                  // 7: dapr.proto.common.v1.StateItem
+	(*Etag)(nil),                       // 8: dapr.proto.common.v1.Etag
+	(*StateOptions)(nil),               // 9: dapr.proto.common.v1.StateOptions
+	(*ConfigurationItem)(nil),          // 10: dapr.proto.common.v1.ConfigurationItem
+	nil,                                // 11: dapr.proto.common.v1.StateItem.MetadataEntry
+	nil,                                // 12: dapr.proto.common.v1.ConfigurationItem.MetadataEntry
+	(*anypb.Any)(nil),                  // 13: google.protobuf.Any
 }
 var file_dapr_proto_common_v1_common_proto_depIdxs = []int32{
-	1,  // 0: dapr.proto.common.v1.HTTPExtension.verb:type_name -> dapr.proto.common.v1.HTTPExtension.Verb
-	14, // 1: dapr.proto.common.v1.InvokeRequest.data:type_name -> google.protobuf.Any
-	4,  // 2: dapr.proto.common.v1.InvokeRequest.http_extension:type_name -> dapr.proto.common.v1.HTTPExtension
-	14, // 3: dapr.proto.common.v1.InvokeResponse.data:type_name -> google.protobuf.Any
-	9,  // 4: dapr.proto.common.v1.StateItem.etag:type_name -> dapr.proto.common.v1.Etag
-	12, // 5: dapr.proto.common.v1.StateItem.metadata:type_name -> dapr.proto.common.v1.StateItem.MetadataEntry
-	10, // 6: dapr.proto.common.v1.StateItem.options:type_name -> dapr.proto.common.v1.StateOptions
-	2,  // 7: dapr.proto.common.v1.StateOptions.concurrency:type_name -> dapr.proto.common.v1.StateOptions.StateConcurrency
-	3,  // 8: dapr.proto.common.v1.StateOptions.consistency:type_name -> dapr.proto.common.v1.StateOptions.StateConsistency
-	13, // 9: dapr.proto.common.v1.ConfigurationItem.metadata:type_name -> dapr.proto.common.v1.ConfigurationItem.MetadataEntry
+	0,  // 0: dapr.proto.common.v1.HTTPExtension.verb:type_name -> dapr.proto.common.v1.HTTPExtension.Verb
+	13, // 1: dapr.proto.common.v1.InvokeRequest.data:type_name -> google.protobuf.Any
+	3,  // 2: dapr.proto.common.v1.InvokeRequest.http_extension:type_name -> dapr.proto.common.v1.HTTPExtension
+	13, // 3: dapr.proto.common.v1.InvokeResponse.data:type_name -> google.protobuf.Any
+	8,  // 4: dapr.proto.common.v1.StateItem.etag:type_name -> dapr.proto.common.v1.Etag
+	11, // 5: dapr.proto.common.v1.StateItem.metadata:type_name -> dapr.proto.common.v1.StateItem.MetadataEntry
+	9,  // 6: dapr.proto.common.v1.StateItem.options:type_name -> dapr.proto.common.v1.StateOptions
+	1,  // 7: dapr.proto.common.v1.StateOptions.concurrency:type_name -> dapr.proto.common.v1.StateOptions.StateConcurrency
+	2,  // 8: dapr.proto.common.v1.StateOptions.consistency:type_name -> dapr.proto.common.v1.StateOptions.StateConsistency
+	12, // 9: dapr.proto.common.v1.ConfigurationItem.metadata:type_name -> dapr.proto.common.v1.ConfigurationItem.MetadataEntry
 	10, // [10:10] is the sub-list for method output_type
 	10, // [10:10] is the sub-list for method input_type
 	10, // [10:10] is the sub-list for extension type_name
@@ -1063,7 +1005,7 @@ func file_dapr_proto_common_v1_common_proto_init() {
 		File: protoimpl.DescBuilder{
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_common_v1_common_proto_rawDesc,
-			NumEnums:      4,
+			NumEnums:      3,
 			NumMessages:   10,
 			NumExtensions: 0,
 			NumServices:   0,

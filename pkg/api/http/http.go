@@ -108,8 +108,6 @@ const (
 	tracestateHeader         = "tracestate"
 	daprAppID                = "dapr-app-id"
 	daprRuntimeVersionKey    = "daprRuntimeVersion"
-
-	queryKeyWorkflowRecursive = "recursive"
 )
 
 // APIOpts contains the options for NewAPI.

@@ -16,7 +16,6 @@ package http
 import (
 	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
@@ -24,7 +23,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
-	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
@@ -243,20 +241,6 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 			InModifier: func(r *http.Request, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
-
-				// Extract recursive option from query string
-				if query := r.URL.Query(); query.Has(queryKeyWorkflowRecursive) {
-					recursive, err := strconv.ParseBool(query.Get(queryKeyWorkflowRecursive))
-					if err != nil {
-						return nil, err
-					}
-
-					if recursive {
-						in.Recursive = commonv1.Boolean_BOOLEAN_TRUE.Enum()
-					} else {
-						in.Recursive = commonv1.Boolean_BOOLEAN_FALSE.Enum()
-					}
-				}
 				return in, nil
 			},
 			SuccessStatusCode: http.StatusAccepted,
@@ -315,20 +299,6 @@ func (a *api) onPurgeWorkflowHandler() http.HandlerFunc {
 			InModifier: func(r *http.Request, in *runtimev1pb.PurgeWorkflowRequest) (*runtimev1pb.PurgeWorkflowRequest, error) {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
-
-				// Extract recursive option from query string
-				if query := r.URL.Query(); query.Has(queryKeyWorkflowRecursive) {
-					recursive, err := strconv.ParseBool(query.Get(queryKeyWorkflowRecursive))
-					if err != nil {
-						return nil, err
-					}
-
-					if recursive {
-						in.Recursive = commonv1.Boolean_BOOLEAN_TRUE.Enum()
-					} else {
-						in.Recursive = commonv1.Boolean_BOOLEAN_FALSE.Enum()
-					}
-				}
 				return in, nil
 			},
 			SuccessStatusCode: http.StatusAccepted,

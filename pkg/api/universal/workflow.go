@@ -24,7 +24,6 @@ import (
 
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/messages"
-	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
@@ -126,7 +125,7 @@ func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.
 
 	req := &workflows.TerminateRequest{
 		InstanceID: in.GetInstanceId(),
-		Recursive:  in.GetRecursive() != commonv1.Boolean_BOOLEAN_FALSE,
+		Recursive:  true,
 	}
 	if err := workflowComponent.Terminate(ctx, req); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
@@ -249,7 +248,7 @@ func (a *Universal) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Purg
 
 	req := workflows.PurgeRequest{
 		InstanceID: in.GetInstanceId(),
-		Recursive:  in.GetRecursive() != commonv1.Boolean_BOOLEAN_FALSE,
+		Recursive:  true,
 	}
 
 	err = workflowComponent.Purge(ctx, &req)
