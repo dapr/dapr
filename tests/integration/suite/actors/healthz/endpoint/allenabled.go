@@ -122,5 +122,5 @@ func (a *allenabled) Run(t *testing.T, ctx context.Context) {
 }
 
 func fooActorURL(daprd *daprd.Daprd) string {
-	return "http://localhost:" + strconv.Itoa(daprd.HTTPPort()) + "/v1.0" + pathMethodFoo
+	return "http://127.0.0.1:" + strconv.Itoa(daprd.HTTPPort()) + "/v1.0" + pathMethodFoo
 }

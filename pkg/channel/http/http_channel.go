@@ -228,7 +228,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}()
 
 	// Emit metric when request is sent
-	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, int64(len(req.Message().GetData().GetValue())))
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().GetMethod(), int64(len(req.Message().GetData().GetValue())))
 	startRequest := time.Now()
 
 	rw := &RWRecorder{
@@ -261,17 +261,17 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
 	rsp, err := h.parseChannelResponse(req, resp)
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
 
 	return rsp, nil
 }

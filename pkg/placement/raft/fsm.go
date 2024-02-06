@@ -46,15 +46,15 @@ type FSM struct {
 	// racing with Restore(), which is called by Raft (it puts in a totally
 	// new state store). Everything internal here is synchronized by the
 	// Raft side, so doesn't need to lock this.
-	stateLock         sync.RWMutex
-	state             *DaprHostMemberState
-	replicationFactor int64
+	stateLock sync.RWMutex
+	state     *DaprHostMemberState
+	config    DaprHostMemberStateConfig
 }
 
-func newFSM(replicationFactor int64) *FSM {
+func newFSM(config DaprHostMemberStateConfig) *FSM {
 	return &FSM{
-		state:             newDaprHostMemberState(int(replicationFactor)),
-		replicationFactor: replicationFactor,
+		state:  newDaprHostMemberState(config),
+		config: config,
 	}
 }
 
@@ -68,15 +68,16 @@ func (c *FSM) State() *DaprHostMemberState {
 // PlacementState returns the current placement tables.
 // the withVirtualNodes parameter is here for backwards compatibility and should be removed in 1.14
 // TODO in v1.15 remove the withVirtualNodes parameter
-func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
+func (c *FSM) PlacementState() *v1pb.PlacementTables {
 	c.stateLock.RLock()
 	defer c.stateLock.RUnlock()
+	withVirtualNodes := c.state.APILevel() < NoVirtualNodesInPlacementTablesAPILevel
 
 	newTable := &v1pb.PlacementTables{
 		Version:           strconv.FormatUint(c.state.TableGeneration(), 10),
 		Entries:           make(map[string]*v1pb.PlacementTable),
 		ApiLevel:          c.state.APILevel(),
-		ReplicationFactor: c.replicationFactor,
+		ReplicationFactor: c.config.replicationFactor,
 	}
 
 	totalHostSize := 0
@@ -209,7 +210,7 @@ func (c *FSM) Snapshot() (raft.FSMSnapshot, error) {
 func (c *FSM) Restore(old io.ReadCloser) error {
 	defer old.Close()
 
-	members := newDaprHostMemberState(int(c.replicationFactor))
+	members := newDaprHostMemberState(c.config)
 	if err := members.restore(old); err != nil {
 		return err
 	}
