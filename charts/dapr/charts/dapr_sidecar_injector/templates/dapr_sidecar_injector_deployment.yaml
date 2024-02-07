@@ -150,6 +150,8 @@ spec:
         # Configuration for injected sidecars
         - name: SIDECAR_RUN_AS_NON_ROOT
           value: {{ .Values.sidecarRunAsNonRoot | toString | toYaml }}
+        - name: ENABLE_K8S_DOWNWARD_APIS
+          value: {{ .Values.enableK8sDownwardAPIs | toString | toYaml }}
         - name: SIDECAR_DROP_ALL_CAPABILITIES
           value: {{ .Values.sidecarDropALLCapabilities | toString | toYaml }}
         - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
