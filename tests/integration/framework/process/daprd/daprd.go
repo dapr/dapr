@@ -46,6 +46,7 @@ type Daprd struct {
 	freeport *util.FreePort
 
 	appID            string
+	namespace        string
 	appProtocol      string
 	appPort          int
 	grpcPort         int
@@ -138,11 +139,18 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
 
+	ns := "default"
+	if opts.namespace != nil {
+		ns = *opts.namespace
+		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
+	}
+
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		freeport:         fp,
 		appHTTP:          appHTTP,
 		appID:            opts.appID,
+		namespace:        ns,
 		appProtocol:      opts.appProtocol,
 		appPort:          opts.appPort,
 		grpcPort:         opts.grpcPort,
@@ -180,7 +188,7 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 	require.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.httpPort), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/v1.0/healthz", d.httpPort), nil)
 		if err != nil {
 			return false
 		}
@@ -198,7 +206,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 	case "http":
 		client := util.HTTPClient(t)
 		assert.Eventually(t, func() bool {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.httpPort), nil)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/v1.0/healthz", d.httpPort), nil)
 			if err != nil {
 				return false
 			}
@@ -230,19 +238,27 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 	}
 }
 
-func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", d.GRPCPort()),
+func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
+	conn, err := grpc.DialContext(ctx, fmt.Sprintf("127.0.0.1:%d", d.GRPCPort()),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
-	return rtv1.NewDaprClient(conn)
+	return conn
+}
+
+func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
+	return rtv1.NewDaprClient(d.GRPCConn(t, ctx))
 }
 
 func (d *Daprd) AppID() string {
 	return d.appID
+}
+
+func (d *Daprd) Namespace() string {
+	return d.namespace
 }
 
 func (d *Daprd) AppPort() int {
@@ -250,7 +266,7 @@ func (d *Daprd) AppPort() int {
 }
 
 func (d *Daprd) AppAddress() string {
-	return "localhost:" + strconv.Itoa(d.AppPort())
+	return "127.0.0.1:" + strconv.Itoa(d.AppPort())
 }
 
 func (d *Daprd) GRPCPort() int {
@@ -258,7 +274,7 @@ func (d *Daprd) GRPCPort() int {
 }
 
 func (d *Daprd) GRPCAddress() string {
-	return "localhost:" + strconv.Itoa(d.GRPCPort())
+	return "127.0.0.1:" + strconv.Itoa(d.GRPCPort())
 }
 
 func (d *Daprd) HTTPPort() int {
@@ -266,7 +282,7 @@ func (d *Daprd) HTTPPort() int {
 }
 
 func (d *Daprd) HTTPAddress() string {
-	return "localhost:" + strconv.Itoa(d.HTTPPort())
+	return "127.0.0.1:" + strconv.Itoa(d.HTTPPort())
 }
 
 func (d *Daprd) InternalGRPCPort() int {
@@ -274,7 +290,7 @@ func (d *Daprd) InternalGRPCPort() int {
 }
 
 func (d *Daprd) InternalGRPCAddress() string {
-	return "localhost:" + strconv.Itoa(d.InternalGRPCPort())
+	return "127.0.0.1:" + strconv.Itoa(d.InternalGRPCPort())
 }
 
 func (d *Daprd) PublicPort() int {

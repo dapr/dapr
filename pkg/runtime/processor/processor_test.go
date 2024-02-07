@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -452,4 +453,10 @@ func TestMetadataClientID(t *testing.T) {
 			t.Error("Timed out waiting for clientID for Standalone Mode test")
 		}
 	})
+}
+
+func TestProcessNoWorkflow(t *testing.T) {
+	proc, _ := newTestProc()
+	_, ok := proc.managers[components.CategoryWorkflow]
+	require.False(t, ok, "workflow cannot be registered as user facing component")
 }

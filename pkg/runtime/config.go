@@ -231,8 +231,9 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	// Initialize metrics only if MetricSpec is enabled.
 	metricsSpec := globalConfig.GetMetricsSpec()
 	if metricsSpec.GetEnabled() {
-		if mErr := diag.InitMetrics(intc.id, namespace, metricsSpec.Rules); mErr != nil {
-			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", mErr).Error())
+		err = diag.InitMetrics(intc.id, namespace, metricsSpec.Rules, metricsSpec.GetHTTPIncreasedCardinality(log))
+		if err != nil {
+			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
 		}
 	}
 

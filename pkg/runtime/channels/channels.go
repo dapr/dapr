@@ -25,7 +25,6 @@ import (
 
 	"golang.org/x/net/http2"
 
-	contribmiddle "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	httpendpapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -34,7 +33,7 @@ import (
 	compmiddlehttp "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
-	middlehttp "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/middleware"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/registry"
@@ -59,6 +58,9 @@ type Options struct {
 	// GlobalConfig is the global configuration.
 	GlobalConfig *config.Configuration
 
+	// AppMiddlware is the application middleware.
+	AppMiddleware middleware.HTTP
+
 	// MaxRequestBodySize is the maximum request body size.
 	MaxRequestBodySize int
 
@@ -75,7 +77,7 @@ type Channels struct {
 	appConnectionConfig config.AppConnectionConfig
 	tracingSpec         *config.TracingSpec
 	maxRequestBodySize  int
-	appHTTPPipelineSpec *config.PipelineSpec
+	appMiddlware        middleware.HTTP
 	httpClient          *http.Client
 	grpc                *manager.Manager
 
@@ -93,7 +95,7 @@ func New(opts Options) *Channels {
 		appConnectionConfig: opts.AppConnectionConfig,
 		tracingSpec:         opts.GlobalConfig.Spec.TracingSpec,
 		maxRequestBodySize:  opts.MaxRequestBodySize,
-		appHTTPPipelineSpec: opts.GlobalConfig.Spec.AppHTTPPipelineSpec,
+		appMiddlware:        opts.AppMiddleware,
 		grpc:                opts.GRPC,
 		httpClient:          appHTTPClient(opts.AppConnectionConfig, opts.GlobalConfig, opts.ReadBufferSize),
 		endpChannels:        make(map[string]channel.HTTPEndpointAppChannel),
@@ -106,13 +108,7 @@ func (c *Channels) Refresh() error {
 
 	log.Debug("Refreshing channels")
 
-	// Create a HTTP channel for external HTTP endpoint invocation
-	pipeline, err := c.buildHTTPPipelineForSpec(c.appHTTPPipelineSpec, "app channel")
-	if err != nil {
-		return fmt.Errorf("failed to build app HTTP pipeline: %w", err)
-	}
-
-	httpEndpChannel, err := channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig(pipeline))
+	httpEndpChannel, err := channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig())
 	if err != nil {
 		return fmt.Errorf("failed to create external HTTP app channel: %w", err)
 	}
@@ -133,7 +129,7 @@ func (c *Channels) Refresh() error {
 	var appChannel channel.AppChannel
 	if c.appConnectionConfig.Protocol.IsHTTP() {
 		// Create a HTTP channel
-		appChannel, err = channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig(pipeline))
+		appChannel, err = channelhttp.CreateHTTPChannel(c.appHTTPChannelConfig())
 		if err != nil {
 			return fmt.Errorf("failed to create HTTP app channel: %w", err)
 		}
@@ -150,16 +146,6 @@ func (c *Channels) Refresh() error {
 	log.Debug("Channels refreshed")
 
 	return nil
-}
-
-func (c *Channels) BuildHTTPPipeline(spec *config.PipelineSpec) (middlehttp.Pipeline, error) {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.buildHTTPPipeline(spec)
-}
-
-func (c *Channels) buildHTTPPipeline(spec *config.PipelineSpec) (middlehttp.Pipeline, error) {
-	return c.buildHTTPPipelineForSpec(spec, "http")
 }
 
 func (c *Channels) AppChannel() channel.AppChannel {
@@ -198,51 +184,11 @@ func (c *Channels) AppHTTPEndpoint() string {
 	}
 }
 
-func (c *Channels) buildHTTPPipelineForSpec(spec *config.PipelineSpec, targetPipeline string) (middlehttp.Pipeline, error) {
-	if spec == nil {
-		return middlehttp.Pipeline{}, nil
-	}
-
-	pipeline := middlehttp.Pipeline{
-		Handlers: make([]func(next http.Handler) http.Handler, 0, len(spec.Handlers)),
-	}
-
-	for _, handlerSpec := range spec.Handlers {
-		comp, exists := c.compStore.GetComponent(handlerSpec.Name)
-		if !exists {
-			// Log the error but continue with initializing the pipeline
-			log.Errorf("couldn't find middleware component defined in configuration with name %s and type %s",
-				handlerSpec.Name, handlerSpec.LogName())
-			continue
-		}
-
-		meta, err := c.meta.ToBaseMetadata(comp)
-		if err != nil {
-			return middlehttp.Pipeline{}, err
-		}
-		md := contribmiddle.Metadata{Base: meta}
-		handler, err := c.registry.Create(handlerSpec.Type, handlerSpec.Version, md, handlerSpec.LogName())
-		if err != nil {
-			err = fmt.Errorf("process component %s error: %w", comp.Name, err)
-			if !comp.Spec.IgnoreErrors {
-				return middlehttp.Pipeline{}, err
-			}
-			log.Error(err)
-			continue
-		}
-
-		log.Infof("enabled %s/%s %s middleware", handlerSpec.Type, targetPipeline, handlerSpec.Version)
-		pipeline.Handlers = append(pipeline.Handlers, handler)
-	}
-
-	return pipeline, nil
-}
-
-func (c *Channels) appHTTPChannelConfig(pipeline middlehttp.Pipeline) channelhttp.ChannelConfiguration {
+func (c *Channels) appHTTPChannelConfig() channelhttp.ChannelConfiguration {
 	conf := channelhttp.ChannelConfiguration{
 		CompStore:            c.compStore,
 		MaxConcurrency:       c.appConnectionConfig.MaxConcurrency,
-		Pipeline:             pipeline,
+		Middleware:           c.appMiddlware,
 		TracingSpec:          c.tracingSpec,
 		MaxRequestBodySizeMB: c.maxRequestBodySize,
 	}
@@ -259,13 +205,8 @@ func (c *Channels) initEndpointChannels() (map[string]channel.HTTPEndpointAppCha
 
 	channels := make(map[string]channel.HTTPEndpointAppChannel, len(endpoints))
 	if len(endpoints) > 0 {
-		pipeline, err := c.buildHTTPPipeline(c.appHTTPPipelineSpec)
-		if err != nil {
-			return nil, err
-		}
-
 		for _, e := range endpoints {
-			conf, err := c.getHTTPEndpointAppChannel(pipeline, e)
+			conf, err := c.getHTTPEndpointAppChannel(e)
 			if err != nil {
 				return nil, err
 			}
@@ -282,11 +223,11 @@ func (c *Channels) initEndpointChannels() (map[string]channel.HTTPEndpointAppCha
 	return channels, nil
 }
 
-func (c *Channels) getHTTPEndpointAppChannel(pipeline middlehttp.Pipeline, endpoint httpendpapi.HTTPEndpoint) (channelhttp.ChannelConfiguration, error) {
+func (c *Channels) getHTTPEndpointAppChannel(endpoint httpendpapi.HTTPEndpoint) (channelhttp.ChannelConfiguration, error) {
 	conf := channelhttp.ChannelConfiguration{
 		CompStore:            c.compStore,
 		MaxConcurrency:       c.appConnectionConfig.MaxConcurrency,
-		Pipeline:             pipeline,
+		Middleware:           c.appMiddlware,
 		MaxRequestBodySizeMB: c.maxRequestBodySize,
 		TracingSpec:          c.tracingSpec,
 	}

@@ -407,7 +407,16 @@ func (a *actorsRuntime) haltAllActors() error {
 func (a *actorsRuntime) deactivateActor(act *actor) error {
 	// This uses a background context as it should be unrelated from the caller's context
 	// Once the decision to deactivate an actor has been made, we must go through with it or we could have an inconsistent state
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		defer cancel()
+		select {
+		case <-ctx.Done():
+		case <-a.closeCh:
+		}
+	}()
 
 	// Delete the actor from the actor table regardless of the outcome of deactivation the actor in the app
 	actorKey := act.Key()
@@ -815,8 +824,22 @@ func (a *actorsRuntime) callRemoteActor(
 }
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
-	return strings.Contains(targetActorAddress, "localhost") || strings.Contains(targetActorAddress, "127.0.0.1") ||
-		targetActorAddress == hostAddress+":"+strconv.Itoa(grpcPort)
+	portStr := strconv.Itoa(grpcPort)
+
+	if targetActorAddress == hostAddress+":"+portStr {
+		// Easy case when there is a perfect match
+		return true
+	}
+
+	if isLocalhost(hostAddress) && strings.HasSuffix(targetActorAddress, ":"+portStr) {
+		return isLocalhost(targetActorAddress[0 : len(targetActorAddress)-len(portStr)-1])
+	}
+
+	return false
+}
+
+func isLocalhost(addr string) bool {
+	return addr == "localhost" || addr == "127.0.0.1" || addr == "[::1]" || addr == "::1"
 }
 
 func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
@@ -1272,7 +1295,7 @@ func (a *actorsRuntime) Close() error {
 
 	var errs []error
 	if a.closed.CompareAndSwap(false, true) {
-		defer func() { close(a.closeCh) }()
+		close(a.closeCh)
 		if a.checker != nil {
 			a.checker.Close()
 		}

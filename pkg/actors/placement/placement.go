@@ -30,8 +30,8 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/placement/hashing"
+	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
@@ -163,7 +163,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 	p.appHealthy.Store(true)
 	p.resetPlacementTables()
 
-	if !p.establishStreamConn(ctx, config.ActorAPILevel) {
+	if !p.establishStreamConn(ctx) {
 		return nil
 	}
 
@@ -205,7 +205,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			if !p.running.Load() {
 				break
 			}
-			p.establishStreamConn(ctx, config.ActorAPILevel)
+			p.establishStreamConn(ctx)
 		}
 	}()
 
@@ -258,9 +258,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				log.Debug("Disconnecting from placement service by the unhealthy app")
 
 				p.client.disconnect()
-				p.placementTableLock.Lock()
 				p.resetPlacementTables()
-				p.placementTableLock.Unlock()
 				if p.haltAllActorsFn != nil {
 					haltErr := p.haltAllActorsFn()
 					if haltErr != nil {
@@ -379,7 +377,7 @@ func (p *actorPlacement) doLookupActor(ctx context.Context, actorType, actorID s
 }
 
 //nolint:nosnakecase
-func (p *actorPlacement) establishStreamConn(ctx context.Context, apiLevel uint32) (established bool) {
+func (p *actorPlacement) establishStreamConn(ctx context.Context) (established bool) {
 	// Backoff for reconnecting in case of errors
 	bo := backoff.NewExponentialBackOff()
 	bo.InitialInterval = placementReconnectMinInterval
@@ -414,7 +412,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context, apiLevel uint3
 			log.Debug("try to connect to placement service: " + serverAddr)
 		}
 
-		err := p.client.connectToServer(ctx, serverAddr, apiLevel)
+		err := p.client.connectToServer(ctx, serverAddr)
 		if err == errEstablishingTLSConn {
 			return false
 		}
@@ -514,8 +512,10 @@ func (p *actorPlacement) unblockPlacements() {
 }
 
 // Resets the placement tables.
-// Note that this method should be invoked by a caller that owns a lock.
 func (p *actorPlacement) resetPlacementTables() {
+	p.placementTableLock.Lock()
+	defer p.placementTableLock.Unlock()
+
 	if p.hasPlacementTablesCh != nil {
 		close(p.hasPlacementTablesCh)
 	}
@@ -528,20 +528,20 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 	updated := false
 	var updatedAPILevel *uint32
 	func() {
-		p.placementTableLock.Lock()
-		defer p.placementTableLock.Unlock()
-
+		p.placementTableLock.RLock()
 		if in.GetVersion() == p.placementTables.Version {
+			p.placementTableLock.RUnlock()
 			return
 		}
+		p.placementTableLock.RUnlock()
 
 		if in.GetApiLevel() != p.apiLevel {
 			p.apiLevel = in.GetApiLevel()
 			updatedAPILevel = ptr.Of(in.GetApiLevel())
 		}
 
-		maps.Clear(p.placementTables.Entries)
-		p.placementTables.Version = in.GetVersion()
+		entries := map[string]*hashing.Consistent{}
+
 		for k, v := range in.GetEntries() {
 			loadMap := make(map[string]*hashing.Host, len(v.GetLoadMap()))
 			for lk, lv := range v.GetLoadMap() {
@@ -550,12 +550,28 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 
 			// TODO: @elena in v1.15 remove the check for versions < 1.13
 			// only keep `hashing.NewFromExisting`
-			if p.apiLevel < placement.NoVirtualNodesInPlacementTablesAPILevel {
-				p.placementTables.Entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
+
+			if p.apiLevel < raft.NoVirtualNodesInPlacementTablesAPILevel {
+				entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
 			} else {
-				p.placementTables.Entries[k] = hashing.NewFromExisting(loadMap, int(in.GetReplicationFactor()), p.virtualNodesCache)
+				entries[k] = hashing.NewFromExisting(loadMap, in.GetReplicationFactor(), p.virtualNodesCache)
 			}
 		}
+
+		p.placementTableLock.Lock()
+		defer p.placementTableLock.Unlock()
+
+		// Check if the table was updated in the meantime
+		// This is not needed atm, because the placement leader is the only one sending updates,
+		// but it might be needed soon because there's plans to allow other nodes to send updates
+		// This is a very cheap check, so it's a good idea to keep it
+		if in.GetVersion() == p.placementTables.Version {
+			return
+		}
+
+		maps.Clear(p.placementTables.Entries)
+		p.placementTables.Version = in.GetVersion()
+		p.placementTables.Entries = entries
 
 		updated = true
 		if p.hasPlacementTablesCh != nil {

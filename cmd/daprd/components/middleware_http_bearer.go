@@ -18,16 +18,16 @@ package components
 import (
 	"context"
 
-	"github.com/dapr/components-contrib/middleware"
+	contribmiddleware "github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/middleware/http/bearer"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/middleware"
 	"github.com/dapr/kit/logger"
 )
 
 func init() {
 	httpMiddlewareLoader.DefaultRegistry.RegisterComponent(func(log logger.Logger) httpMiddlewareLoader.FactoryMethod {
-		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
+		return func(metadata contribmiddleware.Metadata) (middleware.HTTP, error) {
 			return bearer.NewBearerMiddleware(log).GetHandler(context.TODO(), metadata)
 		}
 	}, "bearer")

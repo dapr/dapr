@@ -106,12 +106,11 @@ spec:
 `))
 
 	return []framework.Option{
-		framework.WithProcesses(app, u.logline),
+		framework.WithProcesses(app, u.logline, u.daprd),
 	}
 }
 
 func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
-	u.daprd.Run(t, ctx)
 	u.daprd.WaitUntilRunning(t, ctx)
 
 	conn, err := grpc.DialContext(ctx, u.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
@@ -144,16 +143,4 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 		//nolint:testifylint
 		assert.ErrorContains(c, err, "app is not in a healthy state")
 	}, time.Second*5, time.Millisecond*100)
-
-	daprdStopped := make(chan struct{})
-	go func() {
-		u.daprd.Cleanup(t)
-		close(daprdStopped)
-	}()
-
-	select {
-	case <-daprdStopped:
-	case <-time.After(time.Second * 5):
-		assert.Fail(t, "daprd did not exit in time")
-	}
 }

@@ -42,6 +42,7 @@ type Operator struct {
 	closech           chan struct{}
 	lock              sync.RWMutex
 	updateComponentCh chan *api.ComponentUpdateEvent
+	srvUpdateCh       []chan *api.ComponentUpdateEvent
 	currentComponents []compapi.Component
 }
 
@@ -54,11 +55,14 @@ func New(t *testing.T, fopts ...Option) *Operator {
 	}
 
 	opts := options{
-		listComponentsFn: func(context.Context, *operatorv1.ListComponentsRequest) (*operatorv1.ListComponentResponse, error) {
+		listComponentsFn: func(ctx context.Context, req *operatorv1.ListComponentsRequest) (*operatorv1.ListComponentResponse, error) {
 			o.lock.Lock()
 			defer o.lock.Unlock()
 			var comps [][]byte
 			for _, comp := range o.currentComponents {
+				if comp.Namespace != req.GetNamespace() {
+					continue
+				}
 				compB, err := json.Marshal(comp)
 				if err != nil {
 					return nil, err
@@ -67,14 +71,26 @@ func New(t *testing.T, fopts ...Option) *Operator {
 			}
 			return &operatorv1.ListComponentResponse{Components: comps}, nil
 		},
-		componentUpdateFn: func(_ *operatorv1.ComponentUpdateRequest, srv operatorv1.Operator_ComponentUpdateServer) error {
+		componentUpdateFn: func(req *operatorv1.ComponentUpdateRequest, srv operatorv1.Operator_ComponentUpdateServer) error {
+			o.lock.Lock()
+			updateCh := make(chan *api.ComponentUpdateEvent)
+			o.srvUpdateCh = append(o.srvUpdateCh, updateCh)
+			o.lock.Unlock()
+
 			for {
 				select {
 				case <-srv.Context().Done():
 					return nil
 				case <-o.closech:
 					return errors.New("operator closed")
-				case comp := <-o.updateComponentCh:
+				case comp := <-updateCh:
+					if len(comp.Component.Namespace) == 0 {
+						comp.Component.Namespace = "default"
+					}
+					if comp.Component.Namespace != req.GetNamespace() {
+						continue
+					}
+
 					compB, err := json.Marshal(comp.Component)
 					if err != nil {
 						return err
@@ -179,12 +195,16 @@ func (o *Operator) Components() []compapi.Component {
 // will be piped to clients listening on ComponentUpdate.
 func (o *Operator) ComponentUpdateEvent(t *testing.T, ctx context.Context, event *api.ComponentUpdateEvent) {
 	t.Helper()
+	o.lock.Lock()
+	defer o.lock.Unlock()
 
-	select {
-	case <-ctx.Done():
-		t.Fatal("timed out waiting for component update event")
-	case <-o.closech:
-		t.Fatal("operator closed")
-	case o.updateComponentCh <- event:
+	for _, ch := range o.srvUpdateCh {
+		select {
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for component update event")
+		case <-o.closech:
+			t.Fatal("operator closed")
+		case ch <- event:
+		}
 	}
 }

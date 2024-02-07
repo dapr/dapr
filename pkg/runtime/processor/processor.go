@@ -33,6 +33,7 @@ import (
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/internal/apis"
+	"github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -48,8 +49,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
-	wfbeProcessor "github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
-	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
+	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -106,6 +106,8 @@ type Options struct {
 	Channels *channels.Channels
 
 	OperatorClient operatorv1.OperatorClient
+
+	MiddlewareHTTP *http.HTTP
 }
 
 // Processor manages the lifecycle of all components categories.
@@ -174,7 +176,7 @@ func New(opts Options) *Processor {
 		Channels:       opts.Channels,
 	})
 
-	wfbe := wfbeProcessor.New(wfbeProcessor.Options{
+	wfbe := wfbackend.New(wfbackend.Options{
 		AppID:          opts.ID,
 		Registry:       opts.Registry.WorkflowBackends(),
 		ComponentStore: opts.ComponentStore,
@@ -213,12 +215,11 @@ func New(opts Options) *Processor {
 			components.CategorySecretStore:     secret,
 			components.CategoryStateStore:      state,
 			components.CategoryWorkflowBackend: wfbe,
-			components.CategoryWorkflow: workflow.New(workflow.Options{
-				Registry:       opts.Registry.Workflows(),
-				ComponentStore: opts.ComponentStore,
-				Meta:           opts.Meta,
+			components.CategoryMiddleware: middleware.New(middleware.Options{
+				Meta:         opts.Meta,
+				RegistryHTTP: opts.Registry.HTTPMiddlewares(),
+				HTTP:         opts.MiddlewareHTTP,
 			}),
-			components.CategoryMiddleware: middleware.New(),
 		},
 	}
 }

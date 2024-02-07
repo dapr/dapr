@@ -62,6 +62,8 @@ func Run() {
 		Peers:             opts.RaftPeers,
 		LogStorePath:      opts.RaftLogStorePath,
 		ReplicationFactor: int64(opts.ReplicationFactor),
+		MinAPILevel:       uint32(opts.MinAPILevel),
+		MaxAPILevel:       uint32(opts.MaxAPILevel),
 	})
 	if raftServer == nil {
 		log.Fatal("Failed to create raft server.")

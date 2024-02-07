@@ -35,7 +35,7 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/middleware"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -64,7 +64,7 @@ type Channel struct {
 	maxResponseBodySizeMB int
 	appHealthCheckPath    string
 	appHealth             *apphealth.AppHealth
-	pipeline              httpMiddleware.Pipeline
+	middleware            middleware.HTTP
 }
 
 // ChannelConfiguration is the configuration used to create an HTTP AppChannel.
@@ -73,7 +73,7 @@ type ChannelConfiguration struct {
 	CompStore            *compstore.ComponentStore
 	Endpoint             string
 	MaxConcurrency       int
-	Pipeline             httpMiddleware.Pipeline
+	Middleware           middleware.HTTP
 	TracingSpec          *config.TracingSpec
 	MaxRequestBodySizeMB int
 	TLSClientCert        string
@@ -85,7 +85,7 @@ type ChannelConfiguration struct {
 // CreateHTTPChannel creates an HTTP AppChannel.
 func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) {
 	c := &Channel{
-		pipeline:              config.Pipeline,
+		middleware:            config.Middleware,
 		client:                config.Client,
 		compStore:             config.CompStore,
 		baseAddress:           config.Endpoint,
@@ -228,37 +228,28 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}()
 
 	// Emit metric when request is sent
-	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, int64(len(req.Message().GetData().GetValue())))
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().GetMethod(), int64(len(req.Message().GetData().GetValue())))
 	startRequest := time.Now()
 
-	var resp *http.Response
-	if len(h.pipeline.Handlers) > 0 {
-		// Exec pipeline only if at least one handler is specified
-		rw := &RWRecorder{
-			W: &bytes.Buffer{},
-		}
-		execPipeline := h.pipeline.Apply(http.HandlerFunc(func(wr http.ResponseWriter, r *http.Request) {
-			// Send request to user application
-			// (Body is closed below, but linter isn't detecting that)
-			//nolint:bodyclose
-			clientResp, clientErr := h.client.Do(r)
-			if clientResp != nil {
-				copyHeader(wr.Header(), clientResp.Header)
-				wr.WriteHeader(clientResp.StatusCode)
-				_, _ = io.Copy(wr, clientResp.Body)
-			}
-			if clientErr != nil {
-				err = clientErr
-			}
-		}))
-		execPipeline.ServeHTTP(rw, channelReq)
-		resp = rw.Result() //nolint:bodyclose
-	} else {
+	rw := &RWRecorder{
+		W: &bytes.Buffer{},
+	}
+	execPipeline := h.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		// Send request to user application
 		// (Body is closed below, but linter isn't detecting that)
 		//nolint:bodyclose
-		resp, err = h.client.Do(channelReq)
-	}
+		clientResp, clientErr := h.client.Do(r)
+		if clientResp != nil {
+			copyHeader(w.Header(), clientResp.Header)
+			w.WriteHeader(clientResp.StatusCode)
+			_, _ = io.Copy(w, clientResp.Body)
+		}
+		if clientErr != nil {
+			err = clientErr
+		}
+	}))
+	execPipeline.ServeHTTP(rw, channelReq)
+	resp := rw.Result() //nolint:bodyclose
 
 	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
 
@@ -270,17 +261,17 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
 	rsp, err := h.parseChannelResponse(req, resp)
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
 
 	return rsp, nil
 }

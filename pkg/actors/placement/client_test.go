@@ -32,14 +32,14 @@ func TestConnectToServer(t *testing.T) {
 		client := newPlacementClient(func() ([]grpc.DialOption, error) {
 			return nil, errEstablishingTLSConn
 		})
-		assert.Equal(t, client.connectToServer(context.Background(), "", 1), errEstablishingTLSConn)
+		assert.Equal(t, client.connectToServer(context.Background(), ""), errEstablishingTLSConn)
 	})
 	t.Run("when grpc dial returns an error connectToServer should return an error", func(t *testing.T) {
 		client := newPlacementClient(func() ([]grpc.DialOption, error) {
 			return []grpc.DialOption{}, nil
 		})
 
-		require.Error(t, client.connectToServer(context.Background(), "", 1))
+		require.Error(t, client.connectToServer(context.Background(), ""))
 	})
 	t.Run("when new placement stream returns an error connectToServer should return an error", func(t *testing.T) {
 		client := newPlacementClient(func() ([]grpc.DialOption, error) {
@@ -47,7 +47,7 @@ func TestConnectToServer(t *testing.T) {
 		})
 		conn, cleanup := newTestServerWithOpts() // do not register the placement stream server
 		defer cleanup()
-		require.Error(t, client.connectToServer(context.Background(), conn, 1))
+		require.Error(t, client.connectToServer(context.Background(), conn))
 	})
 	t.Run("when connectToServer succeeds it should broadcast that a new connection is alive", func(t *testing.T) {
 		conn, _, cleanup := newTestServer() // do not register the placement stream server
@@ -64,7 +64,7 @@ func TestConnectToServer(t *testing.T) {
 			ready.Done()
 		}()
 
-		require.NoError(t, client.connectToServer(context.Background(), conn, 1))
+		require.NoError(t, client.connectToServer(context.Background(), conn))
 		ready.Wait() // should not timeout
 		assert.True(t, client.streamConnAlive)
 	})
@@ -84,7 +84,7 @@ func TestConnectToServer(t *testing.T) {
 			ready.Done()
 		}()
 
-		err := client.connectToServer(context.Background(), conn, 10)
+		err := client.connectToServer(context.Background(), conn)
 		require.NoError(t, err)
 	})
 }
@@ -119,7 +119,7 @@ func TestDisconnect(t *testing.T) {
 		defer cleanup()
 
 		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, testSecurity(t)))
-		require.NoError(t, client.connectToServer(context.Background(), conn, 1))
+		require.NoError(t, client.connectToServer(context.Background(), conn))
 
 		called := false
 		shouldBeCalled := func() {

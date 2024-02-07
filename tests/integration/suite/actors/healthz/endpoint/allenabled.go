@@ -103,7 +103,7 @@ func (a *allenabled) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, meta.GetActorRuntime().GetActiveActors(), 1)
 		assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 		assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
-	}, time.Second*15, time.Millisecond*100)
+	}, time.Second*30, time.Millisecond*100)
 
 	select {
 	case <-a.healthzCalled:
@@ -122,5 +122,5 @@ func (a *allenabled) Run(t *testing.T, ctx context.Context) {
 }
 
 func fooActorURL(daprd *daprd.Daprd) string {
-	return "http://localhost:" + strconv.Itoa(daprd.HTTPPort()) + "/v1.0" + pathMethodFoo
+	return "http://127.0.0.1:" + strconv.Itoa(daprd.HTTPPort()) + "/v1.0" + pathMethodFoo
 }

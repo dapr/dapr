@@ -71,7 +71,7 @@ func (s *state) Setup(t *testing.T) []framework.Option {
 	s.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
-		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(s.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
@@ -88,7 +88,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 1)
+		assert.Empty(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()))
 		s.writeExpectError(t, ctx, client, "123", http.StatusInternalServerError)
 	})
 
@@ -104,13 +104,12 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 1)
 		}, time.Second*5, time.Millisecond*100)
 		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
-		require.Len(t, resp, 2)
+		require.Len(t, resp, 1)
 
 		assert.ElementsMatch(t, resp, []*rtv1.RegisteredComponents{
-			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 			{
 				Name:    "123",
 				Type:    "state.in-memory",
@@ -154,14 +153,13 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp1, EventType: operatorv1.ResourceEventType_CREATED})
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp2, EventType: operatorv1.ResourceEventType_CREATED})
 
+		var resp []*rtv1.RegisteredComponents
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 4)
+			resp = util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
+			assert.Len(c, resp, 3)
 		}, time.Second*5, time.Millisecond*100)
-		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
-		require.Len(t, resp, 4)
 
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
-			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
@@ -209,14 +207,13 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.in-memory", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 				{
 					Name: "abc", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
@@ -283,10 +280,9 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 				{
 					Name: "abc", Type: "state.in-memory", Version: "v1",
@@ -346,10 +342,9 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 				{
 					Name: "bar", Type: "state.in-memory", Version: "v1",
@@ -401,11 +396,10 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
@@ -441,7 +435,6 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 			}, resp)
 		}, time.Second*10, time.Millisecond*100)
@@ -463,7 +456,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.operator.AddComponents(comp)
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 3)
+			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 		s.writeRead(t, ctx, client, "123")
 	})

@@ -77,7 +77,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 1)
+		assert.Empty(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()))
 		s.writeExpectError(t, ctx, client, "123", http.StatusInternalServerError)
 	})
 
@@ -94,11 +94,10 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 1)
 		}, time.Second*5, time.Millisecond*100)
 		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
-			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
@@ -138,11 +137,10 @@ spec:
  `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 4)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
 		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
-			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
@@ -184,14 +182,13 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.in-memory", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 				{
 					Name: "abc", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
@@ -247,10 +244,9 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 				{
 					Name: "abc", Type: "state.in-memory", Version: "v1",
@@ -293,10 +289,9 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 				{
 					Name: "bar", Type: "state.in-memory", Version: "v1",
@@ -344,11 +339,10 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 				{
 					Name: "xyz", Type: "state.in-memory", Version: "v1",
@@ -379,7 +373,6 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 			}, resp)
 		}, time.Second*10, time.Millisecond*100)
@@ -403,7 +396,7 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 3)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 
 		s.writeRead(t, ctx, client, "123")

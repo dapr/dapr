@@ -25,6 +25,7 @@ type options struct {
 	execOpts []exec.Option
 
 	appID                   string
+	namespace               *string
 	appPort                 int
 	grpcPort                int
 	httpPort                int
@@ -61,6 +62,12 @@ func WithExecOptions(execOptions ...exec.Option) Option {
 func WithAppID(appID string) Option {
 	return func(o *options) {
 		o.appID = appID
+	}
+}
+
+func WithNamespace(namespace string) Option {
+	return func(o *options) {
+		o.namespace = &namespace
 	}
 }
 
@@ -138,7 +145,7 @@ func WithAppHealthProbeThreshold(threshold int) Option {
 
 func WithResourceFiles(files ...string) Option {
 	return func(o *options) {
-		o.resourceFiles = files
+		o.resourceFiles = append(o.resourceFiles, files...)
 	}
 }
 
