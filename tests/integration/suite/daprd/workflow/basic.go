@@ -156,56 +156,46 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		backendClient.StartWorkItemListener(taskhubCtx, r)
 		defer cancelTaskhub()
 
-		// Test terminating with and without recursion
-		for _, nonRecursive := range []string{"", "false", "true"} {
-			// `non_recursive` = "" means no query param, which should default to false
-			nonRecursiveBool := false
-			if nonRecursive == "true" {
-				nonRecursiveBool = true
+		id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
+
+		// Wait long enough to ensure all orchestrations have started (but not longer than the timer delay)
+		assert.Eventually(t, func() bool {
+			// List of all orchestrations created
+			orchestrationIDs := []string{string(id)}
+			for i := 0; i < 5; i++ {
+				orchestrationIDs = append(orchestrationIDs, string(id)+"_L1_"+strconv.Itoa(i), string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
 			}
-			t.Run(fmt.Sprintf("non_recursive = %v", nonRecursive), func(t *testing.T) {
-				id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
-
-				// Wait long enough to ensure all orchestrations have started (but not longer than the timer delay)
-				assert.Eventually(t, func() bool {
-					// List of all orchestrations created
-					orchestrationIDs := []string{string(id)}
-					for i := 0; i < 5; i++ {
-						orchestrationIDs = append(orchestrationIDs, string(id)+"_L1_"+strconv.Itoa(i), string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
-					}
-					for _, orchID := range orchestrationIDs {
-						meta, err := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
-						require.NoError(t, err)
-						// All orchestrations should be running
-						if meta.RuntimeStatus != api.RUNTIME_STATUS_RUNNING {
-							return false
-						}
-					}
-					return true
-				}, 2*time.Second, 100*time.Millisecond)
-
-				// Terminate the root orchestration and mark whether a nonRecursive termination
-				b.terminateWorkflow(ctx, t, string(id), nonRecursive)
-
-				// Wait for the root orchestration to complete and verify its terminated status
-				metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
+			for _, orchID := range orchestrationIDs {
+				meta, err := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
 				require.NoError(t, err)
-				require.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.RuntimeStatus)
-
-				// Wait for all L2 suborchestrations to complete
-				orchIDs := []string{}
-				for i := 0; i < 5; i++ {
-					orchIDs = append(orchIDs, string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
+				// All orchestrations should be running
+				if meta.RuntimeStatus != api.RUNTIME_STATUS_RUNNING {
+					return false
 				}
-				for _, orchID := range orchIDs {
-					_, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID(orchID))
-					require.NoError(t, err)
-				}
+			}
+			return true
+		}, 2*time.Second, 100*time.Millisecond)
 
-				// Verify tht none of the L2 suborchestrations executed the activity in case of recursive termination
-				assert.Equal(t, nonRecursiveBool, executedActivity.Load())
-			})
+		// Terminate the root orchestration
+		b.terminateWorkflow(t, ctx, string(id))
+
+		// Wait for the root orchestration to complete and verify its terminated status
+		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.RuntimeStatus)
+
+		// Wait for all L2 suborchestrations to complete
+		orchIDs := []string{}
+		for i := 0; i < 5; i++ {
+			orchIDs = append(orchIDs, string(id)+"_L1_"+strconv.Itoa(i)+"_L2")
 		}
+		for _, orchID := range orchIDs {
+			_, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID(orchID))
+			require.NoError(t, err)
+		}
+
+		// Verify that none of the L2 suborchestrations executed the activity
+		assert.False(t, executedActivity.Load())
 	})
 
 	t.Run("purge", func(t *testing.T) {
@@ -227,47 +217,26 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		backendClient.StartWorkItemListener(taskhubCtx, r)
 		defer cancelTaskhub()
 
-		// Test purging with and without recursion
-		for _, nonRecursive := range []string{"", "false", "true"} {
-			// `non_recursive` = "" means no query param, which should default to false
-			nonRecursiveBool := false
-			if nonRecursive == "true" {
-				nonRecursiveBool = true
-			}
-			t.Run(fmt.Sprintf("non_recursive = %v", nonRecursive), func(t *testing.T) {
-				// Run the orchestration, which will block waiting for external events
-				id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
+		// Run the orchestration, which will block waiting for external events
+		id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
 
-				metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
-				require.NoError(t, err)
-				require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
+		require.NoError(t, err)
+		require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
 
-				// Purge the root orchestration
-				b.purgeWorkflow(ctx, t, string(id), nonRecursive)
+		// Purge the root orchestration
+		b.purgeWorkflow(t, ctx, string(id))
 
-				// Verify that root Orchestration has been purged
-				_, err = backendClient.FetchOrchestrationMetadata(ctx, id)
-				assert.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
+		// Verify that root Orchestration has been purged
+		_, err = backendClient.FetchOrchestrationMetadata(ctx, id)
+		assert.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 
-				if nonRecursiveBool {
-					// Verify that L1 and L2 orchestrations are not purged
-					metadata, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
-					require.NoError(t, err)
-					require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+		// Verify that L1 and L2 orchestrations have been purged
+		_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
+		require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 
-					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
-					require.NoError(t, err)
-					require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
-				} else {
-					// Verify that L1 and L2 orchestrations have been purged
-					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1")
-					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
-
-					_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
-					require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
-				}
-			})
-		}
+		_, err = backendClient.FetchOrchestrationMetadata(ctx, id+"_L1_L2")
+		require.Contains(t, status.Convert(err).Message(), api.ErrInstanceNotFound.Error())
 	})
 
 	t.Run("child workflow", func(t *testing.T) {
@@ -324,12 +293,9 @@ func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, in
 }
 
 // terminate workflow
-func (b *basic) terminateWorkflow(ctx context.Context, t *testing.T, instanceID string, nonRecursive string) {
+func (b *basic) terminateWorkflow(t *testing.T, ctx context.Context, instanceID string) {
 	// use http client to terminate the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", b.daprd.HTTPPort(), instanceID)
-	if nonRecursive != "" {
-		reqURL += "?non_recursive=" + nonRecursive
-	}
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
@@ -341,12 +307,9 @@ func (b *basic) terminateWorkflow(ctx context.Context, t *testing.T, instanceID 
 }
 
 // purge workflow
-func (b *basic) purgeWorkflow(ctx context.Context, t *testing.T, instanceID string, nonRecursive string) {
+func (b *basic) purgeWorkflow(t *testing.T, ctx context.Context, instanceID string) {
 	// use http client to purge the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", b.daprd.HTTPPort(), instanceID)
-	if nonRecursive != "" {
-		reqURL += "?non_recursive=" + nonRecursive
-	}
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
