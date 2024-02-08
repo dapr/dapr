@@ -97,10 +97,10 @@ func (p *Processor) processComponents(ctx context.Context) error {
 		if err != nil {
 			err = fmt.Errorf("process component %s error: %s", comp.Name, err)
 			if !comp.Spec.IgnoreErrors {
-				log.Warnf("Error processing component, daprd will exit gracefully")
+				log.Warnf("Error processing component, daprd will exit gracefully: %s", err)
 				return err
 			}
-			log.Error(err)
+			log.Errorf("Ignoring error processing component: %s", err)
 		}
 		return nil
 	}
