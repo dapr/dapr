@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -15,6 +15,8 @@ package http
 
 import (
 	"context"
+	"crypto/sha1"
+	"encoding/hex"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,7 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -37,13 +39,32 @@ func init() {
 }
 
 type encryption struct {
-	daprd *procdaprd.Daprd
+	daprd *daprd.Daprd
+}
+
+func SHA1(data []byte) []byte {
+	h := sha1.New()
+	h.Write(data)
+	return h.Sum(nil)
+}
+
+func generateAesRandom(keyword string) (key []byte) {
+	data := []byte(keyword)
+
+	hashs := SHA1(SHA1(data))
+	key = hashs[0:16]
+
+	return key
 }
 
 func (e *encryption) Setup(t *testing.T) []framework.Option {
 	tmp := t.TempDir()
 	secretsFile := filepath.Join(tmp, "secrets.json")
-	secretsJson := `{ "key":  "5ca12365a9c1cc981090331f7eec683d"}` //nolint:gosec
+
+	scr := generateAesRandom(strings.Repeat("a", 128))
+	key := hex.EncodeToString(scr)
+
+	secretsJSON := fmt.Sprintf(`{ "key": "%s"}`, key)
 
 	secretStore := fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -72,8 +93,8 @@ auth:
   secretStore: secretstore
 `
 
-	os.WriteFile(secretsFile, []byte(secretsJson), 0o600)
-	e.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(secretStore, stateStore))
+	require.NoError(t, os.WriteFile(secretsFile, []byte(secretsJSON), 0o600))
+	e.daprd = daprd.New(t, daprd.WithResourceFiles(secretStore, stateStore))
 
 	return []framework.Option{
 		framework.WithProcesses(e.daprd),
