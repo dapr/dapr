@@ -15,7 +15,7 @@ package http
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha1" //nolint:gosec
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -43,7 +43,7 @@ type encryption struct {
 }
 
 func SHA1(data []byte) []byte {
-	h := sha1.New()
+	h := sha1.New() //nolint:gosec
 	h.Write(data)
 	return h.Sum(nil)
 }
