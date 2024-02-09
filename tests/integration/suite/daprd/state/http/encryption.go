@@ -15,7 +15,7 @@ package http
 
 import (
 	"context"
-	"crypto/sha1" //nolint:gosec
+	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
 	"io"
@@ -42,8 +42,8 @@ type encryption struct {
 	daprd *daprd.Daprd
 }
 
-func SHA1(data []byte) []byte {
-	h := sha1.New() //nolint:gosec
+func SHA256(data []byte) []byte {
+	h := sha256.New()
 	h.Write(data)
 	return h.Sum(nil)
 }
@@ -51,7 +51,7 @@ func SHA1(data []byte) []byte {
 func generateAesRandom(keyword string) (key []byte) {
 	data := []byte(keyword)
 
-	hashs := SHA1(SHA1(data))
+	hashs := SHA256(SHA256(data))
 	key = hashs[0:16]
 
 	return key
