@@ -1521,7 +1521,6 @@ func (a *DaprRuntime) processResourceSecrets(ctx context.Context, resource meta.
 			}
 
 			metadata[i].SetValue(dec)
-			metadata[i].SecretKeyRef = commonapi.SecretKeyRef{}
 			updated = true
 			continue
 		}
@@ -1556,7 +1555,6 @@ func (a *DaprRuntime) processResourceSecrets(ctx context.Context, resource meta.
 		val, ok := resp.Data[secretKeyName]
 		if ok && val != "" {
 			metadata[i].SetValue([]byte(val))
-			metadata[i].SecretKeyRef = commonapi.SecretKeyRef{}
 			updated = true
 		}
 
