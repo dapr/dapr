@@ -31,6 +31,8 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/healthz"
 )
 
 func Test_Start(t *testing.T) {
@@ -95,6 +97,7 @@ func Test_Start(t *testing.T) {
 			ControlPlaneTrustDomain: "test.example.com",
 			ControlPlaneNamespace:   "default",
 			MTLSEnabled:             true,
+			Healthz:                 healthz.New(),
 			OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
 				return []*x509.Certificate{workloadCert}, nil
 			},
@@ -131,7 +134,7 @@ func Test_Start(t *testing.T) {
 		watcherStopped := make(chan struct{})
 		go func() {
 			defer close(watcherStopped)
-			sec.WatchTrustAnchors(ctx, caBundleCh)
+			require.NoError(t, p.WatchTrustAnchors(ctx, caBundleCh))
 		}()
 
 		assert.Eventually(t, func() bool {

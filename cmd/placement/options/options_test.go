@@ -37,8 +37,8 @@ func TestAppFlag(t *testing.T) {
 	assert.EqualValues(t, "dapr-sentry.default.svc:443", opts.SentryAddress)
 	assert.EqualValues(t, "info", opts.Logger.OutputLevel)
 	assert.EqualValues(t, false, opts.Logger.JSONFormatEnabled)
-	assert.EqualValues(t, true, opts.Metrics.MetricsEnabled)
-	assert.EqualValues(t, "9090", opts.Metrics.Port)
+	assert.EqualValues(t, true, opts.Metrics.Enabled())
+	assert.EqualValues(t, "9090", opts.Metrics.Port())
 }
 
 func TestInitialCluster(t *testing.T) {

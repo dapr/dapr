@@ -33,6 +33,7 @@ import (
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
+	"github.com/dapr/dapr/pkg/healthz"
 )
 
 func TestHandleRequest(t *testing.T) {
@@ -48,6 +49,7 @@ func TestHandleRequest(t *testing.T) {
 		},
 		DaprClient: fake.NewSimpleClientset(),
 		KubeClient: kubernetesfake.NewSimpleClientset(),
+		Healthz:    healthz.New(),
 	})
 
 	require.NoError(t, err)

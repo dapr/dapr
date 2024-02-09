@@ -22,6 +22,7 @@ import (
 	"k8s.io/utils/clock"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/healthz"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -38,11 +39,13 @@ type Options[T differ.Resource] struct {
 	CompStore  *compstore.ComponentStore
 	Processor  *processor.Processor
 	Authorizer *authorizer.Authorizer
+	Healthz    healthz.Healthz
 }
 
 type Reconciler[T differ.Resource] struct {
 	kind    string
 	manager manager[T]
+	htarget healthz.Target
 
 	clock clock.WithTicker
 }
@@ -55,8 +58,9 @@ type manager[T differ.Resource] interface {
 
 func NewComponent(opts Options[componentsapi.Component]) *Reconciler[componentsapi.Component] {
 	return &Reconciler[componentsapi.Component]{
-		clock: clock.RealClock{},
-		kind:  componentsapi.Kind,
+		clock:   clock.RealClock{},
+		kind:    componentsapi.Kind,
+		htarget: opts.Healthz.AddTarget(),
 		manager: &component{
 			Loader: opts.Loader.Components(),
 			store:  opts.CompStore,
@@ -71,6 +75,8 @@ func (r *Reconciler[T]) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error running component stream: %w", err)
 	}
+
+	r.htarget.Ready()
 
 	return r.watchForEvents(ctx, conn)
 }

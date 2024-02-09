@@ -33,7 +33,7 @@ type Fake struct {
 	controlPlaneTrustDomainFn func() spiffeid.TrustDomain
 	controlPlaneNamespaceFn   func() string
 	currentTrustAnchorsFn     func() ([]byte, error)
-	watchTrustAnchorsFn       func(context.Context, chan<- []byte)
+	watchTrustAnchorsFn       func(context.Context, chan<- []byte) error
 	mtls                      bool
 
 	tlsServerConfigMTLSFn               func(spiffeid.TrustDomain) (*tls.Config, error)
@@ -78,8 +78,8 @@ func New() *Fake {
 		currentTrustAnchorsFn: func() ([]byte, error) {
 			return []byte{}, nil
 		},
-		watchTrustAnchorsFn: func(context.Context, chan<- []byte) {
-			return
+		watchTrustAnchorsFn: func(context.Context, chan<- []byte) error {
+			return nil
 		},
 		netListenerIDFn: func(l net.Listener, _ spiffeid.ID) net.Listener {
 			return l
@@ -178,7 +178,7 @@ func (f *Fake) WithCurrentTrustAnchorsFn(fn func() ([]byte, error)) *Fake {
 	return f
 }
 
-func (f *Fake) WithWatchTrustAnchorsFn(fn func(context.Context, chan<- []byte)) *Fake {
+func (f *Fake) WithWatchTrustAnchorsFn(fn func(context.Context, chan<- []byte) error) *Fake {
 	f.watchTrustAnchorsFn = fn
 	return f
 }
@@ -206,8 +206,8 @@ func (f *Fake) CurrentTrustAnchors() ([]byte, error) {
 	return f.currentTrustAnchorsFn()
 }
 
-func (f *Fake) WatchTrustAnchors(ctx context.Context, ch chan<- []byte) {
-	f.watchTrustAnchorsFn(ctx, ch)
+func (f *Fake) WatchTrustAnchors(ctx context.Context, ch chan<- []byte) error {
+	return f.watchTrustAnchorsFn(ctx, ch)
 }
 
 func (f *Fake) GRPCDialOption(id spiffeid.ID) grpc.DialOption {

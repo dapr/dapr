@@ -43,7 +43,7 @@ import (
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
-	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
@@ -52,14 +52,13 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.operator")
 
 // Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle.
 type Operator interface {
-	Run(ctx context.Context) error
+	Start(ctx context.Context) error
 }
 
 // Options contains the options for `NewOperator`.
@@ -75,8 +74,8 @@ type Options struct {
 	WatchdogCanPatchPodLabels           bool
 	TrustAnchorsFile                    string
 	APIPort                             int
-	HealthzPort                         int
 	WebhookServerPort                   int
+	Healthz                             healthz.Healthz
 }
 
 type operator struct {
@@ -86,11 +85,13 @@ type operator struct {
 
 	mgr         ctrl.Manager
 	secProvider security.Provider
-	healthzPort int
+	tshealthz   []healthz.Target
 }
 
 // NewOperator returns a new Dapr Operator.
 func NewOperator(ctx context.Context, opts Options) (Operator, error) {
+	htargets := opts.Healthz.AddTargetSet(5)
+
 	conf, err := ctrl.GetConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get controller runtime configuration, err: %s", err)
@@ -110,6 +111,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		// mTLS is always enabled for the operator.
 		MTLSEnabled: true,
 		Mode:        modes.KubernetesMode,
+		Healthz:     opts.Healthz,
 	})
 	if err != nil {
 		return nil, err
@@ -182,7 +184,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		mgr:         mgr,
 		secProvider: secProvider,
 		config:      config,
-		healthzPort: opts.HealthzPort,
+		tshealthz:   htargets,
 		apiServer: api.NewAPIServer(api.Options{
 			Client:   mgrClient,
 			Security: secProvider,
@@ -217,13 +219,8 @@ func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
 	}
 }
 
-func (o *operator) Run(ctx context.Context) error {
+func (o *operator) Start(ctx context.Context) error {
 	log.Info("Dapr Operator is starting")
-	healthzServer := health.NewServer(health.Options{
-		Log:     log,
-		Targets: ptr.Of(5),
-	})
-
 	/*
 		Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
 	*/
@@ -253,42 +250,28 @@ func (o *operator) Run(ctx context.Context) error {
 			if rErr != nil {
 				return rErr
 			}
-			healthzServer.Ready()
+			o.tshealthz[0].Ready()
 			return o.mgr.Start(ctx)
-		},
-		func(ctx context.Context) error {
-			// start healthz server
-			if rErr := healthzServer.Run(ctx, o.healthzPort); rErr != nil {
-				return fmt.Errorf("failed to start healthz server: %w", rErr)
-			}
-			return nil
 		},
 		func(ctx context.Context) error {
 			if rErr := o.apiServer.Ready(ctx); rErr != nil {
 				return fmt.Errorf("API server did not become ready in time: %w", rErr)
 			}
-			healthzServer.Ready()
+			o.tshealthz[1].Ready()
 			log.Infof("Dapr Operator started")
 			<-ctx.Done()
 			return nil
 		},
 		func(ctx context.Context) error {
 			if !enableConversionWebhooks {
-				healthzServer.Ready()
 				<-ctx.Done()
 				return nil
 			}
-
-			sec, rErr := o.secProvider.Handler(ctx)
-			if rErr != nil {
-				return rErr
-			}
-			sec.WatchTrustAnchors(ctx, caBundleCh)
-			return nil
+			return o.secProvider.WatchTrustAnchors(ctx, caBundleCh)
 		},
 		func(ctx context.Context) error {
 			if !enableConversionWebhooks {
-				healthzServer.Ready()
+				o.tshealthz[2].Ready()
 				<-ctx.Done()
 				return nil
 			}
@@ -309,7 +292,7 @@ func (o *operator) Run(ctx context.Context) error {
 					return rErr
 				}
 
-				healthzServer.Ready()
+				o.tshealthz[2].Ready()
 
 				select {
 				case caBundle = <-caBundleCh:
@@ -345,7 +328,7 @@ func (o *operator) Run(ctx context.Context) error {
 			if rErr != nil {
 				return fmt.Errorf("unable to add components informer event handler: %w", rErr)
 			}
-			healthzServer.Ready()
+			o.tshealthz[3].Ready()
 			<-ctx.Done()
 			return nil
 		},
@@ -368,7 +351,7 @@ func (o *operator) Run(ctx context.Context) error {
 			if rErr != nil {
 				return fmt.Errorf("unable to add http endpoint informer event handler: %w", rErr)
 			}
-			healthzServer.Ready()
+			o.tshealthz[4].Ready()
 			<-ctx.Done()
 			return nil
 		},

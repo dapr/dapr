@@ -29,6 +29,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -113,6 +114,7 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 			TrustAnchors:            e.trustAnchors,
 			AppID:                   "another-app",
 			MTLSEnabled:             true,
+			Healthz:                 healthz.New(),
 		})
 		require.NoError(t, err)
 

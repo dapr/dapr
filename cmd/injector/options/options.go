@@ -28,7 +28,7 @@ type Options struct {
 	Kubeconfig  string
 	Port        int
 	Logger      logger.Options
-	Metrics     *metrics.Options
+	Metrics     *metrics.FlagOptions
 }
 
 func New(origArgs []string) *Options {
@@ -65,7 +65,7 @@ func New(origArgs []string) *Options {
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
-	opts.Metrics = metrics.DefaultMetricOptions()
+	opts.Metrics = metrics.DefaultFlagOptions()
 	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
 	// Ignore errors; flagset is set for ExitOnError

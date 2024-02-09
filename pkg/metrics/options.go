@@ -14,7 +14,8 @@ limitations under the License.
 package metrics
 
 import (
-	"strconv"
+	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/kit/logger"
 )
 
 const (
@@ -24,54 +25,59 @@ const (
 
 // Options defines the sets of options for exporting metrics.
 type Options struct {
-	// MetricsEnabled indicates whether a metrics server should be started.
-	MetricsEnabled bool
+	// Log is the metrics logger.
+	Log logger.Logger
+	// Enabled indicates whether a metrics server should be started.
+	Enabled bool
+	// Namespace is the prometheus exporter namespace.
+	Namespace string
 	// Port to start metrics server on.
 	Port string
+	// Healthz is used to signal the health of the metrics server.
+	Healthz healthz.Healthz
 }
 
-func DefaultMetricOptions() *Options {
-	return &Options{
-		Port:           defaultMetricsPort,
-		MetricsEnabled: defaultMetricsEnabled,
-	}
+type FlagOptions struct {
+	enabled bool
+	port    string
 }
 
-// MetricsPort gets metrics port.
-func (o *Options) MetricsPort() uint64 {
-	port, err := strconv.ParseUint(o.Port, 10, 64)
-	if err != nil {
-		// Use default metrics port as a fallback
-		port, _ = strconv.ParseUint(defaultMetricsPort, 10, 64)
+func DefaultFlagOptions() *FlagOptions {
+	return &FlagOptions{
+		port:    defaultMetricsPort,
+		enabled: defaultMetricsEnabled,
 	}
-
-	return port
 }
 
 // AttachCmdFlags attaches metrics options to command flags.
-func (o *Options) AttachCmdFlags(
+func (f *FlagOptions) AttachCmdFlags(
 	stringVar func(p *string, name string, value string, usage string),
 	boolVar func(p *bool, name string, value bool, usage string),
 ) {
 	stringVar(
-		&o.Port,
+		&f.port,
 		"metrics-port",
 		defaultMetricsPort,
 		"The port for the metrics server")
 	boolVar(
-		&o.MetricsEnabled,
+		&f.enabled,
 		"enable-metrics",
 		defaultMetricsEnabled,
 		"Enable prometheus metric")
 }
 
-// AttachCmdFlag attaches single metrics option to command flags.
-func (o *Options) AttachCmdFlag(
-	stringVar func(p *string, name string, value string, usage string),
-) {
-	stringVar(
-		&o.Port,
-		"metrics-port",
-		defaultMetricsPort,
-		"The port for the metrics server")
+func (f *FlagOptions) ToOptions(healthz healthz.Healthz) Options {
+	return Options{
+		Enabled: f.enabled,
+		Port:    f.port,
+		Healthz: healthz,
+	}
+}
+
+func (f *FlagOptions) Enabled() bool {
+	return f.enabled
+}
+
+func (f *FlagOptions) Port() string {
+	return f.port
 }

@@ -13,6 +13,8 @@ limitations under the License.
 
 package placement
 
+import "encoding/json"
+
 type PlacementTables struct {
 	HostList     []HostInfo `json:"hostList,omitempty"`
 	TableVersion uint64     `json:"tableVersion"`
@@ -27,7 +29,7 @@ type HostInfo struct {
 }
 
 // GetPlacementTables returns the current placement host infos.
-func (p *Service) GetPlacementTables() (*PlacementTables, error) {
+func (p *Service) GetPlacementTables() ([]byte, error) {
 	state := p.raftNode.FSM().State()
 	m := state.Members()
 	response := &PlacementTables{
@@ -54,5 +56,5 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 		i++
 	}
 	response.HostList = members
-	return response, nil
+	return json.Marshal(response)
 }
