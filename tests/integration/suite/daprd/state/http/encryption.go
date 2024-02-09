@@ -43,7 +43,7 @@ type encryption struct {
 func (e *encryption) Setup(t *testing.T) []framework.Option {
 	tmp := t.TempDir()
 	secretsFile := filepath.Join(tmp, "secrets.json")
-	secretsJson := `{ "key":  "5ca12365a9c1cc981090331f7eec683d"}`
+	secretsJson := `{ "key":  "5ca12365a9c1cc981090331f7eec683d"}` //nolint:gosec
 
 	secretStore := fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
 kind: Component
