@@ -27,6 +27,7 @@ import (
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -161,6 +162,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 				TrustAnchors:            opts.sentry.CABundle().TrustAnchors,
 				AppID:                   "dapr-operator",
 				MTLSEnabled:             true,
+				Healthz:                 healthz.New(),
 			})
 			require.NoError(t, err)
 

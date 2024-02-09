@@ -14,15 +14,13 @@ limitations under the License.
 package app
 
 import (
-	"context"
-	"fmt"
 	"math"
 	"os"
-	"strconv"
 
 	"github.com/dapr/dapr/cmd/placement/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
-	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/healthz/server"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement"
@@ -48,9 +46,31 @@ func Run() {
 	log.Infof("Starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
-	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
+	healthz := healthz.New()
+	metricsExporter := metrics.New(metrics.Options{
+		Log:       log,
+		Enabled:   opts.Metrics.Enabled(),
+		Namespace: metrics.DefaultMetricNamespace,
+		Port:      opts.Metrics.Port(),
+		Healthz:   healthz,
+	})
 
 	err := monitoring.InitMetrics()
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	ctx := signals.Context()
+	secProvider, err := security.New(ctx, security.Options{
+		SentryAddress:           opts.SentryAddress,
+		ControlPlaneTrustDomain: opts.TrustDomain,
+		ControlPlaneNamespace:   security.CurrentNamespace(),
+		TrustAnchorsFile:        &opts.TrustAnchorsFile,
+		AppID:                   "dapr-placement",
+		MTLSEnabled:             opts.TLSEnabled,
+		Mode:                    modes.DaprMode(opts.Mode),
+		Healthz:                 healthz,
+	})
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -64,28 +84,18 @@ func Run() {
 		ReplicationFactor: int64(opts.ReplicationFactor),
 		MinAPILevel:       uint32(opts.MinAPILevel),
 		MaxAPILevel:       uint32(opts.MaxAPILevel),
+		Healthz:           healthz,
+		Security:          secProvider,
 	})
 	if raftServer == nil {
 		log.Fatal("Failed to create raft server.")
 	}
 
-	ctx := signals.Context()
-	secProvider, err := security.New(ctx, security.Options{
-		SentryAddress:           opts.SentryAddress,
-		ControlPlaneTrustDomain: opts.TrustDomain,
-		ControlPlaneNamespace:   security.CurrentNamespace(),
-		TrustAnchorsFile:        &opts.TrustAnchorsFile,
-		AppID:                   "dapr-placement",
-		MTLSEnabled:             opts.TLSEnabled,
-		Mode:                    modes.DaprMode(opts.Mode),
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
 	placementOpts := placement.PlacementServiceOpts{
+		Port:        opts.PlacementPort,
 		RaftNode:    raftServer,
 		SecProvider: secProvider,
+		Healthz:     healthz,
 	}
 	if opts.MinAPILevel >= 0 && opts.MinAPILevel < math.MaxInt32 {
 		placementOpts.MinAPILevel = uint32(opts.MinAPILevel)
@@ -94,36 +104,26 @@ func Run() {
 		placementOpts.MaxAPILevel = ptr.Of(uint32(opts.MaxAPILevel))
 	}
 	apiServer := placement.NewPlacementService(placementOpts)
+	var healthzHandlers []server.Handler
+	if opts.MetadataEnabled {
+		healthzHandlers = append(healthzHandlers, server.Handler{
+			Path:   "/placement/state",
+			Getter: apiServer.GetPlacementTables,
+		})
+	}
 
 	err = concurrency.NewRunnerManager(
-		func(ctx context.Context) error {
-			sec, serr := secProvider.Handler(ctx)
-			if serr != nil {
-				return serr
-			}
-			return raftServer.StartRaft(ctx, sec, nil)
-		},
-		metricsExporter.Run,
 		secProvider.Run,
+		raftServer.StartRaft,
+		metricsExporter.Start,
+		server.New(server.Options{
+			Log:      log,
+			Port:     opts.HealthzPort,
+			Healthz:  healthz,
+			Handlers: healthzHandlers,
+		}).Start,
 		apiServer.MonitorLeadership,
-		func(ctx context.Context) error {
-			var metadataOptions []health.RouterOptions
-			if opts.MetadataEnabled {
-				metadataOptions = append(metadataOptions, health.NewJSONDataRouterOptions[*placement.PlacementTables]("/placement/state", apiServer.GetPlacementTables))
-			}
-			healthzServer := health.NewServer(health.Options{
-				Log:           log,
-				RouterOptions: metadataOptions,
-			})
-			healthzServer.Ready()
-			if healthzErr := healthzServer.Run(ctx, opts.HealthzListenAddress, opts.HealthzPort); healthzErr != nil {
-				return fmt.Errorf("failed to start healthz server: %w", healthzErr)
-			}
-			return nil
-		},
-		func(ctx context.Context) error {
-			return apiServer.Run(ctx, opts.PlacementListenAddress, strconv.Itoa(opts.PlacementPort))
-		},
+		apiServer.Start,
 	).Run(ctx)
 	if err != nil {
 		log.Fatal(err)

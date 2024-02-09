@@ -15,14 +15,14 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"time"
 
 	"github.com/dapr/dapr/cmd/sentry/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
-	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/healthz"
+	healthzserver "github.com/dapr/dapr/pkg/healthz/server"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/sentry"
 	"github.com/dapr/dapr/pkg/sentry/config"
@@ -46,8 +46,6 @@ func Run() {
 
 	log.Infof("Starting Dapr Sentry certificate authority -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
-
-	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
 	if err := utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
@@ -85,9 +83,30 @@ func Run() {
 	// restarted when the CA server needs to be restarted because of file events.
 	// We don't want to restart the healthz server and file watcher on file
 	// events (as well as wanting to terminate the program on signals).
-	caMngrFactory := func() *concurrency.RunnerManager {
+	caMngrFactory := func(ctx context.Context) error {
+		healthz := healthz.New()
+		metricsExporter := metrics.New(metrics.Options{
+			Log:       log,
+			Enabled:   opts.Metrics.Enabled(),
+			Namespace: metrics.DefaultMetricNamespace,
+			Port:      opts.Metrics.Port(),
+			Healthz:   healthz,
+		})
+		sentry, serr := sentry.New(ctx, sentry.Options{
+			Config:  cfg,
+			Healthz: healthz,
+		})
+		if serr != nil {
+			return serr
+		}
 		return concurrency.NewRunnerManager(
-			sentry.New(cfg).Start,
+			healthzserver.New(healthzserver.Options{
+				Log:     log,
+				Port:    opts.HealthzPort,
+				Healthz: healthz,
+			}).Start,
+			metricsExporter.Start,
+			sentry.Start,
 			func(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
@@ -107,14 +126,13 @@ func Run() {
 					}
 				}
 			},
-		)
+		).Run(ctx)
 	}
 
 	// CA Server
 	err = mngr.Add(func(ctx context.Context) error {
 		for {
-			runErr := caMngrFactory().Run(ctx)
-			if runErr != nil {
+			if runErr := caMngrFactory(ctx); runErr != nil {
 				return runErr
 			}
 			// Catch outer context cancellation to exit.
@@ -142,22 +160,6 @@ func Run() {
 	}); err != nil {
 		log.Fatal(err)
 	}
-
-	// Healthz server
-	err = mngr.Add(func(ctx context.Context) error {
-		healthzServer := health.NewServer(health.Options{Log: log})
-		healthzServer.Ready()
-		runErr := healthzServer.Run(ctx, opts.HealthzListenAddress, opts.HealthzPort)
-		if runErr != nil {
-			return fmt.Errorf("failed to start healthz server: %s", runErr)
-		}
-		return nil
-	})
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	mngr.Add(metricsExporter.Run)
 
 	// Run the runner manager.
 	if err := mngr.Run(signals.Context()); err != nil {

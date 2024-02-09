@@ -55,6 +55,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/middleware"
@@ -143,6 +144,7 @@ var testResiliency = &v1alpha1.Resiliency{
 func TestPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
 			CompStore: compstore.New(),
@@ -314,6 +316,7 @@ func TestPubSubEndpoints(t *testing.T) {
 func TestBulkPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
 			CompStore: compstore.New(),
@@ -783,6 +786,7 @@ func TestShutdownEndpoints(t *testing.T) {
 
 	shutdownCh := make(chan struct{})
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			ShutdownFn: func() {
 				close(shutdownCh)
@@ -857,6 +861,7 @@ func TestGetMetadataFromFastHTTPRequest(t *testing.T) {
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
+		healthz: healthz.New(),
 		sendToOutputBindingFn: func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "testbinding" {
 				return nil, nil
@@ -945,6 +950,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	createExporters(&buffer)
 
 	testAPI := &api{
+		healthz: healthz.New(),
 		sendToOutputBindingFn: func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			return nil, nil
 		},
@@ -1003,6 +1009,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 	testLog := logger.NewLogger("test.api.http.actors")
 	rc := resiliency.FromConfigurations(testLog, testResiliency)
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     testLog,
 			AppID:      "fakeAPI",
@@ -1795,6 +1802,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	}
 
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			AppID:     "xyz",
 			CompStore: compStore,
@@ -1856,6 +1864,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	createExporters(&buffer)
 
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			Resiliency: resiliency.New(nil),
@@ -1981,6 +1990,7 @@ func TestAPIToken(t *testing.T) {
 	compStore := compstore.New()
 
 	testAPI := &api{
+		healthz:         healthz.New(),
 		directMessaging: mockDirectMessaging,
 		universal: universal.New(universal.Options{
 			CompStore:  compStore,
@@ -2102,6 +2112,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	compStore := compstore.New()
 
 	testAPI := &api{
+		healthz:         healthz.New(),
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
 		universal: universal.New(universal.Options{
@@ -2150,6 +2161,7 @@ func TestConfigurationGet(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Resiliency: resiliency.New(nil),
 			CompStore:  compStore,
@@ -2352,6 +2364,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Resiliency: resiliency.New(nil),
 			CompStore:  compStore,
@@ -2454,6 +2467,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddLock(storeName, fakeLockStore)
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     l,
 			CompStore:  compStore,
@@ -2628,6 +2642,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	wfengine.SetWorkflowEngineReadyDone()
 
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:         logger.NewLogger("fakeLogger"),
 			CompStore:      compStore,
@@ -2946,6 +2961,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	compStore := compstore.New()
 
 	testAPI := &api{
+		healthz:         healthz.New(),
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
 		universal: universal.New(universal.Options{
@@ -3008,6 +3024,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	compStore := compstore.New()
 
 	testAPI := &api{
+		healthz:         healthz.New(),
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
 		universal: universal.New(universal.Options{
@@ -3229,6 +3246,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	compStore.AddStateStore("failStore", failingStore)
 	rc := resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
@@ -3783,6 +3801,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", newFakeStateStore())
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
@@ -3802,6 +3821,7 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", newFakeStateStore())
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
@@ -3821,6 +3841,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore(storeName, newFakeStateStoreQuerier())
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
@@ -4012,6 +4033,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		compStore.AddSecretStore(name, store)
 	}
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     l,
 			CompStore:  compStore,
@@ -4339,7 +4361,10 @@ func TestV1HealthzEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	const appID = "fakeAPI"
+	healthz := healthz.New()
+	htarget := healthz.AddTarget()
 	testAPI := &api{
+		healthz: healthz,
 		universal: universal.New(universal.Options{
 			AppID: appID,
 		}),
@@ -4356,7 +4381,8 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	t.Run("Healthz - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
-		testAPI.MarkStatusAsReady()
+		htarget.Ready()
+		t.Cleanup(htarget.NotReady)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
@@ -4364,14 +4390,16 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	t.Run("Healthz - 500 No AppId Match", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
-		testAPI.MarkStatusAsReady()
+		htarget.Ready()
+		t.Cleanup(htarget.NotReady)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": "not-test"})
 		assert.Equal(t, 500, resp.StatusCode)
 	})
 
 	t.Run("Healthz - 204 AppId Match", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
-		testAPI.MarkStatusAsReady()
+		htarget.Ready()
+		t.Cleanup(htarget.NotReady)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
 		assert.Equal(t, 204, resp.StatusCode)
 	})
@@ -4388,6 +4416,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	compStore.AddStateStore("storeNonTransactional", fakeStoreNonTransactional)
 
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),

@@ -28,6 +28,7 @@ import (
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -70,7 +71,6 @@ const (
 )
 
 // Config holds the Dapr Runtime configuration.
-
 type Config struct {
 	AppID                         string
 	ControlPlaneAddress           string
@@ -109,9 +109,10 @@ type Config struct {
 	DisableBuiltinK8sSecretStore  bool
 	AppHealthCheckPath            string
 	AppChannelAddress             string
-	Metrics                       *metrics.Options
+	Metrics                       metrics.Options
 	Registry                      *registry.Options
 	Security                      security.Handler
+	Healthz                       healthz.Healthz
 }
 
 type internalConfig struct {
@@ -144,6 +145,8 @@ type internalConfig struct {
 	config                       []string
 	registry                     *registry.Registry
 	metricsExporter              metrics.Exporter
+	healthz                      healthz.Healthz
+	outboundHealthz              healthz.Healthz
 }
 
 func (i internalConfig) ActorsEnabled() bool {
@@ -171,7 +174,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		env.DaprPort:        strconv.Itoa(intc.internalGRPCPort),
 		env.DaprGRPCPort:    strconv.Itoa(intc.apiGRPCPort),
 		env.DaprHTTPPort:    strconv.Itoa(intc.httpPort),
-		env.DaprMetricsPort: intc.metricsExporter.Options().Port,
+		env.DaprMetricsPort: cfg.Metrics.Port,
 		env.DaprProfilePort: strconv.Itoa(intc.profilePort),
 	}
 
@@ -302,12 +305,14 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
 		registry:                  registry.New(c.Registry),
-		metricsExporter:           metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, c.Metrics),
+		metricsExporter:           metrics.New(c.Metrics),
 		blockShutdownDuration:     c.DaprBlockShutdownDuration,
 		actorsService:             c.ActorsService,
 		remindersService:          c.RemindersService,
 		publicListenAddress:       c.DaprPublicListenAddress,
 		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
+		healthz:                   c.Healthz,
+		outboundHealthz:           healthz.New(),
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {

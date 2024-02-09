@@ -51,7 +51,7 @@ type Options struct {
 	WatchdogCanPatchPodLabels          bool
 	TrustAnchorsFile                   string
 	Logger                             logger.Options
-	Metrics                            *metrics.Options
+	Metrics                            *metrics.FlagOptions
 	APIPort                            int
 	APIListenAddress                   string
 	HealthzPort                        int
@@ -91,7 +91,7 @@ func New() *Options {
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
-	opts.Metrics = metrics.DefaultMetricOptions()
+	opts.Metrics = metrics.DefaultFlagOptions()
 	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()

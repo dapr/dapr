@@ -19,6 +19,7 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -40,6 +41,7 @@ type OptionsReloaderDisk struct {
 	ComponentStore *compstore.ComponentStore
 	Authorizer     *authorizer.Authorizer
 	Processor      *processor.Processor
+	Healthz        healthz.Healthz
 }
 
 type OptionsReloaderOperator struct {
@@ -50,6 +52,7 @@ type OptionsReloaderOperator struct {
 	ComponentStore *compstore.ComponentStore
 	Authorizer     *authorizer.Authorizer
 	Processor      *processor.Processor
+	Healthz        healthz.Healthz
 }
 
 type Reloader struct {
@@ -77,6 +80,7 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 			CompStore:  opts.ComponentStore,
 			Processor:  opts.Processor,
 			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
 		}),
 		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
 			Loader:    loader,
@@ -102,6 +106,7 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 			CompStore:  opts.ComponentStore,
 			Processor:  opts.Processor,
 			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
 		}),
 		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
 			Loader:    loader,

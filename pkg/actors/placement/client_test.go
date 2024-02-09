@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/security"
 )
@@ -161,7 +162,12 @@ func testSecurity(t *testing.T) security.Handler {
 		ControlPlaneTrustDomain: "test.example.com",
 		ControlPlaneNamespace:   "default",
 		MTLSEnabled:             false,
+<<<<<<< HEAD
 		OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
+=======
+		Healthz:                 healthz.New(),
+		OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
+>>>>>>> 043345811 (Healthz overhaul)
 			return []*x509.Certificate{nil}, nil
 		},
 	})

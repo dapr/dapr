@@ -278,8 +278,12 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 		}
 	}
 
-	a.actorsReminders.Init(ctx)
-	a.timers.Init(ctx)
+	if err = a.actorsReminders.Init(ctx); err != nil {
+		return err
+	}
+	if err = a.timers.Init(ctx); err != nil {
+		return err
+	}
 
 	a.placementEnabled = true
 

@@ -211,6 +211,7 @@ func newDaprRuntime(ctx context.Context,
 			ComponentStore: compStore,
 			Authorizer:     authz,
 			Processor:      processor,
+			Healthz:        runtimeConfig.healthz,
 		})
 	case modes.StandaloneMode:
 		reloader, err = hotreload.NewDisk(hotreload.OptionsReloaderDisk{
@@ -220,6 +221,7 @@ func newDaprRuntime(ctx context.Context,
 			Authorizer:     authz,
 			Processor:      processor,
 			AppID:          runtimeConfig.id,
+			Healthz:        runtimeConfig.healthz,
 		})
 		if err != nil {
 			return nil, err
@@ -258,8 +260,9 @@ func newDaprRuntime(ctx context.Context,
 		gracePeriod = &duration
 	}
 
+	rtHealthz := rt.runtimeConfig.healthz.AddTarget()
 	rt.runnerCloser = concurrency.NewRunnerCloserManager(gracePeriod,
-		rt.runtimeConfig.metricsExporter.Run,
+		rt.runtimeConfig.metricsExporter.Start,
 		rt.processor.Process,
 		rt.reloader.Run,
 		func(ctx context.Context) error {
@@ -274,10 +277,7 @@ func newDaprRuntime(ctx context.Context,
 			d := time.Since(start).Milliseconds()
 			log.Infof("dapr initialized. Status: Running. Init Elapsed %vms", d)
 
-			if rt.daprHTTPAPI != nil {
-				// Setting the status only when runtime is initialized.
-				rt.daprHTTPAPI.MarkStatusAsReady()
-			}
+			rtHealthz.Ready()
 
 			close(rt.initComplete)
 			<-ctx.Done()
@@ -564,9 +564,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.initDirectMessaging(a.nameResolver)
 
-	if a.daprHTTPAPI != nil {
-		a.daprHTTPAPI.MarkStatusAsOutboundReady()
-	}
+	a.runtimeConfig.outboundHealthz.AddTarget().Ready()
 	if err := a.blockUntilAppIsReady(ctx); err != nil {
 		return err
 	}
@@ -786,6 +784,8 @@ func (a *DaprRuntime) startHTTPServer() error {
 		TracingSpec:           a.globalConfig.GetTracingSpec(),
 		MetricSpec:            &getMetricSpec,
 		MaxRequestBodySize:    int64(a.runtimeConfig.maxRequestBodySize),
+		Healthz:               a.runtimeConfig.healthz,
+		OutboundHealthz:       a.runtimeConfig.outboundHealthz,
 	})
 
 	serverConf := http.ServerConfig{
@@ -838,7 +838,15 @@ func (a *DaprRuntime) startHTTPServer() error {
 func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
 	serverConf := a.getNewServerConfig([]string{a.runtimeConfig.internalGRPCListenAddress}, a.runtimeConfig.internalGRPCPort)
-	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.sec, a.proxy)
+	server := grpc.NewInternalServer(grpc.OptionsInternal{
+		API:         api,
+		Config:      serverConf,
+		TracingSpec: a.globalConfig.GetTracingSpec(),
+		MetricSpec:  a.globalConfig.GetMetricsSpec(),
+		Security:    a.sec,
+		Proxy:       a.proxy,
+		Healthz:     a.runtimeConfig.healthz,
+	})
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
@@ -851,7 +859,16 @@ func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
 
 func (a *DaprRuntime) startGRPCAPIServer(api grpc.API, port int) error {
 	serverConf := a.getNewServerConfig(a.runtimeConfig.apiListenAddresses, port)
-	server := grpc.NewAPIServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.globalConfig.GetAPISpec(), a.proxy, a.workflowEngine)
+	server := grpc.NewAPIServer(grpc.Options{
+		API:            api,
+		Config:         serverConf,
+		TracingSpec:    a.globalConfig.GetTracingSpec(),
+		MetricSpec:     a.globalConfig.GetMetricsSpec(),
+		APISpec:        a.globalConfig.GetAPISpec(),
+		Proxy:          a.proxy,
+		WorkflowEngine: a.workflowEngine,
+		Healthz:        a.runtimeConfig.healthz,
+	})
 	if err := server.StartNonBlocking(); err != nil {
 		return err
 	}
