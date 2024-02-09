@@ -96,7 +96,7 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 		ok := encryption.AddEncryptedStateStore(comp.ObjectMeta.Name, encKeys)
 		if ok {
 			log.Infof("Automatic encryption enabled for state store %s", comp.ObjectMeta.Name)
-			log.Warnf("WARNING: ⚠️ Automatic state store encryption should never be used to encrypt more than 2^32 values. Encrypting more than that can cause the private key to be exposed.")
+			log.Info("WARNING: Automatic state store encryption should never be used to store more than 4 billion items in the state store (including updates). Storing more items than that can cause the private key to be exposed.")
 		}
 	}
 
