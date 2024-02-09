@@ -15,7 +15,6 @@ package hotreload
 
 import (
 	"context"
-	"errors"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
@@ -28,13 +27,9 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/reconciler"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/kit/concurrency"
-	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.hotreload")
-
 type OptionsReloaderDisk struct {
-	Config         *config.Configuration
 	Dirs           []string
 	ComponentStore *compstore.ComponentStore
 	Authorizer     *authorizer.Authorizer
@@ -52,7 +47,6 @@ type OptionsReloaderOperator struct {
 }
 
 type Reloader struct {
-	isEnabled            bool
 	componentsLoader     loader.Interface
 	componentsReconciler *reconciler.Reconciler[componentsapi.Component]
 }
@@ -67,7 +61,6 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 	}
 
 	return &Reloader{
-		isEnabled:        opts.Config.IsFeatureEnabled(config.HotReload),
 		componentsLoader: loader,
 		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
 			Loader:     loader,
@@ -87,7 +80,6 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 	})
 
 	return &Reloader{
-		isEnabled:        opts.Config.IsFeatureEnabled(config.HotReload),
 		componentsLoader: loader,
 		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
 			Loader:     loader,
@@ -99,23 +91,8 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 }
 
 func (r *Reloader) Run(ctx context.Context) error {
-	if !r.isEnabled {
-		log.Debug("Hot reloading disabled")
-		<-ctx.Done()
-		return nil
-	}
-
-	log.Info("Hot reloading enabled. Daprd will reload 'Component' resources on change.")
-
 	return concurrency.NewRunnerManager(
 		r.componentsLoader.Run,
 		r.componentsReconciler.Run,
 	).Run(ctx)
-}
-
-func (r *Reloader) Close() error {
-	if r.isEnabled {
-		log.Info("Closing hot reloader")
-	}
-	return errors.Join(r.componentsReconciler.Close())
 }
