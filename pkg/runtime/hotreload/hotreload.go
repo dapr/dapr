@@ -17,7 +17,6 @@ import (
 	"context"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/config"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -40,7 +39,6 @@ type OptionsReloaderOperator struct {
 	PodName        string
 	Namespace      string
 	Client         operatorv1.OperatorClient
-	Config         *config.Configuration
 	ComponentStore *compstore.ComponentStore
 	Authorizer     *authorizer.Authorizer
 	Processor      *processor.Processor
@@ -59,7 +57,6 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	return &Reloader{
 		componentsLoader: loader,
 		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
