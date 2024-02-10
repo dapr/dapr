@@ -69,7 +69,7 @@ func NewComponent(opts Options[componentsapi.Component]) *Reconciler[componentsa
 func (r *Reconciler[T]) Run(ctx context.Context) error {
 	stream, err := r.manager.Stream(ctx)
 	if err != nil {
-		return fmt.Errorf("error runing component stream: %w", err)
+		return fmt.Errorf("error running component stream: %w", err)
 	}
 
 	return r.watchForEvents(ctx, stream)
