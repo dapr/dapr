@@ -48,7 +48,7 @@ func (u *uniquename) Setup(t *testing.T) []framework.Option {
 
 	u.logline = logline.New(t,
 		logline.WithStdoutLineContains(
-			"Fatal error from runtime: process component foo error: [INIT_COMPONENT_FAILURE]: initialization error occurred for foo (state.in-memory/v1): component foo already exists",
+			"Fatal error from runtime: failed to load components: duplicate definition of component name foo (state.in-memory/v1) with existing foo (secretstores.local.file/v1)",
 		),
 	)
 

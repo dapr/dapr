@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package resources
+package namespace
 
 import (
 	"context"
@@ -19,90 +19,70 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(namespace))
+	suite.Register(new(different))
 }
 
-// namespace ensures that the component disk loader does not load components
-// from different namespaces.
-type namespace struct {
+// different ensures that the component disk loader always loads components
+// regardless of the namespace specified in the component file.
+type different struct {
 	daprd *daprd.Daprd
 }
 
-func (n *namespace) Setup(t *testing.T) []framework.Option {
-	n.daprd = daprd.New(t, daprd.WithResourceFiles(`
+func (d *different) Setup(t *testing.T) []framework.Option {
+	d.daprd = daprd.New(t, daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: abc
+ name: abc
 spec:
-  type: state.in-memory
-  version: v1
----
-# This component is skipped because it is in a different namespace. Even though
-# it has the same name, daprd will not error as it is not loaded.
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: abc
-  namespace: notmynamespace
-spec:
-  type: state.in-memory
-  version: v1
+ type: state.in-memory
+ version: v1
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: ghi
-  namespace: notmynamespace
+ name: ghi
+ namespace: notmynamespace
 spec:
-  type: state.in-memory
-  version: v1
+ type: state.in-memory
+ version: v1
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: def
-  namespace: mynamespace
+ name: def
+ namespace: mynamespace
 spec:
-  type: state.in-memory
-  version: v1
+ type: state.in-memory
+ version: v1
 `),
-		daprd.WithExecOptions(
-			exec.WithEnvVars(t, "NAMESPACE", "mynamespace"),
-		),
+		daprd.WithNamespace("mynamespace"),
 	)
 	return []framework.Option{
-		framework.WithProcesses(n.daprd),
+		framework.WithProcesses(d.daprd),
 	}
 }
 
-func (n *namespace) Run(t *testing.T, ctx context.Context) {
-	n.daprd.WaitUntilRunning(t, ctx)
+func (d *different) Run(t *testing.T, ctx context.Context) {
+	d.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, n.daprd.GRPCAddress(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-
-	client := rtv1.NewDaprClient(conn)
-
-	resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	resp, err := d.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
 			Name: "abc", Type: "state.in-memory", Version: "v1",
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+		},
+		{
+			Name: "ghi", Type: "state.in-memory", Version: "v1",
 			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 		},
 		{

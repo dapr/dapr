@@ -23,16 +23,21 @@ import (
 
 type FakeT struct {
 	component *Fake[componentsapi.Component]
+	startFn   func(context.Context) error
 }
 
 func New() *FakeT {
 	return &FakeT{
 		component: NewFake[componentsapi.Component](),
+		startFn: func(ctx context.Context) error {
+			<-ctx.Done()
+			return nil
+		},
 	}
 }
 
-func (f *FakeT) Close() error {
-	return nil
+func (f *FakeT) Run(ctx context.Context) error {
+	return f.startFn(ctx)
 }
 
 func (f *FakeT) Components() loader.Loader[componentsapi.Component] {
