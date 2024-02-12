@@ -190,7 +190,7 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 		}
 		net.Close()
 		return true
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -206,7 +206,7 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusNoContent == resp.StatusCode
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
@@ -224,7 +224,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			}
 			defer resp.Body.Close()
 			return http.StatusNoContent == resp.StatusCode
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 
 	case "grpc":
 		assert.Eventually(t, func() bool {
@@ -242,7 +242,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			out := rtv1.HealthCheckResponse{}
 			err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &in, &out)
 			return err == nil
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 	}
 }
 

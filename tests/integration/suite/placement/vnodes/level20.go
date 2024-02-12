@@ -72,5 +72,5 @@ func (v *vNodesAPILevel20) Run(t *testing.T, ctx context.Context) {
 			assert.Empty(t, placementTables.GetEntries()["someactor"].GetHosts())
 			assert.Empty(t, placementTables.GetEntries()["someactor"].GetSortedSet())
 		}
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }

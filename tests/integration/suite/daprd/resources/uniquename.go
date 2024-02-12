@@ -88,5 +88,5 @@ spec:
 }
 
 func (u *uniquename) Run(t *testing.T, ctx context.Context) {
-	assert.Eventually(t, u.logline.FoundAll, time.Second*5, time.Millisecond*100)
+	assert.Eventually(t, u.logline.FoundAll, time.Second*5, time.Millisecond*10)
 }

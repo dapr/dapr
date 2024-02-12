@@ -94,7 +94,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			return false
 		}
 		return true
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*10, time.Millisecond*10)
 
 	err := stream.Send(&v1pb.Host{
 		Name:     "app-1",
@@ -115,5 +115,5 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(c, o.GetTables().GetEntries(), "entity-1")
 			assert.Contains(c, o.GetTables().GetEntries(), "entity-2")
 		}
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 }
