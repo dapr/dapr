@@ -174,7 +174,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				}
 			}
 			return true
-		}, 2*time.Second, 100*time.Millisecond)
+		}, 2*time.Second, 10*time.Millisecond)
 
 		// Terminate the root orchestration
 		b.terminateWorkflow(t, ctx, string(id))

@@ -79,7 +79,7 @@ func (v *vNodesRollingUpgrade) Run(t *testing.T, ctx context.Context) {
 			assert.Len(t, placementTables.GetEntries()["someactor1"].GetHosts(), int(placementTables.GetReplicationFactor()))
 			assert.Len(t, placementTables.GetEntries()["someactor1"].GetSortedSet(), int(placementTables.GetReplicationFactor()))
 		}
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 
 	// Register the second host, with a higher API level (v1.13+)
 	msg2 := &placementv1pb.Host{
@@ -108,7 +108,7 @@ func (v *vNodesRollingUpgrade) Run(t *testing.T, ctx context.Context) {
 			assert.Len(t, placementTables.GetEntries()["someactor2"].GetHosts(), int(placementTables.GetReplicationFactor()))
 			assert.Len(t, placementTables.GetEntries()["someactor2"].GetSortedSet(), int(placementTables.GetReplicationFactor()))
 		}
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 
 	// Stop the first host; the API level should increase and vnodes shouldn't be sent anymore
 	cancel1()
@@ -128,5 +128,5 @@ func (v *vNodesRollingUpgrade) Run(t *testing.T, ctx context.Context) {
 			assert.Empty(t, placementTables.GetEntries()["someactor2"].GetHosts())
 			assert.Empty(t, placementTables.GetEntries()["someactor2"].GetSortedSet())
 		}
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
