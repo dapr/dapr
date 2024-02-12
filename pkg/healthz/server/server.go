@@ -99,7 +99,7 @@ func (s *Server) Start(ctx context.Context) error {
 
 	serveErr := make(chan error, 1)
 	go func() {
-		s.log.Infof("Healthz server is listening on %s", srv.Addr)
+		s.log.Infof("Healthz server is listening on %s", ln.Addr())
 		err := srv.Serve(ln)
 		if !errors.Is(err, http.ErrServerClosed) {
 			serveErr <- err

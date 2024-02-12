@@ -224,20 +224,19 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spif
 		return errors.New("injector already running")
 	}
 
-	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", i.server.Addr)
-
 	i.currentTrustAnchors = currentTrustAnchors
 	i.sentrySPIFFEID = sentryID
-	i.server.TLSConfig = tlsConfig
 
 	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", i.port), tlsConfig)
 	if err != nil {
 		return fmt.Errorf("error while starting injector: %w", err)
 	}
 
+	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", ln.Addr())
+
 	errCh := make(chan error, 1)
 	go func() {
-		err := i.server.ServeTLS(ln, "", "")
+		err := i.server.Serve(ln)
 		if !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("sidecar injector error: %w", err)
 			return
