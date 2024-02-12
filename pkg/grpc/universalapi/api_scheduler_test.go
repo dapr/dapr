@@ -16,9 +16,11 @@ package universalapi
 import (
 	"context"
 	"fmt"
-	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"google.golang.org/grpc"
 	"testing"
+
+	"google.golang.org/grpc"
+
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
 type mockSchedulerClient struct {
@@ -63,7 +65,7 @@ func newMockSchedulerClient() *mockSchedulerClientWithSchedulerClient {
 }
 
 func TestScheduleJob(t *testing.T) {
-	//commented below out since still WIP
+	// commented below out since still WIP
 	/*
 		// Create a fake scheduler client for testing
 		mockSchedClient := newMockSchedulerClient()
@@ -116,13 +118,10 @@ func TestScheduleJob(t *testing.T) {
 }
 
 func TestDeleteJob(t *testing.T) {
-
 }
 
 func TestGetJob(t *testing.T) {
-
 }
 
 func TestListJobs(t *testing.T) {
-
 }

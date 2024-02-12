@@ -133,7 +133,7 @@ func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsReq
 	}
 
 	for _, job := range response.Jobs {
-		jobName := job.Name
+		jobName := job.GetName()
 		// override job name, so it's the original user's job name and not the app_id prefix
 		job.Name = strings.TrimPrefix(jobName, a.AppID()+"||")
 	}
