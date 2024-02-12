@@ -72,4 +72,8 @@ func (o *operator) Run(t *testing.T, ctx context.Context) {
 			_ = assert.NoError(c, err) && assert.NoError(c, conn.Close())
 		}, time.Second*10, 10*time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}
+
+	// Shutting the operator down too fast will cause the operator to exit error
+	// as the cache has not had time to sync. Wait until healthz before exiting.
+	o.proc.WaitUntilRunning(t, ctx)
 }
