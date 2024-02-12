@@ -1211,7 +1211,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		jobSchedule := "@every " + req.Period
 		internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
-				Name:     jobName,
+				Name:     fmt.Sprintf("%s||%s", a.actorsConfig.AppID, jobName),
 				Schedule: jobSchedule,
 				Data:     req.Data,
 				DueTime:  req.DueTime,
