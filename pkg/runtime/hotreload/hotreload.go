@@ -22,6 +22,7 @@ import (
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/disk"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/operator"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/reconciler"
@@ -52,11 +53,12 @@ type OptionsReloaderOperator struct {
 
 type Reloader struct {
 	isEnabled            bool
+	componentsLoader     loader.Interface
 	componentsReconciler *reconciler.Reconciler[componentsapi.Component]
 }
 
-func NewDisk(ctx context.Context, opts OptionsReloaderDisk) (*Reloader, error) {
-	loader, err := disk.New(ctx, disk.Options{
+func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
+	loader, err := disk.New(disk.Options{
 		Dirs:           opts.Dirs,
 		ComponentStore: opts.ComponentStore,
 	})
@@ -65,7 +67,8 @@ func NewDisk(ctx context.Context, opts OptionsReloaderDisk) (*Reloader, error) {
 	}
 
 	return &Reloader{
-		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
+		isEnabled:        opts.Config.IsFeatureEnabled(config.HotReload),
+		componentsLoader: loader,
 		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
@@ -84,7 +87,8 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 	})
 
 	return &Reloader{
-		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
+		isEnabled:        opts.Config.IsFeatureEnabled(config.HotReload),
+		componentsLoader: loader,
 		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
@@ -104,6 +108,7 @@ func (r *Reloader) Run(ctx context.Context) error {
 	log.Info("Hot reloading enabled. Daprd will reload 'Component' resources on change.")
 
 	return concurrency.NewRunnerManager(
+		r.componentsLoader.Run,
 		r.componentsReconciler.Run,
 	).Run(ctx)
 }
