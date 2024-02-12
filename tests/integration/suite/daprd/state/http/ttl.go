@@ -92,6 +92,6 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			require.NoError(c, err)
 			require.NoError(t, resp.Body.Close())
 			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 10*time.Millisecond)
 	})
 }

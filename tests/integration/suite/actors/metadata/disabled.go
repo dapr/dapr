@@ -69,5 +69,5 @@ func (m *disabled) Run(t *testing.T, ctx context.Context) {
 		assert.False(t, res.ActorRuntime.HostReady)
 		assert.Empty(t, res.ActorRuntime.Placement)
 		assert.Empty(t, res.ActorRuntime.ActiveActors)
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
