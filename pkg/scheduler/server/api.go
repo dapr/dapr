@@ -16,7 +16,6 @@ package server
 import (
 	"context"
 	"fmt"
-
 	etcdcron "github.com/Scalingo/go-etcd-cron"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -81,10 +80,7 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 	case <-s.readyCh:
 	}
 
-	// TODO: need to do some tweaks here to get entries by appID from req.AppId
-
-	// entries := s.cron.Entries()
-	entries := s.cron.ListJobsByAppID(req.GetAppId())
+	entries := s.cron.ListJobsByPrefix(req.GetAppId() + "||")
 
 	jobs := make([]*runtimev1pb.Job, 0, len(entries))
 	for _, entry := range entries {
@@ -112,8 +108,6 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.JobRequest) (*sc
 		return nil, ctx.Err()
 	case <-s.readyCh:
 	}
-
-	// jobName := fmt.Sprintf("%s_%s", req.Metadata["app_id"], req.Job.Name)
 
 	job := s.cron.GetJob(req.GetJobName())
 	if job != nil {
