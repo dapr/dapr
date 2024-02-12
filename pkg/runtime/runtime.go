@@ -224,7 +224,7 @@ func newDaprRuntime(ctx context.Context,
 			Processor:      processor,
 		})
 	case modes.StandaloneMode:
-		reloader, err = hotreload.NewDisk(ctx, hotreload.OptionsReloaderDisk{
+		reloader, err = hotreload.NewDisk(hotreload.OptionsReloaderDisk{
 			Config:         globalConfig,
 			Dirs:           runtimeConfig.standalone.ResourcesPath,
 			ComponentStore: compStore,
@@ -1028,7 +1028,7 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 	}
 
 	log.Info("Loading components…")
-	comps, err := loader.LoadComponents()
+	comps, err := loader.Load()
 	if err != nil {
 		return err
 	}
