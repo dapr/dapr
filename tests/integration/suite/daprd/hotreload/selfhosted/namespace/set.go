@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package selfhosted
+package namespace
 
 import (
 	"context"
@@ -31,18 +31,18 @@ import (
 )
 
 func init() {
-	suite.Register(new(namespace))
+	suite.Register(new(set))
 }
 
-// namespace ensures that component manifest files are hot-reloaded, regardless
-// of the namespace set on them.
-type namespace struct {
+// set ensures that component manifest files are hot-reloaded, but ignore
+// components which are not in the same namespace when NAMESPACE env var set.
+type set struct {
 	daprd   *daprd.Daprd
 	logline *logline.LogLine
 	resDir  string
 }
 
-func (n *namespace) Setup(t *testing.T) []framework.Option {
+func (s *set) Setup(t *testing.T) []framework.Option {
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -54,21 +54,21 @@ spec:
   - name: HotReload
     enabled: true`), 0o600))
 
-	n.resDir = t.TempDir()
+	s.resDir = t.TempDir()
 
-	n.logline = logline.New(t, logline.WithStdoutLineContains(
-		"Fatal error from runtime: failed to load resources from disk: duplicate definition of component name foo (pubsub.in-memory/v1) with existing foo (state.in-memory/v1)",
+	s.logline = logline.New(t, logline.WithStdoutLineContains(
+		`"Fatal error from runtime: failed to load resources from disk: duplicate definition of component name foo (state.in-memory/v1) with existing foo (pubsub.in-memory/v1)"`,
 	))
 
-	n.daprd = daprd.New(t,
+	s.daprd = daprd.New(t,
 		daprd.WithConfigs(configFile),
-		daprd.WithResourcesDir(n.resDir),
-		daprd.WithNamespace("mynamespace"),
+		daprd.WithResourcesDir(s.resDir),
 		daprd.WithExit1(),
-		daprd.WithLogLineStdout(n.logline),
+		daprd.WithLogLineStdout(s.logline),
+		daprd.WithNamespace("mynamespace"),
 	)
 
-	require.NoError(t, os.WriteFile(filepath.Join(n.resDir, "1.yaml"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -79,12 +79,12 @@ spec:
 `), 0o600))
 
 	return []framework.Option{
-		framework.WithProcesses(n.logline, n.daprd),
+		framework.WithProcesses(s.logline, s.daprd),
 	}
 }
 
-func (n *namespace) Run(t *testing.T, ctx context.Context) {
-	n.daprd.WaitUntilRunning(t, ctx)
+func (s *set) Run(t *testing.T, ctx context.Context) {
+	s.daprd.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
@@ -92,10 +92,10 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 			},
-		}, n.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.RegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
-	require.NoError(t, os.WriteFile(filepath.Join(n.resDir, "1.yaml"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -105,17 +105,29 @@ spec:
  type: pubsub.in-memory
  version: v1
 `), 0o600))
+	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Empty(t, s.daprd.RegistedComponents(t, ctx))
+	}, 5*time.Second, 10*time.Millisecond)
 
+	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: 123
+spec:
+ type: pubsub.in-memory
+ version: v1
+`), 0o600))
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 			{
 				Name: "123", Type: "pubsub.in-memory", Version: "v1",
 				Capabilities: []string{"SUBSCRIBE_WILDCARDS"},
 			},
-		}, n.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.RegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
-	require.NoError(t, os.WriteFile(filepath.Join(n.resDir, "1.yaml"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -125,26 +137,16 @@ spec:
  type: state.in-memory
  version: v1
 `), 0o600))
-
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 			},
-		}, n.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.RegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
-	require.NoError(t, os.WriteFile(filepath.Join(n.resDir, "1.yaml"), []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
- name: 123
- namespace: mynamespace
-spec:
- type: state.in-memory
- version: v1
----
+	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -153,22 +155,26 @@ metadata:
 spec:
  type: state.in-memory
  version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: 123
+ namespace: mynamespace
+spec:
+ type: pubsub.in-memory
+ version: v1
 `), 0o600))
-
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 			{
-				Name: "123", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				Name: "123", Type: "pubsub.in-memory", Version: "v1",
+				Capabilities: []string{"SUBSCRIBE_WILDCARDS"},
 			},
-			{
-				Name: "foo", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
-			},
-		}, n.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.RegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
-	require.NoError(t, os.WriteFile(filepath.Join(n.resDir, "1.yaml"), []byte(`
+	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -195,7 +201,15 @@ metadata:
 spec:
  type: pubsub.in-memory
  version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: foo
+spec:
+ type: state.in-memory
+ version: v1
 `), 0o600))
 
-	n.logline.EventuallyFoundAll(t)
+	s.logline.EventuallyFoundAll(t)
 }
