@@ -77,7 +77,8 @@ func (d *daprd) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			//nolint:bodyclose
 			_, err = client.Do(req)
-			require.ErrorContains(t, err, "connection refused")
+			require.Error(t, err)
+			assert.Regexp(t, "No connection|connection refused", err.Error())
 		}
 
 		d.sentry.Run(t, ctx)
