@@ -72,5 +72,5 @@ func (v *vNodesAPILevel10) Run(t *testing.T, ctx context.Context) {
 			assert.Len(t, placementTables.GetEntries()["someactor"].GetHosts(), int(placementTables.GetReplicationFactor()))
 			assert.Len(t, placementTables.GetEntries()["someactor"].GetSortedSet(), int(placementTables.GetReplicationFactor()))
 		}
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
