@@ -8,6 +8,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 ---
+{{- if not .Values.global.rbac.namespaced }}
 kind: ClusterRole
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -24,12 +25,12 @@ rules:
     resources: ["mutatingwebhookconfigurations"]
     verbs: ["patch"]
     resourceNames: ["dapr-sidecar-injector"]
-{{- if not .Values.global.rbac.namespaced }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations", "components"]
     verbs: [ "get", "list"]
 {{- end }}
 ---
+{{- if not .Values.global.rbac.namespaced }}
 kind: ClusterRoleBinding
 apiVersion: rbac.authorization.k8s.io/v1
 metadata:
@@ -46,6 +47,7 @@ roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: ClusterRole
   name: dapr-injector
+{{- end }}
 ---
 kind: Role
 apiVersion: rbac.authorization.k8s.io/v1
