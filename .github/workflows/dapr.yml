@@ -686,3 +686,13 @@ jobs:
             echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
             exit -1
           fi
+  re-run:
+    needs: helmpublish
+    if: failure() && fromJSON(github.run_attempt) < 3 && github.event_name != 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
+      - env:
+          GH_REPO: ${{ github.repository }}
+          GH_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          GH_DEBUG: api
+        run: gh workflow run rerun.yml -F run_id=${{ github.run_id }}
