@@ -695,6 +695,6 @@ jobs:
     steps:
       - env:
           GH_REPO: ${{ github.repository }}
-          GH_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+          GH_TOKEN: ${{ github.token }}
           GH_DEBUG: api
         run: gh workflow run rerun.yml -F run_id=${{ github.run_id }}
