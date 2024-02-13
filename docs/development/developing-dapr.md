@@ -47,16 +47,17 @@ You can build Dapr binaries with the `make` tool.
 
 > For example, developers on Windows who prefer to develop in [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install-win10) can use the Linux development environment to cross-compile binaries like `daprd.exe` that run on Windows natively.
 
-- You can individually build the daprd binary:
+You can individually build the daprd binary:
+
 ```sh
-cd /cmd/daprd
+cd cmd/daprd
 go build -tags=allcomponents -v
 # use it in this manner
 ./daprd ...
-# if you need to execute a `dapr run` command with that newly build binary:
+# if you need to execute a `dapr run` command with that newly-built binary:
 mv daprd ~/.dapr/bin/daprd
 dapr version # see `Runtime version: edge` to ensure you are using the newly built binary
-dapr run ... # this will use the newly built binary
+dapr run ... # this will use the newly-built binary
 ```
 
 ## Run unit tests
@@ -127,8 +128,9 @@ This is useful to debug Dapr when the process is running.
 
 ### Debug Dapr With Goland IDE
 
-Build the daprd binary `go build -tags=allcomponents -v` from `/cmd/daprd`.
-Proceed to run client code necessary for testing purposes and set break points as needed.
+1. Build the daprd binary `go build -tags=allcomponents -v` from `/cmd/daprd`.
+2. Proceed to run client code necessary for testing purposes and set break points as needed.
+
 ![Build & Run Daprd In Goland IDE](build-and-run-daprd.png)
 
 ### Debug unit-tests
