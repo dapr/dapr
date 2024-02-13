@@ -47,6 +47,8 @@ jobs:
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
     steps:
+      - name: Force failure
+        run: exit 1 # FORCE FAILURE TEMPORARILY!!!!!!
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
       - name: Set up Go
