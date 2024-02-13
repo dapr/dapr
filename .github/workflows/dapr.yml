@@ -688,7 +688,8 @@ jobs:
             echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
             exit -1
           fi
-  re-run:
+  rerun:
+    name: Reruns in case of failure
     needs: helmpublish
     if: failure() && fromJSON(github.run_attempt) < 3 && github.event_name != 'pull_request'
     runs-on: ubuntu-latest
