@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,11 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub
+package v2alpha1
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/contentlength"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/grpc"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/http"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub/scopes"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/selfhosted/v2alpha1/routes/defaultroute"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/selfhosted/v2alpha1/routes/emptymatch"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/selfhosted/v2alpha1/routes/match"
 )
