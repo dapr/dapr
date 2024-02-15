@@ -75,7 +75,7 @@ INSERT INTO state VALUES
 	p.srv = prochttp.New(t, prochttp.WithHandler(p.handler.NewHandler()))
 	p.daprd = daprd.New(t,
 		daprd.WithResourceFiles(p.db.GetComponent(t)),
-		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(p.place.Port())),
+		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(p.place.Port())),
 		daprd.WithAppPort(p.srv.Port()),
 		// Daprd is super noisy in debug mode when connecting to placement.
 		daprd.WithLogLevel("info"),

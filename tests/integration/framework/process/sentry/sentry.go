@@ -205,7 +205,7 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 	defer cancel()
 	conn, err := grpc.DialContext(
 		ctx,
-		fmt.Sprintf("127.0.0.1:%d", s.Port()),
+		fmt.Sprintf("localhost:%d", s.Port()),
 		grpc.WithTransportCredentials(transportCredentials),
 		grpc.WithReturnConnectionError(),
 		grpc.WithBlock(),
