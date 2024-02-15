@@ -238,3 +238,18 @@ func (d *Daprd) MetricsPort() int {
 func (d *Daprd) ProfilePort() int {
 	return d.profilePort
 }
+
+func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
+	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(d.grpcPort),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	return conn
+}
+
+func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) runtimev1pb.DaprClient {
+	return runtimev1pb.NewDaprClient(d.GRPCConn(t, ctx))
+}
