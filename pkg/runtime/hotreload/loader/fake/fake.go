@@ -22,12 +22,17 @@ import (
 )
 
 type FakeT struct {
+	runFn     func(context.Context) error
 	component *Fake[componentsapi.Component]
 	startFn   func(context.Context) error
 }
 
 func New() *FakeT {
 	return &FakeT{
+		runFn: func(ctx context.Context) error {
+			<-ctx.Done()
+			return nil
+		},
 		component: NewFake[componentsapi.Component](),
 		startFn: func(ctx context.Context) error {
 			<-ctx.Done()
@@ -37,7 +42,7 @@ func New() *FakeT {
 }
 
 func (f *FakeT) Run(ctx context.Context) error {
-	return f.startFn(ctx)
+	return f.runFn(ctx)
 }
 
 func (f *FakeT) Components() loader.Loader[componentsapi.Component] {
@@ -46,6 +51,11 @@ func (f *FakeT) Components() loader.Loader[componentsapi.Component] {
 
 func (f *FakeT) WithComponent(fake *Fake[componentsapi.Component]) *FakeT {
 	f.component = fake
+	return f
+}
+
+func (f *FakeT) WithRun(fn func(context.Context) error) *FakeT {
+	f.runFn = fn
 	return f
 }
 
