@@ -24,13 +24,23 @@ import (
 
 // options contains the options for running a HTTP server in integration tests.
 type options struct {
-	handler   http.Handler
-	tlsConfig *tls.Config
+	handler      http.Handler
+	handlerFuncs map[string]http.HandlerFunc
+	tlsConfig    *tls.Config
 }
 
 func WithHandler(handler http.Handler) Option {
 	return func(o *options) {
 		o.handler = handler
+	}
+}
+
+func WithHandlerFunc(path string, fn http.HandlerFunc) Option {
+	return func(o *options) {
+		if o.handlerFuncs == nil {
+			o.handlerFuncs = make(map[string]http.HandlerFunc)
+		}
+		o.handlerFuncs[path] = fn
 	}
 }
 
