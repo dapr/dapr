@@ -112,7 +112,7 @@ func validateResponse(t *testing.T, appID string, appPort int, body io.Reader) {
 	require.True(t, ok)
 	require.Equal(t, appPort, int(port))
 	require.Equal(t, "http", appConnectionProperties["protocol"])
-	require.Equal(t, "localhost", appConnectionProperties["channelAddress"])
+	require.Equal(t, "127.0.0.1", appConnectionProperties["channelAddress"])
 
 	// validate that the metadata contains correct format of subscription.
 	// The http response struct is private, so we use assert here.
