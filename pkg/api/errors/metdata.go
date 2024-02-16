@@ -7,28 +7,62 @@ import (
 	kiterrors "github.com/dapr/kit/errors"
 )
 
-func IncomingContextMetadataNotFound() error {
-	message := "metadata not found in the incoming context"
+func MetadataSubScriptionsError(name string) error {
+	message := fmt.Sprintf("error returning subscriptions %s", name)
 	return kiterrors.NewBuilder(
 		grpcCodes.InvalidArgument,
-		http.StatusBadRequest,
-		message,
-		"ERR_METADATA_NOT_FOUND"
+		http.StatusNotFound,
+		message.
+		"ERR_RETURNING_IN_SUBSCRIPTIONS_LIST",
 	).
-	WithErrorInfo("METADATA_NOT_FOUND", nil).
-	WithResourceInfo("", "", message).
-	Build()
+	WithErrorInfo(kiterrors.CodePrefix+"ERROR_RETURNING_LIST_OF_PUB/SUB_SUBSCRIPTIONS").
+	WithErrorInfo(name, " ").
 }
 
-func MetadataFromIncomingContextFailed() error {
-	message := "failed to retrieve metadata from incoming context"
+func MetadataInfoReturnError(name string) error {
+	message := fmt.Sprintf("error returning metadata information")
 	return kiterrors.NewBuilder(
-		grpcCodes.InvalidArgument
-        http.StatusBadRequest,
+		grpcCodes.InvalidArgument,
+		http.StatusNotFound,
 		message,
-		"ERR_METADATA_RETRIEVAL_FAILED",
+		"ERR_METADATA_INFORMATION",
 	).
-	WithErrorInfo("METADATA_RETRIEVAL_FAILED", nil).
-	WithResourceInfo("", "", "", message).
-	Build()
+	WithErrorInfo(kiterrors.CodePrefix)
+	WithErrorInfo(name, " ").
+}
+
+func AppConnectionError(name string) error {
+	message := fmt.Sprintf("error returning information related to connection to the app")
+	return kiterrors.NewBuilder(
+		grpcCodes.InvalidArgument,
+		http.StatusNotFound,
+		message,
+		"ERR_APP_CONNECTION",
+	).
+	WithErrorInfo(kiterrors.CodePrefix)
+	WithErrorInfo(name, " ").
+}
+
+func EnableFeatureError(name string) error {
+	message := fmt.Sprintf("error in listing features enabled")
+	return kiterrors.NewBuilder(
+		grpcCodes.InvalidArgument,
+		http.StatusNotFound,
+		message,
+		"ERR_ENABLE_FEATURE",
+	).
+	WithErrorInfo(kiterrors.CodePrefix)
+	WithErrorInfo(name, " ").
+}
+
+func HttpEndpointsError(name string) error {
+	message := fmt.Sprintf("error in providing name")
+	return kiterrors.NewBuilder(
+		grpcCodes.InvalidArgument,
+		http.StatusNotFound,
+		message,
+		"ERR_HTTP_ENDPOINTS"
+	).
+	WithErrorInfo(kiterrors.CodePrefix)
+	WithErrorInfo(name, " ").
 }
