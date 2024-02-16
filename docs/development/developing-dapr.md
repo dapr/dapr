@@ -11,6 +11,7 @@ There are several options for getting an environment up and running for Dapr dev
 ## Forking the repo
 
 Contributing to Dapr often requires working with multiple repositories at once. We recommend creating a folder for Dapr and cloning all forked repositories in that folder. 
+
 For instructions on how to fork a repo, [see this video on forking the dapr/docs repo](https://youtu.be/uPYuXcaEs-c?t=289). The process is the same, just for different repositories.
 
 ```sh
