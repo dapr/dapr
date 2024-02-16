@@ -38,26 +38,26 @@ import (
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
-	appCallbackClient    runtimev1pb.AppCallbackClient
-	conn                 *grpc.ClientConn
-	baseAddress          string
-	ch                   chan struct{}
-	tracingSpec          config.TracingSpec
-	appMetadataToken     string
-	maxRequestBodySizeMB int
-	appHealth            *apphealth.AppHealth
+	appCallbackClient  runtimev1pb.AppCallbackClient
+	conn               *grpc.ClientConn
+	baseAddress        string
+	ch                 chan struct{}
+	tracingSpec        config.TracingSpec
+	appMetadataToken   string
+	maxRequestBodySize int
+	appHealth          *apphealth.AppHealth
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
 func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int, baseAddress string) *Channel {
 	// readBufferSize is unused
 	c := &Channel{
-		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		conn:                 conn,
-		baseAddress:          net.JoinHostPort(baseAddress, strconv.Itoa(port)),
-		tracingSpec:          spec,
-		appMetadataToken:     security.GetAppToken(),
-		maxRequestBodySizeMB: maxRequestBodySize,
+		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
+		conn:               conn,
+		baseAddress:        net.JoinHostPort(baseAddress, strconv.Itoa(port)),
+		tracingSpec:        spec,
+		appMetadataToken:   security.GetAppToken(),
+		maxRequestBodySize: maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan struct{}, maxConcurrency)
@@ -112,8 +112,8 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	opts := []grpc.CallOption{
 		grpc.Header(&header),
 		grpc.Trailer(&trailer),
-		grpc.MaxCallSendMsgSize(g.maxRequestBodySizeMB << 20),
-		grpc.MaxCallRecvMsgSize(g.maxRequestBodySizeMB << 20),
+		grpc.MaxCallSendMsgSize(g.maxRequestBodySize),
+		grpc.MaxCallRecvMsgSize(g.maxRequestBodySize),
 	}
 
 	resp, err := g.appCallbackClient.OnInvoke(ctx, pd.GetMessage(), opts...)

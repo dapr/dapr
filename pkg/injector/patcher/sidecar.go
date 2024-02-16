@@ -91,8 +91,10 @@ type SidecarConfig struct {
 	SidecarReadinessProbeThreshold      int32   `annotation:"dapr.io/sidecar-readiness-probe-threshold"       default:"3"`
 	SidecarImage                        string  `annotation:"dapr.io/sidecar-image"`
 	SidecarSeccompProfileType           string  `annotation:"dapr.io/sidecar-seccomp-profile-type"`
-	HTTPMaxRequestSize                  *int    `annotation:"dapr.io/http-max-request-size"`
-	HTTPReadBufferSize                  *int    `annotation:"dapr.io/http-read-buffer-size"`
+	HTTPMaxRequestSize                  *int    `annotation:"dapr.io/http-max-request-size"` // Legacy flag
+	MaxBodySize                         string  `annotation:"dapr.io/max-body-size"`
+	HTTPReadBufferSize                  *int    `annotation:"dapr.io/http-read-buffer-size"` // Legacy flag
+	ReadBufferSize                      string  `annotation:"dapr.io/read-buffer-size"`
 	GracefulShutdownSeconds             int     `annotation:"dapr.io/graceful-shutdown-seconds"               default:"-1"`
 	BlockShutdownDuration               *string `annotation:"dapr.io/block-shutdown-duration"`
 	EnableAPILogging                    *bool   `annotation:"dapr.io/enable-api-logging"`
