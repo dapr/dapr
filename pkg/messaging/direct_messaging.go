@@ -58,23 +58,23 @@ const resolverCacheTTL = 20
 type messageClientConnection func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 type directMessaging struct {
-	channels             *channels.Channels
-	connectionCreatorFn  messageClientConnection
-	appID                string
-	mode                 modes.DaprMode
-	grpcPort             int
-	namespace            string
-	resolver             nr.Resolver
-	resolverMulti        nr.ResolverMulti
-	hostAddress          string
-	hostName             string
-	maxRequestBodySizeMB int
-	proxy                Proxy
-	readBufferSize       int
-	resiliency           resiliency.Provider
-	compStore            *compstore.ComponentStore
-	resolverCache        *ttlcache.Cache[nr.AddressList]
-	closed               atomic.Bool
+	channels            *channels.Channels
+	connectionCreatorFn messageClientConnection
+	appID               string
+	mode                modes.DaprMode
+	grpcPort            int
+	namespace           string
+	resolver            nr.Resolver
+	resolverMulti       nr.ResolverMulti
+	hostAddress         string
+	hostName            string
+	maxRequestBodySize  int
+	proxy               Proxy
+	readBufferSize      int
+	resiliency          resiliency.Provider
+	compStore           *compstore.ComponentStore
+	resolverCache       *ttlcache.Cache[nr.AddressList]
+	closed              atomic.Bool
 }
 
 type remoteApp struct {
@@ -107,20 +107,20 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 	hName, _ := os.Hostname()
 
 	dm := &directMessaging{
-		appID:                opts.AppID,
-		namespace:            opts.Namespace,
-		grpcPort:             opts.Port,
-		mode:                 opts.Mode,
-		channels:             opts.Channels,
-		connectionCreatorFn:  opts.ClientConnFn,
-		resolver:             opts.Resolver,
-		maxRequestBodySizeMB: opts.MaxRequestBodySize,
-		proxy:                opts.Proxy,
-		readBufferSize:       opts.ReadBufferSize,
-		resiliency:           opts.Resiliency,
-		hostAddress:          hAddr,
-		hostName:             hName,
-		compStore:            opts.CompStore,
+		appID:               opts.AppID,
+		namespace:           opts.Namespace,
+		grpcPort:            opts.Port,
+		mode:                opts.Mode,
+		channels:            opts.Channels,
+		connectionCreatorFn: opts.ClientConnFn,
+		resolver:            opts.Resolver,
+		maxRequestBodySize:  opts.MaxRequestBodySize,
+		proxy:               opts.Proxy,
+		readBufferSize:      opts.ReadBufferSize,
+		resiliency:          opts.Resiliency,
+		hostAddress:         hAddr,
+		hostName:            hName,
+		compStore:           opts.CompStore,
 	}
 
 	// Set resolverMulti if the resolver implements the ResolverMulti interface
@@ -306,8 +306,8 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 
 	opts := []grpc.CallOption{
-		grpc.MaxCallRecvMsgSize(d.maxRequestBodySizeMB << 20),
-		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB << 20),
+		grpc.MaxCallRecvMsgSize(d.maxRequestBodySize),
+		grpc.MaxCallSendMsgSize(d.maxRequestBodySize),
 	}
 
 	// Set up timers
