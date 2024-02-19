@@ -119,7 +119,7 @@ func TestPlacementStateWithVirtualNodes(t *testing.T) {
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",
 		Entities: []string{"actorTypeOne", "actorTypeTwo"},
-		APILevel: 0,
+		APILevel: 10,
 	}
 	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
 	require.NoError(t, err)
