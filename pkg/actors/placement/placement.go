@@ -79,7 +79,8 @@ type actorPlacement struct {
 	hasPlacementTablesCh chan struct{}
 
 	// apiLevel is the current API level of the cluster
-	apiLevel uint32
+	apiLevel        uint32
+	initialAPILevel uint32
 	// onAPILevelUpdate is invoked when the API level is updated
 	onAPILevelUpdate func(apiLevel uint32)
 
@@ -128,6 +129,7 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		closeCh:           make(chan struct{}),
 		resiliency:        opts.Resiliency,
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
+		initialAPILevel:   opts.InitialAPILevel,
 	}
 }
 
@@ -276,7 +278,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				Pod:      p.config.PodName,
 				// Port is redundant because Name should include port number
 				// Port: 0,
-				ApiLevel: internal.ActorAPILevel,
+				ApiLevel: p.initialAPILevel,
 			}
 
 			err := p.client.send(&host)
@@ -454,12 +456,11 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 // onPlacementError closes the current placement stream and reestablish the connection again,
 // uses a different placement server depending on the error code
 func (p *actorPlacement) onPlacementError(err error) {
+	log.Debugf("Disconnected from placement: %v", err)
 	s, ok := status.FromError(err)
 	// If the current server is not leader, then it will try to the next server.
 	if ok && s.Code() == codes.FailedPrecondition {
 		p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
-	} else {
-		log.Debugf("Disconnected from placement: %v", err)
 	}
 }
 

@@ -967,7 +967,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		AppChannel:       a.channels.AppChannel(),
 		GRPCConnectionFn: a.grpc.GetGRPCConnection,
 		Config:           actorConfig,
-		TracingSpec:      a.globalConfig.GetTracingSpec(),
+		GlobalConfig:     a.globalConfig,
 		Resiliency:       a.resiliency,
 		StateStoreName:   actorStateStoreName,
 		CompStore:        a.compStore,

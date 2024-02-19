@@ -41,7 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
-	configuration "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -118,7 +118,7 @@ type actorsRuntime struct {
 	timers             internal.TimersProvider
 	actorsReminders    internal.RemindersProvider
 	actorsTable        *sync.Map
-	tracingSpec        configuration.TracingSpec
+	tracingSpec        config.TracingSpec
 	resiliency         resiliency.Provider
 	storeName          string
 	compStore          *compstore.ComponentStore
@@ -141,7 +141,7 @@ type ActorsOpts struct {
 	AppChannel       channel.AppChannel
 	GRPCConnectionFn GRPCConnectionFn
 	Config           Config
-	TracingSpec      configuration.TracingSpec
+	GlobalConfig     *config.Configuration
 	Resiliency       resiliency.Provider
 	StateStoreName   string
 	CompStore        *compstore.ComponentStore
@@ -165,7 +165,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		grpcConnectionFn:   opts.GRPCConnectionFn,
 		actorsConfig:       opts.Config,
 		timers:             timers.NewTimersProvider(clock),
-		tracingSpec:        opts.TracingSpec,
+		tracingSpec:        opts.GlobalConfig.GetTracingSpec(),
 		resiliency:         opts.Resiliency,
 		storeName:          opts.StateStoreName,
 		placement:          opts.MockPlacement,
@@ -181,6 +181,12 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		closeCh:         make(chan struct{}),
 	}
 
+	initialAPILevel := uint32(internal.ActorAPILevel)
+	if !internal.APILevelFeatureRemindersProtobuf.IsEnabled(initialAPILevel) &&
+		opts.GlobalConfig.IsFeatureEnabled(config.ActorReminderStorageProtobuf) {
+		initialAPILevel = uint32(internal.APILevelFeatureRemindersProtobuf)
+	}
+
 	// Init reminders and placement
 	providerOpts := internal.ActorsProviderOptions{
 		Config:   a.actorsConfig.Config,
@@ -191,9 +197,10 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 			}
 			return a.checker.HealthChannel()
 		},
-		Clock:      a.clock,
-		APILevel:   &a.apiLevel,
-		Resiliency: a.resiliency,
+		Clock:           a.clock,
+		APILevel:        &a.apiLevel,
+		Resiliency:      a.resiliency,
+		InitialAPILevel: initialAPILevel,
 	}
 
 	// Initialize the placement client if we don't have a mocked one already
