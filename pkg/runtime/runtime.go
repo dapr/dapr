@@ -448,7 +448,7 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 }
 
 func getOtelServiceName(fallback string) string {
-	if value, ok := os.LookupEnv("OTEL_SERVICE_NAME"); ok {
+	if value := os.Getenv("OTEL_SERVICE_NAME"); value != "" {
 		return value
 	}
 	return fallback
