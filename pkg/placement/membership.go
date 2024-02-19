@@ -17,6 +17,8 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"google.golang.org/grpc/metadata"
+	"strconv"
 	"sync"
 	"time"
 
@@ -33,6 +35,7 @@ const (
 	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
 	raftApplyCommandMaxConcurrency = 10
 	barrierWriteTimeout            = 2 * time.Minute
+	GRPCContextKeyExpectsVNodes    = "dapr-expects-vnodes"
 )
 
 // MonitorLeadership is used to monitor if we acquire or lose our role
@@ -335,7 +338,10 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	p.disseminateLock.Lock()
 	defer p.disseminateLock.Unlock()
 
-	state := p.raftNode.FSM().PlacementState()
+	// Check if the cluster has daprd hosts that expect vnodes;
+	// older daprd versions (pre 1.13) do expect them, and newer versions (1.13+) do not.
+	state := &v1pb.PlacementTables{}
+	stateWithVNodes := &v1pb.PlacementTables{}
 
 	log.Infof(
 		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
@@ -343,8 +349,26 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	p.streamConnPoolLock.RLock()
 	streamConnPool := make([]placementGRPCStream, len(p.streamConnPool))
 	copy(streamConnPool, p.streamConnPool)
+
+	hasOldDaprds := false
+	hasNewDaprds := false
+	for _, stream := range streamConnPool {
+		if !hostExpectsVNodes(stream) {
+			hasNewDaprds = true
+		} else {
+			hasOldDaprds = true
+		}
+	}
+
+	if hasNewDaprds {
+		state = p.raftNode.FSM().PlacementState(false)
+	}
+	if hasOldDaprds {
+		stateWithVNodes = p.raftNode.FSM().PlacementState(true)
+	}
+
 	p.streamConnPoolLock.RUnlock()
-	if err := p.performTablesUpdate(ctx, streamConnPool, state); err != nil {
+	if err := p.performTablesUpdate(ctx, streamConnPool, state, stateWithVNodes); err != nil {
 		return err
 	}
 	log.Infof(
@@ -362,7 +386,7 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 // It first locks so no further dapr can be taken it. Once placement table is locked
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
-func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPCStream, newTable *v1pb.PlacementTables) error {
+func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPCStream, newTable *v1pb.PlacementTables, newTableWithVNodes *v1pb.PlacementTables) error {
 	// TODO: error from disseminationOperation needs to be handle properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
@@ -381,15 +405,15 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 	defer cancel()
 
 	// Perform each update on all hosts in sequence
-	err := p.disseminateOperationOnHosts(ctx, hosts, "lock", nil)
+	err := p.disseminateOperationOnHosts(ctx, hosts, "lock", nil, nil)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'lock' failed: %v", err)
 	}
-	err = p.disseminateOperationOnHosts(ctx, hosts, "update", newTable)
+	err = p.disseminateOperationOnHosts(ctx, hosts, "update", newTable, newTableWithVNodes)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'update' failed: %v", err)
 	}
-	err = p.disseminateOperationOnHosts(ctx, hosts, "unlock", nil)
+	err = p.disseminateOperationOnHosts(ctx, hosts, "unlock", nil, nil)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'unlock' failed: %v", err)
 	}
@@ -398,12 +422,17 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 	return nil
 }
 
-func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
+func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []placementGRPCStream, operation string, tables *v1pb.PlacementTables, tablesWithVirtualNodes *v1pb.PlacementTables) error {
 	errCh := make(chan error)
 
 	for i := 0; i < len(hosts); i++ {
 		go func(i int) {
-			errCh <- p.disseminateOperation(ctx, hosts[i], operation, tables)
+			withVNodes := hostExpectsVNodes(hosts[i])
+			if withVNodes {
+				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
+			} else {
+				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tables)
+			}
 		}(i)
 	}
 
@@ -451,4 +480,24 @@ func (p *Service) disseminateOperation(ctx context.Context, target placementGRPC
 		func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
 		func() { log.Debug("Dissemination successful after failure") },
 	)
+}
+
+func hostExpectsVNodes(stream placementGRPCStream) bool {
+	md, ok := metadata.FromIncomingContext(stream.Context())
+	if !ok {
+		return true // default to older versions that need vnodes
+	}
+
+	// Extract apiLevel from metadata
+	expectsVNodes := md.Get(GRPCContextKeyExpectsVNodes)
+	if len(expectsVNodes) == 0 {
+		return true // default to older versions that need vnodes
+	}
+
+	res, err := strconv.ParseBool(expectsVNodes[0])
+	if err != nil {
+		return true
+	}
+
+	return res
 }

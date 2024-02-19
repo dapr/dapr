@@ -16,6 +16,8 @@ package placement
 import (
 	"context"
 	"crypto/x509"
+	"github.com/dapr/dapr/pkg/placement"
+	"google.golang.org/grpc/metadata"
 	"sync"
 	"testing"
 
@@ -86,6 +88,17 @@ func TestConnectToServer(t *testing.T) {
 
 		err := client.connectToServer(context.Background(), conn)
 		require.NoError(t, err)
+
+		// Extract the "dapr-expects-vnodes" value from the context's metadata
+		md, ok := metadata.FromOutgoingContext(client.clientStream.Context())
+		require.True(t, ok)
+
+		requiresVnodes, ok := md[placement.GRPCContextKeyExpectsVNodes]
+		require.True(t, ok)
+		require.Len(t, requiresVnodes, 1)
+
+		assert.Equal(t, "false", requiresVnodes[0])
+
 	})
 }
 

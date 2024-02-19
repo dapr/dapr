@@ -250,9 +250,16 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				registeredMemberID = req.GetName()
 				p.addStreamConn(stream)
 				// We need to use a background context here so dissemination isn't tied to the context of this stream
-				placementTable := p.raftNode.FSM().PlacementState()
+				placementTableWithoutNodes := &placementv1pb.PlacementTables{}
+				placementTableWithNodes := &placementv1pb.PlacementTables{}
 
-				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, placementTable)
+				if hostExpectsVNodes(stream) {
+					placementTableWithNodes = p.raftNode.FSM().PlacementState(true)
+				} else {
+					placementTableWithoutNodes = p.raftNode.FSM().PlacementState(false)
+				}
+
+				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, placementTableWithoutNodes, placementTableWithNodes)
 				if err != nil {
 					return err
 				}

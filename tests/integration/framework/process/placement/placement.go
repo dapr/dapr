@@ -18,6 +18,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"google.golang.org/grpc/metadata"
 	"io"
 	"net/http"
 	"strconv"
@@ -173,13 +174,17 @@ func (p *Placement) CurrentActorsAPILevel() int {
 	return 20 // Defined in pkg/actors/internal/api_level.go
 }
 
-func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host) chan *placementv1pb.PlacementTables {
+func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host, contextMetadata map[string]string) chan *placementv1pb.PlacementTables {
 	conn, err := grpc.DialContext(parentCtx, p.Address(),
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)
 	client := placementv1pb.NewPlacementClient(conn)
+
+	for k, v := range contextMetadata {
+		parentCtx = metadata.AppendToOutgoingContext(parentCtx, k, v)
+	}
 
 	var stream placementv1pb.Placement_ReportDaprStatusClient
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -259,6 +264,12 @@ func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *p
 	}()
 
 	return placementUpdateCh
+}
+
+// RegisterHost Registers a host with the placement service using default context metadata
+func (p *Placement) RegisterHost(t *testing.T, ctx context.Context, msg *placementv1pb.Host) chan *placementv1pb.PlacementTables {
+	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-expects-vnodes", "false")
+	return p.RegisterHostWithMetadata(t, ctx, msg, nil)
 }
 
 // AssertRegisterHostFails Expect the registration to fail with FailedPrecondition.

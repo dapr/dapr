@@ -15,6 +15,8 @@ package placement
 
 import (
 	"context"
+	"github.com/dapr/dapr/pkg/placement"
+	"google.golang.org/grpc/metadata"
 	"sync"
 
 	"google.golang.org/grpc"
@@ -63,6 +65,7 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 	}
 
 	client := v1pb.NewPlacementClient(conn)
+	ctx = metadata.AppendToOutgoingContext(ctx, placement.GRPCContextKeyExpectsVNodes, "false")
 	stream, err := client.ReportDaprStatus(ctx)
 	if err != nil {
 		if conn != nil {
