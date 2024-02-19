@@ -15,9 +15,11 @@ package placement
 
 import (
 	"context"
-	"github.com/dapr/dapr/pkg/placement"
-	"google.golang.org/grpc/metadata"
 	"sync"
+
+	"google.golang.org/grpc/metadata"
+
+	"github.com/dapr/dapr/pkg/placement"
 
 	"google.golang.org/grpc"
 

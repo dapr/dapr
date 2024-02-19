@@ -17,11 +17,12 @@ package placement
 import (
 	"context"
 	"fmt"
-	"google.golang.org/grpc/metadata"
 	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
+
+	"google.golang.org/grpc/metadata"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"

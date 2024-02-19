@@ -15,15 +15,16 @@ package vnodes
 
 import (
 	"context"
-	"fmt"
+	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"testing"
-	"time"
 )
 
 func init() {
@@ -45,7 +46,6 @@ func (v *vnodes) Setup(t *testing.T) []framework.Option {
 }
 
 func (v *vnodes) Run(t *testing.T, ctx context.Context) {
-
 	t.Run("register host without vnodes metadata (simulating daprd <1.13)", func(t *testing.T) {
 		v.place.WaitUntilRunning(t, ctx)
 
@@ -141,7 +141,6 @@ func (v *vnodes) Run(t *testing.T, ctx context.Context) {
 
 		// Second host will send the "dapr-expects-vnodes" metadata, simulating  daprd 1.13+
 		placementMessageCh2 := v.place.RegisterHost(t, ctx2, msg2)
-		fmt.Println("placementMessageCh2: ", placementMessageCh2)
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			select {

@@ -311,7 +311,6 @@ func TestOnPlacementOrder(t *testing.T) {
 		assert.Containsf(t, table, "actorOne", "actorOne should be in the table")
 		assert.Len(t, table["actorOne"].VirtualNodes(), 6)
 		assert.Len(t, table["actorOne"].SortedSet(), 6)
-
 	})
 
 	t.Run("unlock operation", func(t *testing.T) {

@@ -17,10 +17,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"google.golang.org/grpc/metadata"
 	"strconv"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc/metadata"
 
 	"google.golang.org/grpc/peer"
 

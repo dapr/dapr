@@ -16,10 +16,12 @@ package placement
 import (
 	"context"
 	"crypto/x509"
-	"github.com/dapr/dapr/pkg/placement"
-	"google.golang.org/grpc/metadata"
 	"sync"
 	"testing"
+
+	"google.golang.org/grpc/metadata"
+
+	"github.com/dapr/dapr/pkg/placement"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -98,7 +100,6 @@ func TestConnectToServer(t *testing.T) {
 		require.Len(t, requiresVnodes, 1)
 
 		assert.Equal(t, "false", requiresVnodes[0])
-
 	})
 }
 
