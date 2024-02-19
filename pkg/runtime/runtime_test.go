@@ -2150,7 +2150,7 @@ func testSecurity(t *testing.T) security.Handler {
 	return sec
 }
 
- TestGetOtelServiceName(t *testing.T) {
+func TestGetOtelServiceName(t *testing.T) {
 	// Save the original value of the OTEL_SERVICE_NAME variable and restore at the end
 
 	tests := []struct {
