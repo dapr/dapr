@@ -15,7 +15,7 @@ package universal
 
 import (
 	"context"
-	"fmt"
+	"strings"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -23,14 +23,12 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-// Service layer funcs
-
 func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
 	// validate job details, date, schedule, etc??
 	var err error
 
 	metadata := map[string]string{"app_id": a.AppID()}
-	jobName := fmt.Sprintf("%s_%s", a.AppID(), inReq.GetJob().GetName())
+	jobName := a.AppID() + "||" + inReq.GetJob().GetName()
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
@@ -48,7 +46,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	// TODO: do something with following response?
 	_, err = a.schedulerClient.ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
-		a.logger.Errorf("Error Scheduling job %v", err)
+		a.logger.Errorf("Error Scheduling job %s. %v", inReq.GetJob().GetName(), err)
 		return &emptypb.Empty{}, err
 	}
 
@@ -59,11 +57,11 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 	var err error
 
 	if inReq.GetName() == "" {
-		a.logger.Errorf("Job name empty %v", err)
+		a.logger.Error("Job name empty.")
 		return &emptypb.Empty{}, err
 	}
 
-	jobName := fmt.Sprintf("%s_%s", a.AppID(), inReq.GetName())
+	jobName := a.AppID() + "||" + inReq.GetName()
 	internalDeleteJobReq := &schedulerv1pb.JobRequest{
 		JobName: jobName,
 	}
@@ -71,7 +69,7 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 	// TODO: do something with following response?
 	_, err = a.schedulerClient.DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
-		a.logger.Errorf("Error Deleting job %v", err)
+		a.logger.Errorf("Error Deleting job: %s. %v", inReq.GetName(), err)
 		return &emptypb.Empty{}, err
 	}
 
@@ -84,22 +82,25 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 	var err error
 
 	if inReq.GetName() == "" {
-		a.logger.Errorf("Job name empty %v", err)
+		a.logger.Error("Job name empty.")
 		return response, err
 	}
 
-	jobName := fmt.Sprintf("%s_%s", a.AppID(), inReq.GetName())
+	jobName := a.AppID() + "||" + inReq.GetName()
 	internalGetJobReq := &schedulerv1pb.JobRequest{
 		JobName: jobName,
 	}
 
 	internalResp, err = a.schedulerClient.GetJob(ctx, internalGetJobReq)
 	if err != nil {
-		a.logger.Errorf("Error Getting job %v", err)
+		a.logger.Errorf("Error Getting job %s. %v", inReq.GetName(), err)
 		return nil, err
 	}
 
 	response.Job = internalResp.GetJob()
+
+	// override job name, so it's the original user's job name and not the app_id prefix
+	response.Job.Name = strings.TrimPrefix(jobName, a.AppID()+"||")
 
 	return response, err
 }
@@ -113,7 +114,7 @@ func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsReq
 	var err error
 
 	if inReq.GetAppId() == "" {
-		a.logger.Errorf("Job appID empty %v", err)
+		a.logger.Error("Job appID empty.")
 		return response, err
 	}
 
@@ -123,12 +124,18 @@ func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsReq
 
 	internalListResp, err = a.schedulerClient.ListJobs(ctx, internalListReq)
 	if err != nil {
-		a.logger.Errorf("Error Listing jobs for app %s: %v", inReq.GetAppId(), err)
+		a.logger.Errorf("Error Listing jobs for app %s. %v", inReq.GetAppId(), err)
 		return nil, err
 	}
 
 	if len(internalListResp.GetJobs()) > 0 {
 		response.Jobs = internalListResp.GetJobs()
+	}
+
+	for _, job := range response.Jobs {
+		jobName := job.GetName()
+		// override job name, so it's the original user's job name and not the app_id prefix
+		job.Name = strings.TrimPrefix(jobName, a.AppID()+"||")
 	}
 
 	return response, err
