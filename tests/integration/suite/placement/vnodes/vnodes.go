@@ -46,9 +46,9 @@ func (v *vnodes) Setup(t *testing.T) []framework.Option {
 }
 
 func (v *vnodes) Run(t *testing.T, ctx context.Context) {
-	t.Run("register host without vnodes metadata (simulating daprd <1.13)", func(t *testing.T) {
-		v.place.WaitUntilRunning(t, ctx)
+	v.place.WaitUntilRunning(t, ctx)
 
+	t.Run("register host without vnodes metadata (simulating daprd <1.13)", func(t *testing.T) {
 		// Register the host, with API level 10 (pre v1.13)
 		msg := &placementv1pb.Host{
 			Name:     "myapp",
@@ -58,7 +58,7 @@ func (v *vnodes) Run(t *testing.T, ctx context.Context) {
 			ApiLevel: uint32(10),
 		}
 
-		// The host won't send the "dapr-expects-vnodes" metadata, simulating an older daprd version
+		// The host won't send the "dapr-accept-vnodes" metadata, simulating an older daprd version
 		placementMessageCh := v.place.RegisterHostWithMetadata(t, ctx, msg, nil)
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -78,8 +78,6 @@ func (v *vnodes) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("register host with vnodes metadata (simulating daprd 1.13+)", func(t *testing.T) {
-		v.place.WaitUntilRunning(t, ctx)
-
 		// Register the host, with API level 10 (pre v1.13)
 		msg := &placementv1pb.Host{
 			Name:     "myapp",
@@ -89,7 +87,7 @@ func (v *vnodes) Run(t *testing.T, ctx context.Context) {
 			ApiLevel: uint32(10),
 		}
 
-		// The host will send the "dapr-expects-vnodes" metadata, simulating an older daprd version
+		// The host will send the "dapr-accept-vnodes" metadata, simulating an older daprd version
 		placementMessageCh := v.place.RegisterHost(t, ctx, msg)
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
@@ -97,9 +95,6 @@ func (v *vnodes) Run(t *testing.T, ctx context.Context) {
 			case <-ctx.Done():
 				return
 			case placementTables := <-placementMessageCh:
-				if ctx.Err() != nil {
-					return
-				}
 				assert.Len(t, placementTables.GetEntries(), 1)
 				// Check that the placement service doesn't send the vnodes
 				assert.Empty(t, placementTables.GetEntries()["someactor"].GetHosts())
@@ -113,8 +108,6 @@ func (v *vnodes) Run(t *testing.T, ctx context.Context) {
 			level1 = 10
 			level2 = 20
 		)
-
-		v.place.WaitUntilRunning(t, ctx)
 
 		msg1 := &placementv1pb.Host{
 			Name:     "myapp1",
@@ -131,25 +124,17 @@ func (v *vnodes) Run(t *testing.T, ctx context.Context) {
 			ApiLevel: uint32(level2),
 		}
 
-		ctx1, cancel1 := context.WithCancel(ctx)
-		defer cancel1()
-		ctx2, cancel2 := context.WithCancel(ctx)
-		defer cancel2()
+		// First host won't send the "dapr-accept-vnodes" metadata, simulating daprd pre 1.13
+		placementMessageCh1 := v.place.RegisterHostWithMetadata(t, ctx, msg1, nil)
 
-		// First host won't send the "dapr-expects-vnodes" metadata, simulating daprd pre 1.13
-		placementMessageCh1 := v.place.RegisterHostWithMetadata(t, ctx1, msg1, nil)
-
-		// Second host will send the "dapr-expects-vnodes" metadata, simulating  daprd 1.13+
-		placementMessageCh2 := v.place.RegisterHost(t, ctx2, msg2)
+		// Second host will send the "dapr-accept-vnodes" metadata, simulating  daprd 1.13+
+		placementMessageCh2 := v.place.RegisterHost(t, ctx, msg2)
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			select {
 			case <-ctx.Done():
 				return
 			case placementTables := <-placementMessageCh1:
-				if ctx.Err() != nil {
-					return
-				}
 				assert.Len(t, placementTables.GetEntries(), 2)
 				// Check that the placement service sends the vnodes
 				assert.Len(t, placementTables.GetEntries()["someactor1"].GetHosts(), int(placementTables.GetReplicationFactor()))

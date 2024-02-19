@@ -17,12 +17,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"google.golang.org/grpc/metadata"
-
 	"google.golang.org/grpc/peer"
 
 	"github.com/dapr/dapr/pkg/placement/monitoring"
@@ -36,7 +35,7 @@ const (
 	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
 	raftApplyCommandMaxConcurrency = 10
 	barrierWriteTimeout            = 2 * time.Minute
-	GRPCContextKeyExpectsVNodes    = "dapr-expects-vnodes"
+	GRPCContextKeyExpectsVNodes    = "dapr-accept-vnodes"
 )
 
 // MonitorLeadership is used to monitor if we acquire or lose our role
@@ -341,8 +340,7 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 
 	// Check if the cluster has daprd hosts that expect vnodes;
 	// older daprd versions (pre 1.13) do expect them, and newer versions (1.13+) do not.
-	state := &v1pb.PlacementTables{}
-	stateWithVNodes := &v1pb.PlacementTables{}
+	var state, stateWithVNodes *v1pb.PlacementTables
 
 	log.Infof(
 		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
@@ -354,10 +352,13 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	hasOldDaprds := false
 	hasNewDaprds := false
 	for _, stream := range streamConnPool {
-		if !hostExpectsVNodes(stream) {
+		if !hostAcceptsVNodes(stream) {
 			hasNewDaprds = true
 		} else {
 			hasOldDaprds = true
+		}
+		if hasOldDaprds && hasNewDaprds {
+			break
 		}
 	}
 
@@ -428,7 +429,7 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []place
 
 	for i := 0; i < len(hosts); i++ {
 		go func(i int) {
-			withVNodes := hostExpectsVNodes(hosts[i])
+			withVNodes := hostAcceptsVNodes(hosts[i])
 			if withVNodes {
 				errCh <- p.disseminateOperation(ctx, hosts[i], operation, tablesWithVirtualNodes)
 			} else {
@@ -483,22 +484,13 @@ func (p *Service) disseminateOperation(ctx context.Context, target placementGRPC
 	)
 }
 
-func hostExpectsVNodes(stream placementGRPCStream) bool {
+func hostAcceptsVNodes(stream placementGRPCStream) bool {
 	md, ok := metadata.FromIncomingContext(stream.Context())
 	if !ok {
 		return true // default to older versions that need vnodes
 	}
 
 	// Extract apiLevel from metadata
-	expectsVNodes := md.Get(GRPCContextKeyExpectsVNodes)
-	if len(expectsVNodes) == 0 {
-		return true // default to older versions that need vnodes
-	}
-
-	res, err := strconv.ParseBool(expectsVNodes[0])
-	if err != nil {
-		return true
-	}
-
-	return res
+	vmd := md.Get(GRPCContextKeyExpectsVNodes)
+	return !(len(vmd) > 0 && strings.EqualFold(vmd[0], "false"))
 }

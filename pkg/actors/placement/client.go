@@ -17,12 +17,10 @@ import (
 	"context"
 	"sync"
 
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/placement"
-
-	"google.golang.org/grpc"
-
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 

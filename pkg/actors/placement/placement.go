@@ -34,6 +34,7 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
+
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )

@@ -29,9 +29,10 @@ import (
 	"google.golang.org/grpc"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	"github.com/dapr/kit/logger"
+
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/kit/logger"
 )
 
 func cleanupStates() {
@@ -471,7 +472,7 @@ func TestExpectsVNodes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			stream := MockPlacementGRPCStream{ctx: tt.ctx}
-			result := hostExpectsVNodes(stream)
+			result := hostAcceptsVNodes(stream)
 			if result != tt.expected {
 				t.Errorf("expectsVNodes() for %s: expected %v, got %v", tt.name, tt.expected, result)
 			}

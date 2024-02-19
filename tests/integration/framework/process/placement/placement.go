@@ -254,7 +254,7 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 
 			if in.GetOperation() == "update" {
 				tables := in.GetTables()
-				require.NotEmptyf(t, tables, "Placement tables is empty")
+				require.NotEmptyf(t, tables, "Placement table is empty")
 
 				select {
 				case placementUpdateCh <- tables:
@@ -269,7 +269,7 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 
 // RegisterHost Registers a host with the placement service using default context metadata
 func (p *Placement) RegisterHost(t *testing.T, ctx context.Context, msg *placementv1pb.Host) chan *placementv1pb.PlacementTables {
-	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-expects-vnodes", "false")
+	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-accept-vnodes", "false")
 	return p.RegisterHostWithMetadata(t, ctx, msg, nil)
 }
 

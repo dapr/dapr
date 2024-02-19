@@ -19,15 +19,13 @@ import (
 	"sync"
 	"testing"
 
-	"google.golang.org/grpc/metadata"
-
-	"github.com/dapr/dapr/pkg/placement"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/metadata"
 
+	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -91,7 +89,7 @@ func TestConnectToServer(t *testing.T) {
 		err := client.connectToServer(context.Background(), conn)
 		require.NoError(t, err)
 
-		// Extract the "dapr-expects-vnodes" value from the context's metadata
+		// Extract the "dapr-accept-vnodes" value from the context's metadata
 		md, ok := metadata.FromOutgoingContext(client.clientStream.Context())
 		require.True(t, ok)
 

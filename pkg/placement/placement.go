@@ -34,6 +34,7 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
+
 	"github.com/dapr/kit/logger"
 )
 
@@ -253,7 +254,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				placementTableWithoutNodes := &placementv1pb.PlacementTables{}
 				placementTableWithNodes := &placementv1pb.PlacementTables{}
 
-				if hostExpectsVNodes(stream) {
+				if hostAcceptsVNodes(stream) {
 					placementTableWithNodes = p.raftNode.FSM().PlacementState(true)
 				} else {
 					placementTableWithoutNodes = p.raftNode.FSM().PlacementState(false)
