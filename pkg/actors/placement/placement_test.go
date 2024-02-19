@@ -252,7 +252,7 @@ func TestOnPlacementOrder(t *testing.T) {
 			Tables: &placementv1pb.PlacementTables{
 				Version:           tableVersion,
 				Entries:           entries,
-				ApiLevel:          0,
+				ApiLevel:          10,
 				ReplicationFactor: 3,
 			},
 		})
@@ -302,7 +302,7 @@ func TestOnPlacementOrder(t *testing.T) {
 			Tables: &placementv1pb.PlacementTables{
 				Version:  tableVersion,
 				Entries:  entries,
-				ApiLevel: 0,
+				ApiLevel: 10,
 			},
 		})
 
