@@ -93,7 +93,7 @@ func TestConnectToServer(t *testing.T) {
 		md, ok := metadata.FromOutgoingContext(client.clientStream.Context())
 		require.True(t, ok)
 
-		requiresVnodes, ok := md[placement.GRPCContextKeyExpectsVNodes]
+		requiresVnodes, ok := md[placement.GRPCContextKeyAcceptVNodes]
 		require.True(t, ok)
 		require.Len(t, requiresVnodes, 1)
 

@@ -65,7 +65,7 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 	}
 
 	client := v1pb.NewPlacementClient(conn)
-	ctx = metadata.AppendToOutgoingContext(ctx, placement.GRPCContextKeyExpectsVNodes, "false")
+	ctx = metadata.AppendToOutgoingContext(ctx, placement.GRPCContextKeyAcceptVNodes, "false")
 	stream, err := client.ReportDaprStatus(ctx)
 	if err != nil {
 		if conn != nil {

@@ -34,7 +34,6 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
-
 	"github.com/dapr/kit/logger"
 )
 

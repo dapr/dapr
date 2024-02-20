@@ -35,7 +35,7 @@ const (
 	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
 	raftApplyCommandMaxConcurrency = 10
 	barrierWriteTimeout            = 2 * time.Minute
-	GRPCContextKeyExpectsVNodes    = "dapr-accept-vnodes"
+	GRPCContextKeyAcceptVNodes     = "dapr-accept-vnodes"
 )
 
 // MonitorLeadership is used to monitor if we acquire or lose our role
@@ -491,6 +491,6 @@ func hostAcceptsVNodes(stream placementGRPCStream) bool {
 	}
 
 	// Extract apiLevel from metadata
-	vmd := md.Get(GRPCContextKeyExpectsVNodes)
+	vmd := md.Get(GRPCContextKeyAcceptVNodes)
 	return !(len(vmd) > 0 && strings.EqualFold(vmd[0], "false"))
 }

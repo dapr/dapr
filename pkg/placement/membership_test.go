@@ -22,17 +22,15 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc/metadata"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	clocktesting "k8s.io/utils/clock/testing"
-
-	"github.com/dapr/kit/logger"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/kit/logger"
 )
 
 func cleanupStates() {
@@ -454,17 +452,17 @@ func TestExpectsVNodes(t *testing.T) {
 		},
 		{
 			name:     "With metadata expectsVNodes true",
-			ctx:      createContextWithMetadata(GRPCContextKeyExpectsVNodes, "true"),
+			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "true"),
 			expected: true,
 		},
 		{
 			name:     "With metadata expectsVNodes false",
-			ctx:      createContextWithMetadata(GRPCContextKeyExpectsVNodes, "false"),
+			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "false"),
 			expected: false,
 		},
 		{
 			name:     "With invalid metadata value",
-			ctx:      createContextWithMetadata(GRPCContextKeyExpectsVNodes, "invalid"),
+			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "invalid"),
 			expected: true,
 		},
 	}

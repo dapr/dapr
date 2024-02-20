@@ -36,7 +36,6 @@ import (
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-
 	"github.com/dapr/kit/logger"
 )
 
