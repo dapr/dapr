@@ -77,6 +77,52 @@ type hostMemberChange struct {
 	host    raft.DaprHostMember
 }
 
+type placementTablesUpdate struct {
+	withoutVirtualNodes *placementv1pb.PlacementTables
+	withVirtualNodes    *placementv1pb.PlacementTables
+}
+
+func newPlacementTablesUpdate(hasOldDaprds, hasNewDaprds bool, fsm *raft.FSM) *placementTablesUpdate {
+	// At least one of hasOldDaprds, hasNewDaprds will be true
+	tables := &placementTablesUpdate{}
+	if hasNewDaprds {
+		tables.withoutVirtualNodes = fsm.PlacementState(false)
+	}
+	if hasOldDaprds {
+		tables.withVirtualNodes = fsm.PlacementState(true)
+	}
+
+	return tables
+}
+
+// GetVersion is used only for logs in membership.go
+func (p *placementTablesUpdate) GetVersion() string {
+	if p.withoutVirtualNodes != nil {
+		return p.withoutVirtualNodes.GetVersion()
+	}
+	if p.withVirtualNodes != nil {
+		return p.withVirtualNodes.GetVersion()
+	}
+
+	return ""
+}
+
+func (p *placementTablesUpdate) SetAPILevel(minAPILevel uint32, maxAPILevel *uint32) {
+	setAPILevel := func(tables *placementv1pb.PlacementTables) {
+		if tables != nil {
+			if tables.GetApiLevel() < minAPILevel {
+				tables.ApiLevel = minAPILevel
+			}
+			if maxAPILevel != nil && tables.GetApiLevel() > *maxAPILevel {
+				tables.ApiLevel = *maxAPILevel
+			}
+		}
+	}
+
+	setAPILevel(p.withVirtualNodes)
+	setAPILevel(p.withoutVirtualNodes)
+}
+
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
 	// streamConnPool has the stream connections established between placement gRPC server and Dapr runtime.
@@ -249,17 +295,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 				registeredMemberID = req.GetName()
 				p.addStreamConn(stream)
+
+				acceptsVNodes := hostAcceptsVNodes(stream)
+				tables := newPlacementTablesUpdate(acceptsVNodes, !acceptsVNodes, p.raftNode.FSM())
+
 				// We need to use a background context here so dissemination isn't tied to the context of this stream
-				var placementTableWithoutNodes *placementv1pb.PlacementTables
-				var placementTableWithNodes *placementv1pb.PlacementTables
-
-				if hostAcceptsVNodes(stream) {
-					placementTableWithNodes = p.raftNode.FSM().PlacementState(true)
-				} else {
-					placementTableWithoutNodes = p.raftNode.FSM().PlacementState(false)
-				}
-
-				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, placementTableWithoutNodes, placementTableWithNodes)
+				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, tables)
 				if err != nil {
 					return err
 				}
