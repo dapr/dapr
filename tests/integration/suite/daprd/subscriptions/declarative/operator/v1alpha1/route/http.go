@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package route
 
 import (
 	"context"
@@ -45,7 +45,7 @@ type http struct {
 }
 
 func (h *http) Setup(t *testing.T) []framework.Option {
-	h.sub = subscriber.New(t, subscriber.WithRoutes("/a"))
+	h.sub = subscriber.New(t, subscriber.WithRoutes("/a", "/d/c/b/a", "/a/b/c/d"))
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
 	h.kubeapi = kubernetes.New(t,
@@ -56,21 +56,63 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			Items: []compapi.Component{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mypubsub", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mypub", Namespace: "default"},
 				Spec: compapi.ComponentSpec{
 					Type: "pubsub.in-memory", Version: "v1",
 				},
 			}},
 		}),
 		kubernetes.WithClusterDaprSubscriptionList(t, &subapi.SubscriptionList{
-			Items: []subapi.Subscription{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
-				Spec: subapi.SubscriptionSpec{
-					Pubsubname: "mypubsub",
-					Topic:      "a",
-					Route:      "/a",
+			Items: []subapi.Subscription{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub1", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "a",
+						Route:      "/a/b/c/d",
+					},
 				},
-			}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub2", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "a",
+						Route:      "/a",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub3", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "b",
+						Route:      "/a",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub3", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "b",
+						Route:      "/a",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub4", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "b",
+						Route:      "/d/c/b/a",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub5", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "b",
+						Route:      "/a/b/c/d",
+					},
+				},
+			},
 		}),
 	)
 
@@ -100,21 +142,23 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 }
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
-	h.operator.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{
 		Daprd:      h.daprd,
-		PubSubName: "mypubsub",
+		PubSubName: "mypub",
 		Topic:      "a",
-		Data:       `{"status": "completed"}`,
 	})
 	resp := h.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.Route)
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.Data()))
-	assert.Equal(t, "1.0", resp.SpecVersion())
-	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
-	assert.Equal(t, "a", resp.Extensions()["topic"])
-	assert.Equal(t, "com.dapr.event.sent", resp.Type())
-	assert.Equal(t, "text/plain", resp.DataContentType())
+	assert.Subset(t, []string{"/a", "/a/b/c/d"}, []string{resp.Route})
+	assert.Empty(t, resp.Data())
+
+	h.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:      h.daprd,
+		PubSubName: "mypub",
+		Topic:      "b",
+	})
+	resp = h.sub.Receive(t, ctx)
+	assert.Subset(t, []string{"/a", "/d/c/b/a"}, []string{resp.Route})
+	assert.Empty(t, resp.Data())
 }

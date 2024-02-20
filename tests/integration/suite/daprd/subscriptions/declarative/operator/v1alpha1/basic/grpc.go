@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package basic
 
 import (
 	"context"
@@ -119,6 +119,31 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	resp := g.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.GetPath())
 	assert.JSONEq(t, `{"status": "completed"}`, string(resp.GetData()))
+	assert.Equal(t, "1.0", resp.GetSpecVersion())
+	assert.Equal(t, "mypubsub", resp.GetPubsubName())
+	assert.Equal(t, "com.dapr.event.sent", resp.GetType())
+
+	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+		PubsubName: "mypubsub", Topic: "a",
+		Data: []byte(`{"status": "completed"}`), DataContentType: "foo/bar",
+	})
+	require.NoError(t, err)
+	resp = g.sub.Receive(t, ctx)
+	assert.Equal(t, "/a", resp.GetPath())
+	assert.Empty(t, resp.GetData())
+	assert.Equal(t, "1.0", resp.GetSpecVersion())
+	assert.Equal(t, "mypubsub", resp.GetPubsubName())
+	assert.Equal(t, "com.dapr.event.sent", resp.GetType())
+	assert.Equal(t, "foo/bar", resp.GetDataContentType())
+
+	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+		PubsubName: "mypubsub", Topic: "a", Data: []byte("foo"),
+	})
+	require.NoError(t, err)
+	resp = g.sub.Receive(t, ctx)
+	assert.Equal(t, "/a", resp.GetPath())
+	assert.Equal(t, "foo", string(resp.GetData()))
+	assert.Equal(t, "text/plain", resp.GetDataContentType())
 	assert.Equal(t, "1.0", resp.GetSpecVersion())
 	assert.Equal(t, "mypubsub", resp.GetPubsubName())
 	assert.Equal(t, "com.dapr.event.sent", resp.GetType())

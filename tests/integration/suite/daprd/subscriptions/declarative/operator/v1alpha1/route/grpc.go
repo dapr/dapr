@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package route
 
 import (
 	"context"
@@ -47,8 +47,8 @@ type grpc struct {
 }
 
 func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.sub = subscriber.New(t)
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
+	g.sub = subscriber.New(t)
 
 	g.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
@@ -58,21 +58,55 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			Items: []compapi.Component{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mypubsub", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mypub", Namespace: "default"},
 				Spec: compapi.ComponentSpec{
 					Type: "pubsub.in-memory", Version: "v1",
 				},
 			}},
 		}),
 		kubernetes.WithClusterDaprSubscriptionList(t, &subapi.SubscriptionList{
-			Items: []subapi.Subscription{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
-				Spec: subapi.SubscriptionSpec{
-					Pubsubname: "mypubsub",
-					Topic:      "a",
-					Route:      "/a",
+			Items: []subapi.Subscription{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub1", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "a",
+						Route:      "/a/b/c/d",
+					},
 				},
-			}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub2", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "a",
+						Route:      "/a",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub3", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "b",
+						Route:      "/a",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub4", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "b",
+						Route:      "/d/c/b/a",
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub5", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "b",
+						Route:      "/a/b/c/d",
+					},
+				},
+			},
 		}),
 	)
 
@@ -109,17 +143,23 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 
 	meta, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
-	require.Len(t, meta.GetSubscriptions(), 1)
+	assert.Len(t, meta.GetSubscriptions(), 2)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-		PubsubName: "mypubsub", Topic: "a", Data: []byte(`{"status": "completed"}`),
-		Metadata: map[string]string{"foo": "bar"}, DataContentType: "application/json",
+		PubsubName: "mypub",
+		Topic:      "a",
 	})
 	require.NoError(t, err)
 	resp := g.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.GetPath())
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.GetData()))
-	assert.Equal(t, "1.0", resp.GetSpecVersion())
-	assert.Equal(t, "mypubsub", resp.GetPubsubName())
-	assert.Equal(t, "com.dapr.event.sent", resp.GetType())
+	assert.Subset(t, []string{"/a", "/a/b/c/d"}, []string{resp.GetPath()})
+	assert.Empty(t, resp.GetData())
+
+	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+		PubsubName: "mypub",
+		Topic:      "b",
+	})
+	require.NoError(t, err)
+	resp = g.sub.Receive(t, ctx)
+	assert.Subset(t, []string{"/a", "/d/c/b/a"}, []string{resp.GetPath()})
+	assert.Empty(t, resp.GetData())
 }

@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package basic
 
 import (
 	"context"
@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -117,4 +118,52 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "a", resp.Extensions()["topic"])
 	assert.Equal(t, "com.dapr.event.sent", resp.Type())
 	assert.Equal(t, "text/plain", resp.DataContentType())
+
+	h.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:           h.daprd,
+		PubSubName:      "mypubsub",
+		Topic:           "a",
+		Data:            `{"status": "completed"}`,
+		DataContentType: ptr.Of("application/json"),
+	})
+	resp = h.sub.Receive(t, ctx)
+	assert.Equal(t, "/a", resp.Route)
+	assert.JSONEq(t, `{"status": "completed"}`, string(resp.Data()))
+	assert.Equal(t, "1.0", resp.SpecVersion())
+	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
+	assert.Equal(t, "a", resp.Extensions()["topic"])
+	assert.Equal(t, "com.dapr.event.sent", resp.Type())
+	assert.Equal(t, "application/json", resp.DataContentType())
+
+	h.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:           h.daprd,
+		PubSubName:      "mypubsub",
+		Topic:           "a",
+		Data:            `{"status": "completed"}`,
+		DataContentType: ptr.Of("foo/bar"),
+	})
+	resp = h.sub.Receive(t, ctx)
+	assert.Equal(t, "/a", resp.Route)
+	assert.JSONEq(t, `{"status": "completed"}`, string(resp.Data()))
+	assert.Equal(t, "1.0", resp.SpecVersion())
+	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
+	assert.Equal(t, "a", resp.Extensions()["topic"])
+	assert.Equal(t, "com.dapr.event.sent", resp.Type())
+	assert.Equal(t, "foo/bar", resp.DataContentType())
+
+	h.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:      h.daprd,
+		PubSubName: "mypubsub",
+		Topic:      "a",
+		Data:       "foo",
+	})
+	resp = h.sub.Receive(t, ctx)
+	assert.Equal(t, "/a", resp.Route)
+	assert.Equal(t, "foo", string(resp.Data()))
+	assert.Equal(t, "1.0", resp.SpecVersion())
+	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
+	assert.Equal(t, "a", resp.Extensions()["topic"])
+	assert.Equal(t, "com.dapr.event.sent", resp.Type())
+	assert.Equal(t, "text/plain", resp.DataContentType())
+
 }

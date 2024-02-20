@@ -11,11 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package deadletter
 
 import (
 	"context"
+	"errors"
 	"testing"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -28,7 +30,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpc/subscriber"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -43,12 +45,22 @@ type grpc struct {
 	daprd    *daprd.Daprd
 	kubeapi  *kubernetes.Kubernetes
 	operator *operator.Operator
-	sub      *subscriber.Subscriber
+	app      *app.App
+	inCh     chan *rtv1.TopicEventRequest
 }
 
 func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.sub = subscriber.New(t)
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
+	g.inCh = make(chan *rtv1.TopicEventRequest)
+	g.app = app.New(t,
+		app.WithOnTopicEventFn(func(ctx context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
+			if in.GetTopic() == "a" {
+				return nil, errors.New("my error")
+			}
+			g.inCh <- in
+			return new(rtv1.TopicEventResponse), nil
+		}),
+	)
 
 	g.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
@@ -58,21 +70,33 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			Items: []compapi.Component{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mypubsub", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mypub", Namespace: "default"},
 				Spec: compapi.ComponentSpec{
 					Type: "pubsub.in-memory", Version: "v1",
 				},
 			}},
 		}),
 		kubernetes.WithClusterDaprSubscriptionList(t, &subapi.SubscriptionList{
-			Items: []subapi.Subscription{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
-				Spec: subapi.SubscriptionSpec{
-					Pubsubname: "mypubsub",
-					Topic:      "a",
-					Route:      "/a",
+			Items: []subapi.Subscription{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname:      "mypub",
+						Topic:           "a",
+						Route:           "/a",
+						DeadLetterTopic: "mydead",
+					},
 				},
-			}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "anothersub", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname:      "mypub",
+						Topic:           "mydead",
+						Route:           "/b",
+						DeadLetterTopic: "mydead",
+					},
+				},
+			},
 		}),
 	)
 
@@ -86,7 +110,7 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("kubernetes"),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(g.operator.Address()),
-		daprd.WithAppPort(g.sub.Port(t)),
+		daprd.WithAppPort(g.app.Port(t)),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithEnableMTLS(true),
@@ -97,7 +121,7 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, g.sub, g.kubeapi, g.operator, g.daprd),
+		framework.WithProcesses(sentry, g.app, g.kubeapi, g.operator, g.daprd),
 	}
 }
 
@@ -107,19 +131,19 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 
 	client := g.daprd.GRPCClient(t, ctx)
 
-	meta, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-	require.NoError(t, err)
-	require.Len(t, meta.GetSubscriptions(), 1)
-
-	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-		PubsubName: "mypubsub", Topic: "a", Data: []byte(`{"status": "completed"}`),
+	_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+		PubsubName: "mypub", Topic: "a", Data: []byte(`{"status": "completed"}`),
 		Metadata: map[string]string{"foo": "bar"}, DataContentType: "application/json",
 	})
 	require.NoError(t, err)
-	resp := g.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.GetPath())
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.GetData()))
-	assert.Equal(t, "1.0", resp.GetSpecVersion())
-	assert.Equal(t, "mypubsub", resp.GetPubsubName())
-	assert.Equal(t, "com.dapr.event.sent", resp.GetType())
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	t.Cleanup(cancel)
+	select {
+	case <-ctx.Done():
+		assert.Fail(t, "timeout waiting for event")
+	case in := <-g.inCh:
+		assert.Equal(t, "mydead", in.GetTopic())
+		assert.Equal(t, "/b", in.GetPath())
+	}
 }

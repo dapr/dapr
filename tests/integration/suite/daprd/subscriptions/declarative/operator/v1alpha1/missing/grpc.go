@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package missing
 
 import (
 	"context"
@@ -47,8 +47,8 @@ type grpc struct {
 }
 
 func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.sub = subscriber.New(t)
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
+	g.sub = subscriber.New(t)
 
 	g.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
@@ -58,21 +58,31 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			Items: []compapi.Component{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mypubsub", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mypub", Namespace: "default"},
 				Spec: compapi.ComponentSpec{
 					Type: "pubsub.in-memory", Version: "v1",
 				},
 			}},
 		}),
 		kubernetes.WithClusterDaprSubscriptionList(t, &subapi.SubscriptionList{
-			Items: []subapi.Subscription{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
-				Spec: subapi.SubscriptionSpec{
-					Pubsubname: "mypubsub",
-					Topic:      "a",
-					Route:      "/a",
+			Items: []subapi.Subscription{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub1", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "anotherpub",
+						Topic:      "a",
+						Route:      "/a",
+					},
 				},
-			}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub2", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "c",
+						Route:      "/c",
+					},
+				},
+			},
 		}),
 	)
 
@@ -109,17 +119,16 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 
 	meta, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
-	require.Len(t, meta.GetSubscriptions(), 1)
+	assert.Len(t, meta.GetRegisteredComponents(), 1)
+	assert.Len(t, meta.GetSubscriptions(), 2)
 
-	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-		PubsubName: "mypubsub", Topic: "a", Data: []byte(`{"status": "completed"}`),
-		Metadata: map[string]string{"foo": "bar"}, DataContentType: "application/json",
+	g.sub.ExpectPublishError(t, ctx, g.daprd, &rtv1.PublishEventRequest{
+		PubsubName: "anotherpub", Topic: "a", Data: []byte(`{"status": "completed"}`),
 	})
-	require.NoError(t, err)
-	resp := g.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.GetPath())
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.GetData()))
-	assert.Equal(t, "1.0", resp.GetSpecVersion())
-	assert.Equal(t, "mypubsub", resp.GetPubsubName())
-	assert.Equal(t, "com.dapr.event.sent", resp.GetType())
+	g.sub.ExpectPublishNoReceive(t, ctx, g.daprd, &rtv1.PublishEventRequest{
+		PubsubName: "mypub", Topic: "b", Data: []byte(`{"status": "completed"}`),
+	})
+	g.sub.ExpectPublishReceive(t, ctx, g.daprd, &rtv1.PublishEventRequest{
+		PubsubName: "mypub", Topic: "c", Data: []byte(`{"status": "completed"}`),
+	})
 }

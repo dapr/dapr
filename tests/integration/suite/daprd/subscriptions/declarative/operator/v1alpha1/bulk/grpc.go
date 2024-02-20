@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package bulk
 
 import (
 	"context"
@@ -58,21 +58,36 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			Items: []compapi.Component{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mypubsub", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mypub", Namespace: "default"},
 				Spec: compapi.ComponentSpec{
 					Type: "pubsub.in-memory", Version: "v1",
 				},
 			}},
 		}),
 		kubernetes.WithClusterDaprSubscriptionList(t, &subapi.SubscriptionList{
-			Items: []subapi.Subscription{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
-				Spec: subapi.SubscriptionSpec{
-					Pubsubname: "mypubsub",
-					Topic:      "a",
-					Route:      "/a",
+			Items: []subapi.Subscription{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "a",
+						Route:      "/a",
+						BulkSubscribe: subapi.BulkSubscribe{
+							Enabled:            true,
+							MaxMessagesCount:   100,
+							MaxAwaitDurationMs: 40,
+						},
+					},
 				},
-			}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "nobulk", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "b",
+						Route:      "/b",
+					},
+				},
+			},
 		}),
 	)
 
@@ -107,19 +122,36 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 
 	client := g.daprd.GRPCClient(t, ctx)
 
-	meta, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-	require.NoError(t, err)
-	require.Len(t, meta.GetSubscriptions(), 1)
-
-	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-		PubsubName: "mypubsub", Topic: "a", Data: []byte(`{"status": "completed"}`),
-		Metadata: map[string]string{"foo": "bar"}, DataContentType: "application/json",
+	// TODO: @joshvanl: add support for bulk publish to in-memory pubsub.
+	resp, err := client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
+		PubsubName: "mypub",
+		Topic:      "a",
+		Entries: []*rtv1.BulkPublishRequestEntry{
+			{EntryId: "1", Event: []byte(`{"id": 1}`), ContentType: "application/json"},
+			{EntryId: "2", Event: []byte(`{"id": 2}`), ContentType: "application/json"},
+			{EntryId: "3", Event: []byte(`{"id": 3}`), ContentType: "application/json"},
+			{EntryId: "4", Event: []byte(`{"id": 4}`), ContentType: "application/json"},
+		},
 	})
 	require.NoError(t, err)
-	resp := g.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.GetPath())
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.GetData()))
-	assert.Equal(t, "1.0", resp.GetSpecVersion())
-	assert.Equal(t, "mypubsub", resp.GetPubsubName())
-	assert.Equal(t, "com.dapr.event.sent", resp.GetType())
+	assert.Empty(t, len(resp.GetFailedEntries()))
+	g.sub.ReceiveBulk(t, ctx)
+	g.sub.ReceiveBulk(t, ctx)
+	g.sub.ReceiveBulk(t, ctx)
+	g.sub.ReceiveBulk(t, ctx)
+	g.sub.AssertBulkEventChanLen(t, 0)
+
+	resp, err = client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
+		PubsubName: "mypub",
+		Topic:      "b",
+		Entries: []*rtv1.BulkPublishRequestEntry{
+			{EntryId: "1", Event: []byte(`{"id": 1}`), ContentType: "application/json"},
+			{EntryId: "2", Event: []byte(`{"id": 2}`), ContentType: "application/json"},
+			{EntryId: "3", Event: []byte(`{"id": 3}`), ContentType: "application/json"},
+			{EntryId: "4", Event: []byte(`{"id": 4}`), ContentType: "application/json"},
+		},
+	})
+	require.NoError(t, err)
+	assert.Empty(t, len(resp.GetFailedEntries()))
+	g.sub.AssertBulkEventChanLen(t, 0)
 }

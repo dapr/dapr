@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package missing
 
 import (
 	"context"
@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpc/subscriber"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/subscriber"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -36,21 +36,21 @@ import (
 )
 
 func init() {
-	suite.Register(new(grpc))
+	suite.Register(new(http))
 }
 
-type grpc struct {
+type http struct {
 	daprd    *daprd.Daprd
 	kubeapi  *kubernetes.Kubernetes
 	operator *operator.Operator
 	sub      *subscriber.Subscriber
 }
 
-func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.sub = subscriber.New(t)
+func (h *http) Setup(t *testing.T) []framework.Option {
+	h.sub = subscriber.New(t, subscriber.WithRoutes("/a", "/b", "/c"))
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
-	g.kubeapi = kubernetes.New(t,
+	h.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
 			"default",
@@ -58,36 +58,46 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			Items: []compapi.Component{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mypubsub", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mypub", Namespace: "default"},
 				Spec: compapi.ComponentSpec{
 					Type: "pubsub.in-memory", Version: "v1",
 				},
 			}},
 		}),
 		kubernetes.WithClusterDaprSubscriptionList(t, &subapi.SubscriptionList{
-			Items: []subapi.Subscription{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
-				Spec: subapi.SubscriptionSpec{
-					Pubsubname: "mypubsub",
-					Topic:      "a",
-					Route:      "/a",
+			Items: []subapi.Subscription{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub1", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "anotherpub",
+						Topic:      "a",
+						Route:      "/a",
+					},
 				},
-			}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub2", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "c",
+						Route:      "/c",
+					},
+				},
+			},
 		}),
 	)
 
-	g.operator = operator.New(t,
+	h.operator = operator.New(t,
 		operator.WithNamespace("default"),
-		operator.WithKubeconfigPath(g.kubeapi.KubeconfigPath(t)),
+		operator.WithKubeconfigPath(h.kubeapi.KubeconfigPath(t)),
 		operator.WithTrustAnchorsFile(sentry.TrustAnchorsFile(t)),
 	)
 
-	g.daprd = daprd.New(t,
+	h.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithSentryAddress(sentry.Address()),
-		daprd.WithControlPlaneAddress(g.operator.Address()),
-		daprd.WithAppPort(g.sub.Port(t)),
-		daprd.WithAppProtocol("grpc"),
+		daprd.WithControlPlaneAddress(h.operator.Address()),
+		daprd.WithAppPort(h.sub.Port()),
+		daprd.WithAppProtocol("http"),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithEnableMTLS(true),
 		daprd.WithNamespace("default"),
@@ -97,29 +107,36 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, g.sub, g.kubeapi, g.operator, g.daprd),
+		framework.WithProcesses(sentry, h.sub, h.kubeapi, h.operator, h.daprd),
 	}
 }
 
-func (g *grpc) Run(t *testing.T, ctx context.Context) {
-	g.operator.WaitUntilRunning(t, ctx)
-	g.daprd.WaitUntilRunning(t, ctx)
+func (h *http) Run(t *testing.T, ctx context.Context) {
+	h.daprd.WaitUntilRunning(t, ctx)
 
-	client := g.daprd.GRPCClient(t, ctx)
-
-	meta, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	meta, err := h.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
-	require.Len(t, meta.GetSubscriptions(), 1)
+	assert.Len(t, meta.GetRegisteredComponents(), 1)
+	assert.Len(t, meta.GetSubscriptions(), 2)
 
-	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-		PubsubName: "mypubsub", Topic: "a", Data: []byte(`{"status": "completed"}`),
-		Metadata: map[string]string{"foo": "bar"}, DataContentType: "application/json",
+	h.sub.ExpectPublishError(t, ctx, subscriber.PublishRequest{
+		Daprd:      h.daprd,
+		PubSubName: "anotherpub",
+		Topic:      "a",
+		Data:       `{"status": "completed"}`,
 	})
-	require.NoError(t, err)
-	resp := g.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.GetPath())
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.GetData()))
-	assert.Equal(t, "1.0", resp.GetSpecVersion())
-	assert.Equal(t, "mypubsub", resp.GetPubsubName())
-	assert.Equal(t, "com.dapr.event.sent", resp.GetType())
+
+	h.sub.ExpectPublishNoReceive(t, ctx, subscriber.PublishRequest{
+		Daprd:      h.daprd,
+		PubSubName: "mypub",
+		Topic:      "b",
+		Data:       `{"status": "completed"}`,
+	})
+
+	h.sub.ExpectPublishReceive(t, ctx, subscriber.PublishRequest{
+		Daprd:      h.daprd,
+		PubSubName: "mypub",
+		Topic:      "c",
+		Data:       `{"status": "completed"}`,
+	})
 }
