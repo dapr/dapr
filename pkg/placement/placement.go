@@ -77,37 +77,25 @@ type hostMemberChange struct {
 	host    raft.DaprHostMember
 }
 
-type placementTablesUpdate struct {
-	withoutVirtualNodes *placementv1pb.PlacementTables
-	withVirtualNodes    *placementv1pb.PlacementTables
-}
-
-func newPlacementTablesUpdate(hasOldDaprds, hasNewDaprds bool, fsm *raft.FSM) *placementTablesUpdate {
-	// At least one of hasOldDaprds, hasNewDaprds will be true
-	tables := &placementTablesUpdate{}
-	if hasNewDaprds {
-		tables.withoutVirtualNodes = fsm.PlacementState(false)
-	}
-	if hasOldDaprds {
-		tables.withVirtualNodes = fsm.PlacementState(true)
-	}
-
-	return tables
+type tablesUpdateRequest struct {
+	hosts            []placementGRPCStream
+	tables           *placementv1pb.PlacementTables
+	tablesWithVNodes *placementv1pb.PlacementTables // Temporary. Will be removed in 1.15
 }
 
 // GetVersion is used only for logs in membership.go
-func (p *placementTablesUpdate) GetVersion() string {
-	if p.withoutVirtualNodes != nil {
-		return p.withoutVirtualNodes.GetVersion()
+func (r *tablesUpdateRequest) GetVersion() string {
+	if r.tables != nil {
+		return r.tables.GetVersion()
 	}
-	if p.withVirtualNodes != nil {
-		return p.withVirtualNodes.GetVersion()
+	if r.tablesWithVNodes != nil {
+		return r.tablesWithVNodes.GetVersion()
 	}
 
 	return ""
 }
 
-func (p *placementTablesUpdate) SetAPILevel(minAPILevel uint32, maxAPILevel *uint32) {
+func (r *tablesUpdateRequest) SetAPILevel(minAPILevel uint32, maxAPILevel *uint32) {
 	setAPILevel := func(tables *placementv1pb.PlacementTables) {
 		if tables != nil {
 			if tables.GetApiLevel() < minAPILevel {
@@ -119,8 +107,8 @@ func (p *placementTablesUpdate) SetAPILevel(minAPILevel uint32, maxAPILevel *uin
 		}
 	}
 
-	setAPILevel(p.withVirtualNodes)
-	setAPILevel(p.withoutVirtualNodes)
+	setAPILevel(r.tablesWithVNodes)
+	setAPILevel(r.tables)
 }
 
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
@@ -296,11 +284,17 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				registeredMemberID = req.GetName()
 				p.addStreamConn(stream)
 
-				acceptsVNodes := hostAcceptsVNodes(stream)
-				tables := newPlacementTablesUpdate(acceptsVNodes, !acceptsVNodes, p.raftNode.FSM())
+				updateReq := &tablesUpdateRequest{
+					hosts: []placementGRPCStream{stream},
+				}
+				if hostAcceptsVNodes(stream) {
+					updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false)
+				} else {
+					updateReq.tables = p.raftNode.FSM().PlacementState(true)
+				}
 
 				// We need to use a background context here so dissemination isn't tied to the context of this stream
-				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, tables)
+				err = p.performTablesUpdate(context.Background(), updateReq)
 				if err != nil {
 					return err
 				}

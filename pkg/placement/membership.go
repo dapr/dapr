@@ -344,34 +344,35 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 
 	// Check if the cluster has daprd hosts that expect vnodes;
 	// older daprd versions (pre 1.13) do expect them, and newer versions (1.13+) do not.
-	hasOldDaprds := false
-	hasNewDaprds := false
+	req := &tablesUpdateRequest{
+		hosts: streamConnPool,
+	}
 	for _, stream := range streamConnPool {
-		if !hostAcceptsVNodes(stream) {
-			hasNewDaprds = true
-		} else {
-			hasOldDaprds = true
+		hostAcceptsVNodes := hostAcceptsVNodes(stream)
+		if hostAcceptsVNodes && req.tablesWithVNodes == nil {
+			req.tablesWithVNodes = p.raftNode.FSM().PlacementState(true)
 		}
-		if hasOldDaprds && hasNewDaprds {
+		if !hostAcceptsVNodes && req.tables == nil {
+			req.tables = p.raftNode.FSM().PlacementState(false)
+		}
+		if req.tablesWithVNodes != nil && req.tables != nil {
 			break
 		}
 	}
-
-	// At least one of hasOldDaprds and hasNewDaprds will be true,
-	// meaning `tables` will have either withoutVirtualNodes or withoutVirtualNodes set
-	tables := newPlacementTablesUpdate(hasOldDaprds, hasNewDaprds, p.raftNode.FSM())
 
 	p.streamConnPoolLock.RUnlock()
 
 	log.Infof(
 		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-		cnt, nStreamConnPool, nTargetConns, tables.GetVersion())
-	if err := p.performTablesUpdate(ctx, streamConnPool, tables); err != nil {
+		cnt, nStreamConnPool, nTargetConns, req.GetVersion())
+
+	if err := p.performTablesUpdate(ctx, req); err != nil {
 		return err
 	}
+
 	log.Infof(
 		"Completed dissemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-		cnt, nStreamConnPool, nTargetConns, tables.GetVersion())
+		cnt, nStreamConnPool, nTargetConns, req.GetVersion())
 	p.memberUpdateCount.Store(0)
 
 	// set faultyHostDetectDuration to the default duration.
@@ -384,29 +385,29 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 // It first locks so no further dapr can be taken it. Once placement table is locked
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
-func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPCStream, newTables *placementTablesUpdate) error {
+func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequest) error {
 	// TODO: error from disseminationOperation needs to be handle properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
 
 	// Enforce maximum API level
-	if newTables != nil {
-		newTables.SetAPILevel(p.minAPILevel, p.maxAPILevel)
+	if req.tablesWithVNodes != nil || req.tables != nil {
+		req.SetAPILevel(p.minAPILevel, p.maxAPILevel)
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
 	// Perform each update on all hosts in sequence
-	err := p.disseminateOperationOnHosts(ctx, hosts, "lock", nil)
+	err := p.disseminateOperationOnHosts(ctx, req, "lock")
 	if err != nil {
 		return fmt.Errorf("dissemination of 'lock' failed: %v", err)
 	}
-	err = p.disseminateOperationOnHosts(ctx, hosts, "update", newTables)
+	err = p.disseminateOperationOnHosts(ctx, req, "update")
 	if err != nil {
 		return fmt.Errorf("dissemination of 'update' failed: %v", err)
 	}
-	err = p.disseminateOperationOnHosts(ctx, hosts, "unlock", nil)
+	err = p.disseminateOperationOnHosts(ctx, req, "unlock")
 	if err != nil {
 		return fmt.Errorf("dissemination of 'unlock' failed: %v", err)
 	}
@@ -415,25 +416,25 @@ func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPC
 	return nil
 }
 
-func (p *Service) disseminateOperationOnHosts(ctx context.Context, hosts []placementGRPCStream, operation string, tables *placementTablesUpdate) error {
+func (p *Service) disseminateOperationOnHosts(ctx context.Context, req *tablesUpdateRequest, operation string) error {
 	errCh := make(chan error)
 
-	for i := 0; i < len(hosts); i++ {
+	for i := 0; i < len(req.hosts); i++ {
 		go func(i int) {
 			var tableToSend *v1pb.PlacementTables
-			if tables != nil {
-				if hostAcceptsVNodes(hosts[i]) {
-					tableToSend = tables.withVirtualNodes
-				} else {
-					tableToSend = tables.withoutVirtualNodes
-				}
+			hostAcceptsVNodes := hostAcceptsVNodes(req.hosts[i])
+			if hostAcceptsVNodes && req.tablesWithVNodes != nil {
+				tableToSend = req.tablesWithVNodes
+			} else if !hostAcceptsVNodes && req.tables != nil {
+				tableToSend = req.tables
 			}
-			errCh <- p.disseminateOperation(ctx, hosts[i], operation, tableToSend)
+
+			errCh <- p.disseminateOperation(ctx, req.hosts[i], operation, tableToSend)
 		}(i)
 	}
 
 	var errs []error
-	for i := 0; i < len(hosts); i++ {
+	for i := 0; i < len(req.hosts); i++ {
 		err := <-errCh
 		if err != nil {
 			errs = append(errs, err)

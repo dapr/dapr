@@ -283,7 +283,8 @@ func TestPerformTableUpdate(t *testing.T) {
 	testServer.streamConnPoolLock.RUnlock()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	require.NoError(t, testServer.performTablesUpdate(ctx, streamConnPool, nil))
+	req := &tablesUpdateRequest{hosts: streamConnPool}
+	require.NoError(t, testServer.performTablesUpdate(ctx, req))
 
 	// assert
 	for i := 0; i < testClients; i++ {
