@@ -941,7 +941,6 @@ func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
 	actors, err := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
-		GlobalConfig:   new(config.Configuration),
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
@@ -977,7 +976,6 @@ func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.Workfl
 	actors, err := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
-		GlobalConfig:   new(config.Configuration),
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),

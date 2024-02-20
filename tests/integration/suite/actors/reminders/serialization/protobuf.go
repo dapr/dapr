@@ -58,7 +58,7 @@ func (p *protobufFormat) Setup(t *testing.T) []framework.Option {
 	}
 
 	// Init placement with minimum API level of 20
-	p.place = placement.New(t, placement.WithMinAPILevel(20))
+	p.place = placement.New(t, placement.WithMaxAPILevel(-1), placement.WithMinAPILevel(20))
 
 	// Create a SQLite database and ensure state tables exist
 	now := time.Now().UTC().Format(time.RFC3339)

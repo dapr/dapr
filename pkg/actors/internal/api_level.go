@@ -22,7 +22,7 @@ package internal
 // - 1.12.x = 10
 // - 1.13.x = 10
 // - 1.14.x = 20
-const ActorAPILevel = 10
+const ActorAPILevel = 20
 
 // Features that can be enabled depending on the API level
 type apiLevelFeature uint32

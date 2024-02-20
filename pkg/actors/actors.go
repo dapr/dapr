@@ -141,7 +141,7 @@ type ActorsOpts struct {
 	AppChannel       channel.AppChannel
 	GRPCConnectionFn GRPCConnectionFn
 	Config           Config
-	GlobalConfig     *config.Configuration
+	TracingSpec      config.TracingSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
 	CompStore        *compstore.ComponentStore
@@ -165,7 +165,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		grpcConnectionFn:   opts.GRPCConnectionFn,
 		actorsConfig:       opts.Config,
 		timers:             timers.NewTimersProvider(clock),
-		tracingSpec:        opts.GlobalConfig.GetTracingSpec(),
+		tracingSpec:        opts.TracingSpec,
 		resiliency:         opts.Resiliency,
 		storeName:          opts.StateStoreName,
 		placement:          opts.MockPlacement,
@@ -181,12 +181,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		closeCh:         make(chan struct{}),
 	}
 
-	initialAPILevel := uint32(internal.ActorAPILevel)
-	if !internal.APILevelFeatureRemindersProtobuf.IsEnabled(initialAPILevel) &&
-		opts.GlobalConfig.IsFeatureEnabled(config.ActorReminderStorageProtobuf) {
-		initialAPILevel = uint32(internal.APILevelFeatureRemindersProtobuf)
-	}
-
 	// Init reminders and placement
 	providerOpts := internal.ActorsProviderOptions{
 		Config:   a.actorsConfig.Config,
@@ -197,10 +191,9 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 			}
 			return a.checker.HealthChannel()
 		},
-		Clock:           a.clock,
-		APILevel:        &a.apiLevel,
-		Resiliency:      a.resiliency,
-		InitialAPILevel: initialAPILevel,
+		Clock:      a.clock,
+		APILevel:   &a.apiLevel,
+		Resiliency: a.resiliency,
 	}
 
 	// Initialize the placement client if we don't have a mocked one already

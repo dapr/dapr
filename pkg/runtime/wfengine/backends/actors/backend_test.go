@@ -220,7 +220,6 @@ func getActorRuntime(t *testing.T) actors.Actors {
 	act, err := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
-		GlobalConfig:   new(config.Configuration),
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),

@@ -79,8 +79,7 @@ type actorPlacement struct {
 	hasPlacementTablesCh chan struct{}
 
 	// apiLevel is the current API level of the cluster
-	apiLevel        uint32
-	initialAPILevel uint32
+	apiLevel uint32
 	// onAPILevelUpdate is invoked when the API level is updated
 	onAPILevelUpdate func(apiLevel uint32)
 
@@ -129,7 +128,6 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		closeCh:           make(chan struct{}),
 		resiliency:        opts.Resiliency,
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
-		initialAPILevel:   opts.InitialAPILevel,
 	}
 }
 
@@ -278,7 +276,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				Pod:      p.config.PodName,
 				// Port is redundant because Name should include port number
 				// Port: 0,
-				ApiLevel: p.initialAPILevel,
+				ApiLevel: internal.ActorAPILevel,
 			}
 
 			err := p.client.send(&host)

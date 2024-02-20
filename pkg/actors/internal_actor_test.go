@@ -97,13 +97,9 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 	compStore := compstore.New()
 	compStore.AddStateStore("actorStore", store)
 	a, err := NewActors(ActorsOpts{
-		CompStore: compStore,
-		Config:    cfg,
-		GlobalConfig: &config.Configuration{
-			Spec: config.ConfigurationSpec{
-				TracingSpec: &spec,
-			},
-		},
+		CompStore:      compStore,
+		Config:         cfg,
+		TracingSpec:    spec,
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
 		Security:       fake.New(),
