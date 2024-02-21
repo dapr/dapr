@@ -18,8 +18,6 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strconv"
 	"testing"
@@ -72,17 +70,6 @@ INSERT INTO state VALUES
 `, now)),
 	)
 
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: reminders-protobuf
-spec:
-  features:
-  - name: ActorReminderStorageProtobuf
-    enabled: true`), 0o600))
-
 	// Init daprd and the HTTP server
 	p.handler = &httpServer{}
 	p.srv = prochttp.New(t, prochttp.WithHandler(p.handler.NewHandler()))
@@ -90,7 +77,6 @@ spec:
 		daprd.WithResourceFiles(p.db.GetComponent(t)),
 		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(p.place.Port())),
 		daprd.WithAppPort(p.srv.Port()),
-		daprd.WithConfigs(configFile),
 	)
 
 	return []framework.Option{

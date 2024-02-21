@@ -20,8 +20,7 @@ package internal
 // API levels per Dapr version:
 // - 1.11.x and older = unset (equivalent to 0)
 // - 1.12.x = 10
-// - 1.13.x = 10
-// - 1.14.x = 20
+// - 1.13.x = 20
 const ActorAPILevel = 20
 
 // Features that can be enabled depending on the API level
