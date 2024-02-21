@@ -43,7 +43,8 @@ type Feature string
 const (
 	// Enables support for setting TTL on Actor state keys.
 	ActorStateTTL Feature = "ActorStateTTL"
-	// Enables support for hot reloading of Daprd Components and HTTPEndpoints.
+
+	// Enables support for hot reloading of Daprd Components.
 	HotReload Feature = "HotReload"
 )
 

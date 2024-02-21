@@ -40,6 +40,7 @@ type withMin struct {
 
 func (n *withMin) Setup(t *testing.T) []framework.Option {
 	n.place = placement.New(t,
+		placement.WithMaxAPILevel(-1),
 		placement.WithMinAPILevel(20),
 		placement.WithMetadataEnabled(true),
 	)
