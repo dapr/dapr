@@ -454,12 +454,11 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 // onPlacementError closes the current placement stream and reestablish the connection again,
 // uses a different placement server depending on the error code
 func (p *actorPlacement) onPlacementError(err error) {
+	log.Debugf("Disconnected from placement: %v", err)
 	s, ok := status.FromError(err)
 	// If the current server is not leader, then it will try to the next server.
 	if ok && s.Code() == codes.FailedPrecondition {
 		p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
-	} else {
-		log.Debugf("Disconnected from placement: %v", err)
 	}
 }
 
