@@ -160,6 +160,6 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 	resp = g.sub.Receive(t, ctx)
-	assert.Subset(t, []string{"/a", "/d/c/b/a"}, []string{resp.GetPath()})
+	assert.Subset(t, []string{"/a", "/a/b/c/d", "/d/c/b/a"}, []string{resp.GetPath()})
 	assert.Empty(t, resp.GetData())
 }

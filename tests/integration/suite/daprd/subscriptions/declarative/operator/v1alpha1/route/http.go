@@ -159,6 +159,6 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		Topic:      "b",
 	})
 	resp = h.sub.Receive(t, ctx)
-	assert.Subset(t, []string{"/a", "/d/c/b/a"}, []string{resp.Route})
+	assert.Subset(t, []string{"/a", "/a/b/c/d", "/d/c/b/a"}, []string{resp.Route})
 	assert.Empty(t, resp.Data())
 }

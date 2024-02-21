@@ -17,6 +17,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -40,15 +41,22 @@ func init() {
 }
 
 type http struct {
-	daprd    *daprd.Daprd
 	kubeapi  *kubernetes.Kubernetes
 	operator *operator.Operator
 	sub      *subscriber.Subscriber
+	daprd1   *daprd.Daprd
+	daprd2   *daprd.Daprd
 }
 
 func (h *http) Setup(t *testing.T) []framework.Option {
-	h.sub = subscriber.New(t, subscriber.WithRoutes("/a", "/b", "/c"))
+	h.sub = subscriber.New(t, subscriber.WithRoutes(
+		"/all", "/allempty", "/only1", "/only2", "/both",
+	))
+
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
+
+	appid1 := uuid.New().String()
+	appid2 := uuid.New().String()
 
 	h.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
@@ -67,20 +75,49 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithClusterDaprSubscriptionList(t, &subapi.SubscriptionList{
 			Items: []subapi.Subscription{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "mysub1", Namespace: "default"},
-					Spec: subapi.SubscriptionSpec{
-						Pubsubname: "anotherpub",
-						Topic:      "a",
-						Route:      "/a",
-					},
-				},
-				{
-					ObjectMeta: metav1.ObjectMeta{Name: "mysub2", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "c",
-						Route:      "/c",
+						Topic:      "all",
+						Route:      "/all",
 					},
+					Scopes: nil,
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub2", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "allempty",
+						Route:      "/allempty",
+					},
+					Scopes: []string{},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub3", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "only1",
+						Route:      "/only1",
+					},
+					Scopes: []string{appid1},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub4", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "only2",
+						Route:      "/only2",
+					},
+					Scopes: []string{appid2},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub5", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "both",
+						Route:      "/both",
+					},
+					Scopes: []string{appid1, appid2},
 				},
 			},
 		}),
@@ -92,7 +129,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		operator.WithTrustAnchorsFile(sentry.TrustAnchorsFile(t)),
 	)
 
-	h.daprd = daprd.New(t,
+	daprdOpts := []daprd.Option{
 		daprd.WithMode("kubernetes"),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(h.operator.Address()),
@@ -104,39 +141,76 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 		)),
-	)
+	}
+	h.daprd1 = daprd.New(t, append(daprdOpts, daprd.WithAppID(appid1))...)
+	h.daprd2 = daprd.New(t, append(daprdOpts, daprd.WithAppID(appid2))...)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, h.sub, h.kubeapi, h.operator, h.daprd),
+		framework.WithProcesses(sentry, h.sub, h.kubeapi, h.operator, h.daprd1, h.daprd2),
 	}
 }
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
-	h.daprd.WaitUntilRunning(t, ctx)
+	h.daprd1.WaitUntilRunning(t, ctx)
+	h.daprd2.WaitUntilRunning(t, ctx)
 
-	meta, err := h.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	client1 := h.daprd1.GRPCClient(t, ctx)
+	client2 := h.daprd2.GRPCClient(t, ctx)
+
+	meta, err := client1.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
-	assert.Len(t, meta.GetRegisteredComponents(), 1)
-	assert.Len(t, meta.GetSubscriptions(), 2)
+	assert.ElementsMatch(t, []*rtv1.PubsubSubscription{
+		{PubsubName: "mypub", Topic: "all", Rules: &rtv1.PubsubSubscriptionRules{
+			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/all"}},
+		}},
+		{PubsubName: "mypub", Topic: "allempty", Rules: &rtv1.PubsubSubscriptionRules{
+			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/allempty"}},
+		}},
+		{PubsubName: "mypub", Topic: "only1", Rules: &rtv1.PubsubSubscriptionRules{
+			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/only1"}},
+		}},
+		{PubsubName: "mypub", Topic: "both", Rules: &rtv1.PubsubSubscriptionRules{
+			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/both"}},
+		}},
+	}, meta.GetSubscriptions())
 
-	h.sub.ExpectPublishError(t, ctx, subscriber.PublishRequest{
-		Daprd:      h.daprd,
-		PubSubName: "anotherpub",
-		Topic:      "a",
-		Data:       `{"status": "completed"}`,
-	})
+	meta, err = client2.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	require.NoError(t, err)
+	assert.ElementsMatch(t, []*rtv1.PubsubSubscription{
+		{PubsubName: "mypub", Topic: "all", Rules: &rtv1.PubsubSubscriptionRules{
+			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/all"}},
+		}},
+		{PubsubName: "mypub", Topic: "allempty", Rules: &rtv1.PubsubSubscriptionRules{
+			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/allempty"}},
+		}},
+		{PubsubName: "mypub", Topic: "only2", Rules: &rtv1.PubsubSubscriptionRules{
+			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/only2"}},
+		}},
+		{PubsubName: "mypub", Topic: "both", Rules: &rtv1.PubsubSubscriptionRules{
+			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/both"}},
+		}},
+	}, meta.GetSubscriptions())
 
-	h.sub.ExpectPublishNoReceive(t, ctx, subscriber.PublishRequest{
-		Daprd:      h.daprd,
-		PubSubName: "mypub",
-		Topic:      "b",
-		Data:       `{"status": "completed"}`,
-	})
+	newReq := func(daprd *daprd.Daprd, topic string) subscriber.PublishRequest {
+		return subscriber.PublishRequest{
+			Daprd:      daprd,
+			PubSubName: "mypub",
+			Topic:      topic,
+			Data:       `{"status": "completed"}`,
+		}
+	}
 
-	h.sub.ExpectPublishReceive(t, ctx, subscriber.PublishRequest{
-		Daprd:      h.daprd,
-		PubSubName: "mypub",
-		Topic:      "c",
-		Data:       `{"status": "completed"}`,
-	})
+	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd1, "all"))
+	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd1, "allempty"))
+	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd1, "only1"))
+	h.sub.ExpectPublishNoReceive(t, ctx, newReq(h.daprd1, "only2"))
+	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd1, "both"))
+
+	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd2, "all"))
+	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd2, "allempty"))
+	h.sub.ExpectPublishNoReceive(t, ctx, newReq(h.daprd2, "only1"))
+	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd2, "only2"))
+	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd2, "both"))
+
+	h.sub.AssertEventChanLen(t, 0)
 }
