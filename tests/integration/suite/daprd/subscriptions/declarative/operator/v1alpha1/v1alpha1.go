@@ -21,4 +21,5 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v1alpha1/missing"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v1alpha1/rawpayload"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v1alpha1/route"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v1alpha1/scopes"
 )
