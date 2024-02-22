@@ -73,7 +73,7 @@ type Options struct {
 	Mode                         string
 	Config                       []string
 	UnixDomainSocket             string
-	ReadBufferSize               int
+	ReadBufferSize               int // In bytes
 	DisableBuiltinK8sSecretStore bool
 	AppHealthCheckPath           string
 	AppChannelAddress            string
