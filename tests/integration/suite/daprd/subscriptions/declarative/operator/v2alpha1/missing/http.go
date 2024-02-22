@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package basic
+package missing
 
 import (
 	"context"
@@ -19,10 +19,12 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -31,7 +33,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -46,7 +47,7 @@ type http struct {
 }
 
 func (h *http) Setup(t *testing.T) []framework.Option {
-	h.sub = subscriber.New(t, subscriber.WithRoutes("/a"))
+	h.sub = subscriber.New(t, subscriber.WithRoutes("/a", "/b", "/c"))
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
 	h.kubeapi = kubernetes.New(t,
@@ -57,21 +58,35 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			Items: []compapi.Component{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mypubsub", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mypub", Namespace: "default"},
 				Spec: compapi.ComponentSpec{
 					Type: "pubsub.in-memory", Version: "v1",
 				},
 			}},
 		}),
-		kubernetes.WithClusterDaprSubscriptionList(t, &subapi.SubscriptionList{
-			Items: []subapi.Subscription{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
-				Spec: subapi.SubscriptionSpec{
-					Pubsubname: "mypubsub",
-					Topic:      "a",
-					Route:      "/a",
+		kubernetes.WithClusterDaprSubscriptionListV2(t, &subapi.SubscriptionList{
+			Items: []subapi.Subscription{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub1", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "anotherpub",
+						Topic:      "a",
+						Routes: subapi.Routes{
+							Default: "/a",
+						},
+					},
 				},
-			}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub2", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "c",
+						Routes: subapi.Routes{
+							Default: "/c",
+						},
+					},
+				},
+			},
 		}),
 	)
 
@@ -101,68 +116,31 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 }
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
-	h.operator.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
-	h.sub.Publish(t, ctx, subscriber.PublishRequest{
+	meta, err := h.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	require.NoError(t, err)
+	assert.Len(t, meta.GetRegisteredComponents(), 1)
+	assert.Len(t, meta.GetSubscriptions(), 2)
+
+	h.sub.ExpectPublishError(t, ctx, subscriber.PublishRequest{
 		Daprd:      h.daprd,
-		PubSubName: "mypubsub",
+		PubSubName: "anotherpub",
 		Topic:      "a",
 		Data:       `{"status": "completed"}`,
 	})
-	resp := h.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.Route)
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.Data()))
-	assert.Equal(t, "1.0", resp.SpecVersion())
-	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
-	assert.Equal(t, "a", resp.Extensions()["topic"])
-	assert.Equal(t, "com.dapr.event.sent", resp.Type())
-	assert.Equal(t, "text/plain", resp.DataContentType())
 
-	h.sub.Publish(t, ctx, subscriber.PublishRequest{
-		Daprd:           h.daprd,
-		PubSubName:      "mypubsub",
-		Topic:           "a",
-		Data:            `{"status": "completed"}`,
-		DataContentType: ptr.Of("application/json"),
-	})
-	resp = h.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.Route)
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.Data()))
-	assert.Equal(t, "1.0", resp.SpecVersion())
-	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
-	assert.Equal(t, "a", resp.Extensions()["topic"])
-	assert.Equal(t, "com.dapr.event.sent", resp.Type())
-	assert.Equal(t, "application/json", resp.DataContentType())
-
-	h.sub.Publish(t, ctx, subscriber.PublishRequest{
-		Daprd:           h.daprd,
-		PubSubName:      "mypubsub",
-		Topic:           "a",
-		Data:            `{"status": "completed"}`,
-		DataContentType: ptr.Of("foo/bar"),
-	})
-	resp = h.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.Route)
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.Data()))
-	assert.Equal(t, "1.0", resp.SpecVersion())
-	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
-	assert.Equal(t, "a", resp.Extensions()["topic"])
-	assert.Equal(t, "com.dapr.event.sent", resp.Type())
-	assert.Equal(t, "foo/bar", resp.DataContentType())
-
-	h.sub.Publish(t, ctx, subscriber.PublishRequest{
+	h.sub.ExpectPublishNoReceive(t, ctx, subscriber.PublishRequest{
 		Daprd:      h.daprd,
-		PubSubName: "mypubsub",
-		Topic:      "a",
-		Data:       "foo",
+		PubSubName: "mypub",
+		Topic:      "b",
+		Data:       `{"status": "completed"}`,
 	})
-	resp = h.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.Route)
-	assert.Equal(t, "foo", string(resp.Data()))
-	assert.Equal(t, "1.0", resp.SpecVersion())
-	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
-	assert.Equal(t, "a", resp.Extensions()["topic"])
-	assert.Equal(t, "com.dapr.event.sent", resp.Type())
-	assert.Equal(t, "text/plain", resp.DataContentType())
+
+	h.sub.ExpectPublishReceive(t, ctx, subscriber.PublishRequest{
+		Daprd:      h.daprd,
+		PubSubName: "mypub",
+		Topic:      "c",
+		Data:       `{"status": "completed"}`,
+	})
 }

@@ -11,18 +11,22 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package basic
+package rawpayload
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"testing"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/dapr/components-contrib/pubsub"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -57,21 +61,28 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			Items: []compapi.Component{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mypubsub", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "mypub", Namespace: "default"},
 				Spec: compapi.ComponentSpec{
 					Type: "pubsub.in-memory", Version: "v1",
 				},
 			}},
 		}),
-		kubernetes.WithClusterDaprSubscriptionList(t, &subapi.SubscriptionList{
-			Items: []subapi.Subscription{{
-				ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
-				Spec: subapi.SubscriptionSpec{
-					Pubsubname: "mypubsub",
-					Topic:      "a",
-					Route:      "/a",
+		kubernetes.WithClusterDaprSubscriptionListV2(t, &subapi.SubscriptionList{
+			Items: []subapi.Subscription{
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "a",
+						Routes: subapi.Routes{
+							Default: "/a",
+						},
+						Metadata: map[string]string{
+							"rawPayload": "true",
+						},
+					},
 				},
-			}},
+			},
 		}),
 	)
 
@@ -101,68 +112,99 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 }
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
-	h.operator.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{
 		Daprd:      h.daprd,
-		PubSubName: "mypubsub",
+		PubSubName: "mypub",
 		Topic:      "a",
 		Data:       `{"status": "completed"}`,
 	})
 	resp := h.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.Data()))
 	assert.Equal(t, "1.0", resp.SpecVersion())
-	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
+	assert.Equal(t, "mypub", resp.Extensions()["pubsubname"])
 	assert.Equal(t, "a", resp.Extensions()["topic"])
 	assert.Equal(t, "com.dapr.event.sent", resp.Type())
-	assert.Equal(t, "text/plain", resp.DataContentType())
+	assert.Equal(t, "application/octet-stream", resp.DataContentType())
+	var ce map[string]any
+	require.NoError(t, json.NewDecoder(bytes.NewReader(resp.Data())).Decode(&ce))
+	exp := pubsub.NewCloudEventsEnvelope("", "", "com.dapr.event.sent", "", "a", "mypub", "text/plain", []byte(`{"status": "completed"}`), "", "")
+	exp["id"] = ce["id"]
+	exp["source"] = ce["source"]
+	exp["time"] = ce["time"]
+	exp["traceid"] = ce["traceid"]
+	exp["traceparent"] = ce["traceparent"]
+	assert.Equal(t, exp, ce)
 
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{
 		Daprd:           h.daprd,
-		PubSubName:      "mypubsub",
+		PubSubName:      "mypub",
 		Topic:           "a",
 		Data:            `{"status": "completed"}`,
 		DataContentType: ptr.Of("application/json"),
 	})
 	resp = h.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.Data()))
 	assert.Equal(t, "1.0", resp.SpecVersion())
-	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
+	assert.Equal(t, "mypub", resp.Extensions()["pubsubname"])
 	assert.Equal(t, "a", resp.Extensions()["topic"])
 	assert.Equal(t, "com.dapr.event.sent", resp.Type())
-	assert.Equal(t, "application/json", resp.DataContentType())
+	assert.Equal(t, "application/octet-stream", resp.DataContentType())
+	require.NoError(t, json.NewDecoder(bytes.NewReader(resp.Data())).Decode(&ce))
+	exp = pubsub.NewCloudEventsEnvelope("", "", "com.dapr.event.sent", "", "a", "mypub", "application/json", []byte(`{"status": "completed"}`), "", "")
+	exp["id"] = ce["id"]
+	exp["source"] = ce["source"]
+	exp["time"] = ce["time"]
+	exp["traceid"] = ce["traceid"]
+	exp["traceparent"] = ce["traceparent"]
+	assert.Equal(t, exp, ce)
 
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{
 		Daprd:           h.daprd,
-		PubSubName:      "mypubsub",
+		PubSubName:      "mypub",
 		Topic:           "a",
 		Data:            `{"status": "completed"}`,
 		DataContentType: ptr.Of("foo/bar"),
 	})
 	resp = h.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)
-	assert.JSONEq(t, `{"status": "completed"}`, string(resp.Data()))
 	assert.Equal(t, "1.0", resp.SpecVersion())
-	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
+	assert.Equal(t, "mypub", resp.Extensions()["pubsubname"])
 	assert.Equal(t, "a", resp.Extensions()["topic"])
 	assert.Equal(t, "com.dapr.event.sent", resp.Type())
-	assert.Equal(t, "foo/bar", resp.DataContentType())
+	assert.Equal(t, "application/octet-stream", resp.DataContentType())
+	require.NoError(t, json.NewDecoder(bytes.NewReader(resp.Data())).Decode(&ce))
+	exp = pubsub.NewCloudEventsEnvelope("", "", "com.dapr.event.sent", "", "a", "mypub", "application/json", nil, "", "")
+	exp["id"] = ce["id"]
+	exp["data"] = `{"status": "completed"}`
+	exp["source"] = ce["source"]
+	exp["time"] = ce["time"]
+	exp["traceid"] = ce["traceid"]
+	exp["traceparent"] = ce["traceparent"]
+	exp["datacontenttype"] = "foo/bar"
+	assert.Equal(t, exp, ce)
 
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{
 		Daprd:      h.daprd,
-		PubSubName: "mypubsub",
+		PubSubName: "mypub",
 		Topic:      "a",
 		Data:       "foo",
 	})
 	resp = h.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)
-	assert.Equal(t, "foo", string(resp.Data()))
 	assert.Equal(t, "1.0", resp.SpecVersion())
-	assert.Equal(t, "mypubsub", resp.Extensions()["pubsubname"])
+	assert.Equal(t, "mypub", resp.Extensions()["pubsubname"])
 	assert.Equal(t, "a", resp.Extensions()["topic"])
 	assert.Equal(t, "com.dapr.event.sent", resp.Type())
-	assert.Equal(t, "text/plain", resp.DataContentType())
+	assert.Equal(t, "application/octet-stream", resp.DataContentType())
+	require.NoError(t, json.NewDecoder(bytes.NewReader(resp.Data())).Decode(&ce))
+	exp = pubsub.NewCloudEventsEnvelope("", "", "com.dapr.event.sent", "", "a", "mypub", "application/json", []byte("foo"), "", "")
+	exp["id"] = ce["id"]
+	exp["source"] = ce["source"]
+	exp["time"] = ce["time"]
+	exp["traceid"] = ce["traceid"]
+	exp["traceparent"] = ce["traceparent"]
+	exp["datacontenttype"] = "text/plain"
+	assert.Equal(t, exp, ce)
 }

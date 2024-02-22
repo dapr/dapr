@@ -22,7 +22,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -63,13 +63,15 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 				},
 			}},
 		}),
-		kubernetes.WithClusterDaprSubscriptionList(t, &subapi.SubscriptionList{
+		kubernetes.WithClusterDaprSubscriptionListV2(t, &subapi.SubscriptionList{
 			Items: []subapi.Subscription{{
 				ObjectMeta: metav1.ObjectMeta{Name: "mysub", Namespace: "default"},
 				Spec: subapi.SubscriptionSpec{
 					Pubsubname: "mypubsub",
 					Topic:      "a",
-					Route:      "/a",
+					Routes: subapi.Routes{
+						Default: "/a",
+					},
 				},
 			}},
 		}),
