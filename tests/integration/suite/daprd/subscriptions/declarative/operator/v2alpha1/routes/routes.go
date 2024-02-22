@@ -11,9 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package operator
+package v2alpha1
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v1alpha1"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1/routes/defaultroute"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1/routes/emptymatch"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1/routes/match"
 )

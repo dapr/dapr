@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package emptymatch
+package match
 
 import (
 	"context"
@@ -28,7 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpc/subscriber"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/subscriber"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -36,21 +36,23 @@ import (
 )
 
 func init() {
-	suite.Register(new(grpc))
+	suite.Register(new(http))
 }
 
-type grpc struct {
+type http struct {
 	daprd    *daprd.Daprd
 	kubeapi  *kubernetes.Kubernetes
 	operator *operator.Operator
 	sub      *subscriber.Subscriber
 }
 
-func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.sub = subscriber.New(t)
+func (h *http) Setup(t *testing.T) []framework.Option {
+	h.sub = subscriber.New(t, subscriber.WithRoutes(
+		"/aaa", "/type", "/foo", "/bar", "/topic", "/123", "/456", "/order7def", "/order7rule",
+	))
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
-	g.kubeapi = kubernetes.New(t,
+	h.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
 			"default",
@@ -67,55 +69,84 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithClusterDaprSubscriptionListV2(t, &subapi.SubscriptionList{
 			Items: []subapi.Subscription{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "justpath", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "type", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "justpath",
+						Topic:      "type",
 						Routes: subapi.Routes{
+							Default: "/aaa",
 							Rules: []subapi.Rule{
-								{Path: "/justpath", Match: ""},
+								{Path: "/type", Match: `event.type == "com.dapr.event.sent"`},
+								{Path: "/foo", Match: ""},
+								{Path: "/bar", Match: `event.type == "com.dapr.event.recv"`},
 							},
 						},
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "defaultandpath", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "order1", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "defaultandpath",
+						Topic:      "order1",
 						Routes: subapi.Routes{
-							Default: "/abc",
+							Default: "/aaa",
 							Rules: []subapi.Rule{
-								{Path: "/123", Match: ""},
+								{Path: "/type", Match: `event.type == "com.dapr.event.sent"`},
+								{Path: "/topic", Match: `event.topic == "order1"`},
 							},
 						},
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "multipaths", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "order2", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "multipaths",
+						Topic:      "order2",
 						Routes: subapi.Routes{
+							Default: "/aaa",
 							Rules: []subapi.Rule{
-								{Path: "/xyz", Match: ""},
-								{Path: "/456", Match: ""},
-								{Path: "/789", Match: ""},
+								{Path: "/topic", Match: `event.topic == "order2"`},
+								{Path: "/type", Match: `event.type == "com.dapr.event.sent"`},
 							},
 						},
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "defaultandpaths", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "order3", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "defaultandpaths",
+						Topic:      "order3",
 						Routes: subapi.Routes{
-							Default: "/def",
+							Default: "/aaa",
 							Rules: []subapi.Rule{
-								{Path: "/zyz", Match: ""},
-								{Path: "/aaa", Match: ""},
-								{Path: "/bbb", Match: ""},
+								{Path: "/123", Match: `event.topic == "order3"`},
+								{Path: "/456", Match: `event.topic == "order3"`},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "order4", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "order4",
+						Routes: subapi.Routes{
+							Rules: []subapi.Rule{
+								{Path: "/123", Match: `event.topic == "order5"`},
+								{Path: "/456", Match: `event.topic == "order6"`},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "order7", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "order7",
+						Routes: subapi.Routes{
+							Default: "/order7def",
+							Rules: []subapi.Rule{
+								{Path: "/order7rule", Match: ""},
 							},
 						},
 					},
@@ -124,18 +155,18 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 
-	g.operator = operator.New(t,
+	h.operator = operator.New(t,
 		operator.WithNamespace("default"),
-		operator.WithKubeconfigPath(g.kubeapi.KubeconfigPath(t)),
+		operator.WithKubeconfigPath(h.kubeapi.KubeconfigPath(t)),
 		operator.WithTrustAnchorsFile(sentry.TrustAnchorsFile(t)),
 	)
 
-	g.daprd = daprd.New(t,
+	h.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithSentryAddress(sentry.Address()),
-		daprd.WithControlPlaneAddress(g.operator.Address()),
-		daprd.WithAppPort(g.sub.Port(t)),
-		daprd.WithAppProtocol("grpc"),
+		daprd.WithControlPlaneAddress(h.operator.Address()),
+		daprd.WithAppPort(h.sub.Port()),
+		daprd.WithAppProtocol("http"),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithEnableMTLS(true),
 		daprd.WithNamespace("default"),
@@ -145,45 +176,58 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, g.sub, g.kubeapi, g.operator, g.daprd),
+		framework.WithProcesses(sentry, h.sub, h.kubeapi, h.operator, h.daprd),
 	}
 }
 
-func (g *grpc) Run(t *testing.T, ctx context.Context) {
-	g.operator.WaitUntilRunning(t, ctx)
-	g.daprd.WaitUntilRunning(t, ctx)
-
-	client := g.daprd.GRPCClient(t, ctx)
+func (h *http) Run(t *testing.T, ctx context.Context) {
+	h.operator.WaitUntilRunning(t, ctx)
+	h.daprd.WaitUntilRunning(t, ctx)
+	client := h.daprd.GRPCClient(t, ctx)
 
 	_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub",
-		Topic:      "justpath",
+		Topic:      "type",
 	})
 	require.NoError(t, err)
-	resp := g.sub.Receive(t, ctx)
-	assert.Equal(t, "/justpath", resp.GetPath())
+	resp := h.sub.Receive(t, ctx)
+	assert.Equal(t, "/type", resp.Route)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub",
-		Topic:      "defaultandpath",
+		Topic:      "order1",
 	})
 	require.NoError(t, err)
-	resp = g.sub.Receive(t, ctx)
-	assert.Equal(t, "/123", resp.GetPath())
+	resp = h.sub.Receive(t, ctx)
+	assert.Equal(t, "/type", resp.Route)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub",
-		Topic:      "multipaths",
+		Topic:      "order2",
 	})
 	require.NoError(t, err)
-	resp = g.sub.Receive(t, ctx)
-	assert.Equal(t, "/xyz", resp.GetPath())
+	resp = h.sub.Receive(t, ctx)
+	assert.Equal(t, "/topic", resp.Route)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub",
-		Topic:      "defaultandpaths",
+		Topic:      "order3",
 	})
 	require.NoError(t, err)
-	resp = g.sub.Receive(t, ctx)
-	assert.Equal(t, "/zyz", resp.GetPath())
+	resp = h.sub.Receive(t, ctx)
+	assert.Equal(t, "/123", resp.Route)
+
+	h.sub.ExpectPublishNoReceive(t, ctx, subscriber.PublishRequest{
+		Daprd:      h.daprd,
+		PubSubName: "mypub",
+		Topic:      "order4",
+	})
+
+	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+		PubsubName: "mypub",
+		Topic:      "order7",
+	})
+	require.NoError(t, err)
+	resp = h.sub.Receive(t, ctx)
+	assert.Equal(t, "/order7rule", resp.Route)
 }

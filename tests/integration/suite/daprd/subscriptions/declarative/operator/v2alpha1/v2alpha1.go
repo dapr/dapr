@@ -14,5 +14,12 @@ limitations under the License.
 package v2alpha1
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1/basic"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1/bulk"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1/deadletter"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1/informer"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1/missing"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1/rawpayload"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1/routes"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative/operator/v2alpha1/scopes"
 )

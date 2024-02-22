@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package defaultroute
+package match
 
 import (
 	"context"
@@ -67,42 +67,85 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithClusterDaprSubscriptionListV2(t, &subapi.SubscriptionList{
 			Items: []subapi.Subscription{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "mysub1", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "type", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "a",
+						Topic:      "type",
 						Routes: subapi.Routes{
-							Default: "/a/b/c/d",
+							Default: "/aaa",
+							Rules: []subapi.Rule{
+								{Path: "/type", Match: `event.type == "com.dapr.event.sent"`},
+								{Path: "/foo", Match: ""},
+								{Path: "/bar", Match: `event.type == "com.dapr.event.recv"`},
+							},
 						},
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "mysub2", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "order1", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "a",
+						Topic:      "order1",
 						Routes: subapi.Routes{
-							Default: "/a",
+							Default: "/aaa",
+							Rules: []subapi.Rule{
+								{Path: "/type", Match: `event.type == "com.dapr.event.sent"`},
+								{Path: "/topic", Match: `event.topic == "order1"`},
+							},
 						},
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "mysub3", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "order2", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "b",
+						Topic:      "order2",
 						Routes: subapi.Routes{
-							Default: "/b",
+							Default: "/aaa",
+							Rules: []subapi.Rule{
+								{Path: "/topic", Match: `event.topic == "order2"`},
+								{Path: "/type", Match: `event.type == "com.dapr.event.sent"`},
+							},
 						},
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "mysub4", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "order3", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "b",
+						Topic:      "order3",
 						Routes: subapi.Routes{
-							Default: "/a/b/c/d",
+							Default: "/aaa",
+							Rules: []subapi.Rule{
+								{Path: "/123", Match: `event.topic == "order3"`},
+								{Path: "/456", Match: `event.topic == "order3"`},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "order4", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "order4",
+						Routes: subapi.Routes{
+							Rules: []subapi.Rule{
+								{Path: "/123", Match: `event.topic == "order5"`},
+								{Path: "/456", Match: `event.topic == "order6"`},
+							},
+						},
+					},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "order7", Namespace: "default"},
+					Spec: subapi.SubscriptionSpec{
+						Pubsubname: "mypub",
+						Topic:      "order7",
+						Routes: subapi.Routes{
+							Default: "/order7def",
+							Rules: []subapi.Rule{
+								{Path: "/order7rule", Match: ""},
+							},
 						},
 					},
 				},
@@ -143,19 +186,46 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 
 	_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub",
-		Topic:      "a",
+		Topic:      "type",
 	})
 	require.NoError(t, err)
 	resp := g.sub.Receive(t, ctx)
-	assert.Subset(t, []string{"/a", "/a/b/c/d"}, []string{resp.GetPath()})
-	assert.Empty(t, resp.GetData())
+	assert.Equal(t, "/type", resp.GetPath())
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub",
-		Topic:      "b",
+		Topic:      "order1",
 	})
 	require.NoError(t, err)
 	resp = g.sub.Receive(t, ctx)
-	assert.Subset(t, []string{"/b", "/a/b/c/d"}, []string{resp.GetPath()})
-	assert.Empty(t, resp.GetData())
+	assert.Equal(t, "/type", resp.GetPath())
+
+	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+		PubsubName: "mypub",
+		Topic:      "order2",
+	})
+	require.NoError(t, err)
+	resp = g.sub.Receive(t, ctx)
+	assert.Equal(t, "/topic", resp.GetPath())
+
+	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+		PubsubName: "mypub",
+		Topic:      "order3",
+	})
+	require.NoError(t, err)
+	resp = g.sub.Receive(t, ctx)
+	assert.Equal(t, "/123", resp.GetPath())
+
+	g.sub.ExpectPublishNoReceive(t, ctx, g.daprd, &rtv1.PublishEventRequest{
+		PubsubName: "mypub",
+		Topic:      "order4",
+	})
+
+	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+		PubsubName: "mypub",
+		Topic:      "order7",
+	})
+	require.NoError(t, err)
+	resp = g.sub.Receive(t, ctx)
+	assert.Equal(t, "/order7rule", resp.GetPath())
 }

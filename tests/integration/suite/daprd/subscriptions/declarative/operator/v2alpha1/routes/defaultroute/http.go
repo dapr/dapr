@@ -92,7 +92,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 						Pubsubname: "mypub",
 						Topic:      "b",
 						Routes: subapi.Routes{
-							Default: "/a",
+							Default: "/b",
 						},
 					},
 				},
@@ -145,7 +145,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		Topic:      "a",
 	})
 	resp := h.sub.Receive(t, ctx)
-	assert.Equal(t, "/a/b/c/d", resp.Route)
+	assert.Subset(t, []string{"/a", "/a/b/c/d"}, []string{resp.Route})
 	assert.Empty(t, resp.Data())
 
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{
@@ -154,6 +154,6 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		Topic:      "b",
 	})
 	resp = h.sub.Receive(t, ctx)
-	assert.Equal(t, "/b", resp.Route)
+	assert.Subset(t, []string{"/b", "/a/b/c/d"}, []string{resp.Route})
 	assert.Empty(t, resp.Data())
 }

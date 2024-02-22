@@ -46,7 +46,8 @@ type http struct {
 
 func (h *http) Setup(t *testing.T) []framework.Option {
 	h.sub = subscriber.New(t, subscriber.WithRoutes(
-		"/a/b/c/d", "/a", "/b", "/d/c/b/a",
+		"/justpath", "/abc", "/123", "/def", "/zyz",
+		"/aaa", "/bbb", "/xyz", "/456", "/789",
 	))
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
@@ -67,42 +68,56 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithClusterDaprSubscriptionListV2(t, &subapi.SubscriptionList{
 			Items: []subapi.Subscription{
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "mysub1", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "justpath", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "a",
+						Topic:      "justpath",
 						Routes: subapi.Routes{
-							Default: "/a/b/c/d",
+							Rules: []subapi.Rule{
+								{Path: "/justpath", Match: ""},
+							},
 						},
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "mysub2", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "defaultandpath", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "a",
+						Topic:      "defaultandpath",
 						Routes: subapi.Routes{
-							Default: "/a",
+							Default: "/abc",
+							Rules: []subapi.Rule{
+								{Path: "/123", Match: ""},
+							},
 						},
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "mysub3", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "multipaths", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "b",
+						Topic:      "multipaths",
 						Routes: subapi.Routes{
-							Default: "/a",
+							Rules: []subapi.Rule{
+								{Path: "/xyz", Match: ""},
+								{Path: "/456", Match: ""},
+								{Path: "/789", Match: ""},
+							},
 						},
 					},
 				},
 				{
-					ObjectMeta: metav1.ObjectMeta{Name: "mysub4", Namespace: "default"},
+					ObjectMeta: metav1.ObjectMeta{Name: "defaultandpaths", Namespace: "default"},
 					Spec: subapi.SubscriptionSpec{
 						Pubsubname: "mypub",
-						Topic:      "b",
+						Topic:      "defaultandpaths",
 						Routes: subapi.Routes{
-							Default: "/a/b/c/d",
+							Default: "/def",
+							Rules: []subapi.Rule{
+								{Path: "/zyz", Match: ""},
+								{Path: "/aaa", Match: ""},
+								{Path: "/bbb", Match: ""},
+							},
 						},
 					},
 				},
@@ -142,18 +157,32 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{
 		Daprd:      h.daprd,
 		PubSubName: "mypub",
-		Topic:      "a",
+		Topic:      "justpath",
 	})
 	resp := h.sub.Receive(t, ctx)
-	assert.Equal(t, "/a/b/c/d", resp.Route)
-	assert.Empty(t, resp.Data())
+	assert.Equal(t, "/justpath", resp.Route)
 
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{
 		Daprd:      h.daprd,
 		PubSubName: "mypub",
-		Topic:      "b",
+		Topic:      "defaultandpath",
 	})
 	resp = h.sub.Receive(t, ctx)
-	assert.Equal(t, "/b", resp.Route)
-	assert.Empty(t, resp.Data())
+	assert.Equal(t, "/123", resp.Route)
+
+	h.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:      h.daprd,
+		PubSubName: "mypub",
+		Topic:      "multipaths",
+	})
+	resp = h.sub.Receive(t, ctx)
+	assert.Equal(t, "/xyz", resp.Route)
+
+	h.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:      h.daprd,
+		PubSubName: "mypub",
+		Topic:      "defaultandpaths",
+	})
+	resp = h.sub.Receive(t, ctx)
+	assert.Equal(t, "/zyz", resp.Route)
 }
