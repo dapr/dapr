@@ -54,7 +54,7 @@ type AppChannelConfig struct {
 	TracingSpec        config.TracingSpec
 	EnableTLS          bool
 	MaxRequestBodySize int // In bytes
-	ReadBufferSize     int
+	ReadBufferSize     int // In bytes
 	BaseAddress        string
 }
 

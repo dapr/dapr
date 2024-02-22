@@ -103,7 +103,7 @@ type Config struct {
 	Mode                         string
 	Config                       []string
 	UnixDomainSocket             string
-	ReadBufferSize               int
+	ReadBufferSize               int // In bytes
 	DisableBuiltinK8sSecretStore bool
 	AppHealthCheckPath           string
 	AppChannelAddress            string
@@ -130,9 +130,9 @@ type internalConfig struct {
 	kubernetes                   configmodes.KubernetesConfig
 	mTLSEnabled                  bool
 	sentryServiceAddress         string
-	maxRequestBodySize           int
 	unixDomainSocket             string
-	readBufferSize               int
+	maxRequestBodySize           int // In bytes
+	readBufferSize               int // In bytes
 	gracefulShutdownDuration     time.Duration
 	blockShutdownDuration        *time.Duration
 	enableAPILogging             *bool
