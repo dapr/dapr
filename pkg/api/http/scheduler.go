@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -79,6 +80,11 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 		a.universal.ScheduleJob,
 		UniversalHTTPHandlerOpts[*runtimev1pb.ScheduleJobRequest, *emptypb.Empty]{
 			InModifier: func(r *http.Request, in *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobRequest, error) {
+				// Users should set the name in the url, and not in the url and body
+				if (chi.URLParam(r, nameParam) == "") || (chi.URLParam(r, nameParam) != "" && in.Job.GetName() != "") {
+					return nil, apierrors.SchedulerURLName(map[string]string{"app_id": a.universal.AppID()})
+				}
+
 				job := &runtimev1pb.Job{
 					Name:     chi.URLParam(r, nameParam),
 					Schedule: in.GetJob().GetSchedule(),

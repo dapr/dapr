@@ -93,7 +93,7 @@ type Config struct {
 	DaprBlockShutdownDuration    *time.Duration
 	ActorsService                string
 	RemindersService             string
-	SchedulerServiceHostAddr     string
+	SchedulerHostAddr            string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
 	AppHealthProbeTimeout        int
@@ -382,8 +382,8 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		intc.gracefulShutdownDuration = time.Duration(c.DaprGracefulShutdownSeconds) * time.Second
 	}
 
-	if c.SchedulerServiceHostAddr != "" {
-		intc.schedulerAddresses = parseSchedulerAddr(c.SchedulerServiceHostAddr)
+	if c.SchedulerHostAddr != "" {
+		intc.schedulerAddresses = parseSchedulerAddr(c.SchedulerHostAddr)
 	}
 
 	if intc.appConnectionConfig.MaxConcurrency == -1 {

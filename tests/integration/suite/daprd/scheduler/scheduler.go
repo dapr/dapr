@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2023 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,6 +14,6 @@ limitations under the License.
 package scheduler
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/authz"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler/grpc"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler/http"
 )

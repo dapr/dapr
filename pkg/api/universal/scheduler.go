@@ -19,15 +19,34 @@ import (
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
 func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
-	// validate job details, date, schedule, etc??
 	var err error
 
-	metadata := map[string]string{"appId": a.AppID()}
+	metadata := map[string]string{"app_id": a.AppID()}
+
+	if inReq.GetJob() == nil {
+		return &emptypb.Empty{}, apierrors.Empty("job", metadata, apierrors.CodePrefixScheduler+apierrors.PostFixEmpty)
+	}
+
+	if inReq.GetJob().GetName() == "" {
+		return &emptypb.Empty{}, apierrors.Empty("job name", metadata, apierrors.CodePrefixScheduler+apierrors.InFixJob+apierrors.InFixName+apierrors.PostFixEmpty)
+	}
+
+	if inReq.GetJob().GetSchedule() == "" {
+		return &emptypb.Empty{}, apierrors.Empty("job schedule", metadata, apierrors.CodePrefixScheduler+apierrors.InFixSchedule+apierrors.PostFixEmpty)
+	}
+
+	if inReq.GetJob().GetRepeats() < 0 {
+		return &emptypb.Empty{}, apierrors.IncorrectNegative("job repeats", metadata, apierrors.CodePrefixScheduler+apierrors.InFixNegative+apierrors.PostFixRepeats)
+	}
+
+	// TODO: add validation on dueTime and ttl
+
 	jobName := a.AppID() + "||" + inReq.GetJob().GetName()
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
@@ -132,7 +151,7 @@ func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsReq
 		response.Jobs = internalListResp.GetJobs()
 	}
 
-	for _, job := range response.Jobs {
+	for _, job := range response.GetJobs() {
 		jobName := job.GetName()
 		// override job name, so it's the original user's job name and not the app_id prefix
 		job.Name = strings.TrimPrefix(jobName, a.AppID()+"||")
