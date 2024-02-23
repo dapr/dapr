@@ -17,16 +17,20 @@ import (
 	"bytes"
 	"io"
 	"net/http"
+	nethttp "net/http"
 	"strings"
 
 	contribCrypto "github.com/dapr/components-contrib/crypto"
+	contribMetadata "github.com/dapr/components-contrib/metadata"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
+	kiterrors "github.com/dapr/kit/errors"
 	"github.com/dapr/kit/ptr"
 	encv1 "github.com/dapr/kit/schemes/enc/v1"
 	"github.com/dapr/kit/utils"
 	"github.com/valyala/fasthttp"
+	"google.golang.org/grpc/codes"
 )
 
 const (
@@ -195,8 +199,9 @@ func (a *api) onCryptoDecrypt(reqCtx *fasthttp.RequestCtx) {
 }
 
 func (a *api) cryptoGetComponent(componentName string) (contribCrypto.SubtleCrypto, error) {
+	cryptoType := string(contribMetadata.CryptoType)
 	if a.universal.CompStore().CryptoProvidersLen() == 0 {
-		err := apierrors.CryptoNotConfigured(componentName)
+		err := apierrors.NotConfigured(componentName, cryptoType, map[string]string{"appID": a.universal.AppID()}, codes.FailedPrecondition, nethttp.StatusInternalServerError, "ERR_CRYPTO_NOT_CONFIGURED", kiterrors.CodePrefixCryptography+kiterrors.CodeNotConfigured)
 		log.Debug(err)
 		return nil, err
 	}
@@ -209,7 +214,7 @@ func (a *api) cryptoGetComponent(componentName string) (contribCrypto.SubtleCryp
 
 	component, ok := a.universal.CompStore().GetCryptoProvider(componentName)
 	if !ok {
-		err := apierrors.CryptoNotFound(componentName)
+		err := apierrors.NotFound(componentName, cryptoType, map[string]string{"appID": a.universal.AppID()}, codes.InvalidArgument, nethttp.StatusBadRequest, "ERR_CRYPTO_NOT_FOUND", kiterrors.CodePrefixCryptography+kiterrors.CodeNotFound)
 		log.Debug(err)
 		return nil, err
 	}
