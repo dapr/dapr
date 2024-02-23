@@ -19,14 +19,14 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/valyala/fasthttp"
-
 	contribCrypto "github.com/dapr/components-contrib/crypto"
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/kit/ptr"
 	encv1 "github.com/dapr/kit/schemes/enc/v1"
 	"github.com/dapr/kit/utils"
+	"github.com/valyala/fasthttp"
 )
 
 const (
@@ -130,7 +130,7 @@ func (a *api) onCryptoEncrypt(reqCtx *fasthttp.RequestCtx) {
 	// Errors returned here, synchronously, are initialization errors, for example due to failed wrapping
 	enc, err := encv1.Encrypt(bytes.NewReader(body), encOpts)
 	if err != nil {
-		err = messages.ErrCryptoOperation.WithFormat(err)
+		err = apierrors.CryptoProviderEncryptOperation(componentName, err)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
@@ -178,7 +178,7 @@ func (a *api) onCryptoDecrypt(reqCtx *fasthttp.RequestCtx) {
 	// Errors returned here, synchronously, are initialization errors, for example due to failed unwrapping
 	dec, err := encv1.Decrypt(bytes.NewReader(body), decOpts)
 	if err != nil {
-		err = messages.ErrCryptoOperation.WithFormat(err)
+		err = apierrors.CryptoProviderDecryptOperation(componentName, err)
 		log.Debug(err)
 		universalFastHTTPErrorResponder(reqCtx, err)
 		return
@@ -196,20 +196,20 @@ func (a *api) onCryptoDecrypt(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) cryptoGetComponent(componentName string) (contribCrypto.SubtleCrypto, error) {
 	if a.universal.CompStore().CryptoProvidersLen() == 0 {
-		err := messages.ErrCryptoProvidersNotConfigured
+		err := apierrors.CryptoNotConfigured(componentName)
 		log.Debug(err)
 		return nil, err
 	}
 
 	if componentName == "" {
-		err := messages.ErrBadRequest.WithFormat("missing component name")
+		err := apierrors.CryptoNameEmpty(componentName)
 		log.Debug(err)
 		return nil, err
 	}
 
 	component, ok := a.universal.CompStore().GetCryptoProvider(componentName)
 	if !ok {
-		err := messages.ErrCryptoProviderNotFound.WithFormat(componentName)
+		err := apierrors.CryptoNotFound(componentName)
 		log.Debug(err)
 		return nil, err
 	}
