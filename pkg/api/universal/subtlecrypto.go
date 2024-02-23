@@ -19,10 +19,15 @@ package universal
 import (
 	"context"
 
+	nethttp "net/http"
+
 	contribCrypto "github.com/dapr/components-contrib/crypto"
+	contribMetadata "github.com/dapr/components-contrib/metadata"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	kiterrors "github.com/dapr/kit/errors"
+	"google.golang.org/grpc/codes"
 )
 
 // SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
@@ -62,8 +67,9 @@ func (a *Universal) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.Subt
 
 // CryptoValidateRequest is an internal method that checks if the request is for a valid crypto component.
 func (a *Universal) CryptoValidateRequest(componentName string) (contribCrypto.SubtleCrypto, error) {
+	cryptoType := string(contribMetadata.CryptoType)
 	if a.compStore.CryptoProvidersLen() == 0 {
-		err := apierrors.CryptoNotConfigured(componentName)
+		err := apierrors.NotConfigured(componentName, cryptoType, nil, codes.FailedPrecondition, nethttp.StatusInternalServerError, "ERR_CRYPTO_NOT_CONFIGURED", kiterrors.CodePrefixCryptography+kiterrors.CodeNotConfigured)
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -76,7 +82,7 @@ func (a *Universal) CryptoValidateRequest(componentName string) (contribCrypto.S
 
 	component, ok := a.compStore.GetCryptoProvider(componentName)
 	if !ok {
-		err := apierrors.CryptoNotFound(componentName)
+		err := apierrors.NotFound(componentName, cryptoType, nil, codes.InvalidArgument, nethttp.StatusBadRequest, "ERR_CRYPTO_NOT_FOUND", kiterrors.CodePrefixCryptography+kiterrors.CodeNotFound)
 		a.logger.Debug(err)
 		return nil, err
 	}

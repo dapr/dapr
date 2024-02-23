@@ -14,7 +14,6 @@ limitations under the License.
 package errors
 
 import (
-	"fmt"
 	"net/http"
 
 	grpcCodes "google.golang.org/grpc/codes"
@@ -23,59 +22,36 @@ import (
 )
 
 const (
-	ErrCryptoProviderNotConfigured = "NOT_CONFIGURED"
-	ErrCryptoProviderNotFound      = "NOT_FOUND"
-	ErrCryptoNameEmpty             = "NAME_EMPTY"
-	ErrCryptoGetKey                = "GET_KEY"
-	ErrCryptoEncryptOperation      = "ENCRYPT"
-	ErrCryptoDecryptOperation      = "DECRYPT"
-	ErrCryptoKeyOperation          = "KEY"
-	ErrCryptoVerifySignature       = "VERIFY_SIGNATURE"
+	// Crypto Errors
+	ErrCryptoNameEmpty        = "NAME_EMPTY"
+	ErrCryptoGetKey           = "GET_KEY"
+	ErrCryptoEncryptOperation = "ENCRYPT"
+	ErrCryptoDecryptOperation = "DECRYPT"
+	ErrCryptoKeyOperation     = "KEY"
+	ErrCryptoVerifySignature  = "VERIFY_SIGNATURE"
+
+	// Crypto Error Messages
+	MessageNameEmpty    = "crypto provider name empty"
+	MessageEncryptError = "failed to perform encrypt operation: "
+	MessageDecryptError = "failed to perform decrypt operation: "
 )
 
 const ResourceType = "Cryptography"
 
-func CryptoNotConfigured(name string) error {
-	message := "crypto providers not configured"
-	return kiterrors.NewBuilder(
-		grpcCodes.Internal,
-		http.StatusInternalServerError,
-		message,
-		"ERR_CRYPTO_PROVIDERS_NOT_CONFIGURED",
-	).
-		WithErrorInfo(kiterrors.CodePrefixCryptography+ErrCryptoProviderNotConfigured, nil).
-		WithResourceInfo(ResourceType, name, "", message).
-		Build()
-}
-
-func CryptoNotFound(name string) error {
-	message := "crypto provider not found"
-	return kiterrors.NewBuilder(
-		grpcCodes.InvalidArgument,
-		http.StatusBadRequest,
-		message,
-		"ERR_CRYPTO_PROVIDER_NOT_FOUND",
-	).
-		WithErrorInfo(kiterrors.CodePrefixCryptography+ErrCryptoProviderNotFound, nil).
-		WithResourceInfo(ResourceType, name, "", message).
-		Build()
-}
-
 func CryptoNameEmpty(name string) error {
-	message := "crypto provider name empty"
 	return kiterrors.NewBuilder(
 		grpcCodes.Internal,
 		http.StatusInternalServerError,
-		message,
+		MessageNameEmpty,
 		"ERR_CRYPTO_MISSING_COMPONENT_NAME",
 	).
 		WithErrorInfo(kiterrors.CodePrefixCryptography+ErrCryptoNameEmpty, nil).
-		WithResourceInfo(ResourceType, name, "", message).
+		WithResourceInfo(ResourceType, name, "", MessageNameEmpty).
 		Build()
 }
 
-func CryptoProviderGetKey(name string, err string) error {
-	message := err
+func CryptoProviderGetKey(name string, err error) error {
+	message := err.Error()
 	return kiterrors.NewBuilder(
 		grpcCodes.Internal,
 		http.StatusInternalServerError,
@@ -88,7 +64,7 @@ func CryptoProviderGetKey(name string, err string) error {
 }
 
 func CryptoProviderEncryptOperation(name string, err error) error {
-	message := fmt.Sprintf("failed to perform encrypt operation: %s", err.Error())
+	message := MessageEncryptError + err.Error()
 	return kiterrors.NewBuilder(
 		grpcCodes.Internal,
 		http.StatusInternalServerError,
@@ -101,7 +77,7 @@ func CryptoProviderEncryptOperation(name string, err error) error {
 }
 
 func CryptoProviderDecryptOperation(name string, err error) error {
-	message := fmt.Sprintf("failed to perform decrypt operation: %s", err.Error())
+	message := MessageDecryptError + err.Error()
 	return kiterrors.NewBuilder(
 		grpcCodes.Internal,
 		http.StatusInternalServerError,
@@ -113,8 +89,8 @@ func CryptoProviderDecryptOperation(name string, err error) error {
 		Build()
 }
 
-func CryptoProviderKeyOperation(name string, err string) error {
-	message := err
+func CryptoProviderKeyOperation(name string, err error) error {
+	message := err.Error()
 	return kiterrors.NewBuilder(
 		grpcCodes.Internal,
 		http.StatusInternalServerError,
@@ -126,8 +102,8 @@ func CryptoProviderKeyOperation(name string, err string) error {
 		Build()
 }
 
-func CryptoProviderVerifySignatureOperation(name string, err string) error {
-	message := err
+func CryptoProviderVerifySignatureOperation(name string, err error) error {
+	message := err.Error()
 	return kiterrors.NewBuilder(
 		grpcCodes.Internal,
 		http.StatusInternalServerError,

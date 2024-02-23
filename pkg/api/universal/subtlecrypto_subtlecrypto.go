@@ -24,9 +24,11 @@ import (
 	"encoding/json"
 	"encoding/pem"
 	"fmt"
+	nethttp "net/http"
 	"time"
 
 	contribCrypto "github.com/dapr/components-contrib/crypto"
+	contribMetadata "github.com/dapr/components-contrib/metadata"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -34,7 +36,9 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	kitCrypto "github.com/dapr/kit/crypto"
+	kiterrors "github.com/dapr/kit/errors"
 	"github.com/lestrrat-go/jwx/v2/jwk"
+	"google.golang.org/grpc/codes"
 )
 
 // TODO: Remove this when the build tag is removed
@@ -159,6 +163,7 @@ func (a *Universal) SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.Sub
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
+		err = fmt.Errorf("failed to encrypt")
 		err = apierrors.CryptoProviderEncryptOperation(in.ComponentName, err)
 		return &runtimev1pb.SubtleEncryptResponse{}, err
 	}
@@ -191,6 +196,7 @@ func (a *Universal) SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.Sub
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
+		err = fmt.Errorf("failed to decrypt")
 		err = apierrors.CryptoProviderDecryptOperation(in.ComponentName, err)
 		return &runtimev1pb.SubtleDecryptResponse{}, err
 	}
@@ -233,7 +239,7 @@ func (a *Universal) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.Sub
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = fmt.Errorf("failed to wrap key: %w", err)
+		err = fmt.Errorf("failed to wrap key")
 		err = apierrors.CryptoProviderKeyOperation(in.ComponentName, err)
 		return &runtimev1pb.SubtleWrapKeyResponse{}, err
 	}
@@ -266,7 +272,7 @@ func (a *Universal) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1pb.S
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = fmt.Errorf("failed to unwrap key: %w", err)
+		err = fmt.Errorf("failed to unwrap key")
 		err = apierrors.CryptoProviderKeyOperation(in.ComponentName, err)
 		return &runtimev1pb.SubtleUnwrapKeyResponse{}, err
 	}
@@ -308,7 +314,8 @@ func (a *Universal) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.Subtle
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = messages.ErrCryptoOperation.WithFormat("failed to sign")
+		err = fmt.Errorf("failed to sign")
+		err = apierrors.CryptoProviderKeyOperation(in.ComponentName, err)
 		return &runtimev1pb.SubtleSignResponse{}, err
 	}
 
@@ -339,7 +346,7 @@ func (a *Universal) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.Subt
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = fmt.Errorf("failed to verify signature: %w", err)
+		err = fmt.Errorf("failed to verify signature: ")
 		err = apierrors.CryptoProviderVerifySignatureOperation(in.ComponentName, err)
 		return &runtimev1pb.SubtleVerifyResponse{}, err
 	}
@@ -351,8 +358,9 @@ func (a *Universal) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.Subt
 
 // CryptoValidateRequest is an internal method that checks if the request is for a valid crypto component.
 func (a *Universal) CryptoValidateRequest(componentName string) (contribCrypto.SubtleCrypto, error) {
+	cryptoType := string(contribMetadata.CryptoType)
 	if a.compStore.CryptoProvidersLen() == 0 {
-		err := apierrors.CryptoNotConfigured(componentName)
+		err := apierrors.NotConfigured(componentName, cryptoType, map[string]string{"appID": a.universal.AppID()}, codes.FailedPrecondition, nethttp.StatusInternalServerError, "ERR_CRYPTO_NOT_CONFIGURED", kiterrors.CodePrefixCryptography+kiterrors.CodeNotConfigured)
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -365,7 +373,7 @@ func (a *Universal) CryptoValidateRequest(componentName string) (contribCrypto.S
 
 	component, ok := a.compStore.GetCryptoProvider(componentName)
 	if !ok {
-		err := apierrors.CryptoNotFound(componentName)
+		err := apierrors.NotFound(componentName, cryptoType, map[string]string{"appID": a.universal.AppID()}, codes.InvalidArgument, nethttp.StatusBadRequest, "ERR_CRYPTO_NOT_FOUND", kiterrors.CodePrefixCryptography+kiterrors.CodeNotFound)
 		a.logger.Debug(err)
 		return nil, err
 	}
