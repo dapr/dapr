@@ -133,7 +133,7 @@ func Run() {
 
 			rt, rerr := runtime.FromConfig(ctx, &runtime.Config{
 				AppID:                        opts.AppID,
-				SchedulerServiceHostAddr:     opts.SchedulerServiceHostAddr,
+				SchedulerHostAddr:     		  opts.SchedulerServiceHostAddr,
 				ActorsService:                opts.ActorsService,
 				RemindersService:             opts.RemindersService,
 				AllowedOrigins:               opts.AllowedOrigins,

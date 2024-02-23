@@ -45,16 +45,17 @@ type Daprd struct {
 	appHTTP  process.Interface
 	freeport *util.FreePort
 
-	appID            string
-	namespace        string
-	appProtocol      string
-	appPort          int
-	grpcPort         int
-	httpPort         int
-	internalGRPCPort int
-	publicPort       int
-	metricsPort      int
-	profilePort      int
+	appID                string
+	namespace            string
+	appProtocol          string
+	appPort              int
+	grpcPort             int
+	httpPort             int
+	internalGRPCPort     int
+	publicPort           int
+	metricsPort          int
+	profilePort          int
+	schedulerHostAddress string
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
@@ -138,6 +139,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.blockShutdownDuration != nil {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
+	var scheduleraddr string
+	if len(opts.schedulerAddresses) > 0 && opts.schedulerAddresses[0] != "" {
+		// TODO, rm index once my PR is merged
+		args = append(args, "--scheduler-host-address="+opts.schedulerAddresses[0])
+		scheduleraddr = opts.schedulerAddresses[0]
+	}
 
 	ns := "default"
 	if opts.namespace != nil {
@@ -146,19 +153,20 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	}
 
 	return &Daprd{
-		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
-		freeport:         fp,
-		appHTTP:          appHTTP,
-		appID:            opts.appID,
-		namespace:        ns,
-		appProtocol:      opts.appProtocol,
-		appPort:          opts.appPort,
-		grpcPort:         opts.grpcPort,
-		httpPort:         opts.httpPort,
-		internalGRPCPort: opts.internalGRPCPort,
-		publicPort:       opts.publicPort,
-		metricsPort:      opts.metricsPort,
-		profilePort:      opts.profilePort,
+		exec:                 exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
+		freeport:             fp,
+		appHTTP:              appHTTP,
+		appID:                opts.appID,
+		namespace:            ns,
+		appProtocol:          opts.appProtocol,
+		appPort:              opts.appPort,
+		grpcPort:             opts.grpcPort,
+		httpPort:             opts.httpPort,
+		internalGRPCPort:     opts.internalGRPCPort,
+		publicPort:           opts.publicPort,
+		metricsPort:          opts.metricsPort,
+		profilePort:          opts.profilePort,
+		schedulerHostAddress: scheduleraddr,
 	}
 }
 
