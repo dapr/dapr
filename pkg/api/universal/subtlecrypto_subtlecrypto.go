@@ -23,6 +23,7 @@ import (
 	"crypto/x509"
 	"encoding/json"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	nethttp "net/http"
 	"time"
@@ -163,8 +164,7 @@ func (a *Universal) SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.Sub
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = fmt.Errorf("failed to encrypt")
-		err = apierrors.CryptoProviderEncryptOperation(in.ComponentName, err)
+		err = apierrors.CryptoProviderEncryptOperation(in.ComponentName, errors.New("failed to encrypt"))
 		return &runtimev1pb.SubtleEncryptResponse{}, err
 	}
 
@@ -196,8 +196,7 @@ func (a *Universal) SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.Sub
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = fmt.Errorf("failed to decrypt")
-		err = apierrors.CryptoProviderDecryptOperation(in.ComponentName, err)
+		err = apierrors.CryptoProviderDecryptOperation(in.ComponentName, errors.New("failed to decrypt"))
 		return &runtimev1pb.SubtleDecryptResponse{}, err
 	}
 
@@ -239,8 +238,7 @@ func (a *Universal) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.Sub
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = fmt.Errorf("failed to wrap key")
-		err = apierrors.CryptoProviderKeyOperation(in.ComponentName, err)
+		err = apierrors.CryptoProviderKeyOperation(in.ComponentName, errors.New("failed to wrap key"))
 		return &runtimev1pb.SubtleWrapKeyResponse{}, err
 	}
 
@@ -272,8 +270,7 @@ func (a *Universal) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1pb.S
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = fmt.Errorf("failed to unwrap key")
-		err = apierrors.CryptoProviderKeyOperation(in.ComponentName, err)
+		err = apierrors.CryptoProviderKeyOperation(in.ComponentName, errors.New("failed to unwrap key"))
 		return &runtimev1pb.SubtleUnwrapKeyResponse{}, err
 	}
 
@@ -314,8 +311,7 @@ func (a *Universal) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.Subtle
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = fmt.Errorf("failed to sign")
-		err = apierrors.CryptoProviderKeyOperation(in.ComponentName, err)
+		err = apierrors.CryptoProviderKeyOperation(in.ComponentName, errors.New("failed to sign"))
 		return &runtimev1pb.SubtleSignResponse{}, err
 	}
 
@@ -346,8 +342,7 @@ func (a *Universal) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.Subt
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
 		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = fmt.Errorf("failed to verify signature: ")
-		err = apierrors.CryptoProviderVerifySignatureOperation(in.ComponentName, err)
+		err = apierrors.CryptoProviderVerifySignatureOperation(in.ComponentName, errors.New("failed to verify signature"))
 		return &runtimev1pb.SubtleVerifyResponse{}, err
 	}
 
