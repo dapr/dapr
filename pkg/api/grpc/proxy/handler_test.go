@@ -812,7 +812,7 @@ func (s *proxyTestSuite) SetupSuite() {
 		func(ctx context.Context, address, id, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
 			return s.getServerClientConn()
 		},
-		4,
+		4<<10,
 	)
 	s.proxy = grpc.NewServer(
 		grpc.UnknownServiceHandler(th),

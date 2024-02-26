@@ -84,15 +84,15 @@ func TestClose(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		serverConfig := ServerConfig{
-			AppID:                "test",
-			HostAddress:          "127.0.0.1",
-			Port:                 port,
-			APIListenAddresses:   []string{"127.0.0.1"},
-			NameSpace:            "test",
-			TrustDomain:          "test",
-			MaxRequestBodySizeMB: 4,
-			ReadBufferSizeKB:     4,
-			EnableAPILogging:     true,
+			AppID:              "test",
+			HostAddress:        "127.0.0.1",
+			Port:               port,
+			APIListenAddresses: []string{"127.0.0.1"},
+			NameSpace:          "test",
+			TrustDomain:        "test",
+			MaxRequestBodySize: 4 << 20,
+			ReadBufferSize:     4 << 10,
+			EnableAPILogging:   true,
 		}
 		a := &api{Universal: universal.New(universal.Options{
 			CompStore: compstore.New(),
@@ -107,15 +107,15 @@ func TestClose(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		serverConfig := ServerConfig{
-			AppID:                "test",
-			HostAddress:          "127.0.0.1",
-			Port:                 port,
-			APIListenAddresses:   []string{"127.0.0.1"},
-			NameSpace:            "test",
-			TrustDomain:          "test",
-			MaxRequestBodySizeMB: 4,
-			ReadBufferSizeKB:     4,
-			EnableAPILogging:     false,
+			AppID:              "test",
+			HostAddress:        "127.0.0.1",
+			Port:               port,
+			APIListenAddresses: []string{"127.0.0.1"},
+			NameSpace:          "test",
+			TrustDomain:        "test",
+			MaxRequestBodySize: 4 << 20,
+			ReadBufferSize:     4 << 10,
+			EnableAPILogging:   false,
 		}
 		a := &api{Universal: universal.New(universal.Options{
 			CompStore: compstore.New(),
