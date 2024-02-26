@@ -1034,6 +1034,27 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 	}))
 
+	t.Run("max-body-size", testSuiteGenerator([]testCase{
+		{
+			name:        "not present by default",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--max-body-size")
+			},
+		},
+		{
+			name: "set value",
+			annotations: map[string]string{
+				annotations.KeyMaxBodySize: "1Mi",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--max-body-size 1Mi")
+			},
+		},
+	}))
+
 	t.Run("set resources", testCaseFn(testCase{
 		annotations: map[string]string{
 			annotations.KeyCPURequest:  "100",
