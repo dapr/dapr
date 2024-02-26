@@ -8,9 +8,11 @@ There are several options for getting an environment up and running for Dapr dev
 - If you are using [Visual Studio Code](https://code.visualstudio.com/), you can [connect to a development container](./setup-dapr-development-using-vscode.md) configured for Dapr development.
 - [Manually install](./setup-dapr-development-env.md) the necessary tools and frameworks for developing Dapr on your device.
 
-## Cloning the repo
+## Forking the repo
 
-Contributing to Dapr often requires working with multiple repositories at once. We recommend creating a folder for Dapr and clone all repositories in that folder.
+Contributing to Dapr often requires working with multiple repositories at once. We recommend creating a folder for Dapr and cloning all forked repositories in that folder. 
+
+For instructions on how to fork a repo, [see this video on forking the dapr/docs repo](https://youtu.be/uPYuXcaEs-c?t=289). The process is the same, just for different repositories.
 
 ```sh
 mkdir dapr
@@ -45,6 +47,19 @@ You can build Dapr binaries with the `make` tool.
    ```
 
 > For example, developers on Windows who prefer to develop in [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install-win10) can use the Linux development environment to cross-compile binaries like `daprd.exe` that run on Windows natively.
+
+You can individually build the daprd binary:
+
+```sh
+cd cmd/daprd
+go build -tags=allcomponents -v
+# use it in this manner
+./daprd ...
+# if you need to execute a `dapr run` command with that newly-built binary:
+mv daprd ~/.dapr/bin/daprd
+dapr version # see `Runtime version: edge` to ensure you are using the newly built binary
+dapr run ... # this will use the newly-built binary
+```
 
 ## Run unit tests
 
@@ -111,6 +126,13 @@ This is useful to debug Dapr when the process is running.
    ```bash
    dlv attach {PID}
    ```
+
+### Debug Dapr With Goland IDE
+
+1. Build the daprd binary `go build -tags=allcomponents -v` from `/cmd/daprd`.
+2. Proceed to run client code necessary for testing purposes and set break points as needed.
+
+![Build & Run Daprd In Goland IDE](build-and-run-daprd.png)
 
 ### Debug unit-tests
 
