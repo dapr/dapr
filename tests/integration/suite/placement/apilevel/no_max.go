@@ -41,6 +41,7 @@ type noMax struct {
 func (n *noMax) Setup(t *testing.T) []framework.Option {
 	n.place = placement.New(t,
 		placement.WithMetadataEnabled(true),
+		placement.WithMaxAPILevel(-1),
 	)
 
 	return []framework.Option{
