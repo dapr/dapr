@@ -67,12 +67,12 @@ func RegisterService(server *grpc.Server, director StreamDirector, getPolicyFn g
 // backends. It should be used as a `grpc.UnknownServiceHandler`.
 //
 // This can *only* be used if the `server` also uses grpcproxy.CodecForServer() ServerOption.
-func TransparentHandler(director StreamDirector, getPolicyFn getPolicyFn, connFactory DirectorConnectionFactory, maxMessageBodySizeMB int) grpc.StreamHandler {
+func TransparentHandler(director StreamDirector, getPolicyFn getPolicyFn, connFactory DirectorConnectionFactory, maxMessageBodySize int) grpc.StreamHandler {
 	streamer := &handler{
 		director:           director,
 		getPolicyFn:        getPolicyFn,
 		connFactory:        connFactory,
-		maxRequestBodySize: maxMessageBodySizeMB,
+		maxRequestBodySize: maxMessageBodySize,
 	}
 	return streamer.handler
 }
@@ -130,9 +130,9 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 
 	if s.maxRequestBodySize > 0 {
 		clientStreamOptSubtype = append(clientStreamOptSubtype,
-			grpc.MaxCallRecvMsgSize(s.maxRequestBodySize<<20),
-			grpc.MaxCallSendMsgSize(s.maxRequestBodySize<<20),
-			grpc.MaxRetryRPCBufferSize(s.maxRequestBodySize<<20),
+			grpc.MaxCallRecvMsgSize(s.maxRequestBodySize),
+			grpc.MaxCallSendMsgSize(s.maxRequestBodySize),
+			grpc.MaxRetryRPCBufferSize(s.maxRequestBodySize),
 		)
 	}
 
