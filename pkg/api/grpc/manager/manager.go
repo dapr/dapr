@@ -49,13 +49,13 @@ type ConnCreatorFn = func() (grpc.ClientConnInterface, error)
 
 // AppChannelConfig contains the configuration for the app channel.
 type AppChannelConfig struct {
-	Port                 int
-	MaxConcurrency       int
-	TracingSpec          config.TracingSpec
-	EnableTLS            bool
-	MaxRequestBodySizeMB int
-	ReadBufferSizeKB     int
-	BaseAddress          string
+	Port               int
+	MaxConcurrency     int
+	TracingSpec        config.TracingSpec
+	EnableTLS          bool
+	MaxRequestBodySize int // In bytes
+	ReadBufferSize     int // In bytes
+	BaseAddress        string
 }
 
 // Manager is a wrapper around gRPC connection pooling.
@@ -100,8 +100,8 @@ func (g *Manager) GetAppChannel() (channel.AppChannel, error) {
 		g.channelConfig.MaxConcurrency,
 		conn.(*grpc.ClientConn),
 		g.channelConfig.TracingSpec,
-		g.channelConfig.MaxRequestBodySizeMB,
-		g.channelConfig.ReadBufferSizeKB,
+		g.channelConfig.MaxRequestBodySize,
+		g.channelConfig.ReadBufferSize,
 		g.channelConfig.BaseAddress,
 	)
 	return ch, nil

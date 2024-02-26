@@ -545,7 +545,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	} else {
 		log.Infof("HTTP server is running on port %v", a.runtimeConfig.httpPort)
 	}
-	log.Infof("The request body size parameter is: %v", a.runtimeConfig.maxRequestBodySize)
+	log.Infof("The request body size parameter is: %v bytes", a.runtimeConfig.maxRequestBodySize)
 
 	// Start internal gRPC server (used for sidecar-to-sidecar communication)
 	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.internalGRPCPort)
@@ -775,7 +775,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		PubsubAdapter:         a.processor.PubSub(),
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
 		TracingSpec:           a.globalConfig.GetTracingSpec(),
-		MaxRequestBodySize:    int64(a.runtimeConfig.maxRequestBodySize) << 20, // Convert from MB to bytes
+		MaxRequestBodySize:    int64(a.runtimeConfig.maxRequestBodySize),
 	})
 
 	serverConf := http.ServerConfig{
@@ -787,9 +787,9 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		ProfilePort:             profilePort,
 		AllowedOrigins:          allowedOrigins,
 		EnableProfiling:         a.runtimeConfig.enableProfiling,
-		MaxRequestBodySizeMB:    a.runtimeConfig.maxRequestBodySize,
+		MaxRequestBodySize:      a.runtimeConfig.maxRequestBodySize,
 		UnixDomainSocket:        a.runtimeConfig.unixDomainSocket,
-		ReadBufferSizeKB:        a.runtimeConfig.readBufferSize,
+		ReadBufferSize:          a.runtimeConfig.readBufferSize,
 		EnableAPILogging:        *a.runtimeConfig.enableAPILogging,
 		APILoggingObfuscateURLs: a.globalConfig.GetAPILoggingSpec().ObfuscateURLs,
 		APILogHealthChecks:      !a.globalConfig.GetAPILoggingSpec().OmitHealthChecks,
@@ -859,16 +859,16 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 		trustDomain = a.accessControlList.TrustDomain
 	}
 	return grpc.ServerConfig{
-		AppID:                a.runtimeConfig.id,
-		HostAddress:          a.hostAddress,
-		Port:                 port,
-		APIListenAddresses:   apiListenAddresses,
-		NameSpace:            a.namespace,
-		TrustDomain:          trustDomain,
-		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
-		UnixDomainSocket:     a.runtimeConfig.unixDomainSocket,
-		ReadBufferSizeKB:     a.runtimeConfig.readBufferSize,
-		EnableAPILogging:     *a.runtimeConfig.enableAPILogging,
+		AppID:              a.runtimeConfig.id,
+		HostAddress:        a.hostAddress,
+		Port:               port,
+		APIListenAddresses: apiListenAddresses,
+		NameSpace:          a.namespace,
+		TrustDomain:        trustDomain,
+		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
+		UnixDomainSocket:   a.runtimeConfig.unixDomainSocket,
+		ReadBufferSize:     a.runtimeConfig.readBufferSize,
+		EnableAPILogging:   *a.runtimeConfig.enableAPILogging,
 	}
 }
 
@@ -1250,8 +1250,8 @@ func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, glob
 		grpcAppChannelConfig.Port = runtimeConfig.appConnectionConfig.Port
 		grpcAppChannelConfig.MaxConcurrency = runtimeConfig.appConnectionConfig.MaxConcurrency
 		grpcAppChannelConfig.EnableTLS = (runtimeConfig.appConnectionConfig.Protocol == protocol.GRPCSProtocol)
-		grpcAppChannelConfig.MaxRequestBodySizeMB = runtimeConfig.maxRequestBodySize
-		grpcAppChannelConfig.ReadBufferSizeKB = runtimeConfig.readBufferSize
+		grpcAppChannelConfig.MaxRequestBodySize = runtimeConfig.maxRequestBodySize
+		grpcAppChannelConfig.ReadBufferSize = runtimeConfig.readBufferSize
 		grpcAppChannelConfig.BaseAddress = runtimeConfig.appConnectionConfig.ChannelAddress
 	}
 
