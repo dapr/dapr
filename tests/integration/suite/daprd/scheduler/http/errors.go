@@ -34,8 +34,7 @@ import (
 )
 
 const (
-	ErrInfoType      = "type.googleapis.com/google.rpc.ErrorInfo"
-	ResourceInfoType = "type.googleapis.com/google.rpc.ResourceInfo"
+	ErrInfoType = "type.googleapis.com/google.rpc.ErrorInfo"
 )
 
 func init() {

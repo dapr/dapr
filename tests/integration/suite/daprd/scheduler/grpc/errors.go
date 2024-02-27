@@ -19,9 +19,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
@@ -57,10 +55,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 	e.scheduler.WaitUntilRunning(t, ctx)
 	e.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, e.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	client := e.daprd.GRPCClient(t, ctx)
 
 	// Covers apierrors.Empty() job is empty
 	t.Run("job is empty", func(t *testing.T) {
