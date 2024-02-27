@@ -435,8 +435,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.13.0-rc.6 h1:vJMVGBJWYtRVUljABUD5WRjbux6NxqLL3+JcEd5spBg=
-github.com/dapr/components-contrib v1.13.0-rc.6/go.mod h1:2vqGUxoK1BUkurXVzl61958wCGydbftK4eQP0rudMSQ=
+github.com/dapr/components-contrib v1.13.0-rc.7 h1:AcfE9cVjUDLpubspMTpD4K3YyrO+kgEBvUOlgnBKPI8=
+github.com/dapr/components-contrib v1.13.0-rc.7/go.mod h1:6I1EEoWqKiSuu2pgSsT4Sy3O4H3uM4ekJ4ikRpx0qHI=
 github.com/dapr/kit v0.13.0 h1:4S+5QqDCreva+MBONtIgxeg6B2b1W89bB8F5lqKgTa0=
 github.com/dapr/kit v0.13.0/go.mod h1:VyHrelNXPbtS/VcQX0Y/uzW0lfEVuveJ+1E5bDys8mo=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -1049,8 +1049,8 @@ github.com/kisielk/errcheck v1.2.0/go.mod h1:/BMXB+zMLi60iA8Vv6Ksmxu/1UDYcXs4uQL
 github.com/kisielk/errcheck v1.5.0/go.mod h1:pFxgyoBC7bSaBwPgfKdkLd5X25qrDl4LWUI2bnpBCr8=
 github.com/kisielk/gotool v1.0.0/go.mod h1:XhKaO+MFFWcvkIS/tQcRk01m1F5IRFswLeQ+oQHNcck=
 github.com/klauspost/compress v1.13.6/go.mod h1:/3/Vjq9QcHkK5uEr5lBEmyoZ1iFhe47etQ6QUkpK6sk=
-github.com/klauspost/compress v1.17.4 h1:Ej5ixsIri7BrIjBkRZLTo6ghwrEtHFk7ijlczPW4fZ4=
-github.com/klauspost/compress v1.17.4/go.mod h1:/dCuZOvVtNoHsyb+cuJD3itjs3NbnF6KH9zAO4BDxPM=
+github.com/klauspost/compress v1.17.7 h1:ehO88t2UGzQK66LMdE8tibEd1ErmzZjNEqWkjLAKQQg=
+github.com/klauspost/compress v1.17.7/go.mod h1:Di0epgTjJY877eYKx5yC51cX2A2Vl2ibi7bDH9ttBbw=
 github.com/klauspost/cpuid/v2 v2.0.9/go.mod h1:FInQzS24/EEf25PyTYn52gqo7WaD8xa0213Md/qVLRg=
 github.com/klauspost/cpuid/v2 v2.2.4/go.mod h1:RVVoqg1df56z8g3pUjL/3lE5UfnlrJX8tyFgg4nqhuY=
 github.com/knadh/koanf v1.4.1 h1:Z0VGW/uo8NJmjd+L1Dc3S5frq6c62w5xQ9Yf4Mg3wFQ=
