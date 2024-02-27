@@ -26,6 +26,9 @@ const (
 	InFixJob            = "JOB_"
 	InFixSchedule       = "SCHEDULE_"
 	PostFixRepeats      = "REPEATS"
+	PostFixJob          = "JOB"
+
+	MsgScheduleJob = "failed to schedule job"
 )
 
 func SchedulerURLName(metadata map[string]string) error {
@@ -37,5 +40,16 @@ func SchedulerURLName(metadata map[string]string) error {
 		"",
 	).
 		WithErrorInfo(CodePrefixScheduler+InFixJob+PostFixName, metadata).
+		Build()
+}
+
+func SchedulerScheduleJob(metadata map[string]string, err error) error {
+	return kiterrors.NewBuilder(
+		codes.Internal,
+		http.StatusInternalServerError,
+		MsgScheduleJob+" due to: "+err.Error(),
+		"",
+	).
+		WithErrorInfo(CodePrefixScheduler+InFixSchedule+PostFixJob, metadata).
 		Build()
 }
