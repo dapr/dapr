@@ -55,10 +55,7 @@ func (j *schedulejobs) Run(t *testing.T, ctx context.Context) {
 	j.scheduler.WaitUntilRunning(t, ctx)
 	j.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, j.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	client := j.daprd.GRPCClient(t, ctx)
 
 	t.Run("CRUD 10 jobs", func(t *testing.T) {
 		for i := 1; i <= 10; i++ {
@@ -88,8 +85,8 @@ func (j *schedulejobs) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.ListJobs(ctx, &rtv1.ListJobsRequest{
 			AppId: j.daprd.AppID(),
 		})
-		require.True(t, len(resp.GetJobs()) == 10)
 		require.NoError(t, err)
+		require.Len(t, 10, resp.GetJobs())
 
 		for i := 1; i <= 10; i++ {
 			name := "test" + strconv.Itoa(i)
@@ -105,7 +102,7 @@ func (j *schedulejobs) Run(t *testing.T, ctx context.Context) {
 		resp, err = client.ListJobs(ctx, &rtv1.ListJobsRequest{
 			AppId: j.daprd.AppID(),
 		})
-		require.True(t, len(resp.GetJobs()) == 0)
+		require.Empty(t, resp.GetJobs())
 		require.NoError(t, err)
 	})
 }
