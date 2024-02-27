@@ -33,7 +33,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 		return &emptypb.Empty{}, apierrors.Empty("job", metadata, apierrors.CodePrefixScheduler+apierrors.PostFixEmpty)
 	}
 
-	if inReq.GetJob().GetName() == "" {
+	if inReq.GetJob().GetName() == "" || inReq.GetJob().GetName() == " " {
 		return &emptypb.Empty{}, apierrors.Empty("job name", metadata, apierrors.CodePrefixScheduler+apierrors.InFixJob+apierrors.InFixName+apierrors.PostFixEmpty)
 	}
 
@@ -66,7 +66,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	_, err = a.schedulerClient.ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
 		a.logger.Errorf("Error Scheduling job %s. %v", inReq.GetJob().GetName(), err)
-		return &emptypb.Empty{}, err
+		return &emptypb.Empty{}, apierrors.SchedulerScheduleJob(metadata, err)
 	}
 
 	return &emptypb.Empty{}, err
