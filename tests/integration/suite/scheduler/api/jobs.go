@@ -15,18 +15,17 @@ package api
 
 import (
 	"context"
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/anypb"
 	"strconv"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/anypb"
+
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -71,9 +70,10 @@ func (j *schedulejobs) Run(t *testing.T, ctx context.Context) {
 					Repeats: 1,
 					DueTime: "0h0m9s0ms",
 					Ttl:     "20s",
-				}}
+				},
+			}
 
-			_, err = client.ScheduleJob(ctx, req)
+			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
 
 			resp, err := client.GetJob(ctx, &rtv1.GetJobRequest{Name: name})
@@ -86,17 +86,18 @@ func (j *schedulejobs) Run(t *testing.T, ctx context.Context) {
 			AppId: j.daprd.AppID(),
 		})
 		require.NoError(t, err)
-		require.Len(t, 10, resp.GetJobs())
+		count := len(resp.GetJobs())
+		require.Equal(t, 10, count)
 
 		for i := 1; i <= 10; i++ {
 			name := "test" + strconv.Itoa(i)
 
-			_, err := client.DeleteJob(ctx, &rtv1.DeleteJobRequest{Name: name})
+			_, err = client.DeleteJob(ctx, &rtv1.DeleteJobRequest{Name: name})
 			require.NoError(t, err)
 
-			resp, err := client.GetJob(ctx, &rtv1.GetJobRequest{Name: name})
+			resp, nerr := client.GetJob(ctx, &rtv1.GetJobRequest{Name: name})
 			require.Nil(t, resp)
-			require.Error(t, err)
+			require.Error(t, nerr)
 		}
 
 		resp, err = client.ListJobs(ctx, &rtv1.ListJobsRequest{
