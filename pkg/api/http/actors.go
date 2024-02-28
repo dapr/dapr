@@ -74,11 +74,11 @@ func actorInvocationMethodNameFn(r *http.Request) string {
 func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 	return []endpoints.Endpoint{
 		{
-			Methods:         []string{http.MethodPost, http.MethodPut},
-			Route:           "actors/{actorType}/{actorId}/state",
-			Version:         apiVersionV1,
-			Group:           endpointGroupActorV1State,
-			FastHTTPHandler: a.onActorStateTransaction,
+			Methods: []string{http.MethodPost, http.MethodPut},
+			Route:   "actors/{actorType}/{actorId}/state",
+			Version: apiVersionV1,
+			Group:   endpointGroupActorV1State,
+			Handler: a.onActorStateTransaction,
 			Settings: endpoints.EndpointSettings{
 				Name: "ExecuteActorStateTransaction",
 			},
@@ -109,21 +109,21 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
-			Methods:         []string{http.MethodPost, http.MethodPut},
-			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
-			Version:         apiVersionV1,
-			Group:           endpointGroupActorV1Misc,
-			FastHTTPHandler: a.onCreateActorReminder,
+			Methods: []string{http.MethodPost, http.MethodPut},
+			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
+			Version: apiVersionV1,
+			Group:   endpointGroupActorV1Misc,
+			Handler: a.onCreateActorReminder,
 			Settings: endpoints.EndpointSettings{
 				Name: "RegisterActorReminder",
 			},
 		},
 		{
-			Methods:         []string{http.MethodPost, http.MethodPut},
-			Route:           "actors/{actorType}/{actorId}/timers/{name}",
-			Version:         apiVersionV1,
-			Group:           endpointGroupActorV1Misc,
-			FastHTTPHandler: a.onCreateActorTimer,
+			Methods: []string{http.MethodPost, http.MethodPut},
+			Route:   "actors/{actorType}/{actorId}/timers/{name}",
+			Version: apiVersionV1,
+			Group:   endpointGroupActorV1Misc,
+			Handler: a.onCreateActorTimer,
 			Settings: endpoints.EndpointSettings{
 				Name: "RegisterActorTimer",
 			},
@@ -149,11 +149,11 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
-			Methods:         []string{http.MethodGet},
-			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
-			Version:         apiVersionV1,
-			Group:           endpointGroupActorV1Misc,
-			FastHTTPHandler: a.onGetActorReminder,
+			Methods: []string{http.MethodGet},
+			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
+			Version: apiVersionV1,
+			Group:   endpointGroupActorV1Misc,
+			Handler: a.onGetActorReminder,
 			Settings: endpoints.EndpointSettings{
 				Name: "GetActorReminder",
 			},
@@ -161,78 +161,77 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 	}
 }
 
-func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if !a.actorReadinessCheckFastHTTP(reqCtx) {
-		// Response already sent
+func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	err := a.universal.ActorReadinessCheck(ctx)
+	if err != nil {
+		respondWithError(w, err)
 		return
 	}
 
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	name := reqCtx.UserValue(nameParam).(string)
-
 	var req actors.CreateReminderRequest
-	err := json.Unmarshal(reqCtx.PostBody(), &req)
+	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
+		respondWithError(w, msg)
 		log.Debug(msg)
 		return
 	}
 
-	req.Name = name
-	req.ActorType = actorType
-	req.ActorID = actorID
+	req.Name = chi.URLParamFromCtx(ctx, nameParam)
+	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
+	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
-	err = a.universal.Actors().CreateReminder(reqCtx, &req)
+	err = a.universal.Actors().CreateReminder(ctx, &req)
 	if err != nil {
 		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
 			msg := messages.ErrActorReminderOpActorNotHosted
-			universalFastHTTPErrorResponder(reqCtx, msg)
+			respondWithError(w, msg)
 			log.Debug(msg)
 			return
 		}
 
 		msg := messages.ErrActorReminderCreate.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
+		respondWithError(w, msg)
 		log.Debug(msg)
 		return
 	}
 
-	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+	respondWithEmpty(w)
 }
 
-func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
-	if !a.actorReadinessCheckFastHTTP(reqCtx) {
-		// Response already sent
+func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	err := a.universal.ActorReadinessCheck(ctx)
+	if err != nil {
+		respondWithError(w, err)
 		return
 	}
-
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	name := reqCtx.UserValue(nameParam).(string)
 
 	var req actors.CreateTimerRequest
-	err := json.Unmarshal(reqCtx.PostBody(), &req)
+	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
+		respondWithError(w, msg)
 		log.Debug(msg)
 		return
 	}
 
-	req.Name = name
-	req.ActorType = actorType
-	req.ActorID = actorID
+	req.Name = chi.URLParamFromCtx(ctx, nameParam)
+	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
+	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
-	err = a.universal.Actors().CreateTimer(reqCtx, &req)
+	err = a.universal.Actors().CreateTimer(ctx, &req)
 	if err != nil {
 		msg := messages.ErrActorTimerCreate.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
+		respondWithError(w, msg)
 		log.Debug(msg)
 		return
 	}
-	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+
+	respondWithEmpty(w)
 }
 
 func (a *api) onDeleteActorReminder() http.HandlerFunc {
@@ -249,33 +248,35 @@ func (a *api) onDeleteActorReminder() http.HandlerFunc {
 	)
 }
 
-func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
-	if !a.actorReadinessCheckFastHTTP(reqCtx) {
-		// Response already sent
+func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	err := a.universal.ActorReadinessCheck(ctx)
+	if err != nil {
+		respondWithError(w, err)
 		return
 	}
 
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	body := reqCtx.PostBody()
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 
 	var ops []actors.TransactionalOperation
-	err := json.Unmarshal(body, &ops)
+	err = json.NewDecoder(r.Body).Decode(&ops)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusBadRequest, msg))
+		msg := messages.ErrMalformedRequest.WithFormat(err)
+		respondWithError(w, msg)
 		log.Debug(msg)
 		return
 	}
 
-	hosted := a.universal.Actors().IsActorHosted(reqCtx, &actors.ActorHostedRequest{
+	hosted := a.universal.Actors().IsActorHosted(ctx, &actors.ActorHostedRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 	})
 
 	if !hosted {
 		msg := messages.ErrActorInstanceMissing
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusBadRequest, msg))
+		respondWithError(w, msg)
 		log.Debug(msg)
 		return
 	}
@@ -286,54 +287,46 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		Operations: ops,
 	}
 
-	err = a.universal.Actors().TransactionalStateOperation(reqCtx, &req)
+	err = a.universal.Actors().TransactionalStateOperation(ctx, &req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION_SAVE", fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		msg := messages.ErrActorStateTransactionSave.WithFormat(err)
+		respondWithError(w, msg)
 		log.Debug(msg)
 		return
 	}
-	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+
+	respondWithEmpty(w)
 }
 
-func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
-	if !a.actorReadinessCheckFastHTTP(reqCtx) {
-		// Response already sent
+func (a *api) onGetActorReminder(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	err := a.universal.ActorReadinessCheck(ctx)
+	if err != nil {
+		respondWithError(w, err)
 		return
 	}
 
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	name := reqCtx.UserValue(nameParam).(string)
-
-	resp, err := a.universal.Actors().GetReminder(reqCtx, &actors.GetReminderRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-		Name:      name,
+	resp, err := a.universal.Actors().GetReminder(ctx, &actors.GetReminderRequest{
+		ActorType: chi.URLParamFromCtx(ctx, actorTypeParam),
+		ActorID:   chi.URLParamFromCtx(ctx, actorIDParam),
+		Name:      chi.URLParamFromCtx(ctx, nameParam),
 	})
 	if err != nil {
 		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
 			msg := messages.ErrActorReminderOpActorNotHosted
-			universalFastHTTPErrorResponder(reqCtx, msg)
+			respondWithError(w, msg)
 			log.Debug(msg)
 			return
 		}
 
 		msg := messages.ErrActorReminderGet.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
+		respondWithError(w, msg)
 		log.Debug(msg)
 		return
 	}
 
-	b, err := json.Marshal(resp)
-	if err != nil {
-		msg := messages.ErrActorReminderGet.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
-		log.Debug(msg)
-		return
-	}
-
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(http.StatusOK, b, nil))
+	respondWithJSON(w, http.StatusOK, resp)
 }
 
 func (a *api) onDeleteActorTimer() http.HandlerFunc {
