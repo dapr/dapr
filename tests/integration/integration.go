@@ -27,8 +27,10 @@ import (
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
-var focusF = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
-var parallelFlag = flag.Bool("integration-parallel", true, "Disable running integration tests in parallel")
+var (
+	focusF       = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
+	parallelFlag = flag.Bool("integration-parallel", true, "Disable running integration tests in parallel")
+)
 
 func RunIntegrationTests(t *testing.T) {
 	flag.Parse()
