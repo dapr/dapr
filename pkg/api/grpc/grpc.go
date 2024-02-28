@@ -350,7 +350,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 	spanMap := map[int]otelTrace.Span{}
 	// closeChildSpans method is called on every respond() call in all return paths in the following block of code.
-	closeChildSpans := func(ctx context.Context, err error) {
+	closeChildSpans := func(_ context.Context, err error) {
 		for _, span := range spanMap {
 			diag.UpdateSpanStatusFromGRPCError(span, err)
 			span.End()
@@ -1113,7 +1113,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return a.Universal.Actors().Call(ctx, req)
 	})
 	if err != nil && !actorerrors.Is(err) {
-		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
+		err = messages.ErrActorInvoke.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return response, err
 	}
