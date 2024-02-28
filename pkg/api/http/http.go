@@ -1642,21 +1642,3 @@ func (a *api) onQueryStateHandler() nethttp.HandlerFunc {
 		},
 	)
 }
-
-// This function makes sure that the actor subsystem is ready.
-// If it returns false, handlers should return without performing any other action: responses will be sent to the client already.
-func (a *api) actorReadinessCheckFastHTTP(reqCtx *fasthttp.RequestCtx) bool {
-	// Note: with FastHTTP, reqCtx is tied to the context of the *server* and not the request.
-	// See: https://github.com/valyala/fasthttp/issues/1219#issuecomment-1041548933
-	// So, this is effectively a background context when using FastHTTP.
-	// There's no workaround besides migrating to the standard library's server.
-	a.universal.WaitForActorsReady(reqCtx)
-
-	if a.universal.Actors() == nil {
-		universalFastHTTPErrorResponder(reqCtx, messages.ErrActorRuntimeNotFound)
-		log.Debug(messages.ErrActorRuntimeNotFound)
-		return false
-	}
-
-	return true
-}

@@ -362,11 +362,13 @@ func TestAPIToken(t *testing.T) {
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
 	// Setup Dapr API server
+	log := logger.NewLogger("api")
 	fakeAPI := &api{
-		logger: logger.NewLogger("api"),
+		logger: log,
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			Resiliency: resiliency.New(nil),
+			Logger:     log,
 		}),
 		directMessaging: mockDirectMessaging,
 	}

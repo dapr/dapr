@@ -19,11 +19,11 @@ import (
 	"errors"
 	"time"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/messages"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
 // SetActorsInitDone indicates that the actors runtime has been initialized, whether actors are available or not
@@ -55,7 +55,10 @@ func (a *Universal) ActorReadinessCheck(ctx context.Context) error {
 	a.WaitForActorsReady(ctx)
 
 	if a.Actors() == nil {
-		a.logger.Debug(messages.ErrActorRuntimeNotFound)
+		// Logger may be nil in some tests
+		if a.logger != nil {
+			a.logger.Debug(messages.ErrActorRuntimeNotFound)
+		}
 		return messages.ErrActorRuntimeNotFound
 	}
 
@@ -79,14 +82,22 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 	}
 
 	if in.GetData() != nil {
-		j, err := json.Marshal(in.GetData())
+		var j []byte
+		j, err = json.Marshal(in.GetData())
 		if err != nil {
+			err = messages.ErrMalformedRequest.WithFormat(err)
+			a.logger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
 		req.Data = j
 	}
 	err = a.Actors().CreateTimer(ctx, req)
-	return &emptypb.Empty{}, err
+	if err != nil {
+		err = messages.ErrActorTimerCreate.WithFormat(err)
+		a.logger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+	return &emptypb.Empty{}, nil
 }
 
 func (a *Universal) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error) {
@@ -102,7 +113,12 @@ func (a *Universal) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Un
 	}
 
 	err = a.Actors().DeleteTimer(ctx, req)
-	return &emptypb.Empty{}, err
+	if err != nil {
+		err = messages.ErrActorTimerDelete.WithFormat(err)
+		a.logger.Debug(err)
+		return &emptypb.Empty{}, err
+	}
+	return &emptypb.Empty{}, nil
 }
 
 func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
@@ -121,16 +137,25 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 	}
 
 	if in.GetData() != nil {
-		j, err := json.Marshal(in.GetData())
+		var j []byte
+		j, err = json.Marshal(in.GetData())
 		if err != nil {
+			err = messages.ErrMalformedRequest.WithFormat(err)
+			a.logger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
 		req.Data = j
 	}
 	err = a.Actors().CreateReminder(ctx, req)
-	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-		a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
-		return nil, messages.ErrActorReminderOpActorNotHosted
+	if err != nil {
+		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
+			return nil, messages.ErrActorReminderOpActorNotHosted
+		}
+
+		err = messages.ErrActorReminderCreate.WithFormat(err)
+		a.logger.Debug(err)
+		return &emptypb.Empty{}, err
 	}
 	return &emptypb.Empty{}, err
 }
@@ -148,9 +173,15 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 	}
 
 	err = a.Actors().DeleteReminder(ctx, req)
-	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-		a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
-		return nil, messages.ErrActorReminderOpActorNotHosted
+	if err != nil {
+		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
+			return nil, messages.ErrActorReminderOpActorNotHosted
+		}
+
+		err = messages.ErrActorReminderDelete.WithFormat(err)
+		a.logger.Debug(err)
+		return &emptypb.Empty{}, err
 	}
 	return &emptypb.Empty{}, err
 }
