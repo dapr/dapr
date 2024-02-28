@@ -1057,7 +1057,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		default:
 			err = status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, op.GetOperationType())
 			apiServerLogger.Debug(err)
-			return &emptypb.Empty{}, err
+			return nil, err
 		}
 
 		actorOps = append(actorOps, actorOp)
@@ -1071,7 +1071,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 	if !hosted {
 		err = messages.ErrActorInstanceMissing
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	req := actors.TransactionalRequest{
@@ -1082,9 +1082,9 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 	err = a.Universal.Actors().TransactionalStateOperation(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
+		err = messages.ErrActorStateTransactionSave.WithFormat(err)
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	return &emptypb.Empty{}, nil

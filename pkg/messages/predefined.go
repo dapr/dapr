@@ -49,8 +49,7 @@ const (
 	ErrAppUnhealthy = "app is not in a healthy state"
 
 	// Actor.
-	ErrActorInvoke               = "error invoke actor method: %s"
-	ErrActorStateTransactionSave = "error saving actor transaction state: %s"
+	ErrActorInvoke = "error invoke actor method: %s"
 
 	// Configuration.
 	ErrConfigurationStoresNotConfigured = "configuration stores not configured"
@@ -97,6 +96,7 @@ var (
 	ErrActorRuntimeNotFound          = APIError{`the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: "true" in your state store component file?`, "ERR_ACTOR_RUNTIME_NOT_FOUND", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorInstanceMissing          = APIError{"actor instance is missing", "ERR_ACTOR_INSTANCE_MISSING", http.StatusBadRequest, grpcCodes.Internal}
 	ErrActorStateGet                 = APIError{"error getting actor state: %s", "ERR_ACTOR_STATE_GET", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorStateTransactionSave     = APIError{"error saving actor transaction state: %s", "ERR_ACTOR_STATE_TRANSACTION_SAVE", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderCreate           = APIError{"error creating actor reminder: %s", "ERR_ACTOR_REMINDER_CREATE", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderGet              = APIError{"error getting actor reminder: %s", "ERR_ACTOR_REMINDER_GET", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderDelete           = APIError{"error deleting actor reminder: %s", "ERR_ACTOR_REMINDER_DELETE", http.StatusInternalServerError, grpcCodes.Internal}

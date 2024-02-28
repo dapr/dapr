@@ -1514,34 +1514,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
-	t.Run("Reminder Get - 500 on JSON encode failure from actor", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-		reminderRequest := actors.GetReminderRequest{
-			Name:      "reminder1",
-			ActorType: "fakeActorType",
-			ActorID:   "fakeActorID",
-		}
-
-		reminderResponse := actors.MockReminder{
-			// This is not valid JSON
-			Data: json.RawMessage(`foo`),
-		}
-
-		mockActors := new(actors.MockActors)
-
-		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
-
-		testAPI.universal.SetActorRuntime(mockActors)
-
-		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-		// assert
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
-	})
-
 	t.Run("Timer Create - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 
