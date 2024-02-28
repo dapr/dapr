@@ -68,7 +68,7 @@ func (a *Universal) ActorReadinessCheck(ctx context.Context) error {
 func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
 	err := a.ActorReadinessCheck(ctx)
 	if err != nil {
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	req := &actors.CreateTimerRequest{
@@ -87,7 +87,7 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 		if err != nil {
 			err = messages.ErrMalformedRequest.WithFormat(err)
 			a.logger.Debug(err)
-			return &emptypb.Empty{}, err
+			return nil, err
 		}
 		req.Data = j
 	}
@@ -95,15 +95,15 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 	if err != nil {
 		err = messages.ErrActorTimerCreate.WithFormat(err)
 		a.logger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
-	return &emptypb.Empty{}, nil
+	return nil, nil
 }
 
 func (a *Universal) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error) {
 	err := a.ActorReadinessCheck(ctx)
 	if err != nil {
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	req := &actors.DeleteTimerRequest{
@@ -116,15 +116,15 @@ func (a *Universal) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Un
 	if err != nil {
 		err = messages.ErrActorTimerDelete.WithFormat(err)
 		a.logger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
-	return &emptypb.Empty{}, nil
+	return nil, nil
 }
 
 func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
 	err := a.ActorReadinessCheck(ctx)
 	if err != nil {
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	req := &actors.CreateReminderRequest{
@@ -142,7 +142,7 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		if err != nil {
 			err = messages.ErrMalformedRequest.WithFormat(err)
 			a.logger.Debug(err)
-			return &emptypb.Empty{}, err
+			return nil, err
 		}
 		req.Data = j
 	}
@@ -155,15 +155,15 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 
 		err = messages.ErrActorReminderCreate.WithFormat(err)
 		a.logger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
-	return &emptypb.Empty{}, err
+	return nil, err
 }
 
 func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error) {
 	err := a.ActorReadinessCheck(ctx)
 	if err != nil {
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	req := &actors.DeleteReminderRequest{
@@ -181,7 +181,7 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 
 		err = messages.ErrActorReminderDelete.WithFormat(err)
 		a.logger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
-	return &emptypb.Empty{}, err
+	return nil, err
 }

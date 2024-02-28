@@ -1000,9 +1000,11 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	rc := resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency)
+	testLog := logger.NewLogger("test.api.http.actors")
+	rc := resiliency.FromConfigurations(testLog, testResiliency)
 	testAPI := &api{
 		universal: universal.New(universal.Options{
+			Logger:     testLog,
 			AppID:      "fakeAPI",
 			Resiliency: rc,
 		}),
@@ -1088,7 +1090,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, fakeData, resp.RawBody)
-		assert.Equal(t, "2020-01-01T00:00:00Z", resp.RawHeader.Get("metadata.ttlexpiretime"))
+		assert.Equalf(t, "2020-01-01T00:00:00Z", resp.RawHeader.Get("metadata.ttlexpiretime"), "Headers: %v", resp.RawHeader)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
@@ -1883,6 +1885,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		universal: universal.New(universal.Options{
+			Logger:     logger.NewLogger("fakeLogger"),
 			Resiliency: resiliency.New(nil),
 		}),
 		tracingSpec: spec,
