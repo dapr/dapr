@@ -191,8 +191,8 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 			return
 		}
 
-		msg := NewErrorResponse("ERR_ACTOR_REMINDER_CREATE", fmt.Sprintf(messages.ErrActorReminderCreate, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		msg := messages.ErrActorReminderCreate.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
@@ -225,12 +225,12 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 
 	err = a.universal.Actors().CreateTimer(reqCtx, &req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_TIMER_CREATE", fmt.Sprintf(messages.ErrActorTimerCreate, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		msg := messages.ErrActorTimerCreate.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
-	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+		return
 	}
+	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
@@ -258,8 +258,8 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 			return
 		}
 
-		msg := NewErrorResponse("ERR_ACTOR_REMINDER_DELETE", fmt.Sprintf(messages.ErrActorReminderDelete, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		msg := messages.ErrActorReminderDelete.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
@@ -309,9 +309,9 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		msg := NewErrorResponse("ERR_ACTOR_STATE_TRANSACTION_SAVE", fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
 		log.Debug(msg)
-	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+		return
 	}
+	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
@@ -337,16 +337,16 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 			return
 		}
 
-		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", fmt.Sprintf(messages.ErrActorReminderGet, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		msg := messages.ErrActorReminderGet.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
 
 	b, err := json.Marshal(resp)
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_REMINDER_GET", fmt.Sprintf(messages.ErrActorReminderGet, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		msg := messages.ErrActorReminderGet.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
@@ -371,12 +371,12 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 	}
 	err := a.universal.Actors().DeleteTimer(reqCtx, &req)
 	if err != nil {
-		msg := NewErrorResponse("ERR_ACTOR_TIMER_DELETE", fmt.Sprintf(messages.ErrActorTimerDelete, err))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		msg := messages.ErrActorTimerDelete.WithFormat(err)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
-	} else {
-		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
+		return
 	}
+	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
@@ -490,4 +490,22 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 		}
 		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(http.StatusOK, resp.Data, resp.Metadata))
 	}
+}
+
+// This function makes sure that the actor subsystem is ready.
+// If it returns false, handlers should return without performing any other action: responses will be sent to the client already.
+func (a *api) actorReadinessCheckFastHTTP(reqCtx *fasthttp.RequestCtx) bool {
+	// Note: with FastHTTP, reqCtx is tied to the context of the *server* and not the request.
+	// See: https://github.com/valyala/fasthttp/issues/1219#issuecomment-1041548933
+	// So, this is effectively a background context when using FastHTTP.
+	// There's no workaround besides migrating to the standard library's server.
+	a.universal.WaitForActorsReady(reqCtx)
+
+	if a.universal.Actors() == nil {
+		universalFastHTTPErrorResponder(reqCtx, messages.ErrActorRuntimeNotFound)
+		log.Debug(messages.ErrActorRuntimeNotFound)
+		return false
+	}
+
+	return true
 }
