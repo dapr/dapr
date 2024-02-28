@@ -28,6 +28,7 @@ import (
 )
 
 var focusF = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
+var parallelFlag = flag.Bool("integration-parallel", true, "Disable running integration tests in parallel")
 
 func RunIntegrationTests(t *testing.T) {
 	flag.Parse()
@@ -64,7 +65,9 @@ func RunIntegrationTests(t *testing.T) {
 	for _, tcase := range focusedTests {
 		tcase := tcase
 		t.Run(tcase.Name(), func(t *testing.T) {
-			t.Parallel()
+			if *parallelFlag {
+				t.Parallel()
+			}
 
 			options := tcase.Setup(t)
 
