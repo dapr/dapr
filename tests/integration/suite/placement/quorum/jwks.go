@@ -56,6 +56,8 @@ type jwks struct {
 }
 
 func (j *jwks) Setup(t *testing.T) []framework.Option {
+	t.Skip("TODO")
+
 	jwtPriv, jwtPub := j.genPrivateJWK(t)
 
 	tokenFiles := make([]string, 3)

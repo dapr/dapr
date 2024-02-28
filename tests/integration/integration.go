@@ -57,11 +57,18 @@ func RunIntegrationTests(t *testing.T) {
 	}
 
 	startTime := time.Now()
+	t.Cleanup(func() {
+		t.Logf("Total integration test execution time: [%d] %s", len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100))
+	})
+
 	for _, tcase := range focusedTests {
+		tcase := tcase
 		t.Run(tcase.Name(), func(t *testing.T) {
-			t.Logf("setting up test case")
+			t.Parallel()
+
 			options := tcase.Setup(t)
 
+			t.Logf("setting up test case")
 			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 			t.Cleanup(cancel)
 
@@ -73,6 +80,4 @@ func RunIntegrationTests(t *testing.T) {
 			})
 		})
 	}
-
-	t.Logf("Total integration test execution time: %s", time.Since(startTime).Truncate(time.Millisecond*100))
 }
