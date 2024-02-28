@@ -17,12 +17,11 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -93,7 +92,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 				AppendSpanAttributes: appendActorInvocationSpanAttributesFn,
 				MethodName:           actorInvocationMethodNameFn,
 			},
-			FastHTTPHandler: a.onDirectActorMessage,
+			Handler: a.onDirectActorMessage,
 			Settings: endpoints.EndpointSettings{
 				Name: "InvokeActor",
 			},
@@ -343,25 +342,38 @@ func (a *api) onDeleteActorTimer() http.HandlerFunc {
 	)
 }
 
-func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
-	if !a.actorReadinessCheckFastHTTP(reqCtx) {
-		// Response already sent
+func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+
+	err := a.universal.ActorReadinessCheck(ctx)
+	if err != nil {
+		respondWithError(w, err)
 		return
 	}
 
-	actorType := reqCtx.UserValue(actorTypeParam).(string)
-	actorID := reqCtx.UserValue(actorIDParam).(string)
-	verb := strings.ToUpper(string(reqCtx.Method()))
-	method := reqCtx.UserValue(methodParam).(string)
+	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
+	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
+	verb := strings.ToUpper(r.Method)
+	method := chi.URLParamFromCtx(ctx, methodParam)
 
 	policyDef := a.universal.Resiliency().ActorPreLockPolicy(actorType, actorID)
 
+	// Actor invocation doesn't support streaming, so we need to read the entire reqBody
+	reqBody, err := io.ReadAll(r.Body)
+	if err != nil {
+		msg := messages.ErrBadRequest.WithFormat("failed to read body: " + err.Error())
+		respondWithError(w, msg)
+		log.Debug(msg)
+		return
+	}
+
 	req := internalsv1pb.NewInternalInvokeRequest(method).
 		WithActor(actorType, actorID).
-		WithHTTPExtension(verb, reqCtx.QueryArgs().String()).
-		WithData(reqCtx.PostBody()).
-		WithContentType(string(reqCtx.Request.Header.ContentType())).
-		WithFastHTTPHeaders(&reqCtx.Request.Header)
+		WithHTTPExtension(verb, r.URL.RawQuery).
+		WithData(reqBody).
+		WithContentType(r.Header.Get("content-type")).
+		// Save headers to internal metadata
+		WithHTTPHeaders(r.Header)
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -370,48 +382,47 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](reqCtx, policyDef)
+	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
 	res, err := policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
 		return a.universal.Actors().Call(ctx, req)
 	})
 	if err != nil {
 		actorErr, isActorError := actorerrors.As(err)
 		if !isActorError {
-			msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, err))
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+			msg := messages.ErrActorInvoke.WithFormat(err)
+			respondWithError(w, msg)
 			log.Debug(msg)
 			return
 		}
 
 		// Use Add to ensure headers are appended and not replaced
-		invokev1.InternalMetadataToHTTPHeader(reqCtx, actorErr.Headers(), reqCtx.Response.Header.Add)
-		reqCtx.Response.Header.SetContentType(actorErr.ContentType())
+		h := w.Header()
+		invokev1.InternalMetadataToHTTPHeader(ctx, actorErr.Headers(), h.Add)
+		h.Set(headerContentType, actorErr.ContentType())
 
-		// Construct response.
-		statusCode := actorErr.StatusCode()
-		body := actorErr.Body()
-		fasthttpRespond(reqCtx, fasthttpResponseWith(statusCode, body))
+		// Construct response
+		respondWithData(w, actorErr.StatusCode(), actorErr.Body())
 		return
 	}
 
 	if res == nil {
-		msg := NewErrorResponse("ERR_ACTOR_INVOKE_METHOD", fmt.Sprintf(messages.ErrActorInvoke, "failed to cast response"))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		msg := messages.ErrActorInvoke.WithFormat("failed to cast response")
+		respondWithError(w, msg)
 		log.Debug(msg)
 		return
 	}
 
 	// Use Add to ensure headers are appended and not replaced
-	invokev1.InternalMetadataToHTTPHeader(reqCtx, res.GetHeaders(), reqCtx.Response.Header.Add)
-	body := res.GetMessage().GetData().GetValue()
-	reqCtx.Response.Header.SetContentType(res.GetMessage().GetContentType())
+	h := w.Header()
+	invokev1.InternalMetadataToHTTPHeader(ctx, res.GetHeaders(), h.Add)
+	h.Set(headerContentType, res.GetMessage().GetContentType())
 
 	// Construct response.
 	statusCode := int(res.GetStatus().GetCode())
 	if !res.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
-	fasthttpRespond(reqCtx, fasthttpResponseWith(statusCode, body))
+	respondWithData(w, statusCode, res.GetMessage().GetData().GetValue())
 }
 
 func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
@@ -462,22 +473,4 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	setResponseMetadataHeaders(w, resp.Metadata)
 
 	respondWithData(w, http.StatusOK, resp.Data)
-}
-
-// This function makes sure that the actor subsystem is ready, for a FastHTTP handler.
-// If it returns false, handlers should return without performing any other action: responses will be sent to the client already.
-func (a *api) actorReadinessCheckFastHTTP(reqCtx *fasthttp.RequestCtx) bool {
-	// Note: with FastHTTP, reqCtx is tied to the context of the *server* and not the request.
-	// See: https://github.com/valyala/fasthttp/issues/1219#issuecomment-1041548933
-	// So, this is effectively a background context when using FastHTTP.
-	// There's no workaround besides migrating to the standard library's server.
-	a.universal.WaitForActorsReady(reqCtx)
-
-	if a.universal.Actors() == nil {
-		universalFastHTTPErrorResponder(reqCtx, messages.ErrActorRuntimeNotFound)
-		log.Debug(messages.ErrActorRuntimeNotFound)
-		return false
-	}
-
-	return true
 }
