@@ -187,7 +187,10 @@ func (x *x509source) startRotation(ctx context.Context, fn renewFn, cert *x509.C
 
 	for {
 		select {
-		case <-x.clock.After(renewTime.Sub(x.clock.Now())):
+		case <-x.clock.After(min(time.Minute, renewTime.Sub(x.clock.Now()))):
+			if x.clock.Now().Before(renewTime) {
+				continue
+			}
 			log.Infof("Renewing workload cert; current cert expires on: %s", cert.NotAfter.String())
 			newCert, err := fn(ctx)
 			if err != nil {
