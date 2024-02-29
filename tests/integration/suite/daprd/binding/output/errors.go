@@ -14,10 +14,10 @@ limitations under the License.
 package output
 
 import (
-	"bytes"
 	"context"
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -76,7 +76,7 @@ func (b *bindingerrors) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/github-http-binding-404", b.daprd.HTTPPort())
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewBuffer([]byte("{\"operation\":\"get\"}")))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader("{\"operation\":\"get\"}"))
 		require.NoError(t, err)
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
@@ -94,7 +94,7 @@ func (b *bindingerrors) Run(t *testing.T, ctx context.Context) {
 		require.Error(t, err)
 		require.Nil(t, resp)
 		statusCodeArr := header.Get("metadata.statuscode")
-		require.Equal(t, 1, len(statusCodeArr))
+		require.Len(t, statusCodeArr, 1)
 		return statusCodeArr[0] == "404"
 	}, time.Second*5, 10*time.Millisecond)
 }
