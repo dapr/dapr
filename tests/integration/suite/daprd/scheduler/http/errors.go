@@ -89,7 +89,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.InFixJob+apierrors.InFixName+apierrors.PostFixEmpty, errCode)
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -108,7 +108,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		detailsObject, ok := detailsArray[0].(map[string]interface{})
 		require.True(t, ok)
 		require.Equal(t, "dapr.io", detailsObject["domain"])
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.InFixJob+apierrors.InFixName+apierrors.PostFixEmpty, detailsObject["reason"])
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), detailsObject["reason"])
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
@@ -137,7 +137,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.InFixSchedule+apierrors.PostFixEmpty, errCode)
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty), errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -156,7 +156,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		detailsObject, ok := detailsArray[0].(map[string]interface{})
 		require.True(t, ok)
 		require.Equal(t, "dapr.io", detailsObject["domain"])
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.InFixSchedule+apierrors.PostFixEmpty, detailsObject["reason"])
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty), detailsObject["reason"])
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
@@ -185,7 +185,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.InFixNegative+apierrors.PostFixRepeats, errCode)
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats), errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -204,7 +204,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		detailsObject, ok := detailsArray[0].(map[string]interface{})
 		require.True(t, ok)
 		require.Equal(t, "dapr.io", detailsObject["domain"])
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.InFixNegative+apierrors.PostFixRepeats, detailsObject["reason"])
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats), detailsObject["reason"])
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
@@ -233,7 +233,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.InFixJob+apierrors.PostFixName, errCode)
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.PostFixName), errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -252,7 +252,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		detailsObject, ok := detailsArray[0].(map[string]interface{})
 		require.True(t, ok)
 		require.Equal(t, "dapr.io", detailsObject["domain"])
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.InFixJob+apierrors.PostFixName, detailsObject["reason"])
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.PostFixName), detailsObject["reason"])
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 }

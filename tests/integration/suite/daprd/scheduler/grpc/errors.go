@@ -6,7 +6,7 @@ You may obtain a copy of the License at
     http://www.apache.org/licenses/LICENSE-2.0
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
@@ -76,7 +76,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.PostFixEmpty, errInfo.GetReason())
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty), errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
@@ -99,7 +99,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.InFixJob+apierrors.InFixName+apierrors.PostFixEmpty, errInfo.GetReason())
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
@@ -122,7 +122,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.InFixSchedule+apierrors.PostFixEmpty, errInfo.GetReason())
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty), errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
@@ -145,7 +145,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, apierrors.CodePrefixScheduler+apierrors.InFixNegative+apierrors.PostFixRepeats, errInfo.GetReason())
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats), errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 }
