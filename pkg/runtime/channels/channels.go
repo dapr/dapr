@@ -61,10 +61,10 @@ type Options struct {
 	// AppMiddlware is the application middleware.
 	AppMiddleware middleware.HTTP
 
-	// MaxRequestBodySize is the maximum request body size.
+	// MaxRequestBodySize is the maximum request body size, in bytes.
 	MaxRequestBodySize int
 
-	// ReadBufferSize is the read buffer size.
+	// ReadBufferSize is the read buffer size, in bytes
 	ReadBufferSize int
 
 	GRPC *manager.Manager
@@ -186,11 +186,11 @@ func (c *Channels) AppHTTPEndpoint() string {
 
 func (c *Channels) appHTTPChannelConfig() channelhttp.ChannelConfiguration {
 	conf := channelhttp.ChannelConfiguration{
-		CompStore:            c.compStore,
-		MaxConcurrency:       c.appConnectionConfig.MaxConcurrency,
-		Middleware:           c.appMiddlware,
-		TracingSpec:          c.tracingSpec,
-		MaxRequestBodySizeMB: c.maxRequestBodySize,
+		CompStore:          c.compStore,
+		MaxConcurrency:     c.appConnectionConfig.MaxConcurrency,
+		Middleware:         c.appMiddlware,
+		TracingSpec:        c.tracingSpec,
+		MaxRequestBodySize: c.maxRequestBodySize,
 	}
 
 	conf.Endpoint = c.AppHTTPEndpoint()
@@ -225,11 +225,11 @@ func (c *Channels) initEndpointChannels() (map[string]channel.HTTPEndpointAppCha
 
 func (c *Channels) getHTTPEndpointAppChannel(endpoint httpendpapi.HTTPEndpoint) (channelhttp.ChannelConfiguration, error) {
 	conf := channelhttp.ChannelConfiguration{
-		CompStore:            c.compStore,
-		MaxConcurrency:       c.appConnectionConfig.MaxConcurrency,
-		Middleware:           c.appMiddlware,
-		MaxRequestBodySizeMB: c.maxRequestBodySize,
-		TracingSpec:          c.tracingSpec,
+		CompStore:          c.compStore,
+		MaxConcurrency:     c.appConnectionConfig.MaxConcurrency,
+		Middleware:         c.appMiddlware,
+		MaxRequestBodySize: c.maxRequestBodySize,
+		TracingSpec:        c.tracingSpec,
 	}
 
 	var tlsConfig *tls.Config
@@ -303,7 +303,7 @@ func appHTTPClient(connConfig config.AppConnectionConfig, globalConfig *config.C
 				return net.Dial(network, addr)
 			},
 			// TODO: This may not be exactly the same as "MaxResponseHeaderBytes" so check before enabling this
-			// MaxHeaderListSize: uint32(a.runtimeConfig.readBufferSize << 10),
+			// MaxHeaderListSize: uint32(a.runtimeConfig.readBufferSize),
 		}
 	} else {
 		var tlsConfig *tls.Config
@@ -316,8 +316,8 @@ func appHTTPClient(connConfig config.AppConnectionConfig, globalConfig *config.C
 
 		transport = &http.Transport{
 			TLSClientConfig:        tlsConfig,
-			ReadBufferSize:         readBufferSize << 10,
-			MaxResponseHeaderBytes: int64(readBufferSize) << 10,
+			ReadBufferSize:         readBufferSize,
+			MaxResponseHeaderBytes: int64(readBufferSize),
 			MaxConnsPerHost:        1024,
 			MaxIdleConns:           64, // A local channel connects to a single host
 			MaxIdleConnsPerHost:    64,
