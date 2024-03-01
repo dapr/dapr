@@ -19,14 +19,18 @@ import (
 	"net"
 	"os"
 	"sync/atomic"
+	"time"
 
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 
 	etcdcron "github.com/Scalingo/go-etcd-cron"
 
+	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/config"
-	"github.com/dapr/dapr/pkg/actors/placement"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
+	globalconfig "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/security"
@@ -39,8 +43,8 @@ var log = logger.NewLogger("dapr.scheduler.server")
 type Options struct {
 	AppID       string
 	HostAddress string
-	// Port is the port that the server will listen on.
-	Port int
+	Port        int
+	Mode        modes.DaprMode
 
 	Security security.Handler
 
@@ -55,7 +59,8 @@ type Server struct {
 	cron    *etcdcron.Cron
 	readyCh chan struct{}
 
-	actorPlacement placement.PlacementService
+	grpcManager  *manager.Manager
+	actorRuntime actors.ActorRuntime
 }
 
 func New(opts Options) *Server {
@@ -71,21 +76,34 @@ func New(opts Options) *Server {
 	apiLevel.Store(config.ActorAPILevel)
 
 	if opts.PlacementAddress != "" {
-		actorOptions := config.ActorsProviderOptions{
-			Config: config.Config{
-				ActorsService:    "placement:" + opts.PlacementAddress,
-				AppID:            opts.AppID,
-				HostAddress:      opts.HostAddress,
-				Port:             s.port,
-				PodName:          os.Getenv("POD_NAME"),
-				HostedActorTypes: config.NewHostedActors([]string{}),
+		// Create gRPC manager
+		grpcAppChannelConfig := &manager.AppChannelConfig{}
+		s.grpcManager = manager.NewManager(opts.Security, opts.Mode, grpcAppChannelConfig)
+		s.grpcManager.StartCollector()
+
+		act, _ := actors.NewActors(actors.ActorsOpts{
+			AppChannel:       nil,
+			GRPCConnectionFn: s.grpcManager.GetGRPCConnection,
+			Config: actors.Config{
+				Config: config.Config{
+					ActorsService:                 "placement:" + opts.PlacementAddress,
+					AppID:                         opts.AppID,
+					HostAddress:                   opts.HostAddress,
+					Port:                          s.port,
+					PodName:                       os.Getenv("POD_NAME"),
+					HostedActorTypes:              config.NewHostedActors([]string{}),
+					ActorDeactivationScanInterval: time.Hour, // TODO: disable this feature since we just need to invoke actors
+				},
 			},
-			AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
-			Security:    opts.Security,
-			Resiliency:  resiliency.New(log),
-			APILevel:    apiLevel,
-		}
-		s.actorPlacement = placement.NewActorPlacement(actorOptions)
+			TracingSpec:     globalconfig.TracingSpec{},
+			Resiliency:      resiliency.New(log),
+			StateStoreName:  "",
+			CompStore:       nil,
+			StateTTLEnabled: false, // artursouza: this should not be relevant to invoke actors.
+			Security:        opts.Security,
+		})
+
+		s.actorRuntime = act
 	}
 	return s
 }
@@ -93,8 +111,11 @@ func New(opts Options) *Server {
 func (s *Server) Run(ctx context.Context) error {
 	log.Info("Dapr Scheduler is starting...")
 
-	if s.actorPlacement != nil {
-		s.actorPlacement.Start(ctx)
+	if s.actorRuntime != nil {
+		err := s.actorRuntime.Init(ctx)
+		if err != nil {
+			return err
+		}
 	}
 	return concurrency.NewRunnerManager(
 		s.runServer,

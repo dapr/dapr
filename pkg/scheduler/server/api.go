@@ -19,6 +19,7 @@ import (
 
 	etcdcron "github.com/Scalingo/go-etcd-cron"
 
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
@@ -145,7 +146,27 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.JobRequest) (
 	return &schedulerv1pb.DeleteJobResponse{}, nil
 }
 
-func (s *Server) TriggerJob(context.Context, *schedulerv1pb.TriggerJobRequest) (*schedulerv1pb.TriggerJobResponse, error) {
+func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRequest) (*schedulerv1pb.TriggerJobResponse, error) {
 	log.Info("Triggering job")
+	metadata := req.GetMetadata()
+	actorType := metadata["actorType"]
+	actorID := metadata["actorId"]
+	reminderName := metadata["reminder"]
+	if actorType != "" && actorID != "" && reminderName != "" {
+		if s.actorRuntime == nil {
+			return nil, fmt.Errorf("actor runtime is not configured")
+		}
+
+		invokeMethod := "remind/" + reminderName
+		contentType := metadata["content-type"]
+		invokeReq := internalv1pb.NewInternalInvokeRequest(invokeMethod).
+			WithActor(actorType, actorID).
+			WithData(req.GetData().GetValue()).
+			WithContentType(contentType)
+
+		_, err := s.actorRuntime.Call(ctx, invokeReq)
+		return nil, err
+
+	}
 	return nil, fmt.Errorf("not implemented")
 }

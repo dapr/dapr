@@ -27,7 +27,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	// validate job details, date, schedule, etc??
 	var err error
 
-	metadata := map[string]string{"app_id": a.AppID()}
+	metadata := map[string]string{"appId": a.AppID()}
 	jobName := a.AppID() + "||" + inReq.GetJob().GetName()
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
