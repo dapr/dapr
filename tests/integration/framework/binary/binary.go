@@ -33,23 +33,24 @@ func BuildAll(t *testing.T) {
 
 	binaryNames := []string{"daprd", "placement", "sentry", "operator", "injector", "scheduler"}
 
+	t.Logf("Building binaries: %v", binaryNames)
+
 	var wg sync.WaitGroup
-	wg.Add(len(binaryNames))
+	wg.Add(len(binaryNames) * 2)
 	for _, name := range binaryNames {
-		if runtime.GOOS == "windows" {
-			Build(t, name)
-			wg.Done()
-		} else {
-			go func(name string) {
-				defer wg.Done()
-				Build(t, name)
-			}(name)
-		}
+		go func(name string) {
+			defer wg.Done()
+			BuildLocal(t, name)
+		}(name)
+		go func(name string) {
+			defer wg.Done()
+			BuildPrevious(t, name)
+		}(name)
 	}
 	wg.Wait()
 }
 
-func Build(t *testing.T, name string) {
+func BuildLocal(t *testing.T, name string) {
 	t.Helper()
 	if _, ok := os.LookupEnv(EnvKey(name)); !ok {
 		t.Logf("%q not set, building %q binary", EnvKey(name), name)
@@ -66,31 +67,78 @@ func Build(t *testing.T, name string) {
 		} else {
 			tmpdir = os.TempDir()
 		}
+
 		binPath := filepath.Join(tmpdir, "dapr_integration_tests/"+name)
-		if runtime.GOOS == "windows" {
-			binPath += ".exe"
-		}
-
-		ioout := iowriter.New(t, name)
-		ioerr := iowriter.New(t, name)
-
-		t.Logf("Root dir: %q", rootDir)
-		t.Logf("Compiling %q binary to: %q", name, binPath)
-		cmd := exec.Command("go", "build", "-tags=allcomponents,wfbackendsqlite", "-v", "-o", binPath, "./cmd/"+name)
-		cmd.Dir = rootDir
-		cmd.Stdout = ioout
-		cmd.Stderr = ioerr
-		// Ensure CGO is disabled to avoid linking against system libraries.
-		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
-		require.NoError(t, cmd.Run())
-
-		require.NoError(t, ioout.Close())
-		require.NoError(t, ioerr.Close())
-
+		buildBin(t, buildReq{
+			name:          name,
+			rootDir:       rootDir,
+			mainLocation:  filepath.Join("cmd", name),
+			outputBinPath: binPath,
+		})
 		require.NoError(t, os.Setenv(EnvKey(name), binPath))
 	} else {
 		t.Logf("%q set, using %q pre-built binary", EnvKey(name), EnvValue(name))
 	}
+}
+
+func BuildPrevious(t *testing.T, name string) {
+	t.Helper()
+
+	_, tfile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	prevPath := filepath.Join(tfile, "../previous")
+	dir, err := os.ReadDir(prevPath)
+	require.NoError(t, err)
+
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	wg.Add(len(dir))
+	for _, entry := range dir {
+		go func(entry os.DirEntry) {
+			defer wg.Done()
+
+			t.Logf("Building previous binary: [%q] %q", entry.Name(), name)
+			rootDir := filepath.Join(prevPath, entry.Name())
+			buildBin(t, buildReq{
+				name:          name,
+				rootDir:       rootDir,
+				mainLocation:  name,
+				outputBinPath: filepath.Join(os.TempDir(), "dapr_integration_tests/"+name+"-"+entry.Name()),
+			})
+		}(entry)
+	}
+}
+
+type buildReq struct {
+	name          string
+	rootDir       string
+	mainLocation  string
+	outputBinPath string
+}
+
+// Use a consistent temp dir for the binary so that the binary is cached on
+// subsequent runs.
+func buildBin(t *testing.T, req buildReq) {
+	if runtime.GOOS == "windows" {
+		req.outputBinPath += ".exe"
+	}
+
+	ioout := iowriter.New(t, req.name)
+	ioerr := iowriter.New(t, req.name)
+
+	t.Logf("Root dir: %q", req.rootDir)
+	t.Logf("Compiling %q binary to: %q", req.name, req.outputBinPath)
+	cmd := exec.Command("go", "build", "-tags=allcomponents,wfbackendsqlite", "-v", "-o", req.outputBinPath, "./"+req.mainLocation) // #nosec G204
+	cmd.Dir = req.rootDir
+	cmd.Stdout = ioout
+	cmd.Stderr = ioerr
+	// Ensure CGO is disabled to avoid linking against system libraries.
+	cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
+	require.NoError(t, cmd.Run())
+
+	require.NoError(t, ioout.Close())
+	require.NoError(t, ioerr.Close())
 }
 
 func EnvValue(name string) string {
