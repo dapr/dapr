@@ -103,8 +103,8 @@ github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.1 h1:AMf7YbZOZIW5b66cX
 github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.1/go.mod h1:uwfk06ZBcvL/g4VHNjurPfVln9NMbsk2XIZxJ+hu81k=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue v1.0.0 h1:lJwNFV+xYjHREUTHJKx/ZF6CJSt9znxmLw9DqSTvyRU=
 github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue v1.0.0/go.mod h1:GfT0aGew8Qj5yiQVqOO5v7N8fanbJGyUoHqXg56qcVY=
-github.com/Azure/go-amqp v1.0.4 h1:GX5OFOs706UjuFRD5PDKm3aOuLQ92F7DMbua+DKAYCc=
-github.com/Azure/go-amqp v1.0.4/go.mod h1:vZAogwdrkbyK3Mla8m/CxSc/aKdnTZ4IbPxl51Y5WZE=
+github.com/Azure/go-amqp v1.0.5-0.20240301200753-2dff4b36f85f h1:9yUxNoINCNZaa2wmW6Kl8gLkUiyLmxby6ZjCCeRYCB0=
+github.com/Azure/go-amqp v1.0.5-0.20240301200753-2dff4b36f85f/go.mod h1:vZAogwdrkbyK3Mla8m/CxSc/aKdnTZ4IbPxl51Y5WZE=
 github.com/AzureAD/microsoft-authentication-library-for-go v1.2.1 h1:DzHpqpoJVaCgOUdVHxE8QB52S6NiVdDQvGlny1qvPqA=
 github.com/AzureAD/microsoft-authentication-library-for-go v1.2.1/go.mod h1:wP83P5OoQ5p6ip3ScPr0BAq0BvuPAvacpEuSzyouqAI=
 github.com/BurntSushi/toml v0.3.1/go.mod h1:xHWCNGjB5oqiDr8zfno3MHue2Ht5sIBksp03qcyfWMU=
@@ -435,8 +435,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.13.0-rc.8 h1:HIVdB963rt14mZSuM1DObUViz3ccFbfRLhWZGzowMTs=
-github.com/dapr/components-contrib v1.13.0-rc.8/go.mod h1:2vqGUxoK1BUkurXVzl61958wCGydbftK4eQP0rudMSQ=
+github.com/dapr/components-contrib v1.13.0-rc.9 h1:bxcz17+ls3/riSZg5uJ2kQccgh+xXOQoHigB7DPo9dI=
+github.com/dapr/components-contrib v1.13.0-rc.9/go.mod h1:+3N0fUmkgUDvhfzOq84eVCgWI9nVlFYySSrvyUMTlWw=
 github.com/dapr/kit v0.13.0 h1:4S+5QqDCreva+MBONtIgxeg6B2b1W89bB8F5lqKgTa0=
 github.com/dapr/kit v0.13.0/go.mod h1:VyHrelNXPbtS/VcQX0Y/uzW0lfEVuveJ+1E5bDys8mo=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
