@@ -74,6 +74,10 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 		fopt(&opts)
 	}
 
+	if opts.version != nil {
+		binPath += "-v" + *opts.version
+	}
+
 	return &exec{
 		binPath:    binPath,
 		args:       args,

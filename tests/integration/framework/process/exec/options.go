@@ -27,6 +27,7 @@ type options struct {
 	runErrorFn func(*testing.T, error)
 	exitCode   int
 	envs       map[string]string
+	version    *string
 }
 
 func WithStdout(stdout io.WriteCloser) Option {
@@ -64,5 +65,12 @@ func WithEnvVars(t *testing.T, envs ...string) Option {
 		for i := 0; i < len(envs); i += 2 {
 			o.envs[envs[i]] = envs[i+1]
 		}
+	}
+}
+
+func WithVersion(t *testing.T, version string) Option {
+	require.Contains(t, []string{"", "1.13"}, version)
+	return func(o *options) {
+		o.version = &version
 	}
 }
