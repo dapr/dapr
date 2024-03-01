@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	etcdcron "github.com/Scalingo/go-etcd-cron"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -39,15 +38,12 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 
 	// TODO: figure out if we need/want namespace in job name
 	err := s.cron.AddJob(etcdcron.Job{
-		Name:    req.GetJob().GetName(),
-		Rhythm:  req.GetJob().GetSchedule(),
-		Repeats: req.GetJob().GetRepeats(),
-		DueTime: req.GetJob().GetDueTime(), // TODO: figure out dueTime
-		TTL:     req.GetJob().GetTtl(),
-		Data: &anypb.Any{
-			TypeUrl: "type.googleapis.com/google.protobuf.BytesValue",
-			Value:   req.GetJob().GetData(),
-		},
+		Name:     req.GetJob().GetName(),
+		Rhythm:   req.GetJob().GetSchedule(),
+		Repeats:  req.GetJob().GetRepeats(),
+		DueTime:  req.GetJob().GetDueTime(), // TODO: figure out dueTime
+		TTL:      req.GetJob().GetTtl(),
+		Data:     req.GetJob().GetData(),
 		Metadata: req.GetMetadata(), // TODO: do I need this here?
 		Func: func(context.Context) error {
 			innerErr := s.triggerJob(req.GetJob(), req.GetNamespace(), req.GetMetadata())
@@ -96,7 +92,7 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 			Repeats:  entry.Repeats,
 			DueTime:  entry.DueTime,
 			Ttl:      entry.TTL,
-			Data:     entry.Data.GetValue(),
+			Data:     entry.Data,
 		}
 
 		jobs = append(jobs, job)
@@ -124,7 +120,7 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.JobRequest) (*sc
 				Repeats:  job.Repeats,
 				DueTime:  job.DueTime,
 				Ttl:      job.TTL,
-				Data:     job.Data.GetValue(),
+				Data:     job.Data,
 			},
 		}
 		return resp, nil
@@ -165,7 +161,7 @@ func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRe
 		contentType := metadata["content-type"]
 		invokeReq := internalv1pb.NewInternalInvokeRequest(invokeMethod).
 			WithActor(actorType, actorID).
-			WithData(req.GetData()).
+			WithData(req.GetData().GetValue()).
 			WithContentType(contentType)
 
 		_, err := s.actorRuntime.Call(ctx, invokeReq)

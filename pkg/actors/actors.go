@@ -230,7 +230,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
 	if opts.Config.SchedulerService != "" {
-		log.Warn("Using scheduler service for reminders.")
+		log.Info("Using scheduler service for reminders.")
 		// TODO: have a wrapper that includes both client and conn.
 		schedulerClient, schedulerConn, err := schedulerclient.GetSchedulerClient(context.TODO(), opts.Config.SchedulerService, opts.Security)
 		if err != nil {
@@ -1207,21 +1207,29 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			req.Name,
 		)
 
+		data, err := req.Data.MarshalJSON()
+		if err != nil {
+			return err
+		}
+
 		// TODO: change the 3rd party library to take our format
 		jobSchedule := "@every " + req.Period
 		internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
-				Name:     fmt.Sprintf("%s||%s", a.actorsConfig.AppID, jobName),
+				Name:     a.actorsConfig.AppID + "||" + jobName,
 				Schedule: jobSchedule,
-				Data:     req.Data,
-				DueTime:  req.DueTime,
-				Ttl:      req.TTL,
+				Data: &anypb.Any{
+					TypeUrl: "type.googleapis.com/google.protobuf.BytesValue",
+					Value:   data,
+				},
+				DueTime: req.DueTime,
+				Ttl:     req.TTL,
 			},
 			Namespace: "",       // TODO
 			Metadata:  metadata, // TODO: this should generate key if jobStateStore is configured
 		}
 
-		_, err := a.scheduler.ScheduleJob(ctx, internalScheduleJobReq)
+		_, err = a.scheduler.ScheduleJob(ctx, internalScheduleJobReq)
 		return err
 	}
 
