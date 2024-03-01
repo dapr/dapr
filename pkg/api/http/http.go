@@ -572,6 +572,14 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 
 	diag.DefaultComponentMonitoring.OutputBindingEvent(context.Background(), name, req.Operation, err == nil, elapsed)
 
+	if resp != nil {
+		// Set the metadata in the response even in case of error.
+		// HTTP binding, for example, returns metadata even for error.
+		for k, v := range resp.Metadata {
+			reqCtx.Response.Header.Add(metadataPrefix+k, v)
+		}
+	}
+
 	if err != nil {
 		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
@@ -582,9 +590,6 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	if resp == nil {
 		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 	} else {
-		for k, v := range resp.Metadata {
-			reqCtx.Response.Header.Add(metadataPrefix+k, v)
-		}
 		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 	}
 }
