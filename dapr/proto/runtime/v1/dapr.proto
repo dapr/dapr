@@ -1131,7 +1131,7 @@ message Job {
   string schedule = 2;
 
   // Job data.
-  bytes data = 3;
+  google.protobuf.Any data = 3;
 
   // Optional: jobs with fixed repeat counts (accounting for Actor Reminders).
   int32 repeats = 4;

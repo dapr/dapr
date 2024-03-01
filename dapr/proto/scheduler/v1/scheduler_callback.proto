@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package dapr.proto.scheduler.v1;
 
+import "google/protobuf/any.proto";
+
 option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
 
 service SchedulerCallback {
@@ -18,7 +20,7 @@ message TriggerJobRequest {
 	string namespace = 2;
 
 	// Payload
-	bytes data = 3;
+	google.protobuf.Any data = 3;
 
     // The metadata associated with the job.
     // This can contain the generated `key` for the optional state store when the daprd sidecar needs to lookup the entire data from a state store.
