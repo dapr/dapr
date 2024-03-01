@@ -24,11 +24,19 @@ import (
 const (
 	CodePrefixScheduler = "SCHEDULER_" // TODO(Cassie): move this to kit eventually
 	InFixJob            = "JOB_"
+	InFixAppID          = "APPID_"
+	InFixGet            = "GET_"
+	InFixList           = "LIST_"
+	InFixDelete         = "DELETE_"
 	InFixSchedule       = "SCHEDULE_"
 	PostFixRepeats      = "REPEATS"
 	PostFixJob          = "JOB"
+	PostFixJobs         = "JOBS"
 
 	MsgScheduleJob = "failed to schedule job"
+	MsgGetJob      = "failed to get job"
+	MsgListJobs    = "failed to list jobs"
+	MsgDeleteJob   = "failed to delete job"
 )
 
 func SchedulerURLName(metadata map[string]string) error {
@@ -51,5 +59,38 @@ func SchedulerScheduleJob(metadata map[string]string, err error) error {
 		"",
 	).
 		WithErrorInfo(CodePrefixScheduler+InFixSchedule+PostFixJob, metadata).
+		Build()
+}
+
+func SchedulerGetJob(metadata map[string]string, err error) error {
+	return kiterrors.NewBuilder(
+		codes.Internal,
+		http.StatusInternalServerError,
+		MsgGetJob+" due to: "+err.Error(),
+		"",
+	).
+		WithErrorInfo(CodePrefixScheduler+InFixGet+PostFixJob, metadata).
+		Build()
+}
+
+func SchedulerListJobs(metadata map[string]string, err error) error {
+	return kiterrors.NewBuilder(
+		codes.Internal,
+		http.StatusInternalServerError,
+		MsgListJobs+" due to: "+err.Error(),
+		"",
+	).
+		WithErrorInfo(CodePrefixScheduler+InFixList+PostFixJobs, metadata).
+		Build()
+}
+
+func SchedulerDeleteJob(metadata map[string]string, err error) error {
+	return kiterrors.NewBuilder(
+		codes.Internal,
+		http.StatusInternalServerError,
+		MsgDeleteJob+" due to: "+err.Error(),
+		"",
+	).
+		WithErrorInfo(CodePrefixScheduler+InFixDelete+PostFixJob, metadata).
 		Build()
 }
