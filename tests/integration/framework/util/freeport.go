@@ -55,6 +55,11 @@ func ReservePorts(t *testing.T, count int) *FreePort {
 
 		ports = append(ports, port)
 		lsns = append(lsns, ln)
+		t.Cleanup(func() {
+			portLock.Lock()
+			defer portLock.Unlock()
+			delete(portUsed, port)
+		})
 	}
 
 	return &FreePort{
