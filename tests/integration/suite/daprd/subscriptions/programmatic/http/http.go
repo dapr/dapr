@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/programmatic/http/mixed"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/programmatic/http/v1alpha1"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/programmatic/http/v2alpha1"
 )

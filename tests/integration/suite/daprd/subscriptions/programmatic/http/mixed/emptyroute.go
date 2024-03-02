@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package routes
+package mixed
 
 import (
 	"context"
@@ -26,51 +26,72 @@ import (
 )
 
 func init() {
-	suite.Register(new(defaultroute))
+	suite.Register(new(emptyroute))
 }
 
-type defaultroute struct {
+type emptyroute struct {
 	daprd *daprd.Daprd
 	sub   *subscriber.Subscriber
 }
 
-func (d *defaultroute) Setup(t *testing.T) []framework.Option {
-	d.sub = subscriber.New(t,
-		subscriber.WithRoutes("/a/b/c/d", "/a", "/b", "/d/c/b/a"),
+func (e *emptyroute) Setup(t *testing.T) []framework.Option {
+	e.sub = subscriber.New(t,
+		subscriber.WithRoutes(
+			"/a/b/c/d", "/123",
+		),
 		subscriber.WithProgrammaticSubscriptions(
 			subscriber.SubscriptionJSON{
 				PubsubName: "mypub",
 				Topic:      "a",
+				Route:      "/a/b/c/d",
 				Routes: subscriber.RoutesJSON{
-					Default: "/a/b/c/d",
-				},
-			},
-			subscriber.SubscriptionJSON{
-				PubsubName: "mypub",
-				Topic:      "a",
-				Routes: subscriber.RoutesJSON{
-					Default: "/a",
-				},
-			},
-			subscriber.SubscriptionJSON{
-				PubsubName: "mypub",
-				Topic:      "b",
-				Routes: subscriber.RoutesJSON{
-					Default: "/b",
+					Rules: []*subscriber.RuleJSON{
+						{
+							Path:  "/123",
+							Match: "",
+						},
+					},
 				},
 			},
 			subscriber.SubscriptionJSON{
 				PubsubName: "mypub",
 				Topic:      "b",
+				Route:      "/a/b/c/d",
+			},
+			subscriber.SubscriptionJSON{
+				PubsubName: "mypub",
+				Topic:      "b",
 				Routes: subscriber.RoutesJSON{
-					Default: "/d/c/b/a",
+					Rules: []*subscriber.RuleJSON{
+						{
+							Path:  "/123",
+							Match: "",
+						},
+					},
 				},
+			},
+			subscriber.SubscriptionJSON{
+				PubsubName: "mypub",
+				Topic:      "c",
+				Routes: subscriber.RoutesJSON{
+					Rules: []*subscriber.RuleJSON{
+						{
+							Path:  "/123",
+							Match: "",
+						},
+					},
+				},
+			},
+			subscriber.SubscriptionJSON{
+				PubsubName: "mypub",
+				Topic:      "c",
+				Route:      "/a/b/c/d",
 			},
 		),
 	)
 
-	d.daprd = daprd.New(t,
-		daprd.WithAppPort(d.sub.Port()),
+	e.daprd = daprd.New(t,
+		daprd.WithAppPort(e.sub.Port()),
 		daprd.WithResourceFiles(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -81,28 +102,31 @@ spec:
 `))
 
 	return []framework.Option{
-		framework.WithProcesses(d.sub, d.daprd),
+		framework.WithProcesses(e.sub, e.daprd),
 	}
 }
 
-func (d *defaultroute) Run(t *testing.T, ctx context.Context) {
-	d.daprd.WaitUntilRunning(t, ctx)
+func (e *emptyroute) Run(t *testing.T, ctx context.Context) {
+	e.daprd.WaitUntilRunning(t, ctx)
 
-	d.sub.Publish(t, ctx, subscriber.PublishRequest{
-		Daprd:      d.daprd,
+	e.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:      e.daprd,
 		PubSubName: "mypub",
 		Topic:      "a",
 	})
-	resp := d.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.Route)
-	assert.Empty(t, resp.Data())
+	assert.Equal(t, "/123", e.sub.Receive(t, ctx).Route)
 
-	d.sub.Publish(t, ctx, subscriber.PublishRequest{
-		Daprd:      d.daprd,
+	e.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:      e.daprd,
 		PubSubName: "mypub",
 		Topic:      "b",
 	})
-	resp = d.sub.Receive(t, ctx)
-	assert.Equal(t, "/d/c/b/a", resp.Route)
-	assert.Empty(t, resp.Data())
+	assert.Equal(t, "/123", e.sub.Receive(t, ctx).Route)
+
+	e.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:      e.daprd,
+		PubSubName: "mypub",
+		Topic:      "c",
+	})
+	assert.Equal(t, "/a/b/c/d", e.sub.Receive(t, ctx).Route)
 }

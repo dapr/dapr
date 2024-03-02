@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package routes
+package mixed
 
 import (
 	"context"
@@ -36,35 +36,43 @@ type defaultroute struct {
 
 func (d *defaultroute) Setup(t *testing.T) []framework.Option {
 	d.sub = subscriber.New(t,
-		subscriber.WithRoutes("/a/b/c/d", "/a", "/b", "/d/c/b/a"),
+		subscriber.WithRoutes(
+			"/a/b/c/d", "/d/c/b/a",
+			"/123", "/456",
+			"/zyx", "/xyz",
+		),
 		subscriber.WithProgrammaticSubscriptions(
 			subscriber.SubscriptionJSON{
 				PubsubName: "mypub",
 				Topic:      "a",
-				Routes: subscriber.RoutesJSON{
-					Default: "/a/b/c/d",
-				},
-			},
-			subscriber.SubscriptionJSON{
-				PubsubName: "mypub",
-				Topic:      "a",
-				Routes: subscriber.RoutesJSON{
-					Default: "/a",
-				},
-			},
-			subscriber.SubscriptionJSON{
-				PubsubName: "mypub",
-				Topic:      "b",
-				Routes: subscriber.RoutesJSON{
-					Default: "/b",
-				},
-			},
-			subscriber.SubscriptionJSON{
-				PubsubName: "mypub",
-				Topic:      "b",
+				Route:      "/a/b/c/d",
 				Routes: subscriber.RoutesJSON{
 					Default: "/d/c/b/a",
 				},
+			},
+			subscriber.SubscriptionJSON{
+				PubsubName: "mypub",
+				Topic:      "b",
+				Route:      "/123",
+			},
+			subscriber.SubscriptionJSON{
+				PubsubName: "mypub",
+				Topic:      "b",
+				Routes: subscriber.RoutesJSON{
+					Default: "/456",
+				},
+			},
+			subscriber.SubscriptionJSON{
+				PubsubName: "mypub",
+				Topic:      "c",
+				Routes: subscriber.RoutesJSON{
+					Default: "/xyz",
+				},
+			},
+			subscriber.SubscriptionJSON{
+				PubsubName: "mypub",
+				Topic:      "c",
+				Route:      "/zyx",
 			},
 		),
 	)
@@ -93,16 +101,19 @@ func (d *defaultroute) Run(t *testing.T, ctx context.Context) {
 		PubSubName: "mypub",
 		Topic:      "a",
 	})
-	resp := d.sub.Receive(t, ctx)
-	assert.Equal(t, "/a", resp.Route)
-	assert.Empty(t, resp.Data())
+	assert.Equal(t, "/d/c/b/a", d.sub.Receive(t, ctx).Route)
 
 	d.sub.Publish(t, ctx, subscriber.PublishRequest{
 		Daprd:      d.daprd,
 		PubSubName: "mypub",
 		Topic:      "b",
 	})
-	resp = d.sub.Receive(t, ctx)
-	assert.Equal(t, "/d/c/b/a", resp.Route)
-	assert.Empty(t, resp.Data())
+	assert.Equal(t, "/456", d.sub.Receive(t, ctx).Route)
+
+	d.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:      d.daprd,
+		PubSubName: "mypub",
+		Topic:      "c",
+	})
+	assert.Equal(t, "/zyx", d.sub.Receive(t, ctx).Route)
 }
