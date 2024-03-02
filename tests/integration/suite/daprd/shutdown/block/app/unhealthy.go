@@ -24,8 +24,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -113,12 +111,9 @@ spec:
 func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 	u.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, u.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	client := u.daprd.GRPCClient(t, ctx)
 
-	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+	_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "foo",
 		Topic:      "topic",
 		Data:       []byte(`{"status":"completed"}`),
