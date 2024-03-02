@@ -150,7 +150,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		Topic:      "a",
 	})
 	resp := h.sub.Receive(t, ctx)
-	assert.Subset(t, []string{"/a", "/a/b/c/d"}, []string{resp.Route})
+	assert.Contains(t, []string{"/a", "/a/b/c/d"}, resp.Route)
 	assert.Empty(t, resp.Data())
 
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{
@@ -159,6 +159,6 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		Topic:      "b",
 	})
 	resp = h.sub.Receive(t, ctx)
-	assert.Subset(t, []string{"/a", "/a/b/c/d", "/d/c/b/a"}, []string{resp.Route})
+	assert.Contains(t, []string{"/a", "/a/b/c/d", "/d/c/b/a"}, resp.Route)
 	assert.Empty(t, resp.Data())
 }

@@ -147,7 +147,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 	resp := g.sub.Receive(t, ctx)
-	assert.Subset(t, []string{"/a", "/a/b/c/d"}, []string{resp.GetPath()})
+	assert.Contains(t, []string{"/a", "/a/b/c/d"}, resp.GetPath())
 	assert.Empty(t, resp.GetData())
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
@@ -156,6 +156,6 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 	resp = g.sub.Receive(t, ctx)
-	assert.Subset(t, []string{"/b", "/a/b/c/d"}, []string{resp.GetPath()})
+	assert.Contains(t, []string{"/b", "/a/b/c/d"}, resp.GetPath())
 	assert.Empty(t, resp.GetData())
 }
