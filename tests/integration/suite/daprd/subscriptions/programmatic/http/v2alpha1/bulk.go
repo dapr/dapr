@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package bulk
+package v2alpha1
 
 import (
 	"context"
@@ -24,64 +24,61 @@ import (
 )
 
 func init() {
-	suite.Register(new(http))
+	suite.Register(new(bulk))
 }
 
-type http struct {
+type bulk struct {
 	daprd *daprd.Daprd
 	sub   *subscriber.Subscriber
 }
 
-func (h *http) Setup(t *testing.T) []framework.Option {
-	h.sub = subscriber.New(t, subscriber.WithBulkRoutes("/a", "/b"))
+func (b *bulk) Setup(t *testing.T) []framework.Option {
+	b.sub = subscriber.New(t,
+		subscriber.WithBulkRoutes("/a", "/b"),
+		subscriber.WithProgrammaticSubscriptions(subscriber.SubscriptionJSON{
+			PubsubName: "mypub",
+			Topic:      "a",
+			Routes: subscriber.RoutesJSON{
+				Default: "/a",
+			},
+			BulkSubscribe: subscriber.BulkSubscribeJSON{
+				Enabled:            true,
+				MaxMessagesCount:   100,
+				MaxAwaitDurationMs: 40,
+			},
+		},
+			subscriber.SubscriptionJSON{
+				PubsubName: "mypub",
+				Topic:      "b",
+				Routes: subscriber.RoutesJSON{
+					Default: "/b",
+				},
+			},
+		),
+	)
 
-	h.daprd = daprd.New(t,
-		daprd.WithAppPort(h.sub.Port()),
-		daprd.WithAppProtocol("http"),
+	b.daprd = daprd.New(t,
+		daprd.WithAppPort(b.sub.Port()),
 		daprd.WithResourceFiles(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
- name: mypub
+  name: mypub
 spec:
- type: pubsub.in-memory
- version: v1
----
-apiVersion: dapr.io/v2alpha1
-kind: Subscription
-metadata:
- name: mysub
-spec:
- pubsubname: mypub
- topic: a
- routes:
-  default: /a
- bulkSubscribe:
-  enabled: true
-  maxMessagesCount: 100
-  maxAwaitDurationMs: 40
----
-apiVersion: dapr.io/v2alpha1
-kind: Subscription
-metadata:
- name: nobulk
-spec:
- pubsubname: mypub
- topic: b
- routes:
-  default: /b
+  type: pubsub.in-memory
+  version: v1
 `))
 
 	return []framework.Option{
-		framework.WithProcesses(h.sub, h.daprd),
+		framework.WithProcesses(b.sub, b.daprd),
 	}
 }
 
-func (h *http) Run(t *testing.T, ctx context.Context) {
-	h.daprd.WaitUntilRunning(t, ctx)
+func (b *bulk) Run(t *testing.T, ctx context.Context) {
+	b.daprd.WaitUntilRunning(t, ctx)
 
 	// TODO: @joshvanl: add support for bulk publish to in-memory pubsub.
-	h.sub.PublishBulk(t, ctx, subscriber.PublishBulkRequest{
-		Daprd:      h.daprd,
+	b.sub.PublishBulk(t, ctx, subscriber.PublishBulkRequest{
+		Daprd:      b.daprd,
 		PubSubName: "mypub",
 		Topic:      "a",
 		Entries: []subscriber.PublishBulkRequestEntry{
@@ -92,13 +89,13 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 
-	h.sub.ReceiveBulk(t, ctx)
-	h.sub.ReceiveBulk(t, ctx)
-	h.sub.ReceiveBulk(t, ctx)
-	h.sub.ReceiveBulk(t, ctx)
+	b.sub.ReceiveBulk(t, ctx)
+	b.sub.ReceiveBulk(t, ctx)
+	b.sub.ReceiveBulk(t, ctx)
+	b.sub.ReceiveBulk(t, ctx)
 
-	h.sub.PublishBulk(t, ctx, subscriber.PublishBulkRequest{
-		Daprd:      h.daprd,
+	b.sub.PublishBulk(t, ctx, subscriber.PublishBulkRequest{
+		Daprd:      b.daprd,
 		PubSubName: "mypub",
 		Topic:      "b",
 		Entries: []subscriber.PublishBulkRequestEntry{
@@ -109,8 +106,8 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 
-	h.sub.ReceiveBulk(t, ctx)
-	h.sub.ReceiveBulk(t, ctx)
-	h.sub.ReceiveBulk(t, ctx)
-	h.sub.ReceiveBulk(t, ctx)
+	b.sub.ReceiveBulk(t, ctx)
+	b.sub.ReceiveBulk(t, ctx)
+	b.sub.ReceiveBulk(t, ctx)
+	b.sub.ReceiveBulk(t, ctx)
 }

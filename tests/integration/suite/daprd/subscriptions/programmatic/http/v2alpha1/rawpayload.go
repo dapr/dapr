@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package rawpayload
+package v2alpha1
 
 import (
 	"bytes"
@@ -31,58 +31,55 @@ import (
 )
 
 func init() {
-	suite.Register(new(http))
+	suite.Register(new(rawpayload))
 }
 
-type http struct {
+type rawpayload struct {
 	daprd *daprd.Daprd
 	sub   *subscriber.Subscriber
 }
 
-func (h *http) Setup(t *testing.T) []framework.Option {
-	h.sub = subscriber.New(t,
+func (r *rawpayload) Setup(t *testing.T) []framework.Option {
+	r.sub = subscriber.New(t,
 		subscriber.WithRoutes("/a"),
+		subscriber.WithProgrammaticSubscriptions(subscriber.SubscriptionJSON{
+			PubsubName: "mypub",
+			Topic:      "a",
+			Routes: subscriber.RoutesJSON{
+				Default: "/a",
+			},
+			Metadata: map[string]string{
+				"rawPayload": "true",
+			},
+		}),
 	)
 
-	h.daprd = daprd.New(t,
-		daprd.WithAppPort(h.sub.Port()),
-		daprd.WithAppProtocol("http"),
+	r.daprd = daprd.New(t,
+		daprd.WithAppPort(r.sub.Port()),
 		daprd.WithResourceFiles(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
- name: mypub
+  name: mypub
 spec:
- type: pubsub.in-memory
- version: v1
----
-apiVersion: dapr.io/v2alpha1
-kind: Subscription
-metadata:
- name: mysub
-spec:
- pubsubname: mypub
- topic: a
- routes:
-  default: /a
- metadata:
-  rawPayload: "true"
+  type: pubsub.in-memory
+  version: v1
 `))
 
 	return []framework.Option{
-		framework.WithProcesses(h.sub, h.daprd),
+		framework.WithProcesses(r.sub, r.daprd),
 	}
 }
 
-func (h *http) Run(t *testing.T, ctx context.Context) {
-	h.daprd.WaitUntilRunning(t, ctx)
+func (r *rawpayload) Run(t *testing.T, ctx context.Context) {
+	r.daprd.WaitUntilRunning(t, ctx)
 
-	h.sub.Publish(t, ctx, subscriber.PublishRequest{
-		Daprd:      h.daprd,
+	r.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:      r.daprd,
 		PubSubName: "mypub",
 		Topic:      "a",
 		Data:       `{"status": "completed"}`,
 	})
-	resp := h.sub.Receive(t, ctx)
+	resp := r.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)
 	assert.Equal(t, "1.0", resp.SpecVersion())
 	assert.Equal(t, "mypub", resp.Extensions()["pubsubname"])
@@ -99,14 +96,14 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	exp["traceparent"] = ce["traceparent"]
 	assert.Equal(t, exp, ce)
 
-	h.sub.Publish(t, ctx, subscriber.PublishRequest{
-		Daprd:           h.daprd,
+	r.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:           r.daprd,
 		PubSubName:      "mypub",
 		Topic:           "a",
 		Data:            `{"status": "completed"}`,
 		DataContentType: ptr.Of("application/json"),
 	})
-	resp = h.sub.Receive(t, ctx)
+	resp = r.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)
 	assert.Equal(t, "1.0", resp.SpecVersion())
 	assert.Equal(t, "mypub", resp.Extensions()["pubsubname"])
@@ -122,14 +119,14 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	exp["traceparent"] = ce["traceparent"]
 	assert.Equal(t, exp, ce)
 
-	h.sub.Publish(t, ctx, subscriber.PublishRequest{
-		Daprd:           h.daprd,
+	r.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:           r.daprd,
 		PubSubName:      "mypub",
 		Topic:           "a",
 		Data:            `{"status": "completed"}`,
 		DataContentType: ptr.Of("foo/bar"),
 	})
-	resp = h.sub.Receive(t, ctx)
+	resp = r.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)
 	assert.Equal(t, "1.0", resp.SpecVersion())
 	assert.Equal(t, "mypub", resp.Extensions()["pubsubname"])
@@ -147,13 +144,13 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	exp["datacontenttype"] = "foo/bar"
 	assert.Equal(t, exp, ce)
 
-	h.sub.Publish(t, ctx, subscriber.PublishRequest{
-		Daprd:      h.daprd,
+	r.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:      r.daprd,
 		PubSubName: "mypub",
 		Topic:      "a",
 		Data:       "foo",
 	})
-	resp = h.sub.Receive(t, ctx)
+	resp = r.sub.Receive(t, ctx)
 	assert.Equal(t, "/a", resp.Route)
 	assert.Equal(t, "1.0", resp.SpecVersion())
 	assert.Equal(t, "mypub", resp.Extensions()["pubsubname"])

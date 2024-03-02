@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package deadletter
+package v2alpha1
 
 import (
 	"context"
@@ -27,69 +27,65 @@ import (
 )
 
 func init() {
-	suite.Register(new(http))
+	suite.Register(new(deadletter))
 }
 
-type http struct {
+type deadletter struct {
 	daprd *daprd.Daprd
 	sub   *subscriber.Subscriber
 }
 
-func (h *http) Setup(t *testing.T) []framework.Option {
-	h.sub = subscriber.New(t,
+func (d *deadletter) Setup(t *testing.T) []framework.Option {
+	d.sub = subscriber.New(t,
 		subscriber.WithRoutes("/b"),
 		subscriber.WithHandlerFunc("/a", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			w.WriteHeader(nethttp.StatusServiceUnavailable)
 		}),
+		subscriber.WithProgrammaticSubscriptions(subscriber.SubscriptionJSON{
+			PubsubName: "mypub",
+			Topic:      "a",
+			Routes: subscriber.RoutesJSON{
+				Default: "/a",
+			},
+			DeadLetterTopic: "mydead",
+		},
+			subscriber.SubscriptionJSON{
+				PubsubName: "mypub",
+				Topic:      "mydead",
+				Routes: subscriber.RoutesJSON{
+					Default: "/b",
+				},
+			},
+		),
 	)
 
-	h.daprd = daprd.New(t,
-		daprd.WithAppPort(h.sub.Port()),
-		daprd.WithAppProtocol("http"),
+	d.daprd = daprd.New(t,
+		daprd.WithAppPort(d.sub.Port()),
 		daprd.WithResourceFiles(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
- name: mypub
+  name: mypub
 spec:
- type: pubsub.in-memory
- version: v1
----
-apiVersion: dapr.io/v1alpha1
-kind: Subscription
-metadata:
- name: mysub
-spec:
- pubsubname: mypub
- topic: a
- route: /a
- deadLetterTopic: mydead
----
-apiVersion: dapr.io/v1alpha1
-kind: Subscription
-metadata:
- name: mysub
-spec:
- pubsubname: mypub
- topic: mydead
- route: /b
+  type: pubsub.in-memory
+  version: v1
 `))
 
 	return []framework.Option{
-		framework.WithProcesses(h.sub, h.daprd),
+		framework.WithProcesses(d.sub, d.daprd),
 	}
 }
 
-func (h *http) Run(t *testing.T, ctx context.Context) {
-	h.daprd.WaitUntilRunning(t, ctx)
+func (d *deadletter) Run(t *testing.T, ctx context.Context) {
+	d.daprd.WaitUntilRunning(t, ctx)
 
-	h.sub.Publish(t, ctx, subscriber.PublishRequest{
-		Daprd:      h.daprd,
+	d.sub.Publish(t, ctx, subscriber.PublishRequest{
+		Daprd:      d.daprd,
 		PubSubName: "mypub",
 		Topic:      "a",
 		Data:       `{"status": "completed"}`,
 	})
 
-	resp := h.sub.Receive(t, ctx)
+	resp := d.sub.Receive(t, ctx)
 	assert.Equal(t, "/b", resp.Route)
 	assert.Equal(t, "a", resp.Extensions()["topic"])
 	assert.Equal(t, `{"status": "completed"}`, string(resp.Data()))

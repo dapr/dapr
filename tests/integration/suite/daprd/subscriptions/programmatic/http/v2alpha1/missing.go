@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package v2alpha1
 
 import (
 	"context"
@@ -19,12 +19,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpc/subscriber"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/subscriber"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -39,31 +38,26 @@ type missing struct {
 
 func (m *missing) Setup(t *testing.T) []framework.Option {
 	m.sub = subscriber.New(t,
-		subscriber.WithListTopicSubscriptions(func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error) {
-			return &rtv1.ListTopicSubscriptionsResponse{
-				Subscriptions: []*rtv1.TopicSubscription{
-					{
-						PubsubName: "anotherpub",
-						Topic:      "a",
-						Routes: &rtv1.TopicRoutes{
-							Default: "/a",
-						},
-					},
-					{
-						PubsubName: "mypub",
-						Topic:      "c",
-						Routes: &rtv1.TopicRoutes{
-							Default: "/c",
-						},
-					},
+		subscriber.WithRoutes("/a", "/b", "/c"),
+		subscriber.WithProgrammaticSubscriptions(subscriber.SubscriptionJSON{
+			PubsubName: "anotherpub",
+			Topic:      "a",
+			Routes: subscriber.RoutesJSON{
+				Default: "/a",
+			},
+		},
+			subscriber.SubscriptionJSON{
+				PubsubName: "mypub",
+				Topic:      "c",
+				Routes: subscriber.RoutesJSON{
+					Default: "/c",
 				},
-			}, nil
-		}),
+			},
+		),
 	)
 
 	m.daprd = daprd.New(t,
-		daprd.WithAppPort(m.sub.Port(t)),
-		daprd.WithAppProtocol("grpc"),
+		daprd.WithAppPort(m.sub.Port()),
 		daprd.WithResourceFiles(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -81,20 +75,29 @@ spec:
 func (m *missing) Run(t *testing.T, ctx context.Context) {
 	m.daprd.WaitUntilRunning(t, ctx)
 
-	client := m.daprd.GRPCClient(t, ctx)
-
-	meta, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	meta, err := m.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 	assert.Len(t, meta.GetRegisteredComponents(), 1)
 	assert.Len(t, meta.GetSubscriptions(), 2)
 
-	m.sub.ExpectPublishError(t, ctx, m.daprd, &rtv1.PublishEventRequest{
-		PubsubName: "anotherpub", Topic: "a", Data: []byte(`{"status": "completed"}`),
+	m.sub.ExpectPublishError(t, ctx, subscriber.PublishRequest{
+		Daprd:      m.daprd,
+		PubSubName: "anotherpub",
+		Topic:      "a",
+		Data:       `{"status": "completed"}`,
 	})
-	m.sub.ExpectPublishNoReceive(t, ctx, m.daprd, &rtv1.PublishEventRequest{
-		PubsubName: "mypub", Topic: "b", Data: []byte(`{"status": "completed"}`),
+
+	m.sub.ExpectPublishNoReceive(t, ctx, subscriber.PublishRequest{
+		Daprd:      m.daprd,
+		PubSubName: "mypub",
+		Topic:      "b",
+		Data:       `{"status": "completed"}`,
 	})
-	m.sub.ExpectPublishReceive(t, ctx, m.daprd, &rtv1.PublishEventRequest{
-		PubsubName: "mypub", Topic: "c", Data: []byte(`{"status": "completed"}`),
+
+	m.sub.ExpectPublishReceive(t, ctx, subscriber.PublishRequest{
+		Daprd:      m.daprd,
+		PubSubName: "mypub",
+		Topic:      "c",
+		Data:       `{"status": "completed"}`,
 	})
 }
