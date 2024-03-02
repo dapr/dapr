@@ -14,7 +14,6 @@ limitations under the License.
 package subscriptions
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/mixed"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/programmatic"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/mixed/grpc"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/mixed/http"
 )
