@@ -50,7 +50,7 @@ func (s *skew) Setup(t *testing.T) []framework.Option {
 	s.daprd1 = daprd.New(t, daprd.WithAppPort(srv.Port()))
 	s.daprd2 = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
-		daprd.WithExecOptions(exec.WithVersion(t, "1.13")),
+		daprd.WithExecOptions(exec.WithVersion(t, "v1.13")),
 	)
 
 	return []framework.Option{
