@@ -84,30 +84,48 @@ func BuildLocal(t *testing.T, name string) {
 func BuildPrevious(t *testing.T, name string) {
 	t.Helper()
 
-	_, tfile, _, ok := runtime.Caller(0)
-	require.True(t, ok)
-	prevPath := filepath.Join(tfile, "../previous")
-	dir, err := os.ReadDir(prevPath)
-	require.NoError(t, err)
-
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
-	wg.Add(len(dir))
-	for _, entry := range dir {
-		go func(entry os.DirEntry) {
+	_, tfile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	prevPath := filepath.Join(tfile, "../previous")
+
+	versions := PreviousVersions(t)
+	wg.Add(len(versions))
+	for _, v := range versions {
+		go func(v string) {
 			defer wg.Done()
 
-			t.Logf("Building previous binary: [%q] %q", entry.Name(), name)
-			rootDir := filepath.Join(prevPath, entry.Name())
+			t.Logf("Building previous binary: [%q] %q", v, name)
+			rootDir := filepath.Join(prevPath, v)
 			buildBin(t, buildReq{
 				name:          name,
 				rootDir:       rootDir,
 				mainLocation:  name,
-				outputBinPath: filepath.Join(os.TempDir(), "dapr_integration_tests/"+name+"-"+entry.Name()),
+				outputBinPath: filepath.Join(os.TempDir(), "dapr_integration_tests/"+name+"-"+v),
 			})
-		}(entry)
+		}(v)
 	}
+}
+
+func PreviousVersions(t *testing.T) []string {
+	_, tfile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	prevPath := filepath.Join(tfile, "../previous")
+
+	dir, err := os.ReadDir(prevPath)
+	require.NoError(t, err)
+
+	versions := make([]string, 0, len(dir)-1)
+	for _, d := range dir {
+		if !d.IsDir() {
+			continue
+		}
+		versions = append(versions, d.Name())
+	}
+
+	return versions
 }
 
 type buildReq struct {

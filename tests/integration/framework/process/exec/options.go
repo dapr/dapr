@@ -18,6 +18,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/binary"
 )
 
 type options struct {
@@ -69,7 +71,7 @@ func WithEnvVars(t *testing.T, envs ...string) Option {
 }
 
 func WithVersion(t *testing.T, version string) Option {
-	require.Contains(t, []string{"", "1.13"}, version)
+	require.Contains(t, append(binary.PreviousVersions(t), ""), version)
 	return func(o *options) {
 		o.version = &version
 	}
