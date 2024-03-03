@@ -13,7 +13,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
-	github.com/dapr/components-contrib v1.13.0-rc.8
+	github.com/dapr/components-contrib v1.13.0-rc.10
 	github.com/dapr/kit v0.13.0
 	github.com/evanphx/json-patch/v5 v5.8.1
 	github.com/go-chi/chi/v5 v5.0.11
@@ -63,9 +63,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.21.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/ratelimit v0.3.0
-	golang.org/x/crypto v0.18.0
+	golang.org/x/crypto v0.19.0
 	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
-	golang.org/x/net v0.20.0
+	golang.org/x/net v0.21.0
 	golang.org/x/sync v0.6.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20231120223509-83a465c0220f
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231212172506-995d672761c0
@@ -117,10 +117,10 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/security/keyvault/internal v1.0.0 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.2.1 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue v1.0.0 // indirect
-	github.com/Azure/go-amqp v1.0.4 // indirect
+	github.com/Azure/go-amqp v1.0.5-0.20240301200753-2dff4b36f85f // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.1 // indirect
 	github.com/DataDog/zstd v1.5.2 // indirect
-	github.com/IBM/sarama v1.42.1 // indirect
+	github.com/IBM/sarama v1.42.2 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/RoaringBitmap/roaring v1.1.0 // indirect
@@ -203,7 +203,7 @@ require (
 	github.com/dubbogo/triple v1.1.8 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/dvsekhvalnov/jose2go v1.6.0 // indirect
-	github.com/eapache/go-resiliency v1.4.0 // indirect
+	github.com/eapache/go-resiliency v1.5.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/eclipse/paho.mqtt.golang v1.4.3 // indirect
@@ -349,7 +349,7 @@ require (
 	github.com/pelletier/go-toml v1.9.5 // indirect
 	github.com/peterbourgon/diskv v2.0.1+incompatible // indirect
 	github.com/pierrec/lz4 v2.6.1+incompatible // indirect
-	github.com/pierrec/lz4/v4 v4.1.18 // indirect
+	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
@@ -421,8 +421,8 @@ require (
 	golang.org/x/arch v0.3.0 // indirect
 	golang.org/x/mod v0.14.0 // indirect
 	golang.org/x/oauth2 v0.16.0 // indirect
-	golang.org/x/sys v0.16.0 // indirect
-	golang.org/x/term v0.16.0 // indirect
+	golang.org/x/sys v0.17.0 // indirect
+	golang.org/x/term v0.17.0 // indirect
 	golang.org/x/text v0.14.0 // indirect
 	golang.org/x/time v0.3.0 // indirect
 	golang.org/x/tools v0.17.0 // indirect
