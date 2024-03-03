@@ -45,8 +45,8 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/api/http"
 	"github.com/dapr/dapr/pkg/api/universal"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	endpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
@@ -55,7 +55,9 @@ import (
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/httpendpoint"
+	"github.com/dapr/dapr/pkg/internal/loader"
+	"github.com/dapr/dapr/pkg/internal/loader/disk"
+	"github.com/dapr/dapr/pkg/internal/loader/kubernetes"
 	"github.com/dapr/dapr/pkg/messaging"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
@@ -294,7 +296,7 @@ func newDaprRuntime(ctx context.Context,
 			comps := rt.compStore.ListComponents()
 			errCh := make(chan error)
 			for _, comp := range comps {
-				go func(comp componentsV1alpha1.Component) {
+				go func(comp compapi.Component) {
 					log.Infof("Shutting down component %s", comp.LogName())
 					errCh <- rt.processor.Close(comp)
 				}(comp)
@@ -987,24 +989,29 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 }
 
 func (a *DaprRuntime) loadComponents(ctx context.Context) error {
-	var loader components.ComponentLoader
+	var loader loader.Loader[compapi.Component]
 
 	switch a.runtimeConfig.mode {
 	case modes.KubernetesMode:
-		loader = components.NewKubernetesComponents(a.runtimeConfig.kubernetes, a.namespace, a.operatorClient, a.podName)
+		loader = kubernetes.NewComponents(kubernetes.Options{
+			Config:    a.runtimeConfig.kubernetes,
+			Client:    a.operatorClient,
+			Namespace: a.namespace,
+			PodName:   a.podName,
+		})
 	case modes.StandaloneMode:
-		loader = components.NewLocalComponents(a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.New[compapi.Component](a.runtimeConfig.standalone.ResourcesPath...)
 	default:
 		return nil
 	}
 
 	log.Info("Loading components…")
-	comps, err := loader.Load()
+	comps, err := loader.Load(ctx)
 	if err != nil {
 		return err
 	}
 
-	authorizedComps := a.authz.GetAuthorizedObjects(comps, a.authz.IsObjectAuthorized).([]componentsV1alpha1.Component)
+	authorizedComps := a.authz.GetAuthorizedObjects(comps, a.authz.IsObjectAuthorized).([]compapi.Component)
 
 	// Iterate through the list twice
 	// First, we look for secret stores and load those, then all other components
@@ -1033,7 +1040,7 @@ func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
 	log.Info("Waiting for all outstanding http endpoints to be processed…")
 	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
 	// We know that once the no-op http endpoint is read from the channel, all previous http endpoints will have been fully processed.
-	a.processor.AddPendingEndpoint(ctx, httpEndpointV1alpha1.HTTPEndpoint{})
+	a.processor.AddPendingEndpoint(ctx, endpointapi.HTTPEndpoint{})
 	log.Info("All outstanding http endpoints processed")
 }
 
@@ -1041,29 +1048,34 @@ func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
 	log.Info("Waiting for all outstanding components to be processed…")
 	// We flush by sending a no-op component. Since the processComponents goroutine only reads one component at a time,
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
-	a.processor.AddPendingComponent(ctx, componentsV1alpha1.Component{})
+	a.processor.AddPendingComponent(ctx, compapi.Component{})
 	log.Info("All outstanding components processed")
 }
 
 func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
-	var loader httpendpoint.EndpointsLoader
+	var loader loader.Loader[endpointapi.HTTPEndpoint]
 
 	switch a.runtimeConfig.mode {
 	case modes.KubernetesMode:
-		loader = httpendpoint.NewKubernetesHTTPEndpoints(a.runtimeConfig.kubernetes, a.namespace, a.operatorClient, a.podName)
+		loader = kubernetes.NewHTTPEndpoints(kubernetes.Options{
+			Config:    a.runtimeConfig.kubernetes,
+			Client:    a.operatorClient,
+			Namespace: a.namespace,
+			PodName:   a.podName,
+		})
 	case modes.StandaloneMode:
-		loader = httpendpoint.NewLocalHTTPEndpoints(a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.New[endpointapi.HTTPEndpoint](a.runtimeConfig.standalone.ResourcesPath...)
 	default:
 		return nil
 	}
 
 	log.Info("Loading endpoints…")
-	endpoints, err := loader.LoadHTTPEndpoints()
+	endpoints, err := loader.Load(ctx)
 	if err != nil {
 		return err
 	}
 
-	authorizedHTTPEndpoints := a.authz.GetAuthorizedObjects(endpoints, a.authz.IsObjectAuthorized).([]httpEndpointV1alpha1.HTTPEndpoint)
+	authorizedHTTPEndpoints := a.authz.GetAuthorizedObjects(endpoints, a.authz.IsObjectAuthorized).([]endpointapi.HTTPEndpoint)
 
 	for _, e := range authorizedHTTPEndpoints {
 		log.Infof("Found http endpoint: %s", e.Name)
@@ -1183,11 +1195,11 @@ func (a *DaprRuntime) appendBuiltinSecretStore(ctx context.Context) {
 	switch a.runtimeConfig.mode {
 	case modes.KubernetesMode:
 		// Preload Kubernetes secretstore
-		a.processor.AddPendingComponent(ctx, componentsV1alpha1.Component{
+		a.processor.AddPendingComponent(ctx, compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: secretstoresLoader.BuiltinKubernetesSecretStore,
 			},
-			Spec: componentsV1alpha1.ComponentSpec{
+			Spec: compapi.ComponentSpec{
 				Type:    "secretstores.kubernetes",
 				Version: components.FirstStableVersion,
 			},

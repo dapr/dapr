@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,9 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package disk
 
 import (
+	"context"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -21,21 +22,14 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 )
 
-const configPrefix = "."
-
-func writeTempConfig(path, content string) (delete func(), error error) {
-	filePath := filepath.Join(configPrefix, path)
-	err := os.WriteFile(filePath, []byte(content), fs.FileMode(0o644))
-	return func() {
-		os.Remove(filePath)
-	}, err
-}
-
-func TestLoadComponentsFromFile(t *testing.T) {
+func TestLoad(t *testing.T) {
 	t.Run("valid yaml content", func(t *testing.T) {
-		request := NewLocalComponents(configPrefix)
+		tmp := t.TempDir()
+		request := New[compapi.Component](tmp)
 		filename := "test-component-valid.yaml"
 		yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -50,16 +44,15 @@ spec:
   - name: prop2
     value: value2
 `
-		remove, err := writeTempConfig(filename, yaml)
-		require.NoError(t, err)
-		defer remove()
-		components, err := request.Load()
+		require.NoError(t, os.WriteFile(filepath.Join(tmp, filename), []byte(yaml), fs.FileMode(0o600)))
+		components, err := request.Load(context.Background())
 		require.NoError(t, err)
 		assert.Len(t, components, 1)
 	})
 
 	t.Run("invalid yaml head", func(t *testing.T) {
-		request := NewLocalComponents(configPrefix)
+		tmp := t.TempDir()
+		request := New[compapi.Component](tmp)
 
 		filename := "test-component-invalid.yaml"
 		yaml := `
@@ -68,18 +61,16 @@ apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
 name: statestore`
-		remove, err := writeTempConfig(filename, yaml)
-		require.NoError(t, err)
-		defer remove()
-		components, err := request.Load()
+		require.NoError(t, os.WriteFile(filepath.Join(tmp, filename), []byte(yaml), fs.FileMode(0o600)))
+		components, err := request.Load(context.Background())
 		require.NoError(t, err)
 		assert.Empty(t, components)
 	})
 
 	t.Run("load components file not exist", func(t *testing.T) {
-		request := NewLocalComponents("test-path-no-exists")
+		request := New[compapi.Component]("test-path-no-exists")
 
-		components, err := request.Load()
+		components, err := request.Load(context.Background())
 		require.Error(t, err)
 		assert.Empty(t, components)
 	})
