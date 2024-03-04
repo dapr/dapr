@@ -221,7 +221,7 @@ func runTraces(t *testing.T, testName string, numTraces int, samplingRate string
 	sampledCount := 0
 
 	for i := 0; i < numTraces; i++ {
-		var ctx = context.Background()
+		ctx := context.Background()
 		if hasParentSpanContext {
 			traceID, _ := idg.NewIDs(context.Background())
 			scConfig := trace.SpanContextConfig{
