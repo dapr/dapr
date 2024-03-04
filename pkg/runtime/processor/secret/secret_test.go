@@ -206,6 +206,8 @@ func TestIsEnvVarAllowed(t *testing.T) {
 			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
 			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
 			{name: "keys with a space are denied", key: "FOO BAR", want: false},
+			{name: "case insensitive app_api_token", key: "app_api_token", want: false},
+			{name: "case insensitive dapr_foo", key: "dapr_foo", want: false},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
@@ -234,6 +236,7 @@ func TestIsEnvVarAllowed(t *testing.T) {
 			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
 			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
 			{name: "keys with a space are denied", key: "FOO BAR", want: false},
+			{name: "case insensitive allowlist", key: "foo", want: true},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {

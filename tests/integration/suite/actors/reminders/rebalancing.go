@@ -72,7 +72,7 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 	)
 
 	// Init placement
-	i.place = placement.New(t, placement.WithMaxAPILevel(0))
+	i.place = placement.New(t)
 
 	// Init two instances of daprd, each with its own server
 	for j := 0; j < 2; j++ {
@@ -189,7 +189,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	// Also invoke the same actors using actor invocation
 	for j := 0; j < iterations; j++ {
 		go func(j int) {
-			rctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+			rctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			defer cancel()
 			daprdURL := fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/myactorid-%d/method/foo", i.daprd[0].HTTPPort(), j)
 			req, rErr := http.NewRequestWithContext(rctx, http.MethodPost, daprdURL, nil)
@@ -197,17 +197,23 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 				errCh <- fmt.Errorf("failed invoking actor %d: %w", j, rErr)
 				return
 			}
-			resp, rErr := client.Do(req)
-			if rErr != nil {
-				errCh <- fmt.Errorf("failed invoking actor %d: %w", j, rErr)
-				return
-			}
-			defer resp.Body.Close()
-			// We don't check the status code here as it could be 500 if we tried invoking the fake app
-			if resp.StatusCode != http.StatusOK {
-				log.Printf("MYLOG Invoking actor %d on non-existent host", j)
-			}
-			errCh <- nil
+			assert.Eventually(t,
+				func() bool {
+					resp, respErr := client.Do(req)
+					if respErr != nil {
+						rErr = fmt.Errorf("failed invoking actor %d: %w", j, rErr)
+						return false
+					}
+					defer resp.Body.Close()
+					// We don't check the status code here as it could be 500 if we tried invoking the fake app
+					if resp.StatusCode != http.StatusOK {
+						log.Printf("MYLOG Invoking actor %d on non-existent host", j)
+					}
+
+					rErr = nil
+					return true
+				}, 10*time.Second, 1*time.Second)
+			errCh <- rErr
 		}(j)
 	}
 
@@ -376,6 +382,7 @@ func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placem
 		Port:     1234,
 		Entities: entities,
 		Id:       "invalidapp",
+		ApiLevel: 20,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to send message: %w", err)

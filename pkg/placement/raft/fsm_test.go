@@ -24,7 +24,11 @@ import (
 )
 
 func TestFSMApply(t *testing.T) {
-	fsm := newFSM()
+	fsm := newFSM(DaprHostMemberStateConfig{
+		replicationFactor: 100,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 
 	t.Run("upsertMember", func(t *testing.T) {
 		cmdLog, err := makeRaftLogCommand(MemberUpsert, DaprHostMember{
@@ -77,9 +81,17 @@ func TestFSMApply(t *testing.T) {
 
 func TestRestore(t *testing.T) {
 	// arrange
-	fsm := newFSM()
+	fsm := newFSM(DaprHostMemberStateConfig{
+		replicationFactor: 100,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 
-	s := newDaprHostMemberState()
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 100,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	s.upsertMember(&DaprHostMember{
 		Name:     "127.0.0.1:8080",
 		AppID:    "FakeID",
@@ -98,12 +110,20 @@ func TestRestore(t *testing.T) {
 	assert.Len(t, fsm.State().hashingTableMap(), 2)
 }
 
-func TestPlacementState(t *testing.T) {
-	fsm := newFSM()
+func TestPlacementStateWithVirtualNodes(t *testing.T) {
+	fsm := newFSM(DaprHostMemberStateConfig{
+		replicationFactor: 100,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
+
+	// We expect to see the placement table INCLUDE vnodes,
+	// because the only dapr instance in the cluster is at level 10 (pre v1.13)
 	m := DaprHostMember{
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",
 		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		APILevel: 10,
 	}
 	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
 	require.NoError(t, err)
@@ -118,4 +138,49 @@ func TestPlacementState(t *testing.T) {
 	newTable := fsm.PlacementState()
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
+	// The default replicationFactor is 100
+	assert.Equal(t, int64(100), newTable.GetReplicationFactor())
+
+	for _, host := range newTable.GetEntries() {
+		assert.Len(t, host.GetHosts(), 100)
+		assert.Len(t, host.GetSortedSet(), 100)
+		assert.Len(t, host.GetLoadMap(), 1)
+		assert.Contains(t, host.GetLoadMap(), "127.0.0.1:3030")
+	}
+}
+
+func TestPlacementState(t *testing.T) {
+	fsm := newFSM(DaprHostMemberStateConfig{
+		replicationFactor: 100,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
+	m := DaprHostMember{
+		Name:     "127.0.0.1:3030",
+		AppID:    "fakeAppID",
+		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		APILevel: 20,
+	}
+	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
+	require.NoError(t, err)
+
+	fsm.Apply(&raft.Log{
+		Index: 1,
+		Term:  1,
+		Type:  raft.LogCommand,
+		Data:  cmdLog,
+	})
+
+	newTable := fsm.PlacementState()
+	assert.Equal(t, "1", newTable.GetVersion())
+	assert.Len(t, newTable.GetEntries(), 2)
+	// The default replicationFactor is 100
+	assert.Equal(t, int64(100), newTable.GetReplicationFactor())
+
+	for _, host := range newTable.GetEntries() {
+		assert.Empty(t, host.GetHosts())
+		assert.Empty(t, host.GetSortedSet())
+		assert.Len(t, host.GetLoadMap(), 1)
+		assert.Contains(t, host.GetLoadMap(), "127.0.0.1:3030")
+	}
 }

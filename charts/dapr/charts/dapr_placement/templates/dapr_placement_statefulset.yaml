@@ -1,4 +1,4 @@
-{{- if eq .Values.global.actors.enabled true }}
+{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -268,5 +268,9 @@ spec:
       storageClassName: {{ .Values.volumeclaims.storageClassName }}
     {{- end }}
   {{- end }}
+{{- end }}
+{{- if .Values.global.priorityClassName }}
+      priorityClassName:
+{{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}
 {{- end }}

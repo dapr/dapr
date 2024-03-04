@@ -43,7 +43,7 @@ import (
 	corsDapr "github.com/dapr/dapr/pkg/cors"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/middleware"
 	"github.com/dapr/dapr/pkg/responsewriter"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
@@ -65,7 +65,7 @@ type server struct {
 	config             ServerConfig
 	tracingSpec        config.TracingSpec
 	metricSpec         config.MetricSpec
-	pipeline           httpMiddleware.Pipeline
+	middleware         middleware.HTTP
 	api                API
 	apiSpec            config.APISpec
 	servers            []*http.Server
@@ -79,7 +79,7 @@ type NewServerOpts struct {
 	Config      ServerConfig
 	TracingSpec config.TracingSpec
 	MetricSpec  config.MetricSpec
-	Pipeline    httpMiddleware.Pipeline
+	Middleware  middleware.HTTP
 	APISpec     config.APISpec
 }
 
@@ -91,7 +91,7 @@ func NewServer(opts NewServerOpts) Server {
 		config:      opts.Config,
 		tracingSpec: opts.TracingSpec,
 		metricSpec:  opts.MetricSpec,
-		pipeline:    opts.Pipeline,
+		middleware:  opts.Middleware,
 		apiSpec:     opts.APISpec,
 	}
 }
@@ -150,7 +150,7 @@ func (s *server) StartNonBlocking() error {
 		srv := &http.Server{
 			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
-			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
+			MaxHeaderBytes:    s.config.ReadBufferSize,
 			Addr:              listener.Addr().String(),
 		}
 		s.servers = append(s.servers, srv)
@@ -177,7 +177,7 @@ func (s *server) StartNonBlocking() error {
 			Addr:              fmt.Sprintf(":%d", *s.config.PublicPort),
 			Handler:           publicR,
 			ReadHeaderTimeout: 10 * time.Second,
-			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
+			MaxHeaderBytes:    s.config.ReadBufferSize,
 		}
 		s.servers = append(s.servers, healthServer)
 
@@ -214,7 +214,7 @@ func (s *server) StartNonBlocking() error {
 				// pprof is automatically registered in the DefaultServerMux
 				Handler:           http.DefaultServeMux,
 				ReadHeaderTimeout: 10 * time.Second,
-				MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
+				MaxHeaderBytes:    s.config.ReadBufferSize,
 			}
 			s.servers = append(s.servers, profServer)
 
@@ -290,14 +290,13 @@ func (s *server) useMetrics(r chi.Router) {
 }
 
 func (s *server) useMaxBodySize(r chi.Router) {
-	if s.config.MaxRequestBodySizeMB <= 0 {
+	if s.config.MaxRequestBodySize <= 0 {
 		return
 	}
 
-	maxSize := int64(s.config.MaxRequestBodySizeMB) << 20 // To bytes
-	log.Infof("Enabled max body size HTTP middleware with size %d MB", s.config.MaxRequestBodySizeMB)
+	log.Infof("Enabled max body size HTTP middleware with size %d bytes", s.config.MaxRequestBodySize)
 
-	r.Use(MaxBodySizeMiddleware(maxSize))
+	r.Use(MaxBodySizeMiddleware(int64(s.config.MaxRequestBodySize)))
 }
 
 func (s *server) useContextSetup(mux chi.Router) {
@@ -358,11 +357,7 @@ func (s *server) useAPILogging(mux chi.Router) {
 }
 
 func (s *server) useComponents(r chi.Router) {
-	if len(s.pipeline.Handlers) == 0 {
-		return
-	}
-
-	r.Use(s.pipeline.Handlers...)
+	r.Use(s.middleware)
 }
 
 func (s *server) useCors(r chi.Router) {

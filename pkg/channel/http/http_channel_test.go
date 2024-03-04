@@ -26,7 +26,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
@@ -152,16 +154,23 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 				next.ServeHTTP(w, r)
 			})
 		}
-		pipeline := httpMiddleware.Pipeline{
-			Handlers: []httpMiddleware.Middleware{
-				middleware,
+		pipeline := httpMiddleware.New()
+		pipeline.Add(httpMiddleware.Spec{
+			Component: compapi.Component{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec:       compapi.ComponentSpec{Type: "middleware.http.test", Version: "v1"},
 			},
-		}
+			Implementation: middleware,
+		})
 		c := Channel{
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			pipeline:    pipeline,
+			middleware: pipeline.BuildPipelineFromSpec("test", &config.PipelineSpec{
+				Handlers: []config.HandlerSpec{
+					{Name: "test", Type: "middleware.http.test", Version: "v1"},
+				},
+			}),
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
@@ -185,16 +194,24 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 				w.WriteHeader(http.StatusBadGateway)
 			})
 		}
-		pipeline := httpMiddleware.Pipeline{
-			Handlers: []httpMiddleware.Middleware{
-				middleware,
+
+		pipeline := httpMiddleware.New()
+		pipeline.Add(httpMiddleware.Spec{
+			Component: compapi.Component{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec:       compapi.ComponentSpec{Type: "middleware.http.test", Version: "v1"},
 			},
-		}
+			Implementation: middleware,
+		})
 		c := Channel{
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			pipeline:    pipeline,
+			middleware: pipeline.BuildPipelineFromSpec("test", &config.PipelineSpec{
+				Handlers: []config.HandlerSpec{
+					{Name: "test", Type: "middleware.http.test", Version: "v1"},
+				},
+			}),
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
@@ -215,16 +232,25 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 	t.Run("test uppercase middleware", func(t *testing.T) {
 		server = httptest.NewServer(&testBodyEchoHandler{})
 		defer server.Close()
-		pipeline := httpMiddleware.Pipeline{
-			Handlers: []httpMiddleware.Middleware{
-				utils.UppercaseRequestMiddleware,
+
+		pipeline := httpMiddleware.New()
+		pipeline.Add(httpMiddleware.Spec{
+			Component: compapi.Component{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec:       compapi.ComponentSpec{Type: "middleware.http.test", Version: "v1"},
 			},
-		}
+			Implementation: utils.UppercaseRequestMiddleware,
+		})
+
 		c := Channel{
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			pipeline:    pipeline,
+			middleware: pipeline.BuildPipelineFromSpec("test", &config.PipelineSpec{
+				Handlers: []config.HandlerSpec{
+					{Name: "test", Type: "middleware.http.test", Version: "v1"},
+				},
+			}),
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
@@ -247,16 +273,25 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 	t.Run("test uppercase middleware on request only", func(t *testing.T) {
 		server = httptest.NewServer(&testUppercaseHandler{})
 		defer server.Close()
-		pipeline := httpMiddleware.Pipeline{
-			Handlers: []httpMiddleware.Middleware{
-				utils.UppercaseRequestMiddleware,
+
+		pipeline := httpMiddleware.New()
+		pipeline.Add(httpMiddleware.Spec{
+			Component: compapi.Component{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec:       compapi.ComponentSpec{Type: "middleware.http.test", Version: "v1"},
 			},
-		}
+			Implementation: utils.UppercaseRequestMiddleware,
+		})
+
 		c := Channel{
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			pipeline:    pipeline,
+			middleware: pipeline.BuildPipelineFromSpec("test", &config.PipelineSpec{
+				Handlers: []config.HandlerSpec{
+					{Name: "test", Type: "middleware.http.test", Version: "v1"},
+				},
+			}),
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
@@ -279,16 +314,25 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 	t.Run("test uppercase middleware on response only", func(t *testing.T) {
 		server = httptest.NewServer(&testUppercaseHandler{})
 		defer server.Close()
-		pipeline := httpMiddleware.Pipeline{
-			Handlers: []httpMiddleware.Middleware{
-				utils.UppercaseResponseMiddleware,
+
+		pipeline := httpMiddleware.New()
+		pipeline.Add(httpMiddleware.Spec{
+			Component: compapi.Component{
+				ObjectMeta: metav1.ObjectMeta{Name: "test"},
+				Spec:       compapi.ComponentSpec{Type: "middleware.http.test", Version: "v1"},
 			},
-		}
+			Implementation: utils.UppercaseResponseMiddleware,
+		})
+
 		c := Channel{
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			pipeline:    pipeline,
+			middleware: pipeline.BuildPipelineFromSpec("test", &config.PipelineSpec{
+				Handlers: []config.HandlerSpec{
+					{Name: "test", Type: "middleware.http.test", Version: "v1"},
+				},
+			}),
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
@@ -311,17 +355,33 @@ func TestInvokeMethodMiddlewaresPipeline(t *testing.T) {
 	t.Run("test uppercase middleware on both request and response", func(t *testing.T) {
 		server = httptest.NewServer(&testUppercaseHandler{})
 		defer server.Close()
-		pipeline := httpMiddleware.Pipeline{
-			Handlers: []httpMiddleware.Middleware{
-				utils.UppercaseRequestMiddleware,
-				utils.UppercaseResponseMiddleware,
+
+		pipeline := httpMiddleware.New()
+		pipeline.Add(httpMiddleware.Spec{
+			Component: compapi.Component{
+				ObjectMeta: metav1.ObjectMeta{Name: "test1"},
+				Spec:       compapi.ComponentSpec{Type: "middleware.http.test1", Version: "v1"},
 			},
-		}
+			Implementation: utils.UppercaseRequestMiddleware,
+		})
+		pipeline.Add(httpMiddleware.Spec{
+			Component: compapi.Component{
+				ObjectMeta: metav1.ObjectMeta{Name: "test2"},
+				Spec:       compapi.ComponentSpec{Type: "middleware.http.test2", Version: "v1"},
+			},
+			Implementation: utils.UppercaseResponseMiddleware,
+		})
+
 		c := Channel{
 			baseAddress: server.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
-			pipeline:    pipeline,
+			middleware: pipeline.BuildPipelineFromSpec("test", &config.PipelineSpec{
+				Handlers: []config.HandlerSpec{
+					{Name: "test1", Type: "middleware.http.test1", Version: "v1"},
+					{Name: "test2", Type: "middleware.http.test2", Version: "v1"},
+				},
+			}),
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
@@ -356,6 +416,7 @@ func TestInvokeMethodHeaders(t *testing.T) {
 			tracingSpec: &config.TracingSpec{
 				SamplingRate: "0",
 			},
+			middleware: httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "").
@@ -384,6 +445,7 @@ func TestInvokeMethodHeaders(t *testing.T) {
 			tracingSpec: &config.TracingSpec{
 				SamplingRate: "0",
 			},
+			middleware: httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "").
@@ -418,6 +480,7 @@ func TestInvokeMethod(t *testing.T) {
 			tracingSpec: &config.TracingSpec{
 				SamplingRate: "0",
 			},
+			middleware: httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 		th.serverURL = server.URL[len("http://"):]
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
@@ -442,6 +505,7 @@ func TestInvokeMethod(t *testing.T) {
 			tracingSpec: &config.TracingSpec{
 				SamplingRate: "1",
 			},
+			middleware: httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 		th.serverURL = server.URL[len("http://"):]
 		fakeReq := invokev1.NewInvokeMethodRequest("method").
@@ -472,6 +536,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
 			ch:          make(chan struct{}, 1),
+			middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 
 		// act
@@ -507,6 +572,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
 			ch:          make(chan struct{}, 1),
+			middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 
 		// act
@@ -543,6 +609,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
 			ch:          make(chan struct{}, 1),
+			middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 
 		// act
@@ -578,6 +645,7 @@ func TestInvokeWithHeaders(t *testing.T) {
 		baseAddress: testServer.URL,
 		client:      http.DefaultClient,
 		compStore:   compstore.New(),
+		middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 	}
 
 	req := invokev1.NewInvokeMethodRequest("method").
@@ -615,6 +683,7 @@ func TestContentType(t *testing.T) {
 			baseAddress: testServer.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
+			middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodGet, "")
@@ -639,6 +708,7 @@ func TestContentType(t *testing.T) {
 			baseAddress: testServer.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
+			middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithContentType("application/json").
@@ -664,6 +734,7 @@ func TestContentType(t *testing.T) {
 			baseAddress: testServer.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
+			middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithContentType("text/plain").
@@ -692,6 +763,7 @@ func TestContentLength(t *testing.T) {
 		baseAddress: testServer.URL,
 		client:      http.DefaultClient,
 		compStore:   compstore.New(),
+		middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 	}
 	req := invokev1.NewInvokeMethodRequest("method").
 		WithContentType("text/plain").
@@ -724,6 +796,7 @@ func TestAppToken(t *testing.T) {
 			client:         http.DefaultClient,
 			appHeaderToken: "token1",
 			compStore:      compstore.New(),
+			middleware:     httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 
 		req := invokev1.NewInvokeMethodRequest("method").
@@ -754,6 +827,7 @@ func TestAppToken(t *testing.T) {
 			baseAddress: testServer.URL,
 			client:      http.DefaultClient,
 			compStore:   compstore.New(),
+			middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 		}
 
 		req := invokev1.NewInvokeMethodRequest("method").
@@ -786,6 +860,7 @@ func TestHealthProbe(t *testing.T) {
 		baseAddress: testServer.URL,
 		client:      http.DefaultClient,
 		compStore:   compstore.New(),
+		middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
 	}
 
 	var (
@@ -810,4 +885,39 @@ func TestHealthProbe(t *testing.T) {
 	success, err = c.HealthProbe(ctx)
 	require.NoError(t, err)
 	assert.False(t, success)
+}
+
+func TestNoInvalidTraceContext(t *testing.T) {
+	ctx := context.Background()
+
+	handler := &testHandlerHeaders{}
+	testServer := httptest.NewServer(handler)
+	c := Channel{
+		baseAddress: testServer.URL,
+		client:      http.DefaultClient,
+		compStore:   compstore.New(),
+		middleware:  httpMiddleware.New().BuildPipelineFromSpec("test", nil),
+	}
+	req := invokev1.NewInvokeMethodRequest("method").
+		WithContentType("text/plain").
+		WithMetadata(map[string][]string{invokev1.ContentLengthHeader: {"1"}}).
+		WithHTTPExtension(http.MethodPost, "").
+		WithRawDataString("1")
+	defer req.Close()
+
+	// act
+	resp, err := c.InvokeMethod(ctx, req, "")
+
+	// assert
+	require.NoError(t, err)
+	defer resp.Close()
+	body, _ := resp.RawDataFull()
+	actual := map[string]string{}
+	json.Unmarshal(body, &actual)
+	traceparent, hasTraceparent := actual["Traceparent"]
+	require.NoError(t, err)
+	if hasTraceparent {
+		assert.NotEqual(t, "00-00000000000000000000000000000000-0000000000000000-00", traceparent)
+	}
+	testServer.Close()
 }

@@ -19,6 +19,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: dapr-trust-bundle
+  namespace: {{ .Release.Namespace }}
   labels:
     app: dapr-sentry
     {{- range $key, $value := .Values.global.k8sLabels }}
@@ -231,4 +232,8 @@ spec:
 {{- if .Values.global.tolerations }}
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
+{{- end }}
+{{- if .Values.global.priorityClassName }}
+      priorityClassName:
+{{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}

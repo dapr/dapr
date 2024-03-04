@@ -68,6 +68,25 @@ func TestConnectToServer(t *testing.T) {
 		ready.Wait() // should not timeout
 		assert.True(t, client.streamConnAlive)
 	})
+
+	t.Run("when connectToServer succeeds it should correctly set the stream metadata", func(t *testing.T) {
+		conn, _, cleanup := newTestServer() // do not register the placement stream server
+		defer cleanup()
+
+		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, testSecurity(t)))
+
+		var ready sync.WaitGroup
+		ready.Add(1)
+		go func() {
+			client.waitUntil(func(streamConnAlive bool) bool {
+				return streamConnAlive
+			})
+			ready.Done()
+		}()
+
+		err := client.connectToServer(context.Background(), conn)
+		require.NoError(t, err)
+	})
 }
 
 func TestDisconnect(t *testing.T) {

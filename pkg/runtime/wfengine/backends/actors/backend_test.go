@@ -43,7 +43,7 @@ const (
 )
 
 func TestNoWorkflowState(t *testing.T) {
-	actors := getActorRuntime()
+	actors := getActorRuntime(t)
 	state, err := LoadWorkflowState(context.Background(), actors, "wf1", NewActorsBackendConfig(testAppID))
 	require.NoError(t, err)
 	assert.Empty(t, state)
@@ -132,7 +132,7 @@ func TestLoadSavedState(t *testing.T) {
 	assert.Equal(t, 17, upsertCount) // 10x history, 5x inbox, 1 metadata, 1 customStatus
 	assert.Equal(t, 0, deleteCount)
 
-	actors := getActorRuntime()
+	actors := getActorRuntime(t)
 
 	err = actors.TransactionalStateOperation(context.Background(), req)
 	require.NoError(t, err)
@@ -153,6 +153,24 @@ func TestLoadSavedState(t *testing.T) {
 	}
 }
 
+func TestDecodeEncodedState(t *testing.T) {
+	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
+	wfstate.AddToInbox(&backend.HistoryEvent{EventId: int32(1)})
+	runtimeState := backend.NewOrchestrationRuntimeState(testAppID, nil)
+	err := runtimeState.AddEvent(&backend.HistoryEvent{EventId: int32(2)})
+	require.NoError(t, err)
+	wfstate.ApplyRuntimeStateChanges(runtimeState)
+	wfstate.CustomStatus = "test-status"
+	encodedState, err := wfstate.EncodeWorkflowState()
+	require.NoError(t, err)
+	decodedState := NewWorkflowState(NewActorsBackendConfig(testAppID))
+	err = decodedState.DecodeWorkflowState(encodedState)
+	require.NoError(t, err)
+	assert.Equal(t, wfstate.Inbox[0].GetEventId(), decodedState.Inbox[0].GetEventId())
+	assert.Equal(t, wfstate.History[0].GetEventId(), decodedState.History[0].GetEventId())
+	assert.Equal(t, wfstate.CustomStatus, decodedState.CustomStatus)
+}
+
 func TestResetLoadedState(t *testing.T) {
 	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
 
@@ -169,7 +187,7 @@ func TestResetLoadedState(t *testing.T) {
 	req, err := wfstate.GetSaveRequest("wf1")
 	require.NoError(t, err)
 
-	actorRuntime := getActorRuntime()
+	actorRuntime := getActorRuntime(t)
 	err = actorRuntime.TransactionalStateOperation(context.Background(), req)
 	require.NoError(t, err)
 
@@ -190,22 +208,24 @@ func TestResetLoadedState(t *testing.T) {
 	assert.Equal(t, 15, deleteCount) // all history and inbox records are deleted
 }
 
-func getActorRuntime() actors.Actors {
+func getActorRuntime(t *testing.T) actors.Actors {
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
-		AppID:              testAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          config.ApplicationConfig{},
+		AppID:         testAppID,
+		ActorsService: "placement:placement:5050",
+		AppConfig:     config.ApplicationConfig{},
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
-	return actors.NewActors(actors.ActorsOpts{
+	act, err := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
+	require.NoError(t, err)
+	return act
 }
 
 func countOperations(t *testing.T, req *actors.TransactionalRequest) (upsertCount, deleteCount int) {

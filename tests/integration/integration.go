@@ -45,36 +45,34 @@ func RunIntegrationTests(t *testing.T) {
 	})
 	require.False(t, binFailed, "building binaries must succeed")
 
-	focusedTests := make(map[string]suite.Case)
-	for name, tcase := range suite.All(t) {
+	focusedTests := make([]suite.NamedCase, 0)
+	for _, tcase := range suite.All(t) {
 		// Continue rather than using `t.Skip` to reduce the noise in the test
 		// output.
-		if !focus.MatchString(name) {
-			t.Logf("skipping test case due to focus %s", name)
+		if !focus.MatchString(tcase.Name()) {
+			t.Logf("skipping test case due to focus %s", tcase.Name())
 			continue
 		}
-		focusedTests[name] = tcase
+		focusedTests = append(focusedTests, tcase)
 	}
 
-	for name, tcase := range focusedTests {
-		t.Run(name, func(t *testing.T) {
+	startTime := time.Now()
+	for _, tcase := range focusedTests {
+		t.Run(tcase.Name(), func(t *testing.T) {
 			t.Logf("setting up test case")
 			options := tcase.Setup(t)
 
 			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
 			t.Cleanup(cancel)
 
-			f := framework.Run(t, ctx, options...)
+			framework.Run(t, ctx, options...)
 
 			t.Run("run", func(t *testing.T) {
 				t.Log("running test case")
 				tcase.Run(t, ctx)
 			})
-
-			t.Log("cleaning up framework")
-			f.Cleanup(t)
-
-			t.Log("done")
 		})
 	}
+
+	t.Logf("Total integration test execution time: %s", time.Since(startTime).Truncate(time.Millisecond*100))
 }

@@ -26,32 +26,6 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
-func TestParsePlacementAddr(t *testing.T) {
-	testCases := []struct {
-		addr string
-		out  []string
-	}{
-		{
-			addr: "localhost:1020",
-			out:  []string{"localhost:1020"},
-		},
-		{
-			addr: "placement1:50005,placement2:50005,placement3:50005",
-			out:  []string{"placement1:50005", "placement2:50005", "placement3:50005"},
-		},
-		{
-			addr: "placement1:50005, placement2:50005, placement3:50005",
-			out:  []string{"placement1:50005", "placement2:50005", "placement3:50005"},
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.addr, func(t *testing.T) {
-			assert.EqualValues(t, tc.out, parsePlacementAddr(tc.addr))
-		})
-	}
-}
-
 func Test_toInternal(t *testing.T) {
 	cfg := defaultTestConfig()
 
@@ -61,7 +35,7 @@ func Test_toInternal(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, "app1", intc.id)
-	assert.Equal(t, "localhost:5050", intc.placementAddresses[0])
+	assert.Equal(t, "localhost:5050", intc.actorsService)
 	assert.Equal(t, "localhost:5051", intc.kubernetes.ControlPlaneAddress)
 	assert.Equal(t, "*", intc.allowedOrigins)
 	_ = assert.Len(t, intc.standalone.ResourcesPath, 1) &&
@@ -79,9 +53,9 @@ func Test_toInternal(t *testing.T) {
 	assert.Equal(t, 1, intc.appConnectionConfig.MaxConcurrency)
 	assert.True(t, intc.mTLSEnabled)
 	assert.Equal(t, "localhost:5052", intc.sentryServiceAddress)
-	assert.Equal(t, 4, intc.maxRequestBodySize)
+	assert.Equal(t, 4<<20, intc.maxRequestBodySize)
+	assert.Equal(t, 4<<10, intc.readBufferSize)
 	assert.Equal(t, "", intc.unixDomainSocket)
-	assert.Equal(t, 4, intc.readBufferSize)
 	assert.Equal(t, time.Second, intc.gracefulShutdownDuration)
 	assert.Equal(t, nilDuration, intc.blockShutdownDuration)
 	assert.Equal(t, ptr.Of(true), intc.enableAPILogging)
@@ -99,7 +73,7 @@ func TestStandaloneWasmStrictSandbox(t *testing.T) {
 func defaultTestConfig() Config {
 	return Config{
 		AppID:                        "app1",
-		PlacementServiceHostAddr:     "localhost:5050",
+		ActorsService:                "localhost:5050",
 		ControlPlaneAddress:          "localhost:5051",
 		AllowedOrigins:               "*",
 		ResourcesPath:                []string{"components"},
@@ -116,9 +90,9 @@ func defaultTestConfig() Config {
 		AppMaxConcurrency:            1,
 		EnableMTLS:                   true,
 		SentryAddress:                "localhost:5052",
-		DaprHTTPMaxRequestSize:       4,
+		MaxRequestSize:               4 << 20,
+		ReadBufferSize:               4 << 10,
 		UnixDomainSocket:             "",
-		DaprHTTPReadBufferSize:       4,
 		DaprGracefulShutdownSeconds:  1,
 		EnableAPILogging:             ptr.Of(true),
 		DisableBuiltinK8sSecretStore: true,

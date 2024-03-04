@@ -331,8 +331,10 @@ func TestActivityChainingWorkflow(t *testing.T) {
 		t.Run(opt(engine), func(t *testing.T) {
 			id, err := client.ScheduleNewOrchestration(ctx, "ActivityChain")
 			require.NoError(t, err)
+
 			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
 			require.NoError(t, err)
+
 			assert.True(t, metadata.IsComplete())
 			assert.Equal(t, `10`, metadata.SerializedOutput)
 		})
@@ -377,11 +379,51 @@ func TestConcurrentActivityExecution(t *testing.T) {
 			require.NoError(t, err)
 			metadata, err := client.WaitForOrchestrationCompletion(ctx, id)
 			require.NoError(t, err)
+
 			assert.True(t, metadata.IsComplete())
 			assert.Equal(t, `["9","8","7","6","5","4","3","2","1","0"]`, metadata.SerializedOutput)
 
 			// Because all the activities run in parallel, they should complete very quickly
 			assert.Less(t, metadata.LastUpdatedAt.Sub(metadata.CreatedAt), 3*time.Second)
+		})
+	}
+}
+
+// TestChildWorkflow creates a workflow that calls a child workflow and verifies that the child workflow
+// completes successfully.
+func TestChildWorkflow(t *testing.T) {
+	r := task.NewTaskRegistry()
+	r.AddOrchestratorN("root", func(ctx *task.OrchestrationContext) (any, error) {
+		var input string
+		if err := ctx.GetInput(&input); err != nil {
+			return nil, err
+		}
+		var output string
+		err := ctx.CallSubOrchestrator("child", task.WithSubOrchestratorInput(input)).Await(&output)
+		return output, err
+	})
+	r.AddOrchestratorN("child", func(ctx *task.OrchestrationContext) (any, error) {
+		var name string
+		if err := ctx.GetInput(&name); err != nil {
+			return nil, err
+		}
+		return fmt.Sprintf("Hello, %s!", name), nil
+	})
+
+	ctx := context.Background()
+	client, engine := startEngine(ctx, t, r)
+
+	for _, opt := range GetTestOptions() {
+		t.Run(opt(engine), func(t *testing.T) {
+			// Run the root orchestration
+			id, err := client.ScheduleNewOrchestration(ctx, "root", api.WithInput("世界"))
+			require.NoError(t, err)
+			timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
+			defer cancelTimeout()
+			metadata, err := client.WaitForOrchestrationCompletion(timeoutCtx, id)
+			require.NoError(t, err)
+			assert.True(t, metadata.IsComplete())
+			assert.Equal(t, `"Hello, 世界!"`, metadata.SerializedOutput)
 		})
 	}
 }
@@ -760,7 +802,7 @@ func TestPurge(t *testing.T) {
 
 			for _, item := range keysPostPurge {
 				if strings.Contains(item, string(id)) {
-					assert.True(t, false)
+					assert.Truef(t, false, "Found key post-purge that should not have existed: %v", item)
 				}
 			}
 		})
@@ -890,19 +932,20 @@ func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
 	engine := wfengine.NewWorkflowEngine(testAppID, spec, processor.WorkflowBackend())
 	store := fakeStore()
 	cfg := actors.NewConfig(actors.ConfigOpts{
-		AppID:              testAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          config.ApplicationConfig{},
+		AppID:         testAppID,
+		ActorsService: "placement:placement:5050",
+		AppConfig:     config.ApplicationConfig{},
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
-	actors := actors.NewActors(actors.ActorsOpts{
+	actors, err := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
+	require.NoError(t, err)
 
 	if err := actors.Init(context.Background()); err != nil {
 		require.NoError(t, err)
@@ -921,20 +964,23 @@ func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.Workfl
 	engine := wfengine.NewWorkflowEngine(testAppID, spec, processor.WorkflowBackend())
 	store := fakeStore().(*daprt.FakeStateStore)
 	cfg := actors.NewConfig(actors.ConfigOpts{
-		AppID:              testAppID,
-		PlacementAddresses: []string{"placement:5050"},
-		AppConfig:          config.ApplicationConfig{},
+		AppID:         testAppID,
+		ActorsService: "placement:placement:5050",
+		AppConfig:     config.ApplicationConfig{},
+		HostAddress:   "localhost",
+		Port:          5000, // port for unit tests to pass IsLocalActor
 	})
 	compStore := compstore.New()
 	compStore.AddStateStore("workflowStore", store)
 
-	actors := actors.NewActors(actors.ActorsOpts{
+	actors, err := actors.NewActors(actors.ActorsOpts{
 		CompStore:      compStore,
 		Config:         cfg,
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
 	})
+	require.NoError(t, err)
 
 	require.NoError(t, actors.Init(context.Background()))
 	abe, _ := engine.Backend.(*actorsbe.ActorBackend)

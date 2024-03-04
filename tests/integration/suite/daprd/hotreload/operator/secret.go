@@ -15,6 +15,7 @@ package operator
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -78,7 +79,7 @@ func (s *secret) Setup(t *testing.T) []framework.Option {
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(s.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
-		daprd.WithExecOptions(exec.WithEnvVars(
+		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 			"FOO_SEC_1", "bar1",
 			"FOO_SEC_2", "bar2",
@@ -129,11 +130,9 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 		resp := util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort())
 		require.Len(t, resp, 1)
 
-		assert.Equal(t, &rtpbv1.RegisteredComponents{
-			Name:    "123",
-			Type:    "secretstores.local.env",
-			Version: "v1",
-		}, resp[0])
+		assert.ElementsMatch(t, resp, []*rtpbv1.RegisteredComponents{
+			{Name: "123", Type: "secretstores.local.env", Version: "v1"},
+		})
 
 		s.read(t, ctx, "123", "SEC_1", "bar1")
 		s.read(t, ctx, "123", "SEC_2", "bar2")
@@ -155,6 +154,10 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
  }
  `), 0o600))
 
+		dir := filepath.Join(s.resDir2, "2-sec.json")
+		dirJSON, err := json.Marshal(dir)
+		require.NoError(t, err)
+
 		newComp1 := compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "abc"},
 			Spec: compapi.ComponentSpec{
@@ -162,7 +165,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 				Version: "v1",
 				Metadata: []common.NameValuePair{
 					{Name: "secretsFile", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(`"%s"`, filepath.Join(s.resDir2, "2-sec.json")))},
+						JSON: apiextv1.JSON{Raw: dirJSON},
 					}},
 				},
 			},
@@ -255,6 +258,10 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
  }
  `), 0o600))
 
+		dir := filepath.Join(s.resDir1, "1-sec.json")
+		dirJSON, err := json.Marshal(dir)
+		require.NoError(t, err)
+
 		comp1 := compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "123"},
 			Spec: compapi.ComponentSpec{
@@ -262,7 +269,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 				Version: "v1",
 				Metadata: []common.NameValuePair{
 					{Name: "secretsFile", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(`"%s"`, filepath.Join(s.resDir1, "1-sec.json")))},
+						JSON: apiextv1.JSON{Raw: dirJSON},
 					}},
 				},
 			},
@@ -280,6 +287,10 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 			},
 		}
 
+		dir = filepath.Join(s.resDir2, "2-sec.json")
+		dirJSON, err = json.Marshal(dir)
+		require.NoError(t, err)
+
 		comp3 := compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "abc"},
 			Spec: compapi.ComponentSpec{
@@ -287,7 +298,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 				Version: "v1",
 				Metadata: []common.NameValuePair{
 					{Name: "secretsFile", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(`"%s"`, filepath.Join(s.resDir2, "2-sec.json")))},
+						JSON: apiextv1.JSON{Raw: dirJSON},
 					}},
 				},
 			},
@@ -323,6 +334,10 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("renaming a component should close the old name, and open the new one", func(t *testing.T) {
+		dir := filepath.Join(s.resDir2, "2-sec.json")
+		dirJSON, err := json.Marshal(dir)
+		require.NoError(t, err)
+
 		comp1 := s.operator.Components()[3]
 		comp2 := compapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "bar"},
@@ -331,7 +346,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 				Version: "v1",
 				Metadata: []common.NameValuePair{
 					{Name: "secretsFile", Value: common.DynamicValue{
-						JSON: apiextv1.JSON{Raw: []byte(fmt.Sprintf(`"%s"`, filepath.Join(s.resDir2, "2-sec.json")))},
+						JSON: apiextv1.JSON{Raw: dirJSON},
 					}},
 				},
 			},
@@ -388,7 +403,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 					{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 					{
 						Name: "bar", Type: "state.in-memory", Version: "v1",
-						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 					},
 				}, resp)
 		}, time.Second*5, time.Millisecond*100)
@@ -419,9 +434,13 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
-			if assert.Len(c, resp, 1) {
-				assert.Equal(c, "state.in-memory", resp[0].GetType())
-			}
+			assert.Len(c, resp, 1)
+			assert.ElementsMatch(c, resp, []*rtpbv1.RegisteredComponents{
+				{
+					Name: "bar", Type: "state.in-memory", Version: "v1",
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				},
+			})
 		}, time.Second*5, time.Millisecond*100)
 
 		s.readExpectError(t, ctx, "123", "1-sec-1", http.StatusInternalServerError)

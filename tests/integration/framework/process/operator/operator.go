@@ -85,8 +85,10 @@ func New(t *testing.T, fopts ...Option) *Operator {
 			binary.EnvValue("operator"), args,
 			append(
 				opts.execOpts,
-				exec.WithEnvVars("KUBERNETES_SERVICE_HOST", "anything"),
-				exec.WithEnvVars("NAMESPACE", *opts.namespace),
+				exec.WithEnvVars(t,
+					"KUBERNETES_SERVICE_HOST", "anything",
+					"NAMESPACE", *opts.namespace,
+				),
 			)...,
 		),
 		freeport:    fp,

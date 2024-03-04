@@ -39,7 +39,6 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/lock"
-	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -52,14 +51,15 @@ import (
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
-	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/middleware"
+	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -274,6 +274,7 @@ func TestPubSubEndpoints(t *testing.T) {
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, []byte(`{"key": "value"}`), nil)
+
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
@@ -303,7 +304,7 @@ func TestPubSubEndpoints(t *testing.T) {
 			// assert
 			assert.Equal(t, 403, resp.StatusCode, "unexpected success publishing with %s", method)
 			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
-			assert.Equal(t, "topic topic is not allowed for app id test", resp.ErrorBody["message"]) //nolint:dupword
+			assert.Equal(t, "topic topic is not allowed for app id fakeAPI", resp.ErrorBody["message"]) //nolint:dupword
 		}
 	})
 
@@ -1650,19 +1651,19 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors := new(actors.MockActors)
 		fakeData := []byte("fakeData")
 
-		response := invokev1.NewInvokeMethodResponse(206, "OK", nil)
-		defer response.Close()
-		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
-			m, err := imr.ProtoWithData()
-			if err != nil {
+		response := &internalsv1pb.InternalInvokeResponse{
+			Status: &internalsv1pb.Status{
+				Code:    206,
+				Message: "OK",
+			},
+		}
+		mockActors.On("Call", mock.MatchedBy(func(m *internalsv1pb.InternalInvokeRequest) bool {
+			if m.GetActor().GetActorType() != "fakeActorType" || m.GetActor().GetActorId() != "fakeActorID" {
 				return false
 			}
 
-			if m.GetActor() == nil || m.GetActor().GetActorType() != "fakeActorType" || m.GetActor().GetActorId() != "fakeActorID" {
-				return false
-			}
-
-			if m.GetMessage() == nil || m.GetMessage().GetData() == nil || len(m.GetMessage().GetData().GetValue()) == 0 || !bytes.Equal(m.GetMessage().GetData().GetValue(), fakeData) {
+			v := m.GetMessage().GetData().GetValue()
+			if len(v) == 0 || !bytes.Equal(v, fakeData) {
 				return false
 			}
 			return true
@@ -1681,17 +1682,13 @@ func TestV1ActorEndpoints(t *testing.T) {
 	t.Run("Direct Message - 500 for actor call failure", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/method/method1"
 		mockActors := new(actors.MockActors)
-		mockActors.On("Call", mock.MatchedBy(func(imr *invokev1.InvokeMethodRequest) bool {
-			m, err := imr.ProtoWithData()
-			if err != nil {
+		mockActors.On("Call", mock.MatchedBy(func(m *internalsv1pb.InternalInvokeRequest) bool {
+			if m.GetActor().GetActorType() != "fakeActorType" || m.GetActor().GetActorId() != "fakeActorID" {
 				return false
 			}
 
-			if m.GetActor() == nil || m.GetActor().GetActorType() != "fakeActorType" || m.GetActor().GetActorId() != "fakeActorID" {
-				return false
-			}
-
-			if m.GetMessage() == nil || m.GetMessage().GetData() == nil || len(m.GetMessage().GetData().GetValue()) == 0 || !bytes.Equal(m.GetMessage().GetData().GetValue(), []byte("fakeData")) {
+			v := m.GetMessage().GetData().GetValue()
+			if len(v) == 0 || !bytes.Equal(v, []byte("fakeData")) {
 				return false
 			}
 			return true
@@ -2124,7 +2121,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1.0"}
-	pipe := httpMiddleware.Pipeline{}
+	pipe := func(next gohttp.Handler) gohttp.Handler { return next }
 
 	createExporters(&buffer)
 	compStore := compstore.New()
@@ -2139,7 +2136,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
 		spec:     &spec,
-		pipeline: &pipe,
+		pipeline: pipe,
 	})
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
@@ -2932,22 +2929,20 @@ func TestV1Beta1Workflow(t *testing.T) {
 	})
 }
 
-func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
-	registry := httpMiddlewareLoader.NewRegistry()
-	registry.RegisterComponent(func(l logger.Logger) httpMiddlewareLoader.FactoryMethod {
-		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return utils.UppercaseRequestMiddleware, nil
-		}
-	}, "uppercase")
-	var handlers []httpMiddleware.Middleware
-	for i := 0; i < len(spec.Handlers); i++ {
-		handler, err := registry.Create(spec.Handlers[i].Type, spec.Handlers[i].Version, middleware.Metadata{}, "")
-		if err != nil {
-			return httpMiddleware.Pipeline{}
-		}
-		handlers = append(handlers, handler)
-	}
-	return httpMiddleware.Pipeline{Handlers: handlers}
+func buildHTTPPipeline(spec config.PipelineSpec) middleware.HTTP {
+	h := middlewarehttp.New()
+	h.Add(middlewarehttp.Spec{
+		Component: componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{Name: "middleware.http.uppercase"},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:    "middleware.http.uppercase",
+				Version: "v1",
+			},
+		},
+		Implementation: utils.UppercaseRequestMiddleware,
+	})
+
+	return h.BuildPipelineFromSpec("test", &spec)
 }
 
 func TestSinglePipelineWithTracer(t *testing.T) {
@@ -2963,7 +2958,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1.0"}
 
-	pipeline := buildHTTPPineline(config.PipelineSpec{
+	pipeline := buildHTTPPipeline(config.PipelineSpec{
 		Handlers: []config.HandlerSpec{
 			{
 				Type: "middleware.http.uppercase",
@@ -2985,7 +2980,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
 		spec:     &spec,
-		pipeline: &pipeline,
+		pipeline: pipeline,
 	})
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
@@ -3025,7 +3020,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "0"}
 
-	pipeline := buildHTTPPineline(config.PipelineSpec{
+	pipeline := buildHTTPPipeline(config.PipelineSpec{
 		Handlers: []config.HandlerSpec{
 			{
 				Type: "middleware.http.uppercase",
@@ -3047,7 +3042,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
 		spec:     &spec,
-		pipeline: &pipeline,
+		pipeline: pipeline,
 	})
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
@@ -3096,7 +3091,7 @@ type fakeHTTPResponse struct {
 
 type fakeHTTPServerOptions struct {
 	spec     *config.TracingSpec
-	pipeline *httpMiddleware.Pipeline
+	pipeline middleware.HTTP
 	apiAuth  bool
 }
 
@@ -3111,7 +3106,7 @@ func (f *fakeHTTPServer) StartServer(endpoints []endpoints.Endpoint, opts *fakeH
 	go func() {
 		var handler gohttp.Handler = r
 		if opts.pipeline != nil {
-			handler = opts.pipeline.Apply(handler)
+			handler = opts.pipeline(handler)
 		}
 		if opts.spec != nil {
 			handler = diag.HTTPTraceMiddleware(handler, "fakeAppID", *opts.spec)
@@ -3154,7 +3149,7 @@ func (f *fakeHTTPServer) Shutdown() {
 }
 
 func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body []byte) fakeHTTPResponse {
-	url := fmt.Sprintf("http://localhost/%s", path)
+	url := fmt.Sprintf("http://127.0.0.1/%s", path)
 	r, _ := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("dapr-api-token", token)
@@ -3173,9 +3168,9 @@ func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body 
 }
 
 func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, params map[string]string, headers ...string) fakeHTTPResponse {
-	url := fmt.Sprintf("http://localhost/%s", path)
+	url := fmt.Sprintf("http://127.0.0.1/%s", path)
 	if basicAuth != "" {
-		url = fmt.Sprintf("http://%s@localhost/%s", basicAuth, path)
+		url = fmt.Sprintf("http://%s@127.0.0.1/%s", basicAuth, path)
 	}
 
 	if params != nil {

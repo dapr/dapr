@@ -93,11 +93,11 @@ func TestInvokeMethod(t *testing.T) {
 	conn := createConnection(t)
 	defer closeConnection(t, conn)
 	c := Channel{
-		baseAddress:          "localhost:9998",
-		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		conn:                 conn,
-		appMetadataToken:     "token1",
-		maxRequestBodySizeMB: 4,
+		baseAddress:        "localhost:9998",
+		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
+		conn:               conn,
+		appMetadataToken:   "token1",
+		maxRequestBodySize: 4 << 20,
 	}
 	ctx := context.Background()
 
@@ -139,11 +139,11 @@ func TestInvokeMethod(t *testing.T) {
 func TestHealthProbe(t *testing.T) {
 	conn := createConnection(t)
 	c := Channel{
-		baseAddress:          "localhost:9998",
-		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		conn:                 conn,
-		appMetadataToken:     "token1",
-		maxRequestBodySizeMB: 4,
+		baseAddress:        "localhost:9998",
+		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
+		conn:               conn,
+		appMetadataToken:   "token1",
+		maxRequestBodySize: 4 << 20,
 	}
 	ctx := context.Background()
 

@@ -25,24 +25,9 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/workflows"
-	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1" // This will be removed
 	"github.com/dapr/kit/logger"
 )
-
-var ComponentDefinition = componentsV1alpha1.Component{
-	TypeMeta: metav1.TypeMeta{
-		Kind: "Component",
-	},
-	ObjectMeta: metav1.ObjectMeta{
-		Name: "dapr",
-	},
-	Spec: componentsV1alpha1.ComponentSpec{
-		Type:     "workflow.dapr",
-		Version:  "v1",
-		Metadata: []commonapi.NameValuePair{},
-	},
-}
 
 // Status values are defined at: https://github.com/microsoft/durabletask-go/blob/119b361079c45e368f83b223888d56a436ac59b9/internal/protos/orchestrator_service.pb.go#L42-L64
 var statusMap = map[int32]string{
@@ -121,7 +106,7 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 		return errors.New("a workflow instance ID is required")
 	}
 
-	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID)); err != nil {
+	if err := c.client.TerminateOrchestration(ctx, api.InstanceID(req.InstanceID), api.WithRecursiveTerminate(req.Recursive)); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			c.logger.Infof("No such instance exists: '%s'", req.InstanceID)
 			return err
@@ -138,7 +123,7 @@ func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.Purg
 		return errors.New("a workflow instance ID is required")
 	}
 
-	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID)); err != nil {
+	if err := c.client.PurgeOrchestrationState(ctx, api.InstanceID(req.InstanceID), api.WithRecursivePurge(req.Recursive)); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
 			c.logger.Warnf("Unable to purge the instance: '%s', no such instance exists", req.InstanceID)
 			return err
@@ -260,4 +245,12 @@ func getStatusString(status int32) string {
 		return statusStr
 	}
 	return "UNKNOWN"
+}
+
+func ComponentDefinition() componentsV1alpha1.Component {
+	return componentsV1alpha1.Component{
+		TypeMeta:   metav1.TypeMeta{Kind: "Component"},
+		ObjectMeta: metav1.ObjectMeta{Name: "dapr"},
+		Spec:       componentsV1alpha1.ComponentSpec{Type: "workflow.dapr", Version: "v1"},
+	}
 }

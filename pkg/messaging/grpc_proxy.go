@@ -31,6 +31,8 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/security"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 // Proxy is the interface for a gRPC transparent proxy.
@@ -136,6 +138,11 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	)
 	outCtx = p.telemetryFn(outCtx)
 	outCtx = metadata.AppendToOutgoingContext(outCtx, invokev1.CallerIDHeader, p.appID, invokev1.CalleeIDHeader, target.id)
+
+	appMetadataToken := security.GetAppToken()
+	if appMetadataToken != "" {
+		outCtx = metadata.AppendToOutgoingContext(outCtx, securityConsts.APITokenHeader, appMetadataToken)
+	}
 
 	pt := &grpcProxy.ProxyTarget{
 		ID:        target.id,

@@ -66,7 +66,7 @@ spec:
 	s.daprd = daprd.New(t,
 		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(s.resDir1, s.resDir2, s.resDir3),
-		daprd.WithExecOptions(exec.WithEnvVars(
+		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"FOO_SEC_1", "bar1",
 			"FOO_SEC_2", "bar2",
 			"FOO_SEC_3", "bar3",
@@ -107,16 +107,14 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 1)
+			assert.Len(c, util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort()), 1)
 		}, time.Second*5, time.Millisecond*100)
 		resp := util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort())
 		require.Len(t, resp, 1)
 
-		assert.Equal(t, &rtpbv1.RegisteredComponents{
-			Name:    "123",
-			Type:    "secretstores.local.env",
-			Version: "v1",
-		}, resp[0])
+		assert.ElementsMatch(t, resp, []*rtpbv1.RegisteredComponents{
+			{Name: "123", Type: "secretstores.local.env", Version: "v1"},
+		})
 
 		s.read(t, ctx, "123", "SEC_1", "bar1")
 		s.read(t, ctx, "123", "SEC_2", "bar2")
@@ -165,7 +163,7 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 3)
+			assert.Len(c, util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort()), 3)
 		}, time.Second*5, time.Millisecond*100)
 		resp := util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort())
 		require.Len(t, resp, 3)
@@ -348,7 +346,7 @@ spec:
 					{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 					{
 						Name: "bar", Type: "state.in-memory", Version: "v1",
-						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 					},
 				}, resp)
 		}, time.Second*5, time.Millisecond*100)
@@ -373,9 +371,12 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
-			if assert.Len(c, resp, 1) {
-				assert.Equal(c, "state.in-memory", resp[0].GetType())
-			}
+			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
+				{
+					Name: "bar", Type: "state.in-memory", Version: "v1",
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+				},
+			}, resp)
 		}, time.Second*5, time.Millisecond*100)
 
 		s.readExpectError(t, ctx, "123", "1-sec-1", http.StatusInternalServerError)
@@ -399,7 +400,7 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 2)
+			assert.Len(c, util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort()), 2)
 		}, time.Second*5, time.Millisecond*100)
 
 		s.read(t, ctx, "123", "SEC_1", "bar1")

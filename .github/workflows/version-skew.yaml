@@ -271,12 +271,12 @@ jobs:
 
           Commit ref: ${{ env.CHECKOUT_REF }}
     - name: Check out code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: ${{ env.CHECKOUT_REPO }}
         ref: ${{ env.CHECKOUT_REF }}
     - name: Checkout last release repo
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
       with:
         repository: dapr/dapr
         path: latest-release
@@ -294,7 +294,7 @@ jobs:
         fi
     - name: Set up Go
       id: setup-go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v5
       with:
         go-version-file: 'go.mod'
     - name: Configure KinD
@@ -423,21 +423,23 @@ jobs:
 
     - name: Upload container logs
       if: always()
-      uses: actions/upload-artifact@master
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.mode}}_container_logs
         path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+        compression-level: 0 # Content is already compressed
 
     - name: Upload test logs
       if: always()
-      uses: actions/upload-artifact@master
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.mode}}_test_logs
         path: ${{ env.DAPR_TEST_LOG_PATH }}
+        compression-level: 0 # Content is already compressed
 
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@master
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.mode }}_test_e2e.json
         path: ${{ env.TEST_OUTPUT_FILE_PREFIX }}_e2e.*

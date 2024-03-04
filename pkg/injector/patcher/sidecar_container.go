@@ -107,9 +107,15 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--app-channel-address", c.AppChannelAddress)
 	}
 
-	// Placement address could be empty if placement service is disabled
+	// Actor/placement/reminders services
+	// Note that PlacementAddress takes priority over ActorsAddress
 	if c.PlacementAddress != "" {
 		args = append(args, "--placement-host-address", c.PlacementAddress)
+	} else if c.ActorsService != "" {
+		args = append(args, "--actors-service", c.ActorsService)
+	}
+	if c.RemindersService != "" {
+		args = append(args, "--reminders-service", c.RemindersService)
 	}
 
 	// --enable-api-logging is set if and only if there's an explicit value (true or false) for that
@@ -159,8 +165,16 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--dapr-http-max-request-size", strconv.Itoa(*c.HTTPMaxRequestSize))
 	}
 
+	if c.MaxBodySize != "" {
+		args = append(args, "--max-body-size", c.MaxBodySize)
+	}
+
 	if c.HTTPReadBufferSize != nil {
 		args = append(args, "--dapr-http-read-buffer-size", strconv.Itoa(*c.HTTPReadBufferSize))
+	}
+
+	if c.ReadBufferSize != "" {
+		args = append(args, "--read-buffer-size", c.ReadBufferSize)
 	}
 
 	if c.UnixDomainSocketPath != "" {

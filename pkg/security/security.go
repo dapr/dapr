@@ -105,11 +105,6 @@ type Options struct {
 	// from. Default to an implementation requesting from Sentry.
 	OverrideCertRequestSource RequestFn
 
-	// WriteSVIDoDir is the directory to write the X.509 SVID certificate private
-	// key pair to. This is highly discouraged since it results in the private
-	// key being written to file.
-	WriteSVIDToDir *string
-
 	// Mode is the operation mode of this security instance (self-hosted or
 	// Kubernetes).
 	Mode modes.DaprMode

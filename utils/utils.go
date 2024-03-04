@@ -146,3 +146,11 @@ func GetNamespaceOrDefault(defaultNamespace string) string {
 	}
 	return namespace
 }
+
+func ParseServiceAddr(val string) []string {
+	p := strings.Split(val, ",")
+	for i, v := range p {
+		p[i] = strings.TrimSpace(v)
+	}
+	return p
+}

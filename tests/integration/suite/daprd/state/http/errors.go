@@ -21,6 +21,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"testing"
 
@@ -56,6 +57,10 @@ const (
 )
 
 func (e *errors) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("skipping unix socket based test on windows")
+	}
+
 	// Darwin enforces a maximum 104 byte socket name limit, so we need to be a
 	// bit fancy on how we generate the name.
 	tmp, err := nettest.LocalPath()
@@ -129,7 +134,7 @@ spec:
   type: state.%s
   version: v1
 `, storeWithNoTransactional.SocketName(), storeWithQuerier.SocketName(), storeWithMultiMaxSize.SocketName())),
-		procdaprd.WithExecOptions(exec.WithEnvVars(
+		procdaprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
 		)),
 	)
@@ -303,7 +308,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, "state store is not configured", errMsg)
+		require.Equal(t, fmt.Sprintf("state store %s is not configured", storeName), errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]

@@ -103,16 +103,19 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
 | `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
 | `global.nodeSelector`                     | Pods will be scheduled onto a node node whose labels match the nodeSelector        | `{}`         |
-| `global.tolerations`                      | Pods will be allowed to schedule onto a node whose taints match the tolerations    | `{}`         |
+| `global.tolerations`                      | Pods will be allowed to schedule onto a node whose taints match the tolerations    | `[]`         |
 | `global.labels`                           | Custom pod labels                                                                  | `{}`         |
 | `global.k8sLabels`                        | Custom metadata labels                                                             | `{}`         |
 | `global.issuerFilenames.ca`               | Custom name of the file containing the root CA certificate inside the container    | `ca.crt`     |
 | `global.issuerFilenames.cert`             | Custom name of the file containing the leaf certificate inside the container       | `issuer.crt` |
 | `global.issuerFilenames.key`              | Custom name of the file containing the leaf certificate's key inside the container | `issuer.key` |
 | `global.actors.enabled`                   | Enables the Dapr actors building block. When "false", the Dapr Placement service is not installed, and attempting to use Dapr actors will fail. | `true` |
+| `global.actors.serviceName` | Name of the service that provides actor placement services. | `placement` |
+| `global.reminders.serviceName` | Name of the service that provides reminders functionality. If empty (the default), uses the built-in reminders capabilities in Dapr sidecars. | |
 | `global.seccompProfile` | SeccompProfile for Dapr control plane services | `""` |
 | `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
-| `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts         | `false` |
+| `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts        | `false`                 |
+| `global.priorityClassName`                | Adds `priorityClassName` to Dapr pods                                   | `""`                    |
 
 ### Dapr Operator options:
 | Parameter                                  | Description                                                                                                                                                                                   | Default     |

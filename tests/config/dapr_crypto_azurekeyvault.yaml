@@ -1,0 +1,24 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: azurekeyvault
+spec:
+  type: crypto.azure.keyvault
+  version: v1
+  metadata:
+    - name: vaultName
+      envRef: AZURE_KEY_VAULT_NAME
+    - name: azureTenantId
+      secretKeyRef:
+        name: azurekeyvault-secret
+        key: tenant-id
+    - name: azureClientId
+      secretKeyRef:
+        name: azurekeyvault-secret
+        key: client-id
+    - name: azureClientSecret
+      secretKeyRef:
+        name: azurekeyvault-secret
+        key: client-secret
+scopes:
+  - cryptoapp

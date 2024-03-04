@@ -42,7 +42,7 @@ type timers struct {
 	activeTimersCountLock sync.RWMutex
 	metricsCollector      timersMetricsCollector
 	runningCh             chan struct{}
-	processor             *queue.Processor[*internal.Reminder]
+	processor             *queue.Processor[string, *internal.Reminder]
 }
 
 // NewTimersProvider returns a TimerProvider.
@@ -54,7 +54,7 @@ func NewTimersProvider(clock clock.WithTicker) internal.TimersProvider {
 		metricsCollector:  diag.DefaultMonitoring.ActorTimers,
 		runningCh:         make(chan struct{}),
 	}
-	t.processor = queue.NewProcessor[*internal.Reminder](t.processorExecuteFn)
+	t.processor = queue.NewProcessor[string, *internal.Reminder](t.processorExecuteFn)
 	return t
 }
 

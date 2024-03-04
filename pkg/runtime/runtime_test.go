@@ -448,6 +448,7 @@ func TestInitNameResolution(t *testing.T) {
 				AppPort:          rt.runtimeConfig.appConnectionConfig.Port,
 				Address:          rt.hostAddress,
 				AppID:            rt.runtimeConfig.id,
+				Namespace:        "default",
 			},
 		}
 
@@ -801,8 +802,8 @@ func NewTestDaprRuntimeWithProtocol(t *testing.T, mode modes.DaprMode, protocol 
 
 func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol string, appPort int) *internalConfig {
 	return &internalConfig{
-		id:                 daprt.TestRuntimeConfigID,
-		placementAddresses: []string{"10.10.10.12"},
+		id:            daprt.TestRuntimeConfigID,
+		actorsService: "placement:10.10.10.12",
 		kubernetes: modeconfig.KubernetesConfig{
 			ControlPlaneAddress: "10.10.10.11",
 		},
@@ -823,9 +824,9 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 		enableProfiling:              false,
 		mTLSEnabled:                  false,
 		sentryServiceAddress:         "",
-		maxRequestBodySize:           4,
+		maxRequestBodySize:           4 << 20,
+		readBufferSize:               4 << 10,
 		unixDomainSocket:             "",
-		readBufferSize:               4,
 		gracefulShutdownDuration:     time.Second,
 		enableAPILogging:             ptr.Of(true),
 		disableBuiltinK8sSecretStore: false,
@@ -846,17 +847,6 @@ func TestGracefulShutdown(t *testing.T) {
 	r, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 	require.NoError(t, err)
 	assert.Equal(t, time.Second, r.runtimeConfig.gracefulShutdownDuration)
-}
-
-func TestNamespace(t *testing.T) {
-	t.Run("empty namespace", func(t *testing.T) {
-		assert.Empty(t, getNamespace())
-	})
-
-	t.Run("non-empty namespace", func(t *testing.T) {
-		t.Setenv("NAMESPACE", "a")
-		assert.Equal(t, "a", getNamespace())
-	})
 }
 
 func TestPodName(t *testing.T) {
@@ -1961,18 +1951,18 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 	mockAppChannel.On("InvokeMethod", mock.MatchedBy(daprt.MatchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 	// Create new processor with mocked app channel.
 	rt.processor = processor.New(processor.Options{
-		ID:               rt.runtimeConfig.id,
-		IsHTTP:           rt.runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		PlacementEnabled: len(rt.runtimeConfig.placementAddresses) > 0,
-		Registry:         rt.runtimeConfig.registry,
-		ComponentStore:   rt.compStore,
-		Meta:             rt.meta,
-		GlobalConfig:     rt.globalConfig,
-		Resiliency:       rt.resiliency,
-		Mode:             rt.runtimeConfig.mode,
-		Standalone:       rt.runtimeConfig.standalone,
-		Channels:         rt.channels,
-		GRPC:             rt.grpc,
+		ID:             rt.runtimeConfig.id,
+		IsHTTP:         rt.runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:  len(rt.runtimeConfig.actorsService) > 0,
+		Registry:       rt.runtimeConfig.registry,
+		ComponentStore: rt.compStore,
+		Meta:           rt.meta,
+		GlobalConfig:   rt.globalConfig,
+		Resiliency:     rt.resiliency,
+		Mode:           rt.runtimeConfig.mode,
+		Standalone:     rt.runtimeConfig.standalone,
+		Channels:       rt.channels,
+		GRPC:           rt.grpc,
 	})
 
 	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))

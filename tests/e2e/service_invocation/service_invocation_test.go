@@ -1493,8 +1493,7 @@ func TestNegativeCases(t *testing.T) {
 				// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
 				require.False(t, testResults.MainCallSuccessful)
 				require.Equal(t, 500, status)
-				require.Contains(t, string(testResults.RawBody), "failed to invoke")
-				require.Contains(t, string(testResults.RawBody), "missing-service-0")
+				require.Contains(t, string(testResults.RawBody), "failed to resolve address for 'missing-service-0-dapr.dapr-tests.svc.cluster.local'")
 				require.Nil(t, err)
 			})
 
@@ -1517,8 +1516,7 @@ func TestNegativeCases(t *testing.T) {
 				require.Nil(t, testResults.RawBody)
 				require.Nil(t, err)
 				require.NotNil(t, testResults.RawError)
-				require.Contains(t, testResults.RawError, "failed to invoke")
-				require.Contains(t, testResults.RawError, "missing-service-0")
+				require.Contains(t, testResults.RawError, "failed to resolve address for 'missing-service-0-dapr.dapr-tests.svc.cluster.local'")
 			})
 
 			t.Run("service_timeout_http", func(t *testing.T) {
