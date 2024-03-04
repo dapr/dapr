@@ -90,8 +90,6 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 	config := NewConfig(ConfigOpts{
 		AppID:         TestAppID,
 		ActorsService: "placement:placement:5050",
-		HostAddress:   "localhost",
-		Port:          Port,
 	})
 
 	compStore := compstore.New()

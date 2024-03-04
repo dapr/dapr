@@ -85,7 +85,7 @@ spec:
   - name: actorStateStore
     value: true
 `),
-		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(h.place.Port())),
+		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(h.place.Port())),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 	)

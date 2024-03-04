@@ -66,7 +66,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		port:                fp.Port(t, 0),
 		healthzPort:         fp.Port(t, 1),
 		metricsPort:         fp.Port(t, 2),
-		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(fp.Port(t, 3)),
+		initialCluster:      uid.String() + "=localhost:" + strconv.Itoa(fp.Port(t, 3)),
 		initialClusterPorts: []int{fp.Port(t, 3)},
 		maxAPILevel:         -1,
 		minAPILevel:         0,
@@ -128,7 +128,7 @@ func (p *Placement) Cleanup(t *testing.T) {
 func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", p.healthzPort), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", p.healthzPort), nil)
 		if err != nil {
 			return false
 		}
@@ -150,7 +150,7 @@ func (p *Placement) Port() int {
 }
 
 func (p *Placement) Address() string {
-	return "127.0.0.1:" + strconv.Itoa(p.port)
+	return "localhost:" + strconv.Itoa(p.port)
 }
 
 func (p *Placement) HealthzPort() int {
