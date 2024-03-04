@@ -131,6 +131,7 @@ func (f *fuzzpubsub) Setup(t *testing.T) []framework.Option {
 			strings.HasPrefix(*s, ".") || strings.Contains(*s, "?") ||
 			strings.Contains(*s, "#") || strings.Contains(*s, "%") ||
 			strings.Contains(*s, " ") || strings.Contains(*s, "\t") ||
+			strings.Contains(*s, "{") || strings.Contains(*s, "}") ||
 			strings.Contains(*s, "\n") || strings.Contains(*s, "\r") {
 			*s = "/" + c.RandString()
 		}
