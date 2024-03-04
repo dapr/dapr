@@ -1,8 +1,9 @@
 package diagnostics
 
 import (
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+
+	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 func NewDaprTraceSampler(samplingRateString string) sdktrace.Sampler {
