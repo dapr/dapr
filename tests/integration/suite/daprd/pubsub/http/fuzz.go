@@ -233,7 +233,7 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 			route := f.pubSubs[i].Topics[j].Route
 			payload := f.pubSubs[i].Topics[j].payload
 			pt.Add(func(col *assert.CollectT) {
-				reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s",
+				reqURL := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s",
 					f.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
 				// TODO: @joshvanl: under heavy load, messages seem to get lost here
 				// with no response from Dapr. Until this is fixed, we use to smaller

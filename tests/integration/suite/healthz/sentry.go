@@ -48,7 +48,7 @@ func (s *sentry) Setup(t *testing.T) []framework.Option {
 func (s *sentry) Run(t *testing.T, ctx context.Context) {
 	s.proc.WaitUntilRunning(t, ctx)
 
-	reqURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", s.proc.HealthzPort())
+	reqURL := fmt.Sprintf("http://localhost:%d/healthz", s.proc.HealthzPort())
 	httpClient := util.HTTPClient(t)
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)

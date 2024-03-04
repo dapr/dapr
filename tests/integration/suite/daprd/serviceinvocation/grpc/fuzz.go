@@ -91,7 +91,7 @@ func (f *fuzzgrpc) Run(t *testing.T, ctx context.Context) {
 		}
 
 		pt.Add(func(c *assert.CollectT) {
-			conn, err := grpc.DialContext(ctx, fmt.Sprintf("127.0.0.1:%d", f.daprd2.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+			conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", f.daprd2.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 			require.NoError(c, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 

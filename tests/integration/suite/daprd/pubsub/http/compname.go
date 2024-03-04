@@ -99,7 +99,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 		pubsubName := c.pubsubNames[i]
 		topicName := c.topicNames[i]
 		pt.Add(func(t *assert.CollectT) {
-			reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s", c.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
+			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", c.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(`{"status": "completed"}`))
 			require.NoError(t, err)
 			req.Header.Set("Content-Type", "application/json")

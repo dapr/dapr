@@ -48,7 +48,7 @@ func (p *placement) Setup(t *testing.T) []framework.Option {
 func (p *placement) Run(t *testing.T, ctx context.Context) {
 	p.proc.WaitUntilRunning(t, ctx)
 
-	reqURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", p.proc.HealthzPort())
+	reqURL := fmt.Sprintf("http://localhost:%d/healthz", p.proc.HealthzPort())
 
 	httpClient := util.HTTPClient(t)
 
