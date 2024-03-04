@@ -382,7 +382,7 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 	}
 	for i := range subsV2alpha1.Items {
 		s := subsV2alpha1.Items[i] // Make a copy since we will refer to this as a reference in this loop.
-		if s.APIVersion != APIVersionV2alpha1 {
+		if s.APIVersion() != APIVersionV2alpha1 {
 			continue
 		}
 		b, err := json.Marshal(&s)

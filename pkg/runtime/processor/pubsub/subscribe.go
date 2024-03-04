@@ -20,6 +20,10 @@ import (
 
 	"google.golang.org/grpc"
 
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/internal/loader"
+	"github.com/dapr/dapr/pkg/internal/loader/disk"
+	"github.com/dapr/dapr/pkg/internal/loader/kubernetes"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -174,7 +178,10 @@ func (p *pubsub) subscriptions(ctx context.Context) ([]rtpubsub.Subscription, er
 	}
 
 	// handle declarative subscriptions
-	ds := p.declarativeSubscriptions(ctx)
+	ds, err := p.declarativeSubscriptions(ctx)
+	if err != nil {
+		return nil, err
+	}
 	for _, s := range ds {
 		skip := false
 
@@ -204,14 +211,53 @@ func (p *pubsub) subscriptions(ctx context.Context) ([]rtpubsub.Subscription, er
 
 // Refer for state store api decision
 // https://github.com/dapr/dapr/blob/master/docs/decision_records/api/API-008-multi-state-store-api-design.md
-func (p *pubsub) declarativeSubscriptions(ctx context.Context) []rtpubsub.Subscription {
-	var subs []rtpubsub.Subscription
-
+func (p *pubsub) declarativeSubscriptions(ctx context.Context) ([]rtpubsub.Subscription, error) {
+	var loader loader.Loader[subapi.Subscription]
 	switch p.mode {
 	case modes.KubernetesMode:
-		subs = rtpubsub.DeclarativeKubernetes(ctx, p.operatorClient, p.podName, p.namespace, log)
-	case modes.StandaloneMode:
-		subs = rtpubsub.DeclarativeLocal(p.resourcesPath, p.namespace, log)
+		loader = kubernetes.NewSubscriptions(kubernetes.Options{
+			Client:    p.operatorClient,
+			Namespace: p.namespace,
+			PodName:   p.podName,
+		})
+	default:
+		loader = disk.NewSubscriptions(p.resourcesPath...)
+	}
+
+	subsv2, err := loader.Load(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	subs := make([]rtpubsub.Subscription, len(subsv2))
+
+	for i, subv2 := range subsv2 {
+		sub := rtpubsub.Subscription{
+			PubsubName:      subv2.Spec.Pubsubname,
+			Topic:           subv2.Spec.Topic,
+			DeadLetterTopic: subv2.Spec.DeadLetterTopic,
+			Metadata:        subv2.Spec.Metadata,
+			Scopes:          subv2.Scopes,
+			BulkSubscribe: &rtpubsub.BulkSubscribe{
+				Enabled:            subv2.Spec.BulkSubscribe.Enabled,
+				MaxMessagesCount:   subv2.Spec.BulkSubscribe.MaxMessagesCount,
+				MaxAwaitDurationMs: subv2.Spec.BulkSubscribe.MaxAwaitDurationMs,
+			},
+		}
+		for _, rule := range subv2.Spec.Routes.Rules {
+			erule, err := rtpubsub.CreateRoutingRule(rule.Match, rule.Path)
+			if err != nil {
+				return nil, err
+			}
+			sub.Rules = append(sub.Rules, erule)
+		}
+		if len(subv2.Spec.Routes.Default) > 0 {
+			sub.Rules = append(sub.Rules, &rtpubsub.Rule{
+				Path: subv2.Spec.Routes.Default,
+			})
+		}
+
+		subs[i] = sub
 	}
 
 	// only return valid subscriptions for this app id
@@ -234,5 +280,5 @@ func (p *pubsub) declarativeSubscriptions(ctx context.Context) []rtpubsub.Subscr
 			i++
 		}
 	}
-	return subs[:i]
+	return subs[:i], nil
 }

@@ -18,7 +18,8 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/dapr/dapr/pkg/components"
+	internalloader "github.com/dapr/dapr/pkg/internal/loader"
+	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -31,7 +32,7 @@ import (
 type resource[T differ.Resource] struct {
 	batcher    *batcher.Batcher[int]
 	store      store.Store[T]
-	diskLoader components.ManifestLoader[T]
+	diskLoader internalloader.Loader[T]
 
 	wg      sync.WaitGroup
 	closeCh chan struct{}
@@ -42,14 +43,14 @@ func newResource[T differ.Resource](opts Options, batcher *batcher.Batcher[int],
 	return &resource[T]{
 		batcher:    batcher,
 		store:      store,
-		diskLoader: components.NewDiskManifestLoader[T](opts.Dirs...),
+		diskLoader: loaderdisk.New[T](opts.Dirs...),
 		closeCh:    make(chan struct{}),
 	}
 }
 
 // List returns the current list of resources loaded from disk.
 func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], error) {
-	remotes, err := r.diskLoader.Load()
+	remotes, err := r.diskLoader.Load(ctx)
 	if err != nil {
 		return nil, err
 	}
