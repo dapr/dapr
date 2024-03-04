@@ -47,7 +47,7 @@ PROTOC ?=protoc
 # Version of "protoc" to use
 # We must also specify a protobuf "suite" version from https://github.com/protocolbuffers/protobuf/releases
 PROTOC_VERSION = 24.4
-PROTOBUF_SUITE_VERSION = 21.12
+PROTOBUF_SUITE_VERSION = 24.4
 
 # name of protoc-gen-go when protoc-gen-go --version is run.
 PROTOC_GEN_GO_NAME = "protoc-gen-go"
