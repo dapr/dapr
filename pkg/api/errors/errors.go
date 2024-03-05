@@ -23,10 +23,10 @@ import (
 )
 
 const (
-	InFixName     = "NAME_"
-	InFixNegative = "NEGATIVE_"
-	PostFixName   = "NAME"
-	PostFixEmpty  = "EMPTY"
+	InFixName     ReasonSegment = "NAME_"
+	InFixNegative ReasonSegment = "NEGATIVE_"
+	PostFixName   ReasonSegment = "NAME"
+	PostFixEmpty  ReasonSegment = "EMPTY"
 )
 
 func NotFound(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string) error {

@@ -83,9 +83,6 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 	}
 
 	entries := s.cron.ListJobsByPrefix(req.GetAppId() + "||")
-	if len(entries) == 0 {
-		log.Info("No jobs scheduled for the given appID or appID doesn't exist")
-	}
 
 	jobs := make([]*runtimev1pb.Job, 0, len(entries))
 	for _, entry := range entries {
