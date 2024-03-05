@@ -29,7 +29,7 @@ import (
 )
 
 func init() {
-	suite.Register(new(schedulejobs))
+	suite.Register(new(jobs))
 }
 
 // schedulejobs tests daprd scheduling jobs against the scheduler.
