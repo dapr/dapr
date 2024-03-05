@@ -94,7 +94,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("job name is empty"), errMsg)
+		require.Equal(t, fmt.Sprintf("Name is empty"), errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
@@ -142,7 +142,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("job schedule is empty"), errMsg)
+		require.Equal(t, fmt.Sprintf("Schedule is empty"), errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
@@ -190,7 +190,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("job repeats cannot be negative"), errMsg)
+		require.Equal(t, fmt.Sprintf("Repeats cannot be negative"), errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]

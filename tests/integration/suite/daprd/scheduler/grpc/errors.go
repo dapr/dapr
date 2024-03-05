@@ -67,7 +67,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, codes.InvalidArgument, s.Code())
-		require.Equal(t, "job is empty", s.Message())
+		require.Equal(t, "Job is empty", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)
@@ -90,7 +90,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, codes.InvalidArgument, s.Code())
-		require.Equal(t, "job name is empty", s.Message())
+		require.Equal(t, "Name is empty", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)
@@ -113,7 +113,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, codes.InvalidArgument, s.Code())
-		require.Equal(t, "job schedule is empty", s.Message())
+		require.Equal(t, "Schedule is empty", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)
@@ -136,7 +136,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, codes.InvalidArgument, s.Code())
-		require.Equal(t, "job repeats cannot be negative", s.Message())
+		require.Equal(t, "Repeats cannot be negative", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)
@@ -159,7 +159,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, codes.InvalidArgument, s.Code())
-		require.Equal(t, "job name is empty", s.Message())
+		require.Equal(t, "Name is empty", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)
@@ -182,7 +182,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, codes.InvalidArgument, s.Code())
-		require.Equal(t, "job name is empty", s.Message())
+		require.Equal(t, "Name is empty", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)
@@ -205,7 +205,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, codes.InvalidArgument, s.Code())
-		require.Equal(t, "job appID is empty", s.Message())
+		require.Equal(t, "AppID is empty", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)

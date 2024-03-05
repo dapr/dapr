@@ -28,19 +28,19 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	errMetadata := map[string]string{"app_id": a.AppID()}
 
 	if inReq.GetJob() == nil {
-		return &emptypb.Empty{}, apierrors.Empty("job", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
+		return &emptypb.Empty{}, apierrors.Empty("Job", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
 	}
 
 	if inReq.GetJob().GetName() == "" || inReq.GetJob().GetName() == " " {
-		return &emptypb.Empty{}, apierrors.Empty("job name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
+		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
 	if inReq.GetJob().GetSchedule() == "" {
-		return &emptypb.Empty{}, apierrors.Empty("job schedule", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty))
+		return &emptypb.Empty{}, apierrors.Empty("Schedule", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty))
 	}
 
 	if inReq.GetJob().GetRepeats() < 0 {
-		return &emptypb.Empty{}, apierrors.IncorrectNegative("job repeats", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats))
+		return &emptypb.Empty{}, apierrors.IncorrectNegative("Repeats", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats))
 	}
 
 	// TODO: add validation on dueTime and ttl
@@ -75,7 +75,7 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 
 	if inReq.GetName() == "" {
 		a.logger.Error("Job name is empty.")
-		return &emptypb.Empty{}, apierrors.Empty("job name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
+		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
 	jobName := a.AppID() + "||" + inReq.GetName()
@@ -100,7 +100,7 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 
 	if inReq.GetName() == "" {
 		a.logger.Error("Job name is empty.")
-		return response, apierrors.Empty("job name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
+		return response, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
 	jobName := a.AppID() + "||" + inReq.GetName()
@@ -129,7 +129,7 @@ func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsReq
 
 	if inReq.GetAppId() == "" {
 		a.logger.Error("Job appID empty.")
-		return response, apierrors.Empty("job appID", nil, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixAppID, apierrors.PostFixEmpty))
+		return response, apierrors.Empty("AppID", nil, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixAppID, apierrors.PostFixEmpty))
 	}
 
 	internalListReq := &schedulerv1pb.ListJobsRequest{
