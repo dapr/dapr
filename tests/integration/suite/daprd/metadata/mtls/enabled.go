@@ -55,7 +55,9 @@ func (e *enabled) Setup(t *testing.T) []framework.Option {
 	e.sentry = sentry.New(t)
 
 	e.daprd = daprd.New(t,
-		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(e.sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_TRUST_ANCHORS", string(e.sentry.CABundle().TrustAnchors),
+		)),
 		daprd.WithSentryAddress(e.sentry.Address()),
 		daprd.WithEnableMTLS(true),
 		daprd.WithMetadataAuthorizedIDs(
@@ -72,7 +74,9 @@ spec:
 `))
 
 	e.daprdConfig = daprd.New(t,
-		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(e.sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_TRUST_ANCHORS", string(e.sentry.CABundle().TrustAnchors),
+		)),
 		daprd.WithSentryAddress(e.sentry.Address()),
 		daprd.WithEnableMTLS(true),
 		daprd.WithConfigContents(`apiVersion: dapr.io/v1alpha1
@@ -85,7 +89,9 @@ spec:
 `))
 
 	e.daprdCLI = daprd.New(t,
-		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(e.sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_TRUST_ANCHORS", string(e.sentry.CABundle().TrustAnchors),
+		)),
 		daprd.WithSentryAddress(e.sentry.Address()),
 		daprd.WithEnableMTLS(true),
 		daprd.WithMetadataAuthorizedIDs(
@@ -95,7 +101,9 @@ spec:
 	)
 
 	e.daprdNoAuthz = daprd.New(t,
-		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(e.sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_TRUST_ANCHORS", string(e.sentry.CABundle().TrustAnchors),
+		)),
 		daprd.WithSentryAddress(e.sentry.Address()),
 		daprd.WithEnableMTLS(true),
 	)

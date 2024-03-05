@@ -46,7 +46,9 @@ func (d *disabled) Setup(t *testing.T) []framework.Option {
 	d.sentry = sentry.New(t)
 
 	d.daprd = daprd.New(t,
-		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(d.sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t,
+			"DAPR_TRUST_ANCHORS", string(d.sentry.CABundle().TrustAnchors),
+		)),
 		daprd.WithSentryAddress(d.sentry.Address()),
 		// mTLS is disabled
 		daprd.WithEnableMTLS(false),

@@ -54,7 +54,9 @@ func (c *cli) Setup(t *testing.T) []framework.Option {
 				require.ErrorContains(t, err, "exit status 1")
 			}),
 			exec.WithStdout(c.logline.Stdout()),
-			exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)),
+			exec.WithEnvVars(t,
+				"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+			),
 		),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithEnableMTLS(true),

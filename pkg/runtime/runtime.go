@@ -534,7 +534,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	// Start HTTP Server
-	err = a.startHTTPServer(pipeline)
+	err = a.startHTTPServer()
 	if err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
@@ -765,7 +765,7 @@ func (a *DaprRuntime) initProxy() {
 	})
 }
 
-func (a *DaprRuntime) startHTTPServer(pipeline httpMiddleware.Pipeline) error {
+func (a *DaprRuntime) startHTTPServer() error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		Universal:             a.daprUniversal,
 		Channels:              a.channels,

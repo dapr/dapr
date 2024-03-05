@@ -207,7 +207,7 @@ func (s *server) StartNonBlocking() error {
 			Addr:              fmt.Sprintf(":%d", *s.config.MetadataPort),
 			Handler:           metaR,
 			ReadHeaderTimeout: 10 * time.Second,
-			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
+			MaxHeaderBytes:    s.config.ReadBufferSize,
 		}
 
 		if s.sec.MTLSEnabled() {
