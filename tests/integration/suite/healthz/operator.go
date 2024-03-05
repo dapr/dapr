@@ -46,7 +46,7 @@ type operator struct {
 func (o *operator) Setup(t *testing.T) []framework.Option {
 	o.sentry = procsentry.New(t,
 		procsentry.WithTrustDomain("integration.test.dapr.io"),
-		procsentry.WithExecOptions(exec.WithEnvVars("NAMESPACE", "dapr-system")),
+		procsentry.WithExecOptions(exec.WithEnvVars(t, "NAMESPACE", "dapr-system")),
 	)
 
 	kubeAPI := kubernetes.New(t, kubernetes.WithBaseOperatorAPI(t,
