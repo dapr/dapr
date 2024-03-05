@@ -22,16 +22,16 @@ import (
 )
 
 const (
-	CodePrefixScheduler = "SCHEDULER_" // TODO(Cassie): move this to kit eventually
-	InFixJob            = "JOB_"
-	InFixAppID          = "APPID_"
-	InFixGet            = "GET_"
-	InFixList           = "LIST_"
-	InFixDelete         = "DELETE_"
-	InFixSchedule       = "SCHEDULE_"
-	PostFixRepeats      = "REPEATS"
-	PostFixJob          = "JOB"
-	PostFixJobs         = "JOBS"
+	CodePrefixScheduler               = "SCHEDULER_" // TODO(Cassie): move this to kit eventually
+	InFixJob            ReasonSegment = "JOB_"
+	InFixAppID          ReasonSegment = "APPID_"
+	InFixGet            ReasonSegment = "GET_"
+	InFixList           ReasonSegment = "LIST_"
+	InFixDelete         ReasonSegment = "DELETE_"
+	InFixSchedule       ReasonSegment = "SCHEDULE_"
+	PostFixRepeats      ReasonSegment = "REPEATS"
+	PostFixJob          ReasonSegment = "JOB"
+	PostFixJobs         ReasonSegment = "JOBS"
 
 	MsgScheduleJob = "failed to schedule job"
 	MsgGetJob      = "failed to get job"
@@ -47,7 +47,7 @@ func SchedulerURLName(metadata map[string]string) error {
 		message,
 		"",
 	).
-		WithErrorInfo(CodePrefixScheduler+InFixJob+PostFixName, metadata).
+		WithErrorInfo(string(CodePrefixScheduler+InFixJob+PostFixName), metadata).
 		Build()
 }
 
@@ -58,7 +58,7 @@ func SchedulerScheduleJob(metadata map[string]string, err error) error {
 		MsgScheduleJob+" due to: "+err.Error(),
 		"",
 	).
-		WithErrorInfo(CodePrefixScheduler+InFixSchedule+PostFixJob, metadata).
+		WithErrorInfo(string(CodePrefixScheduler+InFixSchedule+PostFixJob), metadata).
 		Build()
 }
 
@@ -69,7 +69,7 @@ func SchedulerGetJob(metadata map[string]string, err error) error {
 		MsgGetJob+" due to: "+err.Error(),
 		"",
 	).
-		WithErrorInfo(CodePrefixScheduler+InFixGet+PostFixJob, metadata).
+		WithErrorInfo(string(CodePrefixScheduler+InFixGet+PostFixJob), metadata).
 		Build()
 }
 
@@ -80,7 +80,7 @@ func SchedulerListJobs(metadata map[string]string, err error) error {
 		MsgListJobs+" due to: "+err.Error(),
 		"",
 	).
-		WithErrorInfo(CodePrefixScheduler+InFixList+PostFixJobs, metadata).
+		WithErrorInfo(string(CodePrefixScheduler+InFixList+PostFixJobs), metadata).
 		Build()
 }
 
@@ -91,6 +91,6 @@ func SchedulerDeleteJob(metadata map[string]string, err error) error {
 		MsgDeleteJob+" due to: "+err.Error(),
 		"",
 	).
-		WithErrorInfo(CodePrefixScheduler+InFixDelete+PostFixJob, metadata).
+		WithErrorInfo(string(CodePrefixScheduler+InFixDelete+PostFixJob), metadata).
 		Build()
 }
