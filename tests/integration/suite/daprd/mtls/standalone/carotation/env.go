@@ -61,7 +61,7 @@ func (e *env) Setup(t *testing.T) []framework.Option {
 		daprd.WithMode("standalone"),
 		daprd.WithSentryAddress(e.sentry1.Address()),
 		daprd.WithEnableMTLS(true),
-		daprd.WithExecOptions(exec.WithEnvVars(
+		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS_FILE", e.taFile,
 		)),
 	)
