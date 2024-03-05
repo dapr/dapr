@@ -33,12 +33,12 @@ func init() {
 }
 
 // schedulejobs tests daprd scheduling jobs against the scheduler.
-type schedulejobs struct {
+type jobs struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
 }
 
-func (j *schedulejobs) Setup(t *testing.T) []framework.Option {
+func (j *jobs) Setup(t *testing.T) []framework.Option {
 	j.scheduler = scheduler.New(t)
 
 	j.daprd = daprd.New(t,
@@ -50,7 +50,7 @@ func (j *schedulejobs) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (j *schedulejobs) Run(t *testing.T, ctx context.Context) {
+func (j *jobs) Run(t *testing.T, ctx context.Context) {
 	j.scheduler.WaitUntilRunning(t, ctx)
 	j.daprd.WaitUntilRunning(t, ctx)
 
