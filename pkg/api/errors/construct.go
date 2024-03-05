@@ -13,11 +13,16 @@ limitations under the License.
 
 package errors
 
-import "strings"
+type ReasonSegment string
 
 // ConstructReason is used to append several Error Reason const strings into 1 Error Reason.
 // The format of the string should generally follow this pattern:
 // apierrors.CodePrefix<Dapr_API>_, apierrors.InFix<const>_,apierrors.PostFix<const>
-func ConstructReason(vars ...string) string {
-	return strings.Join(vars, "")
+func ConstructReason(vars ...ReasonSegment) string {
+	result := ""
+
+	for _, segment := range vars {
+		result += string(segment)
+	}
+	return result
 }
