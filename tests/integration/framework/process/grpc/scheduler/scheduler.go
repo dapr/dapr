@@ -33,16 +33,12 @@ type Option func(*options)
 // Scheduler is a wrapper around a grpc.Server that implements the Scheduler API.
 type Scheduler struct {
 	*procgrpc.GRPC
-
-	closech chan struct{}
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
 	t.Helper()
 
-	o := &Scheduler{
-		closech: make(chan struct{}),
-	}
+	s := &Scheduler{}
 
 	opts := options{
 		// TODO: add scheduler server funcs here as needed
@@ -54,7 +50,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	require.NotNil(t, opts.sentry, "must provide sentry")
 
-	o.GRPC = procgrpc.New(t, append(opts.grpcopts,
+	s.GRPC = procgrpc.New(t, append(opts.grpcopts,
 		procgrpc.WithServerOption(func(t *testing.T, ctx context.Context) grpc.ServerOption {
 			secProv, err := security.New(ctx, security.Options{
 				SentryAddress:           "localhost:" + strconv.Itoa(opts.sentry.Port()),
@@ -99,10 +95,9 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 			}
 		}))...)
 
-	return o
+	return s
 }
 
-func (o *Scheduler) Cleanup(t *testing.T) {
-	close(o.closech)
-	o.GRPC.Cleanup(t)
+func (s *Scheduler) Cleanup(t *testing.T) {
+	s.GRPC.Cleanup(t)
 }

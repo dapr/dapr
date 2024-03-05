@@ -18,8 +18,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -54,10 +52,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.scheduler.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, b.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	client := b.daprd.GRPCClient(t, ctx)
 
 	t.Run("bad request", func(t *testing.T) {
 		for _, req := range []*rtv1.ScheduleJobRequest{
@@ -82,7 +77,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		} {
-			_, err = client.ScheduleJob(ctx, req)
+			_, err := client.ScheduleJob(ctx, req)
 			require.Error(t, err)
 		}
 	})
@@ -120,7 +115,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		} {
-			_, err = client.ScheduleJob(ctx, req)
+			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
 		}
 	})

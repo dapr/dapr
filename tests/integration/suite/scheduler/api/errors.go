@@ -11,13 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package grpc
+package api
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"testing"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/scheduler"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
@@ -29,39 +30,38 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/grpc/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(controlPlaneErrors))
+	suite.Register(new(errors))
 }
 
-type controlPlaneErrors struct {
+type errors struct {
 	daprd     *daprd.Daprd
 	sentry    *sentry.Sentry
 	scheduler *scheduler.Scheduler
 }
 
-func (e *controlPlaneErrors) Setup(t *testing.T) []framework.Option {
+func (e *errors) Setup(t *testing.T) []framework.Option {
 	e.sentry = sentry.New(t)
 
 	e.scheduler = scheduler.New(t,
 		scheduler.WithSentry(e.sentry),
 		scheduler.WithScheduleJobFn(
 			func(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
-				return nil, errors.New("schedule job error")
+				return nil, stderrors.New("schedule job error")
 			}),
 		scheduler.WithGetJobFn(
 			func(ctx context.Context, req *schedulerv1pb.JobRequest) (*schedulerv1pb.GetJobResponse, error) {
-				return nil, errors.New("get job error")
+				return nil, stderrors.New("get job error")
 			}),
 		scheduler.WithListJobsFn(func(ctx context.Context, request *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
-			return nil, errors.New("list jobs error")
+			return nil, stderrors.New("list jobs error")
 		}),
 		scheduler.WithDeleteJobFn(func(ctx context.Context, request *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
-			return nil, errors.New("delete job error")
+			return nil, stderrors.New("delete job error")
 		}),
 	)
 
@@ -79,7 +79,7 @@ func (e *controlPlaneErrors) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (e *controlPlaneErrors) Run(t *testing.T, ctx context.Context) {
+func (e *errors) Run(t *testing.T, ctx context.Context) {
 	e.sentry.WaitUntilRunning(t, ctx)
 	e.daprd.WaitUntilRunning(t, ctx)
 
