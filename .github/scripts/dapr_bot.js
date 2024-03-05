@@ -26,7 +26,8 @@ const owners = [
     'tanvigour',
     'yaron2',
     'rabollin',
-    'ashiquemd'
+    'ashiquemd',
+    'mikeee'
 ]
 
 const SDKs = [
