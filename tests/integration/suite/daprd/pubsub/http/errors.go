@@ -16,7 +16,7 @@ package http
 import (
 	"context"
 	"encoding/json"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -47,14 +47,14 @@ const (
 )
 
 func init() {
-	suite.Register(new(standardizedErrors))
+	suite.Register(new(errors))
 }
 
-type standardizedErrors struct {
+type errors struct {
 	daprd *daprd.Daprd
 }
 
-func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
+func (e *errors) Setup(t *testing.T) []framework.Option {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping unix socket based test on windows")
 	}
@@ -75,7 +75,7 @@ func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
 		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t,
 			inmemory.WithFeatures(),
 			inmemory.WithPublishFn(func(ctx context.Context, req *componentspubsub.PublishRequest) error {
-				return errors.New("outbox error")
+				return stderrors.New("outbox error")
 			}),
 		)),
 	)
@@ -126,7 +126,7 @@ spec:
 	}
 }
 
-func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
+func (e *errors) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	httpClient := util.HTTPClient(t)

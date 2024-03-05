@@ -15,7 +15,7 @@ package grpc
 
 import (
 	"context"
-	"errors"
+	stderrors "errors"
 	"fmt"
 	"net/http"
 	"sync/atomic"
@@ -52,7 +52,7 @@ func (a *appready) Setup(t *testing.T) []framework.Option {
 			if a.appHealthy.Load() {
 				return &rtv1.HealthCheckResponse{}, nil
 			}
-			return nil, errors.New("app not healthy")
+			return nil, stderrors.New("app not healthy")
 		}),
 		app.WithOnTopicEventFn(func(_ context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
 			a.topicChan <- in.GetPath()
