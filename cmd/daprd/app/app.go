@@ -55,7 +55,10 @@ func Run() {
 	// set GOMAXPROCS
 	_, _ = maxprocs.Set()
 
-	opts := options.New(os.Args[1:])
+	opts, err := options.New(os.Args[1:])
+	if err != nil {
+		log.Fatalf("Failed to parse flags: %v", err)
+	}
 
 	if opts.RuntimeVersion {
 		//nolint:forbidigo
@@ -77,7 +80,8 @@ func Run() {
 	// Apply options to all loggers.
 	opts.Logger.SetAppID(opts.AppID)
 
-	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
+	err = logger.ApplyOptionsToLoggers(&opts.Logger)
+	if err != nil {
 		log.Fatal(err)
 	}
 
@@ -152,9 +156,9 @@ func Run() {
 				AppMaxConcurrency:            opts.AppMaxConcurrency,
 				EnableMTLS:                   opts.EnableMTLS,
 				SentryAddress:                opts.SentryAddress,
-				DaprHTTPMaxRequestSize:       opts.DaprHTTPMaxRequestSize,
+				MaxRequestSize:               opts.MaxRequestSize,
+				ReadBufferSize:               opts.ReadBufferSize,
 				UnixDomainSocket:             opts.UnixDomainSocket,
-				DaprHTTPReadBufferSize:       opts.DaprHTTPReadBufferSize,
 				DaprGracefulShutdownSeconds:  opts.DaprGracefulShutdownSeconds,
 				DaprBlockShutdownDuration:    opts.DaprBlockShutdownDuration,
 				DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,

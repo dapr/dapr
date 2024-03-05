@@ -53,12 +53,14 @@ const (
 	DefaultProfilePort = 7777
 	// DefaultMetricsPort is the default port for metrics endpoints.
 	DefaultMetricsPort = 9090
-	// DefaultMaxRequestBodySize is the default option for the maximum body size in MB for Dapr HTTP servers.
-	DefaultMaxRequestBodySize = 4
+	// DefaultMaxRequestBodySize is the default option for the maximum body size in bytes for Dapr HTTP servers.
+	// Equal to 4MB
+	DefaultMaxRequestBodySize = 4 << 20
 	// DefaultAPIListenAddress is which address to listen for the Dapr HTTP and GRPC APIs. Empty string is all addresses.
 	DefaultAPIListenAddress = ""
-	// DefaultReadBufferSize is the default option for the maximum header size in KB for Dapr HTTP servers.
-	DefaultReadBufferSize = 4
+	// DefaultReadBufferSize is the default option for the maximum header size in bytes for Dapr HTTP servers.
+	// Equal to 4KB
+	DefaultReadBufferSize = 4 << 10
 	// DefaultGracefulShutdownDuration is the default option for the duration of the graceful shutdown.
 	DefaultGracefulShutdownDuration = time.Second * 5
 	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
@@ -78,7 +80,7 @@ type Config struct {
 	AppMaxConcurrency            int
 	EnableMTLS                   bool
 	AppSSL                       bool
-	DaprHTTPMaxRequestSize       int
+	MaxRequestSize               int // In bytes
 	ResourcesPath                []string
 	ComponentsPath               string
 	AppProtocol                  string
@@ -102,7 +104,7 @@ type Config struct {
 	Mode                         string
 	Config                       []string
 	UnixDomainSocket             string
-	DaprHTTPReadBufferSize       int
+	ReadBufferSize               int // In bytes
 	DisableBuiltinK8sSecretStore bool
 	AppHealthCheckPath           string
 	AppChannelAddress            string
@@ -130,9 +132,9 @@ type internalConfig struct {
 	kubernetes                   configmodes.KubernetesConfig
 	mTLSEnabled                  bool
 	sentryServiceAddress         string
-	maxRequestBodySize           int
 	unixDomainSocket             string
-	readBufferSize               int
+	maxRequestBodySize           int // In bytes
+	readBufferSize               int // In bytes
 	gracefulShutdownDuration     time.Duration
 	blockShutdownDuration        *time.Duration
 	enableAPILogging             *bool
@@ -287,8 +289,8 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		mTLSEnabled:                  c.EnableMTLS,
 		disableBuiltinK8sSecretStore: c.DisableBuiltinK8sSecretStore,
 		unixDomainSocket:             c.UnixDomainSocket,
-		maxRequestBodySize:           c.DaprHTTPMaxRequestSize,
-		readBufferSize:               c.DaprHTTPReadBufferSize,
+		maxRequestBodySize:           c.MaxRequestSize,
+		readBufferSize:               c.ReadBufferSize,
 		enableAPILogging:             c.EnableAPILogging,
 		appConnectionConfig: config.AppConnectionConfig{
 			ChannelAddress:      c.AppChannelAddress,

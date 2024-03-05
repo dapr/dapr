@@ -170,8 +170,16 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--dapr-http-max-request-size", strconv.Itoa(*c.HTTPMaxRequestSize))
 	}
 
+	if c.MaxBodySize != "" {
+		args = append(args, "--max-body-size", c.MaxBodySize)
+	}
+
 	if c.HTTPReadBufferSize != nil {
 		args = append(args, "--dapr-http-read-buffer-size", strconv.Itoa(*c.HTTPReadBufferSize))
+	}
+
+	if c.ReadBufferSize != "" {
+		args = append(args, "--read-buffer-size", c.ReadBufferSize)
 	}
 
 	if c.UnixDomainSocketPath != "" {
