@@ -123,15 +123,11 @@ func Run() {
 			if err != nil {
 				return rerr
 			}
-			requester, derr := sentry.New(ctx, sentry.Options{
+			requester := sentry.New(sentry.Options{
 				SentryAddress: cfg.SentryAddress,
 				SentryID:      sentryID,
 				Security:      sec,
 			})
-			if derr != nil {
-				return derr
-			}
-
 			return inj.Run(ctx,
 				sec.TLSServerConfigNoClientAuth(),
 				sentryID,

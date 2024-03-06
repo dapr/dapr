@@ -40,7 +40,6 @@ type withMin struct {
 
 func (n *withMin) Setup(t *testing.T) []framework.Option {
 	n.place = placement.New(t,
-		placement.WithMaxAPILevel(-1),
 		placement.WithMinAPILevel(20),
 		placement.WithMetadataEnabled(true),
 	)
@@ -66,7 +65,7 @@ func (n *withMin) Run(t *testing.T, ctx context.Context) {
 	// API level should be lower
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		n.place.CheckAPILevelInState(t, httpClient, level1)
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// Trying to register a host with version 5 should fail
 	n.place.AssertRegisterHostFails(t, ctx, 5)
@@ -107,7 +106,7 @@ func (n *withMin) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		n.place.CheckAPILevelInState(t, httpClient, level1)
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// Register the second host with the higher API level
 	msg2 := &placementv1pb.Host{
@@ -141,7 +140,7 @@ func (n *withMin) Run(t *testing.T, ctx context.Context) {
 	// API level should not increase
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		n.place.CheckAPILevelInState(t, httpClient, level1)
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase to the higher one (30)
 	cancel1()
@@ -152,5 +151,5 @@ func (n *withMin) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		n.place.CheckAPILevelInState(t, httpClient, level2)
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 }
