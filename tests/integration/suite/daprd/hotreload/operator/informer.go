@@ -136,7 +136,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 		metaComponents := util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort())
 		assert.ElementsMatch(t, metaComponents, []*rtv1.RegisteredComponents{
 			{
@@ -174,7 +174,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 			})
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 	})
 
 	t.Run("deleting a component should delete the component", func(t *testing.T) {
@@ -183,6 +183,6 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Empty(c, util.GetMetaComponents(c, ctx, client, i.daprd.HTTPPort()))
-		}, time.Second*20, time.Millisecond*100)
+		}, time.Second*20, time.Millisecond*10)
 	})
 }
