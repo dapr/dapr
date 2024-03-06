@@ -76,6 +76,6 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			})
 			require.NoError(c, err)
 			assert.Empty(c, resp.GetData())
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 10*time.Millisecond)
 	})
 }
