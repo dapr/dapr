@@ -17,5 +17,5 @@ import componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 
 // ComponentLoader is an interface for returning Dapr components.
 type ComponentLoader interface {
-	Load() ([]componentsV1alpha1.Component, error)
+	LoadComponents() ([]componentsV1alpha1.Component, error)
 }
