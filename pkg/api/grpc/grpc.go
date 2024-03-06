@@ -29,6 +29,7 @@ import (
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -63,7 +64,10 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-const daprHTTPStatusHeader = "dapr-http-status"
+const (
+	daprHTTPStatusHeader = "dapr-http-status"
+	metadataPrefix       = "metadata."
+)
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
@@ -495,6 +499,13 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 
 	diag.DefaultComponentMonitoring.OutputBindingEvent(context.Background(), in.GetName(), in.GetOperation(), err == nil, elapsed)
 
+	// Some bindings have metadata in the response even in case of error
+	if resp != nil {
+		for k, v := range resp.Metadata {
+			grpc.SetHeader(ctx, grpcMetadata.Pairs(metadataPrefix+k, v))
+		}
+	}
+
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrInvokeOutputBinding, in.GetName(), err.Error())
 		apiServerLogger.Debug(err)
@@ -505,6 +516,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		r.Data = resp.Data
 		r.Metadata = resp.Metadata
 	}
+
 	return r, nil
 }
 

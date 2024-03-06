@@ -76,5 +76,5 @@ func (o *operator) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusOK
-	}, time.Second*10, 100*time.Millisecond)
+	}, time.Second*10, 10*time.Millisecond)
 }
