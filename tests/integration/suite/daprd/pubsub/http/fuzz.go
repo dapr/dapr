@@ -19,7 +19,7 @@ import (
 	"crypto/rand"
 	"encoding/base64"
 	"encoding/json"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"io"
 	"math/big"
@@ -249,7 +249,7 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 					require.NoError(col, err)
 					req.Header.Set("Content-Type", "application/json")
 					resp, err := util.HTTPClient(t).Do(req)
-					if stderrors.Is(err, context.DeadlineExceeded) {
+					if errors.Is(err, context.DeadlineExceeded) {
 						// Only retry if we haven't exceeded the test timeout.
 						d, ok := ctx.Deadline()
 						require.True(col, ok)

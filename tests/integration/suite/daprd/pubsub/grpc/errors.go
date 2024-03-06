@@ -15,7 +15,7 @@ package grpc
 
 import (
 	"context"
-	stderrors "errors"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -46,14 +46,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(errors))
+	suite.Register(new(errorcodes))
 }
 
-type errors struct {
+type errorcodes struct {
 	daprd *daprd.Daprd
 }
 
-func (e *errors) Setup(t *testing.T) []framework.Option {
+func (e *errorcodes) Setup(t *testing.T) []framework.Option {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping unix socket based test on windows")
 	}
@@ -74,7 +74,7 @@ func (e *errors) Setup(t *testing.T) []framework.Option {
 		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t,
 			inmemory.WithFeatures(),
 			inmemory.WithPublishFn(func(ctx context.Context, req *componentspubsub.PublishRequest) error {
-				return stderrors.New("outbox error")
+				return errors.New("outbox error")
 			}),
 		)),
 	)
@@ -125,7 +125,7 @@ spec:
 	}
 }
 
-func (e *errors) Run(t *testing.T, ctx context.Context) {
+func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	conn, connErr := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", e.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
