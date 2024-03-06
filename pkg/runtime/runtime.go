@@ -211,6 +211,33 @@ func newDaprRuntime(ctx context.Context,
 		MiddlewareHTTP:   httpMiddleware,
 	})
 
+	var reloader *hotreload.Reloader
+	switch runtimeConfig.mode {
+	case modes.KubernetesMode:
+		reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
+			PodName:        podName,
+			Namespace:      namespace,
+			Client:         operatorClient,
+			Config:         globalConfig,
+			ComponentStore: compStore,
+			Authorizer:     authz,
+			Processor:      processor,
+		})
+	case modes.StandaloneMode:
+		reloader, err = hotreload.NewDisk(ctx, hotreload.OptionsReloaderDisk{
+			Config:         globalConfig,
+			Dirs:           runtimeConfig.standalone.ResourcesPath,
+			ComponentStore: compStore,
+			Authorizer:     authz,
+			Processor:      processor,
+		})
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
+	}
+
 	rt := &DaprRuntime{
 		runtimeConfig:     runtimeConfig,
 		globalConfig:      globalConfig,
@@ -227,6 +254,7 @@ func newDaprRuntime(ctx context.Context,
 		sec:               sec,
 		processor:         processor,
 		authz:             authz,
+		reloader:          reloader,
 		namespace:         namespace,
 		podName:           podName,
 		initComplete:      make(chan struct{}),
@@ -235,35 +263,6 @@ func newDaprRuntime(ctx context.Context,
 		httpMiddleware:    httpMiddleware,
 	}
 	close(rt.isAppHealthy)
-
-	if globalConfig.IsFeatureEnabled(config.HotReload) {
-		log.Info("Hot reloading enabled. Daprd will reload 'Component' resources on change.")
-		switch runtimeConfig.mode {
-		case modes.KubernetesMode:
-			rt.reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
-				PodName:        podName,
-				Namespace:      namespace,
-				Client:         operatorClient,
-				ComponentStore: compStore,
-				Authorizer:     authz,
-				Processor:      processor,
-			})
-		case modes.StandaloneMode:
-			rt.reloader, err = hotreload.NewDisk(hotreload.OptionsReloaderDisk{
-				Dirs:           runtimeConfig.standalone.ResourcesPath,
-				ComponentStore: compStore,
-				Authorizer:     authz,
-				Processor:      processor,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to create hot reload disk reloader: %w", err)
-			}
-		default:
-			return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
-		}
-	} else {
-		log.Debug("Hot reloading disabled")
-	}
 
 	var gracePeriod *time.Duration
 	if duration := runtimeConfig.gracefulShutdownDuration; duration > 0 {
@@ -299,6 +298,9 @@ func newDaprRuntime(ctx context.Context,
 
 	if rt.reloader != nil {
 		if err := rt.runnerCloser.Add(rt.reloader.Run); err != nil {
+			return nil, err
+		}
+		if err := rt.runnerCloser.AddCloser(rt.reloader); err != nil {
 			return nil, err
 		}
 	}
@@ -1026,7 +1028,7 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 	}
 
 	log.Info("Loading components…")
-	comps, err := loader.Load()
+	comps, err := loader.LoadComponents()
 	if err != nil {
 		return err
 	}

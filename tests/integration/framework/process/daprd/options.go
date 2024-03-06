@@ -14,12 +14,7 @@ limitations under the License.
 package daprd
 
 import (
-	"testing"
-
-	"github.com/stretchr/testify/require"
-
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 )
 
 // Option is a function that configures the dapr process.
@@ -60,7 +55,7 @@ type options struct {
 
 func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
-		o.execOpts = append(o.execOpts, execOptions...)
+		o.execOpts = execOptions
 	}
 }
 
@@ -74,19 +69,6 @@ func WithNamespace(namespace string) Option {
 	return func(o *options) {
 		o.namespace = &namespace
 	}
-}
-
-func WithLogLineStdout(ll *logline.LogLine) Option {
-	return WithExecOptions(exec.WithStdout(ll.Stdout()))
-}
-
-func WithExit1() Option {
-	return WithExecOptions(
-		exec.WithExitCode(1),
-		exec.WithRunError(func(t *testing.T, err error) {
-			require.ErrorContains(t, err, "exit status 1")
-		}),
-	)
 }
 
 func WithAppPort(port int) Option {

@@ -234,24 +234,29 @@ func TestOnPlacementOrder(t *testing.T) {
 				LoadMap: map[string]*placementv1pb.Host{
 					"hostname1": {
 						Name: "app-1",
-						Port: 3001,
+						Port: 3000,
 						Id:   "id-1",
 					},
 					"hostname2": {
 						Name: "app-2",
-						Port: 3002,
+						Port: 3000,
 						Id:   "id-2",
 					},
 				},
 			},
 		}
 
+		testPlacement.apiLevel = 20
+		t.Cleanup(func() {
+			testPlacement.apiLevel = 10
+		})
+
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
 			Operation: "update",
 			Tables: &placementv1pb.PlacementTables{
 				Version:           tableVersion,
 				Entries:           entries,
-				ApiLevel:          10,
+				ApiLevel:          20,
 				ReplicationFactor: 3,
 			},
 		})
@@ -268,8 +273,7 @@ func TestOnPlacementOrder(t *testing.T) {
 		tableVersion := "3"
 		tableUpdateCount.Store(0)
 
-		// By not sending the replication factor, we simulate an older placement service
-		// In that case, we expect the vnodes and sorted set to be sent by the placement service
+		//
 		entries := map[string]*placementv1pb.PlacementTable{
 			"actorOne": {
 				LoadMap: map[string]*placementv1pb.Host{
@@ -311,6 +315,17 @@ func TestOnPlacementOrder(t *testing.T) {
 		assert.Containsf(t, table, "actorOne", "actorOne should be in the table")
 		assert.Len(t, table["actorOne"].VirtualNodes(), 6)
 		assert.Len(t, table["actorOne"].SortedSet(), 6)
+
+		// By not sending the replication factor, we simulate an older placement service
+		// In that case, we expect the vnodes and sorted set to be sent by the placement service
+		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
+			Operation: "update",
+			Tables: &placementv1pb.PlacementTables{
+				Version:  tableVersion,
+				Entries:  entries,
+				ApiLevel: 10,
+			},
+		})
 	})
 
 	t.Run("unlock operation", func(t *testing.T) {
