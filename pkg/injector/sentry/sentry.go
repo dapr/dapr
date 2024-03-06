@@ -23,9 +23,7 @@ import (
 	"encoding/pem"
 	"fmt"
 	"os"
-	"time"
 
-	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 
@@ -49,34 +47,17 @@ type Requester struct {
 	sentryID       spiffeid.ID
 	sec            security.Handler
 	kubernetesMode bool
-	sentryConn     *grpc.ClientConn
 }
 
 // New returns a new instance of the Requester.
-func New(ctx context.Context, opts Options) (*Requester, error) {
+func New(opts Options) *Requester {
 	_, kubeMode := os.LookupEnv("KUBERNETES_SERVICE_HOST")
-	r := &Requester{
+	return &Requester{
 		sentryAddress:  opts.SentryAddress,
 		sentryID:       opts.SentryID,
 		sec:            opts.Security,
 		kubernetesMode: kubeMode,
 	}
-
-	return r, r.dialSentryConnection(ctx)
-}
-
-// dialSentryConnection creates the gRPC connection to the Sentry service and blocks for 1 minute.
-func (r *Requester) dialSentryConnection(ctx context.Context) error {
-	connCtx, cancel := context.WithTimeout(ctx, time.Minute)
-	defer cancel()
-
-	conn, err := grpc.DialContext(connCtx, r.sentryAddress, r.sec.GRPCDialOptionMTLS(r.sentryID), grpc.WithBlock())
-	if err != nil {
-		return fmt.Errorf("error establishing connection to sentry: %w", err)
-	}
-	r.sentryConn = conn
-
-	return nil
 }
 
 // RequestCertificateFromSentry requests a certificate from sentry for a
@@ -97,12 +78,18 @@ func (r *Requester) RequestCertificateFromSentry(ctx context.Context, namespace 
 		return nil, nil, fmt.Errorf("failed to create sidecar csr: %w", err)
 	}
 
+	conn, err := grpc.DialContext(ctx, r.sentryAddress, r.sec.GRPCDialOptionMTLS(r.sentryID))
+	if err != nil {
+		return nil, nil, fmt.Errorf("error establishing connection to sentry: %w", err)
+	}
+	defer conn.Close()
+
 	token, tokenValidator, err := securitytoken.GetSentryToken(r.kubernetesMode)
 	if err != nil {
 		return nil, nil, fmt.Errorf("error obtaining token: %w", err)
 	}
 
-	resp, err := sentryv1pb.NewCAClient(r.sentryConn).SignCertificate(ctx,
+	resp, err := sentryv1pb.NewCAClient(conn).SignCertificate(ctx,
 		&sentryv1pb.SignCertificateRequest{
 			CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{
 				Type: "CERTIFICATE REQUEST", Bytes: csrDER,
@@ -111,7 +98,7 @@ func (r *Requester) RequestCertificateFromSentry(ctx context.Context, namespace 
 			Token:          token,
 			Namespace:      namespace,
 			TokenValidator: tokenValidator,
-		}, grpcRetry.WithMax(10), grpcRetry.WithPerRetryTimeout(time.Second*3))
+		})
 	if err != nil {
 		return nil, nil, fmt.Errorf("error from sentry SignCertificate: %w", err)
 	}

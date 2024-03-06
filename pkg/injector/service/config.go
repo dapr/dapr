@@ -41,7 +41,6 @@ type Config struct {
 	RemindersServiceAddress           string `envconfig:"REMINDERS_SERVICE_ADDRESS"`
 	RunAsNonRoot                      string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
 	ReadOnlyRootFilesystem            string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
-	EnableK8sDownwardAPIs             string `envconfig:"ENABLE_K8S_DOWNWARD_APIS"`
 	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
 
 	TrustAnchorsFile        string `envconfig:"DAPR_TRUST_ANCHORS_FILE"`
@@ -53,7 +52,6 @@ type Config struct {
 	parsedRemindersService           patcher.Service
 	parsedRunAsNonRoot               bool
 	parsedReadOnlyRootFilesystem     bool
-	parsedEnableK8sDownwardAPIs      bool
 	parsedSidecarDropALLCapabilities bool
 	parsedEntrypointTolerations      []corev1.Toleration
 }
@@ -123,10 +121,6 @@ func (c Config) GetReadOnlyRootFilesystem() bool {
 	return c.parsedReadOnlyRootFilesystem
 }
 
-func (c Config) GetEnableK8sDownwardAPIs() bool {
-	return c.parsedEnableK8sDownwardAPIs
-}
-
 func (c Config) GetDropCapabilities() bool {
 	return c.parsedSidecarDropALLCapabilities
 }
@@ -175,7 +169,6 @@ func (c *Config) parse() (err error) {
 	c.parsedActorsEnabled = isTruthyDefaultTrue(c.ActorsEnabled)
 	c.parsedRunAsNonRoot = isTruthyDefaultTrue(c.RunAsNonRoot)
 	c.parsedReadOnlyRootFilesystem = isTruthyDefaultTrue(c.ReadOnlyRootFilesystem)
-	c.parsedEnableK8sDownwardAPIs = kitutils.IsTruthy(c.EnableK8sDownwardAPIs)
 	c.parsedSidecarDropALLCapabilities = kitutils.IsTruthy(c.SidecarDropALLCapabilities)
 
 	return nil
