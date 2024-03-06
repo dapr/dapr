@@ -127,7 +127,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 		o.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 1)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 		o.postBinding(t, ctx, client, "binding1", "file1", "data1")
 		o.postBindingFail(t, ctx, client, "binding2")
 		o.postBindingFail(t, ctx, client, "binding3")
@@ -154,7 +154,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 2)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 		o.postBinding(t, ctx, client, "binding1", "file2", "data2")
 		o.postBinding(t, ctx, client, "binding2", "file1", "data1")
 		o.postBindingFail(t, ctx, client, "binding3")
@@ -181,7 +181,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 3)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 		o.postBinding(t, ctx, client, "binding1", "file3", "data3")
 		o.postBinding(t, ctx, client, "binding2", "file2", "data2")
 		o.postBinding(t, ctx, client, "binding3", "file1", "data1")
@@ -197,7 +197,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 2)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 
 		o.postBindingFail(t, ctx, client, "binding1")
 		assert.NoFileExists(t, filepath.Join(o.bindingDir1, "file4"))
@@ -216,7 +216,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Empty(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()))
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 		o.postBindingFail(t, ctx, client, "binding1")
 		o.postBindingFail(t, ctx, client, "binding2")
 		o.postBindingFail(t, ctx, client, "binding3")
@@ -240,7 +240,7 @@ func (o *output) Run(t *testing.T, ctx context.Context) {
 		o.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 1)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 		o.postBinding(t, ctx, client, "binding2", "file5", "data5")
 		o.postBindingFail(t, ctx, client, "binding1")
 		o.postBindingFail(t, ctx, client, "binding3")
