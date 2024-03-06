@@ -52,9 +52,8 @@ func Test_Run(t *testing.T) {
 		r.clock = fakeClock
 
 		errCh := make(chan error)
-		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
-			errCh <- r.Run(ctx)
+			errCh <- r.Run(context.Background())
 		}()
 
 		assert.Eventually(t, fakeClock.HasWaiters, time.Second*3, time.Millisecond*100)
@@ -67,7 +66,8 @@ func Test_Run(t *testing.T) {
 			return listCalled.Load() == 1
 		}, time.Second*3, time.Millisecond*100)
 
-		cancel()
+		require.NoError(t, r.Close())
+
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)
@@ -105,9 +105,8 @@ func Test_Run(t *testing.T) {
 		r.manager = mngr
 
 		errCh := make(chan error)
-		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
-			errCh <- r.Run(ctx)
+			errCh <- r.Run(context.Background())
 		}()
 
 		comp1 := componentsapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
@@ -160,13 +159,8 @@ func Test_Run(t *testing.T) {
 			t.Error("did not get event in time")
 		}
 
-		cancel()
-		select {
-		case err := <-errCh:
-			require.NoError(t, err)
-		case <-time.After(time.Second * 3):
-			t.Error("reconciler did not return in time")
-		}
+		require.NoError(t, r.Close())
+		require.NoError(t, <-errCh)
 	})
 }
 
