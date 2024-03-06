@@ -91,7 +91,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// wait until all host member change requests are flushed
 		assert.Eventually(t, func() bool {
 			return len(testServer.raftNode.FSM().State().Members()) == 3
-		}, disseminateTimerInterval+time.Second*3, time.Millisecond)
+		}, time.Second*6, time.Millisecond)
 	}
 
 	t.Run("successful dissemination", func(t *testing.T) {
@@ -126,12 +126,9 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		select {
 		case <-done:
-		case <-time.After(disseminateTimerInterval + time.Second*3):
+		case <-time.After(time.Second/2 + time.Second*3):
 			t.Error("dissemination did not happen in time")
 		}
-
-		// ignore disseminateTimeout.
-		testServer.disseminateNextTime.Store(0)
 
 		testServer.streamConnPoolLock.RLock()
 		nStreamConnPool := len(testServer.streamConnPool)
@@ -143,7 +140,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		// wait until table dissemination.
 		require.Eventually(t, func() bool {
-			clock.Step(disseminateTimerInterval)
+			clock.Step(time.Second / 2)
 			return testServer.memberUpdateCount.Load() == 0 &&
 				testServer.faultyHostDetectDuration.Load() == int64(faultyHostDetectDefaultDuration)
 		}, time.Second*5, time.Millisecond,
@@ -160,7 +157,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		// faulty host detector removes all members if heartbeat does not happen
 		assert.Eventually(t, func() bool {
-			clock.Step(disseminateTimerInterval)
+			clock.Step(time.Second / 2)
 			return len(testServer.raftNode.FSM().State().Members()) == 0
 		}, 5*time.Second, time.Millisecond)
 	})

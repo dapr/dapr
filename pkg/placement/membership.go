@@ -184,8 +184,6 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 
 	faultyHostDetectTimer := p.clock.NewTicker(faultyHostDetectInterval)
 	defer faultyHostDetectTimer.Stop()
-	disseminateTimer := p.clock.NewTicker(disseminateTimerInterval)
-	defer disseminateTimer.Stop()
 
 	p.memberUpdateCount.Store(0)
 
@@ -200,18 +198,16 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 		case <-ctx.Done():
 			return
 
-		case t := <-disseminateTimer.C():
+		case <-p.disseminateCh:
 			// Earlier stop when leadership is lost.
 			if !p.hasLeadership.Load() {
 				continue
 			}
 
 			// check if there is actor runtime member change.
-			if p.disseminateNextTime.Load() <= t.UnixNano() && len(p.membershipCh) == 0 {
-				if cnt := p.memberUpdateCount.Load(); cnt > 0 {
-					log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCount count: %d", cnt)
-					p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
-				}
+			if cnt := p.memberUpdateCount.Load(); cnt > 0 && len(p.membershipCh) == 0 {
+				log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCount count: %d", cnt)
+				p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
 			}
 
 		case t := <-faultyHostDetectTimer.C():
@@ -302,10 +298,7 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 						// ApplyCommand returns true only if the command changes hashing table.
 						if updated {
 							p.memberUpdateCount.Add(1)
-							// disseminateNextTime will be updated whenever apply is done, so that
-							// it will keep moving the time to disseminate the table, which will
-							// reduce the unnecessary table dissemination.
-							p.disseminateNextTime.Store(p.clock.Now().Add(disseminateTimeout).UnixNano())
+							p.disseminateRateLimiter.Add()
 						}
 					}
 					<-logApplyConcurrency
