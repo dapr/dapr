@@ -17,17 +17,20 @@ import (
 	"context"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 )
 
 type FakeT struct {
-	component *Fake[componentsapi.Component]
+	component    *Fake[componentsapi.Component]
+	subscription *Fake[subapi.Subscription]
 }
 
 func New() *FakeT {
 	return &FakeT{
-		component: NewFake[componentsapi.Component](),
+		component:    NewFake[componentsapi.Component](),
+		subscription: NewFake[subapi.Subscription](),
 	}
 }
 
@@ -41,6 +44,15 @@ func (f *FakeT) Components() loader.Loader[componentsapi.Component] {
 
 func (f *FakeT) WithComponent(fake *Fake[componentsapi.Component]) *FakeT {
 	f.component = fake
+	return f
+}
+
+func (f *FakeT) Subscriptions() loader.Loader[subapi.Subscription] {
+	return f.subscription
+}
+
+func (f *FakeT) WithSubscription(fake *Fake[subapi.Subscription]) *FakeT {
+	f.subscription = fake
 	return f
 }
 

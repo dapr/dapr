@@ -186,6 +186,8 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	client := util.HTTPClient(t)
 	require.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/v1.0/healthz", d.httpPort), nil)

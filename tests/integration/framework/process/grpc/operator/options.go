@@ -39,6 +39,7 @@ type options struct {
 	listResiliencyFn      func(context.Context, *operatorv1.ListResiliencyRequest) (*operatorv1.ListResiliencyResponse, error)
 	listSubscriptionsFn   func(context.Context, *emptypb.Empty) (*operatorv1.ListSubscriptionsResponse, error)
 	listSubscriptionsV2Fn func(context.Context, *operatorv1.ListSubscriptionsRequest) (*operatorv1.ListSubscriptionsResponse, error)
+	subscriptionUpdateFn  func(*operatorv1.SubscriptionUpdateRequest, operatorv1.Operator_SubscriptionUpdateServer) error
 }
 
 func WithGRPCOptions(opts ...procgrpc.Option) func(*options) {
@@ -104,5 +105,11 @@ func WithListSubscriptionsFn(fn func(context.Context, *emptypb.Empty) (*operator
 func WithListSubscriptionsV2Fn(fn func(context.Context, *operatorv1.ListSubscriptionsRequest) (*operatorv1.ListSubscriptionsResponse, error)) func(*options) {
 	return func(opts *options) {
 		opts.listSubscriptionsV2Fn = fn
+	}
+}
+
+func WithSubscriptionUpdateFn(fn func(*operatorv1.SubscriptionUpdateRequest, operatorv1.Operator_SubscriptionUpdateServer) error) func(*options) {
+	return func(opts *options) {
+		opts.subscriptionUpdateFn = fn
 	}
 }

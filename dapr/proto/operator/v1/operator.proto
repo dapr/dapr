@@ -34,6 +34,8 @@ service Operator {
   rpc ListResiliency (ListResiliencyRequest) returns (ListResiliencyResponse) {}
   // Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
   rpc ListSubscriptionsV2 (ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {}
+  // Sends events to Dapr sidecars upon subscription changes.
+  rpc SubscriptionUpdate (SubscriptionUpdateRequest) returns (stream SubscriptionUpdateEvent) {}
   // Returns a list of http endpoints
   rpc ListHTTPEndpoints (ListHTTPEndpointsRequest) returns (ListHTTPEndpointsResponse) {}
   // Sends events to Dapr sidecars upon http endpoint changes.
@@ -95,6 +97,21 @@ message GetConfigurationResponse {
 // ListSubscriptionsResponse includes pub/sub subscriptions.
 message ListSubscriptionsResponse {
   repeated bytes subscriptions = 1;
+}
+
+// SubscriptionUpdateRequest is the request to get updates about new
+// subscriptions for a given namespace.
+message SubscriptionUpdateRequest {
+  string namespace = 1;
+  string podName = 2;
+}
+
+// SubscriptionUpdateEvent includes the updated subscription event.
+message SubscriptionUpdateEvent {
+  bytes subscription = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
 }
 
 // GetResiliencyRequest is the request to get a resiliency configuration.

@@ -15,7 +15,6 @@ package compstore
 
 import (
 	"github.com/dapr/components-contrib/pubsub"
-	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 // PubsubItem is a pubsub component with its scoped subscriptions and
@@ -27,15 +26,6 @@ type PubsubItem struct {
 	AllowedTopics       []string
 	ProtectedTopics     []string
 	NamespaceScoped     bool
-}
-
-type TopicRoutes map[string]TopicRouteElem
-
-type TopicRouteElem struct {
-	Metadata        map[string]string
-	Rules           []*rtpubsub.Rule
-	DeadLetterTopic string
-	BulkSubscribe   *rtpubsub.BulkSubscribe
 }
 
 func (c *ComponentStore) AddPubSub(name string, item PubsubItem) {
@@ -78,34 +68,4 @@ func (c *ComponentStore) DeletePubSub(name string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	delete(c.pubSubs, name)
-}
-
-func (c *ComponentStore) SetTopicRoutes(topicRoutes map[string]TopicRoutes) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.topicRoutes = topicRoutes
-}
-
-func (c *ComponentStore) DeleteTopicRoute(name string) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	delete(c.topicRoutes, name)
-}
-
-func (c *ComponentStore) GetTopicRoutes() map[string]TopicRoutes {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.topicRoutes
-}
-
-func (c *ComponentStore) SetSubscriptions(subscriptions []rtpubsub.Subscription) {
-	c.lock.Lock()
-	defer c.lock.Unlock()
-	c.subscriptions = subscriptions
-}
-
-func (c *ComponentStore) ListSubscriptions() []rtpubsub.Subscription {
-	c.lock.RLock()
-	defer c.lock.RUnlock()
-	return c.subscriptions
 }

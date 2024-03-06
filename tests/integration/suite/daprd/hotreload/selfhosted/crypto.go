@@ -160,6 +160,7 @@ spec:
     - name: path
       value: '%[1]s'
 ---
+apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: crypto2
@@ -191,6 +192,7 @@ spec:
   type: state.in-memory
   version: v1
 ---
+apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: crypto3
@@ -255,6 +257,7 @@ spec:
 
 	t.Run("recreating crypto component should make it available again", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "1.yaml"), []byte(fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: crypto2

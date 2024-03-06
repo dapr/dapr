@@ -17,10 +17,12 @@ import (
 	"testing"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 )
 
 func Test_Fake(t *testing.T) {
 	var _ loader.Interface = New()
 	var _ loader.Loader[componentsapi.Component] = NewFake[componentsapi.Component]()
+	var _ loader.Loader[subapi.Subscription] = NewFake[subapi.Subscription]()
 }

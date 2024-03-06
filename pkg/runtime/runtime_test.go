@@ -1960,7 +1960,6 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		GlobalConfig:   rt.globalConfig,
 		Resiliency:     rt.resiliency,
 		Mode:           rt.runtimeConfig.mode,
-		Standalone:     rt.runtimeConfig.standalone,
 		Channels:       rt.channels,
 		GRPC:           rt.grpc,
 	})

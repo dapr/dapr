@@ -22,15 +22,20 @@ import (
 )
 
 type GenericNameValueResource struct {
-	Name         string
-	Namespace    string
-	SecretStore  string
-	ResourceKind string
-	Pairs        []common.NameValuePair
+	Name               string
+	Namespace          string
+	SecretStore        string
+	ResourceKind       string
+	ResourceAPIVersion string
+	Pairs              []common.NameValuePair
 }
 
 func (g GenericNameValueResource) Kind() string {
 	return g.ResourceKind
+}
+
+func (g GenericNameValueResource) APIVersion() string {
+	return g.ResourceAPIVersion
 }
 
 func (g GenericNameValueResource) GetName() string {

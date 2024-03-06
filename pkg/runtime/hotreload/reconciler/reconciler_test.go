@@ -44,7 +44,7 @@ func Test_Run(t *testing.T) {
 			return nil, nil
 		})
 
-		r := NewComponent(Options[componentsapi.Component]{
+		r := NewComponents(Options[componentsapi.Component]{
 			Loader:    loader,
 			CompStore: compstore.New(),
 		})
@@ -84,7 +84,7 @@ func Test_Run(t *testing.T) {
 			return compCh, nil
 		})
 
-		r := NewComponent(Options[componentsapi.Component]{
+		r := NewComponents(Options[componentsapi.Component]{
 			Loader:    fake.New().WithComponent(compLoader),
 			CompStore: compstore.New(),
 		})
@@ -95,7 +95,7 @@ func Test_Run(t *testing.T) {
 		mngr.Loader = compLoader
 		updateCh := make(chan componentsapi.Component)
 		deleteCh := make(chan componentsapi.Component)
-		mngr.deleteFn = func(c componentsapi.Component) {
+		mngr.deleteFn = func(_ context.Context, c componentsapi.Component) {
 			deleteCh <- c
 		}
 		mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
@@ -180,7 +180,7 @@ func Test_reconcile(t *testing.T) {
 
 	eventCh := make(chan componentsapi.Component)
 	mngr := newFakeManager()
-	mngr.deleteFn = func(c componentsapi.Component) {
+	mngr.deleteFn = func(_ context.Context, c componentsapi.Component) {
 		eventCh <- c
 	}
 	mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
@@ -249,7 +249,7 @@ func Test_handleEvent(t *testing.T) {
 	updateCalled, deleteCalled := 0, 0
 	comp1 := componentsapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
-	mngr.deleteFn = func(c componentsapi.Component) {
+	mngr.deleteFn = func(_ context.Context, c componentsapi.Component) {
 		assert.Equal(t, comp1, c)
 		deleteCalled++
 	}
@@ -288,13 +288,13 @@ func Test_handleEvent(t *testing.T) {
 type fakeManager struct {
 	loader.Loader[componentsapi.Component]
 	updateFn func(context.Context, componentsapi.Component)
-	deleteFn func(componentsapi.Component)
+	deleteFn func(context.Context, componentsapi.Component)
 }
 
 func newFakeManager() *fakeManager {
 	return &fakeManager{
 		updateFn: func(context.Context, componentsapi.Component) {},
-		deleteFn: func(componentsapi.Component) {},
+		deleteFn: func(context.Context, componentsapi.Component) {},
 	}
 }
 
@@ -304,6 +304,6 @@ func (f *fakeManager) update(ctx context.Context, comp componentsapi.Component) 
 }
 
 //nolint:unused
-func (f *fakeManager) delete(comp componentsapi.Component) {
-	f.deleteFn(comp)
+func (f *fakeManager) delete(ctx context.Context, comp componentsapi.Component) {
+	f.deleteFn(ctx, comp)
 }

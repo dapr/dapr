@@ -19,6 +19,19 @@ import (
 // Requires gRPC-Go v1.32.0 or later.
 const _ = grpc.SupportPackageIsVersion7
 
+const (
+	Operator_ComponentUpdate_FullMethodName     = "/dapr.proto.operator.v1.Operator/ComponentUpdate"
+	Operator_ListComponents_FullMethodName      = "/dapr.proto.operator.v1.Operator/ListComponents"
+	Operator_GetConfiguration_FullMethodName    = "/dapr.proto.operator.v1.Operator/GetConfiguration"
+	Operator_ListSubscriptions_FullMethodName   = "/dapr.proto.operator.v1.Operator/ListSubscriptions"
+	Operator_GetResiliency_FullMethodName       = "/dapr.proto.operator.v1.Operator/GetResiliency"
+	Operator_ListResiliency_FullMethodName      = "/dapr.proto.operator.v1.Operator/ListResiliency"
+	Operator_ListSubscriptionsV2_FullMethodName = "/dapr.proto.operator.v1.Operator/ListSubscriptionsV2"
+	Operator_SubscriptionUpdate_FullMethodName  = "/dapr.proto.operator.v1.Operator/SubscriptionUpdate"
+	Operator_ListHTTPEndpoints_FullMethodName   = "/dapr.proto.operator.v1.Operator/ListHTTPEndpoints"
+	Operator_HTTPEndpointUpdate_FullMethodName  = "/dapr.proto.operator.v1.Operator/HTTPEndpointUpdate"
+)
+
 // OperatorClient is the client API for Operator service.
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
@@ -37,6 +50,8 @@ type OperatorClient interface {
 	ListResiliency(ctx context.Context, in *ListResiliencyRequest, opts ...grpc.CallOption) (*ListResiliencyResponse, error)
 	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
 	ListSubscriptionsV2(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error)
+	// Sends events to Dapr sidecars upon subscription changes.
+	SubscriptionUpdate(ctx context.Context, in *SubscriptionUpdateRequest, opts ...grpc.CallOption) (Operator_SubscriptionUpdateClient, error)
 	// Returns a list of http endpoints
 	ListHTTPEndpoints(ctx context.Context, in *ListHTTPEndpointsRequest, opts ...grpc.CallOption) (*ListHTTPEndpointsResponse, error)
 	// Sends events to Dapr sidecars upon http endpoint changes.
@@ -52,7 +67,7 @@ func NewOperatorClient(cc grpc.ClientConnInterface) OperatorClient {
 }
 
 func (c *operatorClient) ComponentUpdate(ctx context.Context, in *ComponentUpdateRequest, opts ...grpc.CallOption) (Operator_ComponentUpdateClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[0], "/dapr.proto.operator.v1.Operator/ComponentUpdate", opts...)
+	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[0], Operator_ComponentUpdate_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -85,7 +100,7 @@ func (x *operatorComponentUpdateClient) Recv() (*ComponentUpdateEvent, error) {
 
 func (c *operatorClient) ListComponents(ctx context.Context, in *ListComponentsRequest, opts ...grpc.CallOption) (*ListComponentResponse, error) {
 	out := new(ListComponentResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListComponents", in, out, opts...)
+	err := c.cc.Invoke(ctx, Operator_ListComponents_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -94,7 +109,7 @@ func (c *operatorClient) ListComponents(ctx context.Context, in *ListComponentsR
 
 func (c *operatorClient) GetConfiguration(ctx context.Context, in *GetConfigurationRequest, opts ...grpc.CallOption) (*GetConfigurationResponse, error) {
 	out := new(GetConfigurationResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/GetConfiguration", in, out, opts...)
+	err := c.cc.Invoke(ctx, Operator_GetConfiguration_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -103,7 +118,7 @@ func (c *operatorClient) GetConfiguration(ctx context.Context, in *GetConfigurat
 
 func (c *operatorClient) ListSubscriptions(ctx context.Context, in *emptypb.Empty, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
 	out := new(ListSubscriptionsResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListSubscriptions", in, out, opts...)
+	err := c.cc.Invoke(ctx, Operator_ListSubscriptions_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -112,7 +127,7 @@ func (c *operatorClient) ListSubscriptions(ctx context.Context, in *emptypb.Empt
 
 func (c *operatorClient) GetResiliency(ctx context.Context, in *GetResiliencyRequest, opts ...grpc.CallOption) (*GetResiliencyResponse, error) {
 	out := new(GetResiliencyResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/GetResiliency", in, out, opts...)
+	err := c.cc.Invoke(ctx, Operator_GetResiliency_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -121,7 +136,7 @@ func (c *operatorClient) GetResiliency(ctx context.Context, in *GetResiliencyReq
 
 func (c *operatorClient) ListResiliency(ctx context.Context, in *ListResiliencyRequest, opts ...grpc.CallOption) (*ListResiliencyResponse, error) {
 	out := new(ListResiliencyResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListResiliency", in, out, opts...)
+	err := c.cc.Invoke(ctx, Operator_ListResiliency_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -130,16 +145,48 @@ func (c *operatorClient) ListResiliency(ctx context.Context, in *ListResiliencyR
 
 func (c *operatorClient) ListSubscriptionsV2(ctx context.Context, in *ListSubscriptionsRequest, opts ...grpc.CallOption) (*ListSubscriptionsResponse, error) {
 	out := new(ListSubscriptionsResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListSubscriptionsV2", in, out, opts...)
+	err := c.cc.Invoke(ctx, Operator_ListSubscriptionsV2_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
 	return out, nil
 }
 
+func (c *operatorClient) SubscriptionUpdate(ctx context.Context, in *SubscriptionUpdateRequest, opts ...grpc.CallOption) (Operator_SubscriptionUpdateClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[1], Operator_SubscriptionUpdate_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &operatorSubscriptionUpdateClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Operator_SubscriptionUpdateClient interface {
+	Recv() (*SubscriptionUpdateEvent, error)
+	grpc.ClientStream
+}
+
+type operatorSubscriptionUpdateClient struct {
+	grpc.ClientStream
+}
+
+func (x *operatorSubscriptionUpdateClient) Recv() (*SubscriptionUpdateEvent, error) {
+	m := new(SubscriptionUpdateEvent)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *operatorClient) ListHTTPEndpoints(ctx context.Context, in *ListHTTPEndpointsRequest, opts ...grpc.CallOption) (*ListHTTPEndpointsResponse, error) {
 	out := new(ListHTTPEndpointsResponse)
-	err := c.cc.Invoke(ctx, "/dapr.proto.operator.v1.Operator/ListHTTPEndpoints", in, out, opts...)
+	err := c.cc.Invoke(ctx, Operator_ListHTTPEndpoints_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -147,7 +194,7 @@ func (c *operatorClient) ListHTTPEndpoints(ctx context.Context, in *ListHTTPEndp
 }
 
 func (c *operatorClient) HTTPEndpointUpdate(ctx context.Context, in *HTTPEndpointUpdateRequest, opts ...grpc.CallOption) (Operator_HTTPEndpointUpdateClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[1], "/dapr.proto.operator.v1.Operator/HTTPEndpointUpdate", opts...)
+	stream, err := c.cc.NewStream(ctx, &Operator_ServiceDesc.Streams[2], Operator_HTTPEndpointUpdate_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -196,6 +243,8 @@ type OperatorServer interface {
 	ListResiliency(context.Context, *ListResiliencyRequest) (*ListResiliencyResponse, error)
 	// Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
 	ListSubscriptionsV2(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error)
+	// Sends events to Dapr sidecars upon subscription changes.
+	SubscriptionUpdate(*SubscriptionUpdateRequest, Operator_SubscriptionUpdateServer) error
 	// Returns a list of http endpoints
 	ListHTTPEndpoints(context.Context, *ListHTTPEndpointsRequest) (*ListHTTPEndpointsResponse, error)
 	// Sends events to Dapr sidecars upon http endpoint changes.
@@ -226,6 +275,9 @@ func (UnimplementedOperatorServer) ListResiliency(context.Context, *ListResilien
 }
 func (UnimplementedOperatorServer) ListSubscriptionsV2(context.Context, *ListSubscriptionsRequest) (*ListSubscriptionsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListSubscriptionsV2 not implemented")
+}
+func (UnimplementedOperatorServer) SubscriptionUpdate(*SubscriptionUpdateRequest, Operator_SubscriptionUpdateServer) error {
+	return status.Errorf(codes.Unimplemented, "method SubscriptionUpdate not implemented")
 }
 func (UnimplementedOperatorServer) ListHTTPEndpoints(context.Context, *ListHTTPEndpointsRequest) (*ListHTTPEndpointsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListHTTPEndpoints not implemented")
@@ -276,7 +328,7 @@ func _Operator_ListComponents_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.operator.v1.Operator/ListComponents",
+		FullMethod: Operator_ListComponents_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(OperatorServer).ListComponents(ctx, req.(*ListComponentsRequest))
@@ -294,7 +346,7 @@ func _Operator_GetConfiguration_Handler(srv interface{}, ctx context.Context, de
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.operator.v1.Operator/GetConfiguration",
+		FullMethod: Operator_GetConfiguration_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(OperatorServer).GetConfiguration(ctx, req.(*GetConfigurationRequest))
@@ -312,7 +364,7 @@ func _Operator_ListSubscriptions_Handler(srv interface{}, ctx context.Context, d
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.operator.v1.Operator/ListSubscriptions",
+		FullMethod: Operator_ListSubscriptions_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(OperatorServer).ListSubscriptions(ctx, req.(*emptypb.Empty))
@@ -330,7 +382,7 @@ func _Operator_GetResiliency_Handler(srv interface{}, ctx context.Context, dec f
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.operator.v1.Operator/GetResiliency",
+		FullMethod: Operator_GetResiliency_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(OperatorServer).GetResiliency(ctx, req.(*GetResiliencyRequest))
@@ -348,7 +400,7 @@ func _Operator_ListResiliency_Handler(srv interface{}, ctx context.Context, dec 
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.operator.v1.Operator/ListResiliency",
+		FullMethod: Operator_ListResiliency_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(OperatorServer).ListResiliency(ctx, req.(*ListResiliencyRequest))
@@ -366,12 +418,33 @@ func _Operator_ListSubscriptionsV2_Handler(srv interface{}, ctx context.Context,
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.operator.v1.Operator/ListSubscriptionsV2",
+		FullMethod: Operator_ListSubscriptionsV2_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(OperatorServer).ListSubscriptionsV2(ctx, req.(*ListSubscriptionsRequest))
 	}
 	return interceptor(ctx, in, info, handler)
+}
+
+func _Operator_SubscriptionUpdate_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(SubscriptionUpdateRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(OperatorServer).SubscriptionUpdate(m, &operatorSubscriptionUpdateServer{stream})
+}
+
+type Operator_SubscriptionUpdateServer interface {
+	Send(*SubscriptionUpdateEvent) error
+	grpc.ServerStream
+}
+
+type operatorSubscriptionUpdateServer struct {
+	grpc.ServerStream
+}
+
+func (x *operatorSubscriptionUpdateServer) Send(m *SubscriptionUpdateEvent) error {
+	return x.ServerStream.SendMsg(m)
 }
 
 func _Operator_ListHTTPEndpoints_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -384,7 +457,7 @@ func _Operator_ListHTTPEndpoints_Handler(srv interface{}, ctx context.Context, d
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: "/dapr.proto.operator.v1.Operator/ListHTTPEndpoints",
+		FullMethod: Operator_ListHTTPEndpoints_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
 		return srv.(OperatorServer).ListHTTPEndpoints(ctx, req.(*ListHTTPEndpointsRequest))
@@ -453,6 +526,11 @@ var Operator_ServiceDesc = grpc.ServiceDesc{
 		{
 			StreamName:    "ComponentUpdate",
 			Handler:       _Operator_ComponentUpdate_Handler,
+			ServerStreams: true,
+		},
+		{
+			StreamName:    "SubscriptionUpdate",
+			Handler:       _Operator_SubscriptionUpdate_Handler,
 			ServerStreams: true,
 		},
 		{

@@ -47,6 +47,10 @@ func (Component) Kind() string {
 	return "Component"
 }
 
+func (Component) APIVersion() string {
+	return components.GroupName + "/" + Version
+}
+
 // GetName returns the component name.
 func (c Component) GetName() string {
 	return c.Name

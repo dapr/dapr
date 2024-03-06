@@ -26,6 +26,7 @@ import (
 	"google.golang.org/grpc"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -39,19 +40,23 @@ type Option func(*options)
 type Operator struct {
 	*procgrpc.GRPC
 
-	closech           chan struct{}
-	lock              sync.RWMutex
-	updateComponentCh chan *api.ComponentUpdateEvent
-	srvUpdateCh       []chan *api.ComponentUpdateEvent
-	currentComponents []compapi.Component
+	closech              chan struct{}
+	lock                 sync.RWMutex
+	updateCompCh         chan *api.ComponentUpdateEvent
+	updateSubCh          chan *api.SubscriptionUpdateEvent
+	srvCompUpdateCh      []chan *api.ComponentUpdateEvent
+	srvSubUpdateCh       []chan *api.SubscriptionUpdateEvent
+	currentComponents    []compapi.Component
+	currentSubscriptions []subapi.Subscription
 }
 
 func New(t *testing.T, fopts ...Option) *Operator {
 	t.Helper()
 
 	o := &Operator{
-		closech:           make(chan struct{}),
-		updateComponentCh: make(chan *api.ComponentUpdateEvent),
+		closech:      make(chan struct{}),
+		updateCompCh: make(chan *api.ComponentUpdateEvent),
+		updateSubCh:  make(chan *api.SubscriptionUpdateEvent),
 	}
 
 	opts := options{
@@ -74,7 +79,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		componentUpdateFn: func(req *operatorv1.ComponentUpdateRequest, srv operatorv1.Operator_ComponentUpdateServer) error {
 			o.lock.Lock()
 			updateCh := make(chan *api.ComponentUpdateEvent)
-			o.srvUpdateCh = append(o.srvUpdateCh, updateCh)
+			o.srvCompUpdateCh = append(o.srvCompUpdateCh, updateCh)
 			o.lock.Unlock()
 
 			for {
@@ -99,6 +104,40 @@ func New(t *testing.T, fopts ...Option) *Operator {
 					if err := srv.Send(&operatorv1.ComponentUpdateEvent{
 						Component: compB,
 						Type:      comp.EventType,
+					}); err != nil {
+						return err
+					}
+				}
+			}
+		},
+		subscriptionUpdateFn: func(req *operatorv1.SubscriptionUpdateRequest, srv operatorv1.Operator_SubscriptionUpdateServer) error {
+			o.lock.Lock()
+			updateCh := make(chan *api.SubscriptionUpdateEvent)
+			o.srvSubUpdateCh = append(o.srvSubUpdateCh, updateCh)
+			o.lock.Unlock()
+
+			for {
+				select {
+				case <-srv.Context().Done():
+					return nil
+				case <-o.closech:
+					return errors.New("operator closed")
+				case sub := <-updateCh:
+					if len(sub.Subscription.Namespace) == 0 {
+						sub.Subscription.Namespace = "default"
+					}
+					if sub.Subscription.Namespace != req.GetNamespace() {
+						continue
+					}
+
+					subB, err := json.Marshal(sub.Subscription)
+					if err != nil {
+						return err
+					}
+
+					if err := srv.Send(&operatorv1.SubscriptionUpdateEvent{
+						Subscription: subB,
+						Type:         sub.EventType,
 					}); err != nil {
 						return err
 					}
@@ -154,6 +193,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 				listResiliencyFn:      opts.listResiliencyFn,
 				listSubscriptionsFn:   opts.listSubscriptionsFn,
 				listSubscriptionsV2Fn: opts.listSubscriptionsV2Fn,
+				subscriptionUpdateFn:  opts.subscriptionUpdateFn,
 			}
 
 			operatorv1.RegisterOperatorServer(s, srv)
@@ -198,7 +238,7 @@ func (o *Operator) ComponentUpdateEvent(t *testing.T, ctx context.Context, event
 	o.lock.Lock()
 	defer o.lock.Unlock()
 
-	for _, ch := range o.srvUpdateCh {
+	for _, ch := range o.srvCompUpdateCh {
 		select {
 		case <-ctx.Done():
 			t.Fatal("timed out waiting for component update event")
@@ -207,4 +247,38 @@ func (o *Operator) ComponentUpdateEvent(t *testing.T, ctx context.Context, event
 		case ch <- event:
 		}
 	}
+}
+
+func (o *Operator) AddSubscriptions(subs ...subapi.Subscription) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	o.currentSubscriptions = append(o.currentSubscriptions, subs...)
+}
+
+func (o *Operator) SubscriptionUpdateEvent(t *testing.T, ctx context.Context, event *api.SubscriptionUpdateEvent) {
+	t.Helper()
+	o.lock.Lock()
+	defer o.lock.Unlock()
+
+	for _, ch := range o.srvSubUpdateCh {
+		select {
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for subscption update event")
+		case <-o.closech:
+			t.Fatal("operator closed")
+		case ch <- event:
+		}
+	}
+}
+
+func (o *Operator) Subscriptions() []subapi.Subscription {
+	o.lock.RLock()
+	defer o.lock.RUnlock()
+	return o.currentSubscriptions
+}
+
+func (o *Operator) SetSubscriptions(subs ...subapi.Subscription) {
+	o.lock.Lock()
+	defer o.lock.Unlock()
+	o.currentSubscriptions = subs
 }

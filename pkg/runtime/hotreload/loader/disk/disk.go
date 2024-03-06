@@ -23,6 +23,8 @@ import (
 	"time"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
@@ -40,7 +42,8 @@ type Options struct {
 }
 
 type disk struct {
-	component *resource[componentsapi.Component]
+	components    *resource[componentsapi.Component]
+	subscriptions *resource[subapi.Subscription]
 
 	wg      sync.WaitGroup
 	closeCh chan struct{}
@@ -60,10 +63,21 @@ func New(ctx context.Context, opts Options) (loader.Interface, error) {
 
 	batcher := batcher.New[int](0)
 	eventCh := make(chan struct{})
+	compLoader := loaderdisk.New[componentsapi.Component](opts.Dirs...)
+	subLoader := loaderdisk.NewSubscriptions(opts.Dirs...)
 
 	d := &disk{
-		closeCh:   make(chan struct{}),
-		component: newResource[componentsapi.Component](opts, batcher, loadercompstore.NewComponent(opts.ComponentStore)),
+		closeCh: make(chan struct{}),
+		components: newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
+			batcher: batcher,
+			store:   loadercompstore.NewComponents(opts.ComponentStore),
+			loader:  compLoader,
+		}),
+		subscriptions: newResource[subapi.Subscription](resourceOptions[subapi.Subscription]{
+			batcher: batcher,
+			store:   loadercompstore.NewSubscriptions(opts.ComponentStore),
+			loader:  subLoader,
+		}),
 	}
 
 	ctx, cancel := context.WithCancel(ctx)
@@ -106,14 +120,13 @@ func (d *disk) Close() error {
 		close(d.closeCh)
 	}
 
-	var errs []error
-	if err := d.component.close(); err != nil {
-		errs = append(errs, err)
-	}
-
-	return errors.Join(errs...)
+	return errors.Join(d.components.close(), d.subscriptions.close())
 }
 
 func (d *disk) Components() loader.Loader[componentsapi.Component] {
-	return d.component
+	return d.components
+}
+
+func (d *disk) Subscriptions() loader.Loader[subapi.Subscription] {
+	return d.subscriptions
 }

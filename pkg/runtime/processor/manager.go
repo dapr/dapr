@@ -48,6 +48,7 @@ type PubsubManager interface {
 
 	StartSubscriptions(context.Context) error
 	StopSubscriptions(forever bool)
+	ReloadSubscriptions(context.Context) error
 	Outbox() outbox.Outbox
 	manager
 }

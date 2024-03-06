@@ -18,6 +18,7 @@ import (
 	"io"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 )
@@ -27,6 +28,7 @@ import (
 type Interface interface {
 	io.Closer
 	Components() Loader[componentsapi.Component]
+	Subscriptions() Loader[subapi.Subscription]
 }
 
 // Loader is an interface for loading and watching for changes to a resource

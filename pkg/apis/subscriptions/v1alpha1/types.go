@@ -15,6 +15,13 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/dapr/pkg/apis/subscriptions"
+)
+
+const (
+	Kind    = "Subscription"
+	Version = "v1alpha1"
 )
 
 // +genclient
@@ -58,4 +65,12 @@ type SubscriptionList struct {
 	metav1.ListMeta `json:"metadata"`
 
 	Items []Subscription `json:"items"`
+}
+
+func (Subscription) Kind() string {
+	return Kind
+}
+
+func (Subscription) APIVersion() string {
+	return subscriptions.GroupName + "/" + Version
 }

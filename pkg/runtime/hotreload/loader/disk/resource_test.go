@@ -27,6 +27,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -138,11 +139,11 @@ func Test_Stream(t *testing.T) {
 		batcher := batcher.New[int](0)
 		store := compstore.New()
 
-		r := newResource[componentsapi.Component](
-			Options{Dirs: []string{dir}},
-			batcher,
-			loadercompstore.NewComponent(store),
-		)
+		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
+			store:   loadercompstore.NewComponents(store),
+			batcher: batcher,
+			loader:  loaderdisk.New[componentsapi.Component](dir),
+		})
 
 		batcher.Batch(0)
 
@@ -205,11 +206,11 @@ func Test_Stream(t *testing.T) {
 		}))
 		require.NoError(t, store.CommitPendingComponent())
 
-		r := newResource[componentsapi.Component](
-			Options{Dirs: []string{dir}},
-			batcher,
-			loadercompstore.NewComponent(store),
-		)
+		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
+			store:   loadercompstore.NewComponents(store),
+			batcher: batcher,
+			loader:  loaderdisk.New[componentsapi.Component](dir),
+		})
 
 		batcher.Batch(0)
 
@@ -273,11 +274,11 @@ func Test_Stream(t *testing.T) {
 		}))
 		require.NoError(t, store.CommitPendingComponent())
 
-		r := newResource[componentsapi.Component](
-			Options{Dirs: []string{dir}},
-			batcher,
-			loadercompstore.NewComponent(store),
-		)
+		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
+			store:   loadercompstore.NewComponents(store),
+			batcher: batcher,
+			loader:  loaderdisk.New[componentsapi.Component](dir),
+		})
 
 		batcher.Batch(0)
 

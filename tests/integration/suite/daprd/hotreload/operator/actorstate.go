@@ -57,15 +57,10 @@ type actorstate struct {
 func (a *actorstate) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t)
 
-	a.loglineCreate = logline.New(t, logline.WithStdoutLineContains(
-		"Aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
-	))
-	a.loglineUpdate = logline.New(t, logline.WithStdoutLineContains(
-		"Aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
-	))
-	a.loglineDelete = logline.New(t, logline.WithStdoutLineContains(
-		"Aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)",
-	))
+	abortStr := "Aborting to hot-reload a state store component that is used as an actor state store: mystore (state.in-memory/v1)"
+	a.loglineCreate = logline.New(t, logline.WithStdoutLineContains(abortStr))
+	a.loglineUpdate = logline.New(t, logline.WithStdoutLineContains(abortStr))
+	a.loglineDelete = logline.New(t, logline.WithStdoutLineContains(abortStr))
 
 	a.operatorCreate = operator.New(t,
 		operator.WithSentry(sentry),

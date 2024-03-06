@@ -17,9 +17,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
-	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -33,13 +31,12 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/dapr/components-contrib/metadata"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -57,7 +54,6 @@ import (
 const (
 	TestPubsubName       = "testpubsub"
 	TestSecondPubsubName = "testpubsub2"
-	resourcesDir         = "./components"
 )
 
 func TestInitPubSub(t *testing.T) {
@@ -454,26 +450,19 @@ func TestInitPubSub(t *testing.T) {
 	t.Run("load declarative subscription, no scopes", func(t *testing.T) {
 		reg := registry.New(registry.NewOptions())
 		pst := New(Options{
-			Registry:   reg.PubSubs(),
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Mode:       modes.StandaloneMode,
-			Namespace:  "ns1",
-			ID:         TestRuntimeConfigID,
-			Channels:   new(channels.Channels),
+			Registry:       reg.PubSubs(),
+			IsHTTP:         true,
+			Resiliency:     resiliency.New(logger.NewLogger("test")),
+			Mode:           modes.StandaloneMode,
+			Namespace:      "ns1",
+			ID:             TestRuntimeConfigID,
+			Channels:       new(channels.Channels),
+			ComponentStore: compstore.New(),
 		})
 
-		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
-		defer os.RemoveAll(resourcesDir)
-
-		s := testDeclarativeSubscription()
-
-		cleanup, err := writeComponentToDisk(s, "sub.yaml")
+		pst.compStore.AddDeclarativeSubscription(testDeclarativeSubscription())
+		subs, err := pst.declarativeSubscriptions(context.Background())
 		require.NoError(t, err)
-		defer cleanup()
-
-		pst.resourcesPath = []string{resourcesDir}
-		subs := pst.declarativeSubscriptions(context.Background())
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 1) {
@@ -481,66 +470,6 @@ func TestInitPubSub(t *testing.T) {
 			}
 			assert.Equal(t, "pubsub", subs[0].PubsubName)
 		}
-	})
-
-	t.Run("load declarative subscription, in scopes", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		pst := New(Options{
-			Registry:   reg.PubSubs(),
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Mode:       modes.StandaloneMode,
-			Namespace:  "ns1",
-			ID:         TestRuntimeConfigID,
-			Channels:   new(channels.Channels),
-		})
-
-		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
-		defer os.RemoveAll(resourcesDir)
-
-		s := testDeclarativeSubscription()
-		s.Scopes = []string{TestRuntimeConfigID}
-
-		cleanup, err := writeComponentToDisk(s, "sub.yaml")
-		require.NoError(t, err)
-		defer cleanup()
-
-		pst.resourcesPath = []string{resourcesDir}
-		subs := pst.declarativeSubscriptions(context.Background())
-		if assert.Len(t, subs, 1) {
-			assert.Equal(t, "topic1", subs[0].Topic)
-			if assert.Len(t, subs[0].Rules, 1) {
-				assert.Equal(t, "myroute", subs[0].Rules[0].Path)
-			}
-			assert.Equal(t, "pubsub", subs[0].PubsubName)
-			assert.Equal(t, TestRuntimeConfigID, subs[0].Scopes[0])
-		}
-	})
-
-	t.Run("load declarative subscription, not in scopes", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		pst := New(Options{
-			Registry:   reg.PubSubs(),
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Namespace:  "ns1",
-			ID:         TestRuntimeConfigID,
-			Channels:   new(channels.Channels),
-		})
-
-		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
-		defer os.RemoveAll(resourcesDir)
-
-		s := testDeclarativeSubscription()
-		s.Scopes = []string{"scope1"}
-
-		cleanup, err := writeComponentToDisk(s, "sub.yaml")
-		require.NoError(t, err)
-		defer cleanup()
-
-		pst.resourcesPath = []string{resourcesDir}
-		subs := pst.declarativeSubscriptions(context.Background())
-		assert.Empty(t, subs)
 	})
 
 	t.Run("test subscribe, app allowed 1 topic", func(t *testing.T) {
@@ -1414,26 +1343,16 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	return subscriptionsapi.Subscription{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Subscription",
-			APIVersion: "v1alpha1",
+			APIVersion: "dapr.io/v2alpha1",
 		},
 		Spec: subscriptionsapi.SubscriptionSpec{
 			Topic:      "topic1",
-			Route:      "myroute",
 			Pubsubname: "pubsub",
+			Routes: subscriptionsapi.Routes{
+				Default: "myroute",
+			},
 		},
 	}
-}
-
-// writeComponentToDisk the given content into a file inside components directory.
-func writeComponentToDisk(content any, fileName string) (cleanup func(), error error) {
-	filePath := fmt.Sprintf("%s/%s", resourcesDir, fileName)
-	b, err := yaml.Marshal(content)
-	if err != nil {
-		return nil, err
-	}
-	return func() {
-		os.Remove(filePath)
-	}, os.WriteFile(filePath, b, 0o600)
 }
 
 func TestNamespacedPublisher(t *testing.T) {
