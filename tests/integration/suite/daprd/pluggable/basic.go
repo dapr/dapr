@@ -189,5 +189,5 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			assert.Empty(c, resp.GetData())
 		}
-	}, time.Second*2, time.Millisecond*100)
+	}, time.Second*2, time.Millisecond*10)
 }

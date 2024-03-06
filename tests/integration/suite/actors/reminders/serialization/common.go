@@ -37,7 +37,7 @@ func invokeActor(t *testing.T, ctx context.Context, baseURL string, client *http
 			assert.NoError(c, resp.Body.Close())
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
 		}
-	}, time.Second*20, time.Millisecond*100, "actor not ready in time")
+	}, time.Second*20, time.Millisecond*10, "actor not ready in time")
 }
 
 func storeReminder(t *testing.T, ctx context.Context, baseURL string, client *http.Client) {

@@ -103,10 +103,10 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		resp, err = client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
 		assert.Len(c, resp.GetRegisteredComponents(), 1)
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 
 	called := a.healthCalled.Load()
-	require.Eventually(t, func() bool { return a.healthCalled.Load() > called }, time.Second*5, time.Millisecond*100)
+	require.Eventually(t, func() bool { return a.healthCalled.Load() > called }, time.Second*5, time.Millisecond*10)
 
 	assert.Eventually(t, func() bool {
 		var resp *http.Response
@@ -114,7 +114,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusInternalServerError
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*5, 10*time.Millisecond)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypubsub",
@@ -131,7 +131,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		default:
 		}
 		return a.healthCalled.Load() > called
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 
 	a.appHealthy.Store(true)
 
@@ -141,7 +141,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusOK
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*5, 10*time.Millisecond)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypubsub",
@@ -165,7 +165,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusInternalServerError
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*5, 10*time.Millisecond)
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypubsub",
 		Topic:      "mytopic",
@@ -181,5 +181,5 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		default:
 		}
 		return a.healthCalled.Load() > called
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 }

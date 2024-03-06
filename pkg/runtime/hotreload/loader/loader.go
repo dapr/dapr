@@ -15,7 +15,6 @@ package loader
 
 import (
 	"context"
-	"io"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -25,7 +24,7 @@ import (
 // Interface is an interface for loading and watching for changes to components
 // a source.
 type Interface interface {
-	io.Closer
+	Run(context.Context) error
 	Components() Loader[componentsapi.Component]
 }
 

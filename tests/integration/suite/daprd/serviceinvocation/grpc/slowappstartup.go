@@ -115,6 +115,6 @@ func (s *slowappstartup) Run(t *testing.T, ctx context.Context) {
 		if !assert.NoError(c, err) {
 			require.ErrorContains(c, err, "app is not in a healthy state")
 		}
-	}, time.Second*3, time.Millisecond*100)
+	}, time.Second*3, time.Millisecond*10)
 	require.NoError(t, resp.GetData().UnmarshalTo(&pingResp))
 }

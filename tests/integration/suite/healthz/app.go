@@ -98,7 +98,7 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusOK && string(body) == "GET /myfunc"
-	}, time.Second*5, 100*time.Millisecond, "expected dapr to report app healthy when /foo returns 200")
+	}, time.Second*5, 10*time.Millisecond, "expected dapr to report app healthy when /foo returns 200")
 
 	a.healthy.Store(false)
 
@@ -114,5 +114,5 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusInternalServerError &&
 			strings.Contains(string(body), "app is not in a healthy state")
-	}, time.Second*20, 100*time.Millisecond, "expected dapr to report app unhealthy now /foo returns 503")
+	}, time.Second*20, 10*time.Millisecond, "expected dapr to report app unhealthy now /foo returns 503")
 }

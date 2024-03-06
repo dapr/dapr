@@ -23,7 +23,6 @@ import (
 	"sync"
 
 	"github.com/dapr/components-contrib/secretstores"
-	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compsecret "github.com/dapr/dapr/pkg/components/secretstores"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -153,7 +152,6 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 			}
 
 			metadata[i].SetValue(dec)
-			metadata[i].SecretKeyRef = commonapi.SecretKeyRef{}
 			updated = true
 			continue
 		}
@@ -188,7 +186,6 @@ func (s *secret) ProcessResource(ctx context.Context, resource meta.Resource) (u
 		val, ok := resp.Data[secretKeyName]
 		if ok && val != "" {
 			metadata[i].SetValue([]byte(val))
-			metadata[i].SecretKeyRef = commonapi.SecretKeyRef{}
 			updated = true
 		}
 

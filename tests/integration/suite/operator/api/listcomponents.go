@@ -124,7 +124,7 @@ func (l *listcomponents) Run(t *testing.T, ctx context.Context) {
 			resp, err = client.ListComponents(ctx, &operatorv1.ListComponentsRequest{Namespace: "default"})
 			require.NoError(t, err)
 			assert.Len(c, resp.GetComponents(), 2)
-		}, time.Second*20, time.Millisecond*100)
+		}, time.Second*20, time.Millisecond*10)
 
 		b1, err := json.Marshal(l.comp1)
 		require.NoError(t, err)

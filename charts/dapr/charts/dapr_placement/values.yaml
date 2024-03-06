@@ -23,7 +23,7 @@ ports:
 scaleZero: false
 ha: false
 
-maxActorApiLevel: -1
+maxActorApiLevel: 10
 minActorApiLevel: 0
 
 cluster:

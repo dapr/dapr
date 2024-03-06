@@ -155,5 +155,5 @@ func (l *LogLine) Stderr() io.WriteCloser {
 }
 
 func (l *LogLine) EventuallyFoundAll(t *testing.T) {
-	assert.Eventually(t, l.FoundAll, time.Second*20, time.Millisecond*100)
+	assert.Eventually(t, l.FoundAll, time.Second*7, time.Millisecond*10)
 }

@@ -14,6 +14,8 @@ limitations under the License.
 package operator
 
 import (
+	"context"
+
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -41,7 +43,8 @@ func New(opts Options) loader.Interface {
 	}
 }
 
-func (o *operator) Close() error {
+func (o *operator) Run(ctx context.Context) error {
+	<-ctx.Done()
 	return o.component.close()
 }
 

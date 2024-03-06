@@ -94,7 +94,7 @@ jobs:
       id: setup-go
       uses: actions/setup-go@v5
       with:
-        go-version-file: 'go.mod'
+        go-version: '1.21.8'
     - name: Configure KinD
       # Generate a KinD configuration file that uses:
       # (a) a couple of worker nodes: this is needed to run both
