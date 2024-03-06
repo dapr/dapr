@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package resources
+package unset
 
 import (
 	"context"
@@ -19,86 +19,70 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(namespace))
+	suite.Register(new(name))
 }
 
-// namespace ensures that the component disk loader does not load components
-// from different namespaces.
-type namespace struct {
+// name ensures that when the NAMESPACE env var is *not* set, all components will
+// be loaded into as the default namespace, regardless of whether they have a
+// namespace set in their metadata.
+type name struct {
 	daprd *daprd.Daprd
 }
 
-func (n *namespace) Setup(t *testing.T) []framework.Option {
+func (n *name) Setup(t *testing.T) []framework.Option {
 	n.daprd = daprd.New(t, daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: abc
+ name: abc
+ namespace: abc
 spec:
-  type: state.in-memory
-  version: v1
----
-# This component is skipped because it is in a different namespace. Even though
-# it has the same name, daprd will not error as it is not loaded.
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: abc
-  namespace: notmynamespace
-spec:
-  type: state.in-memory
-  version: v1
+ type: state.in-memory
+ version: v1
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: ghi
-  namespace: notmynamespace
+ name: 123
 spec:
-  type: state.in-memory
-  version: v1
+ type: state.in-memory
+ version: v1
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: def
-  namespace: mynamespace
+ name: 456
+ namespace: foobar
 spec:
-  type: state.in-memory
-  version: v1
-`),
-		daprd.WithExecOptions(
-			exec.WithEnvVars(t, "NAMESPACE", "mynamespace"),
-		),
-	)
+ type: state.in-memory
+ version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: 789
+ namespace: mynamespace
+spec:
+ type: state.in-memory
+ version: v1
+`))
 	return []framework.Option{
 		framework.WithProcesses(n.daprd),
 	}
 }
 
-func (n *namespace) Run(t *testing.T, ctx context.Context) {
+func (n *name) Run(t *testing.T, ctx context.Context) {
 	n.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, n.daprd.GRPCAddress(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-
-	client := rtv1.NewDaprClient(conn)
-
-	resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	resp, err := n.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 	assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
@@ -106,7 +90,15 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 		},
 		{
-			Name: "def", Type: "state.in-memory", Version: "v1",
+			Name: "123", Type: "state.in-memory", Version: "v1",
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+		},
+		{
+			Name: "456", Type: "state.in-memory", Version: "v1",
+			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+		},
+		{
+			Name: "789", Type: "state.in-memory", Version: "v1",
 			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 		},
 	}, resp.GetRegisteredComponents())
