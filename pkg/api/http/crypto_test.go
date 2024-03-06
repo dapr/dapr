@@ -91,7 +91,7 @@ func TestCryptoEndpoints(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 				require.NotEmpty(t, resp.ErrorBody)
-				assert.Equal(t, "ERR_CRYPTO_PROVIDERS_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+				assert.Equal(t, "ERR_CRYPTO_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
 			})
 		}
 	})
@@ -109,8 +109,8 @@ func TestCryptoEndpoints(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 				require.NotEmpty(t, resp.ErrorBody)
-				assert.Equal(t, "ERR_CRYPTO_PROVIDER_NOT_FOUND", resp.ErrorBody["errorCode"])
-				assert.Equal(t, "crypto provider not-found not found", resp.ErrorBody["message"])
+				assert.Equal(t, "ERR_CRYPTO_NOT_FOUND", resp.ErrorBody["errorCode"])
+				assert.Equal(t, "crypto not-found is not found", resp.ErrorBody["message"])
 			})
 		}
 	})
@@ -154,8 +154,8 @@ func TestCryptoEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_CRYPTO", resp.ErrorBody["errorCode"])
-		assert.Equal(t, "failed to perform operation: failed to wrap the file key: simulated error", resp.ErrorBody["message"])
+		assert.Equal(t, "ERR_CRYPTO_ENCRYPT_OPERATION", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "failed to perform encrypt operation: failed to wrap the file key: simulated error", resp.ErrorBody["message"])
 	})
 
 	t.Run("Decryption fails - 500", func(t *testing.T) {
@@ -165,7 +165,7 @@ func TestCryptoEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_CRYPTO", resp.ErrorBody["errorCode"])
-		assert.Contains(t, resp.ErrorBody["message"], "failed to perform operation: invalid header")
+		assert.Equal(t, "ERR_CRYPTO_DECRYPT_OPERATION", resp.ErrorBody["errorCode"])
+		assert.Contains(t, resp.ErrorBody["message"], "failed to perform decrypt operation: invalid header")
 	})
 }
