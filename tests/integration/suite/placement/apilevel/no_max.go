@@ -41,7 +41,6 @@ type noMax struct {
 func (n *noMax) Setup(t *testing.T) []framework.Option {
 	n.place = placement.New(t,
 		placement.WithMetadataEnabled(true),
-		placement.WithMaxAPILevel(-1),
 	)
 
 	return []framework.Option{
@@ -101,7 +100,7 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 	var tableVersion int
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		tableVersion = n.place.CheckAPILevelInState(t, httpClient, level1)
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// Register the second host with the higher API level
 	msg2 := &placementv1pb.Host{
@@ -144,7 +143,7 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		newTableVersion := n.place.CheckAPILevelInState(t, httpClient, level1)
 		assert.Greater(t, newTableVersion, tableVersion)
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 100*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase
 	cancel1()
@@ -155,7 +154,7 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		tableVersion = n.place.CheckAPILevelInState(t, httpClient, level2)
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// Trying to register a host with version 5 should fail
 	n.place.AssertRegisterHostFails(t, ctx, 5)
@@ -167,7 +166,7 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		newTableVersion := n.place.CheckAPILevelInState(t, httpClient, level2)
 		assert.Greater(t, newTableVersion, tableVersion)
-	}, 5*time.Second, 10*time.Millisecond)
+	}, 5*time.Second, 100*time.Millisecond)
 
 	// Trying to register a host with version 10 should fail
 	n.place.AssertRegisterHostFails(t, ctx, level1)
