@@ -93,5 +93,5 @@ func (m *client) Run(t *testing.T, ctx context.Context) {
 		assert.False(t, res.ActorRuntime.HostReady)
 		assert.Equal(t, "placement: connected", res.ActorRuntime.Placement)
 		assert.Empty(t, res.ActorRuntime.ActiveActors, 0)
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
