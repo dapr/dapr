@@ -123,7 +123,7 @@ func waitForUnlock(t *testing.T, stream v1pb.Placement_ReportDaprStatusClient) {
 		if assert.NoError(c, err) {
 			assert.Equal(c, "unlock", resp.GetOperation())
 		}
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 }
 
 func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementClient) v1pb.Placement_ReportDaprStatusClient {
@@ -144,6 +144,6 @@ func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementCli
 			//nolint:testifylint
 			assert.NoError(c, err)
 		}
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 	return stream
 }

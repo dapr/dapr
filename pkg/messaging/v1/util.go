@@ -233,9 +233,7 @@ func InternalMetadataToHTTPHeader(ctx context.Context, internalMD DaprInternalMe
 			continue
 		}
 
-		if strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) ||
-			keyName == ContentTypeHeader ||
-			keyName == ContentLengthHeader {
+		if strings.HasSuffix(keyName, gRPCBinaryMetadataSuffix) || keyName == ContentTypeHeader {
 			continue
 		}
 
