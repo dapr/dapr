@@ -153,7 +153,7 @@ spec:
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(t, ctx, client, u.daprd2.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
+		}, time.Second*5, time.Millisecond*10, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, true)
 		u.doReq(t, ctx, client, u.daprd1, u.daprd2, true)
@@ -179,7 +179,7 @@ spec:
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(t, ctx, client, u.daprd3.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
+		}, time.Second*5, time.Millisecond*10, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, true)
 		u.doReq(t, ctx, client, u.daprd1, u.daprd2, true)
@@ -223,7 +223,7 @@ spec:
 				{Name: "uppercase", Type: "middleware.http.routeralias", Version: "v1"},
 				{Name: "uppercase2", Type: "middleware.http.routeralias", Version: "v1"},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
+		}, time.Second*5, time.Millisecond*10, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, false)
 		u.doReq(t, ctx, client, u.daprd1, u.daprd2, false)
@@ -264,7 +264,7 @@ spec:
 				{Name: "uppercase", Type: "middleware.http.routeralias", Version: "v1"},
 				{Name: "uppercase2", Type: "middleware.http.uppercase", Version: "v1"},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
+		}, time.Second*5, time.Millisecond*10, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, true)
 		u.doReq(t, ctx, client, u.daprd1, u.daprd2, true)
@@ -286,7 +286,7 @@ spec:
 			assert.Empty(c, util.GetMetaComponents(c, ctx, client, u.daprd1.HTTPPort()))
 			assert.Empty(c, util.GetMetaComponents(c, ctx, client, u.daprd2.HTTPPort()))
 			assert.Empty(c, util.GetMetaComponents(c, ctx, client, u.daprd3.HTTPPort()))
-		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
+		}, time.Second*5, time.Millisecond*10, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, false)
 		u.doReq(t, ctx, client, u.daprd1, u.daprd2, false)
