@@ -113,7 +113,7 @@ func (h *deactivateOnPlacementFail) Run(t *testing.T, ctx context.Context) {
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			assert.Equalf(t, http.StatusOK, resp.StatusCode, "Response body: %v", string(body))
-		}, 10*time.Second, 100*time.Millisecond, "actor not ready")
+		}, 10*time.Second, 10*time.Millisecond, "actor not ready")
 	}
 
 	// Validate invocations
