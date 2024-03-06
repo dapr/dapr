@@ -55,11 +55,6 @@ func ReservePorts(t *testing.T, count int) *FreePort {
 
 		ports = append(ports, port)
 		lsns = append(lsns, ln)
-		t.Cleanup(func() {
-			portLock.Lock()
-			defer portLock.Unlock()
-			delete(portUsed, port)
-		})
 	}
 
 	return &FreePort{
@@ -80,7 +75,12 @@ func (f *FreePort) Port(t *testing.T, n int) int {
 
 func (f *FreePort) Free(t *testing.T) {
 	t.Helper()
-	for _, l := range f.lsns {
+	for i, l := range f.lsns {
+		t.Cleanup(func() {
+			portLock.Lock()
+			defer portLock.Unlock()
+			delete(portUsed, f.ports[i])
+		})
 		require.NoError(t, l.Close())
 	}
 }
