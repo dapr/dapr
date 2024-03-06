@@ -197,22 +197,25 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 				errCh <- fmt.Errorf("failed invoking actor %d: %w", j, rErr)
 				return
 			}
-			assert.Eventually(t,
-				func() bool {
-					resp, respErr := client.Do(req)
-					if respErr != nil {
-						rErr = fmt.Errorf("failed invoking actor %d: %w", j, rErr)
-						return false
-					}
-					defer resp.Body.Close()
-					// We don't check the status code here as it could be 500 if we tried invoking the fake app
-					if resp.StatusCode != http.StatusOK {
-						log.Printf("MYLOG Invoking actor %d on non-existent host", j)
-					}
+			for i := 0; i < 10; i++ {
+				time.Sleep(time.Second)
 
-					rErr = nil
-					return true
-				}, 10*time.Second, 1*time.Second)
+				resp, respErr := client.Do(req)
+				if respErr != nil {
+					rErr = fmt.Errorf("failed invoking actor %d: %w", j, rErr)
+					continue
+				}
+				resp.Body.Close()
+				// We don't check the status code here as it could be 500 if we tried
+				// invoking the fake app.
+				if resp.StatusCode != http.StatusOK {
+					log.Printf("MYLOG Invoking actor %d on non-existent host", j)
+				}
+
+				rErr = nil
+				break
+			}
+
 			errCh <- rErr
 		}(j)
 	}
