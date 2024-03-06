@@ -134,7 +134,7 @@ spec:
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		h.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		h.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
 	})
@@ -159,7 +159,7 @@ spec:
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 3)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		h.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		h.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
 		h.publishMessage(t, ctx, client, "pubsub3", "topic3", "/route3")
@@ -177,7 +177,7 @@ spec:
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		h.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		h.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
 		h.publishMessage(t, ctx, client, "pubsub3", "topic3", "/route3")
@@ -187,7 +187,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(h.resDir, "1.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		h.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		h.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
 		h.publishMessage(t, ctx, client, "pubsub3", "topic3", "/route3")
@@ -197,7 +197,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(h.resDir, "2.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Empty(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()))
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		h.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		h.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
 		h.publishMessageFails(t, ctx, client, "pubsub3", "topic3")
@@ -215,7 +215,7 @@ spec:
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		h.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		h.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
 		h.publishMessageFails(t, ctx, client, "pubsub3", "topic3")

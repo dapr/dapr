@@ -95,7 +95,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
 			{
@@ -138,7 +138,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 3)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
 			{
@@ -195,7 +195,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "abc")
@@ -261,7 +261,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "abc")
@@ -306,7 +306,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "bar")
@@ -353,7 +353,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeExpectError(t, ctx, client, "bar", http.StatusBadRequest)
@@ -375,7 +375,7 @@ spec:
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 			}, resp)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 
 		s.writeExpectError(t, ctx, client, "123", http.StatusInternalServerError)
 		s.writeExpectError(t, ctx, client, "bar", http.StatusInternalServerError)
@@ -397,7 +397,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 	})
