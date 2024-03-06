@@ -25,6 +25,8 @@ import (
 	"testing"
 	"time"
 
+	"google.golang.org/grpc/metadata"
+
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -68,8 +70,6 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		metricsPort:         fp.Port(t, 2),
 		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(fp.Port(t, 3)),
 		initialClusterPorts: []int{fp.Port(t, 3)},
-		maxAPILevel:         -1,
-		minAPILevel:         0,
 		metadataEnabled:     false,
 	}
 
@@ -85,9 +85,13 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"--initial-cluster=" + opts.initialCluster,
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
-		"--max-api-level=" + strconv.Itoa(opts.maxAPILevel),
-		"--min-api-level=" + strconv.Itoa(opts.minAPILevel),
 		"--metadata-enabled=" + strconv.FormatBool(opts.metadataEnabled),
+	}
+	if opts.maxAPILevel != nil {
+		args = append(args, "--max-api-level="+strconv.Itoa(*opts.maxAPILevel))
+	}
+	if opts.minAPILevel != nil {
+		args = append(args, "--min-api-level="+strconv.Itoa(*opts.minAPILevel))
 	}
 	if opts.sentryAddress != nil {
 		args = append(args, "--sentry-address="+*opts.sentryAddress)
@@ -138,7 +142,7 @@ func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusOK == resp.StatusCode
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*5, 10*time.Millisecond)
 }
 
 func (p *Placement) ID() string {
@@ -173,13 +177,17 @@ func (p *Placement) CurrentActorsAPILevel() int {
 	return 20 // Defined in pkg/actors/internal/api_level.go
 }
 
-func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host) chan *placementv1pb.PlacementTables {
+func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host, contextMetadata map[string]string) chan *placementv1pb.PlacementTables {
 	conn, err := grpc.DialContext(parentCtx, p.Address(),
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)
 	client := placementv1pb.NewPlacementClient(conn)
+
+	for k, v := range contextMetadata {
+		parentCtx = metadata.AppendToOutgoingContext(parentCtx, k, v)
+	}
 
 	var stream placementv1pb.Placement_ReportDaprStatusClient
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -201,7 +209,7 @@ func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *p
 			_ = stream.CloseSend()
 			return
 		}
-	}, time.Second*15, time.Millisecond*100)
+	}, time.Second*15, time.Millisecond*10)
 
 	doneCh := make(chan error)
 	placementUpdateCh := make(chan *placementv1pb.PlacementTables)
@@ -248,7 +256,7 @@ func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *p
 
 			if in.GetOperation() == "update" {
 				tables := in.GetTables()
-				require.NotEmptyf(t, tables, "Placement tables is empty")
+				require.NotEmptyf(t, tables, "Placement table is empty")
 
 				select {
 				case placementUpdateCh <- tables:
@@ -259,6 +267,12 @@ func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *p
 	}()
 
 	return placementUpdateCh
+}
+
+// RegisterHost Registers a host with the placement service using default context metadata
+func (p *Placement) RegisterHost(t *testing.T, ctx context.Context, msg *placementv1pb.Host) chan *placementv1pb.PlacementTables {
+	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-accept-vnodes", "false")
+	return p.RegisterHostWithMetadata(t, ctx, msg, nil)
 }
 
 // AssertRegisterHostFails Expect the registration to fail with FailedPrecondition.

@@ -106,7 +106,7 @@ spec:
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -135,7 +135,7 @@ spec:
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")
@@ -174,7 +174,7 @@ spec:
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 3)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")
@@ -213,7 +213,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -226,7 +226,7 @@ spec:
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "2.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -246,7 +246,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -270,7 +270,7 @@ spec:
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")
