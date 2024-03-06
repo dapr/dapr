@@ -15,7 +15,6 @@ package daprd
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"net"
 	"net/http"
@@ -42,10 +41,9 @@ import (
 )
 
 type Daprd struct {
-	exec       process.Interface
-	appHTTP    process.Interface
-	freeport   *util.FreePort
-	httpClient *http.Client
+	exec     process.Interface
+	appHTTP  process.Interface
+	freeport *util.FreePort
 
 	appID            string
 	namespace        string
@@ -150,7 +148,6 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		freeport:         fp,
-		httpClient:       util.HTTPClient(t),
 		appHTTP:          appHTTP,
 		appID:            opts.appID,
 		namespace:        ns,
@@ -185,7 +182,7 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 		}
 		net.Close()
 		return true
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -201,7 +198,7 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusNoContent == resp.StatusCode
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 100*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
@@ -219,7 +216,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			}
 			defer resp.Body.Close()
 			return http.StatusNoContent == resp.StatusCode
-		}, 10*time.Second, 10*time.Millisecond)
+		}, 10*time.Second, 100*time.Millisecond)
 
 	case "grpc":
 		assert.Eventually(t, func() bool {
@@ -237,12 +234,12 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			out := rtv1.HealthCheckResponse{}
 			err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &in, &out)
 			return err == nil
-		}, 10*time.Second, 10*time.Millisecond)
+		}, 10*time.Second, 100*time.Millisecond)
 	}
 }
 
 func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
-	conn, err := grpc.DialContext(ctx, d.GRPCAddress(),
+	conn, err := grpc.DialContext(ctx, fmt.Sprintf("127.0.0.1:%d", d.GRPCPort()),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
@@ -254,26 +251,6 @@ func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
 
 func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 	return rtv1.NewDaprClient(d.GRPCConn(t, ctx))
-}
-
-//nolint:testifylint
-func (d *Daprd) RegistedComponents(t *assert.CollectT, ctx context.Context) []*rtv1.RegisteredComponents {
-	url := fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if !assert.NoError(t, err) {
-		return nil
-	}
-
-	var meta struct {
-		Components []*rtv1.RegisteredComponents
-	}
-	resp, err := d.httpClient.Do(req)
-	if assert.NoError(t, err) {
-		defer resp.Body.Close()
-		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
-	}
-
-	return meta.Components
 }
 
 func (d *Daprd) AppID() string {
