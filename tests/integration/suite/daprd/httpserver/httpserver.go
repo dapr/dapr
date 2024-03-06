@@ -66,7 +66,7 @@ func (h *httpServer) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(h2cClient.CloseIdleConnections)
 
 	t.Run("test with HTTP1", func(t *testing.T) {
-		reqCtx, reqCancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Millisecond)
 		defer reqCancel()
 
 		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.proc.HTTPPort()), nil)
@@ -83,7 +83,7 @@ func (h *httpServer) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("test with HTTP2 Cleartext with prior knowledge", func(t *testing.T) {
-		reqCtx, reqCancel := context.WithTimeout(ctx, 100*time.Millisecond)
+		reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Millisecond)
 		defer reqCancel()
 
 		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.proc.HTTPPort()), nil)

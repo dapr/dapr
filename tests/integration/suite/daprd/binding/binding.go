@@ -15,4 +15,5 @@ package binding
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/binding/input"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/binding/output"
 )

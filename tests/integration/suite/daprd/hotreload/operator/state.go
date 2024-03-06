@@ -105,7 +105,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
 		require.Len(t, resp, 1)
 
@@ -157,7 +157,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp = util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
 			assert.Len(c, resp, 3)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		assert.ElementsMatch(t, []*rtv1.RegisteredComponents{
 			{
@@ -220,7 +220,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "abc")
@@ -297,7 +297,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "abc")
@@ -359,7 +359,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeRead(t, ctx, client, "bar")
@@ -410,7 +410,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")
 		s.writeExpectError(t, ctx, client, "bar", http.StatusBadRequest)
@@ -437,7 +437,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 			}, resp)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 
 		s.writeExpectError(t, ctx, client, "123", http.StatusInternalServerError)
 		s.writeExpectError(t, ctx, client, "bar", http.StatusInternalServerError)
@@ -457,7 +457,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp, EventType: operatorv1.ResourceEventType_CREATED})
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		s.writeRead(t, ctx, client, "123")
 	})
 }

@@ -152,7 +152,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
-		}, time.Second*20, time.Millisecond*100)
+		}, time.Second*20, time.Millisecond*10)
 		g.expectBinding(t, 0, "binding1")
 	})
 
@@ -184,7 +184,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		g.expectBindings(t, []bindingPair{
 			{0, "binding1"},
 			{1, "binding2"},
@@ -218,7 +218,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 3)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		g.expectBindings(t, []bindingPair{
 			{0, "binding1"},
 			{1, "binding2"},
@@ -234,7 +234,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		g.registered[0].Store(false)
 		g.expectBindings(t, []bindingPair{
 			{1, "binding2"},
@@ -252,7 +252,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(c, err)
 			assert.Empty(c, resp.GetRegisteredComponents())
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		g.registered[1].Store(false)
 		g.registered[2].Store(false)
 		// Sleep to ensure binding is not triggered.
@@ -286,7 +286,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		g.expectBinding(t, 0, "binding1")
 	})
 }

@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
@@ -282,7 +283,8 @@ func TestPerformTableUpdate(t *testing.T) {
 	testServer.streamConnPoolLock.RUnlock()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	require.NoError(t, testServer.performTablesUpdate(ctx, streamConnPool, nil))
+	req := &tablesUpdateRequest{hosts: streamConnPool}
+	require.NoError(t, testServer.performTablesUpdate(ctx, req))
 
 	// assert
 	for i := 0; i < testClients; i++ {
@@ -419,5 +421,60 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 func TestPerformTableUpdatePerf(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		fmt.Println("max cost time(ms)", PerformTableUpdateCostTime(t))
+	}
+}
+
+// MockPlacementGRPCStream simulates the behavior of placementv1pb.Placement_ReportDaprStatusServer
+type MockPlacementGRPCStream struct {
+	v1pb.Placement_ReportDaprStatusServer
+	ctx context.Context
+}
+
+func (m MockPlacementGRPCStream) Context() context.Context {
+	return m.ctx
+}
+
+// Utility function to create metadata and context for testing
+func createContextWithMetadata(key, value string) context.Context {
+	md := metadata.Pairs(key, value)
+	return metadata.NewIncomingContext(context.Background(), md)
+}
+
+func TestExpectsVNodes(t *testing.T) {
+	tests := []struct {
+		name     string
+		ctx      context.Context
+		expected bool
+	}{
+		{
+			name:     "Without metadata",
+			ctx:      context.Background(),
+			expected: true,
+		},
+		{
+			name:     "With metadata expectsVNodes true",
+			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "true"),
+			expected: true,
+		},
+		{
+			name:     "With metadata expectsVNodes false",
+			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "false"),
+			expected: false,
+		},
+		{
+			name:     "With invalid metadata value",
+			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "invalid"),
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stream := MockPlacementGRPCStream{ctx: tt.ctx}
+			result := hostAcceptsVNodes(stream)
+			if result != tt.expected {
+				t.Errorf("expectsVNodes() for %s: expected %v, got %v", tt.name, tt.expected, result)
+			}
+		})
 	}
 }

@@ -1,0 +1,43 @@
+commit 6dea5b910e90647ad3bffc1458a24fceb94a6044
+Author: Yaron Schneider <schneider.yaron@live.com>
+Date:   Wed Feb 14 10:43:04 2024 -0800
+
+    * update tests
+    
+    Signed-off-by: yaron2 <schneider.yaron@live.com>
+    
+    ---------
+    
+    Signed-off-by: yaron2 <schneider.yaron@live.com>
+
+diff --git a/tests/e2e/pubsub/pubsub_test.go b/tests/e2e/pubsub/pubsub_test.go
+index c9b548143..dedd528c3 100644
+--- a/tests/e2e/pubsub/pubsub_test.go
++++ b/tests/e2e/pubsub/pubsub_test.go
+@@ -278,12 +278,7 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
+ 	require.NoError(t, err)
+ 	offset += numberOfMessagesToPublish + 1
+ 
+-	// Test bug where content-length metadata conflict makes message undeliverable in grpc subscriber.
+-	// We set an arbitrarily large number that it is unlikely to match the size of the payload daprd delivers.
+-	metadataContentLengthConflict := map[string]string{
+-		"content-length": "9999999",
+-	}
+-	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, metadataContentLengthConflict, "")
++	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil, "")
+ 	require.NoError(t, err)
+ 	offset += numberOfMessagesToPublish + 1
+ 
+@@ -295,10 +290,10 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
+ 	require.NoError(t, err)
+ 	offset += numberOfMessagesToPublish + 1
+ 
+-	metadataRawPayload := map[string]string{
++	metadata := map[string]string{
+ 		"rawPayload": "true",
+ 	}
+-	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadataRawPayload, "")
++	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata, "")
+ 	require.NoError(t, err)
+ 	offset += numberOfMessagesToPublish + 1
+ 

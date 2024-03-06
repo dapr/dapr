@@ -108,7 +108,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		resp := util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort())
 		require.Len(t, resp, 1)
 
@@ -164,7 +164,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort()), 3)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		resp := util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort())
 		require.Len(t, resp, 3)
 
@@ -205,7 +205,7 @@ spec:
 				{Name: "abc", Type: "secretstores.local.env", Version: "v1"},
 				{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.read(t, ctx, "123", "SEC_1", "bar1")
 		s.read(t, ctx, "123", "SEC_2", "bar2")
@@ -272,7 +272,7 @@ spec:
 				{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
 				{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.read(t, ctx, "123", "1-sec-1", "foo")
 		s.read(t, ctx, "123", "1-sec-2", "bar")
@@ -310,7 +310,7 @@ spec:
 				{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
 				{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.read(t, ctx, "123", "1-sec-1", "foo")
 		s.read(t, ctx, "123", "1-sec-2", "bar")
@@ -349,7 +349,7 @@ spec:
 						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 					},
 				}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.read(t, ctx, "123", "1-sec-1", "foo")
 		s.read(t, ctx, "123", "1-sec-2", "bar")
@@ -377,7 +377,7 @@ spec:
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.readExpectError(t, ctx, "123", "1-sec-1", http.StatusInternalServerError)
 		s.readExpectError(t, ctx, "xyz", "SEC_1", http.StatusInternalServerError)
@@ -401,7 +401,7 @@ spec:
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Len(c, util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort()), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.read(t, ctx, "123", "SEC_1", "bar1")
 		s.read(t, ctx, "123", "SEC_2", "bar2")

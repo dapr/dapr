@@ -91,7 +91,7 @@ func TestLoadComponents(t *testing.T) {
 		podName: "testPodName",
 	}
 
-	response, err := request.LoadComponents()
+	response, err := request.Load()
 	require.NoError(t, err)
 	assert.NotNil(t, response)
 	assert.Equal(t, "test", response[0].Name)

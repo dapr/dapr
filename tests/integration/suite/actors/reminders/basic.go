@@ -92,7 +92,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			assert.NoError(c, resp.Body.Close())
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
 		}
-	}, time.Second*10, time.Millisecond*100, "actor not ready in time")
+	}, time.Second*10, time.Millisecond*10, "actor not ready in time")
 
 	body := `{"dueTime": "0ms"}`
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/reminders/remindermethod", strings.NewReader(body))
@@ -105,7 +105,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		return b.methodcalled.Load() == 1
-	}, time.Second*3, time.Millisecond*100)
+	}, time.Second*3, time.Millisecond*10)
 
 	conn, err := grpc.DialContext(ctx, b.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
@@ -124,5 +124,5 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		return b.methodcalled.Load() == 2
-	}, time.Second*3, time.Millisecond*100)
+	}, time.Second*3, time.Millisecond*10)
 }

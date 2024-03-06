@@ -56,7 +56,7 @@ func (p *protobufFormat) Setup(t *testing.T) []framework.Option {
 	}
 
 	// Init placement with minimum API level of 20
-	p.place = placement.New(t, placement.WithMinAPILevel(20))
+	p.place = placement.New(t, placement.WithMaxAPILevel(-1), placement.WithMinAPILevel(20))
 
 	// Create a SQLite database and ensure state tables exist
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -77,8 +77,6 @@ INSERT INTO state VALUES
 		daprd.WithResourceFiles(p.db.GetComponent(t)),
 		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(p.place.Port())),
 		daprd.WithAppPort(p.srv.Port()),
-		// Daprd is super noisy in debug mode when connecting to placement.
-		daprd.WithLogLevel("info"),
 	)
 
 	return []framework.Option{

@@ -32,8 +32,8 @@ type options struct {
 	tlsEnabled          bool
 	sentryAddress       *string
 	trustAnchorsFile    *string
-	maxAPILevel         int
-	minAPILevel         int
+	maxAPILevel         *int
+	minAPILevel         *int
 	metadataEnabled     bool
 }
 
@@ -105,13 +105,13 @@ func WithInitialClusterPorts(ports ...int) Option {
 
 func WithMaxAPILevel(val int) Option {
 	return func(o *options) {
-		o.maxAPILevel = val
+		o.maxAPILevel = &val
 	}
 }
 
 func WithMinAPILevel(val int) Option {
 	return func(o *options) {
-		o.minAPILevel = val
+		o.minAPILevel = &val
 	}
 }
 

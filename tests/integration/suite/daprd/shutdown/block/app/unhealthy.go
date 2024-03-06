@@ -142,5 +142,5 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 		})
 		//nolint:testifylint
 		assert.ErrorContains(c, err, "app is not in a healthy state")
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 }

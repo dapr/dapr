@@ -69,8 +69,6 @@ func (j *jsonFormat) Setup(t *testing.T) []framework.Option {
 		daprd.WithResourceFiles(j.db.GetComponent(t)),
 		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(j.place.Port())),
 		daprd.WithAppPort(j.srv.Port()),
-		// Daprd is super noisy in debug mode when connecting to placement.
-		daprd.WithLogLevel("info"),
 	)
 
 	return []framework.Option{
