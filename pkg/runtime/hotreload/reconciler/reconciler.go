@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/utils/clock"
@@ -44,7 +45,10 @@ type Reconciler[T differ.Resource] struct {
 	kind    string
 	manager manager[T]
 
-	clock clock.WithTicker
+	closeCh chan struct{}
+	closed  atomic.Bool
+	wg      sync.WaitGroup
+	clock   clock.WithTicker
 }
 
 type manager[T differ.Resource] interface {
@@ -55,8 +59,9 @@ type manager[T differ.Resource] interface {
 
 func NewComponent(opts Options[componentsapi.Component]) *Reconciler[componentsapi.Component] {
 	return &Reconciler[componentsapi.Component]{
-		clock: clock.RealClock{},
-		kind:  componentsapi.Kind,
+		clock:   clock.RealClock{},
+		closeCh: make(chan struct{}),
+		kind:    componentsapi.Kind,
 		manager: &component{
 			Loader: opts.Loader.Components(),
 			store:  opts.CompStore,
@@ -67,12 +72,24 @@ func NewComponent(opts Options[componentsapi.Component]) *Reconciler[componentsa
 }
 
 func (r *Reconciler[T]) Run(ctx context.Context) error {
+	r.wg.Add(1)
+	defer r.wg.Done()
+
 	stream, err := r.manager.Stream(ctx)
 	if err != nil {
-		return fmt.Errorf("error running component stream: %w", err)
+		return fmt.Errorf("error starting component stream: %w", err)
 	}
 
 	return r.watchForEvents(ctx, stream)
+}
+
+func (r *Reconciler[T]) Close() error {
+	defer r.wg.Wait()
+	if r.closed.CompareAndSwap(false, true) {
+		close(r.closeCh)
+	}
+
+	return nil
 }
 
 func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loader.Event[T]) error {
@@ -87,6 +104,8 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loade
 	for {
 		select {
 		case <-ctx.Done():
+			return nil
+		case <-r.closeCh:
 			return nil
 		case <-ticker.C():
 			log.Debugf("Running scheduled %s reconcile", r.kind)

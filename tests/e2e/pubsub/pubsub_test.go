@@ -278,7 +278,12 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
-	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, nil, "")
+	// Test bug where content-length metadata conflict makes message undeliverable in grpc subscriber.
+	// We set an arbitrarily large number that it is unlikely to match the size of the payload daprd delivers.
+	metadataContentLengthConflict := map[string]string{
+		"content-length": "9999999",
+	}
+	sentTopicAMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-a-topic", protocol, metadataContentLengthConflict, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
@@ -290,10 +295,10 @@ func testPublish(t *testing.T, publisherExternalURL string, protocol string) rec
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 
-	metadata := map[string]string{
+	metadataRawPayload := map[string]string{
 		"rawPayload": "true",
 	}
-	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadata, "")
+	sentTopicRawMessages, err := sendToPublisher(t, publisherExternalURL, "pubsub-raw-topic", protocol, metadataRawPayload, "")
 	require.NoError(t, err)
 	offset += numberOfMessagesToPublish + 1
 

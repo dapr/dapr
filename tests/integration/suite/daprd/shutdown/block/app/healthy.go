@@ -148,7 +148,7 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 	healthzCalled := h.healthzCalled.Load()
 	assert.Eventually(t, func() bool {
 		return h.healthzCalled.Load() > healthzCalled
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*5, time.Millisecond*100)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "foo",
@@ -175,7 +175,7 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		return h.healthzCalled.Load() > healthzCalled
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*5, time.Millisecond*100)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
@@ -185,7 +185,7 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 		})
 		//nolint:testifylint
 		assert.Error(c, err)
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*5, time.Millisecond*100)
 	_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
 		StoreName: "mystore",
 		States: []*commonv1.StateItem{

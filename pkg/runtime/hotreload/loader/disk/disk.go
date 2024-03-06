@@ -15,16 +15,18 @@ package disk
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
-	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/events/batcher"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -39,11 +41,13 @@ type Options struct {
 
 type disk struct {
 	component *resource[componentsapi.Component]
-	fs        *fswatcher.FSWatcher
-	updateCh  chan<- struct{}
+
+	wg      sync.WaitGroup
+	closeCh chan struct{}
+	closed  atomic.Bool
 }
 
-func New(opts Options) (loader.Interface, error) {
+func New(ctx context.Context, opts Options) (loader.Interface, error) {
 	log.Infof("Watching directories: [%s]", strings.Join(opts.Dirs, ", "))
 
 	fs, err := fswatcher.New(fswatcher.Options{
@@ -54,26 +58,60 @@ func New(opts Options) (loader.Interface, error) {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
 
-	updateCh := make(chan struct{})
+	batcher := batcher.New[int](0)
+	eventCh := make(chan struct{})
 
-	return &disk{
-		fs: fs,
-		component: newResource[componentsapi.Component](
-			components.NewLocalComponents(opts.Dirs...),
-			loadercompstore.NewComponent(opts.ComponentStore),
-			updateCh,
-		),
-		updateCh: updateCh,
-	}, nil
+	d := &disk{
+		closeCh:   make(chan struct{}),
+		component: newResource[componentsapi.Component](opts, batcher, loadercompstore.NewComponent(opts.ComponentStore)),
+	}
+
+	ctx, cancel := context.WithCancel(ctx)
+
+	d.wg.Add(2)
+	go func() {
+		if err := fs.Run(ctx, eventCh); err != nil {
+			log.Errorf("Error watching directories: %s", err)
+		}
+		d.wg.Done()
+	}()
+
+	go func() {
+		defer d.wg.Done()
+		defer batcher.Close()
+		defer cancel()
+		var i int
+		for {
+			select {
+			case <-d.closeCh:
+				return
+			case <-ctx.Done():
+				return
+
+			case <-eventCh:
+				// Use a separate: index every batch to prevent deduplicates of separate
+				// file updates happening at the same time.
+				i++
+				batcher.Batch(i)
+			}
+		}
+	}()
+
+	return d, nil
 }
 
-func (d *disk) Run(ctx context.Context) error {
-	return concurrency.NewRunnerManager(
-		d.component.start,
-		func(ctx context.Context) error {
-			return d.fs.Run(ctx, d.updateCh)
-		},
-	).Run(ctx)
+func (d *disk) Close() error {
+	defer d.wg.Wait()
+	if d.closed.CompareAndSwap(false, true) {
+		close(d.closeCh)
+	}
+
+	var errs []error
+	if err := d.component.close(); err != nil {
+		errs = append(errs, err)
+	}
+
+	return errors.Join(errs...)
 }
 
 func (d *disk) Components() loader.Loader[componentsapi.Component] {

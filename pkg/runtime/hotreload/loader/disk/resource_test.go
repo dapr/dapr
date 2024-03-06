@@ -27,11 +27,11 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/components"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
+	"github.com/dapr/kit/events/batcher"
 )
 
 const (
@@ -69,26 +69,14 @@ func Test_Disk(t *testing.T) {
 	dir := t.TempDir()
 	store := compstore.New()
 
-	d, err := New(Options{
+	d, err := New(context.Background(), Options{
 		Dirs:           []string{dir},
 		ComponentStore: store,
 	})
 	require.NoError(t, err)
 
-	errCh := make(chan error)
-	ctx, cancel := context.WithCancel(context.Background())
-	go func() {
-		errCh <- d.Run(ctx)
-	}()
-
 	t.Cleanup(func() {
-		cancel()
-		select {
-		case err = <-errCh:
-			require.NoError(t, err)
-		case <-time.After(time.Second):
-			assert.Fail(t, "expected to receive error")
-		}
+		require.NoError(t, d.Close())
 	})
 
 	assert.Empty(t, store.ListComponents())
@@ -113,7 +101,7 @@ func Test_Disk(t *testing.T) {
 		{
 			Type: operatorpb.ResourceEventType_CREATED,
 			Resource: componentsapi.Component{
-				ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 				Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 			},
@@ -121,7 +109,7 @@ func Test_Disk(t *testing.T) {
 		{
 			Type: operatorpb.ResourceEventType_CREATED,
 			Resource: componentsapi.Component{
-				ObjectMeta: metav1.ObjectMeta{Name: "comp2", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "comp2"},
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 				Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 			},
@@ -129,7 +117,7 @@ func Test_Disk(t *testing.T) {
 		{
 			Type: operatorpb.ResourceEventType_CREATED,
 			Resource: componentsapi.Component{
-				ObjectMeta: metav1.ObjectMeta{Name: "comp3", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "comp3"},
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 				Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 			},
@@ -147,29 +135,19 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
+		batcher := batcher.New[int](0)
 		store := compstore.New()
 
-		updateCh := make(chan struct{})
 		r := newResource[componentsapi.Component](
-			components.NewDiskManifestLoader[componentsapi.Component](dir),
+			Options{Dirs: []string{dir}},
+			batcher,
 			loadercompstore.NewComponent(store),
-			updateCh,
 		)
 
-		errCh := make(chan error)
-		ctx, cancel := context.WithCancel(context.Background())
-		go func() {
-			errCh <- r.start(ctx)
-		}()
-		t.Cleanup(func() {
-			cancel()
-			require.NoError(t, <-errCh)
-		})
+		batcher.Batch(0)
 
 		ch, err := r.Stream(context.Background())
 		require.NoError(t, err)
-
-		updateCh <- struct{}{}
 
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 3; i++ {
@@ -207,6 +185,8 @@ func Test_Stream(t *testing.T) {
 				},
 			},
 		}, events)
+
+		require.NoError(t, r.close())
 	})
 
 	t.Run("if store has a component and event happens, should send create event with new components", func(t *testing.T) {
@@ -216,6 +196,7 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
+		batcher := batcher.New[int](0)
 		store := compstore.New()
 		require.NoError(t, store.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
@@ -224,27 +205,16 @@ func Test_Stream(t *testing.T) {
 		}))
 		require.NoError(t, store.CommitPendingComponent())
 
-		updateCh := make(chan struct{})
 		r := newResource[componentsapi.Component](
-			components.NewDiskManifestLoader[componentsapi.Component](dir),
+			Options{Dirs: []string{dir}},
+			batcher,
 			loadercompstore.NewComponent(store),
-			updateCh,
 		)
 
-		errCh := make(chan error)
-		ctx, cancel := context.WithCancel(context.Background())
-		go func() {
-			errCh <- r.start(ctx)
-		}()
-		t.Cleanup(func() {
-			cancel()
-			require.NoError(t, <-errCh)
-		})
+		batcher.Batch(0)
 
 		ch, err := r.Stream(context.Background())
 		require.NoError(t, err)
-
-		updateCh <- struct{}{}
 
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 2; i++ {
@@ -274,6 +244,8 @@ func Test_Stream(t *testing.T) {
 				},
 			},
 		}, events)
+
+		require.NoError(t, r.close())
 	})
 
 	t.Run("if store has a component and event happens, should send create/update/delete events components", func(t *testing.T) {
@@ -283,6 +255,7 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
+		batcher := batcher.New[int](0)
 		store := compstore.New()
 		require.NoError(t, store.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
@@ -300,34 +273,23 @@ func Test_Stream(t *testing.T) {
 		}))
 		require.NoError(t, store.CommitPendingComponent())
 
-		updateCh := make(chan struct{})
 		r := newResource[componentsapi.Component](
-			components.NewDiskManifestLoader[componentsapi.Component](dir),
+			Options{Dirs: []string{dir}},
+			batcher,
 			loadercompstore.NewComponent(store),
-			updateCh,
 		)
 
-		errCh := make(chan error)
-		ctx, cancel := context.WithCancel(context.Background())
-		go func() {
-			errCh <- r.start(ctx)
-		}()
-		t.Cleanup(func() {
-			cancel()
-			require.NoError(t, <-errCh)
-		})
+		batcher.Batch(0)
 
 		ch, err := r.Stream(context.Background())
 		require.NoError(t, err)
-
-		updateCh <- struct{}{}
 
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 3; i++ {
 			select {
 			case event := <-ch:
 				events = append(events, event)
-			case <-time.After(time.Second * 5):
+			case <-time.After(time.Second * 3):
 				assert.Fail(t, "expected to receive event")
 			}
 		}
@@ -358,5 +320,7 @@ func Test_Stream(t *testing.T) {
 				},
 			},
 		}, events)
+
+		require.NoError(t, r.close())
 	})
 }
