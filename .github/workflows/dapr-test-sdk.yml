@@ -102,7 +102,7 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: '1.21.8'
       - name: Checkout python-sdk repo to run tests.
         uses: actions/checkout@v4
         with:
@@ -232,7 +232,7 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: '1.21.8'
       - name: Checkout java-sdk repo to run tests.
         uses: actions/checkout@v4
         with:
@@ -404,7 +404,7 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: '1.21.8'
       - name: Checkout js-sdk repo to run tests.
         uses: actions/checkout@v4
         with:
@@ -526,7 +526,7 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: '1.21.8'
       - name: Set up Python 3.9
         uses: actions/setup-python@v4
         with:
