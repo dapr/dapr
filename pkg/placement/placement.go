@@ -77,6 +77,40 @@ type hostMemberChange struct {
 	host    raft.DaprHostMember
 }
 
+type tablesUpdateRequest struct {
+	hosts            []placementGRPCStream
+	tables           *placementv1pb.PlacementTables
+	tablesWithVNodes *placementv1pb.PlacementTables // Temporary. Will be removed in 1.15
+}
+
+// GetVersion is used only for logs in membership.go
+func (r *tablesUpdateRequest) GetVersion() string {
+	if r.tables != nil {
+		return r.tables.GetVersion()
+	}
+	if r.tablesWithVNodes != nil {
+		return r.tablesWithVNodes.GetVersion()
+	}
+
+	return ""
+}
+
+func (r *tablesUpdateRequest) SetAPILevel(minAPILevel uint32, maxAPILevel *uint32) {
+	setAPILevel := func(tables *placementv1pb.PlacementTables) {
+		if tables != nil {
+			if tables.GetApiLevel() < minAPILevel {
+				tables.ApiLevel = minAPILevel
+			}
+			if maxAPILevel != nil && tables.GetApiLevel() > *maxAPILevel {
+				tables.ApiLevel = *maxAPILevel
+			}
+		}
+	}
+
+	setAPILevel(r.tablesWithVNodes)
+	setAPILevel(r.tables)
+}
+
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
 	// streamConnPool has the stream connections established between placement gRPC server and Dapr runtime.
@@ -249,10 +283,18 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 				registeredMemberID = req.GetName()
 				p.addStreamConn(stream)
-				// We need to use a background context here so dissemination isn't tied to the context of this stream
-				placementTable := p.raftNode.FSM().PlacementState()
 
-				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, placementTable)
+				updateReq := &tablesUpdateRequest{
+					hosts: []placementGRPCStream{stream},
+				}
+				if hostAcceptsVNodes(stream) {
+					updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false)
+				} else {
+					updateReq.tables = p.raftNode.FSM().PlacementState(true)
+				}
+
+				// We need to use a background context here so dissemination isn't tied to the context of this stream
+				err = p.performTablesUpdate(context.Background(), updateReq)
 				if err != nil {
 					return err
 				}
