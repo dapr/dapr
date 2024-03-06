@@ -203,7 +203,7 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.doReq(c, ctx, client, "helloworld", "daprd1:/xyz")
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*10, time.Millisecond*10)
 }
 
 func (r *routeralias) doReq(t require.TestingT, ctx context.Context, client *nethttp.Client, path, expect string) {
