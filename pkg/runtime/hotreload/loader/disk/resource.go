@@ -32,7 +32,7 @@ import (
 type resource[T differ.Resource] struct {
 	batcher    *batcher.Batcher[int]
 	store      store.Store[T]
-	diskLoader internalloader.ManifestLoader[T]
+	diskLoader internalloader.Loader[T]
 	updateCh   <-chan struct{}
 
 	lock          sync.RWMutex
@@ -43,7 +43,7 @@ type resource[T differ.Resource] struct {
 	closed  atomic.Bool
 }
 
-func newResource[T differ.Resource](loader internalloader.ManifestLoader[T], store store.Store[T], updateCh <-chan struct{}) *resource[T] {
+func newResource[T differ.Resource](loader internalloader.Loader[T], store store.Store[T], updateCh <-chan struct{}) *resource[T] {
 	return &resource[T]{
 		batcher:    batcher.New[int](0),
 		store:      store,

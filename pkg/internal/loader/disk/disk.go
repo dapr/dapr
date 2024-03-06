@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -27,6 +28,8 @@ import (
 	"sigs.k8s.io/yaml"
 
 	"github.com/dapr/dapr/pkg/internal/loader"
+	"github.com/dapr/dapr/pkg/runtime/meta"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/utils"
 )
@@ -36,30 +39,25 @@ var log = logger.NewLogger("dapr.runtime.loader.disk")
 const yamlSeparator = "\n---"
 
 // disk loads a specific manifest kind from a folder.
-type disk[T loader.Manifest] struct {
-	zvFn  func() T
-	kind  string
-	paths []string
+type disk[T meta.Resource] struct {
+	kind      string
+	paths     []string
+	namespace string
 }
 
 // New creates a new manifest loader for the given paths and kind.
-func New[T loader.Manifest](paths ...string) loader.Loader[T] {
+func New[T meta.Resource](paths ...string) loader.Loader[T] {
 	var zero T
 	return &disk[T]{
-		paths: paths,
-		kind:  zero.Kind(),
+		paths:     paths,
+		kind:      zero.Kind(),
+		namespace: security.CurrentNamespace(),
 	}
-}
-
-// SetZeroValueFn sets the function that returns the "zero" object of the given type.
-// This can be used to set default values before unmarshalling.
-func (d *disk[T]) SetZeroValueFn(zvFn func() T) {
-	d.zvFn = zvFn
 }
 
 // load loads manifests for the given directory.
 func (d *disk[T]) Load(context.Context) ([]T, error) {
-	manifests := []T{}
+	var manifests []T
 	for _, path := range d.paths {
 		loaded, err := d.loadManifestsFromPath(path)
 		if err != nil {
@@ -69,7 +67,37 @@ func (d *disk[T]) Load(context.Context) ([]T, error) {
 			manifests = append(manifests, loaded...)
 		}
 	}
-	return manifests, nil
+
+	nsDefined := len(os.Getenv("NAMESPACE")) != 0
+
+	names := make(map[string]string)
+	goodManifests := make([]T, 0)
+	var errs []error
+	for i := range manifests {
+		// If the process or manifest namespace are not defined, ignore the
+		// manifest namespace.
+		ignoreNamespace := !nsDefined || len(manifests[i].GetNamespace()) == 0
+
+		// Ignore manifests that are not in the process security namespace.
+		if !ignoreNamespace && manifests[i].GetNamespace() != d.namespace {
+			continue
+		}
+
+		if existing, ok := names[manifests[i].GetName()]; ok {
+			errs = append(errs, fmt.Errorf("duplicate definition of %s name %s with existing %s",
+				manifests[i].Kind(), manifests[i].LogName(), existing))
+			continue
+		}
+
+		names[manifests[i].GetName()] = manifests[i].LogName()
+		goodManifests = append(goodManifests, manifests[i])
+	}
+
+	if len(errs) > 0 {
+		return nil, errors.Join(errs...)
+	}
+
+	return goodManifests, nil
 }
 
 func (d *disk[T]) loadManifestsFromPath(path string) ([]T, error) {
@@ -151,9 +179,6 @@ func (d *disk[T]) decodeYaml(b []byte) ([]T, []error) {
 		}
 
 		var manifest T
-		if d.zvFn != nil {
-			manifest = d.zvFn()
-		}
 		if err := yaml.Unmarshal(scannerBytes, &manifest); err != nil {
 			errors = append(errors, err)
 			continue

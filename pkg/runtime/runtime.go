@@ -161,7 +161,6 @@ func newDaprRuntime(ctx context.Context,
 
 	authz := authorizer.New(authorizer.Options{
 		ID:           runtimeConfig.id,
-		Namespace:    namespace,
 		GlobalConfig: globalConfig,
 	})
 

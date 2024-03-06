@@ -13,14 +13,14 @@ limitations under the License.
 
 package loader
 
-import "context"
+import (
+	"context"
 
-type Manifest interface {
-	Kind() string
-}
+	"github.com/dapr/dapr/pkg/runtime/meta"
+)
 
 // Loader loads manifest-like files.
-type Loader[T Manifest] interface {
+type Loader[T meta.Resource] interface {
 	// Load loads all manifests.
 	Load(context.Context) ([]T, error)
 }
