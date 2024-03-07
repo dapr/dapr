@@ -15,9 +15,15 @@ package util
 
 import (
 	"net"
+	"sync"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+)
+
+var (
+	portLock sync.Mutex
+	portUsed = make(map[int]struct{})
 )
 
 // FreePort reserves a network ports, and then frees them when the test is
@@ -35,7 +41,19 @@ func ReservePorts(t *testing.T, count int) *FreePort {
 	for i := 0; i < count; i++ {
 		ln, err := net.Listen("tcp", "127.0.0.1:0")
 		require.NoError(t, err)
-		ports = append(ports, ln.Addr().(*net.TCPAddr).Port)
+		port := ln.Addr().(*net.TCPAddr).Port
+
+		portLock.Lock()
+		if _, ok := portUsed[port]; ok {
+			require.NoError(t, ln.Close())
+			i--
+			portLock.Unlock()
+			continue
+		}
+		portUsed[port] = struct{}{}
+		portLock.Unlock()
+
+		ports = append(ports, port)
 		lsns = append(lsns, ln)
 	}
 
@@ -57,7 +75,12 @@ func (f *FreePort) Port(t *testing.T, n int) int {
 
 func (f *FreePort) Free(t *testing.T) {
 	t.Helper()
-	for _, l := range f.lsns {
+	for i, l := range f.lsns {
+		t.Cleanup(func() {
+			portLock.Lock()
+			defer portLock.Unlock()
+			delete(portUsed, f.ports[i])
+		})
 		require.NoError(t, l.Close())
 	}
 }

@@ -212,7 +212,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 
 					rErr = nil
 					return true
-				}, 10*time.Second, 1*time.Second)
+				}, 20*time.Second, 1*time.Second)
 			errCh <- rErr
 		}(j)
 	}

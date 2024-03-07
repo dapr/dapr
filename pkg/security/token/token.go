@@ -32,32 +32,34 @@ const (
 
 var log = logger.NewLogger("dapr.security.token")
 
+func GetSentryTokenFromFile(path string) (token string, validator sentryv1pb.SignCertificateRequest_TokenValidator, err error) {
+	b, err := os.ReadFile(path)
+	if err != nil {
+		log.Warnf("Failed to read token at path '%s': %v", path, err)
+		return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("failed to read token at path '%s': %w", path, err)
+	}
+	if len(b) == 0 {
+		log.Warnf("Token at path '%s' is empty", path)
+		return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("token at path '%s' is empty", path)
+	}
+
+	log.Debugf("Loaded token from path '%s' specified in the DAPR_SENTRY_TOKEN_FILE environmental variable", path)
+	return string(b), sentryv1pb.SignCertificateRequest_JWKS, nil
+}
+
 // GetSentryToken returns the token for authenticating with Sentry.
 func GetSentryToken(allowKubernetes bool) (token string, validator sentryv1pb.SignCertificateRequest_TokenValidator, err error) {
-	var b []byte
-
 	// Check if we have a token file in the DAPR_SENTRY_TOKEN_FILE env var (for the JWKS validator)
 	if path, ok := os.LookupEnv(securityConsts.SentryTokenFileEnvVar); ok {
 		if path == "" {
 			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, errors.New("environmental variable DAPR_SENTRY_TOKEN_FILE is set with an empty value")
 		}
-		b, err = os.ReadFile(path)
-		if err != nil {
-			log.Warnf("Failed to read token at path '%s': %v", path, err)
-			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("failed to read token at path '%s': %w", path, err)
-		}
-		if len(b) == 0 {
-			log.Warnf("Token at path '%s' is empty", path)
-			return "", sentryv1pb.SignCertificateRequest_UNKNOWN, fmt.Errorf("token at path '%s' is empty", path)
-		}
-
-		log.Debugf("Loaded token from path '%s' specified in the DAPR_SENTRY_TOKEN_FILE environmental variable", path)
-		return string(b), sentryv1pb.SignCertificateRequest_JWKS, nil
+		return GetSentryTokenFromFile(path)
 	}
 
 	if allowKubernetes {
 		// Try to read a token from Kubernetes (for the Kubernetes validator)
-		b, err = os.ReadFile(kubeTknPath)
+		b, err := os.ReadFile(kubeTknPath)
 		if err != nil && os.IsNotExist(err) {
 			// Attempt to use the legacy token if that exists
 			b, _ = os.ReadFile(legacyKubeTknPath)

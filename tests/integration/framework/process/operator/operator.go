@@ -49,7 +49,7 @@ type Operator struct {
 func New(t *testing.T, fopts ...Option) *Operator {
 	t.Helper()
 
-	fp := util.ReservePorts(t, 3)
+	fp := util.ReservePorts(t, 4)
 	opts := options{
 		logLevel:              "info",
 		disableLeaderElection: true,
@@ -74,6 +74,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		"-trust-anchors-file=" + *opts.trustAnchorsFile,
 		"-disable-leader-election=" + strconv.FormatBool(opts.disableLeaderElection),
 		"-kubeconfig=" + *opts.kubeconfigPath,
+		"-webhook-server-port=" + strconv.Itoa(fp.Port(t, 3)),
 	}
 
 	if opts.configPath != nil {
