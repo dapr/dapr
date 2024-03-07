@@ -125,7 +125,7 @@ jobs:
       id: setup-go
       uses: actions/setup-go@v4
       with:
-        go-version: '1.21.8'
+        go-version-file: 'go.mod'
 
     - name: Build & download binaries
       run: |
@@ -296,7 +296,7 @@ jobs:
       id: setup-go
       uses: actions/setup-go@v5
       with:
-        go-version: '1.21.8'
+        go-version-file: 'go.mod'
     - name: Configure KinD
       run: |
         cat > kind.yaml <<EOF
