@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -122,8 +123,6 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 	j.places[1].WaitUntilRunning(t, ctx)
 	j.places[2].WaitUntilRunning(t, ctx)
 
-	t.Setenv("DAPR_SENTRY_TOKEN_FILE", j.appTokenFile)
-
 	secProv, err := security.New(ctx, security.Options{
 		SentryAddress:           j.sentry.Address(),
 		ControlPlaneTrustDomain: "localhost",
@@ -131,6 +130,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		TrustAnchors:            j.sentry.CABundle().TrustAnchors,
 		AppID:                   "app-1",
 		MTLSEnabled:             true,
+		SentryTokenFile:         ptr.Of(j.appTokenFile),
 	})
 	require.NoError(t, err)
 
