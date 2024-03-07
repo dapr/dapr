@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"testing"
-	"time"
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
@@ -27,6 +26,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -36,15 +38,31 @@ func init() {
 
 // workflow tests daprd metrics for workflows
 type workflow struct {
-	base
+	daprd *daprd.Daprd
+	place *placement.Placement
 }
 
-func (m *workflow) Setup(t *testing.T) []framework.Option {
-	return m.testSetup(t)
+func (w *workflow) Setup(t *testing.T) []framework.Option {
+	w.place = placement.New(t)
+
+	app := app.New(t)
+
+	w.daprd = daprd.New(t,
+		daprd.WithAppPort(app.Port()),
+		daprd.WithAppProtocol("http"),
+		daprd.WithAppID("myapp"),
+		daprd.WithPlacementAddresses(w.place.Address()),
+		daprd.WithInMemoryActorStateStore("mystore"),
+	)
+
+	return []framework.Option{
+		framework.WithProcesses(w.place, app, w.daprd),
+	}
 }
 
-func (m *workflow) Run(t *testing.T, ctx context.Context) {
-	m.beforeRun(t, ctx)
+func (w *workflow) Run(t *testing.T, ctx context.Context) {
+	w.place.WaitUntilRunning(t, ctx)
+	w.daprd.WaitUntilRunning(t, ctx)
 
 	// Register workflow
 	r := task.NewTaskRegistry()
@@ -66,22 +84,18 @@ func (m *workflow) Run(t *testing.T, ctx context.Context) {
 		}
 		return nil, nil
 	})
-	taskhubClient := client.NewTaskHubGrpcClient(m.grpcConn, backend.DefaultLogger())
-	taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-	taskhubClient.StartWorkItemListener(taskhubCtx, r)
-	defer cancelTaskhub()
+	taskhubClient := client.NewTaskHubGrpcClient(w.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+	taskhubClient.StartWorkItemListener(ctx, r)
 
 	t.Run("successful workflow execution", func(t *testing.T) {
 		id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_success"))
 		require.NoError(t, err)
-		timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
-		t.Cleanup(cancelTimeout)
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(timeoutCtx, id, api.WithFetchPayloads(true))
+		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, metadata.IsComplete())
 
 		// Verify metrics
-		metrics := m.getMetrics(t, ctx)
+		metrics := w.daprd.Metrics(t, ctx)
 		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
 		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
 		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_success|app_id:myapp|namespace:|status:success"]))
@@ -91,14 +105,12 @@ func (m *workflow) Run(t *testing.T, ctx context.Context) {
 	t.Run("failed workflow execution", func(t *testing.T) {
 		id, err := taskhubClient.ScheduleNewOrchestration(ctx, "workflow", api.WithInput("activity_failure"))
 		require.NoError(t, err)
-		timeoutCtx, cancelTimeout := context.WithTimeout(ctx, 30*time.Second)
-		t.Cleanup(cancelTimeout)
-		metadata, err := taskhubClient.WaitForOrchestrationCompletion(timeoutCtx, id, api.WithFetchPayloads(true))
+		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, metadata.IsComplete())
 
 		// Verify metrics
-		metrics := m.getMetrics(t, ctx)
+		metrics := w.daprd.Metrics(t, ctx)
 		assert.Equal(t, 2, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
 		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:failed|workflow_name:workflow"]))
 		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_failure|app_id:myapp|namespace:|status:failed"]))
