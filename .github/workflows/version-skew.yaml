@@ -114,7 +114,7 @@ jobs:
     - name: Apply patches to latest release
       run: |
         export DAPR_LATEST_MAJOR_MINOR=$(echo ${{ env.DAPR_PREV_VERSION }} | cut -d. -f1-2)
-        export DAPR_PATCH_DIR="$(pwd)/.github/scripts/version-skew-test-patches/integration/release-$DAPR_LATEST_MAJOR_MINOR"
+        export DAPR_PATCH_DIR="$(pwd)/.github/scripts/version-skew-test-patches/integration/release-$DAPR_LATEST_MAJOR_MINOR/${{ matrix.mode }}"
         if [ -d "$DAPR_PATCH_DIR" ]; then
           cd latest-release
           echo "Applying patches from $DAPR_PATCH_DIR to $(pwd)"

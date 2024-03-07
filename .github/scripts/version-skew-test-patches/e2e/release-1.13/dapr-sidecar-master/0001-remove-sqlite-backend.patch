@@ -1,0 +1,31 @@
+diff --git a/tests/e2e/workflows/workflow_test.go b/tests/e2e/workflows/workflow_test.go
+index 3194acf7a..af94a2e96 100644
+--- a/tests/e2e/workflows/workflow_test.go
++++ b/tests/e2e/workflows/workflow_test.go
+@@ -35,7 +35,7 @@ import (
+ 
+ var (
+ 	tr            *runner.TestRunner
+-	backends      = []string{"actors", "sqlite"}
++	backends      = []string{"actors"}
+ 	appNamePrefix = "workflowsapp"
+ )
+ 
+@@ -55,16 +55,7 @@ func TestMain(m *testing.M) {
+ 			testApps = append(testApps, getTestApp(backend))
+ 		}
+ 
+-		comps := []kube.ComponentDescription{
+-			{
+-				Name:     "sqlitebackend",
+-				TypeName: "workflowbackend.sqlite",
+-				MetaData: map[string]kube.MetadataValue{
+-					"connectionString": {Raw: `""`},
+-				},
+-				Scopes: []string{appNamePrefix + "-sqlite"},
+-			},
+-		}
++		comps := []kube.ComponentDescription{}
+ 
+ 		tr = runner.NewTestRunner("workflowsapp", testApps, comps, nil)
+ 		os.Exit(tr.Start(m))
