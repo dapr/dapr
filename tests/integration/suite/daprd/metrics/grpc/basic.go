@@ -11,81 +11,95 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package metrics
+package grpc
 
 import (
 	"context"
+	"fmt"
+	"net/http"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(grpcServer))
+	suite.Register(new(basic))
 }
 
-// grpcServer tests daprd metrics for the gRPC server
-type grpcServer struct {
-	base
+// basic tests daprd metrics for the gRPC server
+type basic struct {
+	daprd *daprd.Daprd
 }
 
-func (m *grpcServer) Setup(t *testing.T) []framework.Option {
-	return m.testSetup(t)
+func (b *basic) Setup(t *testing.T) []framework.Option {
+	app := app.New(t,
+		app.WithHandlerFunc("/hi", func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprint(w, "OK")
+		}),
+	)
+
+	b.daprd = daprd.New(t,
+		daprd.WithAppPort(app.Port()),
+		daprd.WithAppProtocol("http"),
+		daprd.WithAppID("myapp"),
+		daprd.WithInMemoryStateStore("mystore"),
+	)
+
+	return []framework.Option{
+		framework.WithProcesses(app, b.daprd),
+	}
 }
 
-func (m *grpcServer) Run(t *testing.T, ctx context.Context) {
-	m.beforeRun(t, ctx)
+func (b *basic) Run(t *testing.T, ctx context.Context) {
+	b.daprd.WaitUntilRunning(t, ctx)
+
+	client := b.daprd.GRPCClient(t, ctx)
 
 	t.Run("service invocation", func(t *testing.T) {
-		reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
-		t.Cleanup(reqCancel)
-
 		// Invoke
-		_, err := m.grpcClient.InvokeService(reqCtx, &runtimev1pb.InvokeServiceRequest{
+		_, err := client.InvokeService(ctx, &rtv1.InvokeServiceRequest{
 			Id: "myapp",
-			Message: &commonv1pb.InvokeRequest{
+			Message: &commonv1.InvokeRequest{
 				Method: "hi",
-				HttpExtension: &commonv1pb.HTTPExtension{
-					Verb: commonv1pb.HTTPExtension_GET,
+				HttpExtension: &commonv1.HTTPExtension{
+					Verb: commonv1.HTTPExtension_GET,
 				},
 			},
 		})
 		require.NoError(t, err)
 
 		// Verify metrics
-		metrics := m.getMetrics(t, ctx)
+		metrics := b.daprd.Metrics(t, ctx)
 		assert.Equal(t, 1, int(metrics["dapr_grpc_io_server_completed_rpcs|app_id:myapp|grpc_server_method:/dapr.proto.runtime.v1.Dapr/InvokeService|grpc_server_status:OK"]))
 	})
 
 	t.Run("state stores", func(t *testing.T) {
-		reqCtx, reqCancel := context.WithTimeout(ctx, 5*time.Second)
-		t.Cleanup(reqCancel)
-
 		// Write state
-		_, err := m.grpcClient.SaveState(reqCtx, &runtimev1pb.SaveStateRequest{
+		_, err := client.SaveState(ctx, &rtv1.SaveStateRequest{
 			StoreName: "mystore",
-			States: []*commonv1pb.StateItem{
+			States: []*commonv1.StateItem{
 				{Key: "myvalue", Value: []byte(`"hello world"`)},
 			},
 		})
 		require.NoError(t, err)
 
 		// Get state
-		_, err = m.grpcClient.GetState(reqCtx, &runtimev1pb.GetStateRequest{
+		_, err = client.GetState(ctx, &rtv1.GetStateRequest{
 			StoreName: "mystore",
 			Key:       "myvalue",
 		})
 		require.NoError(t, err)
 
 		// Verify metrics
-		metrics := m.getMetrics(t, ctx)
+		metrics := b.daprd.Metrics(t, ctx)
 		assert.Equal(t, 1, int(metrics["dapr_grpc_io_server_completed_rpcs|app_id:myapp|grpc_server_method:/dapr.proto.runtime.v1.Dapr/SaveState|grpc_server_status:OK"]))
 		assert.Equal(t, 1, int(metrics["dapr_grpc_io_server_completed_rpcs|app_id:myapp|grpc_server_method:/dapr.proto.runtime.v1.Dapr/GetState|grpc_server_status:OK"]))
 	})
