@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -122,8 +123,6 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 	j.places[1].WaitUntilRunning(t, ctx)
 	j.places[2].WaitUntilRunning(t, ctx)
 
-	t.Setenv("DAPR_SENTRY_TOKEN_FILE", j.appTokenFile)
-
 	secProv, err := security.New(ctx, security.Options{
 		SentryAddress:           j.sentry.Address(),
 		ControlPlaneTrustDomain: "localhost",
@@ -131,6 +130,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		TrustAnchors:            j.sentry.CABundle().TrustAnchors,
 		AppID:                   "app-1",
 		MTLSEnabled:             true,
+		SentryTokenFile:         ptr.Of(j.appTokenFile),
 	})
 	require.NoError(t, err)
 
@@ -179,7 +179,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 			return false
 		}
 		return true
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*10, time.Millisecond*10)
 
 	err = stream.Send(&v1pb.Host{
 		Name:     "app-1",
@@ -200,7 +200,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(c, o.GetTables().GetEntries(), "entity-1")
 			assert.Contains(c, o.GetTables().GetEntries(), "entity-2")
 		}
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 }
 
 func (j *jwks) signJWT(t *testing.T, jwkPriv jwk.Key, id string) []byte {

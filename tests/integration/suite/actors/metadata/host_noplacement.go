@@ -93,5 +93,5 @@ func (m *hostNoPlacement) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(t, "myactortype", res.ActorRuntime.ActiveActors[0].Type)
 			assert.Equal(t, 0, res.ActorRuntime.ActiveActors[0].Count)
 		}
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }

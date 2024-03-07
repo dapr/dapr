@@ -53,7 +53,7 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: '1.21.8'
       - name: Check white space in .md files
         if: github.event_name == 'pull_request'
         run: |
@@ -132,7 +132,7 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: '1.21.8'
       - name: Run make test
         env:
           COVERAGE_OPTS: "-coverprofile=coverage.txt -covermode=atomic"
@@ -176,15 +176,13 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
-      - name: Build binaries
-        run: make build
+          go-version: '1.21.8'
       - name: Override DAPR_HOST_IP for MacOS
         if: matrix.target_os == 'darwin'
         run: |
           echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
-      - name: Run make test-integration
-        run: make test-integration
+      - name: Run make test-integration-parallel
+        run: make test-integration-parallel
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"
@@ -268,7 +266,7 @@ jobs:
         id: setup-go
         uses: actions/setup-go@v5
         with:
-          go-version-file: "go.mod"
+          go-version: '1.21.8'
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
         run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
       - name: Updates version for sidecar flavor

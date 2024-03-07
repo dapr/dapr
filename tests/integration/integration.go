@@ -27,7 +27,10 @@ import (
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
-var focusF = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
+var (
+	focusF       = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
+	parallelFlag = flag.Bool("integration-parallel", true, "Disable running integration tests in parallel")
+)
 
 func RunIntegrationTests(t *testing.T) {
 	flag.Parse()
@@ -57,12 +60,21 @@ func RunIntegrationTests(t *testing.T) {
 	}
 
 	startTime := time.Now()
+	t.Cleanup(func() {
+		t.Logf("Total integration test execution time: [%d] %s", len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100))
+	})
+
 	for _, tcase := range focusedTests {
+		tcase := tcase
 		t.Run(tcase.Name(), func(t *testing.T) {
-			t.Logf("setting up test case")
+			if *parallelFlag {
+				t.Parallel()
+			}
+
 			options := tcase.Setup(t)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+			t.Logf("setting up test case")
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			t.Cleanup(cancel)
 
 			framework.Run(t, ctx, options...)
@@ -73,6 +85,4 @@ func RunIntegrationTests(t *testing.T) {
 			})
 		})
 	}
-
-	t.Logf("Total integration test execution time: %s", time.Since(startTime).Truncate(time.Millisecond*100))
 }

@@ -232,6 +232,45 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 
 	// Create the container object
 	probeHTTPHandler := getProbeHTTPHandler(c.SidecarPublicPort, injectorConsts.APIVersionV1, injectorConsts.SidecarHealthzPath)
+	env := []corev1.EnvVar{
+		{
+			Name:  "NAMESPACE",
+			Value: c.Namespace,
+		},
+		{
+			Name:  securityConsts.TrustAnchorsEnvVar,
+			Value: string(c.CurrentTrustAnchors),
+		},
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		// TODO: @joshvanl: In v1.14, these two env vars should be moved to flags.
+		{
+			Name:  securityConsts.ControlPlaneNamespaceEnvVar,
+			Value: c.ControlPlaneNamespace,
+		},
+		{
+			Name:  securityConsts.ControlPlaneTrustDomainEnvVar,
+			Value: c.ControlPlaneTrustDomain,
+		},
+	}
+	if c.EnableK8sDownwardAPIs {
+		env = append(env,
+			corev1.EnvVar{
+				Name: injectorConsts.DaprContainerHostIP,
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "status.podIP",
+					},
+				},
+			},
+		)
+	}
 	container := &corev1.Container{
 		Name:            injectorConsts.SidecarContainerName,
 		Image:           c.SidecarImage,
@@ -239,34 +278,8 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		SecurityContext: securityContext,
 		Ports:           ports,
 		Args:            append(cmd, args...),
-		Env: []corev1.EnvVar{
-			{
-				Name:  "NAMESPACE",
-				Value: c.Namespace,
-			},
-			{
-				Name: "POD_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.name",
-					},
-				},
-			},
-			{
-				Name:  securityConsts.TrustAnchorsEnvVar,
-				Value: string(c.CurrentTrustAnchors),
-			},
-			// TODO: @joshvanl: In v1.14, this two env vars should be moved to flags.
-			{
-				Name:  securityConsts.ControlPlaneNamespaceEnvVar,
-				Value: c.ControlPlaneNamespace,
-			},
-			{
-				Name:  securityConsts.ControlPlaneTrustDomainEnvVar,
-				Value: c.ControlPlaneTrustDomain,
-			},
-		},
-		VolumeMounts: opts.VolumeMounts,
+		Env:             env,
+		VolumeMounts:    opts.VolumeMounts,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        probeHTTPHandler,
 			InitialDelaySeconds: c.SidecarReadinessProbeDelaySeconds,

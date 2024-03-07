@@ -24,8 +24,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -122,12 +120,16 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 	h.daprd.Run(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, h.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	client := h.daprd.GRPCClient(t, ctx)
 
-	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+		//nolint:testifylint
+		assert.NoError(c, err)
+		assert.Len(c, resp.GetSubscriptions(), 1)
+	}, time.Second*5, time.Millisecond*10)
+
+	_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "foo",
 		Topic:      "topic",
 		Data:       []byte(`{"status":"completed"}`),
@@ -148,7 +150,7 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 	healthzCalled := h.healthzCalled.Load()
 	assert.Eventually(t, func() bool {
 		return h.healthzCalled.Load() > healthzCalled
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "foo",
@@ -175,7 +177,7 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		return h.healthzCalled.Load() > healthzCalled
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
@@ -185,7 +187,7 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 		})
 		//nolint:testifylint
 		assert.Error(c, err)
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 	_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
 		StoreName: "mystore",
 		States: []*commonv1.StateItem{

@@ -53,7 +53,7 @@ spec:
 		remove, err := writeTempConfig(filename, yaml)
 		require.NoError(t, err)
 		defer remove()
-		components, err := request.LoadComponents()
+		components, err := request.Load()
 		require.NoError(t, err)
 		assert.Len(t, components, 1)
 	})
@@ -71,7 +71,7 @@ name: statestore`
 		remove, err := writeTempConfig(filename, yaml)
 		require.NoError(t, err)
 		defer remove()
-		components, err := request.LoadComponents()
+		components, err := request.Load()
 		require.NoError(t, err)
 		assert.Empty(t, components)
 	})
@@ -79,7 +79,7 @@ name: statestore`
 	t.Run("load components file not exist", func(t *testing.T) {
 		request := NewLocalComponents("test-path-no-exists")
 
-		components, err := request.LoadComponents()
+		components, err := request.Load()
 		require.Error(t, err)
 		assert.Empty(t, components)
 	})

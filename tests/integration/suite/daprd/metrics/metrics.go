@@ -11,10 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package selfhosted
+package metrics
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/selfhosted/binding"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/selfhosted/middleware"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/selfhosted/pubsub"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/grpc"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/http"
 )
