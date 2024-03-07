@@ -91,6 +91,9 @@ type x509source struct {
 	// the control plane trust domain.
 	trustDomain *string
 
+	// sentryTokenFile is the optional file path to the sentry token file.
+	sentryTokenFile *string
+
 	lock  sync.RWMutex
 	clock clock.Clock
 }
@@ -146,15 +149,16 @@ func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDo
 	}
 
 	return &x509source{
-		sentryAddress:  opts.SentryAddress,
-		sentryID:       sentryID,
-		trustAnchors:   x509bundle.FromX509Authorities(sentryID.TrustDomain(), trustAnchorCerts),
-		appID:          opts.AppID,
-		appNamespace:   ns,
-		trustDomain:    trustDomain,
-		kubernetesMode: opts.Mode == modes.KubernetesMode,
-		requestFn:      opts.OverrideCertRequestSource,
-		clock:          clock,
+		sentryAddress:   opts.SentryAddress,
+		sentryID:        sentryID,
+		trustAnchors:    x509bundle.FromX509Authorities(sentryID.TrustDomain(), trustAnchorCerts),
+		appID:           opts.AppID,
+		appNamespace:    ns,
+		trustDomain:     trustDomain,
+		kubernetesMode:  opts.Mode == modes.KubernetesMode,
+		requestFn:       opts.OverrideCertRequestSource,
+		clock:           clock,
+		sentryTokenFile: opts.SentryTokenFile,
 	}, nil
 }
 
@@ -295,7 +299,14 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 
 	defer conn.Close()
 
-	token, tokenValidator, err := sentryToken.GetSentryToken(x.kubernetesMode)
+	var token string
+	var tokenValidator sentryv1pb.SignCertificateRequest_TokenValidator
+	if x.sentryTokenFile != nil {
+		token, tokenValidator, err = sentryToken.GetSentryTokenFromFile(*x.sentryTokenFile)
+	} else {
+		token, tokenValidator, err = sentryToken.GetSentryToken(x.kubernetesMode)
+	}
+
 	if err != nil {
 		diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_token")
 		return nil, fmt.Errorf("error obtaining token: %w", err)
