@@ -47,7 +47,6 @@ import (
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
 	"github.com/dapr/dapr/pkg/operator/handlers"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -182,27 +181,11 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		config:      config,
 		healthzPort: opts.HealthzPort,
 		apiServer: api.NewAPIServer(api.Options{
-			Client:   mgrClient,
+			Manager:  mgr,
 			Security: secProvider,
 			Port:     opts.APIPort,
 		}),
 	}, nil
-}
-
-func (o *operator) syncComponent(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
-	return func(obj interface{}) {
-		var c *componentsapi.Component
-		switch o := obj.(type) {
-		case *componentsapi.Component:
-			c = o
-		case cache.DeletedFinalStateUnknown:
-			c = o.Obj.(*componentsapi.Component)
-		}
-		if c != nil {
-			log.Debugf("Observed component to be synced: %s/%s", c.Namespace, c.Name)
-			o.apiServer.OnComponentUpdated(ctx, eventType, c)
-		}
-	}
 }
 
 func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
@@ -219,7 +202,7 @@ func (o *operator) Run(ctx context.Context) error {
 	log.Info("Dapr Operator is starting")
 	healthzServer := health.NewServer(health.Options{
 		Log:     log,
-		Targets: ptr.Of(5),
+		Targets: ptr.Of(4),
 	})
 
 	/*
@@ -322,29 +305,6 @@ func (o *operator) Run(ctx context.Context) error {
 			if rErr != nil {
 				return fmt.Errorf("failed to start API server: %w", rErr)
 			}
-			return nil
-		},
-		func(ctx context.Context) error {
-			if !o.mgr.GetCache().WaitForCacheSync(ctx) {
-				return errors.New("failed to wait for cache sync")
-			}
-
-			componentInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &componentsapi.Component{})
-			if rErr != nil {
-				return fmt.Errorf("unable to get setup components informer: %w", rErr)
-			}
-			_, rErr = componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-				AddFunc: o.syncComponent(ctx, operatorv1pb.ResourceEventType_CREATED),
-				UpdateFunc: func(_, newObj interface{}) {
-					o.syncComponent(ctx, operatorv1pb.ResourceEventType_UPDATED)(newObj)
-				},
-				DeleteFunc: o.syncComponent(ctx, operatorv1pb.ResourceEventType_DELETED),
-			})
-			if rErr != nil {
-				return fmt.Errorf("unable to add components informer event handler: %w", rErr)
-			}
-			healthzServer.Ready()
-			<-ctx.Done()
 			return nil
 		},
 		func(ctx context.Context) error {

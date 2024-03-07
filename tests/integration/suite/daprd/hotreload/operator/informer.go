@@ -92,6 +92,7 @@ func (i *informer) Setup(t *testing.T) []framework.Option {
 		operator.WithNamespace("default"),
 		operator.WithKubeconfigPath(i.kubeapi.KubeconfigPath(t)),
 		operator.WithTrustAnchorsFile(sentry.TrustAnchorsFile(t)),
+		operator.WithLogLevel("debug"), // TODO: @joshvanl
 	)
 
 	i.daprd = daprd.New(t,
@@ -105,6 +106,7 @@ func (i *informer) Setup(t *testing.T) []framework.Option {
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 		)),
+		daprd.WithLogLevel("debug"), // TODO: @joshvanl
 	)
 
 	return []framework.Option{
@@ -151,7 +153,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	comp := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-		ObjectMeta: metav1.ObjectMeta{Name: "abc", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "123", Namespace: "default"},
 		Spec: compapi.ComponentSpec{
 			Type:    "state.sqlite",
 			Version: "v1",
@@ -170,7 +172,7 @@ func (i *informer) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.ElementsMatch(c, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), []*rtv1.RegisteredComponents{
 				{
-					Name: "abc", Type: "state.sqlite", Version: "v1",
+					Name: "123", Type: "state.sqlite", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 			})
