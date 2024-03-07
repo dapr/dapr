@@ -108,6 +108,10 @@ type Options struct {
 	// Mode is the operation mode of this security instance (self-hosted or
 	// Kubernetes).
 	Mode modes.DaprMode
+
+	// SentryTokenFile is an optional file containing the token to authenticate
+	// to sentry.
+	SentryTokenFile *string
 }
 
 type provider struct {
