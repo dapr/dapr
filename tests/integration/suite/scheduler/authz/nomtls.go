@@ -49,11 +49,7 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 	n.scheduler.WaitUntilRunning(t, ctx)
 
 	host := n.scheduler.Address()
-	conn, err := grpc.DialContext(
-		ctx,
-		host,
-		grpc.WithBlock(),
-		grpc.WithReturnConnectionError(),
+	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)

@@ -142,6 +142,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.blockShutdownDuration != nil {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
+	if opts.schedulerAddress != nil {
+		args = append(args, "--scheduler-host-address="+*opts.schedulerAddress)
+	}
 
 	ns := "default"
 	if opts.namespace != nil {

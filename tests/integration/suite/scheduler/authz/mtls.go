@@ -48,8 +48,7 @@ func (m *mtls) Setup(t *testing.T) []framework.Option {
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, m.sentry.CABundle().TrustAnchors, 0o600))
 
-	m.scheduler = scheduler.New(
-		t,
+	m.scheduler = scheduler.New(t,
 		scheduler.WithEnableTLS(true),
 		scheduler.WithSentryAddress(m.sentry.Address()),
 		scheduler.WithTrustAnchorsFile(taFile),

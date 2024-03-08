@@ -18,9 +18,8 @@ const (
 	dialTimeout = 1 * time.Second
 )
 
-// GetSchedulerClient returns a new scheduler client and the underlying connection.
-// If a cert chain is given, a TLS connection will be established.
-func GetSchedulerClient(ctx context.Context, address string, sec security.Handler) (schedulerv1pb.SchedulerClient, *grpc.ClientConn, error) {
+// New returns a new scheduler client and the underlying connection.
+func New(ctx context.Context, address string, sec security.Handler) (schedulerv1pb.SchedulerClient, error) {
 	unaryClientInterceptor := grpcRetry.UnaryClientInterceptor()
 
 	if diag.DefaultGRPCMonitoring.IsEnabled() {
@@ -32,7 +31,7 @@ func GetSchedulerClient(ctx context.Context, address string, sec security.Handle
 
 	schedulerID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", sec.ControlPlaneNamespace(), "dapr-scheduler")
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
 
 	opts := []grpc.DialOption{
@@ -42,9 +41,12 @@ func GetSchedulerClient(ctx context.Context, address string, sec security.Handle
 
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
+
+	// check mode. dns resolution. create len clients based on len of results of dns res
+	// handle re-est connections
 	conn, err := grpc.DialContext(ctx, address, opts...)
 	if err != nil {
-		return nil, nil, err
+		return nil, err
 	}
-	return schedulerv1pb.NewSchedulerClient(conn), conn, nil
+	return schedulerv1pb.NewSchedulerClient(conn), nil
 }

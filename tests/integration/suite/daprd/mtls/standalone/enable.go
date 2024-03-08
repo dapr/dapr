@@ -79,9 +79,7 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
 		procdaprd.WithSentryAddress(e.sentry.Address()),
 		procdaprd.WithPlacementAddresses(e.placement.Address()),
-		procdaprd.WithSchedulerAddresses(e.scheduler.Address()),
-
-		// Enable mTLS
+		procdaprd.WithSchedulerAddress(e.scheduler.Address()),
 		procdaprd.WithEnableMTLS(true),
 	)
 
