@@ -15,8 +15,12 @@ package server
 
 import (
 	"fmt"
+	"net"
 	"net/url"
+	"strconv"
+	"strings"
 
+	"github.com/dapr/dapr/utils"
 	"go.etcd.io/etcd/server/v3/embed"
 )
 
@@ -35,15 +39,88 @@ func parseEtcdUrls(strs []string) ([]url.URL, error) {
 
 func (s *Server) conf() *embed.Config {
 	config := embed.NewConfig()
-	config.Name = "localhost"
-	config.Dir = s.dataDir
-	// config.LPUrls = parseEtcdUrls([]string{"http://0.0.0.0:2380"})
-	// config.LCUrls = parseEtcdUrls([]string{"http://0.0.0.0:2379"})
-	// config.APUrls = parseEtcdUrls([]string{"http://localhost:2380"})
-	// config.ACUrls = parseEtcdUrls([]string{"http://localhost:2379"})
-	config.InitialCluster = "localhost=http://localhost:2380"
 
-	config.LogLevel = "debug" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
+	config.Name = s.etcdID
+	config.Dir = s.dataDir
+
+	config.InitialCluster = s.etcdInitialPeers
+
+	advertisePeerURLs, err := parseURLs(s.etcdInitialPeers)
+	if err != nil {
+		log.Warnf("Invalid format for initial cluster")
+	}
+	config.AdvertisePeerUrls = advertisePeerURLs
+
+	peerPort, err := extractSinglePeerPort(s.etcdInitialPeers)
+	if err != nil {
+		log.Warnf("Invalid format for initial cluster port")
+	}
+	config.ListenPeerUrls = []url.URL{{
+		Scheme: "http",
+		Host:   "0.0.0.0:" + peerPort,
+	}}
+
+	hostAddress, err := utils.GetHostAddress()
+	if err != nil {
+		log.Fatal(fmt.Errorf("failed to determine host address: %w", err))
+	}
+
+	config.ListenClientUrls = []url.URL{{
+		Scheme: "http",
+		Host:   hostAddress + ":" + strconv.Itoa(s.etcdClientPort),
+	}}
+	config.AdvertiseClientUrls = []url.URL{{
+		Scheme: "http",
+		Host:   hostAddress + ":" + strconv.Itoa(s.etcdClientPort),
+	}}
+
+	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
 	// TODO: Look into etcd config and if we need to do any raft compacting
+
 	return config
+}
+
+func parseURLs(input string) ([]url.URL, error) {
+	var urls []url.URL
+
+	pairs := strings.Split(input, ",")
+
+	for _, pair := range pairs {
+		idAndAddress := strings.SplitN(pair, "=", 2)
+		if len(idAndAddress) != 2 {
+			return nil, fmt.Errorf("invalid format: %s", pair)
+		}
+
+		// Construct the URL without "http://"
+		u, err := url.Parse(idAndAddress[1])
+		if err != nil {
+			return nil, fmt.Errorf("error parsing URL: %w", err)
+		}
+
+		urls = append(urls, *u)
+	}
+
+	return urls, nil
+}
+
+func extractSinglePeerPort(input string) (string, error) {
+	parts := strings.Split(input, "=")
+
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid format: %s", input)
+	}
+
+	// Extract the port
+	u, err := url.Parse(parts[1])
+	if err != nil {
+		return "", fmt.Errorf("error parsing URL: %w", err)
+	}
+
+	// Check if the port is in the URL
+	_, port, err := net.SplitHostPort(u.Host)
+	if err != nil {
+		return "", fmt.Errorf("error extracting port: %w", err)
+	}
+
+	return port, nil
 }
