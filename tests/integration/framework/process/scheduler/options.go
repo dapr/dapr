@@ -20,6 +20,11 @@ type Option func(*options)
 type options struct {
 	execOpts []exec.Option
 
+	id                  string
+	initialCluster      string
+	initialClusterPorts []int
+	etcdClientPort      int
+
 	logLevel         string
 	port             int
 	healthzPort      int
@@ -39,6 +44,30 @@ func WithExecOptions(execOptions ...exec.Option) Option {
 func WithPort(port int) Option {
 	return func(o *options) {
 		o.port = port
+	}
+}
+
+func WithID(id string) Option {
+	return func(o *options) {
+		o.id = id
+	}
+}
+
+func WithInitialCluster(initialCluster string) Option {
+	return func(o *options) {
+		o.initialCluster = initialCluster
+	}
+}
+
+func WithInitialClusterPorts(ports ...int) Option {
+	return func(o *options) {
+		o.initialClusterPorts = ports
+	}
+}
+
+func WithEtcdClientPort(port int) Option {
+	return func(o *options) {
+		o.etcdClientPort = port
 	}
 }
 
