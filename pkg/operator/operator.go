@@ -25,6 +25,7 @@ import (
 	"time"
 
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
+	"github.com/go-logr/logr"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -122,6 +123,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}
 
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
+		Logger: logr.Discard(),
 		Scheme: scheme,
 		WebhookServer: webhook.NewServer(webhook.Options{
 			Port: opts.WebhookServerPort,
