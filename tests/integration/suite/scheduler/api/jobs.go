@@ -42,7 +42,7 @@ func (j *jobs) Setup(t *testing.T) []framework.Option {
 	j.scheduler = scheduler.New(t)
 
 	j.daprd = daprd.New(t,
-		daprd.WithSchedulerAddresses(j.scheduler.Address()),
+		daprd.WithSchedulerAddress(j.scheduler.Address()),
 	)
 
 	return []framework.Option{

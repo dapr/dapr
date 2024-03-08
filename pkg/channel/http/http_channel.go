@@ -55,43 +55,43 @@ const (
 
 // Channel is an HTTP implementation of an AppChannel.
 type Channel struct {
-	client                *http.Client
-	baseAddress           string
-	ch                    chan struct{}
-	compStore             *compstore.ComponentStore
-	tracingSpec           *config.TracingSpec
-	appHeaderToken        string
-	maxResponseBodySizeMB int
-	appHealthCheckPath    string
-	appHealth             *apphealth.AppHealth
-	middleware            middleware.HTTP
+	client              *http.Client
+	baseAddress         string
+	ch                  chan struct{}
+	compStore           *compstore.ComponentStore
+	tracingSpec         *config.TracingSpec
+	appHeaderToken      string
+	maxResponseBodySize int
+	appHealthCheckPath  string
+	appHealth           *apphealth.AppHealth
+	middleware          middleware.HTTP
 }
 
 // ChannelConfiguration is the configuration used to create an HTTP AppChannel.
 type ChannelConfiguration struct {
-	Client               *http.Client
-	CompStore            *compstore.ComponentStore
-	Endpoint             string
-	MaxConcurrency       int
-	Middleware           middleware.HTTP
-	TracingSpec          *config.TracingSpec
-	MaxRequestBodySizeMB int
-	TLSClientCert        string
-	TLSClientKey         string
-	TLSRootCA            string
-	TLSRenegotiation     string
+	Client             *http.Client
+	CompStore          *compstore.ComponentStore
+	Endpoint           string
+	MaxConcurrency     int
+	Middleware         middleware.HTTP
+	TracingSpec        *config.TracingSpec
+	MaxRequestBodySize int
+	TLSClientCert      string
+	TLSClientKey       string
+	TLSRootCA          string
+	TLSRenegotiation   string
 }
 
 // CreateHTTPChannel creates an HTTP AppChannel.
 func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) {
 	c := &Channel{
-		middleware:            config.Middleware,
-		client:                config.Client,
-		compStore:             config.CompStore,
-		baseAddress:           config.Endpoint,
-		tracingSpec:           config.TracingSpec,
-		appHeaderToken:        security.GetAppToken(),
-		maxResponseBodySizeMB: config.MaxRequestBodySizeMB,
+		middleware:          config.Middleware,
+		client:              config.Client,
+		compStore:           config.CompStore,
+		baseAddress:         config.Endpoint,
+		tracingSpec:         config.TracingSpec,
+		appHeaderToken:      security.GetAppToken(),
+		maxResponseBodySize: config.MaxRequestBodySize,
 	}
 
 	if config.MaxConcurrency > 0 {
@@ -362,8 +362,8 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channe
 
 	// Limit response body if needed
 	var body io.ReadCloser
-	if h.maxResponseBodySizeMB > 0 {
-		body = streamutils.LimitReadCloser(channelResp.Body, int64(h.maxResponseBodySizeMB)<<20)
+	if h.maxResponseBodySize > 0 {
+		body = streamutils.LimitReadCloser(channelResp.Body, int64(h.maxResponseBodySize)<<20)
 	} else {
 		body = channelResp.Body
 	}

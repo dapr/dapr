@@ -75,6 +75,7 @@ type Options struct {
 	TrustAnchorsFile                    string
 	APIPort                             int
 	HealthzPort                         int
+	WebhookServerPort                   int
 }
 
 type operator struct {
@@ -123,7 +124,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
 		Scheme: scheme,
 		WebhookServer: webhook.NewServer(webhook.Options{
-			Port: 19443,
+			Port: opts.WebhookServerPort,
 			TLSOpts: []func(*tls.Config){
 				func(tlsConfig *tls.Config) {
 					sec, sErr := secProvider.Handler(ctx)

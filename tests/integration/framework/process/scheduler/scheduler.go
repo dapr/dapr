@@ -61,6 +61,11 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
+		"--etcd-data-dir=" + t.TempDir(),
+	}
+
+	if opts.listenAddress != nil {
+		args = append(args, "--listen-address="+*opts.listenAddress)
 	}
 	if opts.sentryAddress != nil {
 		args = append(args, "--sentry-address="+*opts.sentryAddress)
@@ -125,4 +130,8 @@ func (s *Scheduler) HealthzPort() int {
 
 func (s *Scheduler) MetricsPort() int {
 	return s.metricsPort
+}
+
+func (s *Scheduler) ListenAddress() string {
+	return "localhost"
 }

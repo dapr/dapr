@@ -114,7 +114,7 @@ jobs:
     - name: Apply patches to latest release
       run: |
         export DAPR_LATEST_MAJOR_MINOR=$(echo ${{ env.DAPR_PREV_VERSION }} | cut -d. -f1-2)
-        export DAPR_PATCH_DIR="$(pwd)/.github/scripts/version-skew-test-patches/integration/release-$DAPR_LATEST_MAJOR_MINOR"
+        export DAPR_PATCH_DIR="$(pwd)/.github/scripts/version-skew-test-patches/integration/release-$DAPR_LATEST_MAJOR_MINOR/${{ matrix.mode }}"
         if [ -d "$DAPR_PATCH_DIR" ]; then
           cd latest-release
           echo "Applying patches from $DAPR_PATCH_DIR to $(pwd)"
@@ -125,7 +125,7 @@ jobs:
       id: setup-go
       uses: actions/setup-go@v4
       with:
-        go-version-file: 'go.mod'
+        go-version: '1.21.8'
 
     - name: Build & download binaries
       run: |
@@ -296,7 +296,7 @@ jobs:
       id: setup-go
       uses: actions/setup-go@v5
       with:
-        go-version-file: 'go.mod'
+        go-version: '1.21.8'
     - name: Configure KinD
       run: |
         cat > kind.yaml <<EOF

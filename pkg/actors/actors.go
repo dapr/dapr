@@ -43,7 +43,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/placement"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
-	configuration "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -117,14 +117,13 @@ type actorsRuntime struct {
 	appChannel         channel.AppChannel
 	placement          placement.PlacementService
 	scheduler          schedulerv1pb.SchedulerClient
-	clientConn         *grpc.ClientConn
 	placementEnabled   bool
 	grpcConnectionFn   GRPCConnectionFn
 	actorsConfig       Config
 	timers             internal.TimersProvider
 	actorsReminders    internal.RemindersProvider
 	actorsTable        *sync.Map
-	tracingSpec        configuration.TracingSpec
+	tracingSpec        config.TracingSpec
 	resiliency         resiliency.Provider
 	storeName          string
 	compStore          *compstore.ComponentStore
@@ -147,7 +146,7 @@ type ActorsOpts struct {
 	AppChannel       channel.AppChannel
 	GRPCConnectionFn GRPCConnectionFn
 	Config           Config
-	TracingSpec      configuration.TracingSpec
+	TracingSpec      config.TracingSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
 	CompStore        *compstore.ComponentStore
@@ -230,15 +229,14 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
 	if opts.Config.SchedulerService != "" {
-		log.Info("Using scheduler service for reminders.")
+		log.Info("Using Scheduler service for reminders.")
 		// TODO: have a wrapper that includes both client and conn.
-		schedulerClient, schedulerConn, err := schedulerclient.GetSchedulerClient(context.TODO(), opts.Config.SchedulerService, opts.Security)
+		schedulerClient, err := schedulerclient.New(context.TODO(), opts.Config.SchedulerService, opts.Security)
 		if err != nil {
 			return nil, err
 		}
 
 		a.scheduler = schedulerClient
-		a.clientConn = schedulerConn
 	}
 
 	return a, nil

@@ -69,7 +69,7 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithMode("standalone"),
 		procdaprd.WithSentryAddress(e.sentry.Address()),
 		procdaprd.WithPlacementAddresses(e.placement.Address()),
-		procdaprd.WithSchedulerAddresses(e.scheduler.Address()),
+		procdaprd.WithSchedulerAddress(e.scheduler.Address()),
 
 		// Disable mTLS
 		procdaprd.WithEnableMTLS(false),
@@ -140,7 +140,7 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 				return !strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host.")
 			}
 			return true
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 10*time.Millisecond)
 		require.ErrorContains(t, err, "tls: first record does not look like a TLS handshake")
 	})
 }

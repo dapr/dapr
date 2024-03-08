@@ -74,7 +74,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
-	schedulerCli "github.com/dapr/dapr/pkg/scheduler/client"
+	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
@@ -160,9 +160,9 @@ func newDaprRuntime(ctx context.Context,
 
 	var schedClient schedulerv1pb.SchedulerClient
 	if runtimeConfig.SchedulerEnabled() {
-		schedClient, err = getSchedulerClient(ctx, sec, runtimeConfig)
+		schedClient, err = schedulerclient.New(ctx, *runtimeConfig.schedulerAddress, sec)
 		if err != nil {
-			return nil, err
+			return nil, fmt.Errorf("error creating scheduler client: %w", err)
 		}
 
 		log.Infof("Scheduler client initialized")
@@ -196,7 +196,7 @@ func newDaprRuntime(ctx context.Context,
 		Namespace:        namespace,
 		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
-		SchedulerEnabled: len(runtimeConfig.schedulerAddresses) > 0,
+		SchedulerEnabled: runtimeConfig.schedulerAddress != nil,
 		Registry:         runtimeConfig.registry,
 		ComponentStore:   compStore,
 		Meta:             meta,
@@ -210,33 +210,6 @@ func newDaprRuntime(ctx context.Context,
 		Channels:         channels,
 		MiddlewareHTTP:   httpMiddleware,
 	})
-
-	var reloader *hotreload.Reloader
-	switch runtimeConfig.mode {
-	case modes.KubernetesMode:
-		reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
-			PodName:        podName,
-			Namespace:      namespace,
-			Client:         operatorClient,
-			Config:         globalConfig,
-			ComponentStore: compStore,
-			Authorizer:     authz,
-			Processor:      processor,
-		})
-	case modes.StandaloneMode:
-		reloader, err = hotreload.NewDisk(ctx, hotreload.OptionsReloaderDisk{
-			Config:         globalConfig,
-			Dirs:           runtimeConfig.standalone.ResourcesPath,
-			ComponentStore: compStore,
-			Authorizer:     authz,
-			Processor:      processor,
-		})
-		if err != nil {
-			return nil, err
-		}
-	default:
-		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
-	}
 
 	rt := &DaprRuntime{
 		runtimeConfig:     runtimeConfig,
@@ -254,7 +227,6 @@ func newDaprRuntime(ctx context.Context,
 		sec:               sec,
 		processor:         processor,
 		authz:             authz,
-		reloader:          reloader,
 		namespace:         namespace,
 		podName:           podName,
 		initComplete:      make(chan struct{}),
@@ -263,6 +235,35 @@ func newDaprRuntime(ctx context.Context,
 		httpMiddleware:    httpMiddleware,
 	}
 	close(rt.isAppHealthy)
+
+	if globalConfig.IsFeatureEnabled(config.HotReload) {
+		log.Info("Hot reloading enabled. Daprd will reload 'Component' resources on change.")
+		switch runtimeConfig.mode {
+		case modes.KubernetesMode:
+			rt.reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
+				PodName:        podName,
+				Namespace:      namespace,
+				Client:         operatorClient,
+				ComponentStore: compStore,
+				Authorizer:     authz,
+				Processor:      processor,
+			})
+		case modes.StandaloneMode:
+			rt.reloader, err = hotreload.NewDisk(hotreload.OptionsReloaderDisk{
+				Dirs:           runtimeConfig.standalone.ResourcesPath,
+				ComponentStore: compStore,
+				Authorizer:     authz,
+				Processor:      processor,
+			})
+			if err != nil {
+				return nil, fmt.Errorf("failed to create hot reload disk reloader: %w", err)
+			}
+		default:
+			return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
+		}
+	} else {
+		log.Debug("Hot reloading disabled")
+	}
 
 	var gracePeriod *time.Duration
 	if duration := runtimeConfig.gracefulShutdownDuration; duration > 0 {
@@ -298,9 +299,6 @@ func newDaprRuntime(ctx context.Context,
 
 	if rt.reloader != nil {
 		if err := rt.runnerCloser.Add(rt.reloader.Run); err != nil {
-			return nil, err
-		}
-		if err := rt.runnerCloser.AddCloser(rt.reloader); err != nil {
 			return nil, err
 		}
 	}
@@ -390,16 +388,6 @@ func getOperatorClient(ctx context.Context, sec security.Handler, cfg *internalC
 	}
 
 	return client, nil
-}
-
-func getSchedulerClient(ctx context.Context, sec security.Handler, cfg *internalConfig) (schedulerv1pb.SchedulerClient, error) {
-	// TODO: make dynamic, not index 0
-	schedClient, _, err := schedulerCli.GetSchedulerClient(ctx, cfg.schedulerAddresses[0], sec)
-	if err != nil {
-		return nil, fmt.Errorf("error creating scheduler client: %w", err)
-	}
-
-	return schedClient, nil
 }
 
 // setupTracing set up the trace exporters. Technically we don't need to pass `hostAddress` in,
@@ -571,7 +559,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	} else {
 		log.Infof("HTTP server is running on port %v", a.runtimeConfig.httpPort)
 	}
-	log.Infof("The request body size parameter is: %v", a.runtimeConfig.maxRequestBodySize)
+	log.Infof("The request body size parameter is: %v bytes", a.runtimeConfig.maxRequestBodySize)
 
 	// Start internal gRPC server (used for sidecar-to-sidecar communication)
 	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.internalGRPCPort)
@@ -801,7 +789,7 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		PubsubAdapter:         a.processor.PubSub(),
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
 		TracingSpec:           a.globalConfig.GetTracingSpec(),
-		MaxRequestBodySize:    int64(a.runtimeConfig.maxRequestBodySize) << 20, // Convert from MB to bytes
+		MaxRequestBodySize:    int64(a.runtimeConfig.maxRequestBodySize),
 	})
 
 	serverConf := http.ServerConfig{
@@ -813,9 +801,9 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		ProfilePort:             profilePort,
 		AllowedOrigins:          allowedOrigins,
 		EnableProfiling:         a.runtimeConfig.enableProfiling,
-		MaxRequestBodySizeMB:    a.runtimeConfig.maxRequestBodySize,
+		MaxRequestBodySize:      a.runtimeConfig.maxRequestBodySize,
 		UnixDomainSocket:        a.runtimeConfig.unixDomainSocket,
-		ReadBufferSizeKB:        a.runtimeConfig.readBufferSize,
+		ReadBufferSize:          a.runtimeConfig.readBufferSize,
 		EnableAPILogging:        *a.runtimeConfig.enableAPILogging,
 		APILoggingObfuscateURLs: a.globalConfig.GetAPILoggingSpec().ObfuscateURLs,
 		APILogHealthChecks:      !a.globalConfig.GetAPILoggingSpec().OmitHealthChecks,
@@ -885,16 +873,16 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 		trustDomain = a.accessControlList.TrustDomain
 	}
 	return grpc.ServerConfig{
-		AppID:                a.runtimeConfig.id,
-		HostAddress:          a.hostAddress,
-		Port:                 port,
-		APIListenAddresses:   apiListenAddresses,
-		NameSpace:            a.namespace,
-		TrustDomain:          trustDomain,
-		MaxRequestBodySizeMB: a.runtimeConfig.maxRequestBodySize,
-		UnixDomainSocket:     a.runtimeConfig.unixDomainSocket,
-		ReadBufferSizeKB:     a.runtimeConfig.readBufferSize,
-		EnableAPILogging:     *a.runtimeConfig.enableAPILogging,
+		AppID:              a.runtimeConfig.id,
+		HostAddress:        a.hostAddress,
+		Port:               port,
+		APIListenAddresses: apiListenAddresses,
+		NameSpace:          a.namespace,
+		TrustDomain:        trustDomain,
+		MaxRequestBodySize: a.runtimeConfig.maxRequestBodySize,
+		UnixDomainSocket:   a.runtimeConfig.unixDomainSocket,
+		ReadBufferSize:     a.runtimeConfig.readBufferSize,
+		EnableAPILogging:   *a.runtimeConfig.enableAPILogging,
 	}
 }
 
@@ -1028,7 +1016,7 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 	}
 
 	log.Info("Loading components…")
-	comps, err := loader.LoadComponents()
+	comps, err := loader.Load()
 	if err != nil {
 		return err
 	}
@@ -1277,8 +1265,8 @@ func createGRPCManager(sec security.Handler, runtimeConfig *internalConfig, glob
 		grpcAppChannelConfig.Port = runtimeConfig.appConnectionConfig.Port
 		grpcAppChannelConfig.MaxConcurrency = runtimeConfig.appConnectionConfig.MaxConcurrency
 		grpcAppChannelConfig.EnableTLS = (runtimeConfig.appConnectionConfig.Protocol == protocol.GRPCSProtocol)
-		grpcAppChannelConfig.MaxRequestBodySizeMB = runtimeConfig.maxRequestBodySize
-		grpcAppChannelConfig.ReadBufferSizeKB = runtimeConfig.readBufferSize
+		grpcAppChannelConfig.MaxRequestBodySize = runtimeConfig.maxRequestBodySize
+		grpcAppChannelConfig.ReadBufferSize = runtimeConfig.readBufferSize
 		grpcAppChannelConfig.BaseAddress = runtimeConfig.appConnectionConfig.ChannelAddress
 	}
 

@@ -31,10 +31,10 @@ import (
 	"github.com/dapr/dapr/pkg/actors/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
-	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
+
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -454,12 +454,11 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 // onPlacementError closes the current placement stream and reestablish the connection again,
 // uses a different placement server depending on the error code
 func (p *actorPlacement) onPlacementError(err error) {
+	log.Debugf("Disconnected from placement: %v", err)
 	s, ok := status.FromError(err)
 	// If the current server is not leader, then it will try to the next server.
 	if ok && s.Code() == codes.FailedPrecondition {
 		p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
-	} else {
-		log.Debugf("Disconnected from placement: %v", err)
 	}
 }
 
@@ -551,10 +550,10 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 			// TODO: @elena in v1.15 remove the check for versions < 1.13
 			// only keep `hashing.NewFromExisting`
 
-			if p.apiLevel < raft.NoVirtualNodesInPlacementTablesAPILevel {
-				entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
-			} else {
+			if in.GetReplicationFactor() > 0 && len(v.GetHosts()) == 0 {
 				entries[k] = hashing.NewFromExisting(loadMap, in.GetReplicationFactor(), p.virtualNodesCache)
+			} else {
+				entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
 			}
 		}
 
