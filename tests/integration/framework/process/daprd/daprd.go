@@ -143,11 +143,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.blockShutdownDuration != nil {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
-	var scheduleraddr string
-	if len(opts.schedulerAddresses) > 0 && opts.schedulerAddresses[0] != "" {
-		// TODO, rm index once my PR is merged
-		args = append(args, "--scheduler-host-address="+opts.schedulerAddresses[0])
-		scheduleraddr = opts.schedulerAddresses[0]
+	if opts.schedulerAddress != nil {
+		args = append(args, "--scheduler-host-address="+*opts.schedulerAddress)
 	}
 
 	ns := "default"
@@ -171,7 +168,6 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       opts.publicPort,
 		metricsPort:      opts.metricsPort,
 		profilePort:      opts.profilePort,
-		schedulerHostAddress: scheduleraddr,
 	}
 }
 

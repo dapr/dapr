@@ -69,7 +69,7 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithMode("standalone"),
 		procdaprd.WithSentryAddress(e.sentry.Address()),
 		procdaprd.WithPlacementAddresses(e.placement.Address()),
-		procdaprd.WithSchedulerAddresses(e.scheduler.Address()),
+		procdaprd.WithSchedulerAddress(e.scheduler.Address()),
 
 		// Disable mTLS
 		procdaprd.WithEnableMTLS(false),

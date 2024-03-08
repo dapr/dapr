@@ -15,10 +15,8 @@ package scheduler
 
 import "github.com/dapr/dapr/tests/integration/framework/process/exec"
 
-// Option is a function that configures the process.
 type Option func(*options)
 
-// options contains the options for running the Scheduler in integration tests.
 type options struct {
 	execOpts []exec.Option
 
@@ -29,6 +27,7 @@ type options struct {
 	tlsEnabled       bool
 	sentryAddress    *string
 	trustAnchorsFile *string
+	listenAddress    *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -76,5 +75,11 @@ func WithSentryAddress(sentryAddress string) Option {
 func WithTrustAnchorsFile(file string) Option {
 	return func(o *options) {
 		o.trustAnchorsFile = &file
+	}
+}
+
+func WithListenAddress(address string) Option {
+	return func(o *options) {
+		o.listenAddress = &address
 	}
 }
