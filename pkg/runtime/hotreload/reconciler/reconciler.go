@@ -67,15 +67,15 @@ func NewComponent(opts Options[componentsapi.Component]) *Reconciler[componentsa
 }
 
 func (r *Reconciler[T]) Run(ctx context.Context) error {
-	stream, err := r.manager.Stream(ctx)
+	conn, err := r.manager.Stream(ctx)
 	if err != nil {
 		return fmt.Errorf("error running component stream: %w", err)
 	}
 
-	return r.watchForEvents(ctx, stream)
+	return r.watchForEvents(ctx, conn)
 }
 
-func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loader.Event[T]) error {
+func (r *Reconciler[T]) watchForEvents(ctx context.Context, conn *loader.StreamConn[T]) error {
 	log.Infof("Starting to watch %s updates", r.kind)
 
 	ticker := r.clock.NewTicker(time.Second * 60)
@@ -97,7 +97,16 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loade
 			}
 
 			r.reconcile(ctx, differ.Diff(resources))
-		case event := <-stream:
+		case <-conn.ReconcileCh:
+			log.Debugf("Reconciling all %s", r.kind)
+			resources, err := r.manager.List(ctx)
+			if err != nil {
+				log.Errorf("Error listing %s: %s", r.kind, err)
+				continue
+			}
+
+			r.reconcile(ctx, differ.Diff(resources))
+		case event := <-conn.EventCh:
 			r.handleEvent(ctx, event)
 		}
 	}

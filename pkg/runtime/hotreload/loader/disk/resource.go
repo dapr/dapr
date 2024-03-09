@@ -68,8 +68,12 @@ func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T]
 
 // Stream returns a channel of events that will be sent when a resource is
 // created, updated, or deleted.
-func (r *resource[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], error) {
-	eventCh := make(chan *loader.Event[T])
+func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error) {
+	conn := &loader.StreamConn[T]{
+		EventCh:     make(chan *loader.Event[T]),
+		ReconcileCh: make(chan struct{}),
+	}
+
 	batchCh := make(chan struct{})
 	r.batcher.Subscribe(batchCh)
 
@@ -83,15 +87,15 @@ func (r *resource[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], erro
 			case <-r.closeCh:
 				return
 			case <-batchCh:
-				r.triggerDiff(ctx, eventCh)
+				r.triggerDiff(ctx, conn)
 			}
 		}
 	}()
 
-	return eventCh, nil
+	return conn, nil
 }
 
-func (r *resource[T]) triggerDiff(ctx context.Context, eventCh chan<- *loader.Event[T]) {
+func (r *resource[T]) triggerDiff(ctx context.Context, conn *loader.StreamConn[T]) {
 	r.lock.RLock()
 	defer r.lock.RUnlock()
 
@@ -109,7 +113,7 @@ func (r *resource[T]) triggerDiff(ctx context.Context, eventCh chan<- *loader.Ev
 	} {
 		for _, resource := range group.resources {
 			select {
-			case eventCh <- &loader.Event[T]{
+			case conn.EventCh <- &loader.Event[T]{
 				Resource: resource,
 				Type:     group.eventType,
 			}:

@@ -61,7 +61,7 @@ func (f *FakeT) WithRun(fn func(context.Context) error) *FakeT {
 
 type Fake[T differ.Resource] struct {
 	listFn   func(context.Context) (*differ.LocalRemoteResources[T], error)
-	streamFn func(context.Context) (<-chan *loader.Event[T], error)
+	streamFn func(context.Context) (*loader.StreamConn[T], error)
 }
 
 func NewFake[T differ.Resource]() *Fake[T] {
@@ -69,8 +69,11 @@ func NewFake[T differ.Resource]() *Fake[T] {
 		listFn: func(context.Context) (*differ.LocalRemoteResources[T], error) {
 			return nil, nil
 		},
-		streamFn: func(context.Context) (<-chan *loader.Event[T], error) {
-			return nil, nil
+		streamFn: func(context.Context) (*loader.StreamConn[T], error) {
+			return &loader.StreamConn[T]{
+				EventCh:     make(chan *loader.Event[T]),
+				ReconcileCh: make(chan struct{}),
+			}, nil
 		},
 	}
 }
@@ -80,7 +83,7 @@ func (f *Fake[T]) WithList(fn func(context.Context) (*differ.LocalRemoteResource
 	return f
 }
 
-func (f *Fake[T]) WithStream(fn func(context.Context) (<-chan *loader.Event[T], error)) *Fake[T] {
+func (f *Fake[T]) WithStream(fn func(context.Context) (*loader.StreamConn[T], error)) *Fake[T] {
 	f.streamFn = fn
 	return f
 }
@@ -89,6 +92,6 @@ func (f *Fake[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], er
 	return f.listFn(ctx)
 }
 
-func (f *Fake[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], error) {
+func (f *Fake[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error) {
 	return f.streamFn(ctx)
 }

@@ -91,7 +91,7 @@ func Test_generic(t *testing.T) {
 			}
 
 			select {
-			case got := <-ch:
+			case got := <-ch.EventCh:
 				assert.Same(t, comp, got)
 			case <-time.After(time.Second):
 				t.Error("expected to get event from on receive")
@@ -131,13 +131,19 @@ func Test_generic(t *testing.T) {
 			return nil, errors.New("recv error")
 		}
 
-		_, err := r.Stream(context.Background())
+		conn, err := r.Stream(context.Background())
 		require.NoError(t, err)
 
 		select {
 		case <-retried:
 		case <-time.After(time.Second * 3):
 			t.Error("expected generic to retry establishing stream after failure")
+		}
+
+		select {
+		case <-conn.ReconcileCh:
+		case <-time.After(time.Second * 3):
+			t.Error("expected reconcile channel to be sent")
 		}
 
 		require.NoError(t, r.close())

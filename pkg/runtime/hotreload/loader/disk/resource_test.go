@@ -102,7 +102,7 @@ func Test_Disk(t *testing.T) {
 	var events []*loader.Event[componentsapi.Component]
 	for i := 0; i < 3; i++ {
 		select {
-		case event := <-ch:
+		case event := <-ch.EventCh:
 			events = append(events, event)
 		case <-time.After(time.Second * 3):
 			assert.Fail(t, "expected to receive event")
@@ -174,7 +174,7 @@ func Test_Stream(t *testing.T) {
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 3; i++ {
 			select {
-			case event := <-ch:
+			case event := <-ch.EventCh:
 				events = append(events, event)
 			case <-time.After(time.Second * 3):
 				assert.Fail(t, "expected to receive event")
@@ -249,7 +249,7 @@ func Test_Stream(t *testing.T) {
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 2; i++ {
 			select {
-			case event := <-ch:
+			case event := <-ch.EventCh:
 				events = append(events, event)
 			case <-time.After(time.Second * 3):
 				assert.Fail(t, "expected to receive event")
@@ -325,7 +325,7 @@ func Test_Stream(t *testing.T) {
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 3; i++ {
 			select {
-			case event := <-ch:
+			case event := <-ch.EventCh:
 				events = append(events, event)
 			case <-time.After(time.Second * 5):
 				assert.Fail(t, "expected to receive event")

@@ -28,11 +28,16 @@ type Interface interface {
 	Components() Loader[componentsapi.Component]
 }
 
+type StreamConn[T differ.Resource] struct {
+	EventCh     chan *Event[T]
+	ReconcileCh chan struct{}
+}
+
 // Loader is an interface for loading and watching for changes to a resource
 // from a source.
 type Loader[T differ.Resource] interface {
 	List(context.Context) (*differ.LocalRemoteResources[T], error)
-	Stream(context.Context) (<-chan *Event[T], error)
+	Stream(context.Context) (*StreamConn[T], error)
 }
 
 // Event is a component event.
