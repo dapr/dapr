@@ -150,7 +150,7 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator3.Run(t, ctx)
 	c.operator3.WaitUntilRunning(t, ctx)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()))
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	c.operator3.Cleanup(t)

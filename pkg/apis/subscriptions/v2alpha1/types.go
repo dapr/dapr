@@ -15,6 +15,7 @@ package v2alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apis/subscriptions"
@@ -137,4 +138,12 @@ func (s Subscription) LogName() string {
 
 func (s Subscription) NameValuePairs() []common.NameValuePair {
 	return nil
+}
+
+func (s Subscription) ClientObject() client.Object {
+	return &s
+}
+
+func (s Subscription) GetScopes() []string {
+	return s.Scopes
 }

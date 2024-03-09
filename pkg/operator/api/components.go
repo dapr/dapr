@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/google/uuid"
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/types"
@@ -29,6 +28,7 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	"github.com/dapr/dapr/pkg/operator/api/authz"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
@@ -37,51 +37,16 @@ type ComponentUpdateEvent struct {
 	EventType operatorv1pb.ResourceEventType
 }
 
-func (a *apiServer) OnComponentUpdated(ctx context.Context, eventType operatorv1pb.ResourceEventType, component *componentsapi.Component) {
-	a.connLock.Lock()
-	var wg sync.WaitGroup
-	wg.Add(len(a.allConnUpdateChan))
-	for _, connUpdateChan := range a.allConnUpdateChan {
-		go func(connUpdateChan chan *ComponentUpdateEvent) {
-			defer wg.Done()
-			select {
-			case connUpdateChan <- &ComponentUpdateEvent{
-				Component: component,
-				EventType: eventType,
-			}:
-			case <-ctx.Done():
-			}
-		}(connUpdateChan)
-	}
-	wg.Wait()
-	a.connLock.Unlock()
-}
-
 // ComponentUpdate updates Dapr sidecars whenever a component in the cluster is modified.
 // TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
 // the caller.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
-	if err := a.authzRequest(srv.Context(), in.GetNamespace()); err != nil {
-		return err
-	}
-
 	log.Info("sidecar connected for component updates")
-	keyObj, err := uuid.NewRandom()
+
+	ch, err := a.compInformer.WatchUpdates(srv.Context(), in.GetNamespace())
 	if err != nil {
 		return err
 	}
-	key := keyObj.String()
-
-	a.connLock.Lock()
-	a.allConnUpdateChan[key] = make(chan *ComponentUpdateEvent)
-	updateChan := a.allConnUpdateChan[key]
-	a.connLock.Unlock()
-
-	defer func() {
-		a.connLock.Lock()
-		defer a.connLock.Unlock()
-		delete(a.allConnUpdateChan, key)
-	}()
 
 	updateComponentFunc := func(ctx context.Context, t operatorv1pb.ResourceEventType, c *componentsapi.Component) {
 		if c.Namespace != in.GetNamespace() {
@@ -118,22 +83,18 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		select {
 		case <-srv.Context().Done():
 			return nil
-		case c, ok := <-updateChan:
+		case event, ok := <-ch:
 			if !ok {
 				return nil
 			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				updateComponentFunc(srv.Context(), c.EventType, c.Component)
-			}()
+			updateComponentFunc(srv.Context(), event.Type, &event.Manifest)
 		}
 	}
 }
 
 // ListComponents returns a list of Dapr components.
 func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 

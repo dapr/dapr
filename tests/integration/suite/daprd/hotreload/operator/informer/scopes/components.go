@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,25 +11,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package scopes
 
 import (
 	"context"
-	"encoding/json"
-	"path/filepath"
 	"testing"
 	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
-	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -46,13 +41,12 @@ func init() {
 	suite.Register(new(components))
 }
 
-// components tests operator Comoponent hot reloading with a live operator and
-// daprd, using the process kubernetes informer.
 type components struct {
-	daprd    *daprd.Daprd
-	store    *store.Store
-	kubeapi  *kubernetes.Kubernetes
-	operator *operator.Operator
+	daprd     *daprd.Daprd
+	store     *store.Store
+	kubeapi   *kubernetes.Kubernetes
+	operator1 *operator.Operator
+	operator2 *operator.Operator
 }
 
 func (c *components) Setup(t *testing.T) []framework.Option {
@@ -88,102 +82,91 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithClusterDaprComponentListFromStore(t, c.store),
 	)
 
-	c.operator = operator.New(t,
+	opts := []operator.Option{
 		operator.WithNamespace("default"),
 		operator.WithKubeconfigPath(c.kubeapi.KubeconfigPath(t)),
 		operator.WithTrustAnchorsFile(sentry.TrustAnchorsFile(t)),
-	)
+	}
+	c.operator1 = operator.New(t, opts...)
+	c.operator2 = operator.New(t, append(opts,
+		operator.WithAPIPort(c.operator1.Port()),
+	)...)
 
 	c.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("daprsystem"),
 		daprd.WithSentryAddress(sentry.Address()),
-		daprd.WithControlPlaneAddress(c.operator.Address()),
+		daprd.WithControlPlaneAddress(c.operator1.Address()),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithEnableMTLS(true),
 		daprd.WithNamespace("default"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 		)),
-		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, c.kubeapi, c.operator, c.daprd),
+		framework.WithProcesses(sentry, c.kubeapi, c.daprd),
 	}
 }
 
 func (c *components) Run(t *testing.T, ctx context.Context) {
-	c.operator.WaitUntilRunning(t, ctx)
+	c.operator1.Run(t, ctx)
+	c.operator1.WaitUntilRunning(t, ctx)
 	c.daprd.WaitUntilRunning(t, ctx)
 
 	client := util.HTTPClient(t)
 
-	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()))
-	})
-
-	t.Run("adding a component should become available", func(t *testing.T) {
-		comp := compapi.Component{
-			TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-			ObjectMeta: metav1.ObjectMeta{Name: "123", Namespace: "default"},
-			Spec: compapi.ComponentSpec{
-				Type:    "state.in-memory",
-				Version: "v1",
-			},
-		}
-		c.store.Add(&comp)
-		c.kubeapi.Informer().Add(t, &comp)
-
-		require.EventuallyWithT(t, func(ct *assert.CollectT) {
-			assert.Len(ct, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
-		}, time.Second*10, time.Millisecond*10)
-		metaComponents := util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort())
-		assert.ElementsMatch(t, metaComponents, []*rtv1.RegisteredComponents{
-			{
-				Name: "123", Type: "state.in-memory", Version: "v1",
-				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
-			},
-		})
-	})
-
-	dir := filepath.Join(t.TempDir(), "dc.sqlite")
-	dirJSON, err := json.Marshal(dir)
-	require.NoError(t, err)
 	comp := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 		ObjectMeta: metav1.ObjectMeta{Name: "123", Namespace: "default"},
-		Spec: compapi.ComponentSpec{
-			Type:    "state.sqlite",
-			Version: "v1",
-			Metadata: []common.NameValuePair{
-				{Name: "connectionString", Value: common.DynamicValue{
-					JSON: apiextv1.JSON{Raw: dirJSON},
-				}},
-			},
-		},
+		Spec:       compapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 	}
+	c.store.Add(&comp)
+	c.kubeapi.Informer().Add(t, &comp)
 
-	t.Run("updating component should be updated", func(t *testing.T) {
-		c.store.Set(&comp)
-		c.kubeapi.Informer().Modify(t, &comp)
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
+	}, time.Second*10, time.Millisecond*10)
 
-		require.EventuallyWithT(t, func(ct *assert.CollectT) {
-			assert.ElementsMatch(ct, util.GetMetaComponents(ct, ctx, client, c.daprd.HTTPPort()), []*rtv1.RegisteredComponents{
-				{
-					Name: "123", Type: "state.sqlite", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
-				},
-			})
-		}, time.Second*10, time.Millisecond*10)
-	})
+	comp.Scopes = []string{"foo"}
+	c.store.Set(&comp)
+	c.kubeapi.Informer().Modify(t, &comp)
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()))
+	}, time.Second*10, time.Millisecond*10)
 
-	t.Run("deleting a component should delete the component", func(t *testing.T) {
-		c.store.Set()
-		c.kubeapi.Informer().Delete(t, &comp)
+	comp.Scopes = []string{"foo", c.daprd.AppID()}
+	c.store.Set(&comp)
+	c.kubeapi.Informer().Modify(t, &comp)
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
+	}, time.Second*10, time.Millisecond*10)
 
-		require.EventuallyWithT(t, func(ct *assert.CollectT) {
-			assert.Empty(ct, util.GetMetaComponents(ct, ctx, client, c.daprd.HTTPPort()))
-		}, time.Second*20, time.Millisecond*10)
-	})
+	comp.Scopes = []string{"foo"}
+	c.operator1.Cleanup(t)
+	c.store.Set(&comp)
+	c.operator2.Run(t, ctx)
+	c.operator2.WaitUntilRunning(t, ctx)
+	c.store.Set(&comp)
+	c.kubeapi.Informer().Modify(t, &comp)
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()))
+	}, time.Second*10, time.Millisecond*10)
+
+	comp.Scopes = []string{}
+	c.store.Set(&comp)
+	c.kubeapi.Informer().Modify(t, &comp)
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
+	}, time.Second*10, time.Millisecond*10)
+
+	comp2 := comp.DeepCopy()
+	comp2.Name = "456"
+	comp2.Scopes = []string{c.daprd.AppID()}
+	c.store.Set(&comp, comp2)
+	c.kubeapi.Informer().Modify(t, comp2)
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 2)
+	}, time.Second*10, time.Millisecond*10)
 }
