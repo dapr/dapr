@@ -35,6 +35,16 @@ global:
   prometheus:
     enabled: true
     port: 9090
+  metrics:
+    http:
+      # NOTE: The default will change to `false` in 1.14.
+      increasedCardinality: true
+    rules:
+    #  - name: dapr_runtime_service_invocation_req_sent_total
+    #    labels:
+    #    - name: method
+    #      regex:
+    #        "orders/": "orders/.+"
   mtls:
     enabled: true
     workloadCertTTL: 24h

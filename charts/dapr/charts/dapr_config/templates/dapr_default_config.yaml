@@ -9,6 +9,14 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
+  metrics:
+    enabled: {{ .Values.global.prometheus.enabled }}
+    http:
+      increasedCardinality: {{ .Values.global.metrics.http.increasedCardinality }}
+{{- if .Values.global.metrics.rules }}
+      rules:
+{{ toYaml .Values.global.metrics.rules | indent 6 }}
+{{- end }}
   mtls:
     enabled: {{ .Values.global.mtls.enabled }}
     workloadCertTTL: {{ .Values.global.mtls.workloadCertTTL }}
