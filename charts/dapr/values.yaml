@@ -39,7 +39,7 @@ global:
     http:
       # NOTE: The default will change to `false` in 1.14.
       increasedCardinality: true
-    rules:
+    rules: []
     #  - name: dapr_runtime_service_invocation_req_sent_total
     #    labels:
     #    - name: method
