@@ -15,7 +15,9 @@ package daprd
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -26,6 +28,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -41,9 +44,10 @@ import (
 )
 
 type Daprd struct {
-	exec     process.Interface
-	appHTTP  process.Interface
-	freeport *util.FreePort
+	exec       process.Interface
+	appHTTP    process.Interface
+	freeport   *util.FreePort
+	httpClient *http.Client
 
 	appID            string
 	namespace        string
@@ -148,6 +152,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		freeport:         fp,
+		httpClient:       util.HTTPClient(t),
 		appHTTP:          appHTTP,
 		appID:            opts.appID,
 		namespace:        ns,
@@ -182,41 +187,37 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 		}
 		net.Close()
 		return true
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
+	require.NoError(t, err)
 	require.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/v1.0/healthz", d.httpPort), nil)
-		if err != nil {
-			return false
-		}
 		resp, err := client.Do(req)
 		if err != nil {
 			return false
 		}
 		defer resp.Body.Close()
 		return http.StatusNoContent == resp.StatusCode
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 	switch d.appProtocol {
 	case "http":
 		client := util.HTTPClient(t)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
+		require.NoError(t, err)
 		assert.Eventually(t, func() bool {
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/v1.0/healthz", d.httpPort), nil)
-			if err != nil {
-				return false
-			}
 			resp, err := client.Do(req)
 			if err != nil {
 				return false
 			}
 			defer resp.Body.Close()
 			return http.StatusNoContent == resp.StatusCode
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 
 	case "grpc":
 		assert.Eventually(t, func() bool {
@@ -234,12 +235,12 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			out := rtv1.HealthCheckResponse{}
 			err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &in, &out)
 			return err == nil
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 	}
 }
 
 func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("127.0.0.1:%d", d.GRPCPort()),
+	conn, err := grpc.DialContext(ctx, d.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
@@ -253,6 +254,26 @@ func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 	return rtv1.NewDaprClient(d.GRPCConn(t, ctx))
 }
 
+//nolint:testifylint
+func (d *Daprd) RegistedComponents(t *assert.CollectT, ctx context.Context) []*rtv1.RegisteredComponents {
+	url := fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	if !assert.NoError(t, err) {
+		return nil
+	}
+
+	var meta struct {
+		Components []*rtv1.RegisteredComponents
+	}
+	resp, err := d.httpClient.Do(req)
+	if assert.NoError(t, err) {
+		defer resp.Body.Close()
+		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
+	}
+
+	return meta.Components
+}
+
 func (d *Daprd) AppID() string {
 	return d.appID
 }
@@ -261,12 +282,16 @@ func (d *Daprd) Namespace() string {
 	return d.namespace
 }
 
+func (d *Daprd) ipPort(port int) string {
+	return "127.0.0.1:" + strconv.Itoa(port)
+}
+
 func (d *Daprd) AppPort() int {
 	return d.appPort
 }
 
 func (d *Daprd) AppAddress() string {
-	return "127.0.0.1:" + strconv.Itoa(d.AppPort())
+	return d.ipPort(d.AppPort())
 }
 
 func (d *Daprd) GRPCPort() int {
@@ -274,7 +299,7 @@ func (d *Daprd) GRPCPort() int {
 }
 
 func (d *Daprd) GRPCAddress() string {
-	return "127.0.0.1:" + strconv.Itoa(d.GRPCPort())
+	return d.ipPort(d.GRPCPort())
 }
 
 func (d *Daprd) HTTPPort() int {
@@ -282,7 +307,7 @@ func (d *Daprd) HTTPPort() int {
 }
 
 func (d *Daprd) HTTPAddress() string {
-	return "127.0.0.1:" + strconv.Itoa(d.HTTPPort())
+	return d.ipPort(d.HTTPPort())
 }
 
 func (d *Daprd) InternalGRPCPort() int {
@@ -290,7 +315,7 @@ func (d *Daprd) InternalGRPCPort() int {
 }
 
 func (d *Daprd) InternalGRPCAddress() string {
-	return "127.0.0.1:" + strconv.Itoa(d.InternalGRPCPort())
+	return d.ipPort(d.InternalGRPCPort())
 }
 
 func (d *Daprd) PublicPort() int {
@@ -301,6 +326,72 @@ func (d *Daprd) MetricsPort() int {
 	return d.metricsPort
 }
 
+func (d *Daprd) MetricsAddress() string {
+	return d.ipPort(d.MetricsPort())
+}
+
 func (d *Daprd) ProfilePort() int {
 	return d.profilePort
+}
+
+// Returns a subset of metrics scraped from the metrics endpoint
+func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()), nil)
+	require.NoError(t, err)
+
+	resp, err := d.httpClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Extract the metrics
+	parser := expfmt.TextParser{}
+	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	metrics := make(map[string]float64)
+	for _, mf := range metricFamilies {
+		for _, m := range mf.GetMetric() {
+			key := mf.GetName()
+			for _, l := range m.GetLabel() {
+				key += "|" + l.GetName() + ":" + l.GetValue()
+			}
+			metrics[key] = m.GetCounter().GetValue()
+		}
+	}
+
+	return metrics
+}
+
+func (d *Daprd) HTTPGet2xx(t *testing.T, ctx context.Context, path string) {
+	t.Helper()
+	d.http2xx(t, ctx, http.MethodGet, path, nil)
+}
+
+func (d *Daprd) HTTPPost2xx(t *testing.T, ctx context.Context, path string, body io.Reader, headers ...string) {
+	t.Helper()
+	d.http2xx(t, ctx, http.MethodPost, path, body, headers...)
+}
+
+func (d *Daprd) http2xx(t *testing.T, ctx context.Context, method, path string, body io.Reader, headers ...string) {
+	t.Helper()
+
+	require.Zero(t, len(headers)%2, "headers must be key-value pairs")
+
+	path = strings.TrimPrefix(path, "/")
+	url := fmt.Sprintf("http://%s/%s", d.HTTPAddress(), path)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	require.NoError(t, err)
+
+	for i := 0; i < len(headers); i += 2 {
+		req.Header.Set(headers[i], headers[i+1])
+	}
+
+	resp, err := d.httpClient.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code")
+	require.Less(t, resp.StatusCode, 300, "expected 2xx status code")
 }

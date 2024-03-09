@@ -25,6 +25,7 @@ import (
 	"time"
 
 	argov1alpha1 "github.com/argoproj/argo-rollouts/pkg/apis/rollouts/v1alpha1"
+	"github.com/go-logr/logr"
 	apiextensionsclient "k8s.io/apiextensions-apiserver/pkg/client/clientset/clientset"
 	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -75,6 +76,7 @@ type Options struct {
 	TrustAnchorsFile                    string
 	APIPort                             int
 	HealthzPort                         int
+	WebhookServerPort                   int
 }
 
 type operator struct {
@@ -121,9 +123,10 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}
 
 	mgr, err := ctrl.NewManager(conf, ctrl.Options{
+		Logger: logr.Discard(),
 		Scheme: scheme,
 		WebhookServer: webhook.NewServer(webhook.Options{
-			Port: 19443,
+			Port: opts.WebhookServerPort,
 			TLSOpts: []func(*tls.Config){
 				func(tlsConfig *tls.Config) {
 					sec, sErr := secProvider.Handler(ctx)

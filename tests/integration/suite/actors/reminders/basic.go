@@ -99,7 +99,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				assert.NoError(c, resp.Body.Close())
 				assert.Equal(c, http.StatusOK, resp.StatusCode)
 			}
-		}, time.Second*10, time.Millisecond*100, "actor not ready in time")
+		}, 10*time.Second, 10*time.Millisecond, "actor not ready in time")
 	})
 
 	conn, err := grpc.DialContext(ctx, b.daprd.GRPCAddress(),
@@ -125,7 +125,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		assert.Eventually(t, func() bool {
 			return b.reminderCalled.Load() == 1
-		}, time.Second*3, time.Millisecond*100)
+		}, 3*time.Second, 10*time.Millisecond)
 	})
 
 	t.Run("schedule reminder via gRPC", func(t *testing.T) {
@@ -139,7 +139,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		assert.Eventually(t, func() bool {
 			return b.reminderCalled.Load() == 2
-		}, time.Second*3, time.Millisecond*100)
+		}, 3*time.Second, 10*time.Millisecond)
 	})
 
 	t.Run("cancel recurring reminder", func(t *testing.T) {
@@ -156,7 +156,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		// Should be invoked once
 		assert.Eventually(t, func() bool {
 			return b.stopReminderCalled.Load() == 1
-		}, time.Second*3, time.Millisecond*100)
+		}, 3*time.Second, 10*time.Millisecond)
 
 		// After 2s, should not have been invoked more
 		time.Sleep(2 * time.Second)

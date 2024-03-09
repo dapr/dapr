@@ -177,14 +177,12 @@ jobs:
         uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-      - name: Build binaries
-        run: make build
       - name: Override DAPR_HOST_IP for MacOS
         if: matrix.target_os == 'darwin'
         run: |
           echo "DAPR_HOST_IP=127.0.0.1" >>${GITHUB_ENV}
-      - name: Run make test-integration
-        run: make test-integration
+      - name: Run make test-integration-parallel
+        run: make test-integration-parallel
   build:
     name: "Build artifacts on ${{ matrix.job_name }} - ${{ matrix.sidecar_flavor }}"
     runs-on: "${{ matrix.os }}"

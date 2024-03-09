@@ -122,7 +122,7 @@ func (f *fuzzsecret) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, util.GetMetaComponents(c, ctx, client, f.daprd.HTTPPort()), 1)
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
 	pt := util.NewParallel(t)
 	for key, value := range f.values {

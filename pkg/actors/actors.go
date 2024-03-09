@@ -41,7 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
-	configuration "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -119,7 +119,7 @@ type actorsRuntime struct {
 	timers             internal.TimersProvider
 	actorsReminders    internal.RemindersProvider
 	actorsTable        *sync.Map
-	tracingSpec        configuration.TracingSpec
+	tracingSpec        config.TracingSpec
 	resiliency         resiliency.Provider
 	storeName          string
 	compStore          *compstore.ComponentStore
@@ -142,7 +142,7 @@ type ActorsOpts struct {
 	AppChannel       channel.AppChannel
 	GRPCConnectionFn GRPCConnectionFn
 	Config           Config
-	TracingSpec      configuration.TracingSpec
+	TracingSpec      config.TracingSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
 	CompStore        *compstore.ComponentStore
