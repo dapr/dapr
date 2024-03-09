@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package api
+package listcomponents
 
 import (
 	"context"
@@ -37,11 +37,11 @@ import (
 )
 
 func init() {
-	suite.Register(new(listcomponents))
+	suite.Register(new(basic))
 }
 
-// listcomponents tests the operator's ListCompontns API.
-type listcomponents struct {
+// basic tests the operator's ListCompontns API.
+type basic struct {
 	sentry   *procsentry.Sentry
 	kubeapi  *kubernetes.Kubernetes
 	operator *operator.Operator
@@ -50,10 +50,10 @@ type listcomponents struct {
 	comp2 *compapi.Component
 }
 
-func (l *listcomponents) Setup(t *testing.T) []framework.Option {
-	l.sentry = procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
+func (b *basic) Setup(t *testing.T) []framework.Option {
+	b.sentry = procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
 
-	l.comp1 = &compapi.Component{
+	b.comp1 = &compapi.Component{
 		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "mycomponent", Namespace: "default"},
 		Spec: compapi.ComponentSpec{
@@ -69,7 +69,7 @@ func (l *listcomponents) Setup(t *testing.T) []framework.Option {
 			},
 		},
 	}
-	l.comp2 = &compapi.Component{
+	b.comp2 = &compapi.Component{
 		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
 		ObjectMeta: metav1.ObjectMeta{Name: "myothercomponent", Namespace: "default"},
 		Spec: compapi.ComponentSpec{
@@ -88,34 +88,34 @@ func (l *listcomponents) Setup(t *testing.T) []framework.Option {
 		},
 	}
 
-	l.kubeapi = kubernetes.New(t,
+	b.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
 			"default",
-			l.sentry.Port(),
+			b.sentry.Port(),
 		),
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			TypeMeta: metav1.TypeMeta{Kind: "ComponentList", APIVersion: "dapr.io/v1alpha1"},
-			Items:    []compapi.Component{*l.comp1, *l.comp2, *comp3},
+			Items:    []compapi.Component{*b.comp1, *b.comp2, *comp3},
 		}),
 	)
 
-	l.operator = operator.New(t,
+	b.operator = operator.New(t,
 		operator.WithNamespace("default"),
-		operator.WithKubeconfigPath(l.kubeapi.KubeconfigPath(t)),
-		operator.WithTrustAnchorsFile(l.sentry.TrustAnchorsFile(t)),
+		operator.WithKubeconfigPath(b.kubeapi.KubeconfigPath(t)),
+		operator.WithTrustAnchorsFile(b.sentry.TrustAnchorsFile(t)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(l.kubeapi, l.sentry, l.operator),
+		framework.WithProcesses(b.kubeapi, b.sentry, b.operator),
 	}
 }
 
-func (l *listcomponents) Run(t *testing.T, ctx context.Context) {
-	l.sentry.WaitUntilRunning(t, ctx)
-	l.operator.WaitUntilRunning(t, ctx)
+func (b *basic) Run(t *testing.T, ctx context.Context) {
+	b.sentry.WaitUntilRunning(t, ctx)
+	b.operator.WaitUntilRunning(t, ctx)
 
-	client := l.operator.Dial(t, ctx, "default", l.sentry)
+	client := b.operator.Dial(t, ctx, b.sentry, "myapp")
 
 	t.Run("LIST", func(t *testing.T) {
 		var resp *operatorv1.ListComponentResponse
@@ -126,9 +126,9 @@ func (l *listcomponents) Run(t *testing.T, ctx context.Context) {
 			assert.Len(c, resp.GetComponents(), 2)
 		}, time.Second*20, time.Millisecond*10)
 
-		b1, err := json.Marshal(l.comp1)
+		b1, err := json.Marshal(b.comp1)
 		require.NoError(t, err)
-		b2, err := json.Marshal(l.comp2)
+		b2, err := json.Marshal(b.comp2)
 		require.NoError(t, err)
 
 		if strings.Contains(string(resp.GetComponents()[0]), "mycomponent") {

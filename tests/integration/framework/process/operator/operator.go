@@ -142,13 +142,13 @@ func (o *Operator) HealthzPort() int {
 	return o.healthzPort
 }
 
-func (o *Operator) Dial(t *testing.T, ctx context.Context, ns string, sentry *sentry.Sentry) operatorv1pb.OperatorClient {
+func (o *Operator) Dial(t *testing.T, ctx context.Context, sentry *sentry.Sentry, appID string) operatorv1pb.OperatorClient {
 	sec, err := security.New(ctx, security.Options{
 		SentryAddress:           "localhost:" + strconv.Itoa(sentry.Port()),
 		ControlPlaneTrustDomain: "integration.test.dapr.io",
-		ControlPlaneNamespace:   ns,
+		ControlPlaneNamespace:   o.namespace,
 		TrustAnchorsFile:        sentry.TrustAnchorsFile(t),
-		AppID:                   "myapp",
+		AppID:                   appID,
 		Mode:                    modes.StandaloneMode,
 		MTLSEnabled:             true,
 	})

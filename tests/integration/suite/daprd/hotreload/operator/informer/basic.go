@@ -152,7 +152,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	comp := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
-		ObjectMeta: metav1.ObjectMeta{Name: "abc", Namespace: "default"},
+		ObjectMeta: metav1.ObjectMeta{Name: "123", Namespace: "default"},
 		Spec: compapi.ComponentSpec{
 			Type:    "state.sqlite",
 			Version: "v1",
@@ -169,9 +169,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		b.kubeapi.Informer().Modify(t, &comp)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.ElementsMatch(c, util.GetMetaComponents(t, ctx, client, b.daprd.HTTPPort()), []*rtv1.RegisteredComponents{
+			assert.ElementsMatch(c, util.GetMetaComponents(c, ctx, client, b.daprd.HTTPPort()), []*rtv1.RegisteredComponents{
 				{
-					Name: "abc", Type: "state.sqlite", Version: "v1",
+					Name: "123", Type: "state.sqlite", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 			})
