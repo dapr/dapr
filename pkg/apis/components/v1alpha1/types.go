@@ -72,6 +72,10 @@ func (c Component) NameValuePairs() []common.NameValuePair {
 	return c.Spec.Metadata
 }
 
+func (c Component) GetScopes() []string {
+	return c.Scopes
+}
+
 // EmptyMetaDeepCopy returns a new instance of the component type with the
 // TypeMeta's Kind and APIVersion fields set.
 func (c Component) EmptyMetaDeepCopy() metav1.Object {

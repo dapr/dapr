@@ -104,6 +104,10 @@ func (h HTTPEndpoint) HasTLSPrivateKey() bool {
 	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.PrivateKey != nil && h.Spec.ClientTLS.PrivateKey.Value != nil
 }
 
+func (h HTTPEndpoint) GetScopes() []string {
+	return h.Scopes
+}
+
 // EmptyMetaDeepCopy returns a new instance of the component type with the
 // TypeMeta's Kind and APIVersion fields set.
 func (h HTTPEndpoint) EmptyMetaDeepCopy() metav1.Object {

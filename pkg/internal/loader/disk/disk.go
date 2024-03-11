@@ -30,27 +30,35 @@ import (
 	"github.com/dapr/dapr/pkg/internal/loader"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/utils"
+	kitutils "github.com/dapr/kit/utils"
 )
 
 var log = logger.NewLogger("dapr.runtime.loader.disk")
 
 const yamlSeparator = "\n---"
 
+type Options struct {
+	AppID string
+	Paths []string
+}
+
 // disk loads a specific manifest kind from a folder.
 type disk[T meta.Resource] struct {
 	kind      string
 	paths     []string
+	appID     string
 	namespace string
 }
 
 // New creates a new manifest loader for the given paths and kind.
-func New[T meta.Resource](paths ...string) loader.Loader[T] {
+func New[T meta.Resource](opts Options) loader.Loader[T] {
 	var zero T
 	return &disk[T]{
-		paths:     paths,
+		paths:     opts.Paths,
 		kind:      zero.Kind(),
+		appID:     opts.AppID,
 		namespace: security.CurrentNamespace(),
 	}
 }
@@ -71,7 +79,7 @@ func (d *disk[T]) Load(context.Context) ([]T, error) {
 	nsDefined := len(os.Getenv("NAMESPACE")) != 0
 
 	names := make(map[string]string)
-	goodManifests := make([]T, 0)
+	filteredManifests := make([]T, 0)
 	var errs []error
 	for i := range manifests {
 		// If the process or manifest namespace are not defined, ignore the
@@ -89,15 +97,21 @@ func (d *disk[T]) Load(context.Context) ([]T, error) {
 			continue
 		}
 
+		// Skip manifests which are not in scope
+		scopes := manifests[i].GetScopes()
+		if !(len(scopes) == 0 || utils.Contains(scopes, d.appID)) {
+			continue
+		}
+
 		names[manifests[i].GetName()] = manifests[i].LogName()
-		goodManifests = append(goodManifests, manifests[i])
+		filteredManifests = append(filteredManifests, manifests[i])
 	}
 
 	if len(errs) > 0 {
 		return nil, errors.Join(errs...)
 	}
 
-	return goodManifests, nil
+	return filteredManifests, nil
 }
 
 func (d *disk[T]) loadManifestsFromPath(path string) ([]T, error) {
@@ -111,7 +125,7 @@ func (d *disk[T]) loadManifestsFromPath(path string) ([]T, error) {
 	for _, file := range files {
 		if !file.IsDir() {
 			fileName := file.Name()
-			if !utils.IsYaml(fileName) {
+			if !kitutils.IsYaml(fileName) {
 				log.Warnf("A non-YAML %s file %s was detected, it will not be loaded", d.kind, fileName)
 				continue
 			}
