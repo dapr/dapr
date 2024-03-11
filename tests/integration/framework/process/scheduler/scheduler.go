@@ -16,6 +16,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"sync/atomic"
@@ -90,6 +91,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	if opts.trustAnchorsFile != nil {
 		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
 	}
+	log.Printf("CASSIE: Scheduler opts %+v", opts)
 
 	return &Scheduler{
 		exec:                exec.New(t, binary.EnvValue("scheduler"), args, opts.execOpts...),
@@ -123,9 +125,10 @@ func (s *Scheduler) Cleanup(t *testing.T) {
 
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", s.healthzPort), nil)
-	require.NoError(t, err)
+
 	assert.Eventually(t, func() bool {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", s.healthzPort), nil)
+		require.NoError(t, err)
 		resp, err := client.Do(req)
 		if err != nil {
 			return false

@@ -20,7 +20,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/dapr/dapr/utils"
 	"go.etcd.io/etcd/server/v3/embed"
 )
 
@@ -45,82 +44,130 @@ func (s *Server) conf() *embed.Config {
 
 	config.InitialCluster = s.etcdInitialPeers
 
-	advertisePeerURLs, err := parseURLs(s.etcdInitialPeers)
+	advertisePeerURLs, err := parseURLs(s.etcdID, s.etcdInitialPeers)
 	if err != nil {
-		log.Warnf("Invalid format for initial cluster")
+		log.Warnf("Invalid format for initial cluster: %s", err)
 	}
-	config.AdvertisePeerUrls = advertisePeerURLs
+	log.Infof("CASSIE: advertisePeerURLs %+v", advertisePeerURLs)
 
-	peerPort, err := extractSinglePeerPort(s.etcdInitialPeers)
-	if err != nil {
-		log.Warnf("Invalid format for initial cluster port")
-	}
-	config.ListenPeerUrls = []url.URL{{
+	//config.AdvertisePeerUrls = advertisePeerURLs
+	log.Infof("CASSIE: initialCluster %s", s.etcdInitialPeers)
+
+	// TODO: cassie use input from etcdInitialPeers
+	//hostAddress, err := utils.GetHostAddress()
+	//if err != nil {
+	//	log.Fatal(fmt.Errorf("failed to determine host address: %w", err))
+	//}
+
+	etcdUrl, peerPort, err := peerHostAndPort(s.etcdID, s.etcdInitialPeers)
+	config.AdvertisePeerUrls = []url.URL{{
 		Scheme: "http",
-		Host:   "0.0.0.0:" + peerPort,
+		Host:   fmt.Sprintf("%s:%s", etcdUrl, peerPort),
 	}}
 
-	hostAddress, err := utils.GetHostAddress()
+	log.Infof("CASSIE: peerPort %s, etcdURL %s", peerPort, etcdUrl)
 	if err != nil {
-		log.Fatal(fmt.Errorf("failed to determine host address: %w", err))
+		log.Warnf("Invalid format for initial cluster port. Make sure to include 'http://' in Scheduler URL")
 	}
+
+	config.ListenPeerUrls = []url.URL{{
+		Scheme: "http",
+		//Host:   "0.0.0.0:" + peerPort,
+		Host: fmt.Sprintf("%s:%s", etcdUrl, peerPort),
+	}}
 
 	config.ListenClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   hostAddress + ":" + strconv.Itoa(s.etcdClientPort),
+		Host:   fmt.Sprintf("%s:%s", etcdUrl, strconv.Itoa(s.etcdClientPort)),
 	}}
 	config.AdvertiseClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   hostAddress + ":" + strconv.Itoa(s.etcdClientPort),
+		Host:   fmt.Sprintf("%s:%s", etcdUrl, strconv.Itoa(s.etcdClientPort)),
 	}}
 
 	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
 	// TODO: Look into etcd config and if we need to do any raft compacting
 
+	log.Debugf("CASSIE: etcd config: %+v", config)
+
 	return config
 }
 
-func parseURLs(input string) ([]url.URL, error) {
-	var urls []url.URL
+func parseURLs(name, input string) ([]url.URL, error) {
+	//var urls []url.URL
 
 	pairs := strings.Split(input, ",")
 
 	for _, pair := range pairs {
 		idAndAddress := strings.SplitN(pair, "=", 2)
 		if len(idAndAddress) != 2 {
-			return nil, fmt.Errorf("invalid format: %s", pair)
+			return nil, fmt.Errorf("invalid format for: %s. Format should be: <id>=<ip>:<port>", pair)
 		}
+		idCandidate := strings.TrimPrefix(idAndAddress[0], "http://")
 
-		// Construct the URL without "http://"
-		u, err := url.Parse(idAndAddress[1])
-		if err != nil {
-			return nil, fmt.Errorf("error parsing URL: %w", err)
+		if idCandidate == name {
+			// Construct the URL without "http://"
+			u, err := url.Parse(idAndAddress[1])
+			if err != nil {
+				return nil, fmt.Errorf("error parsing URL: %w", err)
+			}
+			log.Infof("CASSIE: AdvertisePeerUrl %+v", *u)
+			//urls = append(urls, *u)
+			return []url.URL{*u}, nil
 		}
-
-		urls = append(urls, *u)
 	}
-
-	return urls, nil
+	//log.Infof("CASSIE: URLS %+v", urls)
+	return []url.URL{}, fmt.Errorf("AdvertisePeerUrl not found for id: %s", name)
 }
 
-func extractSinglePeerPort(input string) (string, error) {
-	parts := strings.Split(input, "=")
+func peerHostAndPort(name, input string) (string, string, error) {
+	if strings.Contains(input, ",") {
+		pairs := strings.Split(input, ",")
+		for i, pair := range pairs {
+			idAndAddress := strings.SplitN(pairs[i], "=", 2)
+			if len(idAndAddress) != 2 {
+				return "", "", fmt.Errorf("invalid format: %s", pair)
+			}
+			idCandidate := strings.TrimPrefix(idAndAddress[0], "http://")
+			log.Infof("CASSIE*** BEFORE id=name pair: %v && idAndAddress: %v", pair, idAndAddress)
 
-	if len(parts) != 2 {
-		return "", fmt.Errorf("invalid format: %s", input)
+			if idCandidate == name {
+				u, err := url.Parse(idAndAddress[1])
+				if err != nil {
+					return "", "", fmt.Errorf("error parsing URL: %w", err)
+				}
+
+				log.Infof("CASSIE*** in id=name u: %v", u)
+				host, port, err := net.SplitHostPort(u.Host)
+				log.Infof("CASSIE*** in id=name port: %v", port)
+
+				if err != nil {
+					return "", "", fmt.Errorf("error extracting port: %w", err)
+				}
+
+				//hostAndPort := strings.Split(input, ":")
+
+				//return port, strings.TrimPrefix(idAndAddress[1], "http://"), nil
+				return host, port, nil
+			}
+		}
 	}
 
-	// Extract the port
-	u, err := url.Parse(parts[1])
+	// If there's no comma, split by ":" to get the port
+	idAndAddress := strings.SplitN(input, "=", 2)
+	if len(idAndAddress) != 2 {
+		return "", "", fmt.Errorf("invalid format: %s", input)
+	}
+
+	u, err := url.Parse(idAndAddress[1])
 	if err != nil {
-		return "", fmt.Errorf("error parsing URL: %w", err)
+		return "", "", fmt.Errorf("error parsing URL: %w", err)
 	}
 
-	// Check if the port is in the URL
-	_, port, err := net.SplitHostPort(u.Host)
+	host, port, err := net.SplitHostPort(u.Host)
 	if err != nil {
-		return "", fmt.Errorf("error extracting port: %w", err)
+		return "", "", fmt.Errorf("error extracting port: %w", err)
 	}
 
-	return port, nil
+	return host, port, nil
 }
