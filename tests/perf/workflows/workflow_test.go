@@ -132,9 +132,9 @@ func addTestResults(t *testing.T, testName string, testAppName string, result *l
 		OutputK6Trend(testName+"Iteration Duration", "ms", result.IterationDuration)
 }
 
-// Runs the test for `workflowName` workflow with differnt inputs and different scenarios
+// Runs the test for `workflowName` workflow with different inputs and different scenarios
 // inputs are the different workflow inputs/payload_sizes for which workflows are run
-// scnearios are the different combinations of {VU,iterations} for which tests are run
+// scenarios are the different combinations of {VU,iterations} for which tests are run
 // rateChecks[index1][index2] represents the check required for the run with input=inputs[index1] and scenario=scenarios[index2]
 func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs []string, scenarios []string, rateChecks [][]string, restart bool, payloadTest bool) {
 	table := summary.ForTest(t)
