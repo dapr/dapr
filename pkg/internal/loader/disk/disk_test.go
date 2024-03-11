@@ -100,7 +100,7 @@ metadata:
 			"if no manifests, return nothing": {
 				comps:     nil,
 				namespace: nil,
-				expComps:  nil,
+				expComps:  []compapi.Component{},
 				expErr:    false,
 			},
 			"if single manifest, return manifest": {
