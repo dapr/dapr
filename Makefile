@@ -46,8 +46,8 @@ PROTOC ?=protoc
 
 # Version of "protoc" to use
 # We must also specify a protobuf "suite" version from https://github.com/protocolbuffers/protobuf/releases
-PROTOC_VERSION = 3.21.12
-PROTOBUF_SUITE_VERSION = 21.12
+PROTOC_VERSION = 24.4
+PROTOBUF_SUITE_VERSION = 24.4
 
 # name of protoc-gen-go when protoc-gen-go --version is run.
 PROTOC_GEN_GO_NAME = "protoc-gen-go"
@@ -90,10 +90,10 @@ else
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-PROTOC_GEN_GO_VERSION = v1.28.1
+PROTOC_GEN_GO_VERSION = v1.32.0
 PROTOC_GEN_GO_NAME+= $(PROTOC_GEN_GO_VERSION)
 
-PROTOC_GEN_GO_GRPC_VERSION = 1.2.0
+PROTOC_GEN_GO_GRPC_VERSION = 1.3.0
 
 ifeq ($(TARGET_OS_LOCAL),windows)
 	BUILD_TOOLS_BIN ?= build-tools.exe

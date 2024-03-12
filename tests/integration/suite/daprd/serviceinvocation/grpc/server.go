@@ -29,7 +29,9 @@ type (
 	invokeFn func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)
 )
 
-type pingserver struct{}
+type pingserver struct {
+	testpb.UnsafeTestServiceServer
+}
 
 func newGRPCServer(t *testing.T, onInvoke invokeFn, opts ...procgrpc.Option) *app.App {
 	return app.New(t,
