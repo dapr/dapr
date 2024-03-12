@@ -23,7 +23,9 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/connectivity"
+	"google.golang.org/grpc/metadata"
 
+	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -39,7 +41,7 @@ func TestConnectToServer(t *testing.T) {
 			return []grpc.DialOption{}, nil
 		})
 
-		assert.NotNil(t, client.connectToServer(context.Background(), ""))
+		require.Error(t, client.connectToServer(context.Background(), ""))
 	})
 	t.Run("when new placement stream returns an error connectToServer should return an error", func(t *testing.T) {
 		client := newPlacementClient(func() ([]grpc.DialOption, error) {
@@ -47,7 +49,7 @@ func TestConnectToServer(t *testing.T) {
 		})
 		conn, cleanup := newTestServerWithOpts() // do not register the placement stream server
 		defer cleanup()
-		assert.NotNil(t, client.connectToServer(context.Background(), conn))
+		require.Error(t, client.connectToServer(context.Background(), conn))
 	})
 	t.Run("when connectToServer succeeds it should broadcast that a new connection is alive", func(t *testing.T) {
 		conn, _, cleanup := newTestServer() // do not register the placement stream server
@@ -64,9 +66,38 @@ func TestConnectToServer(t *testing.T) {
 			ready.Done()
 		}()
 
-		assert.Nil(t, client.connectToServer(context.Background(), conn))
+		require.NoError(t, client.connectToServer(context.Background(), conn))
 		ready.Wait() // should not timeout
 		assert.True(t, client.streamConnAlive)
+	})
+
+	t.Run("when connectToServer succeeds it should correctly set the stream metadata", func(t *testing.T) {
+		conn, _, cleanup := newTestServer() // do not register the placement stream server
+		defer cleanup()
+
+		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, testSecurity(t)))
+
+		var ready sync.WaitGroup
+		ready.Add(1)
+		go func() {
+			client.waitUntil(func(streamConnAlive bool) bool {
+				return streamConnAlive
+			})
+			ready.Done()
+		}()
+
+		err := client.connectToServer(context.Background(), conn)
+		require.NoError(t, err)
+
+		// Extract the "dapr-accept-vnodes" value from the context's metadata
+		md, ok := metadata.FromOutgoingContext(client.clientStream.Context())
+		require.True(t, ok)
+
+		requiresVnodes, ok := md[placement.GRPCContextKeyAcceptVNodes]
+		require.True(t, ok)
+		require.Len(t, requiresVnodes, 1)
+
+		assert.Equal(t, "false", requiresVnodes[0])
 	})
 }
 
@@ -100,7 +131,7 @@ func TestDisconnect(t *testing.T) {
 		defer cleanup()
 
 		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, testSecurity(t)))
-		assert.Nil(t, client.connectToServer(context.Background(), conn))
+		require.NoError(t, client.connectToServer(context.Background(), conn))
 
 		called := false
 		shouldBeCalled := func() {
@@ -118,7 +149,7 @@ func TestDisconnect(t *testing.T) {
 		}()
 		client.disconnectFn(shouldBeCalled)
 		ready.Wait()
-		assert.Equal(t, client.clientConn.GetState(), connectivity.Shutdown)
+		assert.Equal(t, connectivity.Shutdown, client.clientConn.GetState())
 		assert.True(t, called)
 	})
 }

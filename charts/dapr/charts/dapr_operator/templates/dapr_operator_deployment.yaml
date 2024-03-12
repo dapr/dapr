@@ -34,8 +34,8 @@ spec:
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
 {{- end }}
-{{- if .Values.deploymentAnnotations }}
-{{ toYaml .Values.deploymentAnnotations | indent 4}}
+{{- with .Values.deploymentAnnotations }}
+{{ toYaml . | indent 8 }}
 {{- end }}
     spec:
       containers:
@@ -89,6 +89,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        {{- range $name, $value := .Values.extraEnvVars }}
+        - name: "{{ $name }}"
+          value: "{{ $value }}"
+        {{- end }}
         ports:
         - containerPort: 6500
 {{- if eq .Values.global.prometheus.enabled true }}
@@ -219,7 +223,7 @@ spec:
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 }}
+        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:
@@ -228,4 +232,8 @@ spec:
 {{- if .Values.global.tolerations }}
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
+{{- end }}
+{{- if .Values.global.priorityClassName }}
+      priorityClassName:
+{{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}

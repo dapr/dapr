@@ -1,0 +1,158 @@
+diff --git a/tests/integration/suite/actors/healthz/healthz.go b/tests/integration/suite/actors/healthz/healthz.go
+index 00142601d..528e91117 100644
+--- a/tests/integration/suite/actors/healthz/healthz.go
++++ b/tests/integration/suite/actors/healthz/healthz.go
+@@ -39,15 +39,17 @@ func init() {
+ // initerror tests that Daprd will block actor calls until actors have been
+ // initialized.
+ type initerror struct {
+-	daprd        *daprd.Daprd
+-	place        *placement.Placement
+-	configCalled chan struct{}
+-	blockConfig  chan struct{}
++	daprd         *daprd.Daprd
++	place         *placement.Placement
++	configCalled  chan struct{}
++	blockConfig   chan struct{}
++	healthzCalled chan struct{}
+ }
+ 
+ func (i *initerror) Setup(t *testing.T) []framework.Option {
+ 	i.configCalled = make(chan struct{})
+ 	i.blockConfig = make(chan struct{})
++	i.healthzCalled = make(chan struct{})
+ 
+ 	handler := http.NewServeMux()
+ 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+@@ -55,6 +57,10 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
+ 		<-i.blockConfig
+ 		w.Write([]byte(`{"entities": ["myactortype"]}`))
+ 	})
++	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
++		w.WriteHeader(http.StatusOK)
++		close(i.healthzCalled)
++	})
+ 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+ 		w.Write([]byte(`OK`))
+ 	})
+@@ -119,6 +125,12 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
+ 
+ 	close(i.blockConfig)
+ 
++	select {
++	case <-i.healthzCalled:
++	case <-time.After(time.Second * 15):
++		t.Fatal("timed out waiting for healthz call")
++	}
++
+ 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL, nil)
+ 	require.NoError(t, err)
+ 	resp, err = client.Do(req)
+diff --git a/tests/integration/suite/actors/http/ttl.go b/tests/integration/suite/actors/http/ttl.go
+index 47dbd8ff6..5135d424c 100644
+--- a/tests/integration/suite/actors/http/ttl.go
++++ b/tests/integration/suite/actors/http/ttl.go
+@@ -21,6 +21,7 @@ import (
+ 	"path/filepath"
+ 	"strconv"
+ 	"strings"
++	"sync"
+ 	"testing"
+ 	"time"
+ 
+@@ -40,11 +41,13 @@ func init() {
+ }
+ 
+ type ttl struct {
+-	daprd *daprd.Daprd
+-	place *placement.Placement
++	daprd         *daprd.Daprd
++	place         *placement.Placement
++	healthzCalled chan struct{}
+ }
+ 
+ func (l *ttl) Setup(t *testing.T) []framework.Option {
++	l.healthzCalled = make(chan struct{})
+ 	configFile := filepath.Join(t.TempDir(), "config.yaml")
+ 	require.NoError(t, os.WriteFile(configFile, []byte(`
+ apiVersion: dapr.io/v1alpha1
+@@ -61,6 +64,13 @@ spec:
+ 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+ 		w.Write([]byte(`{"entities": ["myactortype"]}`))
+ 	})
++	var once sync.Once
++	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
++		w.WriteHeader(http.StatusOK)
++		once.Do(func() {
++			close(l.healthzCalled)
++		})
++	})
+ 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+ 		w.Write([]byte(`OK`))
+ 	})
+@@ -93,6 +103,12 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
+ 	l.place.WaitUntilRunning(t, ctx)
+ 	l.daprd.WaitUntilRunning(t, ctx)
+ 
++	select {
++	case <-l.healthzCalled:
++	case <-time.After(time.Second * 15):
++		t.Fatal("timed out waiting for healthz call")
++	}
++
+ 	client := util.HTTPClient(t)
+ 
+ 	daprdURL := "http://localhost:" + strconv.Itoa(l.daprd.HTTPPort())
+diff --git a/tests/integration/suite/actors/reminders/rebalancing.go b/tests/integration/suite/actors/reminders/rebalancing.go
+index d64e73457..53f8e4fa6 100644
+--- a/tests/integration/suite/actors/reminders/rebalancing.go
++++ b/tests/integration/suite/actors/reminders/rebalancing.go
+@@ -394,6 +394,7 @@ func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placem
+ 		Port:     1234,
+ 		Entities: entities,
+ 		Id:       "invalidapp",
++		ApiLevel: 10,
+ 	})
+ 	if err != nil {
+ 		return fmt.Errorf("failed to send message: %w", err)
+diff --git a/tests/integration/suite/placement/quorum/insecure.go b/tests/integration/suite/placement/quorum/insecure.go
+index d0531bed4..df526cb29 100644
+--- a/tests/integration/suite/placement/quorum/insecure.go
++++ b/tests/integration/suite/placement/quorum/insecure.go
+@@ -124,7 +124,10 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
+ 		if err != nil {
+ 			return false
+ 		}
+-		err = stream.Send(new(v1pb.Host))
++		err = stream.Send(&v1pb.Host{
++			Id:       "app-1",
++			ApiLevel: 10,
++		})
+ 		if err != nil {
+ 			return false
+ 		}
+@@ -133,7 +136,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
+ 			return false
+ 		}
+ 		return true
+-	}, time.Second*10, time.Millisecond*100)
++	}, time.Second*30, time.Millisecond*100)
+ 
+ 	err = stream.Send(&v1pb.Host{
+ 		Name:     "app-1",
+diff --git a/tests/integration/suite/placement/quorum/jwks.go b/tests/integration/suite/placement/quorum/jwks.go
+index 2d555299c..4ef55eb5c 100644
+--- a/tests/integration/suite/placement/quorum/jwks.go
++++ b/tests/integration/suite/placement/quorum/jwks.go
+@@ -169,7 +169,10 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
+ 		if err != nil {
+ 			return false
+ 		}
+-		err = stream.Send(new(v1pb.Host))
++		err = stream.Send(&v1pb.Host{
++			Id:       "app-1",
++			ApiLevel: 10,
++		})
+ 		if err != nil {
+ 			return false
+ 		}

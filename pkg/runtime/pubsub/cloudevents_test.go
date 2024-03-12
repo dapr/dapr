@@ -19,6 +19,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewCloudEvent(t *testing.T) {
@@ -33,7 +34,7 @@ func TestNewCloudEvent(t *testing.T) {
 			TraceID:         "d",
 			Type:            "custom-type",
 		}, map[string]string{})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotEmpty(t, ce["id"])                 // validates that the ID is generated
 		assert.True(t, validUUID(ce["id"].(string))) // validates that the ID is a UUID
 		assert.Equal(t, "a", ce["source"].(string))
@@ -54,7 +55,7 @@ func TestNewCloudEvent(t *testing.T) {
 			TraceID:         "d",
 			Type:            "", // defaults to "com.dapr.event.sent"
 		}, map[string]string{})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "testid", ce["id"].(string))
 		assert.Equal(t, "Dapr", ce["source"].(string))
 		assert.Equal(t, "b", ce["topic"].(string))
@@ -83,7 +84,7 @@ func TestNewCloudEvent(t *testing.T) {
 			"cloudevent.traceparent": "overridetraceparent",
 			"cloudevent.tracestate":  "overridetracestate",
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "originalpubsub", ce["pubsubname"].(string))
 		assert.Equal(t, "originaltopic", ce["topic"].(string))
 		assert.Equal(t, "originaldata", ce["data"].(string))
@@ -113,7 +114,7 @@ func TestNewCloudEvent(t *testing.T) {
 			TraceID:         "trace1",
 			Pubsub:          "pubsub",
 		}, map[string]string{})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "event", ce["id"].(string))
 		assert.Equal(t, "world", ce["data"].(string))
 		assert.Equal(t, "text/plain", ce["datacontenttype"].(string))

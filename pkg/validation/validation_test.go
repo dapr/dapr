@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestValidateKubernetesAppID(t *testing.T) {
@@ -27,32 +28,32 @@ func TestValidateKubernetesAppID(t *testing.T) {
 			id += "a"
 		}
 		err := ValidateKubernetesAppID(id)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("invalid length if suffix -dapr is appended", func(t *testing.T) {
 		// service name id+"-dapr" exceeds 63 characters (59 + 5 = 64)
 		id := strings.Repeat("a", 59)
 		err := ValidateKubernetesAppID(id)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("valid id", func(t *testing.T) {
 		id := "my-app-id"
 		err := ValidateKubernetesAppID(id)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("invalid char: .", func(t *testing.T) {
 		id := "my-app-id.app"
 		err := ValidateKubernetesAppID(id)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("invalid chars space", func(t *testing.T) {
 		id := "my-app-id app"
 		err := ValidateKubernetesAppID(id)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("invalid empty", func(t *testing.T) {
@@ -66,19 +67,19 @@ func TestValidateSelfHostedAppID(t *testing.T) {
 	t.Run("valid id", func(t *testing.T) {
 		id := "my-app-id"
 		err := ValidateSelfHostedAppID(id)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("contains a dot", func(t *testing.T) {
 		id := "my-app-id.app"
 		err := ValidateSelfHostedAppID(id)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("contains multiple dots", func(t *testing.T) {
 		id := "foo.bar.baz"
 		err := ValidateSelfHostedAppID(id)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("invalid empty", func(t *testing.T) {

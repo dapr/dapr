@@ -164,22 +164,22 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 		injectorRequesting = pod.Namespace == k.controlPlaneNS
 	}
 
-	if saNamespace != req.Namespace {
+	if saNamespace != req.GetNamespace() {
 		if injectorRequesting {
 			overrideDuration = true
 		} else {
-			return spiffeid.TrustDomain{}, false, fmt.Errorf("namespace mismatch; received namespace: %s", req.Namespace)
+			return spiffeid.TrustDomain{}, false, fmt.Errorf("namespace mismatch; received namespace: %s", req.GetNamespace())
 		}
 	}
 
 	if pod.Spec.ServiceAccountName != prts[3] {
-		log.Errorf("Service account on pod %s/%s does not match token", req.Namespace, claims.Pod.Name)
+		log.Errorf("Service account on pod %s/%s does not match token", req.GetNamespace(), claims.Pod.Name)
 		return spiffeid.TrustDomain{}, false, errors.New("pod service account mismatch")
 	}
 
 	expID, isControlPlane, err := k.expectedID(&pod)
 	if err != nil {
-		log.Errorf("Failed to get expected ID for pod %s/%s: %s", req.Namespace, claims.Pod.Name, err)
+		log.Errorf("Failed to get expected ID for pod %s/%s: %s", req.GetNamespace(), claims.Pod.Name, err)
 		return spiffeid.TrustDomain{}, false, err
 	}
 
@@ -187,7 +187,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	// for the ID containing their namespace and service account (ns:sa). This
 	// is wrong- dapr identities are based on daprd namespace + _app ID_.
 	// Remove this allowance in v1.13.
-	if pod.Namespace+":"+pod.Spec.ServiceAccountName == req.Id {
+	if pod.Namespace+":"+pod.Spec.ServiceAccountName == req.GetId() {
 		req.Id = expID
 	}
 
@@ -201,11 +201,11 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 
 	// TODO: @joshvanl: Remove is v1.13 when injector no longer needs to request
 	// daprd identities.
-	if expID != req.Id {
+	if expID != req.GetId() {
 		if injectorRequesting {
 			overrideDuration = true
 		} else {
-			return spiffeid.TrustDomain{}, false, fmt.Errorf("app-id mismatch. expected: %s, received: %s", expID, req.Id)
+			return spiffeid.TrustDomain{}, false, fmt.Errorf("app-id mismatch. expected: %s, received: %s", expID, req.GetId())
 		}
 	}
 
@@ -220,7 +220,7 @@ func (k *kubernetes) Validate(ctx context.Context, req *sentryv1pb.SignCertifica
 	}
 
 	var config configv1alpha1.Configuration
-	err = k.client.Get(ctx, types.NamespacedName{Namespace: req.Namespace, Name: configName}, &config)
+	err = k.client.Get(ctx, types.NamespacedName{Namespace: req.GetNamespace(), Name: configName}, &config)
 	if err != nil {
 		log.Errorf("Failed to get configuration %q: %v", configName, err)
 		return spiffeid.TrustDomain{}, false, errors.New("failed to get configuration")

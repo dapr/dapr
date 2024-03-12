@@ -63,6 +63,22 @@ type ConfigurationSpec struct {
 	LoggingSpec *LoggingSpec `json:"logging,omitempty"`
 	// +optional
 	WasmSpec *WasmSpec `json:"wasm,omitempty"`
+	// +optional
+	WorkflowSpec *WorkflowSpec `json:"workflow,omitempty"`
+}
+
+// WorkflowSpec defines the configuration for Dapr workflows.
+type WorkflowSpec struct {
+	// maxConcurrentWorkflowInvocations is the maximum number of concurrent workflow invocations that can be scheduled by a single Dapr instance.
+	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
+	// If omitted, the default value of 100 will be used.
+	// +optional
+	MaxConcurrentWorkflowInvocations int32 `json:"maxConcurrentWorkflowInvocations,omitempty"`
+	// maxConcurrentActivityInvocations is the maximum number of concurrent activities that can be processed by a single Dapr instance.
+	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
+	// If omitted, the default value of 100 will be used.
+	// +optional
+	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty"`
 }
 
 // APISpec describes the configuration for Dapr APIs.
@@ -196,7 +212,16 @@ type ZipkinSpec struct {
 type MetricSpec struct {
 	Enabled *bool `json:"enabled"`
 	// +optional
+	HTTP *MetricHTTP `json:"http,omitempty"`
+	// +optional
 	Rules []MetricsRule `json:"rules,omitempty"`
+}
+
+// MetricHTTP defines configuration for metrics for the HTTP server
+type MetricHTTP struct {
+	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
+	// +optional
+	IncreasedCardinality *bool `json:"increasedCardinality,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.

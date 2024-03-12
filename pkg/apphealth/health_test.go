@@ -188,7 +188,7 @@ func Test_StartProbes(t *testing.T) {
 
 		go func() {
 			defer close(done)
-			assert.NoError(t, h.StartProbes(ctx))
+			require.NoError(t, h.StartProbes(ctx))
 		}()
 
 		// Wait for ticker to start,
@@ -244,7 +244,7 @@ func Test_StartProbes(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			assert.NoError(t, h.StartProbes(ctx))
+			require.NoError(t, h.StartProbes(ctx))
 		}()
 
 		// Wait for ticker to start,
@@ -279,7 +279,7 @@ func Test_StartProbes(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			assert.NoError(t, h.StartProbes(ctx))
+			require.NoError(t, h.StartProbes(ctx))
 		}()
 
 		h.OnHealthChange(func(ctx context.Context, status uint8) {

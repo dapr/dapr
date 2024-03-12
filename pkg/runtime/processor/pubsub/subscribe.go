@@ -29,10 +29,17 @@ import (
 // StartSubscriptions starts the pubsub subscriptions
 func (p *pubsub) StartSubscriptions(ctx context.Context) error {
 	// Clean any previous state
-	p.StopSubscriptions()
+	p.StopSubscriptions(false)
 
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	// If Dapr has stopped subscribing forever, return early.
+	if p.stopForever {
+		return nil
+	}
+
+	p.subscribing = true
 
 	var errs []error
 	for pubsubName := range p.compStore.ListPubSubs() {
@@ -45,9 +52,16 @@ func (p *pubsub) StartSubscriptions(ctx context.Context) error {
 }
 
 // StopSubscriptions to all topics and cleans the cached topics
-func (p *pubsub) StopSubscriptions() {
+func (p *pubsub) StopSubscriptions(forever bool) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
+
+	if forever {
+		// Mark if Dapr has stopped subscribing forever.
+		p.stopForever = true
+	}
+
+	p.subscribing = false
 
 	for subKey := range p.topicCancels {
 		p.unsubscribeTopic(subKey)
@@ -68,7 +82,7 @@ func (p *pubsub) beginPubSub(ctx context.Context, name string) error {
 
 	var errs []error
 	for topic, route := range v {
-		err = p.subscribeTopic(ctx, name, topic, route)
+		err = p.subscribeTopic(name, topic, route)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("error occurred while beginning pubsub for topic %s on component %s: %v", topic, name, err))
 		}

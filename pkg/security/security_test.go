@@ -101,6 +101,9 @@ func Test_Start(t *testing.T) {
 		})
 		require.NoError(t, err)
 
+		// Override the default of 500ms to 0 to speed up the test.
+		p.(*provider).fswatcherInterval = 0
+
 		ctx, cancel := context.WithCancel(context.Background())
 
 		providerStopped := make(chan struct{})
@@ -149,7 +152,7 @@ func Test_Start(t *testing.T) {
 			curr, err := prov.sec.source.trustAnchors.Marshal()
 			require.NoError(t, err)
 			return bytes.Equal(root2, curr)
-		}, time.Second*5, time.Millisecond)
+		}, time.Second*5, time.Millisecond*750)
 
 		t.Run("should expect that the trust bundle watch is updated", func(t *testing.T) {
 			select {
@@ -167,5 +170,34 @@ func Test_Start(t *testing.T) {
 		case <-time.After(time.Second):
 			require.FailNow(t, "provider is not stopped")
 		}
+	})
+}
+
+func TestCurrentNamespace(t *testing.T) {
+	t.Run("error is namespace is not set", func(t *testing.T) {
+		osns, ok := os.LookupEnv("NAMESPACE")
+		os.Unsetenv("NAMESPACE")
+		t.Cleanup(func() {
+			if ok {
+				os.Setenv("NAMESPACE", osns)
+			}
+		})
+		ns, err := CurrentNamespaceOrError()
+		require.Error(t, err)
+		assert.Empty(t, ns)
+	})
+
+	t.Run("error if namespace is set but empty", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "")
+		ns, err := CurrentNamespaceOrError()
+		require.Error(t, err)
+		assert.Empty(t, ns)
+	})
+
+	t.Run("returns namespace if set", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "foo")
+		ns, err := CurrentNamespaceOrError()
+		require.NoError(t, err)
+		assert.Equal(t, "foo", ns)
 	})
 }

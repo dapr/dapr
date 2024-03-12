@@ -1,4 +1,4 @@
-{{- if eq .Values.global.actors.enabled true }}
+{{- if and (eq .Values.global.actors.enabled true) (eq .Values.global.actors.serviceName "placement") }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -10,7 +10,9 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-{{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
+{{- if eq .Values.scaleZero true }}
+  replicas: 0
+{{- else if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   replicas: 3
 {{- else }}
   replicas: 1
@@ -37,8 +39,8 @@ spec:
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
 {{- end }}
-{{- if .Values.statefulsetAnnotations }}
-{{ toYaml .Values.statefulsetAnnotations | indent 4}}
+{{- with .Values.statefulsetAnnotations }}
+{{ toYaml . | indent 8 }}
 {{- end }}
     spec:
       containers:
@@ -147,6 +149,10 @@ spec:
         - "--enable-metrics"
         - "--replicationFactor"
         - "{{ .Values.replicationFactor }}"
+        - "--max-api-level"
+        - "{{ .Values.maxActorApiLevel }}"
+        - "--min-api-level"
+        - "{{ .Values.minActorApiLevel }}"
         - "--metrics-port"
         - "{{ .Values.global.prometheus.port }}"
 {{- else }}
@@ -178,14 +184,18 @@ spec:
   {{- end }}
 {{- end }}
         env:
-          - name: PLACEMENT_ID
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.name
-          - name: NAMESPACE
-            valueFrom:
-              fieldRef:
-                fieldPath: metadata.namespace
+        - name: PLACEMENT_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        {{- range $name, $value := .Values.extraEnvVars }}
+        - name: "{{ $name }}"
+          value: "{{ $value }}"
+        {{- end }}
       serviceAccountName: dapr-placement
       volumes:
       - name: dapr-trust-bundle
@@ -233,7 +243,7 @@ spec:
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 }}
+        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:
@@ -258,5 +268,9 @@ spec:
       storageClassName: {{ .Values.volumeclaims.storageClassName }}
     {{- end }}
   {{- end }}
+{{- end }}
+{{- if .Values.global.priorityClassName }}
+      priorityClassName:
+{{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}
 {{- end }}

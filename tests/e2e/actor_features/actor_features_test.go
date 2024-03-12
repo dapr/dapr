@@ -864,7 +864,7 @@ func TestActorFeatures(t *testing.T) {
 
 		var currentMetadata metadata
 		err = json.Unmarshal(res, &currentMetadata)
-		assert.NoError(t, err, "error unmarshalling JSON")
+		require.NoError(t, err, "error unmarshalling JSON")
 		assert.NotNil(t, currentMetadata, "metadata object is nil")
 
 		assert.Equal(t, appName, currentMetadata.ID)

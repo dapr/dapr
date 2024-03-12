@@ -416,8 +416,8 @@ func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationClient) 
 		configurationItems := make(map[string]*Item)
 		for key, item := range rsp.GetItems() {
 			configurationItems[key] = &Item{
-				Value:   item.Value,
-				Version: item.Version,
+				Value:   item.GetValue(),
+				Version: item.GetVersion(),
 			}
 		}
 		receivedItemsInBytes, _ := json.Marshal(configurationItems)

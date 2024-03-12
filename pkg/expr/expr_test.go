@@ -24,7 +24,7 @@ func TestEval(t *testing.T) {
 		},
 	})
 	require.NoError(t, err)
-	assert.Equal(t, true, result)
+	assert.True(t, result.(bool))
 }
 
 func TestJSONMarshal(t *testing.T) {
@@ -42,7 +42,7 @@ func TestEmptyProgramNoPanic(t *testing.T) {
 	r, err := e.Eval(map[string]interface{}{})
 
 	assert.Nil(t, r)
-	assert.NotNil(t, err)
+	require.Error(t, err)
 }
 
 var result interface{}

@@ -64,7 +64,7 @@ DEBU[0000] activity-processor: waiting for new work items...       app_id=wfapp 
 Unit tests can be run using the following `go` command from the repo root. Depending on the speed of your development machine, these tests should complete in less than 30 seconds.
 
 ```bash
-go test ./pkg/runtime/wfengine/...
+go test ./pkg/runtime/wfengine/... -tags=unit
 ```
 
 If you're using VS Code, you can also run tests directly from the IDE.

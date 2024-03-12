@@ -16,10 +16,46 @@ limitations under the License.
 package components
 
 import (
-	"github.com/dapr/components-contrib/state/postgresql"
+	pgv1 "github.com/dapr/components-contrib/state/postgresql/v1"
+	pgv2 "github.com/dapr/components-contrib/state/postgresql/v2"
+	"github.com/dapr/dapr/pkg/components"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 )
 
 func init() {
-	stateLoader.DefaultRegistry.RegisterComponent(postgresql.NewPostgreSQLStateStore, "postgres", "postgresql")
+	// Note: for v2, cockroachdb uses the same implementation as postgres, but it's defined in state_cockroachdb.go
+	stateLoader.DefaultRegistry.RegisterComponentWithVersions("postgres", components.Versioning{
+		Preferred: components.VersionConstructor{
+			Version: "v2", Constructor: pgv2.NewPostgreSQLStateStore,
+		},
+		Others: []components.VersionConstructor{
+			{Version: "v1", Constructor: pgv1.NewPostgreSQLStateStore},
+		},
+		Default: "v1",
+	})
+
+	stateLoader.DefaultRegistry.RegisterComponentWithVersions("postgresql", components.Versioning{
+		Preferred: components.VersionConstructor{
+			Version: "v2", Constructor: pgv2.NewPostgreSQLStateStore,
+		},
+		Others: []components.VersionConstructor{
+			{Version: "v1", Constructor: pgv1.NewPostgreSQLStateStore},
+		},
+		Default: "v1",
+	})
+
+	// The v2 component can also be used with YugabyteDB
+	// There's no "v1" for YugabyteDB
+	stateLoader.DefaultRegistry.RegisterComponentWithVersions("yugabytedb", components.Versioning{
+		Preferred: components.VersionConstructor{
+			Version: "v2", Constructor: pgv2.NewPostgreSQLStateStore,
+		},
+		Default: "v2",
+	})
+	stateLoader.DefaultRegistry.RegisterComponentWithVersions("yugabyte", components.Versioning{
+		Preferred: components.VersionConstructor{
+			Version: "v2", Constructor: pgv2.NewPostgreSQLStateStore,
+		},
+		Default: "v2",
+	})
 }

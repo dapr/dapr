@@ -57,7 +57,7 @@ func TestServiceCallback(t *testing.T) {
 		called := 0
 		AddServiceDiscoveryCallback(fakeServiceName, func(name string, _ GRPCConnectionDialer) {
 			called++
-			assert.Equal(t, name, fakeComponentName)
+			assert.Equal(t, fakeComponentName, name)
 		})
 		callback([]service{{protoRef: fakeServiceName, componentName: fakeComponentName}})
 		assert.Equal(t, 1, called)
@@ -81,7 +81,7 @@ func TestConnectionCloser(t *testing.T) {
 		closer := reflectServiceConnectionCloser(fakeCloser, fakeService)
 		closer()
 		assert.Len(t, callOrder, 2)
-		assert.Equal(t, callOrder, []string{reset, close})
+		assert.Equal(t, []string{reset, close}, callOrder)
 	})
 }
 
@@ -132,7 +132,7 @@ func TestComponentDiscovery(t *testing.T) {
 		_, err = serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
 			return nil, nil, errors.New("fake-err")
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(0), reflectService.listServicesCalled.Load())
 	})
 	t.Run("serviceDiscovery should return an error when list services return an error", func(t *testing.T) {
@@ -154,7 +154,7 @@ func TestComponentDiscovery(t *testing.T) {
 		_, err = serviceDiscovery(func(string) (reflectServiceClient, func(), error) {
 			return reflectService, func() {}, nil
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), reflectService.listServicesCalled.Load())
 	})
 	t.Run("serviceDiscovery should return all services list", func(t *testing.T) {
@@ -190,20 +190,20 @@ func TestComponentDiscovery(t *testing.T) {
 
 func TestRemoveExt(t *testing.T) {
 	t.Run("remove ext should remove file extension when it has one", func(t *testing.T) {
-		assert.Equal(t, removeExt("a.sock"), "a")
+		assert.Equal(t, "a", removeExt("a.sock"))
 	})
 	t.Run("remove ext should not change file name when it has no extension", func(t *testing.T) {
-		assert.Equal(t, removeExt("a"), "a")
+		assert.Equal(t, "a", removeExt("a"))
 	})
 }
 
 func TestGetSocketFolder(t *testing.T) {
 	t.Run("get socket folder should use default when env var is not set", func(t *testing.T) {
-		assert.Equal(t, GetSocketFolderPath(), defaultSocketFolder)
+		assert.Equal(t, defaultSocketFolder, GetSocketFolderPath())
 	})
 	t.Run("get socket folder should use env var when set", func(t *testing.T) {
 		const fakeSocketFolder = "/tmp"
 		t.Setenv(SocketFolderEnvVar, fakeSocketFolder)
-		assert.Equal(t, GetSocketFolderPath(), fakeSocketFolder)
+		assert.Equal(t, fakeSocketFolder, GetSocketFolderPath())
 	})
 }

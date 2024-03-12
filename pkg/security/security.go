@@ -105,14 +105,13 @@ type Options struct {
 	// from. Default to an implementation requesting from Sentry.
 	OverrideCertRequestSource RequestFn
 
-	// WriteSVIDoDir is the directory to write the X.509 SVID certificate private
-	// key pair to. This is highly discouraged since it results in the private
-	// key being written to file.
-	WriteSVIDToDir *string
-
 	// Mode is the operation mode of this security instance (self-hosted or
 	// Kubernetes).
 	Mode modes.DaprMode
+
+	// SentryTokenFile is an optional file containing the token to authenticate
+	// to sentry.
+	SentryTokenFile *string
 }
 
 type provider struct {
@@ -121,6 +120,10 @@ type provider struct {
 	running          atomic.Bool
 	readyCh          chan struct{}
 	trustAnchorsFile string
+
+	// fswatcherInterval is the interval at which the trust anchors file changes
+	// are batched. Used for testing only, and 500ms otherwise.
+	fswatcherInterval time.Duration
 }
 
 // security implements the Security interface.
@@ -165,8 +168,9 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	}
 
 	return &provider{
-		readyCh:          make(chan struct{}),
-		trustAnchorsFile: opts.TrustAnchorsFile,
+		fswatcherInterval: time.Millisecond * 500,
+		readyCh:           make(chan struct{}),
+		trustAnchorsFile:  opts.TrustAnchorsFile,
 		sec: &security{
 			source:                  source,
 			mtls:                    opts.MTLSEnabled,
@@ -208,10 +212,18 @@ func (p *provider) Run(ctx context.Context) error {
 	if len(p.trustAnchorsFile) > 0 {
 		caEvent := make(chan struct{})
 
+		fs, err := fswatcher.New(fswatcher.Options{
+			Targets:  []string{filepath.Dir(p.trustAnchorsFile)},
+			Interval: &p.fswatcherInterval,
+		})
+		if err != nil {
+			return err
+		}
+
 		err = mngr.Add(
 			func(ctx context.Context) error {
 				log.Infof("Watching trust anchors file '%s' for changes", p.trustAnchorsFile)
-				return fswatcher.Watch(ctx, filepath.Dir(p.trustAnchorsFile), caEvent)
+				return fs.Run(ctx, caEvent)
 			},
 			func(ctx context.Context) error {
 				for {
@@ -406,6 +418,21 @@ func CurrentNamespace() string {
 		return "default"
 	}
 	return namespace
+}
+
+// CurrentNamespaceOrError returns the namespace of this workload. If current
+// Namespace is not found, error.
+func CurrentNamespaceOrError() (string, error) {
+	namespace, ok := os.LookupEnv("NAMESPACE")
+	if !ok {
+		return "", errors.New("'NAMESPACE' environment variable not set")
+	}
+
+	if len(namespace) == 0 {
+		return "", errors.New("'NAMESPACE' environment variable is empty")
+	}
+
+	return namespace, nil
 }
 
 // SentryID returns the SPIFFE ID of the sentry server.

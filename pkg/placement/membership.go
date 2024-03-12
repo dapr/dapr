@@ -17,9 +17,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"strings"
 	"sync"
 	"time"
 
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/peer"
 
 	"github.com/dapr/dapr/pkg/placement/monitoring"
@@ -33,6 +35,7 @@ const (
 	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
 	raftApplyCommandMaxConcurrency = 10
 	barrierWriteTimeout            = 2 * time.Minute
+	GRPCContextKeyAcceptVNodes     = "dapr-accept-vnodes"
 )
 
 // MonitorLeadership is used to monitor if we acquire or lose our role
@@ -176,6 +179,9 @@ func (p *Service) cleanupHeartbeats() {
 // membershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
 func (p *Service) membershipChangeWorker(ctx context.Context) {
+	baselineHeartbeatTimestamp := p.clock.Now().UnixNano()
+	log.Infof("Baseline membership heartbeat timestamp: %v", baselineHeartbeatTimestamp)
+
 	faultyHostDetectTimer := p.clock.NewTicker(faultyHostDetectInterval)
 	defer faultyHostDetectTimer.Stop()
 	disseminateTimer := p.clock.NewTicker(disseminateTimerInterval)
@@ -229,9 +235,16 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 					// connections from each runtime so that lastHeartBeat have no heartbeat timestamp record
 					// from each runtime. Eventually, all runtime will find the leader and connect to the leader
 					// of placement servers.
-					// Before all runtimes connect to the leader of placements, it will record the current
-					// time as heartbeat timestamp.
-					heartbeat, _ := p.lastHeartBeat.LoadOrStore(v.Name, p.clock.Now().UnixNano())
+					// Before all runtimes connect to the leader of placements, it will record the leadership change
+					// timestamp as the latest leadership change.
+					// artursouza: The default heartbeat used to be now() but it is not correct and can lead to scenarios where a
+					// runtime (pod) is terminated while there is also a leadership change in placement, meaning the host entry
+					// in placement table will never have a heartbeat. With this new behavior, it will eventually expire and be
+					// removed.
+					heartbeat, loaded := p.lastHeartBeat.LoadOrStore(v.Name, baselineHeartbeatTimestamp)
+					if !loaded {
+						log.Warnf("Heartbeat not found for host: %s", v.Name)
+					}
 
 					elapsed := t.UnixNano() - heartbeat.(int64)
 					if elapsed < p.faultyHostDetectDuration.Load() {
@@ -265,7 +278,7 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 			switch op.cmdType {
 			case raft.MemberUpsert, raft.MemberRemove:
 				// MemberUpsert updates the state of dapr runtime host whenever
-				// Dapr runtime sends heartbeats every 1 second.
+				// Dapr runtime sends heartbeats every X seconds.
 				// MemberRemove will be queued by faultHostDetectTimer.
 				// Even if ApplyCommand is failed, both commands will retry
 				// until the state is consistent.
@@ -316,30 +329,54 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 	monitoring.RecordRuntimesCount(nStreamConnPool)
 	monitoring.RecordActorRuntimesCount(nTargetConns)
 
-	// ignore dissemination if there is no member update.
-	if cnt := p.memberUpdateCount.Load(); cnt > 0 {
-		p.disseminateLock.Lock()
-		defer p.disseminateLock.Unlock()
-
-		state := p.raftNode.FSM().PlacementState()
-		log.Infof(
-			"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-			cnt, nStreamConnPool, nTargetConns, state.Version)
-		p.streamConnPoolLock.RLock()
-		streamConnPool := make([]placementGRPCStream, len(p.streamConnPool))
-		copy(streamConnPool, p.streamConnPool)
-		p.streamConnPoolLock.RUnlock()
-		if err := p.performTablesUpdate(ctx, streamConnPool, state); err != nil {
-			return err
-		}
-		log.Infof(
-			"Completed dissemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-			cnt, nStreamConnPool, nTargetConns, state.Version)
-		p.memberUpdateCount.Store(0)
-
-		// set faultyHostDetectDuration to the default duration.
-		p.faultyHostDetectDuration.Store(int64(faultyHostDetectDefaultDuration))
+	// Ignore dissemination if there is no member update
+	cnt := p.memberUpdateCount.Load()
+	if cnt == 0 {
+		return nil
 	}
+
+	p.disseminateLock.Lock()
+	defer p.disseminateLock.Unlock()
+
+	p.streamConnPoolLock.RLock()
+	streamConnPool := make([]placementGRPCStream, len(p.streamConnPool))
+	copy(streamConnPool, p.streamConnPool)
+
+	// Check if the cluster has daprd hosts that expect vnodes;
+	// older daprd versions (pre 1.13) do expect them, and newer versions (1.13+) do not.
+	req := &tablesUpdateRequest{
+		hosts: streamConnPool,
+	}
+	for _, stream := range streamConnPool {
+		hostAcceptsVNodes := hostAcceptsVNodes(stream)
+		if hostAcceptsVNodes && req.tablesWithVNodes == nil {
+			req.tablesWithVNodes = p.raftNode.FSM().PlacementState(true)
+		}
+		if !hostAcceptsVNodes && req.tables == nil {
+			req.tables = p.raftNode.FSM().PlacementState(false)
+		}
+		if req.tablesWithVNodes != nil && req.tables != nil {
+			break
+		}
+	}
+
+	p.streamConnPoolLock.RUnlock()
+
+	log.Infof(
+		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+		cnt, nStreamConnPool, nTargetConns, req.GetVersion())
+
+	if err := p.performTablesUpdate(ctx, req); err != nil {
+		return err
+	}
+
+	log.Infof(
+		"Completed dissemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+		cnt, nStreamConnPool, nTargetConns, req.GetVersion())
+	p.memberUpdateCount.Store(0)
+
+	// set faultyHostDetectDuration to the default duration.
+	p.faultyHostDetectDuration.Store(int64(faultyHostDetectDefaultDuration))
 
 	return nil
 }
@@ -348,82 +385,107 @@ func (p *Service) performTableDissemination(ctx context.Context) error {
 // It first locks so no further dapr can be taken it. Once placement table is locked
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
-func (p *Service) performTablesUpdate(ctx context.Context, hosts []placementGRPCStream, newTable *v1pb.PlacementTables) error {
+func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequest) error {
 	// TODO: error from disseminationOperation needs to be handle properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
 
-	ctx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	// Enforce maximum API level
+	if req.tablesWithVNodes != nil || req.tables != nil {
+		req.SetAPILevel(p.minAPILevel, p.maxAPILevel)
+	}
+
+	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	errCh := make(chan error)
-
-	for _, host := range hosts {
-		go func(h placementGRPCStream) {
-			for _, s := range []struct {
-				op    string
-				table *v1pb.PlacementTables
-			}{
-				{"lock", nil},
-				{"update", newTable},
-				{"unlock", nil},
-			} {
-				errCh <- p.disseminateOperation(ctx, []placementGRPCStream{h}, s.op, s.table)
-			}
-		}(host)
-	}
-
-	var err error
-	for i := 0; i < len(hosts)*3; i++ {
-		err = errors.Join(err, <-errCh)
-	}
+	// Perform each update on all hosts in sequence
+	err := p.disseminateOperationOnHosts(ctx, req, "lock")
 	if err != nil {
-		return fmt.Errorf("dissemination failed: %s", err)
+		return fmt.Errorf("dissemination of 'lock' failed: %v", err)
+	}
+	err = p.disseminateOperationOnHosts(ctx, req, "update")
+	if err != nil {
+		return fmt.Errorf("dissemination of 'update' failed: %v", err)
+	}
+	err = p.disseminateOperationOnHosts(ctx, req, "unlock")
+	if err != nil {
+		return fmt.Errorf("dissemination of 'unlock' failed: %v", err)
 	}
 
-	log.Debugf("performTablesUpdate succeed %v", p.clock.Since(startedAt))
+	log.Debugf("performTablesUpdate succeed in %v", p.clock.Since(startedAt))
 	return nil
 }
 
-func (p *Service) disseminateOperation(ctx context.Context, targets []placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
+func (p *Service) disseminateOperationOnHosts(ctx context.Context, req *tablesUpdateRequest, operation string) error {
+	errCh := make(chan error)
+
+	for i := 0; i < len(req.hosts); i++ {
+		go func(i int) {
+			var tableToSend *v1pb.PlacementTables
+			hostAcceptsVNodes := hostAcceptsVNodes(req.hosts[i])
+			if hostAcceptsVNodes && req.tablesWithVNodes != nil {
+				tableToSend = req.tablesWithVNodes
+			} else if !hostAcceptsVNodes && req.tables != nil {
+				tableToSend = req.tables
+			}
+
+			errCh <- p.disseminateOperation(ctx, req.hosts[i], operation, tableToSend)
+		}(i)
+	}
+
+	var errs []error
+	for i := 0; i < len(req.hosts); i++ {
+		err := <-errCh
+		if err != nil {
+			errs = append(errs, err)
+		}
+	}
+	return errors.Join(errs...)
+}
+
+func (p *Service) disseminateOperation(ctx context.Context, target placementGRPCStream, operation string, tables *v1pb.PlacementTables) error {
 	o := &v1pb.PlacementOrder{
 		Operation: operation,
 		Tables:    tables,
 	}
 
-	for _, s := range targets {
-		config := retry.DefaultConfig()
-		config.MaxRetries = 3
-		backoff := config.NewBackOffWithContext(ctx)
-		err := retry.NotifyRecover(func() error {
-			// Check stream in stream pool, if stream is not available, skip to next.
-			if !p.hasStreamConn(s) {
-				remoteAddr := "n/a"
-				if p, ok := peer.FromContext(s.Context()); ok {
-					remoteAddr = p.Addr.String()
-				}
-				log.Debugf("Runtime host (%q) is disconnected with server; go with next dissemination (operation: %s)", remoteAddr, operation)
-				return nil
+	config := retry.DefaultConfig()
+	config.MaxRetries = 3
+	backoff := config.NewBackOffWithContext(ctx)
+	return retry.NotifyRecover(func() error {
+		// Check stream in stream pool, if stream is not available, skip to next.
+		if !p.hasStreamConn(target) {
+			remoteAddr := "n/a"
+			if p, ok := peer.FromContext(target.Context()); ok {
+				remoteAddr = p.Addr.String()
 			}
-
-			if err := s.Send(o); err != nil {
-				remoteAddr := "n/a"
-				if p, ok := peer.FromContext(s.Context()); ok {
-					remoteAddr = p.Addr.String()
-				}
-				log.Errorf("error updating runtime host (%q) on %q operation: %s", remoteAddr, operation, err)
-				return err
-			}
+			log.Debugf("Runtime host %q is disconnected with server; go with next dissemination (operation: %s)", remoteAddr, operation)
 			return nil
-		},
-			backoff,
-			func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
-			func() { log.Debug("Dissemination successful") },
-		)
-		if err != nil {
+		}
+
+		if err := target.Send(o); err != nil {
+			remoteAddr := "n/a"
+			if p, ok := peer.FromContext(target.Context()); ok {
+				remoteAddr = p.Addr.String()
+			}
+			log.Errorf("Error updating runtime host %q on %q operation: %v", remoteAddr, operation, err)
 			return err
 		}
+		return nil
+	},
+		backoff,
+		func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
+		func() { log.Debug("Dissemination successful after failure") },
+	)
+}
+
+func hostAcceptsVNodes(stream placementGRPCStream) bool {
+	md, ok := metadata.FromIncomingContext(stream.Context())
+	if !ok {
+		return true // default to older versions that need vnodes
 	}
 
-	return nil
+	// Extract apiLevel from metadata
+	vmd := md.Get(GRPCContextKeyAcceptVNodes)
+	return !(len(vmd) > 0 && strings.EqualFold(vmd[0], "false"))
 }

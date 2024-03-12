@@ -299,7 +299,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 		}
 
 		_, err := ParseAccessControlSpec(invalidAccessControlSpec, true)
-		assert.Error(t, err, "invalid access control spec. missing trustdomain for apps: [%s], missing namespace for apps: [%s], missing app name on at least one of the app policies: true", app1, app2)
+		require.Error(t, err, "invalid access control spec. missing trustdomain for apps: [%s], missing namespace for apps: [%s], missing app name on at least one of the app policies: true", app1, app2)
 	})
 
 	t.Run("test when no trust domain is specified for the app", func(t *testing.T) {
@@ -374,7 +374,7 @@ func TestParseAccessControlSpec(t *testing.T) {
 		}
 
 		accessControlList, _ := ParseAccessControlSpec(invalidAccessControlSpec, true)
-		assert.Equal(t, accessControlList.DefaultAction, config.DenyAccess)
+		assert.Equal(t, config.DenyAccess, accessControlList.DefaultAction)
 	})
 }
 
@@ -384,7 +384,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 	t.Run("test when no acl specified", func(t *testing.T) {
 		srcAppID := app1
 		spiffeID, err := spiffe.FromStrings(td, "ns1", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op1", common.HTTPExtension_POST, true, nil)
 		// Action = Allow the operation since no ACL is defined
 		assert.True(t, isAllowed)
@@ -394,7 +394,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		srcAppID := "appX"
 		accessControlList, _ := initializeAccessControlList(true)
 		spiffeID, err := spiffe.FromStrings(td, "ns1", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op1", common.HTTPExtension_POST, true, accessControlList)
 		// Action = Default global action
 		assert.False(t, isAllowed)
@@ -404,7 +404,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList(true)
 		spiffeID, err := spiffe.FromStrings(privateTD, "ns1", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op1", common.HTTPExtension_POST, true, accessControlList)
 		// Action = Ignore policy and apply global default action
@@ -415,7 +415,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList(true)
 		spiffeID, err := spiffe.FromStrings(td, "abcd", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op1", common.HTTPExtension_POST, true, accessControlList)
 		// Action = Ignore policy and apply global default action
 		assert.False(t, isAllowed)
@@ -439,7 +439,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList(true)
 		spiffeID, err := spiffe.FromStrings(td, "ns1", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "opX", common.HTTPExtension_POST, true, accessControlList)
 		// Action = Ignore policy and apply default action for app
 		assert.True(t, isAllowed)
@@ -449,7 +449,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList(true)
 		spiffeID, err := spiffe.FromStrings(td, "ns1", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "Op2", common.HTTPExtension_POST, true, accessControlList)
 		// Action = Ignore policy and apply default action for app
 		assert.False(t, isAllowed)
@@ -460,7 +460,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(true)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op4", common.HTTPExtension_PUT, true, accessControlList)
 		// Action = Default action for the specific app
@@ -472,7 +472,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(true)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns1", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op5", common.HTTPExtension_PUT, true, accessControlList)
 		// Action = Global Default action
 		assert.False(t, isAllowed)
@@ -482,7 +482,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		srcAppID := app1
 		accessControlList, _ := initializeAccessControlList(true)
 		spiffeID, err := spiffe.FromStrings(td, "ns1", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op2", common.HTTPExtension_PUT, true, accessControlList)
 		// Action = Default action for the specific verb
 		assert.False(t, isAllowed)
@@ -493,7 +493,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(true)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op4", common.HTTPExtension_POST, true, accessControlList)
 		// Action = Default action for the specific verb
 		assert.True(t, isAllowed)
@@ -504,7 +504,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(true)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "/op4", common.HTTPExtension_POST, true, accessControlList)
 		// Action = Default action for the specific verb
 		assert.True(t, isAllowed)
@@ -515,7 +515,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(true)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op4", common.HTTPExtension_NONE, true, accessControlList)
 		// Action = Default action for the app
 		assert.False(t, isAllowed)
@@ -526,7 +526,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(true)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "/op3/a", common.HTTPExtension_PUT, true, accessControlList)
 		// Action = Default action for the specific verb
 		assert.True(t, isAllowed)
@@ -537,7 +537,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(false)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "/OP4", common.HTTPExtension_NONE, false, accessControlList)
 		// Action = Default action for the specific verb
 		assert.False(t, isAllowed)
@@ -548,7 +548,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(true)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "/op3/b/b", common.HTTPExtension_PUT, true, accessControlList)
 		// Action = Default action for the app
 		assert.False(t, isAllowed)
@@ -559,7 +559,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(true)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "/op3/a/b", common.HTTPExtension_PUT, true, accessControlList)
 		// Action = Default action for the app
 		assert.True(t, isAllowed)
@@ -570,7 +570,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(false)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op4", common.HTTPExtension_NONE, false, accessControlList)
 		// Action = Default action for the app
 		assert.True(t, isAllowed)
@@ -581,7 +581,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(false)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op6", common.HTTPExtension_NONE, false, accessControlList)
 		// Action = Default action for the app
 		assert.True(t, isAllowed)
@@ -592,7 +592,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(false)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op7/a/b/c", common.HTTPExtension_NONE, false, accessControlList)
 		assert.True(t, isAllowed)
 
@@ -608,7 +608,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(false)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op7/a/bc", common.HTTPExtension_NONE, false, accessControlList)
 		assert.True(t, isAllowed)
 	})
@@ -618,7 +618,7 @@ func Test_isOperationAllowedByAccessControlPolicy(t *testing.T) {
 		accessControlList, _ := initializeAccessControlList(false)
 		domain1TD := spiffeid.RequireTrustDomainFromString("domain1")
 		spiffeID, err := spiffe.FromStrings(domain1TD, "ns2", srcAppID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		isAllowed, _ := isOperationAllowedByAccessControlPolicy(spiffeID, "op7/c/d/e", common.HTTPExtension_NONE, false, accessControlList)
 		assert.True(t, isAllowed)
 	})

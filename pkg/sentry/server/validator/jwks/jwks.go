@@ -37,6 +37,8 @@ type Options struct {
 	SentryID spiffeid.ID `mapstructure:"-"`
 	// Location of the JWKS: a URL, path on local file, or the actual JWKS (optionally base64-encoded)
 	Source string `mapstructure:"source"`
+	// Optional CA certificate to trust. Can be a path to a local file or an actual, PEM-encoded certificate
+	CACertificate string `mapstructure:"caCertificate"`
 	// Minimum interval before the JWKS can be refrehsed if fetched from a HTTP(S) endpoint.
 	MinRefreshInterval time.Duration `mapstructure:"minRefreshInterval"`
 	// Timeout for network requests.
@@ -50,29 +52,30 @@ type Options struct {
 // - sub: must include the SPIFFE ID of the requestor
 type jwks struct {
 	sentryAudience string
-	opts           Options
 	cache          *jwkscache.JWKSCache
 }
 
 func New(ctx context.Context, opts Options) (validator.Validator, error) {
+	cache := jwkscache.NewJWKSCache(opts.Source, log)
+
+	// Set options
+	if opts.MinRefreshInterval > time.Second {
+		cache.SetMinRefreshInterval(opts.MinRefreshInterval)
+	}
+	if opts.RequestTimeout > time.Millisecond {
+		cache.SetRequestTimeout(opts.RequestTimeout)
+	}
+	if opts.CACertificate != "" {
+		cache.SetCACertificate(opts.CACertificate)
+	}
+
 	return &jwks{
 		sentryAudience: opts.SentryID.String(),
-		opts:           opts,
+		cache:          cache,
 	}, nil
 }
 
 func (j *jwks) Start(ctx context.Context) error {
-	// Create a JWKS and start it
-	j.cache = jwkscache.NewJWKSCache(j.opts.Source, log)
-
-	// Set options
-	if j.opts.MinRefreshInterval > time.Second {
-		j.cache.SetMinRefreshInterval(j.opts.MinRefreshInterval)
-	}
-	if j.opts.RequestTimeout > time.Millisecond {
-		j.cache.SetRequestTimeout(j.opts.RequestTimeout)
-	}
-
 	// Start the cache. Note this is a blocking call
 	err := j.cache.Start(ctx)
 	if err != nil {
@@ -83,8 +86,12 @@ func (j *jwks) Start(ctx context.Context) error {
 }
 
 func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (td spiffeid.TrustDomain, overrideDuration bool, err error) {
-	if req.Token == "" {
+	if req.GetToken() == "" {
 		return td, false, errors.New("the request does not contain a token")
+	}
+
+	if err = j.cache.WaitForCacheReady(ctx); err != nil {
+		return td, false, errors.New("jwks validator not ready")
 	}
 
 	// Validate the internal request
@@ -95,13 +102,13 @@ func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequ
 	}
 
 	// Construct the expected value for the subject, which is the SPIFFE ID of the requestor
-	sub, err := spiffeid.FromSegments(td, "ns", req.Namespace, req.Id)
+	sub, err := spiffeid.FromSegments(td, "ns", req.GetNamespace(), req.GetId())
 	if err != nil {
 		return td, false, fmt.Errorf("failed to construct SPIFFE ID for requestor: %w", err)
 	}
 
 	// Validate the authorization token
-	_, err = jwt.Parse([]byte(req.Token),
+	_, err = jwt.Parse([]byte(req.GetToken()),
 		jwt.WithKeySet(j.cache.KeySet(), jws.WithInferAlgorithmFromKey(true)),
 		jwt.WithAcceptableSkew(5*time.Minute),
 		jwt.WithContext(ctx),

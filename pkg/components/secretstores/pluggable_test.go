@@ -153,7 +153,7 @@ func TestComponentCalls(t *testing.T) {
 		errStr := "secret not found"
 		svc := &server{
 			onGetSecret: func(req *proto.GetSecretRequest) {
-				assert.Equal(t, key, req.Key)
+				assert.Equal(t, key, req.GetKey())
 			},
 			getSecretErr: errors.New(errStr),
 		}
@@ -212,7 +212,7 @@ func TestComponentCalls(t *testing.T) {
 
 		err = gSecretStores.Ping()
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), svc.pingCalled.Load())
 	})
 }

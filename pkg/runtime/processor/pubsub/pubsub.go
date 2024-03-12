@@ -25,11 +25,11 @@ import (
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	comppubsub "github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/grpc/manager"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/outbox"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -97,7 +97,9 @@ type pubsub struct {
 	channels       *channels.Channels
 	operatorClient operatorv1.OperatorClient
 
-	lock sync.RWMutex
+	lock        sync.RWMutex
+	subscribing bool
+	stopForever bool
 
 	topicCancels map[string]context.CancelFunc
 	outbox       outbox.Outbox
@@ -177,6 +179,10 @@ func (p *pubsub) Init(ctx context.Context, comp compapi.Component) error {
 	})
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
+	if p.subscribing {
+		return p.beginPubSub(ctx, pubsubName)
+	}
+
 	return nil
 }
 
@@ -189,6 +195,8 @@ func (p *pubsub) Close(comp compapi.Component) error {
 		return nil
 	}
 
+	defer p.compStore.DeletePubSub(comp.Name)
+
 	for topic := range p.compStore.GetTopicRoutes()[comp.Name] {
 		subKey := topicKey(comp.Name, topic)
 		p.unsubscribeTopic(subKey)
@@ -198,8 +206,6 @@ func (p *pubsub) Close(comp compapi.Component) error {
 	if err := ps.Component.Close(); err != nil {
 		return err
 	}
-
-	p.compStore.DeletePubSub(comp.Name)
 
 	return nil
 }
@@ -230,7 +236,7 @@ func findMatchingRoute(rules []*rtpubsub.Rule, cloudEvent interface{}) (path str
 
 func matchRoutingRule(rules []*rtpubsub.Rule, data map[string]interface{}) (*rtpubsub.Rule, error) {
 	for _, rule := range rules {
-		if rule.Match == nil {
+		if rule.Match == nil || len(rule.Match.String()) == 0 {
 			return rule, nil
 		}
 		iResult, err := rule.Match.Eval(data)
@@ -276,7 +282,7 @@ func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulk
 	if data, ok := event[contribpubsub.DataField]; ok && data != nil {
 		envelope.Data = nil
 
-		if contenttype.IsStringContentType(envelope.DataContentType) {
+		if contenttype.IsStringContentType(envelope.GetDataContentType()) {
 			switch v := data.(type) {
 			case string:
 				envelope.Data = []byte(v)
@@ -285,7 +291,7 @@ func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulk
 			default:
 				return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, errUnexpectedEnvelopeData //nolint:nosnakecase
 			}
-		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
+		} else if contenttype.IsJSONContentType(envelope.GetDataContentType()) || contenttype.IsCloudEventContentType(envelope.GetDataContentType()) {
 			envelope.Data, _ = json.Marshal(data)
 		}
 	}

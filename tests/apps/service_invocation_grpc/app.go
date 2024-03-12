@@ -127,16 +127,16 @@ func (s *server) retrieveRequestObject(ctx context.Context) ([]byte, error) {
 // OnInvoke This method gets invoked when a remote service has called the app through Dapr
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
-	fmt.Printf("Got invoked method %s and data: %s\n", in.Method, string(in.GetData().Value))
+	fmt.Printf("Got invoked method %s and data: %s\n", in.GetMethod(), string(in.GetData().GetValue()))
 
 	var err error
 	var response []byte
-	switch in.Method {
+	switch in.GetMethod() {
 	case "httpToGrpcTest":
 		// not a typo, the handling is the same as the case below
 		fallthrough
 	case "grpcToGrpcTest", "grpcToGrpcWithoutVerbTest":
-		response, err = s.grpcTestHandler(in.GetData().Value)
+		response, err = s.grpcTestHandler(in.GetData().GetValue())
 	case "retrieve_request_object":
 		response, err = s.retrieveRequestObject(ctx)
 	}

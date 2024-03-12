@@ -25,8 +25,6 @@ import (
 	"errors"
 	"fmt"
 	"os"
-	"path/filepath"
-	"runtime"
 	"sync"
 	"time"
 
@@ -84,9 +82,6 @@ type x509source struct {
 	// remote server. Used for overriding requesting from Sentry.
 	requestFn RequestFn
 
-	// writeToDiskDir is the directory to write the identity document to.
-	writeToDiskDir *string
-
 	// trustAnchorSubscribers is a list of channels to notify when the trust
 	// anchors are updated.
 	trustAnchorSubscribers []chan<- struct{}
@@ -95,6 +90,9 @@ type x509source struct {
 	// the identity certificate. Used by control plane services to request for
 	// the control plane trust domain.
 	trustDomain *string
+
+	// sentryTokenFile is the optional file path to the sentry token file.
+	sentryTokenFile *string
 
 	lock  sync.RWMutex
 	clock clock.Clock
@@ -151,16 +149,16 @@ func newX509Source(ctx context.Context, clock clock.Clock, cptd spiffeid.TrustDo
 	}
 
 	return &x509source{
-		sentryAddress:  opts.SentryAddress,
-		sentryID:       sentryID,
-		trustAnchors:   x509bundle.FromX509Authorities(sentryID.TrustDomain(), trustAnchorCerts),
-		appID:          opts.AppID,
-		appNamespace:   ns,
-		trustDomain:    trustDomain,
-		kubernetesMode: opts.Mode == modes.KubernetesMode,
-		requestFn:      opts.OverrideCertRequestSource,
-		writeToDiskDir: opts.WriteSVIDToDir,
-		clock:          clock,
+		sentryAddress:   opts.SentryAddress,
+		sentryID:        sentryID,
+		trustAnchors:    x509bundle.FromX509Authorities(sentryID.TrustDomain(), trustAnchorCerts),
+		appID:           opts.AppID,
+		appNamespace:    ns,
+		trustDomain:     trustDomain,
+		kubernetesMode:  opts.Mode == modes.KubernetesMode,
+		requestFn:       opts.OverrideCertRequestSource,
+		clock:           clock,
+		sentryTokenFile: opts.SentryTokenFile,
 	}, nil
 }
 
@@ -244,7 +242,7 @@ func (x *x509source) renewIdentityCertificate(ctx context.Context) (*x509.Certif
 		PrivateKey:   pk,
 	}
 
-	return workloadcert[0], x.maybeWriteSVIDToDir()
+	return workloadcert[0], nil
 }
 
 func generateCSRAndPrivateKey(id string) ([]byte, crypto.Signer, error) {
@@ -301,7 +299,14 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 
 	defer conn.Close()
 
-	token, tokenValidator, err := sentryToken.GetSentryToken(x.kubernetesMode)
+	var token string
+	var tokenValidator sentryv1pb.SignCertificateRequest_TokenValidator
+	if x.sentryTokenFile != nil {
+		token, tokenValidator, err = sentryToken.GetSentryTokenFromFile(*x.sentryTokenFile)
+	} else {
+		token, tokenValidator, err = sentryToken.GetSentryToken(x.kubernetesMode)
+	}
+
 	if err != nil {
 		diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_token")
 		return nil, fmt.Errorf("error obtaining token: %w", err)
@@ -347,36 +352,6 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 	return workloadcert, nil
 }
 
-// maybeWriteSVIDToDir writes the current SVID to the configured directory if
-// configured. Does this atomically using unix symlinks.
-func (x *x509source) maybeWriteSVIDToDir() error {
-	if x.writeToDiskDir == nil || x.currentSVID == nil || x.trustAnchors == nil {
-		return nil
-	}
-
-	certs, pk, err := x.currentSVID.Marshal()
-	if err != nil {
-		return err
-	}
-
-	ta, err := x.trustAnchors.Marshal()
-	if err != nil {
-		return err
-	}
-
-	if err := atomicWrite(x.clock, *x.writeToDiskDir, map[string][]byte{
-		"tls.crt": certs,
-		"tls.key": pk,
-		"ca.crt":  ta,
-	}); err != nil {
-		return fmt.Errorf("unable to write SVID to disk: %w", err)
-	}
-
-	log.Infof("Wrote SVID to '%s'", *x.writeToDiskDir)
-
-	return nil
-}
-
 func (x *x509source) updateTrustAnchorFromFile(ctx context.Context, filepath string) error {
 	x.lock.RLock()
 	defer x.lock.RUnlock()
@@ -393,10 +368,6 @@ func (x *x509source) updateTrustAnchorFromFile(ctx context.Context, filepath str
 
 	x.trustAnchors.SetX509Authorities(trustAnchorCerts)
 
-	if err := x.maybeWriteSVIDToDir(); err != nil {
-		return err
-	}
-
 	var wg sync.WaitGroup
 	defer wg.Wait()
 
@@ -409,61 +380,6 @@ func (x *x509source) updateTrustAnchorFromFile(ctx context.Context, filepath str
 			case <-ctx.Done():
 			}
 		}(ch)
-	}
-
-	return nil
-}
-
-func atomicWrite(clock clock.Clock, dir string, data map[string][]byte) error {
-	dir = filepath.Clean(dir)
-	if err := os.MkdirAll(filepath.Dir(dir), 0o700); err != nil {
-		return err
-	}
-
-	newDir := dir + "-" + clock.Now().Format("20060102-150405")
-	if err := os.MkdirAll(newDir, 0o700); err != nil {
-		return err
-	}
-
-	for file, contents := range data {
-		if err := os.WriteFile(filepath.Join(newDir, file), contents, 0o600); err != nil {
-			return err
-		}
-	}
-
-	// Symlinks are typically not available on Windows containers, so we use a
-	// copy and rename instead.
-	if runtime.GOOS == "windows" {
-		os.RemoveAll(dir + "-new")
-		if err := os.MkdirAll(dir+"-new", 0o700); err != nil {
-			return err
-		}
-
-		entries, err := os.ReadDir(newDir)
-		if err != nil {
-			return err
-		}
-		for _, entry := range entries {
-			b, err := os.ReadFile(filepath.Join(newDir, entry.Name()))
-			if err != nil {
-				return err
-			}
-			if err := os.WriteFile(filepath.Join(dir+"-new", entry.Name()), b, 0o600); err != nil {
-				return err
-			}
-		}
-		// You can't rename a directory over an existing directory.
-		os.RemoveAll(dir)
-		if err := os.Rename(dir+"-new", dir); err != nil {
-			return fmt.Errorf("failed to rename %s to %s: %w", dir+"-new", dir, err)
-		}
-	} else {
-		if err := os.Symlink(newDir, dir+"-new"); err != nil {
-			return err
-		}
-		if err := os.Rename(dir+"-new", dir); err != nil {
-			return err
-		}
 	}
 
 	return nil

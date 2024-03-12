@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	cp "github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/dapr/pkg/components/crypto"
@@ -53,20 +54,20 @@ func TestRegistry(t *testing.T) {
 
 		// assert v0 and v1
 		p, e := testRegistry.Create(componentName, "v0", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mock, p)
 		p, e = testRegistry.Create(componentName, "v1", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mock, p)
 
 		// assert v2
 		pV2, e := testRegistry.Create(componentName, "v2", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
 
 		// check case-insensitivity
 		pV2, e = testRegistry.Create(strings.ToUpper(componentName), "V2", "")
-		assert.NoError(t, e)
+		require.NoError(t, e)
 		assert.Same(t, mockV2, pV2)
 	})
 

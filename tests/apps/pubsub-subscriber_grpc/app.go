@@ -154,20 +154,20 @@ func initializeSets() {
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload.
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	reqID := "s-" + uuid.New().String()
-	if in.HttpExtension != nil && in.HttpExtension.Querystring != "" {
-		qs, err := url.ParseQuery(in.HttpExtension.Querystring)
+	if len(in.GetHttpExtension().GetQuerystring()) > 0 {
+		qs, err := url.ParseQuery(in.GetHttpExtension().GetQuerystring())
 		if err == nil && qs.Has("reqid") {
 			reqID = qs.Get("reqid")
 		}
 	}
 
-	log.Printf("(%s) Got invoked method %s", reqID, in.Method)
+	log.Printf("(%s) Got invoked method %s", reqID, in.GetMethod())
 
 	lock.Lock()
 	defer lock.Unlock()
 
 	respBody := &anypb.Any{}
-	switch in.Method {
+	switch in.GetMethod() {
 	case "getMessages":
 		respBody.Value = s.getMessages(reqID)
 	case "initialize":
@@ -327,7 +327,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	defer lock.Unlock()
 
 	reqID := uuid.New().String()
-	log.Printf("(%s) Message arrived - Topic: %s, Message: %s", reqID, in.Topic, string(in.Data))
+	log.Printf("(%s) Message arrived - Topic: %s, Message: %s", reqID, in.GetTopic(), string(in.GetData()))
 
 	if respondWithRetry {
 		log.Printf("(%s) Responding with RETRY", reqID)
@@ -346,20 +346,20 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 		}, nil
 	}
 
-	if in.Data == nil {
-		log.Printf("(%s) Responding with DROP. in.Data is nil", reqID)
+	if in.GetData() == nil {
+		log.Printf("(%s) Responding with DROP. in.GetData() is nil", reqID)
 		// Return success with DROP status to drop message
 		return &runtimev1pb.TopicEventResponse{
 			Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 		}, nil
 	}
-	log.Printf("(%s) data %s and the content type (%s)", reqID, in.Data, in.DataContentType)
+	log.Printf("(%s) data %s and the content type (%s)", reqID, in.GetData(), in.GetDataContentType())
 	var msg string
 	var err error
-	if !strings.Contains(in.Topic, "bulk") {
+	if !strings.Contains(in.GetTopic(), "bulk") {
 		// This is the old flow where always the content type is application/json
 		// and data is always json serialized
-		err = json.Unmarshal(in.Data, &msg)
+		err = json.Unmarshal(in.GetData(), &msg)
 		if err != nil {
 			log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v", reqID, err)
 			// Return success with DROP status to drop message
@@ -367,7 +367,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 				Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 			}, err
 		}
-		if strings.HasPrefix(in.Topic, pubsubRaw) {
+		if strings.HasPrefix(in.GetTopic(), pubsubRaw) {
 			var actualMsg string
 			err = json.Unmarshal([]byte(msg), &actualMsg)
 			if err != nil {
@@ -376,11 +376,11 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 				msg = actualMsg
 			}
 		}
-	} else if strings.Contains(in.Topic, "bulk") {
+	} else if strings.Contains(in.GetTopic(), "bulk") {
 		// In bulk publish data and data content type match is important and
 		// enforced/expected
-		if in.DataContentType == "application/json" || in.DataContentType == "application/cloudevents+json" {
-			err = json.Unmarshal(in.Data, &msg)
+		if in.GetDataContentType() == "application/json" || in.GetDataContentType() == "application/cloudevents+json" {
+			err = json.Unmarshal(in.GetData(), &msg)
 			if err != nil {
 				log.Printf("(%s) Responding with DROP. Error while unmarshaling JSON data: %v", reqID, err)
 				// Return success with DROP status to drop message
@@ -388,42 +388,42 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 					Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 				}, err
 			}
-		} else if strings.HasPrefix(in.DataContentType, "text/") {
-			msg = (string)(in.Data)
-		} else if strings.Contains(in.Topic, "raw") {
+		} else if strings.HasPrefix(in.GetDataContentType(), "text/") {
+			msg = (string)(in.GetData())
+		} else if strings.Contains(in.GetTopic(), "raw") {
 			// All raw payload topics are assumed to have "raw" in the name
 			// this is for the bulk case
 			// This is simply for E2E only ....
 			// we are assuming raw payload is also a string here .... In general msg should be []byte only and compared as []byte
 			// raw payload for bulk is set from a string so this scenario holds true
-			msg = string(in.Data)
+			msg = string(in.GetData())
 		}
 	}
 
-	log.Printf("(%s) Received message: %s - %s", reqID, in.Topic, msg)
+	log.Printf("(%s) Received message: %s - %s", reqID, in.GetTopic(), msg)
 
-	if strings.HasPrefix(in.Topic, pubsubA) && !receivedMessagesA.Has(msg) {
+	if strings.HasPrefix(in.GetTopic(), pubsubA) && !receivedMessagesA.Has(msg) {
 		receivedMessagesA.Insert(msg)
-	} else if strings.HasPrefix(in.Topic, pubsubB) && !receivedMessagesB.Has(msg) {
+	} else if strings.HasPrefix(in.GetTopic(), pubsubB) && !receivedMessagesB.Has(msg) {
 		receivedMessagesB.Insert(msg)
-	} else if strings.HasPrefix(in.Topic, pubsubC) && !receivedMessagesC.Has(msg) {
+	} else if strings.HasPrefix(in.GetTopic(), pubsubC) && !receivedMessagesC.Has(msg) {
 		receivedMessagesC.Insert(msg)
-	} else if strings.HasPrefix(in.Topic, pubsubRaw) && !receivedMessagesRaw.Has(msg) {
+	} else if strings.HasPrefix(in.GetTopic(), pubsubRaw) && !receivedMessagesRaw.Has(msg) {
 		receivedMessagesRaw.Insert(msg)
-	} else if strings.HasSuffix(in.Topic, pubsubBulkTopic) && !receivedMessagesBulkTopic.Has(msg) {
+	} else if strings.HasSuffix(in.GetTopic(), pubsubBulkTopic) && !receivedMessagesBulkTopic.Has(msg) {
 		receivedMessagesBulkTopic.Insert(msg)
-	} else if strings.HasSuffix(in.Topic, pubsubRawBulkTopic) && !receivedMessagesRawBulkTopic.Has(msg) {
+	} else if strings.HasSuffix(in.GetTopic(), pubsubRawBulkTopic) && !receivedMessagesRawBulkTopic.Has(msg) {
 		receivedMessagesRawBulkTopic.Insert(msg)
-	} else if strings.HasSuffix(in.Topic, pubsubCEBulkTopic) && !receivedMessagesCEBulkTopic.Has(msg) {
+	} else if strings.HasSuffix(in.GetTopic(), pubsubCEBulkTopic) && !receivedMessagesCEBulkTopic.Has(msg) {
 		receivedMessagesCEBulkTopic.Insert(msg)
-	} else if strings.HasSuffix(in.Topic, pubsubDefBulkTopic) && !receivedMessagesDefBulkTopic.Has(msg) {
+	} else if strings.HasSuffix(in.GetTopic(), pubsubDefBulkTopic) && !receivedMessagesDefBulkTopic.Has(msg) {
 		receivedMessagesDefBulkTopic.Insert(msg)
-	} else if strings.HasPrefix(in.Topic, pubsubRawSubTopic) && !receivedMessagesSubRaw.Has(msg) {
+	} else if strings.HasPrefix(in.GetTopic(), pubsubRawSubTopic) && !receivedMessagesSubRaw.Has(msg) {
 		receivedMessagesSubRaw.Insert(msg)
-	} else if strings.HasPrefix(in.Topic, pubsubCESubTopic) && !receivedMessagesSubCE.Has(msg) {
+	} else if strings.HasPrefix(in.GetTopic(), pubsubCESubTopic) && !receivedMessagesSubCE.Has(msg) {
 		receivedMessagesSubCE.Insert(msg)
 	} else {
-		log.Printf("(%s) Received duplicate message: %s - %s", reqID, in.Topic, msg)
+		log.Printf("(%s) Received duplicate message: %s - %s", reqID, in.GetTopic(), msg)
 	}
 
 	if respondWithEmptyJSON {
@@ -439,59 +439,59 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 
 func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
 	reqID := uuid.New().String()
-	log.Printf("(%s) Entered in OnBulkTopicEventAlpha1 in Bulk Subscribe - Topic: %s", reqID, in.Topic)
+	log.Printf("(%s) Entered in OnBulkTopicEventAlpha1 in Bulk Subscribe - Topic: %s", reqID, in.GetTopic())
 	lock.Lock()
 	defer lock.Unlock()
 
-	bulkResponses := make([]*runtimev1pb.TopicEventBulkResponseEntry, len(in.Entries))
+	bulkResponses := make([]*runtimev1pb.TopicEventBulkResponseEntry, len(in.GetEntries()))
 
-	for i, entry := range in.Entries {
-		if entry.Event == nil {
-			log.Printf("(%s) Responding with DROP in bulk subscribe for entryId: %s. entry.Event is nil", reqID, entry.EntryId)
+	for i, entry := range in.GetEntries() {
+		if entry.GetEvent() == nil {
+			log.Printf("(%s) Responding with DROP in bulk subscribe for entryId: %s. entry.Event is nil", reqID, entry.GetEntryId())
 			// Return success with DROP status to drop message
 			bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
-				EntryId: entry.EntryId,
+				EntryId: entry.GetEntryId(),
 				Status:  runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 			}
 		}
 		var msg string
-		if strings.HasPrefix(in.Topic, pubsubCEBulkSubTopic) {
-			log.Printf("(%s) Message arrived in Bulk Subscribe - Topic: %s, Message: %s", reqID, in.Topic, string(entry.GetCloudEvent().Data))
-			err := json.Unmarshal(entry.GetCloudEvent().Data, &msg)
+		if strings.HasPrefix(in.GetTopic(), pubsubCEBulkSubTopic) {
+			log.Printf("(%s) Message arrived in Bulk Subscribe - Topic: %s, Message: %s", reqID, in.GetTopic(), string(entry.GetCloudEvent().GetData()))
+			err := json.Unmarshal(entry.GetCloudEvent().GetData(), &msg)
 			if err != nil {
-				log.Printf("(%s) Error extracing ce event in bulk subscribe for entryId: %s: %v", reqID, entry.EntryId, err)
+				log.Printf("(%s) Error extracing ce event in bulk subscribe for entryId: %s: %v", reqID, entry.GetEntryId(), err)
 				bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
-					EntryId: entry.EntryId,
+					EntryId: entry.GetEntryId(),
 					Status:  runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 				}
 				continue
 			}
-			log.Printf("(%s) Value of ce event in bulk subscribe for entryId: %s: %s", reqID, entry.EntryId, msg)
+			log.Printf("(%s) Value of ce event in bulk subscribe for entryId: %s: %s", reqID, entry.GetEntryId(), msg)
 		} else {
-			log.Printf("(%s) Message arrived in Bulk Subscribe - Topic: %s, Message: %s", reqID, in.Topic, string(entry.GetBytes()))
+			log.Printf("(%s) Message arrived in Bulk Subscribe - Topic: %s, Message: %s", reqID, in.GetTopic(), string(entry.GetBytes()))
 			err := json.Unmarshal(entry.GetBytes(), &msg)
 			if err != nil {
-				log.Printf("(%s) Error extracing raw event in bulk subscribe for entryId: %s: %v", reqID, entry.EntryId, err)
+				log.Printf("(%s) Error extracing raw event in bulk subscribe for entryId: %s: %v", reqID, entry.GetEntryId(), err)
 				// Return success with DROP status to drop message
 				bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
-					EntryId: entry.EntryId,
+					EntryId: entry.GetEntryId(),
 					Status:  runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 				}
 				continue
 			}
-			log.Printf("(%s) Value of raw event in bulk subscribe for entryId: %s: %s", reqID, entry.EntryId, msg)
+			log.Printf("(%s) Value of raw event in bulk subscribe for entryId: %s: %s", reqID, entry.GetEntryId(), msg)
 		}
 
 		bulkResponses[i] = &runtimev1pb.TopicEventBulkResponseEntry{
-			EntryId: entry.EntryId,
+			EntryId: entry.GetEntryId(),
 			Status:  runtimev1pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
 		}
-		if strings.HasPrefix(in.Topic, pubsubRawBulkSubTopic) && !receivedMessagesRawBulkSub.Has(msg) {
+		if strings.HasPrefix(in.GetTopic(), pubsubRawBulkSubTopic) && !receivedMessagesRawBulkSub.Has(msg) {
 			receivedMessagesRawBulkSub.Insert(msg)
-		} else if strings.HasPrefix(in.Topic, pubsubCEBulkSubTopic) && !receivedMessagesCEBulkSub.Has(msg) {
+		} else if strings.HasPrefix(in.GetTopic(), pubsubCEBulkSubTopic) && !receivedMessagesCEBulkSub.Has(msg) {
 			receivedMessagesCEBulkSub.Insert(msg)
 		} else {
-			log.Printf("(%s) Received duplicate message in bulk subscribe: %s - %s", reqID, in.Topic, msg)
+			log.Printf("(%s) Received duplicate message in bulk subscribe: %s - %s", reqID, in.GetTopic(), msg)
 		}
 	}
 	log.Printf("(%s) Responding with SUCCESS for bulk subscribe", reqID)
@@ -509,6 +509,6 @@ func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*run
 
 // This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata.
 func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
-	log.Printf("Invoked from binding: %s", in.Name)
+	log.Printf("Invoked from binding: %s", in.GetName())
 	return &runtimev1pb.BindingEventResponse{}, nil
 }

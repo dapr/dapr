@@ -21,6 +21,7 @@ import (
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
@@ -47,9 +48,8 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	)
 
 	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
-	placementAddress := patcher.ServiceAddress(patcher.ServicePlacement, i.config.Namespace, i.config.KubeClusterDomain)
-	sentryAddress := patcher.ServiceAddress(patcher.ServiceSentry, i.config.Namespace, i.config.KubeClusterDomain)
-	operatorAddress := patcher.ServiceAddress(patcher.ServiceAPI, i.config.Namespace, i.config.KubeClusterDomain)
+	sentryAddress := patcher.ServiceSentry.Address(i.config.Namespace, i.config.KubeClusterDomain)
+	operatorAddress := patcher.ServiceAPI.Address(i.config.Namespace, i.config.KubeClusterDomain)
 
 	trustAnchors, err := i.currentTrustAnchors()
 	if err != nil {
@@ -65,7 +65,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.GetInjectedComponentContainers = i.getInjectedComponentContainers
 	sidecar.Mode = injectorConsts.ModeKubernetes
 	sidecar.Namespace = ar.Request.Namespace
-	sidecar.MTLSEnabled = mTLSEnabled(i.daprClient)
+	sidecar.MTLSEnabled = mTLSEnabled(i.controlPlaneNamespace, i.daprClient)
 	sidecar.Identity = ar.Request.Namespace + ":" + pod.Spec.ServiceAccountName
 	sidecar.IgnoreEntrypointTolerations = i.config.GetIgnoreEntrypointTolerations()
 	sidecar.ImagePullPolicy = i.config.GetPullPolicy()
@@ -73,19 +73,44 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.SentryAddress = sentryAddress
 	sidecar.RunAsNonRoot = i.config.GetRunAsNonRoot()
 	sidecar.ReadOnlyRootFilesystem = i.config.GetReadOnlyRootFilesystem()
+	sidecar.EnableK8sDownwardAPIs = i.config.GetEnableK8sDownwardAPIs()
 	sidecar.SidecarDropALLCapabilities = i.config.GetDropCapabilities()
 	sidecar.ControlPlaneNamespace = i.controlPlaneNamespace
 	sidecar.ControlPlaneTrustDomain = i.controlPlaneTrustDomain
+	sidecar.SentrySPIFFEID = i.sentrySPIFFEID.String()
 	sidecar.CurrentTrustAnchors = trustAnchors
 	sidecar.CertChain = string(daprdCert)
 	sidecar.CertKey = string(daprdPrivateKey)
 	sidecar.DisableTokenVolume = !token.HasKubernetesToken()
 
-	// Set the placement address unless it's skipped
-	// Even if the placement is skipped, however,the placement address will still be included if explicitly set in the annotations
-	// We still include PlacementServiceAddress if explicitly set as annotation
-	if !i.config.GetSkipPlacement() {
-		sidecar.PlacementAddress = placementAddress
+	// Set addresses for actor services
+	// Even if actors are disabled, however, the placement-host-address flag will still be included if explicitly set in the annotation dapr.io/placement-host-address
+	// So, if the annotation is already set, we accept that and also use placement for actors services
+	if sidecar.PlacementAddress == "" {
+		// Set configuration for the actors service
+		actorsSvcName, actorsSvc := i.config.GetActorsService()
+		actorsSvcAddr := actorsSvc.Address(i.config.Namespace, i.config.KubeClusterDomain)
+		if actorsSvcName == "placement" {
+			// If the actors service is "placement" (default if empty), then we use the PlacementAddress option for backwards compatibility
+			// TODO: In the future, use the actors-service CLI flag too
+			sidecar.ActorsService = ""
+			sidecar.PlacementAddress = actorsSvcAddr
+		} else {
+			// We have a different actors service, not placement
+			// Set the actors-service CLI flag with "<name>:<address>"
+			sidecar.ActorsService = actorsSvcName + ":" + actorsSvcAddr
+		}
+	} else {
+		// If we are using placement forcefully, do not set "ActorsService"
+		sidecar.ActorsService = ""
+	}
+
+	// Set address for reminders service
+	// This could be empty, indicating sidecars to use the built-in reminders subsystem
+	remindersSvcName, remindersSvc, useRemindersSvc := i.config.GetRemindersService()
+	if useRemindersSvc {
+		// Set the reminders-service CLI flag with "<name>:<address>"
+		sidecar.RemindersService = remindersSvcName + ":" + remindersSvc.Address(i.config.Namespace, i.config.KubeClusterDomain)
 	}
 
 	// Default value for the sidecar image, which can be overridden by annotations
@@ -103,20 +128,19 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	return patch, nil
 }
 
-func mTLSEnabled(daprClient scheme.Interface) bool {
+func mTLSEnabled(controlPlaneNamespace string, daprClient scheme.Interface) bool {
 	resp, err := daprClient.ConfigurationV1alpha1().
-		Configurations(metav1.NamespaceAll).
-		List(metav1.ListOptions{})
+		Configurations(controlPlaneNamespace).
+		Get(defaultConfig, metav1.GetOptions{})
+	if apierrors.IsNotFound(err) {
+		log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
+		return defaultMtlsEnabled
+	}
+
 	if err != nil {
 		log.Errorf("Failed to load dapr configuration from k8s, use default value %t for mTLSEnabled: %s", defaultMtlsEnabled, err)
 		return defaultMtlsEnabled
 	}
 
-	for _, c := range resp.Items {
-		if c.GetName() == defaultConfig {
-			return c.Spec.MTLSSpec.GetEnabled()
-		}
-	}
-	log.Infof("Dapr system configuration '%s' does not exist; using default value %t for mTLSEnabled", defaultConfig, defaultMtlsEnabled)
-	return defaultMtlsEnabled
+	return resp.Spec.MTLSSpec.GetEnabled()
 }

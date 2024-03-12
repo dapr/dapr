@@ -88,6 +88,6 @@ func (d *defaulttimeout) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
-	assert.NoError(t, resp.Body.Close())
+	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, "GET", string(body))
 }

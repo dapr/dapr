@@ -15,6 +15,7 @@ package diagnostics
 
 import (
 	"context"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -138,8 +139,8 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 		sc := gotSp.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
-		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))
-		assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", spanID[:]))
+		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", hex.EncodeToString(traceID[:]))
+		assert.NotEqual(t, "00f067aa0ba902b7", hex.EncodeToString(spanID[:]))
 	})
 
 	t.Run("traceparent is provided with sampling flag = 1 but sampling is disabled", func(t *testing.T) {
@@ -164,20 +165,20 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 		const expectSampled = 1051
 		const numTraces = 100000
 		sampledCount := runTraces(t, "test_trace", numTraces, "0.01", 0)
-		require.Equal(t, sampledCount, expectSampled, "Expected to sample %d traces but sampled %d", expectSampled, sampledCount)
+		require.Equal(t, expectSampled, sampledCount, "Expected to sample %d traces but sampled %d", expectSampled, sampledCount)
 		require.Less(t, sampledCount, numTraces, "Expected to sample fewer than the total number of traces, but sampled all of them!")
 	})
 
 	t.Run("traceparent is provided with sampling flag = 0 and sampling is enabled (and P=1.00)", func(t *testing.T) {
 		const numTraces = 1000
 		sampledCount := runTraces(t, "test_trace", numTraces, "1.00", 0)
-		require.Equal(t, sampledCount, numTraces, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
+		require.Equal(t, numTraces, sampledCount, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
 	})
 
 	t.Run("traceparent is provided with sampling flag = 1 and sampling is enabled (but not P=1.00)", func(t *testing.T) {
 		const numTraces = 1000
 		sampledCount := runTraces(t, "test_trace", numTraces, "0.00001", 1)
-		require.Equal(t, sampledCount, numTraces, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
+		require.Equal(t, numTraces, sampledCount, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
 	})
 }
 

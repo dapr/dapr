@@ -40,15 +40,7 @@ type ttl struct {
 }
 
 func (l *ttl) Setup(t *testing.T) []framework.Option {
-	l.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-`))
+	l.daprd = procdaprd.New(t, procdaprd.WithInMemoryActorStateStore("mystore"))
 
 	return []framework.Option{
 		framework.WithProcesses(l.daprd),
@@ -70,7 +62,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		resp, err := client.Do(req)
 		require.NoError(t, err)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	})
 
@@ -82,7 +74,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 		assert.Equal(t, `"value1"`, string(body))
 
 		ttlExpireTimeStr := resp.Header.Get("metadata.ttlExpireTime")
@@ -98,8 +90,8 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			require.NoError(c, err)
 			resp, err := client.Do(req)
 			require.NoError(c, err)
-			assert.NoError(t, resp.Body.Close())
+			require.NoError(t, resp.Body.Close())
 			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 10*time.Millisecond)
 	})
 }

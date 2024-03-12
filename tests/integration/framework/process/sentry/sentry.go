@@ -45,7 +45,7 @@ type Sentry struct {
 	exec     process.Interface
 	freeport *util.FreePort
 
-	bundle      ca.Bundle
+	bundle      *ca.Bundle
 	port        int
 	healthzPort int
 	metricsPort int
@@ -54,14 +54,8 @@ type Sentry struct {
 func New(t *testing.T, fopts ...Option) *Sentry {
 	t.Helper()
 
-	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	require.NoError(t, err)
-	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
-	require.NoError(t, err)
-
 	fp := util.ReservePorts(t, 3)
 	opts := options{
-		bundle:      bundle,
 		port:        fp.Port(t, 0),
 		healthzPort: fp.Port(t, 1),
 		metricsPort: fp.Port(t, 2),
@@ -71,6 +65,19 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 
 	for _, fopt := range fopts {
 		fopt(&opts)
+	}
+
+	// Only generate a bundle if one was not provided.
+	if opts.bundle == nil {
+		td := spiffeid.RequireTrustDomainFromString("default").String()
+		if opts.trustDomain != nil {
+			td = *opts.trustDomain
+		}
+		pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+		bundle, err := ca.GenerateBundle(pk, td, time.Second*5, nil)
+		require.NoError(t, err)
+		opts.bundle = &bundle
 	}
 
 	args := []string{
@@ -118,6 +125,10 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		args = append(args, "-config="+configPath)
 	}
 
+	if opts.namespace != nil {
+		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
+	}
+
 	return &Sentry{
 		exec:        exec.New(t, binary.EnvValue("sentry"), args, opts.execOpts...),
 		freeport:    fp,
@@ -139,26 +150,36 @@ func (s *Sentry) Cleanup(t *testing.T) {
 
 func (s *Sentry) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
-	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", s.healthzPort), nil)
-		if err != nil {
-			return false
-		}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", s.healthzPort), nil)
+	require.NoError(t, err)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.Do(req)
-		if err != nil {
-			return false
+		//nolint:testifylint
+		if assert.NoError(c, err) {
+			defer resp.Body.Close()
+			assert.Equal(c, http.StatusOK, resp.StatusCode)
 		}
-		defer resp.Body.Close()
-		return http.StatusOK == resp.StatusCode
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*20, 10*time.Millisecond)
+}
+
+func (s *Sentry) TrustAnchorsFile(t *testing.T) string {
+	t.Helper()
+	taf := filepath.Join(t.TempDir(), "ca.pem")
+	require.NoError(t, os.WriteFile(taf, s.CABundle().TrustAnchors, 0o600))
+	return taf
 }
 
 func (s *Sentry) CABundle() ca.Bundle {
-	return s.bundle
+	return *s.bundle
 }
 
 func (s *Sentry) Port() int {
 	return s.port
+}
+
+func (s *Sentry) Address() string {
+	return "localhost:" + strconv.Itoa(s.Port())
 }
 
 func (s *Sentry) MetricsPort() int {
@@ -191,7 +212,7 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
-		assert.NoError(t, conn.Close())
+		require.NoError(t, conn.Close())
 	})
 
 	return conn

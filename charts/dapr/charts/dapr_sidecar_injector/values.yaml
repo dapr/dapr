@@ -29,6 +29,7 @@ runAsNonRoot: true
 sidecarRunAsNonRoot: true
 sidecarReadOnlyRootFilesystem: true
 sidecarDropALLCapabilities: false
+enableK8sDownwardAPIs: false
 allowedServiceAccounts: ""
 allowedServiceAccountsPrefixNames: ""
 resources: {}
@@ -50,3 +51,5 @@ debug:
   enabled: false
   port: 40000
   initialDelaySeconds: 30000
+
+extraEnvVars: {}

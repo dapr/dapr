@@ -62,9 +62,9 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 			t.Helper()
 			if runtime.GOOS == "windows" {
 				// Windows returns 1 when we kill the process.
-				assert.ErrorContains(t, err, "exit status 1")
+				require.ErrorContains(t, err, "exit status 1")
 			} else {
-				assert.NoError(t, err, "expected %q to run without error", binPath)
+				require.NoError(t, err, "expected %q to run without error", binPath)
 			}
 		},
 		exitCode: defaultExitCode,
@@ -97,6 +97,7 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 
 	e.cmd.Stdout = e.stdoutpipe
 	e.cmd.Stderr = e.stderrpipe
+
 	// Wait for a few seconds before killing the process completely.
 	e.cmd.WaitDelay = time.Second * 5
 
@@ -112,11 +113,12 @@ func (e *exec) Cleanup(t *testing.T) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	assert.NoError(t, e.stderrpipe.Close())
-	assert.NoError(t, e.stdoutpipe.Close())
-
 	kill.Kill(t, e.cmd)
+
 	e.checkExit(t)
+
+	require.NoError(t, e.stderrpipe.Close())
+	require.NoError(t, e.stdoutpipe.Close())
 }
 
 func (e *exec) checkExit(t *testing.T) {
@@ -125,6 +127,7 @@ func (e *exec) checkExit(t *testing.T) {
 	t.Logf("waiting for %q process to exit", filepath.Base(e.binPath))
 
 	e.runErrorFn(t, e.cmd.Wait())
-	assert.NotNil(t, e.cmd.ProcessState, "process state should not be nil")
+	require.NotNil(t, e.cmd.ProcessState, "process state should not be nil")
 	assert.Equalf(t, e.exitCode, e.cmd.ProcessState.ExitCode(), "expected exit code to be %d", e.exitCode)
+	t.Logf("%q process exited", filepath.Base(e.binPath))
 }

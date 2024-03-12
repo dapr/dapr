@@ -14,6 +14,8 @@ limitations under the License.
 package meta
 
 import (
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
 	"github.com/dapr/dapr/pkg/apis/common"
 )
 
@@ -23,6 +25,11 @@ type Resource interface {
 	Kind() string
 	GetName() string
 	GetNamespace() string
+	LogName() string
 	GetSecretStore() string
 	NameValuePairs() []common.NameValuePair
+
+	// Returns a deep copy of the resource, with the object meta set only with
+	// Name and Namespace.
+	EmptyMetaDeepCopy() metav1.Object
 }

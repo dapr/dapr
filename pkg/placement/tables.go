@@ -15,31 +15,43 @@ package placement
 
 type PlacementTables struct {
 	HostList     []HostInfo `json:"hostList,omitempty"`
-	TableVersion uint64     `json:"tableVersion,omitempty"`
+	TableVersion uint64     `json:"tableVersion"`
+	APILevel     uint32     `json:"apiLevel"`
 }
 type HostInfo struct {
 	Name       string   `json:"name,omitempty"`
 	AppID      string   `json:"appId,omitempty"`
 	ActorTypes []string `json:"actorTypes,omitempty"`
 	UpdatedAt  int64    `json:"updatedAt,omitempty"`
+	APILevel   uint32   `json:"apiLevel"`
 }
 
 // GetPlacementTables returns the current placement host infos.
 func (p *Service) GetPlacementTables() (*PlacementTables, error) {
-	m := p.raftNode.FSM().State().Members()
-	version := p.raftNode.FSM().State().TableGeneration()
+	state := p.raftNode.FSM().State()
+	m := state.Members()
 	response := &PlacementTables{
-		TableVersion: version,
+		TableVersion: state.TableGeneration(),
+		APILevel:     state.APILevel(),
 	}
-	members := make([]HostInfo, 0, len(m))
+	if response.APILevel < p.minAPILevel {
+		response.APILevel = p.minAPILevel
+	}
+	if p.maxAPILevel != nil && response.APILevel > *p.maxAPILevel {
+		response.APILevel = *p.maxAPILevel
+	}
+	members := make([]HostInfo, len(m))
 	// the key of the member map is the host name, so we can just ignore it.
+	var i int
 	for _, v := range m {
-		members = append(members, HostInfo{
+		members[i] = HostInfo{
 			Name:       v.Name,
 			AppID:      v.AppID,
 			ActorTypes: v.Entities,
 			UpdatedAt:  v.UpdatedAt,
-		})
+			APILevel:   v.APILevel,
+		}
+		i++
 	}
 	response.HostList = members
 	return response, nil

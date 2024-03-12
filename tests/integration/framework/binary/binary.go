@@ -23,7 +23,6 @@ import (
 	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/iowriter"
@@ -32,15 +31,20 @@ import (
 func BuildAll(t *testing.T) {
 	t.Helper()
 
-	binaryNames := []string{"daprd", "placement", "sentry"}
+	binaryNames := []string{"daprd", "placement", "sentry", "operator"}
 
 	var wg sync.WaitGroup
 	wg.Add(len(binaryNames))
 	for _, name := range binaryNames {
-		go func(name string) {
-			defer wg.Done()
+		if runtime.GOOS == "windows" {
 			Build(t, name)
-		}(name)
+			wg.Done()
+		} else {
+			go func(name string) {
+				defer wg.Done()
+				Build(t, name)
+			}(name)
+		}
 	}
 	wg.Wait()
 }
@@ -66,7 +70,7 @@ func Build(t *testing.T, name string) {
 
 		t.Logf("Root dir: %q", rootDir)
 		t.Logf("Compiling %q binary to: %q", name, binPath)
-		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", binPath, "./cmd/"+name)
+		cmd := exec.Command("go", "build", "-tags=allcomponents,wfbackendsqlite", "-v", "-o", binPath, "./cmd/"+name)
 		cmd.Dir = rootDir
 		cmd.Stdout = ioout
 		cmd.Stderr = ioerr
@@ -74,8 +78,8 @@ func Build(t *testing.T, name string) {
 		cmd.Env = append(os.Environ(), "CGO_ENABLED=0")
 		require.NoError(t, cmd.Run())
 
-		assert.NoError(t, ioout.Close())
-		assert.NoError(t, ioerr.Close())
+		require.NoError(t, ioout.Close())
+		require.NoError(t, ioerr.Close())
 
 		require.NoError(t, os.Setenv(EnvKey(name), binPath))
 	} else {

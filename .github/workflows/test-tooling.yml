@@ -1,0 +1,49 @@
+name: Test Tooling
+
+on:
+  push:
+    paths: # Explicitly declare which paths
+      - ".github/workflows/test-tooling.yml"
+      - ".build-tools/*"
+  pull_request:
+    branches:
+      - master
+    paths: # Explicitly declare which paths
+      - ".github/workflows/test-tooling.yml"
+      - ".build-tools/*"
+
+jobs:
+  lint:
+    name: Test (${{ matrix.os}})
+    
+    strategy:
+      fail-fast: false
+      matrix:
+        os: 
+          - "ubuntu-latest"
+          - "windows-latest"
+          - "macos-latest"
+    runs-on: ${{ matrix.os }}
+    env:
+      GOLANGCILINT_VER: "v1.55.2" # Make sure to bump /.build-tools/check-lint-version/main_test.go
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: './.build-tools/go.mod'
+
+
+      - name: Tidy
+        working-directory: ./.build-tools
+        run: go mod tidy
+
+      - name: Install Linter
+        run: curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b "$(go env GOPATH)/bin" ${{ env.GOLANGCILINT_VER }} 
+
+      - name: Test
+        working-directory: ./.build-tools
+        run: go test ./...

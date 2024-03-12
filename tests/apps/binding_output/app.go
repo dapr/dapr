@@ -168,7 +168,7 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Write(resp.Data.Value)
+	w.Write(resp.GetData().GetValue())
 }
 
 // appRouter initializes restful api router

@@ -34,6 +34,9 @@ type DaprHostMember struct {
 
 	// UpdatedAt is the last time when this host member info is updated.
 	UpdatedAt int64
+
+	// Version of the Actor APIs supported by the Dapr runtime
+	APILevel uint32
 }
 
 type DaprHostMemberStateData struct {
@@ -45,6 +48,9 @@ type DaprHostMemberStateData struct {
 	// TableGeneration is the generation of hashingTableMap.
 	// This is increased whenever hashingTableMap is updated.
 	TableGeneration uint64
+
+	// Version of the actor APIs for the cluster
+	APILevel uint32
 
 	// hashingTableMap is the map for storing consistent hashing data
 	// per Actor types. This will be generated when log entries are replayed.
@@ -58,14 +64,20 @@ type DaprHostMemberStateData struct {
 type DaprHostMemberState struct {
 	lock sync.RWMutex
 
-	data DaprHostMemberStateData
+	config DaprHostMemberStateConfig
+	data   DaprHostMemberStateData
 }
 
-func newDaprHostMemberState() *DaprHostMemberState {
+type DaprHostMemberStateConfig struct {
+	replicationFactor int64
+	minAPILevel       uint32
+	maxAPILevel       uint32
+}
+
+func newDaprHostMemberState(config DaprHostMemberStateConfig) *DaprHostMemberState {
 	return &DaprHostMemberState{
+		config: config,
 		data: DaprHostMemberStateData{
-			Index:           0,
-			TableGeneration: 0,
 			Members:         map[string]*DaprHostMember{},
 			hashingTableMap: map[string]*hashing.Consistent{},
 		},
@@ -79,11 +91,19 @@ func (s *DaprHostMemberState) Index() uint64 {
 	return s.data.Index
 }
 
+// APILevel returns the current API level of the cluster.
+func (s *DaprHostMemberState) APILevel() uint32 {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	return s.data.APILevel
+}
+
 func (s *DaprHostMemberState) Members() map[string]*DaprHostMember {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	members := make(map[string]*DaprHostMember)
+	members := make(map[string]*DaprHostMember, len(s.data.Members))
 	for k, v := range s.data.Members {
 		members[k] = v
 	}
@@ -95,6 +115,40 @@ func (s *DaprHostMemberState) TableGeneration() uint64 {
 	defer s.lock.RUnlock()
 
 	return s.data.TableGeneration
+}
+
+// Internal function that updates the API level in the object.
+// The API level can only be increased.
+// Make sure you have a lock before calling this method.
+func (s *DaprHostMemberState) updateAPILevel() {
+	var observedMinLevel uint32
+	for k := range s.data.Members {
+		apiLevel := s.data.Members[k].APILevel
+		if apiLevel <= 0 {
+			apiLevel = 0
+		}
+		if observedMinLevel == 0 || observedMinLevel > apiLevel {
+			observedMinLevel = apiLevel
+		}
+	}
+
+	// Only enforce minAPILevel if value > 0
+	// 0 is the default value of the struct.
+	// -1 is the default value of the CLI flag.
+	if s.config.minAPILevel >= uint32(0) && observedMinLevel < s.config.minAPILevel {
+		observedMinLevel = s.config.minAPILevel
+	}
+
+	// Only enforce maxAPILevel if value > 0
+	// 0 is the default value of the struct.
+	// -1 is the default value of the CLI flag.
+	if s.config.maxAPILevel >= uint32(0) && observedMinLevel > s.config.maxAPILevel {
+		observedMinLevel = s.config.maxAPILevel
+	}
+
+	if observedMinLevel > s.data.APILevel {
+		s.data.APILevel = observedMinLevel
+	}
 }
 
 func (s *DaprHostMemberState) hashingTableMap() map[string]*hashing.Consistent {
@@ -109,11 +163,12 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 	defer s.lock.RUnlock()
 
 	newMembers := &DaprHostMemberState{
+		config: s.config,
 		data: DaprHostMemberStateData{
 			Index:           s.data.Index,
 			TableGeneration: s.data.TableGeneration,
-			Members:         map[string]*DaprHostMember{},
-			hashingTableMap: nil,
+			Members:         make(map[string]*DaprHostMember, len(s.data.Members)),
+			APILevel:        s.data.APILevel,
 		},
 	}
 	for k, v := range s.data.Members {
@@ -122,6 +177,7 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 			AppID:     v.AppID,
 			Entities:  make([]string, len(v.Entities)),
 			UpdatedAt: v.UpdatedAt,
+			APILevel:  v.APILevel,
 		}
 		copy(m.Entities, v.Entities)
 		newMembers.data.Members[k] = m
@@ -133,7 +189,7 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
 	for _, e := range host.Entities {
 		if _, ok := s.data.hashingTableMap[e]; !ok {
-			s.data.hashingTableMap[e] = hashing.NewConsistentHash()
+			s.data.hashingTableMap[e] = hashing.NewConsistentHash(s.config.replicationFactor)
 		}
 
 		s.data.hashingTableMap[e].Add(host.Name, host.AppID, 0)
@@ -181,6 +237,7 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 		Name:      host.Name,
 		AppID:     host.AppID,
 		UpdatedAt: host.UpdatedAt,
+		APILevel:  host.APILevel,
 	}
 
 	// Update hashing table only when host reports actor types
@@ -188,6 +245,7 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 	copy(s.data.Members[host.Name].Entities, host.Entities)
 
 	s.updateHashingTables(s.data.Members[host.Name])
+	s.updateAPILevel()
 
 	// Increase hashing table generation version. Runtime will compare the table generation
 	// version with its own and then update it if it is new.
@@ -206,6 +264,7 @@ func (s *DaprHostMemberState) removeMember(host *DaprHostMember) bool {
 		s.removeHashingTables(m)
 		s.data.TableGeneration++
 		delete(s.data.Members, host.Name)
+		s.updateAPILevel()
 
 		return true
 	}
@@ -217,7 +276,7 @@ func (s *DaprHostMemberState) isActorHost(host *DaprHostMember) bool {
 	return len(host.Entities) > 0
 }
 
-// caller should holds lock.
+// caller should hold lock.
 func (s *DaprHostMemberState) restoreHashingTables() {
 	if s.data.hashingTableMap == nil {
 		s.data.hashingTableMap = map[string]*hashing.Consistent{}
@@ -241,6 +300,7 @@ func (s *DaprHostMemberState) restore(r io.Reader) error {
 	s.data = data
 
 	s.restoreHashingTables()
+	s.updateAPILevel()
 	return nil
 }
 

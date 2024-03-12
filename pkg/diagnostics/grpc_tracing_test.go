@@ -16,12 +16,14 @@ package diagnostics
 import (
 	"context"
 	"encoding/base64"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -31,10 +33,10 @@ import (
 	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/config"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/grpc/metadata"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -81,7 +83,7 @@ func TestUserDefinedMetadata(t *testing.T) {
 
 	m := userDefinedMetadata(testCtx)
 
-	assert.Equal(t, 2, len(m))
+	assert.Len(t, m, 2)
 	assert.Equal(t, "value1", m["dapr-userdefined-1"])
 	assert.Equal(t, "value2", m["dapr-userdefined-2"])
 }
@@ -132,9 +134,9 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 
 		sc := span.SpanContext()
 		traceID := sc.TraceID()
-		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))
+		assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", hex.EncodeToString(traceID[:]))
 		spanID := sc.SpanID()
-		assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", spanID[:]))
+		assert.NotEqual(t, "00f067aa0ba902b7", hex.EncodeToString(spanID[:]))
 	})
 
 	t.Run("grpc-trace-bin is not given", func(t *testing.T) {
@@ -157,8 +159,8 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 		sc := span.SpanContext()
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
-		assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
-		assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
+		assert.NotEmpty(t, hex.EncodeToString(traceID[:]))
+		assert.NotEmpty(t, hex.EncodeToString(spanID[:]))
 	})
 
 	t.Run("InvokeService call", func(t *testing.T) {
@@ -183,8 +185,8 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 		assert.True(t, strings.Contains(spanString, "CallLocal/targetID/method1"))
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
-		assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
-		assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
+		assert.NotEmpty(t, hex.EncodeToString(traceID[:]))
+		assert.NotEmpty(t, hex.EncodeToString(spanID[:]))
 	})
 
 	t.Run("InvokeService call with grpc status error", func(t *testing.T) {
@@ -227,8 +229,8 @@ func TestGRPCTraceUnaryServerInterceptor(t *testing.T) {
 		assert.True(t, strings.Contains(spanString, "CallLocal/targetID/method1"))
 		traceID := sc.TraceID()
 		spanID := sc.SpanID()
-		assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
-		assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
+		assert.NotEmpty(t, hex.EncodeToString(traceID[:]))
+		assert.NotEmpty(t, hex.EncodeToString(spanID[:]))
 	})
 }
 
@@ -258,7 +260,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			}
 
 			err := interceptor(nil, &fakeStream{}, fakeInfo, h)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		})
 
 		t.Run("grpc-trace-bin is given", func(t *testing.T) {
@@ -279,9 +281,9 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 
 			sc := span.SpanContext()
 			traceID := sc.TraceID()
-			assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))
+			assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", hex.EncodeToString(traceID[:]))
 			spanID := sc.SpanID()
-			assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", spanID[:]))
+			assert.NotEqual(t, "00f067aa0ba902b7", hex.EncodeToString(spanID[:]))
 		})
 
 		t.Run("grpc-trace-bin is not given", func(t *testing.T) {
@@ -300,8 +302,8 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			sc := span.SpanContext()
 			traceID := sc.TraceID()
 			spanID := sc.SpanID()
-			assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
-			assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
+			assert.NotEmpty(t, hex.EncodeToString(traceID[:]))
+			assert.NotEmpty(t, hex.EncodeToString(spanID[:]))
 		})
 	})
 
@@ -316,7 +318,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			}
 
 			err := interceptor(nil, &fakeStream{}, fakeInfo, h)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		})
 
 		t.Run("grpc-trace-bin is given", func(t *testing.T) {
@@ -337,9 +339,9 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 
 			sc := span.SpanContext()
 			traceID := sc.TraceID()
-			assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))
+			assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", hex.EncodeToString(traceID[:]))
 			spanID := sc.SpanID()
-			assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", spanID[:]))
+			assert.NotEqual(t, "00f067aa0ba902b7", hex.EncodeToString(spanID[:]))
 		})
 
 		t.Run("grpc-trace-bin is not given", func(t *testing.T) {
@@ -358,8 +360,8 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			sc := span.SpanContext()
 			traceID := sc.TraceID()
 			spanID := sc.SpanID()
-			assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
-			assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
+			assert.NotEmpty(t, hex.EncodeToString(traceID[:]))
+			assert.NotEmpty(t, hex.EncodeToString(spanID[:]))
 		})
 	})
 
@@ -370,7 +372,7 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			}
 
 			err := interceptor(nil, &fakeStream{}, fakeInfo, nil)
-			assert.Error(t, err)
+			require.Error(t, err)
 		})
 
 		t.Run("proxy request with app id and grpc-trace-bin", func(t *testing.T) {
@@ -392,13 +394,13 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			}
 
 			err := interceptor(nil, &fakeStream{ctx}, fakeInfo, assertHandler)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			sc := span.SpanContext()
 			traceID := sc.TraceID()
-			assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", fmt.Sprintf("%x", traceID[:]))
+			assert.Equal(t, "4bf92f3577b34da6a3ce929d0e0e4736", hex.EncodeToString(traceID[:]))
 			spanID := sc.SpanID()
-			assert.NotEqual(t, "00f067aa0ba902b7", fmt.Sprintf("%x", spanID[:]))
+			assert.NotEqual(t, "00f067aa0ba902b7", hex.EncodeToString(spanID[:]))
 		})
 
 		t.Run("proxy request with app id and no grpc-trace-bin", func(t *testing.T) {
@@ -419,13 +421,13 @@ func TestGRPCTraceStreamServerInterceptor(t *testing.T) {
 			}
 
 			err := interceptor(nil, &fakeStream{ctx}, fakeInfo, assertHandler)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			sc := span.SpanContext()
 			traceID := sc.TraceID()
 			spanID := sc.SpanID()
-			assert.NotEmpty(t, fmt.Sprintf("%x", traceID[:]))
-			assert.NotEmpty(t, fmt.Sprintf("%x", spanID[:]))
+			assert.NotEmpty(t, hex.EncodeToString(traceID[:]))
+			assert.NotEmpty(t, hex.EncodeToString(spanID[:]))
 		})
 	})
 }

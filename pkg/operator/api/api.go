@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"strconv"
 	"sync"
 	"sync/atomic"
 
@@ -42,8 +43,6 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-const serverPort = 6500
-
 const (
 	APIVersionV1alpha1    = "dapr.io/v1alpha1"
 	APIVersionV2alpha1    = "dapr.io/v2alpha1"
@@ -52,48 +51,68 @@ const (
 
 var log = logger.NewLogger("dapr.operator.api")
 
+type Options struct {
+	Client   client.Client
+	Security security.Provider
+	Port     int
+}
+
 // Server runs the Dapr API server for components and configurations.
 type Server interface {
-	Run(context.Context, security.Handler) error
+	Run(context.Context) error
 	Ready(context.Context) error
-	OnComponentUpdated(ctx context.Context, component *componentsapi.Component)
-	OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint)
+	OnComponentUpdated(context.Context, operatorv1pb.ResourceEventType, *componentsapi.Component)
+	OnHTTPEndpointUpdated(context.Context, *httpendpointsapi.HTTPEndpoint)
+}
+
+type ComponentUpdateEvent struct {
+	Component *componentsapi.Component
+	EventType operatorv1pb.ResourceEventType
 }
 
 type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
 	Client client.Client
+	sec    security.Provider
+	port   string
 	// notify all dapr runtime
 	connLock               sync.Mutex
 	endpointLock           sync.Mutex
-	allConnUpdateChan      map[string]chan *componentsapi.Component
+	allConnUpdateChan      map[string]chan *ComponentUpdateEvent
 	allEndpointsUpdateChan map[string]chan *httpendpointsapi.HTTPEndpoint
 	readyCh                chan struct{}
 	running                atomic.Bool
 }
 
 // NewAPIServer returns a new API server.
-func NewAPIServer(client client.Client) Server {
+func NewAPIServer(opts Options) Server {
 	return &apiServer{
-		Client:                 client,
-		allConnUpdateChan:      make(map[string]chan *componentsapi.Component),
+		Client:                 opts.Client,
+		sec:                    opts.Security,
+		port:                   strconv.Itoa(opts.Port),
+		allConnUpdateChan:      make(map[string]chan *ComponentUpdateEvent),
 		allEndpointsUpdateChan: make(map[string]chan *httpendpointsapi.HTTPEndpoint),
 		readyCh:                make(chan struct{}),
 	}
 }
 
 // Run starts a new gRPC server.
-func (a *apiServer) Run(ctx context.Context, sec security.Handler) error {
+func (a *apiServer) Run(ctx context.Context) error {
 	if !a.running.CompareAndSwap(false, true) {
 		return errors.New("api server already running")
 	}
 
-	log.Infof("starting gRPC server on port %d", serverPort)
+	log.Infof("Starting gRPC server on port %s", a.port)
+
+	sec, err := a.sec.Handler(ctx)
+	if err != nil {
+		return err
+	}
 
 	s := grpc.NewServer(sec.GRPCServerOptionMTLS())
 	operatorv1pb.RegisterOperatorServer(s, a)
 
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%v", serverPort))
+	lis, err := net.Listen("tcp", ":"+a.port)
 	if err != nil {
 		return fmt.Errorf("error starting tcp listener: %w", err)
 	}
@@ -111,27 +130,46 @@ func (a *apiServer) Run(ctx context.Context, sec security.Handler) error {
 	// Block until context is done
 	<-ctx.Done()
 
+	a.connLock.Lock()
+	for key, ch := range a.allConnUpdateChan {
+		close(ch)
+		delete(a.allConnUpdateChan, key)
+	}
+	a.connLock.Unlock()
+
 	s.GracefulStop()
 	err = <-errCh
 	if err != nil {
 		return err
 	}
 	err = lis.Close()
-	if err != nil {
+	if err != nil && !errors.Is(err, net.ErrClosed) {
 		return fmt.Errorf("error closing listener: %w", err)
 	}
 	return nil
 }
 
-func (a *apiServer) OnComponentUpdated(_ context.Context, component *componentsapi.Component) {
+func (a *apiServer) OnComponentUpdated(ctx context.Context, eventType operatorv1pb.ResourceEventType, component *componentsapi.Component) {
 	a.connLock.Lock()
+	var wg sync.WaitGroup
+	wg.Add(len(a.allConnUpdateChan))
 	for _, connUpdateChan := range a.allConnUpdateChan {
-		connUpdateChan <- component
+		go func(connUpdateChan chan *ComponentUpdateEvent) {
+			defer wg.Done()
+			select {
+			case connUpdateChan <- &ComponentUpdateEvent{
+				Component: component,
+				EventType: eventType,
+			}:
+			case <-ctx.Done():
+			}
+		}(connUpdateChan)
 	}
+	wg.Wait()
 	a.connLock.Unlock()
 }
 
-func (a *apiServer) OnHTTPEndpointUpdated(_ context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
+func (a *apiServer) OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
 	a.endpointLock.Lock()
 	for _, endpointUpdateChan := range a.allEndpointsUpdateChan {
 		go func(endpointUpdateChan chan *httpendpointsapi.HTTPEndpoint) {
@@ -152,10 +190,14 @@ func (a *apiServer) Ready(ctx context.Context) error {
 
 // GetConfiguration returns a Dapr configuration.
 func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetConfigurationRequest) (*operatorv1pb.GetConfigurationResponse, error) {
-	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
+	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var config configurationapi.Configuration
 	if err := a.Client.Get(ctx, key, &config); err != nil {
-		return nil, fmt.Errorf("error getting configuration: %w", err)
+		return nil, fmt.Errorf("error getting configuration %s/%s: %w", in.GetNamespace(), in.GetName(), err)
 	}
 	b, err := json.Marshal(&config)
 	if err != nil {
@@ -168,9 +210,13 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 
 // ListComponents returns a list of Dapr components.
 func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
 	var components componentsapi.ComponentList
 	if err := a.Client.List(ctx, &components, &client.ListOptions{
-		Namespace: in.Namespace,
+		Namespace: in.GetNamespace(),
 	}); err != nil {
 		return nil, fmt.Errorf("error getting components: %w", err)
 	}
@@ -179,18 +225,18 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	}
 	for i := range components.Items {
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
-		err := processComponentSecrets(ctx, &c, in.Namespace, a.Client)
+		err := processComponentSecrets(ctx, &c, in.GetNamespace(), a.Client)
 		if err != nil {
-			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
+			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.GetNamespace(), in.GetPodName(), err)
 			return &operatorv1pb.ListComponentResponse{}, err
 		}
 
 		b, err := json.Marshal(&c)
 		if err != nil {
-			log.Warnf("error marshalling component %s from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
+			log.Warnf("error marshalling component %s from pod %s/%s: %s", c.Name, in.GetNamespace(), in.GetPodName(), err)
 			continue
 		}
-		resp.Components = append(resp.Components, b)
+		resp.Components = append(resp.GetComponents(), b)
 	}
 	return resp, nil
 }
@@ -319,6 +365,10 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 
 // ListSubscriptionsV2 returns a list of Dapr pub/sub subscriptions. Use ListSubscriptionsRequest to expose pod info.
 func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
 	resp := &operatorv1pb.ListSubscriptionsResponse{
 		Subscriptions: [][]byte{},
 	}
@@ -326,7 +376,7 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 	// Only the latest/storage version needs to be returned.
 	var subsV2alpha1 subscriptionsapiV2alpha1.SubscriptionList
 	if err := a.Client.List(ctx, &subsV2alpha1, &client.ListOptions{
-		Namespace: in.Namespace,
+		Namespace: in.GetNamespace(),
 	}); err != nil {
 		return nil, fmt.Errorf("error getting subscriptions: %w", err)
 	}
@@ -337,10 +387,10 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 		}
 		b, err := json.Marshal(&s)
 		if err != nil {
-			log.Warnf("error marshalling subscription for pod %s/%s: %s", in.Namespace, in.PodName, err)
+			log.Warnf("error marshalling subscription for pod %s/%s: %s", in.GetNamespace(), in.GetPodName(), err)
 			continue
 		}
-		resp.Subscriptions = append(resp.Subscriptions, b)
+		resp.Subscriptions = append(resp.GetSubscriptions(), b)
 	}
 
 	return resp, nil
@@ -348,7 +398,11 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 
 // GetResiliency returns a specified resiliency object.
 func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetResiliencyResponse, error) {
-	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
+	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var resiliencyConfig resiliencyapi.Resiliency
 	if err := a.Client.Get(ctx, key, &resiliencyConfig); err != nil {
 		return nil, fmt.Errorf("error getting resiliency: %w", err)
@@ -364,13 +418,17 @@ func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResil
 
 // ListResiliency gets the list of applied resiliencies.
 func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListResiliencyRequest) (*operatorv1pb.ListResiliencyResponse, error) {
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
 	resp := &operatorv1pb.ListResiliencyResponse{
 		Resiliencies: [][]byte{},
 	}
 
 	var resiliencies resiliencyapi.ResiliencyList
 	if err := a.Client.List(ctx, &resiliencies, &client.ListOptions{
-		Namespace: in.Namespace,
+		Namespace: in.GetNamespace(),
 	}); err != nil {
 		return nil, fmt.Errorf("error listing resiliencies: %w", err)
 	}
@@ -381,14 +439,20 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 			log.Warnf("Error unmarshalling resiliency: %s", err)
 			continue
 		}
-		resp.Resiliencies = append(resp.Resiliencies, b)
+		resp.Resiliencies = append(resp.GetResiliencies(), b)
 	}
 
 	return resp, nil
 }
 
 // ComponentUpdate updates Dapr sidecars whenever a component in the cluster is modified.
+// TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
+// the caller.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
+	if err := a.authzRequest(srv.Context(), in.GetNamespace()); err != nil {
+		return err
+	}
+
 	log.Info("sidecar connected for component updates")
 	keyObj, err := uuid.NewRandom()
 	if err != nil {
@@ -397,7 +461,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 	key := keyObj.String()
 
 	a.connLock.Lock()
-	a.allConnUpdateChan[key] = make(chan *componentsapi.Component, 1)
+	a.allConnUpdateChan[key] = make(chan *ComponentUpdateEvent)
 	updateChan := a.allConnUpdateChan[key]
 	a.connLock.Unlock()
 
@@ -407,32 +471,33 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		delete(a.allConnUpdateChan, key)
 	}()
 
-	updateComponentFunc := func(ctx context.Context, c *componentsapi.Component) {
-		if c.Namespace != in.Namespace {
+	updateComponentFunc := func(ctx context.Context, t operatorv1pb.ResourceEventType, c *componentsapi.Component) {
+		if c.Namespace != in.GetNamespace() {
 			return
 		}
 
-		err := processComponentSecrets(ctx, c, in.Namespace, a.Client)
+		err := processComponentSecrets(ctx, c, in.GetNamespace(), a.Client)
 		if err != nil {
-			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.Namespace, in.PodName, err)
+			log.Warnf("error processing component %s secrets from pod %s/%s: %s", c.Name, in.GetNamespace(), in.GetPodName(), err)
 			return
 		}
 
 		b, err := json.Marshal(&c)
 		if err != nil {
-			log.Warnf("error serializing component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
+			log.Warnf("error serializing component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName(), err)
 			return
 		}
 
 		err = srv.Send(&operatorv1pb.ComponentUpdateEvent{
 			Component: b,
+			Type:      t,
 		})
 		if err != nil {
-			log.Warnf("error updating sidecar with component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName, err)
+			log.Warnf("error updating sidecar with component %s (%s) from pod %s/%s: %s", c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName(), err)
 			return
 		}
 
-		log.Infof("updated sidecar with component %s (%s) from pod %s/%s", c.GetName(), c.Spec.Type, in.Namespace, in.PodName)
+		log.Debugf("updated sidecar with component %s %s (%s) from pod %s/%s", t.String(), c.GetName(), c.Spec.Type, in.GetNamespace(), in.GetPodName())
 	}
 
 	var wg sync.WaitGroup
@@ -448,7 +513,7 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				updateComponentFunc(srv.Context(), c)
+				updateComponentFunc(srv.Context(), c.EventType, c.Component)
 			}()
 		}
 	}
@@ -456,7 +521,11 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 
 // GetHTTPEndpoint returns a specified http endpoint object.
 func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetHTTPEndpointResponse, error) {
-	key := types.NamespacedName{Namespace: in.Namespace, Name: in.Name}
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
+	key := types.NamespacedName{Namespace: in.GetNamespace(), Name: in.GetName()}
 	var endpointConfig httpendpointsapi.HTTPEndpoint
 	if err := a.Client.Get(ctx, key, &endpointConfig); err != nil {
 		return nil, fmt.Errorf("error getting http endpoint: %w", err)
@@ -472,13 +541,17 @@ func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetRes
 
 // ListHTTPEndpoints gets the list of applied http endpoints.
 func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListHTTPEndpointsRequest) (*operatorv1pb.ListHTTPEndpointsResponse, error) {
+	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+		return nil, err
+	}
+
 	resp := &operatorv1pb.ListHTTPEndpointsResponse{
 		HttpEndpoints: [][]byte{},
 	}
 
 	var endpoints httpendpointsapi.HTTPEndpointList
 	if err := a.Client.List(ctx, &endpoints, &client.ListOptions{
-		Namespace: in.Namespace,
+		Namespace: in.GetNamespace(),
 	}); err != nil {
 		return nil, fmt.Errorf("error listing http endpoints: %w", err)
 	}
@@ -496,7 +569,7 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 			log.Warnf("Error unmarshalling http endpoints: %s", err)
 			continue
 		}
-		resp.HttpEndpoints = append(resp.HttpEndpoints, b)
+		resp.HttpEndpoints = append(resp.GetHttpEndpoints(), b)
 	}
 
 	return resp, nil
@@ -504,6 +577,10 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 
 // HTTPEndpointUpdate updates Dapr sidecars whenever an http endpoint in the cluster is modified.
 func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateRequest, srv operatorv1pb.Operator_HTTPEndpointUpdateServer) error { //nolint:nosnakecase
+	if err := a.authzRequest(srv.Context(), in.GetNamespace()); err != nil {
+		return err
+	}
+
 	log.Info("sidecar connected for http endpoint updates")
 	keyObj, err := uuid.NewRandom()
 	if err != nil {
@@ -523,18 +600,18 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 	}()
 
 	updateHTTPEndpointFunc := func(ctx context.Context, e *httpendpointsapi.HTTPEndpoint) {
-		if e.Namespace != in.Namespace {
+		if e.Namespace != in.GetNamespace() {
 			return
 		}
 
-		err := processHTTPEndpointSecrets(ctx, e, in.Namespace, a.Client)
+		err := processHTTPEndpointSecrets(ctx, e, in.GetNamespace(), a.Client)
 		if err != nil {
-			log.Warnf("error processing http endpoint %s secrets from pod %s/%s: %s", e.Name, in.Namespace, in.PodName, err)
+			log.Warnf("error processing http endpoint %s secrets from pod %s/%s: %s", e.Name, in.GetNamespace(), in.GetPodName(), err)
 			return
 		}
 		b, err := json.Marshal(&e)
 		if err != nil {
-			log.Warnf("error serializing  http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			log.Warnf("error serializing  http endpoint %s from pod %s/%s: %s", e.GetName(), in.GetNamespace(), in.GetPodName(), err)
 			return
 		}
 
@@ -542,11 +619,11 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 			HttpEndpoints: b,
 		})
 		if err != nil {
-			log.Warnf("error updating sidecar with http endpoint %s from pod %s/%s: %s", e.GetName(), in.Namespace, in.PodName, err)
+			log.Warnf("error updating sidecar with http endpoint %s from pod %s/%s: %s", e.GetName(), in.GetNamespace(), in.GetPodName(), err)
 			return
 		}
 
-		log.Infof("updated sidecar with http endpoint %s from pod %s/%s", e.GetName(), in.Namespace, in.PodName)
+		log.Infof("updated sidecar with http endpoint %s from pod %s/%s", e.GetName(), in.GetNamespace(), in.GetPodName())
 	}
 
 	var wg sync.WaitGroup

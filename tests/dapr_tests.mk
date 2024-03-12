@@ -41,6 +41,7 @@ actorfeatures \
 actorinvocationapp \
 actorstate \
 actorreentrancy \
+crypto \
 runtime \
 runtime_init \
 middleware \
@@ -104,6 +105,10 @@ endif
 
 ifeq ($(DAPR_TEST_CONFIG_STORE),)
 DAPR_TEST_CONFIG_STORE=redis
+endif
+
+ifeq ($(DAPR_TEST_CRYPTO),)
+DAPR_TEST_CRYPTO=jwks
 endif
 
 ifeq ($(DAPR_TEST_NAMESPACE),)
@@ -253,7 +258,7 @@ create-test-namespace:
 	kubectl create namespace $(DAPR_TEST_NAMESPACE)
 
 delete-test-namespace:
-	kubectl delete namespace $(DAPR_TEST_NAMESPACE)
+	kubectl delete namespace $(DAPR_TEST_NAMESPACE) aa
 
 setup-3rd-party: setup-helm-init setup-test-env-redis setup-test-env-kafka setup-test-env-zipkin setup-test-env-postgres
 
@@ -552,6 +557,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_CONFIG_STORE)_configuration.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/pubsub_no_resiliency.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kafka_pubsub.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/dapr_crypto_$(DAPR_TEST_CRYPTO).yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_pluggable_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_kafka_bindings_custom_route.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -584,6 +590,8 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/externalinvocationcrd.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/omithealthchecks_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/external_invocation_http_endpoint_tls.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	# Don't set namespace as Namespace is defind in the yaml.
+	$(KUBECTL) apply -f ./tests/config/ignore_daprsystem_config.yaml
 
 	# Show the installed components
 	$(KUBECTL) get components --namespace $(DAPR_TEST_NAMESPACE)

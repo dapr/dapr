@@ -171,7 +171,8 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 
 		var ce map[string]string
 		err = json.Unmarshal(body, &ce)
+		//nolint:testifylint
 		assert.NoError(c, err)
 		assert.Equal(c, "2", ce["data"])
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*10, time.Millisecond*10)
 }

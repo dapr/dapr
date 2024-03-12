@@ -19,6 +19,7 @@ import (
 
 	"github.com/hashicorp/raft"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 type MockSnapShotSink struct {
@@ -41,7 +42,11 @@ func (m *MockSnapShotSink) Close() error {
 
 func TestPersist(t *testing.T) {
 	// arrange
-	fsm := newFSM()
+	fsm := newFSM(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	testMember := DaprHostMember{
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",
@@ -60,13 +65,17 @@ func TestPersist(t *testing.T) {
 
 	// act
 	snap, err := fsm.Snapshot()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	snap.Persist(fakeSink)
 
 	// assert
-	restoredState := newDaprHostMemberState()
+	restoredState := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	err = restoredState.restore(buf)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	expectedMember := fsm.State().Members()[testMember.Name]
 	restoredMember := restoredState.Members()[testMember.Name]

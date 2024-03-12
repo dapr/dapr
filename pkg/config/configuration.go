@@ -22,8 +22,6 @@ import (
 	"strings"
 	"time"
 
-	env "github.com/dapr/dapr/pkg/config/env"
-
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
 	yaml "gopkg.in/yaml.v3"
@@ -31,8 +29,10 @@ import (
 	"k8s.io/apimachinery/pkg/util/sets"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
+	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -41,12 +41,11 @@ import (
 type Feature string
 
 const (
-	// Disables enforcing minimum TLS version 1.2 in AppChannel, which is insecure.
-	// TODO: Remove this feature flag in Dapr 1.13.
-	AppChannelAllowInsecureTLS Feature = "AppChannelAllowInsecureTLS"
-	// Enables support for setting TTL on Actor state keys. Remove this flag in
-	// Dapr 1.12.
+	// Enables support for setting TTL on Actor state keys.
 	ActorStateTTL Feature = "ActorStateTTL"
+
+	// Enables support for hot reloading of Daprd Components.
+	HotReload Feature = "HotReload"
 )
 
 // end feature flags section
@@ -60,6 +59,9 @@ const (
 	DefaultNamespace    = "default"
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
+
+	defaultMaxWorkflowConcurrentInvocations = 100
+	defaultMaxActivityConcurrentInvocations = 100
 )
 
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
@@ -98,20 +100,47 @@ type AccessControlListOperationAction struct {
 }
 
 type ConfigurationSpec struct {
-	HTTPPipelineSpec    *PipelineSpec       `json:"httpPipeline,omitempty" yaml:"httpPipeline,omitempty"`
+	HTTPPipelineSpec    *PipelineSpec       `json:"httpPipeline,omitempty"    yaml:"httpPipeline,omitempty"`
 	AppHTTPPipelineSpec *PipelineSpec       `json:"appHttpPipeline,omitempty" yaml:"appHttpPipeline,omitempty"`
-	TracingSpec         *TracingSpec        `json:"tracing,omitempty" yaml:"tracing,omitempty"`
-	MTLSSpec            *MTLSSpec           `json:"mtls,omitempty" yaml:"mtls,omitempty"`
-	MetricSpec          *MetricSpec         `json:"metric,omitempty" yaml:"metric,omitempty"`
-	MetricsSpec         *MetricSpec         `json:"metrics,omitempty" yaml:"metrics,omitempty"`
-	Secrets             *SecretsSpec        `json:"secrets,omitempty" yaml:"secrets,omitempty"`
-	AccessControlSpec   *AccessControlSpec  `json:"accessControl,omitempty" yaml:"accessControl,omitempty"`
-	NameResolutionSpec  *NameResolutionSpec `json:"nameResolution,omitempty" yaml:"nameResolution,omitempty"`
-	Features            []FeatureSpec       `json:"features,omitempty" yaml:"features,omitempty"`
-	APISpec             *APISpec            `json:"api,omitempty" yaml:"api,omitempty"`
-	ComponentsSpec      *ComponentsSpec     `json:"components,omitempty" yaml:"components,omitempty"`
-	LoggingSpec         *LoggingSpec        `json:"logging,omitempty" yaml:"logging,omitempty"`
-	WasmSpec            *WasmSpec           `json:"wasm,omitempty" yaml:"wasm,omitempty"`
+	TracingSpec         *TracingSpec        `json:"tracing,omitempty"         yaml:"tracing,omitempty"`
+	MTLSSpec            *MTLSSpec           `json:"mtls,omitempty"            yaml:"mtls,omitempty"`
+	MetricSpec          *MetricSpec         `json:"metric,omitempty"          yaml:"metric,omitempty"`
+	MetricsSpec         *MetricSpec         `json:"metrics,omitempty"         yaml:"metrics,omitempty"`
+	Secrets             *SecretsSpec        `json:"secrets,omitempty"         yaml:"secrets,omitempty"`
+	AccessControlSpec   *AccessControlSpec  `json:"accessControl,omitempty"   yaml:"accessControl,omitempty"`
+	NameResolutionSpec  *NameResolutionSpec `json:"nameResolution,omitempty"  yaml:"nameResolution,omitempty"`
+	Features            []FeatureSpec       `json:"features,omitempty"        yaml:"features,omitempty"`
+	APISpec             *APISpec            `json:"api,omitempty"             yaml:"api,omitempty"`
+	ComponentsSpec      *ComponentsSpec     `json:"components,omitempty"      yaml:"components,omitempty"`
+	LoggingSpec         *LoggingSpec        `json:"logging,omitempty"         yaml:"logging,omitempty"`
+	WasmSpec            *WasmSpec           `json:"wasm,omitempty"            yaml:"wasm,omitempty"`
+	WorkflowSpec        *WorkflowSpec       `json:"workflow,omitempty"        yaml:"workflow,omitempty"`
+}
+
+// WorkflowSpec defines the configuration for Dapr workflows.
+type WorkflowSpec struct {
+	// maxConcurrentWorkflowInvocations is the maximum number of concurrent workflow invocations that can be scheduled by a single Dapr instance.
+	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
+	// If omitted, the default value of 100 will be used.
+	MaxConcurrentWorkflowInvocations int32 `json:"maxConcurrentWorkflowInvocations,omitempty" yaml:"maxConcurrentWorkflowInvocations,omitempty"`
+	// maxConcurrentActivityInvocations is the maximum number of concurrent activities that can be processed by a single Dapr instance.
+	// Attempted invocations beyond this will be queued until the number of concurrent invocations drops below this value.
+	// If omitted, the default value of 100 will be used.
+	MaxConcurrentActivityInvocations int32 `json:"maxConcurrentActivityInvocations,omitempty" yaml:"maxConcurrentActivityInvocations,omitempty"`
+}
+
+func (w *WorkflowSpec) GetMaxConcurrentWorkflowInvocations() int32 {
+	if w == nil || w.MaxConcurrentWorkflowInvocations <= 0 {
+		return defaultMaxWorkflowConcurrentInvocations
+	}
+	return w.MaxConcurrentWorkflowInvocations
+}
+
+func (w *WorkflowSpec) GetMaxConcurrentActivityInvocations() int32 {
+	if w == nil || w.MaxConcurrentActivityInvocations <= 0 {
+		return defaultMaxActivityConcurrentInvocations
+	}
+	return w.MaxConcurrentActivityInvocations
 }
 
 type SecretsSpec struct {
@@ -120,10 +149,10 @@ type SecretsSpec struct {
 
 // SecretsScope defines the scope for secrets.
 type SecretsScope struct {
-	DefaultAccess  string   `json:"defaultAccess,omitempty" yaml:"defaultAccess,omitempty"`
-	StoreName      string   `json:"storeName,omitempty" yaml:"storeName,omitempty"`
+	DefaultAccess  string   `json:"defaultAccess,omitempty"  yaml:"defaultAccess,omitempty"`
+	StoreName      string   `json:"storeName,omitempty"      yaml:"storeName,omitempty"`
 	AllowedSecrets []string `json:"allowedSecrets,omitempty" yaml:"allowedSecrets,omitempty"`
-	DeniedSecrets  []string `json:"deniedSecrets,omitempty" yaml:"deniedSecrets,omitempty"`
+	DeniedSecrets  []string `json:"deniedSecrets,omitempty"  yaml:"deniedSecrets,omitempty"`
 }
 
 type PipelineSpec struct {
@@ -171,9 +200,9 @@ func (r APIAccessRules) GetRulesByProtocol(protocol APIAccessRuleProtocol) map[s
 }
 
 type HandlerSpec struct {
-	Name         string       `json:"name,omitempty" yaml:"name,omitempty"`
-	Type         string       `json:"type,omitempty" yaml:"type,omitempty"`
-	Version      string       `json:"version,omitempty" yaml:"version,omitempty"`
+	Name         string       `json:"name,omitempty"     yaml:"name,omitempty"`
+	Type         string       `json:"type,omitempty"     yaml:"type,omitempty"`
+	Version      string       `json:"version,omitempty"  yaml:"version,omitempty"`
 	SelectorSpec SelectorSpec `json:"selector,omitempty" yaml:"selector,omitempty"`
 }
 
@@ -221,6 +250,7 @@ func (o OtelSpec) GetIsSecure() bool {
 type MetricSpec struct {
 	// Defaults to true
 	Enabled *bool         `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	HTTP    *MetricHTTP   `json:"http,omitempty" yaml:"http,omitempty"`
 	Rules   []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
 }
 
@@ -230,15 +260,30 @@ func (m MetricSpec) GetEnabled() bool {
 	return m.Enabled == nil || *m.Enabled
 }
 
-// MetricsRule defines configuration options for a metric.
+// GetHTTPIncreasedCardinality returns true if increased cardinality is enabled for HTTP metrics
+func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
+	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
+		// The default is false
+		return false
+	}
+	return *m.HTTP.IncreasedCardinality
+}
+
+// MetricHTTP defines configuration for metrics for the HTTP server
+type MetricHTTP struct {
+	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
+	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
+}
+
+// MetricsRu le defines configuration options for a metric.
 type MetricsRule struct {
-	Name   string        `json:"name,omitempty" yaml:"name,omitempty"`
+	Name   string        `json:"name,omitempty"   yaml:"name,omitempty"`
 	Labels []MetricLabel `json:"labels,omitempty" yaml:"labels,omitempty"`
 }
 
 // MetricsLabel defines an object that allows to set regex expressions for a label.
 type MetricLabel struct {
-	Name  string            `json:"name,omitempty" yaml:"name,omitempty"`
+	Name  string            `json:"name,omitempty"  yaml:"name,omitempty"`
 	Regex map[string]string `json:"regex,omitempty" yaml:"regex,omitempty"`
 }
 
@@ -261,22 +306,22 @@ type AppOperation struct {
 // AccessControlSpec is the spec object in ConfigurationSpec.
 type AccessControlSpec struct {
 	DefaultAction string          `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
-	TrustDomain   string          `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
-	AppPolicies   []AppPolicySpec `json:"policies,omitempty" yaml:"policies,omitempty"`
+	TrustDomain   string          `json:"trustDomain,omitempty"   yaml:"trustDomain,omitempty"`
+	AppPolicies   []AppPolicySpec `json:"policies,omitempty"      yaml:"policies,omitempty"`
 }
 
 type NameResolutionSpec struct {
-	Component     string `json:"component,omitempty" yaml:"component,omitempty"`
-	Version       string `json:"version,omitempty" yaml:"version,omitempty"`
+	Component     string `json:"component,omitempty"     yaml:"component,omitempty"`
+	Version       string `json:"version,omitempty"       yaml:"version,omitempty"`
 	Configuration any    `json:"configuration,omitempty" yaml:"configuration,omitempty"`
 }
 
 // MTLSSpec defines mTLS configuration.
 type MTLSSpec struct {
-	Enabled                 bool   `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	WorkloadCertTTL         string `json:"workloadCertTTL,omitempty" yaml:"workloadCertTTL,omitempty"`
-	AllowedClockSkew        string `json:"allowedClockSkew,omitempty" yaml:"allowedClockSkew,omitempty"`
-	SentryAddress           string `json:"sentryAddress,omitempty" yaml:"sentryAddress,omitempty"`
+	Enabled                 bool   `json:"enabled,omitempty"                 yaml:"enabled,omitempty"`
+	WorkloadCertTTL         string `json:"workloadCertTTL,omitempty"         yaml:"workloadCertTTL,omitempty"`
+	AllowedClockSkew        string `json:"allowedClockSkew,omitempty"        yaml:"allowedClockSkew,omitempty"`
+	SentryAddress           string `json:"sentryAddress,omitempty"           yaml:"sentryAddress,omitempty"`
 	ControlPlaneTrustDomain string `json:"controlPlaneTrustDomain,omitempty" yaml:"controlPlaneTrustDomain,omitempty"`
 	// Additional token validators to use.
 	// When Dapr is running in Kubernetes mode, this is in addition to the built-in "kubernetes" validator.
@@ -304,7 +349,7 @@ func (v ValidatorSpec) OptionsMap() map[string]string {
 
 // FeatureSpec defines which preview features are enabled.
 type FeatureSpec struct {
-	Name    Feature `json:"name" yaml:"name"`
+	Name    Feature `json:"name"    yaml:"name"`
 	Enabled bool    `json:"enabled" yaml:"enabled"`
 }
 
@@ -362,6 +407,10 @@ func LoadDefaultConfiguration() *Configuration {
 			AccessControlSpec: &AccessControlSpec{
 				DefaultAction: AllowAccess,
 				TrustDomain:   "public",
+			},
+			WorkflowSpec: &WorkflowSpec{
+				MaxConcurrentWorkflowInvocations: defaultMaxWorkflowConcurrentInvocations,
+				MaxConcurrentActivityInvocations: defaultMaxActivityConcurrentInvocations,
 			},
 		},
 	}
@@ -582,6 +631,18 @@ func (c Configuration) GetAPILoggingSpec() APILoggingSpec {
 	return *c.Spec.LoggingSpec.APILogging
 }
 
+// GetWorkflowSpec returns the Workflow spec.
+// It's a short-hand that includes nil-checks for safety.
+func (c *Configuration) GetWorkflowSpec() WorkflowSpec {
+	if c == nil || c.Spec.WorkflowSpec == nil {
+		return WorkflowSpec{
+			MaxConcurrentWorkflowInvocations: defaultMaxWorkflowConcurrentInvocations,
+			MaxConcurrentActivityInvocations: defaultMaxActivityConcurrentInvocations,
+		}
+	}
+	return *c.Spec.WorkflowSpec
+}
+
 // ToYAML returns the Configuration represented as YAML.
 func (c *Configuration) ToYAML() (string, error) {
 	b, err := yaml.Marshal(c)
@@ -602,14 +663,20 @@ func (c *Configuration) String() string {
 
 // Apply .metrics if set. If not, retain .metric.
 func (c *Configuration) sortMetricsSpec() {
-	if c.Spec.MetricsSpec != nil {
-		if c.Spec.MetricsSpec.Enabled != nil {
-			c.Spec.MetricSpec.Enabled = c.Spec.MetricsSpec.Enabled
-		}
+	if c.Spec.MetricsSpec == nil {
+		return
+	}
 
-		if len(c.Spec.MetricsSpec.Rules) > 0 {
-			c.Spec.MetricSpec.Rules = c.Spec.MetricsSpec.Rules
-		}
+	if c.Spec.MetricsSpec.Enabled != nil {
+		c.Spec.MetricSpec.Enabled = c.Spec.MetricsSpec.Enabled
+	}
+
+	if len(c.Spec.MetricsSpec.Rules) > 0 {
+		c.Spec.MetricSpec.Rules = c.Spec.MetricsSpec.Rules
+	}
+
+	if c.Spec.MetricsSpec.HTTP != nil {
+		c.Spec.MetricSpec.HTTP = c.Spec.MetricsSpec.HTTP
 	}
 }
 

@@ -121,20 +121,20 @@ func initializeSets() {
 // The payload carries a Method to identify the method, a set of metadata properties and an optional payload.
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	reqID := "s-" + uuid.New().String()
-	if in.HttpExtension != nil && in.HttpExtension.Querystring != "" {
-		qs, err := url.ParseQuery(in.HttpExtension.Querystring)
+	if len(in.GetHttpExtension().GetQuerystring()) > 0 {
+		qs, err := url.ParseQuery(in.GetHttpExtension().GetQuerystring())
 		if err == nil && qs.Has("reqid") {
 			reqID = qs.Get("reqid")
 		}
 	}
 
-	log.Printf("(%s) Got invoked method %s", reqID, in.Method)
+	log.Printf("(%s) Got invoked method %s", reqID, in.GetMethod())
 
 	lock.Lock()
 	defer lock.Unlock()
 
 	respBody := &anypb.Any{}
-	switch in.Method {
+	switch in.GetMethod() {
 	case "getMessages":
 		respBody.Value = s.getMessages(reqID)
 	case "initialize":
@@ -192,10 +192,10 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	defer lock.Unlock()
 
 	reqID := uuid.New().String()
-	log.Printf("(%s) Message arrived - Topic: %s, Message: %s, Path: %s", reqID, in.Topic, string(in.Data), in.Path)
+	log.Printf("(%s) Message arrived - Topic: %s, Message: %s, Path: %s", reqID, in.GetTopic(), string(in.GetData()), in.GetPath())
 
 	var set *sets.Set[string]
-	switch in.Path {
+	switch in.GetPath() {
 	case pathA:
 		set = &routedMessagesA
 	case pathB:
@@ -209,14 +209,14 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	case pathF:
 		set = &routedMessagesF
 	default:
-		log.Printf("(%s) Responding with DROP. in.Path not found", reqID)
+		log.Printf("(%s) Responding with DROP. in.GetPath() not found", reqID)
 		// Return success with DROP status to drop message.
 		return &runtimev1pb.TopicEventResponse{
 			Status: runtimev1pb.TopicEventResponse_DROP, //nolint:nosnakecase
 		}, nil
 	}
 
-	msg := string(in.Data)
+	msg := string(in.GetData())
 
 	set.Insert(msg)
 
@@ -235,6 +235,6 @@ func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*run
 
 // This method gets invoked every time a new event is fired from a registered binding. The message carries the binding name, a payload and optional metadata.
 func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
-	log.Printf("Invoked from binding: %s", in.Name)
+	log.Printf("Invoked from binding: %s", in.GetName())
 	return &runtimev1pb.BindingEventResponse{}, nil
 }

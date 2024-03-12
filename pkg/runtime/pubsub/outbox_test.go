@@ -165,9 +165,9 @@ func TestAddOrUpdateOutbox(t *testing.T) {
 		})
 
 		c := o.outboxStores["test"]
-		assert.Equal(t, c.outboxPubsub, "2")
-		assert.Equal(t, c.publishPubSub, "a")
-		assert.Equal(t, c.publishTopic, "1")
+		assert.Equal(t, "2", c.outboxPubsub)
+		assert.Equal(t, "a", c.publishPubSub)
+		assert.Equal(t, "1", c.publishTopic)
 	})
 
 	t.Run("config default values correct", func(t *testing.T) {
@@ -199,9 +199,9 @@ func TestAddOrUpdateOutbox(t *testing.T) {
 		})
 
 		c := o.outboxStores["test"]
-		assert.Equal(t, c.outboxPubsub, "a")
-		assert.Equal(t, c.publishPubSub, "a")
-		assert.Equal(t, c.publishTopic, "1")
+		assert.Equal(t, "a", c.outboxPubsub)
+		assert.Equal(t, "a", c.publishPubSub)
+		assert.Equal(t, "1", c.publishTopic)
 	})
 }
 
@@ -211,7 +211,7 @@ func TestPublishInternal(t *testing.T) {
 		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			var cloudEvent map[string]interface{}
 			err := json.Unmarshal(pr.Data, &cloudEvent)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			assert.Equal(t, "test", cloudEvent["data"])
 			assert.Equal(t, "a", pr.PubsubName)
@@ -254,19 +254,84 @@ func TestPublishInternal(t *testing.T) {
 				Key:   "key",
 				Value: "test",
 			},
-		}, "testapp")
+		}, "testapp", "", "")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
-	t.Run("valid operation, custom datacontenttype", func(t *testing.T) {
+	t.Run("valid operation, no datacontenttype", func(t *testing.T) {
 		o := newTestOutbox().(*outboxImpl)
 		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			var cloudEvent map[string]interface{}
 			err := json.Unmarshal(pr.Data, &cloudEvent)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			assert.Equal(t, "test", cloudEvent["data"])
+			assert.Equal(t, "a", pr.PubsubName)
+			assert.Equal(t, "testapp1outbox", pr.Topic)
+			assert.Equal(t, "testapp", cloudEvent["source"])
+			assert.Equal(t, "text/plain", cloudEvent["datacontenttype"])
+			assert.Equal(t, "a", cloudEvent["pubsubname"])
+
+			return nil
+		}
+
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		contentType := ""
+		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{
+				Key:         "key",
+				Value:       "test",
+				ContentType: &contentType,
+			},
+		}, "testapp", "", "")
+
+		require.NoError(t, err)
+	})
+
+	type customData struct {
+		Name string `json:"name"`
+	}
+
+	t.Run("valid operation, application/json datacontenttype", func(t *testing.T) {
+		o := newTestOutbox().(*outboxImpl)
+		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			var cloudEvent map[string]interface{}
+			err := json.Unmarshal(pr.Data, &cloudEvent)
+			require.NoError(t, err)
+
+			data := cloudEvent["data"]
+			j := customData{}
+
+			err = json.Unmarshal([]byte(data.(string)), &j)
+			require.NoError(t, err)
+
+			assert.Equal(t, "test", j.Name)
 			assert.Equal(t, "a", pr.PubsubName)
 			assert.Equal(t, "testapp1outbox", pr.Topic)
 			assert.Equal(t, "testapp", cloudEvent["source"])
@@ -302,16 +367,22 @@ func TestPublishInternal(t *testing.T) {
 			},
 		})
 
+		j := customData{
+			Name: "test",
+		}
+		b, err := json.Marshal(&j)
+		require.NoError(t, err)
+
 		contentType := "application/json"
-		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+		_, err = o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
 				Key:         "key",
-				Value:       "test",
+				Value:       string(b),
 				ContentType: &contentType,
 			},
-		}, "testapp")
+		}, "testapp", "", "")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("missing state store", func(t *testing.T) {
@@ -322,8 +393,8 @@ func TestPublishInternal(t *testing.T) {
 				Key:   "key",
 				Value: "test",
 			},
-		}, "testapp")
-		assert.Error(t, err)
+		}, "testapp", "", "")
+		require.Error(t, err)
 	})
 
 	t.Run("no op when no transactions", func(t *testing.T) {
@@ -359,9 +430,9 @@ func TestPublishInternal(t *testing.T) {
 			},
 		})
 
-		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{}, "testapp")
+		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{}, "testapp", "", "")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("error when pubsub fails", func(t *testing.T) {
@@ -401,14 +472,14 @@ func TestPublishInternal(t *testing.T) {
 				Key:   "1",
 				Value: "hello",
 			},
-		}, "testapp")
+		}, "testapp", "", "")
 
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }
 
 func TestSubscribeToInternalTopics(t *testing.T) {
-	t.Run("correct configuration", func(t *testing.T) {
+	t.Run("correct configuration with trace", func(t *testing.T) {
 		o := newTestOutbox().(*outboxImpl)
 		o.cloudEventExtractorFn = extractCloudEventProperty
 
@@ -431,6 +502,14 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			} else if pr.Topic == "1" {
 				close(externalCalledCh)
 			}
+
+			ce := map[string]string{}
+			json.Unmarshal(pr.Data, &ce)
+
+			traceID := ce[contribPubsub.TraceIDField]
+			traceState := ce[contribPubsub.TraceStateField]
+			assert.Equal(t, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", traceID)
+			assert.Equal(t, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", traceState)
 
 			return psMock.Publish(ctx, pr)
 		}
@@ -480,7 +559,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 					Key:   "1",
 					Value: "hello",
 				},
-			}, appID)
+			}, appID, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01")
 
 			if pErr != nil {
 				errCh <- pErr
@@ -559,10 +638,10 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				Key:   "1",
 				Value: "hello",
 			},
-		}, appID)
+		}, appID, "", "")
 
-		assert.Error(t, pErr)
-		assert.Len(t, trs, 0)
+		require.Error(t, pErr)
+		assert.Empty(t, trs)
 	})
 
 	t.Run("outbox state not present", func(t *testing.T) {
@@ -634,7 +713,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 					Key:   "1",
 					Value: "hello",
 				},
-			}, appID)
+			}, appID, "", "")
 
 			if pErr != nil {
 				errCh <- pErr
@@ -648,7 +727,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		}()
 
 		d, err := time.ParseDuration(stateScan)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		start := time.Now()
 		doneCh := make(chan error, 2)
@@ -759,7 +838,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 					Key:   "1",
 					Value: "hello",
 				},
-			}, appID)
+			}, appID, "", "")
 
 			if pErr != nil {
 				errCh <- pErr
@@ -773,7 +852,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		}()
 
 		d, err := time.ParseDuration(stateScan)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		start := time.Now()
 		doneCh := make(chan error, 2)
@@ -830,7 +909,7 @@ func (o *outboxPubsubMock) Publish(ctx context.Context, req *contribPubsub.Publi
 		})
 
 		if o.validateNoError {
-			assert.NoError(o.t, err)
+			require.NoError(o.t, err)
 			return
 		}
 	}()

@@ -216,7 +216,7 @@ func TestPoliciesForTargets(t *testing.T) {
 				called.Store(true)
 				return nil, nil
 			})
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.True(t, called.Load())
 		})
 	}
@@ -225,7 +225,7 @@ func TestPoliciesForTargets(t *testing.T) {
 func TestLoadKubernetesResiliency(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	s := grpc.NewServer()
 	operatorv1pb.RegisterOperatorServer(s, &mockOperator{})
@@ -259,7 +259,7 @@ func TestLoadStandaloneResiliency(t *testing.T) {
 	t.Run("test load resiliency skips other types", func(t *testing.T) {
 		configs := LoadLocalResiliency(log, "app1", "../components")
 		assert.NotNil(t, configs)
-		assert.Len(t, configs, 0)
+		assert.Empty(t, configs)
 	})
 }
 
@@ -290,10 +290,10 @@ func TestParseActorCircuitBreakerScope(t *testing.T) {
 		t.Run(tt.input, func(t *testing.T) {
 			actual, err := ParseActorCircuitBreakerScope(tt.input)
 			if tt.err == "" {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Equal(t, tt.output, actual)
 			} else {
-				assert.EqualError(t, err, tt.err)
+				require.EqualError(t, err, tt.err)
 			}
 		})
 	}
@@ -306,7 +306,7 @@ func TestParseMaxRetries(t *testing.T) {
 	require.NotNil(t, configs[0])
 
 	r := FromConfigurations(log, configs[0])
-	require.True(t, len(r.retries) > 0)
+	require.NotEmpty(t, r.retries)
 	require.NotNil(t, r.retries["noRetry"])
 	require.NotNil(t, r.retries["retryForever"])
 	require.NotNil(t, r.retries["missingMaxRetries"])
@@ -325,7 +325,7 @@ func TestParseMaxRetries(t *testing.T) {
 func TestResiliencyScopeIsRespected(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	s := grpc.NewServer()
 	operatorv1pb.RegisterOperatorServer(s, &mockOperator{})

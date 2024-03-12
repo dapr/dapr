@@ -38,26 +38,26 @@ import (
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
-	appCallbackClient    runtimev1pb.AppCallbackClient
-	conn                 *grpc.ClientConn
-	baseAddress          string
-	ch                   chan struct{}
-	tracingSpec          config.TracingSpec
-	appMetadataToken     string
-	maxRequestBodySizeMB int
-	appHealth            *apphealth.AppHealth
+	appCallbackClient  runtimev1pb.AppCallbackClient
+	conn               *grpc.ClientConn
+	baseAddress        string
+	ch                 chan struct{}
+	tracingSpec        config.TracingSpec
+	appMetadataToken   string
+	maxRequestBodySize int
+	appHealth          *apphealth.AppHealth
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
 func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int, baseAddress string) *Channel {
 	// readBufferSize is unused
 	c := &Channel{
-		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		conn:                 conn,
-		baseAddress:          net.JoinHostPort(baseAddress, strconv.Itoa(port)),
-		tracingSpec:          spec,
-		appMetadataToken:     security.GetAppToken(),
-		maxRequestBodySizeMB: maxRequestBodySize,
+		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
+		conn:               conn,
+		baseAddress:        net.JoinHostPort(baseAddress, strconv.Itoa(port)),
+		tracingSpec:        spec,
+		appMetadataToken:   security.GetAppToken(),
+		maxRequestBodySize: maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan struct{}, maxConcurrency)
@@ -98,7 +98,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		return nil, err
 	}
 
-	md := invokev1.InternalMetadataToGrpcMetadata(ctx, pd.Metadata, true)
+	md := invokev1.InternalMetadataToGrpcMetadata(ctx, pd.GetMetadata(), true)
 
 	if g.appMetadataToken != "" {
 		md.Set(securityConsts.APITokenHeader, g.appMetadataToken)
@@ -112,11 +112,11 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	opts := []grpc.CallOption{
 		grpc.Header(&header),
 		grpc.Trailer(&trailer),
-		grpc.MaxCallSendMsgSize(g.maxRequestBodySizeMB << 20),
-		grpc.MaxCallRecvMsgSize(g.maxRequestBodySizeMB << 20),
+		grpc.MaxCallSendMsgSize(g.maxRequestBodySize),
+		grpc.MaxCallRecvMsgSize(g.maxRequestBodySize),
 	}
 
-	resp, err := g.appCallbackClient.OnInvoke(ctx, pd.Message, opts...)
+	resp, err := g.appCallbackClient.OnInvoke(ctx, pd.GetMessage(), opts...)
 
 	if g.ch != nil {
 		<-g.ch
@@ -127,7 +127,7 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		// Convert status code
 		respStatus := status.Convert(err)
 		// Prepare response
-		rsp = invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), respStatus.Proto().Details)
+		rsp = invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), respStatus.Proto().GetDetails())
 	} else {
 		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)
 	}

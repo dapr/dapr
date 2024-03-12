@@ -595,7 +595,8 @@ message GetMetadataRequest {
 // GetMetadataResponse is a message that is returned on GetMetadata rpc call.
 message GetMetadataResponse {
   string id = 1;
-  repeated ActiveActorsCount active_actors_count = 2 [json_name = "actors"];
+  // Deprecated alias for actor_runtime.active_actors.
+  repeated ActiveActorsCount active_actors_count = 2 [json_name = "actors", deprecated = true];
   repeated RegisteredComponents registered_components = 3 [json_name = "components"];
   map<string, string> extended_metadata = 4 [json_name = "extended"];
   repeated PubsubSubscription subscriptions = 5 [json_name = "subscriptions"];
@@ -603,6 +604,28 @@ message GetMetadataResponse {
   AppConnectionProperties app_connection_properties = 7 [json_name = "appConnectionProperties"];
   string runtime_version = 8 [json_name = "runtimeVersion"];
   repeated string enabled_features = 9 [json_name = "enabledFeatures"];
+  ActorRuntime actor_runtime = 10 [json_name = "actorRuntime"];
+}
+
+message ActorRuntime {
+  enum ActorRuntimeStatus {
+    // Indicates that the actor runtime is still being initialized.
+    INITIALIZING = 0;
+    // Indicates that the actor runtime is disabled.
+    // This normally happens when Dapr is started without "placement-host-address"
+    DISABLED = 1;
+    // Indicates the actor runtime is running, either as an actor host or client.
+    RUNNING = 2;
+  }
+
+  // Contains an enum indicating whether the actor runtime has been initialized.
+  ActorRuntimeStatus runtime_status = 1 [json_name = "runtimeStatus"];
+  // Count of active actors per type.
+  repeated ActiveActorsCount active_actors = 2 [json_name = "activeActors"];
+  // Indicates whether the actor runtime is ready to host actors.
+  bool host_ready = 3 [json_name = "hostReady"];
+  // Custom message from the placement provider.
+  string placement = 4 [json_name = "placement"];
 }
 
 message ActiveActorsCount {

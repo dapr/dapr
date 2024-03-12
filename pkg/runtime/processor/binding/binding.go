@@ -22,12 +22,12 @@ import (
 	"sync"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	compbindings "github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/grpc/manager"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -71,23 +71,26 @@ type binding struct {
 	tracingSpec *config.TracingSpec
 	grpc        *manager.Manager
 
-	lock sync.Mutex
+	lock            sync.Mutex
+	readingBindings bool
+	stopForever     bool
 
 	subscribeBindingList []string
-	inputCancel          context.CancelFunc
+	inputCancels         map[string]context.CancelFunc
 	wg                   sync.WaitGroup
 }
 
 func New(opts Options) *binding {
 	return &binding{
-		registry:    opts.Registry,
-		compStore:   opts.ComponentStore,
-		meta:        opts.Meta,
-		isHTTP:      opts.IsHTTP,
-		resiliency:  opts.Resiliency,
-		tracingSpec: opts.TracingSpec,
-		grpc:        opts.GRPC,
-		channels:    opts.Channels,
+		registry:     opts.Registry,
+		compStore:    opts.ComponentStore,
+		meta:         opts.Meta,
+		isHTTP:       opts.IsHTTP,
+		resiliency:   opts.Resiliency,
+		tracingSpec:  opts.TracingSpec,
+		grpc:         opts.GRPC,
+		channels:     opts.Channels,
+		inputCancels: make(map[string]context.CancelFunc),
 	}
 }
 
@@ -127,19 +130,21 @@ func (b *binding) Close(comp compapi.Component) error {
 
 	inbinding, ok := b.compStore.GetInputBinding(comp.Name)
 	if ok {
+		defer b.compStore.DeleteInputBinding(comp.Name)
+		if cancel := b.inputCancels[comp.Name]; cancel != nil {
+			cancel()
+		}
+		delete(b.inputCancels, comp.Name)
 		if err := inbinding.Close(); err != nil {
 			errs = append(errs, err)
-		} else {
-			b.compStore.DeleteInputBinding(comp.Name)
 		}
 	}
 
 	outbinding, ok := b.compStore.GetOutputBinding(comp.Name)
 	if ok {
+		defer b.compStore.DeleteOutputBinding(comp.Name)
 		if err := b.closeOutputBinding(outbinding); err != nil {
 			errs = append(errs, err)
-		} else {
-			b.compStore.DeleteOutputBinding(comp.Name)
 		}
 	}
 
@@ -188,6 +193,11 @@ func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) 
 	}
 	b.compStore.AddInputBinding(comp.Name, binding)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
+
+	if b.readingBindings {
+		return b.startInputBinding(comp, binding)
+	}
+
 	return nil
 }
 

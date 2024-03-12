@@ -55,8 +55,13 @@ env:
   AZURE_ARM_REGIONS: "eastus"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+  # Name of the Azure Key Vault resource used in tests
+  # The credentials defined in AZURE_CREDENTIALS must have permissions to perform operations in this vault
+  AZURE_KEY_VAULT_NAME: "dapre2ekv"
   # Whether to collect TCP dumps
   TCP_DUMPS: "false"
+  # Additional build tags for Dapr
+  DAPR_GO_BUILD_TAGS: "subtlecrypto,wfbackendsqlite"
   # Useful for upgrade/downgrade/compatibility tests
   # TODO: Make this auto-populated based on GitHub's releases.
   DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.12.0"
@@ -112,7 +117,7 @@ jobs:
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -265,35 +270,15 @@ jobs:
           rm.exe "C:/WINDOWS/system32/bash.EXE"
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-      - name: Cache Go modules (Linux)
-        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-build-
-      - name: Cache Go modules (Windows)
-        if: env.CHECKOUT_REPO != '' && runner.os == 'Windows'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~\AppData\Local\go-build
-            ~\go\pkg\mod
-          key: ${{ runner.os }}-go-build-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-build-
       - name: Login to Azure
         if: env.CHECKOUT_REPO != ''
         uses: azure/login@v1
@@ -302,7 +287,7 @@ jobs:
       - name: Login to cache registry for Windows
         if: runner.os == 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
         run: |
-          $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken)
+          $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken --output tsv)
           docker login ${{ env.DAPR_CACHE_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
       - name: Login to cache registry for Linux or Mac
         if: runner.os != 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
@@ -350,7 +335,7 @@ jobs:
       - name: Login to Azure Container Registry for Windows
         if: runner.os == 'Windows' && env.TEST_PREFIX != ''
         run: |
-          $accessToken = (az acr login  -n ${{ env.DAPR_REGISTRY }} --expose-token --query accessToken)
+          $accessToken = (az acr login  -n ${{ env.DAPR_REGISTRY }} --expose-token --query accessToken --output tsv)
           docker login ${{ env.DAPR_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
       - name: Login to Azure Container Registry for Linux or Mac
         if: runner.os != 'Windows' && env.TEST_PREFIX != ''
@@ -455,25 +440,15 @@ jobs:
             }
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version-file: "go.mod"
-      - name: Cache Go modules (test)
-        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-tests-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-tests-
       - uses: azure/setup-kubectl@v3
         with:
           version: ${{ env.KUBECTLVER }}
@@ -523,6 +498,8 @@ jobs:
         shell: bash
       - name: Setup for cloud resources
         if: env.TEST_PREFIX != '' && env.TEST_CLOUD_ENV != ''
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
         run: ./tests/test-infra/setup_${{ env.TEST_CLOUD_ENV }}.sh
         shell: bash
       - name: Preparing AKS cluster for test
@@ -595,25 +572,28 @@ jobs:
         shell: bash
       - name: Upload tcpdump
         if: always() && env.TCP_DUMPS == 'true'
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_tcpdump
           path: sntp.cap.gz
+          compression-level: 0 # File is already compressed
       - name: Upload container logs
         if: always()
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_container_logs
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+          compression-level: 0 # Content is already compressed
       - name: Upload test logs
         if: always()
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_test_logs
           path: ${{ env.DAPR_TEST_LOG_PATH }}
+          compression-level: 0 # Content is already compressed
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: ${{ matrix.target_os }}_${{ matrix.target_arch }}_e2e.json

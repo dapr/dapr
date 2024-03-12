@@ -46,8 +46,8 @@ PROTOC ?=protoc
 
 # Version of "protoc" to use
 # We must also specify a protobuf "suite" version from https://github.com/protocolbuffers/protobuf/releases
-PROTOC_VERSION = 3.21.12
-PROTOBUF_SUITE_VERSION = 21.12
+PROTOC_VERSION = 24.4
+PROTOBUF_SUITE_VERSION = 24.4
 
 # name of protoc-gen-go when protoc-gen-go --version is run.
 PROTOC_GEN_GO_NAME = "protoc-gen-go"
@@ -90,10 +90,10 @@ else
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-PROTOC_GEN_GO_VERSION = v1.28.1
+PROTOC_GEN_GO_VERSION = v1.32.0
 PROTOC_GEN_GO_NAME+= $(PROTOC_GEN_GO_VERSION)
 
-PROTOC_GEN_GO_GRPC_VERSION = 1.2.0
+PROTOC_GEN_GO_GRPC_VERSION = 1.3.0
 
 ifeq ($(TARGET_OS_LOCAL),windows)
 	BUILD_TOOLS_BIN ?= build-tools.exe
@@ -110,6 +110,7 @@ TARGET_OS ?= linux
 TARGET_ARCH ?= amd64
 TEST_OUTPUT_FILE_PREFIX ?= ./test_report
 
+GOLANGCI_LINT_TAGS=allcomponents,subtlecrypto
 ifeq ($(GOOS),windows)
 BINARY_EXT_LOCAL:=.exe
 GOLANGCI_LINT:=golangci-lint.exe
@@ -250,7 +251,7 @@ dapr.yaml: check-docker-env
 		--include-crds=true  --set global.ha.enabled=$(HA_MODE) --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
 
 ################################################################################
-# Target: upload-helmchart
+# Target: upload-helmchart													   #
 ################################################################################
 
 # Upload helm charts to Helm Registry
@@ -360,7 +361,7 @@ test-race:
 		go test -tags="allcomponents unit" -race
 
 ################################################################################
-# Target: test-integration                                                                 #
+# Target: test-integration                                                     #
 ################################################################################
 .PHONY: test-integration
 test-integration: test-deps
@@ -368,16 +369,33 @@ test-integration: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -timeout=20m -count=1 -v -tags="integration"
+			./tests/integration -timeout=20m -count=1 -v -tags="integration" -integration-parallel=false
+
+.PHONY: test-integration-parallel
+test-integration-parallel: test-deps
+		CGO_ENABLED=1 gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+			--format testname \
+			-- \
+			./tests/integration -timeout=20m -count=1 -v -tags="integration" -integration-parallel=true
 
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.51.2 , otherwise you might encounter errors.
-# You can download version v1.51.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.2
+# Please use golangci-lint version v1.55.2 , otherwise you might encounter errors.
+# You can download version v1.55.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.55.2
 .PHONY: lint
-lint:
-	$(GOLANGCI_LINT) run --build-tags=allcomponents --timeout=20m
+lint: check-linter
+	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
+
+
+################################################################################
+# Target: check-linter                                                         #
+################################################################################
+.SILENT: check-linter # Silence output other than the application run
+.PHONY: check-linter
+check-linter:
+	$(RUN_BUILD_TOOLS) check-linter
 
 ################################################################################
 # Target: modtidy-all                                                          #
@@ -387,7 +405,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.20; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.21; cd -
 endef
 
 # Generate modtidy target action for each go.mod file
@@ -408,21 +426,21 @@ modtidy:
 	go mod tidy
 
 ################################################################################
-# Target: format                                                              #
+# Target: format                                                               #
 ################################################################################
 .PHONY: format
 format: modtidy-all
 	gofumpt -l -w . && goimports -local github.com/dapr/ -w $(shell find ./pkg -type f -name '*.go' -not -path "./pkg/proto/*")
 
 ################################################################################
-# Target: check                                                              #
+# Target: check                                                                #
 ################################################################################
 .PHONY: check
 check: format test lint
 	git status && [[ -z `git status -s` ]]
 
 ################################################################################
-# Target: init-proto                                                            #
+# Target: init-proto                                                           #
 ################################################################################
 .PHONY: init-proto
 init-proto:
@@ -467,7 +485,7 @@ check-diff:
 	git diff --exit-code ./go.sum # check no changes
 
 ################################################################################
-# Target: check-proto-version                                                         #
+# Target: check-proto-version                                                  #
 ################################################################################
 .PHONY: check-proto-version
 check-proto-version: ## Checking the version of proto related tools
@@ -481,7 +499,7 @@ check-proto-version: ## Checking the version of proto related tools
 	|| { echo "please use protoc-gen-go $(PROTOC_GEN_GO_VERSION) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 ################################################################################
-# Target: check-proto-diff                                                           #
+# Target: check-proto-diff                                                     #
 ################################################################################
 .PHONY: check-proto-diff
 check-proto-diff:
@@ -497,7 +515,7 @@ check-proto-diff:
 
 
 ################################################################################
-# Target: compile-build-tools                                                              #
+# Target: compile-build-tools                                                  #
 ################################################################################
 compile-build-tools:
 ifeq (,$(wildcard $(BUILD_TOOLS)))

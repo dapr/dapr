@@ -20,7 +20,11 @@ ports:
   apiPort: 50005
   raftRPCPort: 8201
 
+scaleZero: false
 ha: false
+
+maxActorApiLevel: 10
+minActorApiLevel: 0
 
 cluster:
   forceInMemoryLog: false
@@ -51,3 +55,6 @@ debug:
 
 runAsNonRoot: true
 resources: {}
+
+extraEnvVars: {}
+

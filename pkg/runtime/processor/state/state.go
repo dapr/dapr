@@ -34,17 +34,17 @@ import (
 )
 
 const (
-	propertyKeyActorStateStore = "actorstatestore"
+	PropertyKeyActorStateStore = "actorstatestore"
 )
 
 var log = logger.NewLogger("dapr.runtime.processor.state")
 
 type Options struct {
-	Registry         *compstate.Registry
-	ComponentStore   *compstore.ComponentStore
-	Meta             *meta.Meta
-	PlacementEnabled bool
-	Outbox           outbox.Outbox
+	Registry       *compstate.Registry
+	ComponentStore *compstore.ComponentStore
+	Meta           *meta.Meta
+	ActorsEnabled  bool
+	Outbox         outbox.Outbox
 }
 
 type state struct {
@@ -54,17 +54,17 @@ type state struct {
 	lock      sync.RWMutex
 
 	actorStateStoreName *string
-	placementEnabled    bool
+	actorsEnabled       bool
 	outbox              outbox.Outbox
 }
 
 func New(opts Options) *state {
 	return &state{
-		registry:         opts.Registry,
-		compStore:        opts.ComponentStore,
-		meta:             opts.Meta,
-		placementEnabled: opts.PlacementEnabled,
-		outbox:           opts.Outbox,
+		registry:      opts.Registry,
+		compStore:     opts.ComponentStore,
+		meta:          opts.Meta,
+		actorsEnabled: opts.ActorsEnabled,
+		outbox:        opts.Outbox,
 	}
 }
 
@@ -79,70 +79,74 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
 
-	if store != nil {
-		secretStoreName := s.meta.AuthSecretStoreOrDefault(&comp)
-
-		secretStore, _ := s.compStore.GetSecretStore(secretStoreName)
-		encKeys, encErr := encryption.ComponentEncryptionKey(comp, secretStore)
-		if encErr != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
-			return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
-		}
-
-		if encKeys.Primary.Key != "" {
-			ok := encryption.AddEncryptedStateStore(comp.ObjectMeta.Name, encKeys)
-			if ok {
-				log.Infof("automatic encryption enabled for state store %s", comp.ObjectMeta.Name)
-			}
-		}
-
-		meta, err := s.meta.ToBaseMetadata(comp)
-		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-		}
-
-		props := meta.Properties
-		err = store.Init(ctx, contribstate.Metadata{Base: meta})
-		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-			return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-		}
-
-		s.compStore.AddStateStore(comp.ObjectMeta.Name, store)
-		err = compstate.SaveStateConfiguration(comp.ObjectMeta.Name, props)
-		if err != nil {
-			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-			wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
-			return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
-		}
-
-		s.outbox.AddOrUpdateOutbox(comp)
-
-		// when placement address list is not empty, set specified actor store.
-		if s.placementEnabled {
-			// set specified actor store if "actorStateStore" is true in the spec.
-			actorStoreSpecified := false
-			for k, v := range props {
-				//nolint:gocritic
-				if strings.ToLower(k) == propertyKeyActorStateStore {
-					actorStoreSpecified = utils.IsTruthy(v)
-					break
-				}
-			}
-
-			if actorStoreSpecified {
-				if s.actorStateStoreName == nil {
-					log.Info("Using '" + comp.ObjectMeta.Name + "' as actor state store")
-					s.actorStateStoreName = &comp.ObjectMeta.Name
-				} else if *s.actorStateStoreName != comp.ObjectMeta.Name {
-					return fmt.Errorf("detected duplicate actor state store: %s and %s", *s.actorStateStoreName, comp.ObjectMeta.Name)
-				}
-			}
-		}
-
-		diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
+	if store == nil {
+		return nil
 	}
+
+	secretStoreName := s.meta.AuthSecretStoreOrDefault(&comp)
+
+	secretStore, _ := s.compStore.GetSecretStore(secretStoreName)
+	encKeys, err := encryption.ComponentEncryptionKey(comp, secretStore)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
+	}
+
+	if encKeys.Primary.Key != "" {
+		ok := encryption.AddEncryptedStateStore(comp.ObjectMeta.Name, encKeys)
+		if ok {
+			log.Infof("Automatic encryption enabled for state store %s", comp.ObjectMeta.Name)
+			log.Info("WARNING: Automatic state store encryption should never be used to store more than 4 billion items in the state store (including updates). Storing more items than that can cause the private key to be exposed.")
+		}
+	}
+
+	meta, err := s.meta.ToBaseMetadata(comp)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+	}
+
+	props := meta.Properties
+	err = store.Init(ctx, contribstate.Metadata{Base: meta})
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+	}
+
+	// when placement address list is not empty, set specified actor store.
+	if s.actorsEnabled {
+		// set specified actor store if "actorStateStore" is true in the spec.
+		actorStoreSpecified := false
+		for k, v := range props {
+			//nolint:gocritic
+			if strings.ToLower(k) == PropertyKeyActorStateStore {
+				actorStoreSpecified = utils.IsTruthy(v)
+				break
+			}
+		}
+
+		if actorStoreSpecified {
+			if s.actorStateStoreName == nil {
+				log.Info("Using '" + comp.ObjectMeta.Name + "' as actor state store")
+				s.actorStateStoreName = &comp.ObjectMeta.Name
+			} else if *s.actorStateStoreName != comp.ObjectMeta.Name {
+				return fmt.Errorf("detected duplicate actor state store: %s and %s", *s.actorStateStoreName, comp.ObjectMeta.Name)
+			}
+			s.compStore.AddStateStoreActor(comp.ObjectMeta.Name, store)
+		}
+	}
+
+	s.compStore.AddStateStore(comp.ObjectMeta.Name, store)
+	err = compstate.SaveStateConfiguration(comp.ObjectMeta.Name, props)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		wrapError := fmt.Errorf("failed to save lock keyprefix: %s", err.Error())
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, wrapError)
+	}
+
+	s.outbox.AddOrUpdateOutbox(comp)
+
+	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
 
 	return nil
 }
@@ -156,14 +160,14 @@ func (s *state) Close(comp compapi.Component) error {
 		return nil
 	}
 
+	defer s.compStore.DeleteStateStore(comp.Name)
+
 	closer, ok := ss.(io.Closer)
 	if ok && closer != nil {
 		if err := closer.Close(); err != nil {
 			return err
 		}
 	}
-
-	s.compStore.DeleteStateStore(comp.Name)
 
 	return nil
 }

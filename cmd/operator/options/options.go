@@ -52,6 +52,9 @@ type Options struct {
 	TrustAnchorsFile                   string
 	Logger                             logger.Options
 	Metrics                            *metrics.Options
+	APIPort                            int
+	HealthzPort                        int
+	WebhookServerPort                  int
 }
 
 func New() *Options {
@@ -74,6 +77,10 @@ func New() *Options {
 	flag.BoolVar(&opts.WatchdogCanPatchPodLabels, "watchdog-can-patch-pod-labels", false, "Allow watchdog to patch pod labels to set pods with sidecar present")
 
 	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
+
+	flag.IntVar(&opts.APIPort, "port", 6500, "The port for the operator API server to listen on")
+	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
+	flag.IntVar(&opts.WebhookServerPort, "webhook-server-port", 19443, "The port for the webhook server to listen on")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)

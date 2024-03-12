@@ -125,7 +125,7 @@ func (p *pubsub) publishMessageHTTP(ctx context.Context, msg *subscribedMessage)
 	}
 	defer resp.Close()
 
-	statusCode := int(resp.Status().Code)
+	statusCode := int(resp.Status().GetCode())
 
 	if span != nil {
 		m := diag.ConstructSubscriptionSpanAttributes(msg.topic)
@@ -153,6 +153,7 @@ func (p *pubsub) publishMessageHTTP(ctx context.Context, msg *subscribedMessage)
 			return nil
 		case contribpubsub.Retry:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(contribpubsub.Retry)), msg.topic, elapsed)
+			// TODO: add retry error info
 			return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField], rterrors.NewRetriable(nil))
 		case contribpubsub.Drop:
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(contribpubsub.Drop)), msg.topic, elapsed)
@@ -213,7 +214,7 @@ func (p *pubsub) publishMessageGRPC(ctx context.Context, msg *subscribedMessage)
 	} else if data, ok := cloudEvent[contribpubsub.DataField]; ok && data != nil {
 		envelope.Data = nil
 
-		if contenttype.IsStringContentType(envelope.DataContentType) {
+		if contenttype.IsStringContentType(envelope.GetDataContentType()) {
 			switch v := data.(type) {
 			case string:
 				envelope.Data = []byte(v)
@@ -223,7 +224,7 @@ func (p *pubsub) publishMessageGRPC(ctx context.Context, msg *subscribedMessage)
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(contribpubsub.Retry)), msg.topic, 0)
 				return fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(errUnexpectedEnvelopeData))
 			}
-		} else if contenttype.IsJSONContentType(envelope.DataContentType) || contenttype.IsCloudEventContentType(envelope.DataContentType) {
+		} else if contenttype.IsJSONContentType(envelope.GetDataContentType()) || contenttype.IsCloudEventContentType(envelope.GetDataContentType()) {
 			envelope.Data, _ = json.Marshal(data)
 		}
 	}
@@ -269,7 +270,7 @@ func (p *pubsub) publishMessageGRPC(ctx context.Context, msg *subscribedMessage)
 	elapsed := diag.ElapsedSince(start)
 
 	if span != nil {
-		m := diag.ConstructSubscriptionSpanAttributes(envelope.Topic)
+		m := diag.ConstructSubscriptionSpanAttributes(envelope.GetTopic())
 		diag.AddAttributesToSpan(span, m)
 		diag.UpdateSpanStatusFromGRPCError(span, err)
 		span.End()
@@ -301,6 +302,7 @@ func (p *pubsub) publishMessageGRPC(ctx context.Context, msg *subscribedMessage)
 		return nil
 	case runtimev1.TopicEventResponse_RETRY: //nolint:nosnakecase
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(contribpubsub.Retry)), msg.topic, elapsed)
+		// TODO: add retry error info
 		return fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField], rterrors.NewRetriable(nil))
 	case runtimev1.TopicEventResponse_DROP: //nolint:nosnakecase
 		log.Warnf("DROP status returned from app while processing pub/sub event %v", cloudEvent[contribpubsub.IDField])

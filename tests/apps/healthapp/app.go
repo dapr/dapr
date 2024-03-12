@@ -412,8 +412,8 @@ func (s *grpcServer) HealthCheck(ctx context.Context, _ *emptypb.Empty) (*runtim
 }
 
 func (s *grpcServer) OnInvoke(_ context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
-	if in.Method == "foo" {
-		log.Println("Received method invocation: " + in.Method)
+	if in.GetMethod() == "foo" {
+		log.Println("Received method invocation: " + in.GetMethod())
 		return &commonv1pb.InvokeResponse{
 			Data: &anypb.Any{
 				Value: []byte("🤗"),
@@ -421,7 +421,7 @@ func (s *grpcServer) OnInvoke(_ context.Context, in *commonv1pb.InvokeRequest) (
 		}, nil
 	}
 
-	return nil, errors.New("unexpected method invocation: " + in.Method)
+	return nil, errors.New("unexpected method invocation: " + in.GetMethod())
 }
 
 func (s *grpcServer) ListTopicSubscriptions(_ context.Context, in *emptypb.Empty) (*runtimev1pb.ListTopicSubscriptionsResponse, error) {
@@ -436,13 +436,13 @@ func (s *grpcServer) ListTopicSubscriptions(_ context.Context, in *emptypb.Empty
 }
 
 func (s *grpcServer) OnTopicEvent(_ context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
-	if in.Topic == "mytopic" {
-		log.Println("Received topic event: " + in.Topic)
+	if in.GetTopic() == "mytopic" {
+		log.Println("Received topic event: " + in.GetTopic())
 		lastTopicMessage.Record()
 		return &runtimev1pb.TopicEventResponse{}, nil
 	}
 
-	return nil, errors.New("unexpected topic event: " + in.Topic)
+	return nil, errors.New("unexpected topic event: " + in.GetTopic())
 }
 
 func (s *grpcServer) ListInputBindings(_ context.Context, in *emptypb.Empty) (*runtimev1pb.ListInputBindingsResponse, error) {
@@ -452,13 +452,13 @@ func (s *grpcServer) ListInputBindings(_ context.Context, in *emptypb.Empty) (*r
 }
 
 func (s *grpcServer) OnBindingEvent(_ context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
-	if in.Name == "schedule" {
-		log.Println("Received binding event: " + in.Name)
+	if in.GetName() == "schedule" {
+		log.Println("Received binding event: " + in.GetName())
 		lastInputBinding.Record()
 		return &runtimev1pb.BindingEventResponse{}, nil
 	}
 
-	return nil, errors.New("unexpected binding event: " + in.Name)
+	return nil, errors.New("unexpected binding event: " + in.GetName())
 }
 
 type healthCheck struct {

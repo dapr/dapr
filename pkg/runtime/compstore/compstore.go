@@ -16,6 +16,8 @@ package compstore
 import (
 	"sync"
 
+	"github.com/microsoft/durabletask-go/backend"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/crypto"
@@ -47,10 +49,18 @@ type ComponentStore struct {
 	pubSubs                 map[string]PubsubItem
 	topicRoutes             map[string]TopicRoutes
 	workflowComponents      map[string]workflows.Workflow
+	workflowBackends        map[string]backend.Backend
 	cryptoProviders         map[string]crypto.SubtleCrypto
 	components              []compsv1alpha1.Component
 	subscriptions           []rtpubsub.Subscription
 	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
+	actorStateStore         struct {
+		name  string
+		store state.Store
+	}
+
+	compPendingLock sync.Mutex
+	compPending     *compsv1alpha1.Component
 }
 
 func New() *ComponentStore {
@@ -66,6 +76,7 @@ func New() *ComponentStore {
 		locks:                   make(map[string]lock.Store),
 		pubSubs:                 make(map[string]PubsubItem),
 		workflowComponents:      make(map[string]workflows.Workflow),
+		workflowBackends:        make(map[string]backend.Backend),
 		cryptoProviders:         make(map[string]crypto.SubtleCrypto),
 		topicRoutes:             make(map[string]TopicRoutes),
 	}

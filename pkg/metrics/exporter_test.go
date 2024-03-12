@@ -19,6 +19,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/kit/logger"
 )
@@ -40,7 +41,7 @@ func TestMetricsExporter(t *testing.T) {
 				logger:    logger,
 			},
 		}
-		assert.Error(t, e.startMetricServer(context.Background()))
+		require.Error(t, e.startMetricServer(context.Background()))
 	})
 
 	t.Run("skip starting metric server but wait for context cancellation", func(t *testing.T) {
@@ -56,7 +57,7 @@ func TestMetricsExporter(t *testing.T) {
 
 		select {
 		case err := <-errCh:
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		case <-time.After(time.Second):
 			t.Error("expected metrics Run() to return in time when context is cancelled")
 		}

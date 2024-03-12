@@ -15,7 +15,6 @@ package reminders
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -64,19 +63,9 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	b.place = placement.New(t)
-	b.daprd = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-  metadata:
-  - name: actorStateStore
-    value: true
-`),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(b.place.Port())),
+	b.daprd = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithPlacementAddresses(b.place.Address()),
 		daprd.WithAppPort(srv.Port()),
 	)
 
@@ -98,10 +87,12 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, rErr := client.Do(req)
-		require.NoError(c, rErr)
-		assert.NoError(c, resp.Body.Close())
-		assert.Equal(c, http.StatusOK, resp.StatusCode)
-	}, time.Second*10, time.Millisecond*100, "actor not ready in time")
+		//nolint:testifylint
+		if assert.NoError(c, rErr) {
+			assert.NoError(c, resp.Body.Close())
+			assert.Equal(c, http.StatusOK, resp.StatusCode)
+		}
+	}, time.Second*10, time.Millisecond*10, "actor not ready in time")
 
 	body := `{"dueTime": "0ms"}`
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/reminders/remindermethod", strings.NewReader(body))
@@ -109,14 +100,14 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	assert.NoError(t, resp.Body.Close())
+	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 
 	assert.Eventually(t, func() bool {
 		return b.methodcalled.Load() == 1
-	}, time.Second*3, time.Millisecond*100)
+	}, time.Second*3, time.Millisecond*10)
 
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", b.daprd.GRPCPort()),
+	conn, err := grpc.DialContext(ctx, b.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
 	)
 	require.NoError(t, err)
@@ -133,5 +124,5 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		return b.methodcalled.Load() == 2
-	}, time.Second*3, time.Millisecond*100)
+	}, time.Second*3, time.Millisecond*10)
 }
