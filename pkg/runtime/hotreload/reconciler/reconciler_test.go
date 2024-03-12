@@ -189,6 +189,7 @@ func Test_Run(t *testing.T) {
 		r := NewComponent(Options[componentsapi.Component]{
 			Loader:    fake.New().WithComponent(compLoader),
 			CompStore: compstore.New(),
+			Healthz:   healthz.New(),
 		})
 		fakeClock := clocktesting.NewFakeClock(time.Now())
 		r.clock = fakeClock
