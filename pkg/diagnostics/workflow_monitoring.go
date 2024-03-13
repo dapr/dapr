@@ -16,16 +16,14 @@ package diagnostics
 import (
 	"context"
 
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
-
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 var (
-	workflowNameKey = tag.MustNewKey("workflow_name")
-	activityNameKey = tag.MustNewKey("activity_name")
+	workflowNameKey = "workflow_name"
+	activityNameKey = "activity_name"
 )
 
 const (
@@ -42,55 +40,33 @@ const (
 )
 
 type workflowMetrics struct {
+	meter metric.Meter
+
 	// workflowOperationCount records count of Successful/Failed requests to Create/Get/Purge Workflow and Add Events.
-	workflowOperationCount *stats.Int64Measure
+	workflowOperationCount metric.Int64Counter
 	// workflowOperationLatency records latency of response for workflow operation requests.
-	workflowOperationLatency *stats.Float64Measure
+	workflowOperationLatency metric.Float64Histogram
 	// workflowExecutionCount records count of Successful/Failed/Recoverable workflow executions.
-	workflowExecutionCount *stats.Int64Measure
+	workflowExecutionCount metric.Int64Counter
 	// activityExecutionCount records count of Successful/Failed/Recoverable activity executions.
-	activityExecutionCount *stats.Int64Measure
+	activityExecutionCount metric.Int64Counter
 	// activityExecutionLatency records time taken to run an activity to completion.
-	activityExecutionLatency *stats.Float64Measure
+	activityExecutionLatency metric.Float64Histogram
 	// workflowExecutionLatency records time taken to run a workflow to completion.
-	workflowExecutionLatency *stats.Float64Measure
+	workflowExecutionLatency metric.Float64Histogram
 	// workflowSchedulingLatency records time taken between workflow execution request and actual workflow execution
-	workflowSchedulingLatency *stats.Float64Measure
+	workflowSchedulingLatency metric.Float64Histogram
 	appID                     string
 	enabled                   bool
 	namespace                 string
 }
 
 func newWorkflowMetrics() *workflowMetrics {
+	m := otel.Meter("workflow")
+
 	return &workflowMetrics{
-		workflowOperationCount: stats.Int64(
-			"runtime/workflow/operation/count",
-			"The number of successful/failed workflow operation requests.",
-			stats.UnitDimensionless),
-		workflowOperationLatency: stats.Float64(
-			"runtime/workflow/operation/latency",
-			"The latencies of responses for workflow operation requests.",
-			stats.UnitMilliseconds),
-		workflowExecutionCount: stats.Int64(
-			"runtime/workflow/execution/count",
-			"The number of successful/failed/recoverable workflow executions.",
-			stats.UnitDimensionless),
-		activityExecutionCount: stats.Int64(
-			"runtime/workflow/activity/execution/count",
-			"The number of successful/failed/recoverable activity executions.",
-			stats.UnitDimensionless),
-		activityExecutionLatency: stats.Float64(
-			"runtime/workflow/activity/execution/latency",
-			"The total time taken to run an activity to completion.",
-			stats.UnitMilliseconds),
-		workflowExecutionLatency: stats.Float64(
-			"runtime/workflow/execution/latency",
-			"The total time taken to run workflow to completion.",
-			stats.UnitMilliseconds),
-		workflowSchedulingLatency: stats.Float64(
-			"runtime/workflow/scheduling/latency",
-			"Interval between workflow execution request and workflow execution.",
-			stats.UnitMilliseconds),
+		meter:   m,
+		enabled: false,
 	}
 }
 
@@ -100,18 +76,74 @@ func (w *workflowMetrics) IsEnabled() bool {
 
 // Init registers the workflow metrics views.
 func (w *workflowMetrics) Init(appID, namespace string) error {
+	workflowOperationCount, err := w.meter.Int64Counter(
+		"runtime.workflow.operation.count",
+		metric.WithDescription("The number of successful/failed workflow operation requests."),
+	)
+	if err != nil {
+		return err
+	}
+
+	workflowOperationLatency, err := w.meter.Float64Histogram(
+		"runtime.workflow.operation.latency",
+		metric.WithDescription("The latencies of responses for workflow operation requests."),
+	)
+	if err != nil {
+		return err
+	}
+
+	workflowExecutionCount, err := w.meter.Int64Counter(
+		"runtime.workflow.execution.count",
+		metric.WithDescription("The number of successful/failed/recoverable workflow executions."),
+	)
+	if err != nil {
+		return err
+	}
+
+	activityExecutionCount, err := w.meter.Int64Counter(
+		"runtime.workflow.activity.execution.count",
+		metric.WithDescription("The number of successful/failed/recoverable activity executions."),
+	)
+	if err != nil {
+		return err
+	}
+
+	activityExecutionLatency, err := w.meter.Float64Histogram(
+		"runtime.workflow.activity.execution.latency",
+		metric.WithDescription("The total time taken to run an activity to completion."),
+	)
+	if err != nil {
+		return err
+	}
+
+	workflowExecutionLatency, err := w.meter.Float64Histogram(
+		"runtime.workflow.execution.latency",
+		metric.WithDescription("The total time taken to run workflow to completion."),
+	)
+	if err != nil {
+		return err
+	}
+
+	workflowSchedulingLatency, err := w.meter.Float64Histogram(
+		"runtime.workflow.scheduling.latency",
+		metric.WithDescription("Interval between workflow execution request and workflow execution."),
+	)
+	if err != nil {
+		return err
+	}
+
+	w.activityExecutionCount = activityExecutionCount
+	w.activityExecutionLatency = activityExecutionLatency
+	w.workflowExecutionCount = workflowExecutionCount
+	w.workflowOperationCount = workflowOperationCount
+	w.workflowOperationLatency = workflowOperationLatency
+	w.workflowExecutionLatency = workflowExecutionLatency
+	w.workflowSchedulingLatency = workflowSchedulingLatency
 	w.appID = appID
 	w.enabled = true
 	w.namespace = namespace
 
-	return view.Register(
-		diagUtils.NewMeasureView(w.workflowOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(w.workflowOperationLatency, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, defaultLatencyDistribution),
-		diagUtils.NewMeasureView(w.workflowExecutionCount, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(w.activityExecutionCount, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(w.activityExecutionLatency, []tag.Key{appIDKey, namespaceKey, activityNameKey, statusKey}, defaultLatencyDistribution),
-		diagUtils.NewMeasureView(w.workflowExecutionLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey, statusKey}, defaultLatencyDistribution),
-		diagUtils.NewMeasureView(w.workflowSchedulingLatency, []tag.Key{appIDKey, namespaceKey, workflowNameKey}, defaultLatencyDistribution))
+	return nil
 }
 
 // WorkflowOperationEvent records total number of Successful/Failed workflow Operations requests. It also records latency for those requests.
@@ -120,10 +152,10 @@ func (w *workflowMetrics) WorkflowOperationEvent(ctx context.Context, operation,
 		return
 	}
 
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, operationKey, operation, statusKey, status), w.workflowOperationCount.M(1))
+	w.workflowOperationCount.Add(ctx, 1, metric.WithAttributes(attribute.String(appIDKey, w.appID), attribute.String(namespaceKey, w.namespace), attribute.String(operationKey, operation), attribute.String(statusKey, status)))
 
 	if elapsed > 0 {
-		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowOperationLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, operationKey, operation, statusKey, status), w.workflowOperationLatency.M(elapsed))
+		w.workflowOperationLatency.Record(ctx, elapsed, metric.WithAttributes(attribute.String(appIDKey, w.appID), attribute.String(namespaceKey, w.namespace), attribute.String(operationKey, operation), attribute.String(statusKey, status)))
 	}
 }
 
@@ -134,7 +166,7 @@ func (w *workflowMetrics) WorkflowExecutionEvent(ctx context.Context, workflowNa
 		return
 	}
 
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status), w.workflowExecutionCount.M(1))
+	w.workflowExecutionCount.Add(ctx, 1, metric.WithAttributes(attribute.String(appIDKey, w.appID), attribute.String(namespaceKey, w.namespace), attribute.String(workflowNameKey, workflowName), attribute.String(statusKey, status)))
 }
 
 func (w *workflowMetrics) WorkflowExecutionLatency(ctx context.Context, workflowName, status string, elapsed float64) {
@@ -143,7 +175,7 @@ func (w *workflowMetrics) WorkflowExecutionLatency(ctx context.Context, workflow
 	}
 
 	if elapsed > 0 {
-		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowExecutionLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName, statusKey, status), w.workflowExecutionLatency.M(elapsed))
+		w.workflowExecutionLatency.Record(ctx, elapsed, metric.WithAttributes(attribute.String(appIDKey, w.appID), attribute.String(namespaceKey, w.namespace), attribute.String(workflowNameKey, workflowName), attribute.String(statusKey, status)))
 	}
 }
 
@@ -153,7 +185,7 @@ func (w *workflowMetrics) WorkflowSchedulingLatency(ctx context.Context, workflo
 	}
 
 	if elapsed > 0 {
-		stats.RecordWithTags(ctx, diagUtils.WithTags(w.workflowSchedulingLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, workflowNameKey, workflowName), w.workflowSchedulingLatency.M(elapsed))
+		w.workflowSchedulingLatency.Record(ctx, elapsed, metric.WithAttributes(attribute.String(appIDKey, w.appID), attribute.String(namespaceKey, w.namespace), attribute.String(workflowNameKey, workflowName)))
 	}
 }
 
@@ -163,9 +195,9 @@ func (w *workflowMetrics) ActivityExecutionEvent(ctx context.Context, activityNa
 		return
 	}
 
-	stats.RecordWithTags(ctx, diagUtils.WithTags(w.activityExecutionCount.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status), w.activityExecutionCount.M(1))
+	w.activityExecutionCount.Add(ctx, 1, metric.WithAttributes(attribute.String(appIDKey, w.appID), attribute.String(namespaceKey, w.namespace), attribute.String(activityNameKey, activityName), attribute.String(statusKey, status)))
 
 	if elapsed > 0 {
-		stats.RecordWithTags(ctx, diagUtils.WithTags(w.activityExecutionLatency.Name(), appIDKey, w.appID, namespaceKey, w.namespace, activityNameKey, activityName, statusKey, status), w.activityExecutionLatency.M(elapsed))
+		w.activityExecutionLatency.Record(ctx, elapsed, metric.WithAttributes(attribute.String(appIDKey, w.appID), attribute.String(namespaceKey, w.namespace), attribute.String(activityNameKey, activityName), attribute.String(statusKey, status)))
 	}
 }
