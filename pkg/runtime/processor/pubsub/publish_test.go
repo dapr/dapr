@@ -108,6 +108,25 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("ok with empty body", func(t *testing.T) {
+		log.SetOutputLevel(logger.DebugLevel)
+		defer log.SetOutputLevel(logger.InfoLevel)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).WithRawData(nil)
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.Anything, fakeReq).Return(fakeResp, nil)
+
+		// act
+		err := ps.publishMessageHTTP(context.Background(), testPubSubMessage)
+
+		// assert
+		require.NoError(t, err)
+	})
+
 	t.Run("ok with retry", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
 		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
