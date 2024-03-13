@@ -68,7 +68,7 @@ type Server struct {
 	dataDir          string
 	etcdID           string
 	etcdInitialPeers []string
-	etcdClientPorts  []string
+	etcdClientPorts  map[string]string
 	cron             *etcdcron.Cron
 	readyCh          chan struct{}
 
@@ -77,13 +77,25 @@ type Server struct {
 }
 
 func New(opts Options) *Server {
+	clientPorts := make(map[string]string)
+	for _, input := range opts.EtcdClientPorts {
+		idAndPort := strings.Split(input, "=")
+		if len(idAndPort) != 2 {
+			log.Warnf("Incorrect format for client ports: %s. Should contain <id>=<client-port>", input)
+			continue
+		}
+		schedulerID := strings.TrimSpace(idAndPort[0])
+		port := strings.TrimSpace(idAndPort[1])
+		clientPorts[schedulerID] = port
+	}
+
 	s := &Server{
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
 
 		etcdID:           opts.EtcdID,
 		etcdInitialPeers: opts.EtcdInitialPeers,
-		etcdClientPorts:  opts.EtcdClientPorts,
+		etcdClientPorts:  clientPorts,
 		dataDir:          opts.DataDir,
 		readyCh:          make(chan struct{}),
 	}
@@ -198,20 +210,7 @@ func (s *Server) runEtcd(ctx context.Context) error {
 
 	log.Info("Starting EtcdCron")
 
-	clientPort := make(map[string]string)
-	for _, str := range s.etcdClientPorts {
-		idAndPort := strings.Split(str, "=")
-		if len(idAndPort) != 2 {
-			fmt.Printf("Invalid format: %s\n", str)
-			continue
-		}
-
-		id := strings.TrimSpace(idAndPort[0])
-		port := strings.TrimSpace(idAndPort[1])
-		clientPort[id] = port
-	}
-
-	etcdEndpoints := clientEndpoints(s.etcdInitialPeers, clientPort)
+	etcdEndpoints := clientEndpoints(s.etcdInitialPeers, s.etcdClientPorts)
 
 	c, err := etcdcron.NewEtcdMutexBuilder(clientv3.Config{Endpoints: etcdEndpoints})
 	if err != nil {
