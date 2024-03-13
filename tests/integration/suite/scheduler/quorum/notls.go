@@ -121,6 +121,8 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	}
 }
 
+// TODO: Cassie - rm this and switch to the get func once the get functionality checks from the db
+// as of now, the get func only checks in memory, so the data wont be there on another scheduler instance
 func executeEtcdCmd(t *testing.T, port string) string {
 	cmd := exec.Command("etcdctl", "get", "", "--prefix", fmt.Sprintf("--endpoints=localhost:%s", port))
 
