@@ -44,28 +44,14 @@ func (s *Server) conf() *embed.Config {
 		Host:   fmt.Sprintf("%s:%s", etcdUrl, peerPort),
 	}}
 
-	clientPort := make(map[string]string)
-	for _, input := range s.etcdClientPorts {
-		idAndPort := strings.Split(input, "=")
-		if len(idAndPort) != 2 {
-			log.Warnf("Incorrect format for client ports: %s. Should contain <id>=<client-port>", input)
-			continue
-		}
-
-		id := strings.TrimSpace(idAndPort[0])
-		port := strings.TrimSpace(idAndPort[1])
-		clientPort[id] = port
-	}
-
-	schedulerClientPort := clientPort[s.etcdID]
-
 	config.ListenClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdUrl, schedulerClientPort),
+		Host:   fmt.Sprintf("%s:%s", etcdUrl, s.etcdClientPorts[s.etcdID]),
 	}}
+
 	config.AdvertiseClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdUrl, schedulerClientPort),
+		Host:   fmt.Sprintf("%s:%s", etcdUrl, s.etcdClientPorts[s.etcdID]),
 	}}
 
 	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
