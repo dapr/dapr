@@ -28,7 +28,6 @@ type Options struct {
 	Port        int
 	HealthzPort int
 
-	EtcdDataDir      string
 	ListenAddress    string
 	TLSEnabled       bool
 	TrustDomain      string
@@ -36,6 +35,11 @@ type Options struct {
 	SentryAddress    string
 	PlacementAddress string
 	Mode             string
+
+	EtcdID           string
+	EtcdInitialPeers string
+	EtcdDataDir      string
+	EtcdClientPort   int
 
 	Logger  logger.Options
 	Metrics *metrics.Options
@@ -54,7 +58,11 @@ func New() *Options {
 	flag.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
 	flag.StringVar(&opts.PlacementAddress, "placement-address", "", "Addresses for Dapr Actor Placement service")
 	flag.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
+
+	flag.StringVar(&opts.EtcdID, "id", "dapr-scheduler-0", "Scheduler server ID")
+	flag.StringVar(&opts.EtcdInitialPeers, "initial-cluster", "dapr-scheduler-server-0=http://localhost:2380", "Initial etcd cluster peers")
 	flag.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
+	flag.IntVar(&opts.EtcdClientPort, "etcd-client-port", 2379, "Port for etcd client communication")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)

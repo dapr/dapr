@@ -41,12 +41,15 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
-	AppID         string
-	HostAddress   string
-	ListenAddress string
-	DataDir       string
-	Mode          modes.DaprMode
-	Port          int
+	AppID            string
+	HostAddress      string
+	ListenAddress    string
+	DataDir          string
+	EtcdID           string
+	EtcdInitialPeers string
+	EtcdClientPort   int
+	Mode             modes.DaprMode
+	Port             int
 
 	Security security.Handler
 
@@ -58,10 +61,13 @@ type Server struct {
 	port          int
 	srv           *grpc.Server
 	listenAddress string
-	dataDir       string
 
-	cron    *etcdcron.Cron
-	readyCh chan struct{}
+	dataDir          string
+	etcdID           string
+	etcdInitialPeers string
+	etcdClientPort   int
+	cron             *etcdcron.Cron
+	readyCh          chan struct{}
 
 	grpcManager  *manager.Manager
 	actorRuntime actors.ActorRuntime
@@ -71,8 +77,12 @@ func New(opts Options) *Server {
 	s := &Server{
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
-		dataDir:       opts.DataDir,
-		readyCh:       make(chan struct{}),
+
+		etcdID:           opts.EtcdID,
+		etcdInitialPeers: opts.EtcdInitialPeers,
+		etcdClientPort:   opts.EtcdClientPort,
+		dataDir:          opts.DataDir,
+		readyCh:          make(chan struct{}),
 	}
 
 	s.srv = grpc.NewServer(opts.Security.GRPCServerOptionMTLS())

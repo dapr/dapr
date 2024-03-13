@@ -22,7 +22,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
@@ -38,17 +40,29 @@ type Scheduler struct {
 	port        int
 	healthzPort int
 	metricsPort int
+
+	id                  string
+	initialCluster      string
+	initialClusterPorts []int
+	etcdClientPort      int
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
 	t.Helper()
 
-	fp := util.ReservePorts(t, 3)
+	uid, err := uuid.NewUUID()
+	require.NoError(t, err)
+
+	fp := util.ReservePorts(t, 5)
 	opts := options{
-		logLevel:    "info",
-		port:        fp.Port(t, 0),
-		healthzPort: fp.Port(t, 1),
-		metricsPort: fp.Port(t, 2),
+		id:                  uid.String(),
+		logLevel:            "info",
+		port:                fp.Port(t, 0),
+		healthzPort:         fp.Port(t, 1),
+		metricsPort:         fp.Port(t, 2),
+		initialCluster:      uid.String() + "=http://localhost:" + strconv.Itoa(fp.Port(t, 3)),
+		initialClusterPorts: []int{fp.Port(t, 3)},
+		etcdClientPort:      fp.Port(t, 4),
 	}
 
 	for _, fopt := range fopts {
@@ -57,11 +71,14 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	args := []string{
 		"--log-level=" + opts.logLevel,
+		"--id=" + opts.id,
 		"--port=" + strconv.Itoa(opts.port),
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
+		"--initial-cluster=" + opts.initialCluster,
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
 		"--etcd-data-dir=" + t.TempDir(),
+		"--etcd-client-port=" + strconv.Itoa(opts.etcdClientPort),
 	}
 
 	if opts.listenAddress != nil {
@@ -75,11 +92,15 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 
 	return &Scheduler{
-		exec:        exec.New(t, binary.EnvValue("scheduler"), args, opts.execOpts...),
-		freeport:    fp,
-		port:        opts.port,
-		healthzPort: opts.healthzPort,
-		metricsPort: opts.metricsPort,
+		exec:                exec.New(t, binary.EnvValue("scheduler"), args, opts.execOpts...),
+		freeport:            fp,
+		id:                  opts.id,
+		port:                opts.port,
+		healthzPort:         opts.healthzPort,
+		metricsPort:         opts.metricsPort,
+		initialCluster:      opts.initialCluster,
+		initialClusterPorts: opts.initialClusterPorts,
+		etcdClientPort:      opts.etcdClientPort,
 	}
 }
 
@@ -102,11 +123,9 @@ func (s *Scheduler) Cleanup(t *testing.T) {
 
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", s.healthzPort), nil)
+	require.NoError(t, err)
 	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", s.healthzPort), nil)
-		if err != nil {
-			return false
-		}
 		resp, err := client.Do(req)
 		if err != nil {
 			return false
@@ -114,6 +133,10 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		defer resp.Body.Close()
 		return http.StatusOK == resp.StatusCode
 	}, time.Second*5, 100*time.Millisecond)
+}
+
+func (s *Scheduler) ID() string {
+	return s.id
 }
 
 func (s *Scheduler) Port() int {
@@ -130,6 +153,18 @@ func (s *Scheduler) HealthzPort() int {
 
 func (s *Scheduler) MetricsPort() int {
 	return s.metricsPort
+}
+
+func (s *Scheduler) InitialCluster() string {
+	return s.initialCluster
+}
+
+func (s *Scheduler) EtcdClientPort() int {
+	return s.etcdClientPort
+}
+
+func (s *Scheduler) InitialClusterPorts() []int {
+	return s.initialClusterPorts
 }
 
 func (s *Scheduler) ListenAddress() string {

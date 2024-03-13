@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -19,15 +19,32 @@ import (
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
 func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
-	// validate job details, date, schedule, etc??
-	var err error
+	errMetadata := map[string]string{"app_id": a.AppID()}
 
-	metadata := map[string]string{"appId": a.AppID()}
+	if inReq.GetJob() == nil {
+		return &emptypb.Empty{}, apierrors.Empty("Job", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
+	}
+
+	if inReq.GetJob().GetName() == "" || inReq.GetJob().GetName() == " " {
+		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
+	}
+
+	if inReq.GetJob().GetSchedule() == "" {
+		return &emptypb.Empty{}, apierrors.Empty("Schedule", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty))
+	}
+
+	if inReq.GetJob().GetRepeats() < 0 {
+		return &emptypb.Empty{}, apierrors.IncorrectNegative("Repeats", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats))
+	}
+
+	// TODO: add validation on dueTime and ttl
+
 	jobName := a.AppID() + "||" + inReq.GetJob().GetName()
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
@@ -39,26 +56,26 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 			DueTime:  inReq.GetJob().GetDueTime(),
 			Ttl:      inReq.GetJob().GetTtl(),
 		},
-		Namespace: "",       // TODO
-		Metadata:  metadata, // TODO: this should generate key if jobStateStore is configured
+		Namespace: "",  // TODO
+		Metadata:  nil, // TODO: this should generate key if jobStateStore is configured
 	}
 
 	// TODO: do something with following response?
-	_, err = a.schedulerClient.ScheduleJob(ctx, internalScheduleJobReq)
+	_, err := a.schedulerClient.ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
-		a.logger.Errorf("Error Scheduling job %s. %v", inReq.GetJob().GetName(), err)
-		return &emptypb.Empty{}, err
+		a.logger.Errorf("Error scheduling job %s", inReq.GetJob().GetName())
+		return &emptypb.Empty{}, apierrors.SchedulerScheduleJob(errMetadata, err)
 	}
 
-	return &emptypb.Empty{}, err
+	return &emptypb.Empty{}, nil
 }
 
 func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*emptypb.Empty, error) {
-	var err error
+	errMetadata := map[string]string{"app_id": a.AppID()}
 
 	if inReq.GetName() == "" {
-		a.logger.Error("Job name empty.")
-		return &emptypb.Empty{}, err
+		a.logger.Error("Job name is empty.")
+		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
 	jobName := a.AppID() + "||" + inReq.GetName()
@@ -66,24 +83,24 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 		JobName: jobName,
 	}
 
-	// TODO: do something with following response?
-	_, err = a.schedulerClient.DeleteJob(ctx, internalDeleteJobReq)
+	_, err := a.schedulerClient.DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
-		a.logger.Errorf("Error Deleting job: %s. %v", inReq.GetName(), err)
-		return &emptypb.Empty{}, err
+		a.logger.Errorf("Error deleting job: %s", inReq.GetName())
+		return &emptypb.Empty{}, apierrors.SchedulerDeleteJob(errMetadata, err)
 	}
 
-	return &emptypb.Empty{}, err
+	return &emptypb.Empty{}, nil
 }
 
 func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
+	errMetadata := map[string]string{"app_id": a.AppID()}
+
 	response := &runtimev1pb.GetJobResponse{}
 	var internalResp *schedulerv1pb.GetJobResponse
-	var err error
 
 	if inReq.GetName() == "" {
-		a.logger.Error("Job name empty.")
-		return response, err
+		a.logger.Error("Job name is empty.")
+		return response, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
 	jobName := a.AppID() + "||" + inReq.GetName()
@@ -91,10 +108,10 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 		JobName: jobName,
 	}
 
-	internalResp, err = a.schedulerClient.GetJob(ctx, internalGetJobReq)
+	internalResp, err := a.schedulerClient.GetJob(ctx, internalGetJobReq)
 	if err != nil {
-		a.logger.Errorf("Error Getting job %s. %v", inReq.GetName(), err)
-		return nil, err
+		a.logger.Errorf("Error getting job %s", inReq.GetName())
+		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 
 	response.Job = internalResp.GetJob()
@@ -102,7 +119,7 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 	// override job name, so it's the original user's job name and not the app_id prefix
 	response.Job.Name = strings.TrimPrefix(jobName, a.AppID()+"||")
 
-	return response, err
+	return response, nil
 }
 
 func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsResponse, error) {
@@ -110,33 +127,30 @@ func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsReq
 		Jobs: []*runtimev1pb.Job{},
 	}
 
-	var internalListResp *schedulerv1pb.ListJobsResponse
-	var err error
-
 	if inReq.GetAppId() == "" {
 		a.logger.Error("Job appID empty.")
-		return response, err
+		return response, apierrors.Empty("AppID", nil, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixAppID, apierrors.PostFixEmpty))
 	}
 
 	internalListReq := &schedulerv1pb.ListJobsRequest{
 		AppId: inReq.GetAppId(),
 	}
 
-	internalListResp, err = a.schedulerClient.ListJobs(ctx, internalListReq)
+	internalListResp, err := a.schedulerClient.ListJobs(ctx, internalListReq)
 	if err != nil {
-		a.logger.Errorf("Error Listing jobs for app %s. %v", inReq.GetAppId(), err)
-		return nil, err
+		a.logger.Errorf("Error listing jobs for app %s", inReq.GetAppId())
+		return nil, apierrors.SchedulerListJobs(map[string]string{"app_id": a.AppID()}, err)
 	}
 
 	if len(internalListResp.GetJobs()) > 0 {
 		response.Jobs = internalListResp.GetJobs()
 	}
 
-	for _, job := range response.Jobs {
+	for _, job := range response.GetJobs() {
 		jobName := job.GetName()
 		// override job name, so it's the original user's job name and not the app_id prefix
 		job.Name = strings.TrimPrefix(jobName, a.AppID()+"||")
 	}
 
-	return response, err
+	return response, nil
 }

@@ -36,7 +36,7 @@ func init() {
 	suite.Register(new(mtls))
 }
 
-// mtls tests scheduler with tls disabled.
+// mtls tests scheduler with tls enabled.
 type mtls struct {
 	sentry    *sentry.Sentry
 	scheduler *scheduler.Scheduler
