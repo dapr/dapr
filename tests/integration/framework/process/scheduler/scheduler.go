@@ -77,14 +77,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	err = os.Chmod(tmpDir, 0o700)
 	require.NoError(t, err)
 
-	strSlice := make([]string, len(opts.etcdClientPorts))
-	for i, num := range opts.etcdClientPorts {
-		strSlice[i] = num
-	}
-
-	// Join the string slice with commas
-	resultclientports := strings.Join(strSlice, ", ")
-
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--id=" + opts.id,
@@ -94,7 +86,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		"--initial-cluster=" + opts.initialCluster,
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
 		"--etcd-data-dir=" + tmpDir,
-		"--etcd-client-ports=" + resultclientports,
+		"--etcd-client-ports=" + strings.Join(opts.etcdClientPorts, ","),
 	}
 
 	if opts.listenAddress != nil {
