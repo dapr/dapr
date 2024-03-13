@@ -19,6 +19,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 	"time"
@@ -139,7 +140,11 @@ func (p *pubsub) publishMessageHTTP(ctx context.Context, msg *subscribedMessage)
 		var appResponse contribpubsub.AppResponse
 		err := json.NewDecoder(resp.RawData()).Decode(&appResponse)
 		if err != nil {
-			log.Debugf("skipping status check due to error parsing result from pub/sub event %v: %s", cloudEvent[contribpubsub.IDField], err)
+			if errors.Is(err, io.EOF) {
+				log.Debugf("skipping status check due to empty response body from pub/sub event %v", cloudEvent[contribpubsub.IDField])
+			} else {
+				log.Debugf("skipping status check due to error parsing result from pub/sub event %v: %s", cloudEvent[contribpubsub.IDField], err)
+			}
 			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.pubsub, strings.ToLower(string(contribpubsub.Success)), msg.topic, elapsed)
 			return nil
 		}
