@@ -491,8 +491,6 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 // replace github.com/dapr/kit => ../kit
 replace github.com/Scalingo/go-etcd-cron => github.com/cicoyle/go-etcd-cron v0.0.0-20240212132024-691d2e9fb3f1
 
-//replace github.com/Scalingo/go-etcd-cron => ../go-etcd-cron
-
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
