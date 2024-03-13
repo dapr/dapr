@@ -97,7 +97,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		"--initial-cluster=" + opts.initialCluster,
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
 		"--etcd-data-dir=" + tmpDir,
-		"--etcd-client-port=" + resultclientports,
+		"--etcd-client-ports=" + resultclientports,
 	}
 
 	if opts.listenAddress != nil {

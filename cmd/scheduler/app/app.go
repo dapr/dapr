@@ -38,7 +38,7 @@ const appID = "dapr-scheduler"
 
 func Run() {
 	opts := options.New(os.Args[1:])
-	opts.Logger.OutputLevel = "debug"
+
 	// Apply options to all loggers.
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
 		log.Fatal(err)

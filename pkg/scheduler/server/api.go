@@ -36,22 +36,15 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	case <-s.readyCh:
 	}
 
-	//ttl, err := strconv.Atoi(req.GetJob().GetTtl())
-	//if err != nil {
-	//	return nil, err
-	//}
-	fmt.Printf("CASSIE in scheduler scheduleJob. req: %+v\n", req)
-
 	// TODO: figure out if we need/want namespace in job name
 	err := s.cron.AddJob(etcdcron.Job{
-		Name:   req.GetJob().GetName(),
-		Rhythm: req.GetJob().GetSchedule(),
-		//Repeats:  req.GetJob().GetRepeats(),
-		//DueTime:  req.GetJob().GetDueTime(), // TODO: figure out dueTime
-		//TTL: int64(ttl),
-		//TTL: req.GetJob().GetTtl(),
-		//Data:     req.GetJob().GetData(),
-		//Metadata: req.GetMetadata(), // TODO: do I need this here?
+		Name:     req.GetJob().GetName(),
+		Rhythm:   req.GetJob().GetSchedule(),
+		Repeats:  req.GetJob().GetRepeats(),
+		DueTime:  req.GetJob().GetDueTime(), // TODO: figure out dueTime
+		TTL:      req.GetJob().GetTtl(),
+		Data:     req.GetJob().GetData(),
+		Metadata: req.GetMetadata(), // TODO: do I need this here?
 		Func: func(context.Context) error {
 			innerErr := s.triggerJob(req.GetJob(), req.GetNamespace(), req.GetMetadata())
 			if innerErr != nil {
@@ -76,7 +69,7 @@ func (s *Server) triggerJob(job *runtimev1pb.Job, namespace string, metadata map
 	})
 	if err != nil {
 		log.Errorf("error triggering job %s: %s", job.GetName(), err)
-		//return err
+		return err
 	}
 	return nil
 }
@@ -96,10 +89,10 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 		job := &runtimev1pb.Job{
 			Name:     entry.Name,
 			Schedule: entry.Rhythm,
-			//Repeats:  entry.Repeats,
-			//DueTime:  entry.DueTime,
-			//Ttl:      entry.TTL,
-			//Data:     entry.Data,
+			Repeats:  entry.Repeats,
+			DueTime:  entry.DueTime,
+			Ttl:      entry.TTL,
+			Data:     entry.Data,
 		}
 
 		jobs = append(jobs, job)
@@ -124,10 +117,10 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.JobRequest) (*sc
 			Job: &runtimev1pb.Job{
 				Name:     job.Name,
 				Schedule: job.Rhythm,
-				//Repeats:  job.Repeats,
-				//DueTime:  job.DueTime,
-				//Ttl:      job.TTL,
-				//Data:     job.Data,
+				Repeats:  job.Repeats,
+				DueTime:  job.DueTime,
+				Ttl:      job.TTL,
+				Data:     job.Data,
 			},
 		}
 		return resp, nil

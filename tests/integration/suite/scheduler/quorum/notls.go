@@ -16,7 +16,7 @@ package quorum
 import (
 	"context"
 	"fmt"
-	"log"
+	"math/rand"
 	"os/exec"
 	"strconv"
 	"strings"
@@ -46,49 +46,41 @@ type notls struct {
 func (n *notls) Setup(t *testing.T) []framework.Option {
 	fp := util.ReservePorts(t, 6)
 
-	opts := []scheduler.Option{ //switch to 0
-		//scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d", fp.Port(t, 0), fp.Port(t, 1))),
-		scheduler.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1)),
-		//scheduler.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
+	opts := []scheduler.Option{
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
+		scheduler.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
 	}
 
-	//switch to zero
 	clientPorts := []string{
 		"scheduler0=" + strconv.Itoa(fp.Port(t, 3)),
 		"scheduler1=" + strconv.Itoa(fp.Port(t, 4)),
-		//"scheduler2=" + strconv.Itoa(fp.Port(t, 5)),
+		"scheduler2=" + strconv.Itoa(fp.Port(t, 5)),
 	}
 	n.schedulers = []*scheduler.Scheduler{
 		scheduler.New(t, append(opts, scheduler.WithID("scheduler0"), scheduler.WithEtcdClientPorts(clientPorts))...),
 		scheduler.New(t, append(opts, scheduler.WithID("scheduler1"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		//scheduler.New(t, append(opts, scheduler.WithID("scheduler2"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler2"), scheduler.WithEtcdClientPorts(clientPorts))...),
 	}
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(n.schedulers[0], n.schedulers[1]),
-		//framework.WithProcesses(n.schedulers[0], n.schedulers[1], n.schedulers[2]),
+		framework.WithProcesses(n.schedulers[0], n.schedulers[1], n.schedulers[2]),
 	}
 }
 
 func (n *notls) Run(t *testing.T, ctx context.Context) {
 	n.schedulers[0].WaitUntilRunning(t, ctx)
 	n.schedulers[1].WaitUntilRunning(t, ctx)
-	//n.schedulers[2].WaitUntilRunning(t, ctx)
+	n.schedulers[2].WaitUntilRunning(t, ctx)
 
-	// Randomly choose one scheduler
-	//chosenScheduler := n.schedulers[rand.Intn(3)]
-	chosenScheduler := n.schedulers[0] //hardcoded for now
-	log.Printf("CASSIE: choose scheduler: %s", chosenScheduler.ID())
+	// Schedule job to random scheduler instance
+	chosenScheduler := n.schedulers[rand.Intn(3)]
 
 	host := chosenScheduler.Address()
 	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)
-
-	fmt.Println("CASSIE!!! no issue w/ first conn")
 
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -104,165 +96,57 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		Metadata:  map[string]string{"app_id": "test"},
 	}
 
-	log.Println("CASSIE: before scheduling job")
-
 	_, err = client.ScheduleJob(ctx, req)
+	require.NoError(t, err)
 
-	// Keep this, I believe the record is added to the db at trigger time so I need the sleep for the db check to pass
+	// Keep this, I believe the record is added to the db at trigger time, so I need the sleep for the db check to pass
 	time.Sleep(2 * time.Second) // allow time for the record to be added to the db
 
-	log.Printf("CASSIE: after scheduling job: %s", err)
-	require.NoError(t, err)
-	//fmt.Println("CASSIE!!!filepath.Walk")
+	chosenSchedulerPort := findSchedulerClientPort(chosenScheduler)
+	require.NotEmptyf(t, chosenSchedulerPort, "chosenSchedulerPort should not be empty")
 
-	fmt.Println("HITHER url: %s:%d", chosenScheduler.Address(), n.schedulers[0].EtcdClientPort())
-	fmt.Println("&&&&&&&&&&Cassie: scheduled job - check if in etcd", n.schedulers[0].EtcdClientPort())
+	etcdCmdOutput := executeEtcdCmd(t, chosenSchedulerPort)
+	checkCmdOutputForAppID(t, etcdCmdOutput)
 
-	//time.Sleep(15 * time.Second)
-	log.Printf("CASSIE: scheduler: %+v", chosenScheduler)
+	// ensure data exists on ALL schedulers
+	for i := 0; i < 3; i++ {
+		diffScheduler := n.schedulers[i]
 
-	// Assuming n.schedulers[0].ID holds the scheduler ID you want to match
-	targetID := n.schedulers[0].ID()
-	targetID2 := n.schedulers[1].ID()
+		diffSchedulerPort := findSchedulerClientPort(diffScheduler)
+		require.NotEmptyf(t, chosenSchedulerPort, "diffSchedulerPort should not be empty")
 
-	// Iterate through the EtcdClientPort slice to find the corresponding port
-	var targetPort string
-	for _, entry := range n.schedulers[0].EtcdClientPort() {
+		diffEtcdCmdOutput := executeEtcdCmd(t, diffSchedulerPort)
+		checkCmdOutputForAppID(t, diffEtcdCmdOutput)
+	}
+}
+
+func findSchedulerClientPort(s *scheduler.Scheduler) string {
+	schedulerID := s.ID()
+	for _, entry := range s.EtcdClientPort() {
 		parts := strings.Split(entry, "=")
-		if len(parts) == 2 && parts[0] == targetID {
-			targetPort = parts[1]
-			break
+		if len(parts) == 2 && parts[0] == schedulerID {
+			return parts[1]
 		}
 	}
+	return ""
+}
 
-	// Check if the target port is found
-	if targetPort == "" {
-		fmt.Printf("Port for scheduler %s not found\n", targetID)
-		return
+func executeEtcdCmd(t *testing.T, port string) string {
+	cmd := exec.Command("etcdctl", "get", "", "--prefix", fmt.Sprintf("--endpoints=localhost:%s", port))
 
-		// Handle the case where the port is not found
-	}
-
-	cmd := exec.Command("etcdctl", "get", "", "--prefix", fmt.Sprintf("--endpoints=localhost:%s", targetPort))
-	log.Printf("CASSIE: running cmd: %+v", cmd)
-
-	// Run the command and capture output
 	output, err := cmd.CombinedOutput()
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	log.Printf("\nCASSIE: cmd output: %+v\n", string(output[:]))
+	require.NoError(t, err)
 
-	// Convert output bytes to string and split by newline
-	lines := strings.Split(string(output[:]), "\n")
+	return string(output[:])
+}
 
-	// Check if any line contains "appID"
-	found := false
+func checkCmdOutputForAppID(t *testing.T, output string) {
+	lines := strings.Split(output, "\n")
 	for _, line := range lines {
 		if strings.Contains(line, "etcd_cron/appid__testjob") {
-			found = true
-			break
+			require.True(t, true, "Output contains 'etcd_cron/appid__testjob'")
+			return
 		}
 	}
-
-	require.True(t, found)
-	// Print result
-	if found {
-		fmt.Println("Output contains 'appID'")
-
-	} else {
-		fmt.Println("Output does not contain 'appID'")
-	}
-
-	// Iterate through the EtcdClientPort slice to find the corresponding port
-	var targetPort2 string
-	for _, entry := range n.schedulers[1].EtcdClientPort() {
-		parts := strings.Split(entry, "=")
-		if len(parts) == 2 && parts[0] == targetID2 {
-			targetPort2 = parts[1]
-			break
-		}
-	}
-
-	// Check if the target port is found
-	if targetPort2 == "" {
-		fmt.Printf("Port for scheduler %s not found\n", targetID2)
-		return
-
-		// Handle the case where the port is not found
-	}
-	log.Printf("CASSIE: targetport2: %+v", targetPort2)
-
-	cmd = exec.Command("etcdctl", "get", "", "--prefix", fmt.Sprintf("--endpoints=localhost:%s", targetPort2))
-	log.Printf("CASSIE: running cmd: %+v", cmd)
-
-	// Run the command and capture output
-	output, err = cmd.CombinedOutput()
-	if err != nil {
-		fmt.Println("Error:", err)
-		return
-	}
-	log.Printf("\nCASSIE: cmd output: %+v\n", string(output[:]))
-
-	// Convert output bytes to string and split by newline
-	lines = strings.Split(string(output[:]), "\n")
-
-	// Check if any line contains "appID"
-	found = false
-	for _, line := range lines {
-		if strings.Contains(line, "etcd_cron/appid__testjob") {
-			found = true
-			break
-		}
-	}
-
-	require.True(t, found)
-	// Print result
-	if found {
-		fmt.Println("Output contains 'appID'")
-
-	} else {
-		fmt.Println("Output does not contain 'appID'")
-	}
-
-	/*
-		// Choose a different scheduler for GetJob
-		//diffScheduler := n.schedulers[rand.Intn(3)]
-
-		diffScheduler := n.schedulers[1] //hard coded for now
-		log.Printf("CASSIE: diff scheduler: %s", diffScheduler.ID())
-
-		diffHost := diffScheduler.Address()
-		diffConn, diffErr := grpc.DialContext(ctx, diffHost, grpc.WithBlock(), grpc.WithReturnConnectionError(),
-			grpc.WithTransportCredentials(insecure.NewCredentials()),
-		)
-		require.NoError(t, diffErr)
-		t.Cleanup(func() { require.NoError(t, diffConn.Close()) })
-
-		diffClient := schedulerv1pb.NewSchedulerClient(diffConn)
-
-		log.Println("CASSIE: in if err == nil")
-
-		// verify job was scheduled
-		getJobReq := &schedulerv1pb.JobRequest{
-			JobName: "testJob",
-		}
-
-		log.Println("CASSIE: before get job")
-
-		job, getJobErr := diffClient.GetJob(ctx, getJobReq)
-		log.Printf("CASSIE: after get job: %s", getJobErr)
-		log.Printf("CASSIE: job: %s", job)
-		log.Printf("CASSIE: return val: %v", assert.Equal(t, jobName, job.GetJob().GetName()))
-
-		//resp, err := diffClient.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{AppId: "dapr-scheduler"})
-		//log.Printf("CASSIE: list job returns: %+v", resp)
-		//if err != nil {
-		//	log.Println(err)
-		//}
-		assert.Equal(t, jobName, job.GetJob().GetName())
-
-		log.Println("CASSIE: after the eventually")
-	*/
+	require.Fail(t, "Output does not contain 'etcd_cron/appid__testjob'")
 }
