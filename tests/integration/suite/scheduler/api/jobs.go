@@ -15,17 +15,18 @@ package api
 
 import (
 	"context"
+	"fmt"
 	"strconv"
 	"testing"
-
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 func init() {
@@ -39,12 +40,24 @@ type jobs struct {
 }
 
 func (j *jobs) Setup(t *testing.T) []framework.Option {
-	j.scheduler = scheduler.New(t)
+	fp := util.ReservePorts(t, 2)
+
+	clientPorts := []string{
+		"scheduler0=" + strconv.Itoa(fp.Port(t, 1)),
+	}
+
+	j.scheduler = scheduler.New(t,
+		scheduler.WithID("scheduler0"),
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d", fp.Port(t, 0))),
+		scheduler.WithInitialClusterPorts(fp.Port(t, 0)),
+		scheduler.WithEtcdClientPorts(clientPorts),
+	)
 
 	j.daprd = daprd.New(t,
 		daprd.WithSchedulerAddresses(j.scheduler.Address()),
 	)
 
+	fp.Free(t)
 	return []framework.Option{
 		framework.WithProcesses(j.daprd, j.scheduler),
 	}
@@ -63,12 +76,12 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 			req := &rtv1.ScheduleJobRequest{
 				Job: &rtv1.Job{
 					Name:     name,
-					Schedule: "@daily",
+					Schedule: "@every 1s",
 					Data: &anypb.Any{
 						Value: []byte("test"),
 					},
-					Repeats: 1,
-					DueTime: "0h0m9s0ms",
+					Repeats: 10,
+					DueTime: "10s",
 					Ttl:     "20s",
 				},
 			}

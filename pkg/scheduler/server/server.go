@@ -17,10 +17,13 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"net/url"
 	"os"
+	"strings"
 	"sync/atomic"
 	"time"
 
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 
@@ -47,7 +50,7 @@ type Options struct {
 	DataDir          string
 	EtcdID           string
 	EtcdInitialPeers string
-	EtcdClientPort   int
+	EtcdClientPorts  []string
 	Mode             modes.DaprMode
 	Port             int
 
@@ -65,7 +68,7 @@ type Server struct {
 	dataDir          string
 	etcdID           string
 	etcdInitialPeers string
-	etcdClientPort   int
+	etcdClientPorts  []string
 	cron             *etcdcron.Cron
 	readyCh          chan struct{}
 
@@ -80,7 +83,7 @@ func New(opts Options) *Server {
 
 		etcdID:           opts.EtcdID,
 		etcdInitialPeers: opts.EtcdInitialPeers,
-		etcdClientPort:   opts.EtcdClientPort,
+		etcdClientPorts:  opts.EtcdClientPorts,
 		dataDir:          opts.DataDir,
 		readyCh:          make(chan struct{}),
 	}
@@ -194,7 +197,54 @@ func (s *Server) runEtcd(ctx context.Context) error {
 	}
 
 	log.Info("Starting EtcdCron")
-	cron, err := etcdcron.New()
+
+	idToPort := make(map[string]string)
+
+	log.Infof("s.etcdClientPorts: %+v", s.etcdClientPorts)
+
+	for _, str := range s.etcdClientPorts {
+		parts := strings.Split(str, "=")
+		if len(parts) != 2 {
+			fmt.Printf("Invalid format: %s\n", str)
+			continue
+		}
+
+		id := strings.TrimSpace(parts[0])
+		port := strings.TrimSpace(parts[1])
+		idToPort[id] = port
+	}
+	fmt.Println("s.etcdID:", s.etcdID)
+	for id := range idToPort {
+		fmt.Println("idToPort key:", id)
+		fmt.Println("val:", idToPort[id])
+	}
+	id := strings.TrimSpace(s.etcdID)
+
+	log.Infof("idToPort[s.etcdID]: %+v", idToPort[id])
+
+	for i, v := range idToPort {
+		fmt.Println("index:", i)
+		fmt.Println("val:", v)
+	}
+
+	etcdEndpoints := updateEndpoints(s.etcdInitialPeers, idToPort)
+
+	fmt.Printf("CASSIE: ENDPOINTS: %+v\n", etcdEndpoints)
+
+	etcdUrl, _, err := peerHostAndPort(s.etcdID, s.etcdInitialPeers)
+	if err != nil {
+		log.Warnf("Invalid format for initial cluster port. Make sure to include 'http://' in Scheduler URL")
+	}
+	fmt.Printf("CASSIE: etcdUrl: %+v\n", etcdUrl)
+
+	//c, err := etcdcron.NewEtcdMutexBuilder(clientv3.Config{Endpoints: []string{etcdUrl + ":" + idToPort[id]}})
+	c, err := etcdcron.NewEtcdMutexBuilder(clientv3.Config{Endpoints: etcdEndpoints})
+	//c, err := etcdcron.NewEtcdMutexBuilder(clientv3.Config{Endpoints: []string{"localhost:" + idToPort[id]}})
+	if err != nil {
+		return err
+	}
+
+	cron, err := etcdcron.New(etcdcron.WithEtcdMutexBuilder(c)) //pass in initial cluster endpoints
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
 	}
@@ -212,4 +262,40 @@ func (s *Server) runEtcd(ctx context.Context) error {
 		log.Info("Embedded Etcd shutting down")
 		return nil
 	}
+}
+
+func updateEndpoints(initialPeersListIP string, idToPort map[string]string) []string {
+	schedulers := strings.Split(initialPeersListIP, ",")
+
+	var updatedEndpoints []string
+
+	for _, scheduler := range schedulers {
+		// Separate the scheduler ID and URL
+		parts := strings.Split(scheduler, "=")
+		if len(parts) != 2 {
+			log.Warnf("Incorrect format for initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialPeersListIP)
+			continue
+		}
+
+		urll := strings.TrimSpace(parts[1])
+
+		u, err := url.Parse(urll)
+		if err != nil {
+			log.Warnf("Unable to parse url from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialPeersListIP)
+			continue
+		}
+
+		id := strings.TrimSpace(parts[0])
+		clientPort, ok := idToPort[id]
+		if !ok {
+			log.Warnf("Unable to find port from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialPeersListIP)
+			continue
+		}
+
+		// Replace the peer port with the client port
+		updatedURL := fmt.Sprintf("%s:%s", u.Hostname(), clientPort)
+
+		updatedEndpoints = append(updatedEndpoints, updatedURL)
+	}
+	return updatedEndpoints
 }
