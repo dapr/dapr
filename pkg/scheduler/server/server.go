@@ -49,7 +49,7 @@ type Options struct {
 	ListenAddress    string
 	DataDir          string
 	EtcdID           string
-	EtcdInitialPeers string
+	EtcdInitialPeers []string
 	EtcdClientPorts  []string
 	Mode             modes.DaprMode
 	Port             int
@@ -67,7 +67,7 @@ type Server struct {
 
 	dataDir          string
 	etcdID           string
-	etcdInitialPeers string
+	etcdInitialPeers []string
 	etcdClientPorts  []string
 	cron             *etcdcron.Cron
 	readyCh          chan struct{}
@@ -198,53 +198,28 @@ func (s *Server) runEtcd(ctx context.Context) error {
 
 	log.Info("Starting EtcdCron")
 
-	idToPort := make(map[string]string)
-
-	log.Infof("s.etcdClientPorts: %+v", s.etcdClientPorts)
-
+	clientPort := make(map[string]string)
 	for _, str := range s.etcdClientPorts {
-		parts := strings.Split(str, "=")
-		if len(parts) != 2 {
+		idAndPort := strings.Split(str, "=")
+		if len(idAndPort) != 2 {
 			fmt.Printf("Invalid format: %s\n", str)
 			continue
 		}
 
-		id := strings.TrimSpace(parts[0])
-		port := strings.TrimSpace(parts[1])
-		idToPort[id] = port
-	}
-	fmt.Println("s.etcdID:", s.etcdID)
-	for id := range idToPort {
-		fmt.Println("idToPort key:", id)
-		fmt.Println("val:", idToPort[id])
-	}
-	id := strings.TrimSpace(s.etcdID)
-
-	log.Infof("idToPort[s.etcdID]: %+v", idToPort[id])
-
-	for i, v := range idToPort {
-		fmt.Println("index:", i)
-		fmt.Println("val:", v)
+		id := strings.TrimSpace(idAndPort[0])
+		port := strings.TrimSpace(idAndPort[1])
+		clientPort[id] = port
 	}
 
-	etcdEndpoints := updateEndpoints(s.etcdInitialPeers, idToPort)
+	etcdEndpoints := clientEndpoints(s.etcdInitialPeers, clientPort)
 
-	fmt.Printf("CASSIE: ENDPOINTS: %+v\n", etcdEndpoints)
-
-	etcdUrl, _, err := peerHostAndPort(s.etcdID, s.etcdInitialPeers)
-	if err != nil {
-		log.Warnf("Invalid format for initial cluster port. Make sure to include 'http://' in Scheduler URL")
-	}
-	fmt.Printf("CASSIE: etcdUrl: %+v\n", etcdUrl)
-
-	//c, err := etcdcron.NewEtcdMutexBuilder(clientv3.Config{Endpoints: []string{etcdUrl + ":" + idToPort[id]}})
 	c, err := etcdcron.NewEtcdMutexBuilder(clientv3.Config{Endpoints: etcdEndpoints})
-	//c, err := etcdcron.NewEtcdMutexBuilder(clientv3.Config{Endpoints: []string{"localhost:" + idToPort[id]}})
 	if err != nil {
 		return err
 	}
 
-	cron, err := etcdcron.New(etcdcron.WithEtcdMutexBuilder(c)) //pass in initial cluster endpoints
+	// pass in initial cluster endpoints, but with client ports
+	cron, err := etcdcron.New(etcdcron.WithEtcdMutexBuilder(c))
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
 	}
@@ -264,38 +239,33 @@ func (s *Server) runEtcd(ctx context.Context) error {
 	}
 }
 
-func updateEndpoints(initialPeersListIP string, idToPort map[string]string) []string {
-	schedulers := strings.Split(initialPeersListIP, ",")
+func clientEndpoints(initialPeersListIP []string, idToPort map[string]string) []string {
+	var clientEndpoints []string
 
-	var updatedEndpoints []string
-
-	for _, scheduler := range schedulers {
-		// Separate the scheduler ID and URL
-		parts := strings.Split(scheduler, "=")
-		if len(parts) != 2 {
+	for _, scheduler := range initialPeersListIP {
+		idAndAddress := strings.Split(scheduler, "=")
+		if len(idAndAddress) != 2 {
 			log.Warnf("Incorrect format for initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialPeersListIP)
 			continue
 		}
 
-		urll := strings.TrimSpace(parts[1])
-
-		u, err := url.Parse(urll)
-		if err != nil {
-			log.Warnf("Unable to parse url from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialPeersListIP)
-			continue
-		}
-
-		id := strings.TrimSpace(parts[0])
+		id := strings.TrimSpace(idAndAddress[0])
 		clientPort, ok := idToPort[id]
 		if !ok {
 			log.Warnf("Unable to find port from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialPeersListIP)
 			continue
 		}
 
-		// Replace the peer port with the client port
+		address := strings.TrimSpace(idAndAddress[1])
+		u, err := url.Parse(address)
+		if err != nil {
+			log.Warnf("Unable to parse url from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialPeersListIP)
+			continue
+		}
+
 		updatedURL := fmt.Sprintf("%s:%s", u.Hostname(), clientPort)
 
-		updatedEndpoints = append(updatedEndpoints, updatedURL)
+		clientEndpoints = append(clientEndpoints, updatedURL)
 	}
-	return updatedEndpoints
+	return clientEndpoints
 }
