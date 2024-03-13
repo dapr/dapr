@@ -94,7 +94,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			Schedule: "@every 1s",
 		},
 		Namespace: "default",
-		Metadata:  map[string]string{"app_id": "test"},
+		Metadata:  nil,
 	}
 
 	_, err = client.ScheduleJob(ctx, req)
