@@ -18,11 +18,12 @@ import (
 	stderrors "errors"
 	"testing"
 
-	"github.com/dapr/dapr/tests/integration/framework/process/grpc/scheduler"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/scheduler"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"

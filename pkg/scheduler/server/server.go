@@ -239,8 +239,7 @@ func (s *Server) runEtcd(ctx context.Context) error {
 }
 
 func clientEndpoints(initialPeersListIP []string, idToPort map[string]string) []string {
-	var clientEndpoints []string
-
+	clientEndpoints := make([]string, 0)
 	for _, scheduler := range initialPeersListIP {
 		idAndAddress := strings.Split(scheduler, "=")
 		if len(idAndAddress) != 2 {
