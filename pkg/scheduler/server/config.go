@@ -17,24 +17,10 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"strconv"
 	"strings"
 
 	"go.etcd.io/etcd/server/v3/embed"
 )
-
-func parseEtcdUrls(strs []string) ([]url.URL, error) {
-	urls := make([]url.URL, 0, len(strs))
-	for _, str := range strs {
-		u, err := url.Parse(str)
-		if err != nil {
-			return nil, fmt.Errorf("invalid url %s: %s", str, err)
-		}
-		urls = append(urls, *u)
-	}
-
-	return urls, nil
-}
 
 func (s *Server) conf() *embed.Config {
 	config := embed.NewConfig()
@@ -76,16 +62,35 @@ func (s *Server) conf() *embed.Config {
 		Host: fmt.Sprintf("%s:%s", etcdUrl, peerPort),
 	}}
 
+	idToClientPort := make(map[string]string)
+
+	// Populate map
+	for _, str := range s.etcdClientPorts {
+		parts := strings.Split(str, "=")
+		if len(parts) != 2 {
+			fmt.Printf("Invalid format: %s\n", str)
+			continue
+		}
+
+		id := strings.TrimSpace(parts[0])
+		port := strings.TrimSpace(parts[1])
+		idToClientPort[id] = port
+	}
+
+	fmt.Printf("\nCASSIE: idToClientPort: %+v\n", idToClientPort)
+	fmt.Printf("\nCASSIE: idToClientPort[s.etcdID]: %+v\n", idToClientPort[s.etcdID])
+
 	config.ListenClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdUrl, strconv.Itoa(s.etcdClientPort)),
+		//Host:   fmt.Sprintf("%s:%s", etcdUrl, strconv.Itoa(s.etcdClientPorts)),
+		Host: fmt.Sprintf("%s:%s", etcdUrl, idToClientPort[s.etcdID]),
 	}}
 	config.AdvertiseClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdUrl, strconv.Itoa(s.etcdClientPort)),
+		Host:   fmt.Sprintf("%s:%s", etcdUrl, idToClientPort[s.etcdID]),
 	}}
 
-	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
+	config.LogLevel = "debug" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
 	// TODO: Look into etcd config and if we need to do any raft compacting
 
 	log.Debugf("CASSIE: etcd config: %+v", config)

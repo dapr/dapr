@@ -27,7 +27,7 @@ type options struct {
 	id                  string
 	initialCluster      string
 	initialClusterPorts []int
-	etcdClientPort      int
+	etcdClientPorts     []string
 
 	logLevel         string
 	port             int
@@ -71,9 +71,9 @@ func WithInitialClusterPorts(ports ...int) Option {
 	}
 }
 
-func WithEtcdClientPort(port int) Option {
+func WithEtcdClientPorts(ports []string) Option {
 	return func(o *options) {
-		o.etcdClientPort = port
+		o.etcdClientPorts = ports
 	}
 }
 

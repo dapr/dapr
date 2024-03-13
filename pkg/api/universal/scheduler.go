@@ -15,6 +15,7 @@ package universal
 
 import (
 	"context"
+	"fmt"
 	"strings"
 
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -27,6 +28,7 @@ import (
 func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
 	errMetadata := map[string]string{"app_id": a.AppID()}
 
+	fmt.Printf("CASSIE in universal scheduleJob. InReq: %+v\n", inReq)
 	if inReq.GetJob() == nil {
 		return &emptypb.Empty{}, apierrors.Empty("Job", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
 	}
@@ -59,6 +61,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 		Namespace: "",  // TODO
 		Metadata:  nil, // TODO: this should generate key if jobStateStore is configured
 	}
+	fmt.Printf("CASSIE in universal scheduleJob. internalReq: %+v\n", internalScheduleJobReq)
 
 	// TODO: do something with following response?
 	_, err := a.schedulerClient.ScheduleJob(ctx, internalScheduleJobReq)
@@ -94,6 +97,7 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 
 func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
 	errMetadata := map[string]string{"app_id": a.AppID()}
+	fmt.Printf("CASSIE in universal getJob. InReq: %+v\n", inReq)
 
 	response := &runtimev1pb.GetJobResponse{}
 	var internalResp *schedulerv1pb.GetJobResponse
@@ -107,6 +111,7 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 	internalGetJobReq := &schedulerv1pb.JobRequest{
 		JobName: jobName,
 	}
+	fmt.Printf("CASSIE in universal getJob. internalReq: %+v\n", internalGetJobReq)
 
 	internalResp, err := a.schedulerClient.GetJob(ctx, internalGetJobReq)
 	if err != nil {
