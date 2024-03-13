@@ -16,12 +16,13 @@ package options
 import (
 	"fmt"
 
+	"github.com/spf13/pflag"
+
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/security"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 	"github.com/dapr/kit/logger"
-	"github.com/spf13/pflag"
 )
 
 type Options struct {

@@ -23,15 +23,16 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
+
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 )
 
 func init() {
@@ -126,7 +127,7 @@ func executeEtcdCmd(t *testing.T, port string) string {
 	output, err := cmd.CombinedOutput()
 	require.NoError(t, err)
 
-	return string(output[:])
+	return string(output)
 }
 
 func checkCmdOutputForAppID(t *testing.T, output string) {

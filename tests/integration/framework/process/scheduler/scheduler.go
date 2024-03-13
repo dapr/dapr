@@ -74,10 +74,8 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	tmpDir := t.TempDir()
 
-	err = os.Chmod(tmpDir, 0700)
-	if err != nil {
-		fmt.Println("Error setting permissions:", err)
-	}
+	err = os.Chmod(tmpDir, 0o700)
+	require.NoError(t, err)
 
 	strSlice := make([]string, len(opts.etcdClientPorts))
 	for i, num := range opts.etcdClientPorts {
@@ -112,10 +110,8 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	clientPorts := make(map[string]string)
 	for _, input := range opts.etcdClientPorts {
 		idAndPort := strings.Split(input, "=")
-		if len(idAndPort) != 2 {
-			fmt.Printf("Incorrect format for client ports: %s. Should contain <id>=<client-port>", input)
-			continue
-		}
+		require.Len(t, idAndPort, 2)
+
 		schedulerID := strings.TrimSpace(idAndPort[0])
 		port := strings.TrimSpace(idAndPort[1])
 		clientPorts[schedulerID] = port

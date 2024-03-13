@@ -29,29 +29,29 @@ func (s *Server) conf() *embed.Config {
 	config.Dir = s.dataDir
 	config.InitialCluster = strings.Join(s.etcdInitialPeers, ",")
 
-	etcdUrl, peerPort, err := peerHostAndPort(s.etcdID, s.etcdInitialPeers)
+	etcdURL, peerPort, err := peerHostAndPort(s.etcdID, s.etcdInitialPeers)
 	if err != nil {
-		log.Warnf("Invalid format for initial cluster port. Make sure to include 'http://' in Scheduler URL")
+		log.Warnf("Invalid format for initial cluster. Make sure to include 'http://' in Scheduler URL")
 	}
 
 	config.AdvertisePeerUrls = []url.URL{{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdUrl, peerPort),
+		Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
 	}}
 
 	config.ListenPeerUrls = []url.URL{{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdUrl, peerPort),
+		Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
 	}}
 
 	config.ListenClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdUrl, s.etcdClientPorts[s.etcdID]),
+		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
 	}}
 
 	config.AdvertiseClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdUrl, s.etcdClientPorts[s.etcdID]),
+		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
 	}}
 
 	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.

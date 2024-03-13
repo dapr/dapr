@@ -166,7 +166,6 @@ func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRe
 
 		_, err := s.actorRuntime.Call(ctx, invokeReq)
 		return nil, err
-
 	}
 	return nil, fmt.Errorf("not implemented")
 }
