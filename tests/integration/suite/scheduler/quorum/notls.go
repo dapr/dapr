@@ -102,7 +102,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	// Keep this, I believe the record is added to the db at trigger time, so I need the sleep for the db check to pass
 	time.Sleep(2 * time.Second) // allow time for the record to be added to the db
 
-	chosenSchedulerPort := findSchedulerClientPort(chosenScheduler)
+	chosenSchedulerPort := chosenScheduler.EtcdClientPort()
 	require.NotEmptyf(t, chosenSchedulerPort, "chosenSchedulerPort should not be empty")
 
 	etcdCmdOutput := executeEtcdCmd(t, chosenSchedulerPort)
@@ -112,23 +112,12 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	for i := 0; i < 3; i++ {
 		diffScheduler := n.schedulers[i]
 
-		diffSchedulerPort := findSchedulerClientPort(diffScheduler)
-		require.NotEmptyf(t, chosenSchedulerPort, "diffSchedulerPort should not be empty")
+		diffSchedulerPort := diffScheduler.EtcdClientPort()
+		require.NotEmptyf(t, diffSchedulerPort, "diffSchedulerPort should not be empty")
 
 		diffEtcdCmdOutput := executeEtcdCmd(t, diffSchedulerPort)
 		checkCmdOutputForAppID(t, diffEtcdCmdOutput)
 	}
-}
-
-func findSchedulerClientPort(s *scheduler.Scheduler) string {
-	schedulerID := s.ID()
-	for _, entry := range s.EtcdClientPort() {
-		parts := strings.Split(entry, "=")
-		if len(parts) == 2 && parts[0] == schedulerID {
-			return parts[1]
-		}
-	}
-	return ""
 }
 
 func executeEtcdCmd(t *testing.T, port string) string {

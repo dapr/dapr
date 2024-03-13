@@ -16,7 +16,6 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"strconv"
@@ -48,7 +47,7 @@ type Scheduler struct {
 	id                  string
 	initialCluster      string
 	initialClusterPorts []int
-	etcdClientPorts     []string
+	etcdClientPorts     map[string]string
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
@@ -109,7 +108,18 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	if opts.trustAnchorsFile != nil {
 		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
 	}
-	log.Printf("CASSIE: Scheduler opts %+v", opts)
+
+	clientPorts := make(map[string]string)
+	for _, input := range opts.etcdClientPorts {
+		idAndPort := strings.Split(input, "=")
+		if len(idAndPort) != 2 {
+			fmt.Printf("Incorrect format for client ports: %s. Should contain <id>=<client-port>", input)
+			continue
+		}
+		schedulerID := strings.TrimSpace(idAndPort[0])
+		port := strings.TrimSpace(idAndPort[1])
+		clientPorts[schedulerID] = port
+	}
 
 	return &Scheduler{
 		exec:                exec.New(t, binary.EnvValue("scheduler"), args, opts.execOpts...),
@@ -120,7 +130,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		metricsPort:         opts.metricsPort,
 		initialCluster:      opts.initialCluster,
 		initialClusterPorts: opts.initialClusterPorts,
-		etcdClientPorts:     opts.etcdClientPorts,
+		etcdClientPorts:     clientPorts,
 		dataDir:             tmpDir,
 	}
 }
@@ -181,8 +191,8 @@ func (s *Scheduler) InitialCluster() string {
 	return s.initialCluster
 }
 
-func (s *Scheduler) EtcdClientPort() []string {
-	return s.etcdClientPorts
+func (s *Scheduler) EtcdClientPort() string {
+	return s.etcdClientPorts[s.id]
 }
 
 func (s *Scheduler) InitialClusterPorts() []int {
