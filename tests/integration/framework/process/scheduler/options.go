@@ -14,8 +14,6 @@ limitations under the License.
 package scheduler
 
 import (
-	"log"
-
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
@@ -59,7 +57,6 @@ func WithID(id string) Option {
 
 // WithInitialCluster adds the initial etcd cluster peers. This should include http:// in the url.
 func WithInitialCluster(initialCluster string) Option {
-	log.Printf("CASSIE: initial cluster %s", initialCluster)
 	return func(o *options) {
 		o.initialCluster = initialCluster
 	}
