@@ -17,110 +17,76 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"strconv"
 	"strings"
 
-	"github.com/dapr/dapr/utils"
 	"go.etcd.io/etcd/server/v3/embed"
 )
-
-func parseEtcdUrls(strs []string) ([]url.URL, error) {
-	urls := make([]url.URL, 0, len(strs))
-	for _, str := range strs {
-		u, err := url.Parse(str)
-		if err != nil {
-			return nil, fmt.Errorf("invalid url %s: %s", str, err)
-		}
-		urls = append(urls, *u)
-	}
-
-	return urls, nil
-}
 
 func (s *Server) conf() *embed.Config {
 	config := embed.NewConfig()
 
 	config.Name = s.etcdID
 	config.Dir = s.dataDir
+	config.InitialCluster = strings.Join(s.etcdInitialPeers, ",")
 
-	config.InitialCluster = s.etcdInitialPeers
-
-	advertisePeerURLs, err := parseURLs(s.etcdInitialPeers)
+	etcdURL, peerPort, err := peerHostAndPort(s.etcdID, s.etcdInitialPeers)
 	if err != nil {
-		log.Warnf("Invalid format for initial cluster")
+		log.Warnf("Invalid format for initial cluster. Make sure to include 'http://' in Scheduler URL")
 	}
-	config.AdvertisePeerUrls = advertisePeerURLs
 
-	peerPort, err := extractSinglePeerPort(s.etcdInitialPeers)
-	if err != nil {
-		log.Warnf("Invalid format for initial cluster port")
-	}
-	config.ListenPeerUrls = []url.URL{{
+	config.AdvertisePeerUrls = []url.URL{{
 		Scheme: "http",
-		Host:   "0.0.0.0:" + peerPort,
+		Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
 	}}
 
-	hostAddress, err := utils.GetHostAddress()
-	if err != nil {
-		log.Fatal(fmt.Errorf("failed to determine host address: %w", err))
-	}
+	config.ListenPeerUrls = []url.URL{{
+		Scheme: "http",
+		Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
+	}}
 
 	config.ListenClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   hostAddress + ":" + strconv.Itoa(s.etcdClientPort),
+		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
 	}}
+
 	config.AdvertiseClientUrls = []url.URL{{
 		Scheme: "http",
-		Host:   hostAddress + ":" + strconv.Itoa(s.etcdClientPort),
+		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
 	}}
 
 	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
 	// TODO: Look into etcd config and if we need to do any raft compacting
 
+	// TODO: Cassie do extra validation that the client port != peer port -> dont fail silently
+	// TODO: Cassie do extra validation if people forget to put http:// -> dont fail silently
+
 	return config
 }
 
-func parseURLs(input string) ([]url.URL, error) {
-	var urls []url.URL
-
-	pairs := strings.Split(input, ",")
-
-	for _, pair := range pairs {
-		idAndAddress := strings.SplitN(pair, "=", 2)
+func peerHostAndPort(name string, initialCluster []string) (string, string, error) {
+	for _, scheduler := range initialCluster {
+		idAndAddress := strings.SplitN(scheduler, "=", 2)
 		if len(idAndAddress) != 2 {
-			return nil, fmt.Errorf("invalid format: %s", pair)
+			log.Warnf("Incorrect format for initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
+			continue
 		}
 
-		// Construct the URL without "http://"
-		u, err := url.Parse(idAndAddress[1])
-		if err != nil {
-			return nil, fmt.Errorf("error parsing URL: %w", err)
+		id := strings.TrimPrefix(idAndAddress[0], "http://")
+		if id == name {
+			address, err := url.Parse(idAndAddress[1])
+			if err != nil {
+				log.Warnf("Unable to parse url from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
+				continue
+			}
+
+			host, port, err := net.SplitHostPort(address.Host)
+			if err != nil {
+				return "", "", fmt.Errorf("error extracting port: %w", err)
+			}
+
+			return host, port, nil
 		}
-
-		urls = append(urls, *u)
 	}
 
-	return urls, nil
-}
-
-func extractSinglePeerPort(input string) (string, error) {
-	parts := strings.Split(input, "=")
-
-	if len(parts) != 2 {
-		return "", fmt.Errorf("invalid format: %s", input)
-	}
-
-	// Extract the port
-	u, err := url.Parse(parts[1])
-	if err != nil {
-		return "", fmt.Errorf("error parsing URL: %w", err)
-	}
-
-	// Check if the port is in the URL
-	_, port, err := net.SplitHostPort(u.Host)
-	if err != nil {
-		return "", fmt.Errorf("error extracting port: %w", err)
-	}
-
-	return port, nil
+	return "", "", fmt.Errorf("scheduler ID: %s is not found in initial cluster", name)
 }

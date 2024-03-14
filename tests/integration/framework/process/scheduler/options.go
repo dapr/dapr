@@ -13,7 +13,9 @@ limitations under the License.
 
 package scheduler
 
-import "github.com/dapr/dapr/tests/integration/framework/process/exec"
+import (
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+)
 
 type Option func(*options)
 
@@ -23,7 +25,7 @@ type options struct {
 	id                  string
 	initialCluster      string
 	initialClusterPorts []int
-	etcdClientPort      int
+	etcdClientPorts     []string
 
 	logLevel         string
 	port             int
@@ -53,6 +55,7 @@ func WithID(id string) Option {
 	}
 }
 
+// WithInitialCluster adds the initial etcd cluster peers. This should include http:// in the url.
 func WithInitialCluster(initialCluster string) Option {
 	return func(o *options) {
 		o.initialCluster = initialCluster
@@ -65,9 +68,9 @@ func WithInitialClusterPorts(ports ...int) Option {
 	}
 }
 
-func WithEtcdClientPort(port int) Option {
+func WithEtcdClientPorts(ports []string) Option {
 	return func(o *options) {
-		o.etcdClientPort = port
+		o.etcdClientPorts = ports
 	}
 }
 
