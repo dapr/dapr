@@ -81,9 +81,7 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 					Data: &anypb.Any{
 						Value: []byte("test"),
 					},
-					Repeats: 10,
-					DueTime: "10s",
-					Ttl:     "20s",
+					Ttl: "20s",
 				},
 			}
 
