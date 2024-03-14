@@ -65,7 +65,7 @@ func New(origArgs []string) *Options {
 	var opts Options
 
 	// Create a flag set
-	fs := pflag.NewFlagSet("sentry", pflag.ExitOnError)
+	fs := pflag.NewFlagSet("scheduler", pflag.ExitOnError)
 	fs.SortFlags = true
 
 	fs.IntVar(&opts.Port, "port", 50006, "The port for the scheduler server to listen on")

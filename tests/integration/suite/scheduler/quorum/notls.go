@@ -17,13 +17,14 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"os/exec"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -106,8 +107,8 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	chosenSchedulerPort := chosenScheduler.EtcdClientPort()
 	require.NotEmptyf(t, chosenSchedulerPort, "chosenSchedulerPort should not be empty")
 
-	etcdCmdOutput := executeEtcdCmd(t, chosenSchedulerPort)
-	checkCmdOutputForAppID(t, etcdCmdOutput)
+	chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
+	checkKeysForAppID(t, chosenSchedulerEtcdKeys)
 
 	// ensure data exists on ALL schedulers
 	for i := 0; i < 3; i++ {
@@ -116,29 +117,35 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		diffSchedulerPort := diffScheduler.EtcdClientPort()
 		require.NotEmptyf(t, diffSchedulerPort, "diffSchedulerPort should not be empty")
 
-		diffEtcdCmdOutput := executeEtcdCmd(t, diffSchedulerPort)
-		checkCmdOutputForAppID(t, diffEtcdCmdOutput)
+		diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
+		checkKeysForAppID(t, diffSchedulerEtcdKeys)
 	}
 }
 
-// TODO: Cassie - rm this and switch to the get func once the get functionality checks from the db
-// as of now, the get func only checks in memory, so the data wont be there on another scheduler instance
-func executeEtcdCmd(t *testing.T, port string) string {
-	cmd := exec.Command("etcdctl", "get", "", "--prefix", fmt.Sprintf("--endpoints=localhost:%s", port))
-
-	output, err := cmd.CombinedOutput()
-	require.NoError(t, err)
-
-	return string(output)
-}
-
-func checkCmdOutputForAppID(t *testing.T, output string) {
-	lines := strings.Split(output, "\n")
-	for _, line := range lines {
-		if strings.Contains(line, "etcd_cron/appid__testjob") {
-			require.True(t, true, "Output contains 'etcd_cron/appid__testjob'")
+func checkKeysForAppID(t *testing.T, keys []*mvccpb.KeyValue) {
+	for _, kv := range keys {
+		if strings.Contains(string(kv.Key), "etcd_cron/appid__testjob") {
+			require.True(t, true, "Key exists: 'etcd_cron/appid__testjob'")
 			return
 		}
 	}
-	require.Fail(t, "Output does not contain 'etcd_cron/appid__testjob'")
+	require.Fail(t, "Key not found: 'etcd_cron/appid__testjob'")
+}
+
+func getEtcdKeys(t *testing.T, port string) []*mvccpb.KeyValue {
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{fmt.Sprintf("localhost:%s", port)},
+		DialTimeout: 5 * time.Second,
+	})
+	require.NoError(t, err)
+	defer client.Close()
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	// Get keys with prefix
+	resp, err := client.Get(ctx, "", clientv3.WithPrefix())
+	require.NoError(t, err)
+
+	return resp.Kvs
 }
