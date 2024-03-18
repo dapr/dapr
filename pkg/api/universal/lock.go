@@ -15,18 +15,21 @@ package universal
 
 import (
 	"context"
+	"net/http"
 
 	"github.com/dapr/components-contrib/lock"
+	apiErrors "github.com/dapr/dapr/pkg/api/errors"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
-	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	kitErrors "github.com/dapr/kit/errors"
+	"google.golang.org/grpc/codes"
 )
 
 func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
 	// 1. validate and find lock component
 	if req.GetExpiryInSeconds() <= 0 {
-		err := messages.ErrExpiryInSecondsNotPositive.WithFormat(req.GetStoreName())
+		err := apiErrors.DistributedLockExpiryNotPositive(req.GetStoreName(), req.GetLockOwner())
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -44,7 +47,7 @@ func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockR
 	// modify key
 	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.GetStoreName(), a.appID)
 	if err != nil {
-		err = messages.ErrTryLockFailed.WithFormat(err)
+		err := apiErrors.DistributedTryLockFailed(req.GetStoreName(), req.GetLockOwner(), err)
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -57,7 +60,7 @@ func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockR
 		return store.TryLock(ctx, compReq)
 	})
 	if err != nil {
-		err = messages.ErrTryLockFailed.WithFormat(err)
+		err := apiErrors.DistributedTryLockFailed(req.GetStoreName(), req.GetLockOwner(), err)
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -88,7 +91,7 @@ func (a *Universal) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockReq
 	// modify key
 	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.GetStoreName(), a.appID)
 	if err != nil {
-		err = messages.ErrUnlockFailed.WithFormat(err)
+		err := apiErrors.DistributedUnlockFailed(req.GetStoreName(), req.GetLockOwner(), err)
 		a.logger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
 	}
@@ -101,7 +104,7 @@ func (a *Universal) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockReq
 		return store.Unlock(ctx, compReq)
 	})
 	if err != nil {
-		err = messages.ErrUnlockFailed.WithFormat(err)
+		err := apiErrors.DistributedUnlockFailed(req.GetStoreName(), req.GetLockOwner(), err)
 		a.logger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
 	}
@@ -128,17 +131,17 @@ func (a *Universal) lockValidateRequest(req tryLockUnlockRequest) (lock.Store, e
 	var err error
 
 	if a.compStore.LocksLen() == 0 {
-		err = messages.ErrLockStoresNotConfigured
+		err = apiErrors.NotConfigured(req.GetStoreName(), "lock", nil, codes.FailedPrecondition, http.StatusInternalServerError, "ERR_LOCK_STORE_NOT_CONFIGURED", kitErrors.CodePrefixLock+kitErrors.CodeNotConfigured)
 		a.logger.Debug(err)
 		return nil, err
 	}
 	if req.GetResourceId() == "" {
-		err = messages.ErrResourceIDEmpty.WithFormat(req.GetStoreName())
+		err = apiErrors.DistributedLockResourceIDEmpty(req.GetStoreName(), req.GetLockOwner())
 		a.logger.Debug(err)
 		return nil, err
 	}
 	if req.GetLockOwner() == "" {
-		err = messages.ErrLockOwnerEmpty.WithFormat(req.GetStoreName())
+		err = apiErrors.DistributedLockOwnerEmpty(req.GetStoreName())
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -146,7 +149,7 @@ func (a *Universal) lockValidateRequest(req tryLockUnlockRequest) (lock.Store, e
 	// 2. find lock component
 	store, ok := a.compStore.GetLock(req.GetStoreName())
 	if !ok {
-		err = messages.ErrLockStoreNotFound.WithFormat(req.GetStoreName())
+		err = apiErrors.NotFound(req.GetStoreName(), "lock", nil, codes.InvalidArgument, http.StatusNotFound, "ERR_LOCK_STORE_NOT_FOUND", kitErrors.CodePrefixLock+kitErrors.CodeNotFound)
 		a.logger.Debug(err)
 		return nil, err
 	}

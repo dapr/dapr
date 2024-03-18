@@ -68,8 +68,8 @@ func DistributedLockExpiryNotPositive(storeName, owner string) error {
 		Build()
 }
 
-func DistributedTryLockFailed(storeName, owner string) error {
-	msg := fmt.Sprintf("failed to try acquiring lock in lock store %s", storeName)
+func DistributedTryLockFailed(storeName, owner string, err error) error {
+	msg := fmt.Sprintf("failed to try acquiring lock: %s", err.Error())
 	return kitErrors.NewBuilder(
 		grpcCodes.Internal,
 		http.StatusInternalServerError,
@@ -81,8 +81,8 @@ func DistributedTryLockFailed(storeName, owner string) error {
 		Build()
 }
 
-func DistributedUnlockFailed(storeName, owner string) error {
-	msg := fmt.Sprintf("failed to release lock in lock store %s", storeName)
+func DistributedUnlockFailed(storeName, owner string, err error) error {
+	msg := fmt.Sprintf("failed to release lock: %s", err.Error())
 	return kitErrors.NewBuilder(
 		grpcCodes.Internal,
 		http.StatusInternalServerError,
