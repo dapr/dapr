@@ -63,15 +63,15 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	require.NoError(t, err)
 
 	fp := ports.Reserve(t, 4)
-	intIP := fp.Port(t)
+	port := fp.Port(t)
 	opts := options{
 		id:                  uid.String(),
 		logLevel:            "info",
 		port:                fp.Port(t),
 		healthzPort:         fp.Port(t),
 		metricsPort:         fp.Port(t),
-		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(intIP),
-		initialClusterPorts: []int{intIP},
+		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(port),
+		initialClusterPorts: []int{port},
 		metadataEnabled:     false,
 	}
 
