@@ -87,16 +87,13 @@ func (b *binding) startInputBinding(comp componentsV1alpha1.Component, binding b
 	m := meta.Properties
 
 	ctx, cancel := context.WithCancel(context.Background())
-	if isBindingOfExplicitDirection(ComponentTypeInput, m) {
-		isSubscribed = true
-	} else {
-		var err error
-		isSubscribed, err = b.isAppSubscribedToBinding(ctx, comp.Name)
-		if err != nil {
-			cancel()
-			return err
-		}
+	isAppSubscribed, err := b.isAppSubscribedToBinding(ctx, comp.Name)
+	if err != nil {
+		cancel()
+		return err
 	}
+
+	isSubscribed = isAppSubscribed && IsBindingOfDirection(ComponentTypeInput, m)
 
 	if !isSubscribed {
 		log.Infof("app has not subscribed to binding %s.", comp.Name)
@@ -476,7 +473,7 @@ func (b *binding) isAppSubscribedToBinding(ctx context.Context, binding string) 
 	return false, nil
 }
 
-func isBindingOfExplicitDirection(direction string, metadata map[string]string) bool {
+func IsBindingOfDirection(direction string, metadata map[string]string) bool {
 	for k, v := range metadata {
 		if strings.EqualFold(k, ComponentDirection) {
 			directions := strings.Split(v, ",")
@@ -485,8 +482,10 @@ func isBindingOfExplicitDirection(direction string, metadata map[string]string) 
 					return true
 				}
 			}
+			return false
 		}
 	}
 
-	return false
+	// true by default
+	return true
 }

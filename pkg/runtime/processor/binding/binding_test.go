@@ -22,7 +22,7 @@ import (
 	"github.com/dapr/dapr/pkg/apis/common"
 )
 
-func TestIsBindingOfDirection(t *testing.T) {
+func TestBindingIsBindingOfDirection(t *testing.T) {
 	t.Run("no direction in metadata for input binding", func(t *testing.T) {
 		m := []common.NameValuePair{}
 		r := (new(binding)).isBindingOfDirection("input", m)
