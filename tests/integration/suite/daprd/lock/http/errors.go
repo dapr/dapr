@@ -12,3 +12,27 @@ limitations under the License.
 */
 
 package http
+
+import (
+	"context"
+	"testing"
+
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/suite"
+)
+
+func init() {
+	suite.Register(new(standardizedErrors))
+}
+
+type standardizedErrors struct {
+	daprd *daprd.Daprd
+}
+
+func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
+	return []framework.Option{}
+}
+
+func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
+}
