@@ -168,13 +168,11 @@ func newDaprRuntime(ctx context.Context,
 		log.Infof("Scheduler client initialized")
 
 		// TODO: CASSIE move this to connections pkg to abstract away the complexity from runtime.go
-
-		// Create a context for the goroutine
-		ctx, cancel := context.WithCancel(context.Background())
+		// Create a channel to send errors back to the main goroutine
+		errCh := make(chan error)
+		backgroundCtx := context.Background()
 		// Watch for job updates in a separate goroutine
-		go func(ctx context.Context) {
-			// Defer cancelling the context when the function exits
-			defer cancel()
+		go func(backgroundCtx context.Context) {
 			req := &schedulerv1pb.StreamJobRequest{
 				AppId:     runtimeConfig.id,
 				Namespace: namespace,
@@ -182,27 +180,29 @@ func newDaprRuntime(ctx context.Context,
 				Port:      int32(runtimeConfig.apiGRPCPort),
 			}
 
-			stream, err := schedClient.WatchJob(ctx, req)
+			stream, err := schedClient.WatchJob(backgroundCtx, req)
 			if err != nil {
-				log.Fatalf("Error calling Scheduler WatchJob: %v", err)
+				errCh <- err
+				return
 			}
 
 			// Receive messages from the stream
 			for {
 				select {
-				case <-ctx.Done():
+				case <-backgroundCtx.Done():
 					// Exit the loop when the context is cancelled
 					log.Infof("Context cancelled. Exiting goroutine.")
 					return
 				default:
 					resp, err := stream.Recv()
 					if err != nil {
-						log.Fatalf("Error receiving response: %v", err)
+						errCh <- err
+						return
 					}
-					log.Infof("Received response: %v", resp)
+					log.Infof("Received response: %v", resp) // TODO: probably rm this after testing
 				}
 			}
-		}(ctx)
+		}(backgroundCtx)
 		//streamingClient := scheduler.NewClient() // handles the connection setup and abstraction over all schedulers
 		//err := scheduler.NewClient(*runtimeConfig.schedulerAddress) // handles the connection setup and abstraction over all schedulers
 
