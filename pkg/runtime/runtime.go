@@ -160,6 +160,10 @@ func newDaprRuntime(ctx context.Context,
 
 	var schedClient schedulerv1pb.SchedulerClient
 	if runtimeConfig.SchedulerEnabled() {
+
+		// for as many addresses as I have, create a client and maintain those client connections,
+		// if 1 drops backoff & trigger reconnecting for all connections
+
 		schedClient, err = schedulerclient.New(ctx, *runtimeConfig.schedulerAddress, sec)
 		if err != nil {
 			return nil, fmt.Errorf("error creating scheduler client: %w", err)
@@ -170,9 +174,11 @@ func newDaprRuntime(ctx context.Context,
 		// TODO: CASSIE move this to connections pkg to abstract away the complexity from runtime.go
 		// Create a channel to send errors back to the main goroutine
 		errCh := make(chan error)
-		backgroundCtx := context.Background()
+
 		// Watch for job updates in a separate goroutine
-		go func(backgroundCtx context.Context) {
+		go func() {
+			defer close(errCh)
+
 			req := &schedulerv1pb.StreamJobRequest{
 				AppId:     runtimeConfig.id,
 				Namespace: namespace,
@@ -180,7 +186,7 @@ func newDaprRuntime(ctx context.Context,
 				Port:      int32(runtimeConfig.apiGRPCPort),
 			}
 
-			stream, err := schedClient.WatchJob(backgroundCtx, req)
+			stream, err := schedClient.WatchJob(context.Background(), req)
 			if err != nil {
 				errCh <- err
 				return
@@ -189,20 +195,21 @@ func newDaprRuntime(ctx context.Context,
 			// Receive messages from the stream
 			for {
 				select {
-				case <-backgroundCtx.Done():
+				case <-ctx.Done():
 					// Exit the loop when the context is cancelled
-					log.Infof("Context cancelled. Exiting goroutine.")
+					log.Infof("Context cancelled. Exiting WatchJob goroutine.")
 					return
 				default:
 					resp, err := stream.Recv()
 					if err != nil {
+						log.Infof("Error while streaming with Scheduler")
 						errCh <- err
-						return
+						return // TODO: change this to try to receive from a diff scheduler once moving to new pkg
 					}
 					log.Infof("Received response: %v", resp) // TODO: probably rm this after testing
 				}
 			}
-		}(backgroundCtx)
+		}()
 		//streamingClient := scheduler.NewClient() // handles the connection setup and abstraction over all schedulers
 		//err := scheduler.NewClient(*runtimeConfig.schedulerAddress) // handles the connection setup and abstraction over all schedulers
 
