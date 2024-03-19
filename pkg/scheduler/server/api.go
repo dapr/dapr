@@ -187,7 +187,7 @@ func extractAppID(str string) (string, error) {
 // WatchJob sends jobs to Dapr sidecars upon component changes.
 func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv1pb.Scheduler_WatchJobServer) error {
 	errCh := make(chan error)
-
+	ctx := stream.Context()
 	// use req details to add sidecar connection details so scheduler knows how many sidecars there are and
 	// maintains a conn pool
 	s.sidecarConnChan <- &scheduler.SidecarConnDetails{
@@ -198,41 +198,44 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 	}
 	// TODO: probably add ctx to be passed to the go routine so if that is cancelled the go routine quits
 	// Handle job triggers, don't hang scheduler main thread
-	go func() {
+	go func(ctx context.Context) {
+		//go func() {
 		defer close(errCh) // Close the error channel when the goroutine exits
 
 		// Listen for job triggers from the channel
 		for {
 			// Wait for a jobs being triggered
-			job := <-s.jobTriggerChan
+			select {
+			case <-ctx.Done():
+				return // Exit the goroutine if the context is cancelled
+			case job := <-s.jobTriggerChan:
+				jobName, err := extractAppID(job.GetName())
+				if err != nil {
+					log.Errorf("Error separating job name from appID: %v", err)
+					errCh <- err
+				}
+				jobUpdate := &schedulerv1pb.StreamJobResponse{
+					Job: &runtimev1pb.Job{
+						Name:     jobName,
+						Schedule: job.GetSchedule(),
+						// TODO: fill rest of fields
+					},
+				}
 
-			jobName, err := extractAppID(job.GetName())
-			if err != nil {
-				log.Errorf("Error separating job name from appID: %v", err)
-				errCh <- err
-			}
-			// Create a job update
-			jobUpdate := &schedulerv1pb.StreamJobResponse{
-				Job: &runtimev1pb.Job{
-					Name:     jobName,
-					Schedule: job.GetSchedule(),
-					// TODO: fill rest of fields
-				},
-			}
-
-			// Send the job update to the sidecar
-			if err := stream.Send(jobUpdate); err != nil {
-				log.Errorf("Error sending job at trigger time: %v", err)
-				errCh <- err
+				// Send the job update to the sidecar
+				if err := stream.Send(jobUpdate); err != nil {
+					log.Errorf("Error sending job at trigger time: %v", err)
+					errCh <- err
+				}
 			}
 		}
-	}()
+	}(ctx)
 
 	// Wait for errors from the goroutine
 	select {
 	case err := <-errCh:
 		return err
-	case <-stream.Context().Done(): // sidecar closed stream
+	case <-ctx.Done(): // sidecar closed stream
 		log.Infof("WatchJob stream closed")
 		return nil
 	}
