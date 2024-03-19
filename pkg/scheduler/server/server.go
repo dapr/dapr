@@ -47,53 +47,6 @@ import (
 
 var log = logger.NewLogger("dapr.scheduler.server")
 
-// Connection pool for namespace/appID separation of sidecars to schedulers
-//type connPool struct {
-//	lock             sync.RWMutex
-//	nsappidPool      map[string]*appidPool
-//	minConnsPerAppID map[string]int
-//}
-
-//type appidPool struct {
-//	lock sync.RWMutex
-//	//connected []chan struct{}
-//	connected []*sidecarConnDetails
-//}
-
-// Add a channel to the pool for a given namespace/appID
-// func (p *connPool) add(nsappid string, ch chan struct{}) {
-//func (p *connPool) add(nsappid string, connDetails *sidecarConnDetails) {
-//	p.lock.Lock()
-//	defer p.lock.Unlock()
-//	if id, ok := p.nsappidPool[nsappid]; ok { //exists
-//		id.lock.Lock()
-//		defer id.lock.Unlock()
-//		id.connected = append(id.connected, connDetails)
-//	} else { //doesn't exist
-//		p.nsappidPool[nsappid] = &appidPool{
-//			connected: []*sidecarConnDetails{connDetails},
-//			//connected: []chan struct{}{ch},
-//		}
-//	}
-//}
-
-// Remove a channel from the pool for a given namespace/appID
-// func (p *connPool) remove(nsappid string, ch chan struct{}) {
-//func (p *connPool) remove(nsappid string, connDetails *sidecarConnDetails) {
-//	p.lock.Lock()
-//	defer p.lock.Unlock()
-//	if id, ok := p.nsappidPool[nsappid]; ok {
-//		id.lock.Lock()
-//		defer id.lock.Unlock()
-//		for i, c := range id.connected {
-//			if c == connDetails {
-//				id.connected = append(id.connected[:i], id.connected[i+1:]...)
-//				break
-//			}
-//		}
-//	}
-//}
-
 type Options struct {
 	AppID                  string
 	HostAddress            string
@@ -369,50 +322,3 @@ func (s *Server) runJobWatcher(ctx context.Context) error {
 		}
 	}
 }
-
-// addToConnectionPool adds sidecar connection details to the connection pool.
-//func (s *Server) addToConnectionPool(connDetails *SidecarConnDetails) {
-//	s.poolLock.Lock()
-//	defer s.poolLock.Unlock()
-//
-//	nsAppID := connDetails.namespace + connDetails.appID
-//
-//	// Initialize connection pool for the namespace/appID if it doesn't exist
-//	if _, ok := s.connectionPool.NsAppIDPool[nsAppID]; !ok {
-//		s.connectionPool.NsAppIDPool[nsAppID] = &connections.AppIDPool{
-//			Connected: []*SidecarConnDetails{connDetails},
-//		}
-//	} else {
-//		s.connectionPool.Add(nsAppID, connDetails)
-//	}
-//
-//	log.Infof("Added sidecar connection to the pool: Host: %s, Namespace: %s, Port: %d", connDetails.host, connDetails.namespace, connDetails.port)
-//}
-
-// waitUntilReachingMinConns waits until the minimum connection count is reached for a given namespace/appID.
-//func (s *Server) waitUntilReachingMinConns(ctx context.Context, nsAppID string) error {
-//	// Lock the connection pool for reading
-//	s.poolLock.RLock()
-//	defer s.poolLock.RUnlock()
-//
-//	// Wait until the minimum connection count is reached
-//	for {
-//		// Get the current connection count
-//		currentConnCount := len(s.connectionPool.NsAppIDPool[nsAppID].connected)
-//
-//		// If the current connection count is greater than or equal to the minimum required, break the loop
-//		if currentConnCount >= s.minConnPerApp {
-//			break
-//		}
-//
-//		// Wait for a short duration before checking again
-//		select {
-//		case <-ctx.Done():
-//			return ctx.Err()
-//		case <-time.After(time.Duration(s.maxTimeWaitForSidecars) * time.Second):
-//			continue
-//		}
-//	}
-//
-//	return nil
-//}
