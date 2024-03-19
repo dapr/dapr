@@ -18,6 +18,28 @@ service Scheduler {
 	rpc GetJob(JobRequest) returns (GetJobResponse) {}
 	// ListJobs is used by the daprd sidecar to list jobs by app_id.
 	rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {}
+
+	// WatchJob is used by the daprd sidecar to connect to the Scheduler
+	// service to watch for jobs triggering back.
+	rpc WatchJob(StreamJobRequest) returns (stream StreamJobResponse) {}
+}
+
+message StreamJobRequest {
+	// The id of the application (app_id).
+	string app_id = 1;
+	// The namespace.
+	string namespace = 2;
+	// The hostname of the daprd sidecar.
+	string hostname = 3;
+	// The port of the daprd sidecar.
+	int32 port = 4;
+}
+
+message StreamJobResponse {
+	// The job name to be triggered.
+	//	string job_name = 1;
+	// TODO probably just send job name & data
+	runtime.v1.Job job = 1;
 }
 
 message ConnectHostRequest {

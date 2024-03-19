@@ -166,6 +166,54 @@ func newDaprRuntime(ctx context.Context,
 		}
 
 		log.Infof("Scheduler client initialized")
+
+		// TODO: CASSIE move this to connections pkg to abstract away the complexity from runtime.go
+
+		// Create a context for the goroutine
+		ctx, cancel := context.WithCancel(context.Background())
+		// Watch for job updates in a separate goroutine
+		go func(ctx context.Context) {
+			// Defer cancelling the context when the function exits
+			defer cancel()
+			req := &schedulerv1pb.StreamJobRequest{
+				AppId:     runtimeConfig.id,
+				Namespace: namespace,
+				Hostname:  "localhost", // TODO: dont hardcode, do lookup of addr for sidecar in both modes: k8s/standalone
+				Port:      int32(runtimeConfig.apiGRPCPort),
+			}
+
+			stream, err := schedClient.WatchJob(ctx, req)
+			if err != nil {
+				log.Fatalf("Error calling Scheduler WatchJob: %v", err)
+			}
+
+			// Receive messages from the stream
+			for {
+				select {
+				case <-ctx.Done():
+					// Exit the loop when the context is cancelled
+					log.Infof("Context cancelled. Exiting goroutine.")
+					return
+				default:
+					resp, err := stream.Recv()
+					if err != nil {
+						log.Fatalf("Error receiving response: %v", err)
+					}
+					log.Infof("Received response: %v", resp)
+				}
+			}
+		}(ctx)
+		//streamingClient := scheduler.NewClient() // handles the connection setup and abstraction over all schedulers
+		//err := scheduler.NewClient(*runtimeConfig.schedulerAddress) // handles the connection setup and abstraction over all schedulers
+
+		//streamingClient.Run() // runs the stream.Recv() and calls back to app w/ job
+
+		// maybe do for loop here
+		//for {
+		// list of scheduler addresses
+		// est connection
+		// get diff daprds to connect to diff scheduler
+		//}
 	}
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
