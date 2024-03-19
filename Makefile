@@ -105,7 +105,7 @@ else
 	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go run .
 endif
 
-# Default docker container and e2e test targst.
+# Default docker container and e2e test target.
 TARGET_OS ?= linux
 TARGET_ARCH ?= amd64
 TEST_OUTPUT_FILE_PREFIX ?= ./test_report
@@ -275,7 +275,8 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 		--set dapr_placement.image.name=$(RELEASE_NAME) \
 		--set dapr_sentry.image.name=$(RELEASE_NAME) \
 		--set dapr_sidecar_injector.image.name=$(RELEASE_NAME) \
-		--set dapr_sidecar_injector.injectorImage.name=$(RELEASE_NAME)
+		--set dapr_sidecar_injector.injectorImage.name=$(RELEASE_NAME) \
+		--set dapr_scheduler.image.name=$(RELEASE_NAME)
 endif
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
@@ -349,6 +350,7 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/retry/... \
 ./pkg/resiliency/... \
 ./pkg/runtime/... \
+./pkg/scheduler/... \
 ./pkg/scopes/... \
 ./pkg/security/... \
 ./pkg/sentry/... \

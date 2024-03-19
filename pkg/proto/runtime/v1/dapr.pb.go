@@ -2675,7 +2675,7 @@ type GetMetadataResponse struct {
 	AppConnectionProperties *AppConnectionProperties `protobuf:"bytes,7,opt,name=app_connection_properties,json=appConnectionProperties,proto3" json:"app_connection_properties,omitempty"`
 	RuntimeVersion          string                   `protobuf:"bytes,8,opt,name=runtime_version,json=runtimeVersion,proto3" json:"runtime_version,omitempty"`
 	EnabledFeatures         []string                 `protobuf:"bytes,9,rep,name=enabled_features,json=enabledFeatures,proto3" json:"enabled_features,omitempty"`
-	ActorRuntime            *ActorRuntime            `protobuf:"bytes,10,opt,name=actor_runtime,json=actorRuntime,proto3" json:"actor_runtime,omitempty"`
+	ActorRuntime            *ActorRuntime            `protobuf:"bytes,10,opt,name=actor_runtime,json=actorRuntime,proto3" json:"actor_runtime,omitempty"` //TODO: Cassie: probably add scheduler runtime status
 }
 
 func (x *GetMetadataResponse) Reset() {

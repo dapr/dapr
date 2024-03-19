@@ -33,6 +33,8 @@ var (
 	ServicePlacement = Service{"dapr-placement-server", 50005}
 	// Dapr Sentry service.
 	ServiceSentry = Service{"dapr-sentry", 443}
+
+	ServiceScheduler = Service{"dapr-scheduler", 50006}
 )
 
 // NewService returns a Service with values from a string in the format "<name>:<port>"

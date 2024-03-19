@@ -67,6 +67,7 @@ type Server struct {
 	port          int
 	srv           *grpc.Server
 	listenAddress string
+	mode          modes.DaprMode
 
 	dataDir          string
 	etcdID           string
@@ -104,6 +105,7 @@ func New(opts Options) *Server {
 	s := &Server{
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
+		mode:          opts.Mode,
 
 		etcdID:           opts.EtcdID,
 		etcdInitialPeers: opts.EtcdInitialPeers,
