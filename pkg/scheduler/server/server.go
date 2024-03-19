@@ -303,7 +303,8 @@ func (s *Server) runJobWatcher(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Job watcher shutting down")
+			log.Info("Job watcher shutting down. Clearing Sidecar connections.")
+			s.connectionPool.Clear()
 			return ctx.Err()
 		//case <-overallTimeout: // check: do we want this?
 		//	log.Error("Overall timeout waiting for any sidecar connection")
@@ -317,6 +318,9 @@ func (s *Server) runJobWatcher(ctx context.Context) error {
 			// Wait until reaching the minimum connection count
 			if err := s.connectionPool.WaitUntilReachingMinConns(ctx, nsAppID, s.minConnPerApp, time.Duration(s.maxTimeWaitForSidecars)*time.Second); err != nil {
 				// If there's an error waiting for minimum connection count
+				// remove the connection
+				log.Infof("Issue waiting for minimum Sidecar connections. Removing Sidecar connection.")
+				s.connectionPool.Remove(nsAppID, connDetails)
 				return err
 			}
 		}

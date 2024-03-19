@@ -84,3 +84,17 @@ func (p *Pool) WaitUntilReachingMinConns(ctx context.Context, nsAppID string, mi
 		}
 	}
 }
+
+// Clear removes all connections from the pool.
+func (p *Pool) Clear() {
+	p.Lock.Lock()
+	defer p.Lock.Unlock()
+
+	for _, appIDPool := range p.NsAppIDPool {
+		appIDPool.lock.Lock()
+		appIDPool.connected = nil
+		appIDPool.lock.Unlock()
+	}
+
+	p.NsAppIDPool = make(map[string]*AppIDPool)
+}

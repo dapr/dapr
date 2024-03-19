@@ -47,7 +47,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		Data:     req.GetJob().GetData(),
 		Metadata: req.GetMetadata(), // TODO: do I need this here?
 		Func: func(context.Context) error {
-			log.Infof("Triggering Job. fixing to send job on s.jobTriggerChan <-")
+			log.Infof("Triggering Job. fixing to send job to Sidecar. Job: %+v", req.GetJob())
 
 			s.jobTriggerChan <- req.GetJob() // send job to be consumed and sent to sidecar from WatchJob()
 
@@ -190,12 +190,15 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 	ctx := stream.Context()
 	// use req details to add sidecar connection details so scheduler knows how many sidecars there are and
 	// maintains a conn pool
-	s.sidecarConnChan <- &scheduler.SidecarConnDetails{
+
+	sidecarConnDetails := &scheduler.SidecarConnDetails{
 		Namespace: req.Namespace,
 		Host:      req.Hostname,
 		Port:      int(req.Port),
 		AppID:     req.AppId,
 	}
+
+	s.sidecarConnChan <- sidecarConnDetails
 	// TODO: probably add ctx to be passed to the go routine so if that is cancelled the go routine quits
 	// Handle job triggers, don't hang scheduler main thread
 	go func(ctx context.Context) {
@@ -213,12 +216,16 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 				if err != nil {
 					log.Errorf("Error separating job name from appID: %v", err)
 					errCh <- err
+					// continue to send back job details if it errs on the name parsing
+					jobName = job.GetName()
+					continue
 				}
 				jobUpdate := &schedulerv1pb.StreamJobResponse{
 					Job: &runtimev1pb.Job{
 						Name:     jobName,
 						Schedule: job.GetSchedule(),
-						// TODO: fill rest of fields
+						Data:     job.GetData(),
+						// TODO: fill rest of fields, but do people really care about the ttl/repeat val returned?
 					},
 				}
 
@@ -234,9 +241,12 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 	// Wait for errors from the goroutine
 	select {
 	case err := <-errCh:
+		log.Infof("WatchJob stream closed from sidecar due to err. Removing Sidecar connection.")
+		s.connectionPool.Remove(req.Namespace+req.AppId, sidecarConnDetails)
 		return err
 	case <-ctx.Done(): // sidecar closed stream
-		log.Infof("WatchJob stream closed")
+		log.Infof("WatchJob stream closed from sidecar due to ctx cancel. Removing Sidecar connection.")
+		s.connectionPool.Remove(req.Namespace+req.AppId, sidecarConnDetails)
 		return nil
 	}
 }
