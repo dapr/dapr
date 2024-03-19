@@ -16,12 +16,13 @@ package server
 import (
 	"context"
 	"fmt"
+	"strings"
 
 	etcdcron "github.com/Scalingo/go-etcd-cron"
-
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler"
 )
 
 func (s *Server) ConnectHost(context.Context, *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error) {
@@ -46,10 +47,15 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		Data:     req.GetJob().GetData(),
 		Metadata: req.GetMetadata(), // TODO: do I need this here?
 		Func: func(context.Context) error {
-			innerErr := s.triggerJob(req.GetJob(), req.GetNamespace(), req.GetMetadata())
-			if innerErr != nil {
-				return innerErr
-			}
+			log.Infof("Triggering Job. fixing to send job on s.jobTriggerChan <-")
+
+			s.jobTriggerChan <- req.GetJob() // send job to be consumed and sent to sidecar from WatchJob()
+
+			// TODO: only call below if 'actor' type job
+			//innerErr := s.triggerJob(req.GetJob(), req.GetNamespace(), req.GetMetadata())
+			//if innerErr != nil {
+			//	return innerErr
+			//}
 			return nil
 		},
 	})
@@ -168,4 +174,66 @@ func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRe
 		return nil, err
 	}
 	return nil, fmt.Errorf("not implemented")
+}
+
+func extractAppID(str string) (string, error) {
+	parts := strings.Split(str, "||")
+	if len(parts) != 2 {
+		return "", fmt.Errorf("invalid format: %s", str)
+	}
+	return parts[1], nil
+}
+
+// WatchJob sends jobs to Dapr sidecars upon component changes.
+func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv1pb.Scheduler_WatchJobServer) error {
+	errCh := make(chan error)
+
+	// use req details to add sidecar connection details so scheduler knows how many sidecars there are and
+	// maintains a conn pool
+	s.sidecarConnChan <- &scheduler.SidecarConnDetails{
+		Namespace: req.Namespace,
+		Host:      req.Hostname,
+		Port:      int(req.Port),
+		AppID:     req.AppId,
+	}
+	// TODO: probably add ctx to be passed to the go routine so if that is cancelled the go routine quits
+	// Handle job triggers, don't hang scheduler main thread
+	go func() {
+		defer close(errCh) // Close the error channel when the goroutine exits
+
+		// Listen for job triggers from the channel
+		for {
+			// Wait for a jobs being triggered
+			job := <-s.jobTriggerChan
+
+			jobName, err := extractAppID(job.GetName())
+			if err != nil {
+				log.Errorf("Error separating job name from appID: %v", err)
+				errCh <- err
+			}
+			// Create a job update
+			jobUpdate := &schedulerv1pb.StreamJobResponse{
+				Job: &runtimev1pb.Job{
+					Name:     jobName,
+					Schedule: job.GetSchedule(),
+					// TODO: fill rest of fields
+				},
+			}
+
+			// Send the job update to the sidecar
+			if err := stream.Send(jobUpdate); err != nil {
+				log.Errorf("Error sending job at trigger time: %v", err)
+				errCh <- err
+			}
+		}
+	}()
+
+	// Wait for errors from the goroutine
+	select {
+	case err := <-errCh:
+		return err
+	case <-stream.Context().Done(): // sidecar closed stream
+		log.Infof("WatchJob stream closed")
+		return nil
+	}
 }

@@ -29,13 +29,15 @@ type Options struct {
 	Port        int
 	HealthzPort int
 
-	ListenAddress    string
-	TLSEnabled       bool
-	TrustDomain      string
-	TrustAnchorsFile string
-	SentryAddress    string
-	PlacementAddress string
-	Mode             string
+	ListenAddress          string
+	TLSEnabled             bool
+	TrustDomain            string
+	TrustAnchorsFile       string
+	SentryAddress          string
+	PlacementAddress       string
+	Mode                   string
+	MinConnsPerAppID       int
+	MaxTimeWaitForSidecars int
 
 	EtcdID           string
 	EtcdInitialPeers []string
@@ -78,6 +80,9 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
 	fs.StringVar(&opts.PlacementAddress, "placement-address", "", "Addresses for Dapr Actor Placement service")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
+	// TODO: make the below default to 3 after testing
+	fs.IntVar(&opts.MinConnsPerAppID, "min-conns-per-appid", 1, "The minimum number of connections per appID for the job triggers to the Sidecar from the Scheduler")
+	fs.IntVar(&opts.MaxTimeWaitForSidecars, "max-time-wait-for-sidecars", 30, "The maximum amount of time, in seconds, the Scheduler will wait for the minimum Sidecars to be brought up")
 
 	fs.StringVar(&opts.EtcdID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
 	fs.StringSliceVar(&opts.EtcdInitialPeers, "initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
