@@ -20,6 +20,8 @@ import (
 	"strings"
 
 	"go.etcd.io/etcd/server/v3/embed"
+
+	"github.com/dapr/dapr/pkg/modes"
 )
 
 func (s *Server) conf() *embed.Config {
@@ -39,26 +41,40 @@ func (s *Server) conf() *embed.Config {
 		Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
 	}}
 
-	config.ListenPeerUrls = []url.URL{{
-		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
-	}}
-
-	config.ListenClientUrls = []url.URL{{
-		Scheme: "http",
-		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
-	}}
-
 	config.AdvertiseClientUrls = []url.URL{{
 		Scheme: "http",
 		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
 	}}
+
+	switch s.mode {
+	// can't use domain name for k8s for config.ListenPeerUrls && config.ListenClientUrls
+	case modes.KubernetesMode:
+		etcdIP := "0.0.0.0"
+		config.ListenPeerUrls = []url.URL{{
+			Scheme: "http",
+			Host:   fmt.Sprintf("%s:%s", etcdIP, peerPort),
+		}}
+		config.ListenClientUrls = []url.URL{{
+			Scheme: "http",
+			Host:   fmt.Sprintf("%s:%s", etcdIP, s.etcdClientPorts[s.etcdID]),
+		}}
+	default:
+		config.ListenPeerUrls = []url.URL{{
+			Scheme: "http",
+			Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
+		}}
+		config.ListenClientUrls = []url.URL{{
+			Scheme: "http",
+			Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
+		}}
+	}
 
 	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
 	// TODO: Look into etcd config and if we need to do any raft compacting
 
 	// TODO: Cassie do extra validation that the client port != peer port -> dont fail silently
 	// TODO: Cassie do extra validation if people forget to put http:// -> dont fail silently
+	// TODO: Cassie do extra validation to ensure that the list of ids sent in for the clientPort == list of ids from initial cluster
 
 	return config
 }

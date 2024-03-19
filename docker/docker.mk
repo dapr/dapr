@@ -30,6 +30,7 @@ DAPR_PLACEMENT_IMAGE_NAME?=placement
 DAPR_SENTRY_IMAGE_NAME?=sentry
 DAPR_OPERATOR_IMAGE_NAME?=operator
 DAPR_INJECTOR_IMAGE_NAME?=injector
+DAPR_SCHEDULER_IMAGE_NAME?=scheduler
 
 # build docker image for linux
 BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)
@@ -89,6 +90,7 @@ DAPR_PLACEMENT_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_PLACEMENT_IMAGE_NAME)
 DAPR_SENTRY_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_SENTRY_IMAGE_NAME)
 DAPR_OPERATOR_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_OPERATOR_IMAGE_NAME)
 DAPR_INJECTOR_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_INJECTOR_IMAGE_NAME)
+DAPR_SCHEDULER_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_SCHEDULER_IMAGE_NAME)
 BUILD_TAG=$(DAPR_TAG)-$(DOCKER_IMAGE_VARIANT)
 
 # To use buildx: https://github.com/docker/buildx#docker-ce
@@ -134,6 +136,9 @@ else
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 		$(DOCKER) build --build-arg PKG_FILES=injector $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+		$(DOCKER) build --build-arg PKG_FILES=scheduler $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG); \
+	fi
 endif
 else
 	-$(DOCKER) buildx create --use --name daprbuild
@@ -156,6 +161,9 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=injector $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
+	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+		$(DOCKER) buildx build --build-arg PKG_FILES=scheduler $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
 	fi
 endif
 endif
@@ -184,6 +192,9 @@ else
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 		$(DOCKER) push $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+		$(DOCKER) push $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG); \
+	fi
 endif
 else
 	-$(DOCKER) buildx create --use --name daprbuild
@@ -206,6 +217,9 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=injector --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false --push; \
+	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+		$(DOCKER) buildx build --build-arg PKG_FILES=scheduler --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false --push; \
 	fi
 endif
 endif
@@ -233,6 +247,9 @@ else
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 		kind load docker-image $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+		kind load docker-image $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG); \
+	fi
 endif
 
 # publish muti-arch docker image to the registry
@@ -257,6 +274,9 @@ else
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 	$(DOCKER) manifest create $(DAPR_INJECTOR_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
 	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+	$(DOCKER) manifest create $(DAPR_SCHEDULER_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SCHEDULER_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
+	fi
 endif
 ifeq ($(LATEST_RELEASE),true)
 ifeq ($(ONLY_DAPR_IMAGE),true)
@@ -277,6 +297,9 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 	$(DOCKER) manifest create $(DAPR_INJECTOR_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
+	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+	$(DOCKER) manifest create $(DAPR_SCHEDULER_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SCHEDULER_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
 	fi
 endif
 endif
@@ -302,6 +325,9 @@ else
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+	$(DOCKER) manifest push $(DAPR_SCHEDULER_DOCKER_IMAGE):$(DAPR_TAG); \
+	fi
 endif
 ifeq ($(LATEST_RELEASE),true)
 ifeq ($(ONLY_DAPR_IMAGE),true)
@@ -322,6 +348,9 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE):$(LATEST_TAG); \
+	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+	$(DOCKER) manifest push $(DAPR_SCHEDULER_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 endif
 endif
