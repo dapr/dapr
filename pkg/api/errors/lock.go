@@ -14,7 +14,6 @@ limitations under the License.
 package errors
 
 import (
-	"fmt"
 	"net/http"
 
 	kitErrors "github.com/dapr/kit/errors"
@@ -22,15 +21,23 @@ import (
 )
 
 const (
+	// Lock Error PostFix
 	PostFixIDEmpty                    = "RESOURCE_ID_EMPTY"
 	PostFixLockOwnerEmpty             = "LOCK_OWNER_EMPTY"
 	PostFixExpiryInSecondsNotPositive = "NEGATIVE_EXPIRY"
 	PostFixTryLock                    = "TRY_LOCK"
 	PostFixUnlock                     = "UNLOCK"
+
+	// Lock Error Message
+	MsgIDEmpty                    = "ResourceId is empty in lock store "
+	MsgLockOwnerEmpty             = "LockOwner is empty in lock store "
+	MsgExpiryInSecondsNotPositive = "ExpiryInSeconds is not positive in lock store "
+	MsgTryLock                    = "failed to try acquiring lock: "
+	MsgUnlock                     = "failed to release lock: "
 )
 
 func DistributedLockResourceIDEmpty(storeName, owner string) error {
-	msg := fmt.Sprintf("ResourceId is empty in lock store %s", storeName)
+	msg := MsgIDEmpty + storeName
 	return kitErrors.NewBuilder(
 		grpcCodes.InvalidArgument,
 		http.StatusBadRequest,
@@ -43,7 +50,7 @@ func DistributedLockResourceIDEmpty(storeName, owner string) error {
 }
 
 func DistributedLockOwnerEmpty(storeName string) error {
-	msg := fmt.Sprintf("LockOwner is empty in lock store %s", storeName)
+	msg := MsgLockOwnerEmpty + storeName
 	return kitErrors.NewBuilder(
 		grpcCodes.InvalidArgument,
 		http.StatusBadRequest,
@@ -56,7 +63,7 @@ func DistributedLockOwnerEmpty(storeName string) error {
 }
 
 func DistributedLockExpiryNotPositive(storeName, owner string) error {
-	msg := fmt.Sprintf("ExpiryInSeconds is not positive in lock store %s", storeName)
+	msg := MsgExpiryInSecondsNotPositive + storeName
 	return kitErrors.NewBuilder(
 		grpcCodes.InvalidArgument,
 		http.StatusBadRequest,
@@ -69,7 +76,7 @@ func DistributedLockExpiryNotPositive(storeName, owner string) error {
 }
 
 func DistributedTryLockFailed(storeName, owner string, err error) error {
-	msg := fmt.Sprintf("failed to try acquiring lock: %s", err.Error())
+	msg := MsgTryLock + err.Error()
 	return kitErrors.NewBuilder(
 		grpcCodes.Internal,
 		http.StatusInternalServerError,
@@ -82,7 +89,7 @@ func DistributedTryLockFailed(storeName, owner string, err error) error {
 }
 
 func DistributedUnlockFailed(storeName, owner string, err error) error {
-	msg := fmt.Sprintf("failed to release lock: %s", err.Error())
+	msg := MsgUnlock + err.Error()
 	return kitErrors.NewBuilder(
 		grpcCodes.Internal,
 		http.StatusInternalServerError,

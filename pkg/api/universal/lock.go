@@ -18,6 +18,7 @@ import (
 	"net/http"
 
 	"github.com/dapr/components-contrib/lock"
+	contribMetadata "github.com/dapr/components-contrib/metadata"
 	apiErrors "github.com/dapr/dapr/pkg/api/errors"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -129,9 +130,10 @@ type tryLockUnlockRequest interface {
 // Internal method that checks if the request is for a lock store component.
 func (a *Universal) lockValidateRequest(req tryLockUnlockRequest) (lock.Store, error) {
 	var err error
+	lockType := string(contribMetadata.LockStoreType)
 
 	if a.compStore.LocksLen() == 0 {
-		err = apiErrors.NotConfigured(req.GetStoreName(), "lock", nil, codes.FailedPrecondition, http.StatusInternalServerError, "ERR_LOCK_STORE_NOT_CONFIGURED", kitErrors.CodePrefixLock+kitErrors.CodeNotConfigured)
+		err = apiErrors.NotConfigured(req.GetStoreName(), lockType+" store", nil, codes.FailedPrecondition, http.StatusInternalServerError, "ERR_LOCK_STORE_NOT_CONFIGURED", kitErrors.CodePrefixLock+kitErrors.CodeNotConfigured)
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -149,7 +151,7 @@ func (a *Universal) lockValidateRequest(req tryLockUnlockRequest) (lock.Store, e
 	// 2. find lock component
 	store, ok := a.compStore.GetLock(req.GetStoreName())
 	if !ok {
-		err = apiErrors.NotFound(req.GetStoreName(), "lock", nil, codes.InvalidArgument, http.StatusNotFound, "ERR_LOCK_STORE_NOT_FOUND", kitErrors.CodePrefixLock+kitErrors.CodeNotFound)
+		err = apiErrors.NotFound(req.GetStoreName(), lockType+" store", nil, codes.InvalidArgument, http.StatusNotFound, "ERR_LOCK_STORE_NOT_FOUND", kitErrors.CodePrefixLock+kitErrors.CodeNotFound)
 		a.logger.Debug(err)
 		return nil, err
 	}
