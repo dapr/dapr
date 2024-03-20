@@ -227,10 +227,20 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	// Initialize metrics only if MetricSpec is enabled.
 	metricsSpec := globalConfig.GetMetricsSpec()
 	if metricsSpec.GetEnabled() {
-		err = diag.InitMetrics(intc.id, namespace, metricsSpec.Rules, metricsSpec.GetHTTPIncreasedCardinality(log))
+		shutdownMetrics, err := diag.InitMetrics(ctx, intc.id, namespace,
+			metricsSpec.Rules,
+			metricsSpec.GetHTTPIncreasedCardinality(log),
+			metricsSpec.GetOpenCensusProducer())
 		if err != nil {
+			if shutdownMetrics != nil {
+				shutdownMetrics(log)
+			}
 			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
 		}
+		go func() {
+			<-ctx.Done()
+			shutdownMetrics(log)
+		}()
 	}
 
 	// Load Resiliency

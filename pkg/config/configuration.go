@@ -249,9 +249,10 @@ func (o OtelSpec) GetIsSecure() bool {
 // MetricSpec configuration for metrics.
 type MetricSpec struct {
 	// Defaults to true
-	Enabled *bool         `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	HTTP    *MetricHTTP   `json:"http,omitempty" yaml:"http,omitempty"`
-	Rules   []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
+	Enabled            *bool         `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	HTTP               *MetricHTTP   `json:"http,omitempty" yaml:"http,omitempty"`
+	Rules              []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
+	OpenCensusProducer *bool         `json:"openCensusProducer,omitempty" yaml:"openCensusProducer,omitempty"`
 }
 
 // GetEnabled returns true if metrics are enabled.
@@ -267,6 +268,11 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 		return false
 	}
 	return *m.HTTP.IncreasedCardinality
+}
+
+// GetOpenCensusProducer returns true if OpenCensus producer is enabled
+func (m MetricSpec) GetOpenCensusProducer() bool {
+	return m.OpenCensusProducer != nil && *m.OpenCensusProducer
 }
 
 // MetricHTTP defines configuration for metrics for the HTTP server

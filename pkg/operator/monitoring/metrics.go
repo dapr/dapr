@@ -16,11 +16,9 @@ package monitoring
 import (
 	"context"
 
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
-
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -28,45 +26,57 @@ const (
 )
 
 var (
-	serviceCreatedTotal = stats.Int64(
-		"operator/service_created_total",
-		"The total number of dapr services created.",
-		stats.UnitDimensionless)
-	serviceDeletedTotal = stats.Int64(
-		"operator/service_deleted_total",
-		"The total number of dapr services deleted.",
-		stats.UnitDimensionless)
-	serviceUpdatedTotal = stats.Int64(
-		"operator/service_updated_total",
-		"The total number of dapr services updated.",
-		stats.UnitDimensionless)
+	serviceCreatedTotal metric.Int64Counter
+	serviceDeletedTotal metric.Int64Counter
+	serviceUpdatedTotal metric.Int64Counter
 
 	// appIDKey is a tag key for App ID.
-	appIDKey = tag.MustNewKey(appID)
+	appIDKey = appID
 )
 
 // RecordServiceCreatedCount records the number of dapr service created.
 func RecordServiceCreatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(serviceCreatedTotal.Name(), appIDKey, appID), serviceCreatedTotal.M(1))
+	serviceCreatedTotal.Add(context.Background(), 1, metric.WithAttributes(attribute.String(appIDKey, appID)))
 }
 
 // RecordServiceDeletedCount records the number of dapr service deleted.
 func RecordServiceDeletedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(serviceDeletedTotal.Name(), appIDKey, appID), serviceDeletedTotal.M(1))
+	serviceDeletedTotal.Add(context.Background(), 1, metric.WithAttributes(attribute.String(appIDKey, appID)))
 }
 
 // RecordServiceUpdatedCount records the number of dapr service updated.
 func RecordServiceUpdatedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(serviceUpdatedTotal.Name(), appIDKey, appID), serviceUpdatedTotal.M(1))
+	serviceUpdatedTotal.Add(context.Background(), 1, metric.WithAttributes(attribute.String(appIDKey, appID)))
 }
 
 // InitMetrics initialize the operator service metrics.
 func InitMetrics() error {
-	err := view.Register(
-		diagUtils.NewMeasureView(serviceCreatedTotal, []tag.Key{appIDKey}, view.Count()),
-		diagUtils.NewMeasureView(serviceDeletedTotal, []tag.Key{appIDKey}, view.Count()),
-		diagUtils.NewMeasureView(serviceUpdatedTotal, []tag.Key{appIDKey}, view.Count()),
-	)
+	m := otel.Meter("operator")
 
-	return err
+	var err error
+	serviceCreatedTotal, err = m.Int64Counter(
+		"operator.service_created_total",
+		metric.WithDescription("The total number of dapr services created."),
+	)
+	if err != nil {
+		return err
+	}
+
+	serviceDeletedTotal, err = m.Int64Counter(
+		"operator.service_deleted_total",
+		metric.WithDescription("The total number of dapr services deleted."),
+	)
+	if err != nil {
+		return err
+	}
+
+	serviceUpdatedTotal, err = m.Int64Counter(
+		"operator.service_updated_total",
+		metric.WithDescription("The total number of dapr services updated."),
+	)
+	if err != nil {
+		return err
+	}
+
+	return nil
 }

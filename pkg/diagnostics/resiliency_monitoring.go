@@ -3,11 +3,9 @@ package diagnostics
 import (
 	"context"
 
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
-
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 var (
@@ -24,9 +22,11 @@ type PolicyType string
 type PolicyFlowDirection string
 
 type resiliencyMetrics struct {
-	policiesLoadCount *stats.Int64Measure
-	executionCount    *stats.Int64Measure
-	activationsCount  *stats.Int64Measure
+	meter metric.Meter
+
+	policiesLoadCount metric.Int64Counter
+	executionCount    metric.Int64Counter
+	activationsCount  metric.Int64Counter
 
 	appID   string
 	ctx     context.Context
@@ -34,19 +34,10 @@ type resiliencyMetrics struct {
 }
 
 func newResiliencyMetrics() *resiliencyMetrics {
+	m := otel.Meter("resiliency")
+
 	return &resiliencyMetrics{ //nolint:exhaustruct
-		policiesLoadCount: stats.Int64(
-			"resiliency/loaded",
-			"Number of resiliency policies loaded.",
-			stats.UnitDimensionless),
-		executionCount: stats.Int64(
-			"resiliency/count",
-			"Number of times a resiliency policyKey has been applied to a building block.",
-			stats.UnitDimensionless),
-		activationsCount: stats.Int64(
-			"resiliency/activations_total",
-			"Number of times a resiliency policyKey has been activated in a building block after a failure or after a state change.",
-			stats.UnitDimensionless),
+		meter: m,
 
 		// TODO: how to use correct context
 		ctx:     context.Background(),
@@ -56,35 +47,50 @@ func newResiliencyMetrics() *resiliencyMetrics {
 
 // Init registers the resiliency metrics views.
 func (m *resiliencyMetrics) Init(id string) error {
+	policiesLoadCount, err := m.meter.Int64Counter(
+		"resiliency.loaded",
+		metric.WithDescription("Number of resiliency policies loaded."),
+	)
+	if err != nil {
+		return err
+	}
+
+	executionCount, err := m.meter.Int64Counter(
+		"resiliency.count",
+		metric.WithDescription("Number of times a resiliency policyKey has been applied to a building block."),
+	)
+	if err != nil {
+		return err
+	}
+
+	activationsCount, err := m.meter.Int64Counter(
+		"resiliency.activations_total",
+		metric.WithDescription("Number of times a resiliency policyKey has been activated in a building block after a failure or after a state change."),
+	)
+	if err != nil {
+		return err
+	}
+
+	m.policiesLoadCount = policiesLoadCount
+	m.executionCount = executionCount
+	m.activationsCount = activationsCount
 	m.enabled = true
 	m.appID = id
-	return view.Register(
-		diagUtils.NewMeasureView(m.policiesLoadCount, []tag.Key{appIDKey, resiliencyNameKey, namespaceKey}, view.Count()),
-		diagUtils.NewMeasureView(m.executionCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(m.activationsCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
-	)
+
+	return nil
 }
 
 // PolicyLoaded records metric when policy is loaded.
 func (m *resiliencyMetrics) PolicyLoaded(resiliencyName, namespace string) {
 	if m.enabled {
-		_ = stats.RecordWithTags(
-			m.ctx,
-			diagUtils.WithTags(m.policiesLoadCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, namespaceKey, namespace),
-			m.policiesLoadCount.M(1),
-		)
+		m.policiesLoadCount.Add(m.ctx, 1, metric.WithAttributes(attribute.String(appIDKey, m.appID), attribute.String(resiliencyNameKey, resiliencyName), attribute.String(namespaceKey, namespace)))
 	}
 }
 
 // PolicyWithStatusExecuted records metric when policy is executed with added status information (e.g., circuit breaker open).
 func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
 	if m.enabled {
-		_ = stats.RecordWithTags(
-			m.ctx,
-			diagUtils.WithTags(m.executionCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
-				namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
-			m.executionCount.M(1),
-		)
+		m.executionCount.Add(m.ctx, 1, metric.WithAttributes(attribute.String(appIDKey, m.appID), attribute.String(resiliencyNameKey, resiliencyName), attribute.String(policyKey, string(policy)), attribute.String(namespaceKey, namespace), attribute.String(flowDirectionKey, string(flowDirection)), attribute.String(targetKey, target), attribute.String(statusKey, status)))
 	}
 }
 
@@ -101,12 +107,7 @@ func (m *resiliencyMetrics) PolicyActivated(resiliencyName, namespace string, po
 // PolicyWithStatusActivated records metric when policy is activated after a failure or in the case of circuit breaker after a state change. with added state/status (e.g., circuit breaker open).
 func (m *resiliencyMetrics) PolicyWithStatusActivated(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
 	if m.enabled {
-		_ = stats.RecordWithTags(
-			m.ctx,
-			diagUtils.WithTags(m.activationsCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
-				namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
-			m.activationsCount.M(1),
-		)
+		m.activationsCount.Add(m.ctx, 1, metric.WithAttributes(attribute.String(appIDKey, m.appID), attribute.String(resiliencyNameKey, resiliencyName), attribute.String(policyKey, string(policy)), attribute.String(namespaceKey, namespace), attribute.String(flowDirectionKey, string(flowDirection)), attribute.String(targetKey, target), attribute.String(statusKey, status)))
 	}
 }
 
