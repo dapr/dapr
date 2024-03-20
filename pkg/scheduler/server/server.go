@@ -310,7 +310,7 @@ func (s *Server) runJobWatcher(ctx context.Context) error {
 		//	log.Error("Overall timeout waiting for any sidecar connection")
 		//	return fmt.Errorf("overall timeout waiting for any sidecar connection")
 		case connDetails := <-s.sidecarConnChan:
-			log.Infof("Adding a Sidecar connection to Scheduler")
+			log.Infof("Adding a Sidecar connection to Scheduler for appID: %s.\n", connDetails.AppID)
 			nsAppID := connDetails.Namespace + connDetails.AppID
 			// Add sidecar connection details to the connection pool
 			s.connectionPool.Add(nsAppID, connDetails)
@@ -319,7 +319,7 @@ func (s *Server) runJobWatcher(ctx context.Context) error {
 			if err := s.connectionPool.WaitUntilReachingMinConns(ctx, nsAppID, s.minConnPerApp, time.Duration(s.maxTimeWaitForSidecars)*time.Second); err != nil {
 				// If there's an error waiting for minimum connection count
 				// remove the connection
-				log.Infof("Issue waiting for minimum Sidecar connections. Removing Sidecar connection.")
+				log.Infof("Issue waiting for minimum Sidecar connections. Removing Sidecar connection for appID: %s.\n", connDetails.AppID)
 				s.connectionPool.Remove(nsAppID, connDetails)
 				return err
 			}

@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"strings"
+	"sync"
 
 	etcdcron "github.com/Scalingo/go-etcd-cron"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -198,11 +199,19 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 		AppID:     req.AppId,
 	}
 
+	// Use a wait group to wait for all goroutines to finish
+	var wg sync.WaitGroup
+	defer wg.Wait() // Wait for all goroutines to finish when the function exits
+	// Increment the wait group before starting the goroutine
+	wg.Add(1)
+
 	s.sidecarConnChan <- sidecarConnDetails
 	// TODO: probably add ctx to be passed to the go routine so if that is cancelled the go routine quits
 	// Handle job triggers, don't hang scheduler main thread
 	go func(ctx context.Context) {
 		//go func() {
+		defer wg.Done() // Decrement the wait group when this goroutine exits
+
 		defer close(errCh) // Close the error channel when the goroutine exits
 
 		// Listen for job triggers from the channel
@@ -241,11 +250,11 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 	// Wait for errors from the goroutine
 	select {
 	case err := <-errCh:
-		log.Infof("WatchJob stream closed from sidecar due to err. Removing Sidecar connection.")
+		log.Infof("WatchJob stream closed from sidecar due to err. Removing Sidecar connection for sidecar: %s.\n", sidecarConnDetails.AppID)
 		s.connectionPool.Remove(req.Namespace+req.AppId, sidecarConnDetails)
 		return err
 	case <-ctx.Done(): // sidecar closed stream
-		log.Infof("WatchJob stream closed from sidecar due to ctx cancel. Removing Sidecar connection.")
+		log.Infof("WatchJob stream closed from sidecar due to ctx cancel. Removing Sidecar connection for sidecar: %s.\n", sidecarConnDetails.AppID)
 		s.connectionPool.Remove(req.Namespace+req.AppId, sidecarConnDetails)
 		return nil
 	}

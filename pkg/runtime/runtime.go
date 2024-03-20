@@ -28,6 +28,7 @@ import (
 	"sync"
 	"time"
 
+	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -74,7 +75,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
-	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
@@ -104,6 +104,7 @@ type DaprRuntime struct {
 	daprGRPCAPI         grpc.API
 	operatorClient      operatorv1pb.OperatorClient
 	schedulerClient     schedulerv1pb.SchedulerClient
+	schedulerManager    *runtimeScheduler.Manager
 	isAppHealthy        chan struct{}
 	appHealth           *apphealth.AppHealth
 	appHealthReady      func(context.Context) error // Invoked the first time the app health becomes ready
@@ -159,68 +160,43 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	var schedClient schedulerv1pb.SchedulerClient
+	var schedulerManager *runtimeScheduler.Manager
 	if runtimeConfig.SchedulerEnabled() {
-
-		// for as many addresses as I have, create a client and maintain those client connections,
-		// if 1 drops backoff & trigger reconnecting for all connections
-
-		schedClient, err = schedulerclient.New(ctx, *runtimeConfig.schedulerAddress, sec)
+		host, err := utils.GetHostAddress()
 		if err != nil {
-			return nil, fmt.Errorf("error creating scheduler client: %w", err)
+			log.Infof("Error getting host address for sidecar: %v\n", err)
+			return nil, err
 		}
 
-		log.Infof("Scheduler client initialized")
+		//runtimeScheduler.New(ctx, []string{*runtimeConfig.schedulerAddress}, sec, connDetails)
+		schedulerManager, err = runtimeScheduler.NewManager(ctx, runtimeScheduler.Scheduler{
+			Addresses:    []string{*runtimeConfig.schedulerAddress},
+			SidecarNS:    namespace,
+			SidecarAddr:  host,
+			SidecarPort:  runtimeConfig.apiGRPCPort,
+			SidecarAppID: runtimeConfig.id,
+			Sec:          sec,
+		})
+		if err != nil {
+			return nil, err
+		}
 
-		// TODO: CASSIE move this to connections pkg to abstract away the complexity from runtime.go
-		// Create a channel to send errors back to the main goroutine
-		errCh := make(chan error)
+		// TODO: close all connections if sidecar ctx is cancelled or if shutdown
+		//defer schedulerManager.Close()
 
-		// Watch for job updates in a separate goroutine
-		go func() {
-			defer close(errCh)
+		// Start watching for job triggers
+		//schedulerManager.Run(ctx, schedulerManager)
+		schedulerManager.Run(ctx)
 
-			req := &schedulerv1pb.StreamJobRequest{
-				AppId:     runtimeConfig.id,
-				Namespace: namespace,
-				Hostname:  "localhost", // TODO: dont hardcode, do lookup of addr for sidecar in both modes: k8s/standalone
-				Port:      int32(runtimeConfig.apiGRPCPort),
-			}
-
-			stream, err := schedClient.WatchJob(context.Background(), req)
-			if err != nil {
-				errCh <- err
-				return
-			}
-
-			// Receive messages from the stream
-			for {
-				select {
-				case <-ctx.Done():
-					// Exit the loop when the context is cancelled
-					log.Infof("Context cancelled. Exiting WatchJob goroutine.")
-					return
-				default:
-					resp, err := stream.Recv()
-					if err != nil {
-						log.Infof("Error while streaming with Scheduler")
-						errCh <- err
-						return // TODO: change this to try to receive from a diff scheduler once moving to new pkg
-					}
-					log.Infof("Received response: %v", resp) // TODO: probably rm this after testing
-				}
-			}
-		}()
-		//streamingClient := scheduler.NewClient() // handles the connection setup and abstraction over all schedulers
-		//err := scheduler.NewClient(*runtimeConfig.schedulerAddress) // handles the connection setup and abstraction over all schedulers
-
-		//streamingClient.Run() // runs the stream.Recv() and calls back to app w/ job
-
-		// maybe do for loop here
-		//for {
-		// list of scheduler addresses
-		// est connection
-		// get diff daprds to connect to diff scheduler
+		//schedManager, err := connections.NewManager(ctx, []string{*runtimeConfig.schedulerAddress}, sec, connDetails)
+		//if err != nil {
+		//	log.Infof("Error initializing connection manager: %v\n", err)
+		//	return nil, err
 		//}
+		//defer schedManager.Close()
+		//
+		//// Start watching for job updates
+		//schedManager.Run(ctx)
 	}
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
@@ -278,6 +254,7 @@ func newDaprRuntime(ctx context.Context,
 		meta:              meta,
 		operatorClient:    operatorClient,
 		schedulerClient:   schedClient,
+		schedulerManager:  schedulerManager,
 		channels:          channels,
 		sec:               sec,
 		processor:         processor,
@@ -575,6 +552,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
 		SchedulerClient:             a.schedulerClient,
+		SchedulerManager:            a.schedulerManager,
 		WorkflowEngine:              wfe,
 	})
 
