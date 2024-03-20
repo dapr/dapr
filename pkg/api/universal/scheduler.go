@@ -61,7 +61,8 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	}
 
 	// TODO: do something with following response?
-	_, err := a.schedulerClient.ScheduleJob(ctx, internalScheduleJobReq)
+	_, err := a.schedulerManager.NextClient().ScheduleJob(ctx, internalScheduleJobReq)
+	//_, err := a.schedulerClient.ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
 		a.logger.Errorf("Error scheduling job %s", inReq.GetJob().GetName())
 		return &emptypb.Empty{}, apierrors.SchedulerScheduleJob(errMetadata, err)
@@ -83,7 +84,7 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 		JobName: jobName,
 	}
 
-	_, err := a.schedulerClient.DeleteJob(ctx, internalDeleteJobReq)
+	_, err := a.schedulerManager.NextClient().DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
 		a.logger.Errorf("Error deleting job: %s", inReq.GetName())
 		return &emptypb.Empty{}, apierrors.SchedulerDeleteJob(errMetadata, err)
@@ -108,7 +109,7 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 		JobName: jobName,
 	}
 
-	internalResp, err := a.schedulerClient.GetJob(ctx, internalGetJobReq)
+	internalResp, err := a.schedulerManager.NextClient().GetJob(ctx, internalGetJobReq)
 	if err != nil {
 		a.logger.Errorf("Error getting job %s", inReq.GetName())
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
@@ -136,7 +137,7 @@ func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsReq
 		AppId: inReq.GetAppId(),
 	}
 
-	internalListResp, err := a.schedulerClient.ListJobs(ctx, internalListReq)
+	internalListResp, err := a.schedulerManager.NextClient().ListJobs(ctx, internalListReq)
 	if err != nil {
 		a.logger.Errorf("Error listing jobs for app %s", inReq.GetAppId())
 		return nil, apierrors.SchedulerListJobs(map[string]string{"app_id": a.AppID()}, err)

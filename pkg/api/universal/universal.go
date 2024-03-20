@@ -19,12 +19,12 @@ import (
 	"sync"
 	"sync/atomic"
 
-	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
@@ -42,6 +42,7 @@ type Options struct {
 	GlobalConfig                *config.Configuration
 	WorkflowEngine              *wfengine.WorkflowEngine
 	SchedulerClient             schedulerv1pb.SchedulerClient
+	SchedulerManager            *runtimeScheduler.Manager
 }
 
 // Universal contains the implementation of gRPC APIs that are also used by the HTTP server.
@@ -58,6 +59,7 @@ type Universal struct {
 	globalConfig                *config.Configuration
 	workflowEngine              *wfengine.WorkflowEngine
 	schedulerClient             schedulerv1pb.SchedulerClient
+	schedulerManager            *runtimeScheduler.Manager
 
 	extendedMetadataLock sync.RWMutex
 	actorsLock           sync.RWMutex
@@ -80,6 +82,7 @@ func New(opts Options) *Universal {
 		workflowEngine:              opts.WorkflowEngine,
 		actorsReadyCh:               make(chan struct{}),
 		schedulerClient:             opts.SchedulerClient,
+		schedulerManager:            opts.SchedulerManager,
 	}
 }
 
