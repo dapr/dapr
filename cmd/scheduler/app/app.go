@@ -89,7 +89,7 @@ func Run() {
 				PlacementAddress:       opts.PlacementAddress,
 				Mode:                   modes.DaprMode(opts.Mode),
 				Port:                   opts.Port,
-				MinConnsPerAppID:       opts.MinConnsPerAppID,
+				MaxConnsPerAppID:       opts.MaxConnsPerAppID,
 				MaxTimeWaitForSidecars: opts.MaxTimeWaitForSidecars,
 				DataDir:                opts.EtcdDataDir,
 				EtcdID:                 opts.EtcdID,

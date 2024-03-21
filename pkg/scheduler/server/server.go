@@ -53,7 +53,7 @@ type Options struct {
 	PlacementAddress       string
 	Mode                   modes.DaprMode
 	Port                   int
-	MinConnsPerAppID       int
+	MaxConnsPerAppID       int
 	MaxTimeWaitForSidecars int
 
 	DataDir          string
@@ -82,7 +82,7 @@ type Server struct {
 	sidecarConnChan        chan *connections.Connection
 	poolLock               sync.RWMutex
 	connectionPool         *connections.Pool // Connection pool for sidecars
-	minConnPerApp          int
+	maxConnPerApp          int
 	maxTimeWaitForSidecars int
 
 	grpcManager  *manager.Manager
@@ -117,9 +117,9 @@ func New(opts Options) *Server {
 		sidecarConnChan: make(chan *connections.Connection),
 		connectionPool: &connections.Pool{
 			NsAppIDPool:      make(map[string]*connections.AppIDPool),
-			MinConnsPerAppID: make(map[string]int),
+			MaxConnsPerAppID: opts.MaxConnsPerAppID,
 		},
-		minConnPerApp:          opts.MinConnsPerAppID,
+		maxConnPerApp:          opts.MaxConnsPerAppID,
 		maxTimeWaitForSidecars: opts.MaxTimeWaitForSidecars,
 	}
 
@@ -391,10 +391,11 @@ func (s *Server) handleSidecarConnections(ctx context.Context, errCh chan<- erro
 			log.Infof("Adding a Sidecar connection to Scheduler for appID: %s.\n", conn.ConnDetails.AppID)
 			nsAppID := conn.ConnDetails.Namespace + conn.ConnDetails.AppID
 			// Add sidecar connection details to the connection pool
+
 			s.connectionPool.Add(nsAppID, conn)
 
-			// Wait until reaching the minimum connection count
-			if err := s.connectionPool.WaitUntilReachingMinConns(ctx, nsAppID, s.minConnPerApp, time.Duration(s.maxTimeWaitForSidecars)*time.Second); err != nil {
+			// Wait until reaching the max connection count
+			if err := s.connectionPool.WaitUntilReachingMaxConns(ctx, nsAppID, s.maxConnPerApp, time.Duration(s.maxTimeWaitForSidecars)*time.Second); err != nil {
 				// If there's an error waiting for minimum connection count
 				// remove the connection
 				log.Infof("Issue waiting for minimum Sidecar connections. Removing Sidecar connection for appID: %s.\n", conn.ConnDetails.AppID)
