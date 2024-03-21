@@ -168,7 +168,6 @@ func newDaprRuntime(ctx context.Context,
 			return nil, err
 		}
 
-		//runtimeScheduler.New(ctx, []string{*runtimeConfig.schedulerAddress}, sec, connDetails)
 		schedulerManager, err = runtimeScheduler.NewManager(ctx, runtimeScheduler.Scheduler{
 			Addresses:    []string{*runtimeConfig.schedulerAddress},
 			SidecarNS:    namespace,
@@ -181,22 +180,8 @@ func newDaprRuntime(ctx context.Context,
 			return nil, err
 		}
 
-		// TODO: close all connections if sidecar ctx is cancelled or if shutdown
-		//defer schedulerManager.Close()
-
-		// Start watching for job triggers
-		//schedulerManager.Run(ctx, schedulerManager)
 		schedulerManager.Run(ctx)
 
-		//schedManager, err := connections.NewManager(ctx, []string{*runtimeConfig.schedulerAddress}, sec, connDetails)
-		//if err != nil {
-		//	log.Infof("Error initializing connection manager: %v\n", err)
-		//	return nil, err
-		//}
-		//defer schedManager.Close()
-		//
-		//// Start watching for job updates
-		//schedManager.Run(ctx)
 	}
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
