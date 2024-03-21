@@ -6,6 +6,7 @@ import (
 	"sync"
 	"time"
 
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler"
 	"github.com/dapr/kit/logger"
 )
@@ -21,35 +22,47 @@ type Pool struct {
 
 // AppIDPool represents a pool of connections for a single appID.
 type AppIDPool struct {
-	lock      sync.RWMutex
-	connected []*scheduler.SidecarConnDetails
+	lock        sync.RWMutex
+	connections []*Connection
+}
+
+type Connection struct {
+	ConnDetails *scheduler.SidecarConnDetails
+	Stream      schedulerv1pb.Scheduler_WatchJobServer
 }
 
 // Add adds a connection to the pool for a given namespace/appID.
-func (p *Pool) Add(nsAppID string, connDetails *scheduler.SidecarConnDetails) {
+func (p *Pool) Add(nsAppID string, conn *Connection) {
 	p.Lock.Lock()
 	defer p.Lock.Unlock()
 	if id, ok := p.NsAppIDPool[nsAppID]; ok {
 		id.lock.Lock()
 		defer id.lock.Unlock()
-		id.connected = append(id.connected, connDetails)
+		id.connections = append(id.connections, &Connection{
+			ConnDetails: conn.ConnDetails,
+			Stream:      conn.Stream,
+		})
 	} else {
 		p.NsAppIDPool[nsAppID] = &AppIDPool{
-			connected: []*scheduler.SidecarConnDetails{connDetails},
+			connections: []*Connection{&Connection{
+				ConnDetails: conn.ConnDetails,
+				Stream:      conn.Stream,
+			}},
 		}
 	}
 }
 
 // Remove removes a connection from the pool for a given namespace/appID.
-func (p *Pool) Remove(nsAppID string, connDetails *scheduler.SidecarConnDetails) {
+func (p *Pool) Remove(nsAppID string, conn *Connection) {
 	p.Lock.Lock()
 	defer p.Lock.Unlock()
 	if id, ok := p.NsAppIDPool[nsAppID]; ok {
 		id.lock.Lock()
 		defer id.lock.Unlock()
-		for i, c := range id.connected {
-			if c == connDetails {
-				id.connected = append(id.connected[:i], id.connected[i+1:]...)
+		for i, c := range id.connections {
+			if c.ConnDetails == conn.ConnDetails {
+				// Remove the connection and stream from the slice
+				id.connections = append(id.connections[:i], id.connections[i+1:]...)
 				break
 			}
 		}
@@ -62,7 +75,7 @@ func (p *Pool) WaitUntilReachingMinConns(ctx context.Context, nsAppID string, mi
 
 	for {
 		p.Lock.RLock()
-		currentConnCount := len(p.NsAppIDPool[nsAppID].connected)
+		currentConnCount := len(p.NsAppIDPool[nsAppID].connections)
 		p.Lock.RUnlock()
 
 		// We don't want all sidecars connecting to the scheduler, so return once we meet the min connection count.
@@ -92,9 +105,28 @@ func (p *Pool) Clear() {
 
 	for _, appIDPool := range p.NsAppIDPool {
 		appIDPool.lock.Lock()
-		appIDPool.connected = nil
+		appIDPool.connections = []*Connection{}
 		appIDPool.lock.Unlock()
 	}
 
 	p.NsAppIDPool = make(map[string]*AppIDPool)
+}
+
+// GetStreamAndContextForAppID returns a stream and its associated context corresponding to the given appID in a round-robin manner.
+func (p *Pool) GetStreamAndContextForNSAppID(nsAppID string) (schedulerv1pb.Scheduler_WatchJobServer, context.Context, error) {
+	p.Lock.Lock()
+	defer p.Lock.Unlock()
+
+	// Get the AppIDPool for the given appID
+	appIDPool, ok := p.NsAppIDPool[nsAppID]
+	if !ok || len(appIDPool.connections) == 0 {
+		return nil, nil, fmt.Errorf("no connections available for appID: %s", nsAppID)
+	}
+
+	// Round-robin selection of connection
+	selectedConnection := appIDPool.connections[0]                                // Select the first connection
+	appIDPool.connections = append(appIDPool.connections[1:], selectedConnection) // Rotate the slice
+	ctx := selectedConnection.Stream.Context()
+
+	return selectedConnection.Stream, ctx, nil
 }

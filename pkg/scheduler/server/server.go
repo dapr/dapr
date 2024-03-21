@@ -25,7 +25,6 @@ import (
 	"time"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/dapr/pkg/scheduler"
 	"github.com/dapr/dapr/pkg/scheduler/connections"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -77,9 +76,10 @@ type Server struct {
 	etcdClientPorts  map[string]string
 	cron             *etcdcron.Cron
 	readyCh          chan struct{}
-	jobTriggerChan   chan *runtimev1pb.Job // used to trigger the WatchJob logic
+	jobTriggerChan   chan *schedulerv1pb.StreamJobResponse // used to trigger the WatchJob logic
+	jobWatcherWG     sync.WaitGroup
 
-	sidecarConnChan        chan *scheduler.SidecarConnDetails
+	sidecarConnChan        chan *connections.Connection
 	poolLock               sync.RWMutex
 	connectionPool         *connections.Pool // Connection pool for sidecars
 	minConnPerApp          int
@@ -111,9 +111,10 @@ func New(opts Options) *Server {
 		etcdClientPorts:  clientPorts,
 		dataDir:          opts.DataDir,
 		readyCh:          make(chan struct{}),
-		jobTriggerChan:   make(chan *runtimev1pb.Job), //probably slice here
+		jobTriggerChan:   make(chan *schedulerv1pb.StreamJobResponse),
+		jobWatcherWG:     sync.WaitGroup{},
 
-		sidecarConnChan: make(chan *scheduler.SidecarConnDetails),
+		sidecarConnChan: make(chan *connections.Connection),
 		connectionPool: &connections.Pool{
 			NsAppIDPool:      make(map[string]*connections.AppIDPool),
 			MinConnsPerAppID: make(map[string]int),
@@ -291,37 +292,114 @@ func clientEndpoints(initialPeersListIP []string, idToPort map[string]string) []
 	return clientEndpoints
 }
 
-// runJobWatcher (dynamically) watches for (client) sidecar connections and add them to the connection pool.
+// runJobWatcher (dynamically) watches for (client) sidecar connections and adds them to the connection pool.
 func (s *Server) runJobWatcher(ctx context.Context) error {
 	log.Infof("Starting job watcher")
 
-	// Set up a timer for the overall timeout
-	//overallTimeout := time.After(time.Duration(s.maxTimeWaitForSidecars) * time.Second)
+	errCh := make(chan error)
 
-	// create initial pool of appIDs for minConnCount for streaming
-	// this needs to watch for client, sidecar connections and add
+	// Increment the wait group for each goroutine
+	s.jobWatcherWG.Add(2)
+
+	// Goroutine for handling sidecar connections
+	go func() {
+		defer log.Info("Sidecar connections goroutine shutting down.")
+		defer s.jobWatcherWG.Done()
+		s.handleSidecarConnections(ctx, errCh)
+	}()
+
+	// Goroutine for handling job streaming at trigger time
+	go func() {
+		defer log.Info("Job streaming goroutine shutting down.")
+		defer s.jobWatcherWG.Done()
+		s.handleJobStreaming(ctx, errCh)
+	}()
+
+	// Wait for any errors from either goroutine
+	select {
+	case err := <-errCh:
+		return err
+	case <-ctx.Done():
+		s.jobWatcherWG.Wait()
+		log.Info("JobWatcher go routines exited successfully")
+		return ctx.Err()
+	}
+}
+
+func extractAppID(str string) (string, string, error) {
+	parts := strings.Split(str, "||")
+	if len(parts) != 2 {
+		return "", "", fmt.Errorf("invalid format: %s", str)
+	}
+	return parts[0], parts[1], nil
+}
+
+// handleJobStreaming handles the streaming of jobs to Dapr sidecars.
+func (s *Server) handleJobStreaming(ctx context.Context, errCh chan<- error) {
 	for {
 		select {
+		case job := <-s.jobTriggerChan:
+			log.Infof("Got the job at trigger time in the jobWatcher. Job: %+v", job)
+			appID, jobName, err := extractAppID(job.GetJob().GetName())
+			if err != nil {
+				log.Errorf("Error separating job name from appID: %v", err)
+				errCh <- err
+				// continue to send back job details if it errs on the name parsing
+				jobName = job.GetJob().GetName()
+				continue
+			}
+			jobUpdate := &schedulerv1pb.StreamJobResponse{
+				Job: &runtimev1pb.Job{
+					Name:     jobName,
+					Schedule: job.GetJob().GetSchedule(),
+					Data:     job.GetJob().GetData(),
+					// TODO: fill rest of fields, but do people really care about the ttl/repeat val returned?
+				},
+			}
+
+			namespace := job.GetNamespace()
+			// Pick a stream corresponding to the appID
+			stream, _, err := s.connectionPool.GetStreamAndContextForNSAppID(namespace + appID)
+			if err != nil {
+				log.Errorf("Error getting stream for appID: %v", err)
+				errCh <- err
+				continue
+			}
+			// Send the job update to the sidecar
+			if err := stream.Send(jobUpdate); err != nil {
+				log.Errorf("Error sending job at trigger time: %v", err)
+				errCh <- err
+			}
+		// shouldn't need below since sharing main ctx thread
+		case <-ctx.Done():
+			log.Info("Job streaming ctx done.")
+			return
+		}
+	}
+}
+
+// handleSidecarConnections handles the (client) sidecar connections and adds them to the connection pool.
+func (s *Server) handleSidecarConnections(ctx context.Context, errCh chan<- error) {
+	for {
+		select {
+		// shouldn't need below since sharing main ctx thread?
 		case <-ctx.Done():
 			log.Info("Job watcher shutting down. Clearing Sidecar connections.")
 			s.connectionPool.Clear()
-			return ctx.Err()
-		//case <-overallTimeout: // check: do we want this?
-		//	log.Error("Overall timeout waiting for any sidecar connection")
-		//	return fmt.Errorf("overall timeout waiting for any sidecar connection")
-		case connDetails := <-s.sidecarConnChan:
-			log.Infof("Adding a Sidecar connection to Scheduler for appID: %s.\n", connDetails.AppID)
-			nsAppID := connDetails.Namespace + connDetails.AppID
+			return
+		case conn := <-s.sidecarConnChan:
+			log.Infof("Adding a Sidecar connection to Scheduler for appID: %s.\n", conn.ConnDetails.AppID)
+			nsAppID := conn.ConnDetails.Namespace + conn.ConnDetails.AppID
 			// Add sidecar connection details to the connection pool
-			s.connectionPool.Add(nsAppID, connDetails)
+			s.connectionPool.Add(nsAppID, conn)
 
 			// Wait until reaching the minimum connection count
 			if err := s.connectionPool.WaitUntilReachingMinConns(ctx, nsAppID, s.minConnPerApp, time.Duration(s.maxTimeWaitForSidecars)*time.Second); err != nil {
 				// If there's an error waiting for minimum connection count
 				// remove the connection
-				log.Infof("Issue waiting for minimum Sidecar connections. Removing Sidecar connection for appID: %s.\n", connDetails.AppID)
-				s.connectionPool.Remove(nsAppID, connDetails)
-				return err
+				log.Infof("Issue waiting for minimum Sidecar connections. Removing Sidecar connection for appID: %s.\n", conn.ConnDetails.AppID)
+				s.connectionPool.Remove(nsAppID, conn)
+				errCh <- err
 			}
 		}
 	}
