@@ -17,7 +17,7 @@ var log = logger.NewLogger("dapr.runtime.scheduler")
 type Pool struct {
 	Lock             sync.RWMutex
 	NsAppIDPool      map[string]*AppIDPool
-	MinConnsPerAppID map[string]int
+	MaxConnsPerAppID int // future expand to diff conn count for diff appIDs?
 }
 
 // AppIDPool represents a pool of connections for a single appID.
@@ -35,21 +35,36 @@ type Connection struct {
 func (p *Pool) Add(nsAppID string, conn *Connection) {
 	p.Lock.Lock()
 	defer p.Lock.Unlock()
-	if id, ok := p.NsAppIDPool[nsAppID]; ok {
-		id.lock.Lock()
-		defer id.lock.Unlock()
-		id.connections = append(id.connections, &Connection{
-			ConnDetails: conn.ConnDetails,
-			Stream:      conn.Stream,
-		})
-	} else {
+
+	// Ensure the AppIDPool exists for the given nsAppID
+	if p.NsAppIDPool[nsAppID] == nil {
 		p.NsAppIDPool[nsAppID] = &AppIDPool{
-			connections: []*Connection{&Connection{
-				ConnDetails: conn.ConnDetails,
-				Stream:      conn.Stream,
-			}},
+			lock:        sync.RWMutex{},
+			connections: make([]*Connection, 0),
 		}
 	}
+
+	// Check if adding the connection would exceed the maximum connection count
+	if len(p.NsAppIDPool[nsAppID].connections) >= p.MaxConnsPerAppID {
+		log.Infof("Sufficient number of Sidecar connections to Scheduler reached. Not adding connection for namespace/appID: %s. Current connection count: %d\n", nsAppID, len(p.NsAppIDPool[nsAppID].connections))
+		return
+	}
+
+	// Check if the connection already exists in the pool
+	for _, existingConn := range p.NsAppIDPool[nsAppID].connections {
+		if existingConn.ConnDetails == conn.ConnDetails {
+			log.Infof("Not adding connection for namespace/appID: %s. Connection already exists.\n", nsAppID)
+			return
+		}
+	}
+
+	// Add the connection to the connections slice
+	p.NsAppIDPool[nsAppID].lock.Lock()
+	defer p.NsAppIDPool[nsAppID].lock.Unlock()
+	p.NsAppIDPool[nsAppID].connections = append(p.NsAppIDPool[nsAppID].connections, &Connection{
+		ConnDetails: conn.ConnDetails,
+		Stream:      conn.Stream,
+	})
 }
 
 // Remove removes a connection from the pool for a given namespace/appID.
@@ -70,20 +85,27 @@ func (p *Pool) Remove(nsAppID string, conn *Connection) {
 }
 
 // WaitUntilReachingMinConns waits until the minimum connection count (of sidecars) is reached for a given namespace/appID.
-func (p *Pool) WaitUntilReachingMinConns(ctx context.Context, nsAppID string, minConnPerApp int, maxWaitTime time.Duration) error {
+func (p *Pool) WaitUntilReachingMaxConns(ctx context.Context, nsAppID string, maxConnPerApp int, maxWaitTime time.Duration) error {
 	timeout := time.After(maxWaitTime)
 
 	for {
 		p.Lock.RLock()
-		currentConnCount := len(p.NsAppIDPool[nsAppID].connections)
+		appIDPool, ok := p.NsAppIDPool[nsAppID]
 		p.Lock.RUnlock()
+		if !ok {
+			return fmt.Errorf("no connections available for appID: %s", nsAppID)
+		}
+
+		appIDPool.lock.RLock()
+		currentConnCount := len(appIDPool.connections)
+		appIDPool.lock.RUnlock()
 
 		// We don't want all sidecars connecting to the scheduler, so return once we meet the min connection count.
 		// This also accounts for enabling us to NOT have downtime, as we are waiting for the user specified minimum
 		// connection count of sidecars -> schedulers.
-		if currentConnCount >= minConnPerApp {
+		if currentConnCount >= maxConnPerApp {
 			log.Infof("Sufficient number of Sidecar connections to Scheduler reached for namespace/appID: %s. Current connection count: %d", nsAppID, currentConnCount)
-			return nil // exit
+			return nil
 		}
 
 		// Check if the context is done
@@ -91,7 +113,7 @@ func (p *Pool) WaitUntilReachingMinConns(ctx context.Context, nsAppID string, mi
 		case <-ctx.Done():
 			return ctx.Err()
 		case <-timeout:
-			return fmt.Errorf("timeout waiting for minimum connection count")
+			return fmt.Errorf("timeout waiting to reach max sidecar connection count")
 		case <-time.After(maxWaitTime):
 			// Continue checking until the timeout or context is done
 		}
