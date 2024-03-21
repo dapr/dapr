@@ -17,6 +17,7 @@ import (
 	"context"
 	"strings"
 
+	"github.com/dapr/dapr/pkg/security"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
@@ -44,6 +45,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	}
 
 	// TODO: add validation on dueTime and ttl
+	jobMetadata := map[string]string{"app_id": a.AppID(), "namespace": security.CurrentNamespace()}
 
 	jobName := a.AppID() + "||" + inReq.GetJob().GetName()
 
@@ -56,8 +58,8 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 			DueTime:  inReq.GetJob().GetDueTime(),
 			Ttl:      inReq.GetJob().GetTtl(),
 		},
-		Namespace: "",  // TODO
-		Metadata:  nil, // TODO: this should generate key if jobStateStore is configured
+		Namespace: security.CurrentNamespace(), // TODO
+		Metadata:  jobMetadata,                 // TODO: this should generate key if jobStateStore is configured
 	}
 
 	// TODO: do something with following response?

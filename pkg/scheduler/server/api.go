@@ -16,14 +16,13 @@ package server
 import (
 	"context"
 	"fmt"
-	"strings"
-	"sync"
 
 	etcdcron "github.com/Scalingo/go-etcd-cron"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler"
+	"github.com/dapr/dapr/pkg/scheduler/connections"
 )
 
 func (s *Server) ConnectHost(context.Context, *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error) {
@@ -46,11 +45,16 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		DueTime:  req.GetJob().GetDueTime(), // TODO: figure out dueTime
 		TTL:      req.GetJob().GetTtl(),
 		Data:     req.GetJob().GetData(),
-		Metadata: req.GetMetadata(), // TODO: do I need this here?
+		Metadata: req.GetMetadata(), // TODO: do I need this here? yes for namespace lookup for connPool
 		Func: func(context.Context) error {
 			log.Infof("Triggering Job. fixing to send job to Sidecar. Job: %+v", req.GetJob())
+			triggeredJob := &schedulerv1pb.StreamJobResponse{
+				Job:       req.GetJob(),
+				Namespace: req.GetNamespace(),
+				Metadata:  req.GetMetadata(),
+			}
 
-			s.jobTriggerChan <- req.GetJob() // send job to be consumed and sent to sidecar from WatchJob()
+			s.jobTriggerChan <- triggeredJob // send job to be consumed and sent to sidecar from WatchJob()
 
 			// TODO: only call below if 'actor' type job
 			//innerErr := s.triggerJob(req.GetJob(), req.GetNamespace(), req.GetMetadata())
@@ -177,18 +181,10 @@ func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRe
 	return nil, fmt.Errorf("not implemented")
 }
 
-func extractAppID(str string) (string, error) {
-	parts := strings.Split(str, "||")
-	if len(parts) != 2 {
-		return "", fmt.Errorf("invalid format: %s", str)
-	}
-	return parts[1], nil
-}
-
 // WatchJob sends jobs to Dapr sidecars upon component changes.
 func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv1pb.Scheduler_WatchJobServer) error {
 	errCh := make(chan error)
-	ctx := stream.Context()
+
 	// use req details to add sidecar connection details so scheduler knows how many sidecars there are and
 	// maintains a conn pool
 
@@ -199,63 +195,22 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 		AppID:     req.AppId,
 	}
 
-	// Use a wait group to wait for all goroutines to finish
-	var wg sync.WaitGroup
-	defer wg.Wait() // Wait for all goroutines to finish when the function exits
-	// Increment the wait group before starting the goroutine
-	wg.Add(1)
+	conn := &connections.Connection{
+		ConnDetails: sidecarConnDetails,
+		Stream:      stream,
+	}
 
-	s.sidecarConnChan <- sidecarConnDetails
-	// TODO: probably add ctx to be passed to the go routine so if that is cancelled the go routine quits
-	// Handle job triggers, don't hang scheduler main thread
-	go func(ctx context.Context) {
-		//go func() {
-		defer wg.Done() // Decrement the wait group when this goroutine exits
-
-		defer close(errCh) // Close the error channel when the goroutine exits
-
-		// Listen for job triggers from the channel
-		for {
-			// Wait for a jobs being triggered
-			select {
-			case <-ctx.Done():
-				return // Exit the goroutine if the context is cancelled
-			case job := <-s.jobTriggerChan:
-				jobName, err := extractAppID(job.GetName())
-				if err != nil {
-					log.Errorf("Error separating job name from appID: %v", err)
-					errCh <- err
-					// continue to send back job details if it errs on the name parsing
-					jobName = job.GetName()
-					continue
-				}
-				jobUpdate := &schedulerv1pb.StreamJobResponse{
-					Job: &runtimev1pb.Job{
-						Name:     jobName,
-						Schedule: job.GetSchedule(),
-						Data:     job.GetData(),
-						// TODO: fill rest of fields, but do people really care about the ttl/repeat val returned?
-					},
-				}
-
-				// Send the job update to the sidecar
-				if err := stream.Send(jobUpdate); err != nil {
-					log.Errorf("Error sending job at trigger time: %v", err)
-					errCh <- err
-				}
-			}
-		}
-	}(ctx)
+	s.sidecarConnChan <- conn
 
 	// Wait for errors from the goroutine
 	select {
 	case err := <-errCh:
 		log.Infof("WatchJob stream closed from sidecar due to err. Removing Sidecar connection for sidecar: %s.\n", sidecarConnDetails.AppID)
-		s.connectionPool.Remove(req.Namespace+req.AppId, sidecarConnDetails)
+		s.connectionPool.Remove(req.Namespace+req.AppId, conn)
 		return err
-	case <-ctx.Done(): // sidecar closed stream
+	case <-stream.Context().Done(): // sidecar closed stream
 		log.Infof("WatchJob stream closed from sidecar due to ctx cancel. Removing Sidecar connection for sidecar: %s.\n", sidecarConnDetails.AppID)
-		s.connectionPool.Remove(req.Namespace+req.AppId, sidecarConnDetails)
+		s.connectionPool.Remove(req.Namespace+req.AppId, conn)
 		return nil
 	}
 }
