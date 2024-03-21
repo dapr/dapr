@@ -48,7 +48,8 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		Metadata: req.GetMetadata(), // TODO: do I need this here? yes for namespace lookup for connPool
 		Func: func(context.Context) error {
 			log.Infof("Triggering Job. fixing to send job to Sidecar. Job: %+v", req.GetJob())
-			triggeredJob := &schedulerv1pb.StreamJobResponse{
+
+			triggeredJob := &schedulerv1pb.ScheduleJobRequest{
 				Job:       req.GetJob(),
 				Namespace: req.GetNamespace(),
 				Metadata:  req.GetMetadata(),

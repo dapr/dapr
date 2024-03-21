@@ -76,7 +76,7 @@ type Server struct {
 	etcdClientPorts  map[string]string
 	cron             *etcdcron.Cron
 	readyCh          chan struct{}
-	jobTriggerChan   chan *schedulerv1pb.StreamJobResponse // used to trigger the WatchJob logic
+	jobTriggerChan   chan *schedulerv1pb.ScheduleJobRequest // used to trigger the WatchJob logic
 	jobWatcherWG     sync.WaitGroup
 
 	sidecarConnChan        chan *connections.Connection
@@ -111,7 +111,7 @@ func New(opts Options) *Server {
 		etcdClientPorts:  clientPorts,
 		dataDir:          opts.DataDir,
 		readyCh:          make(chan struct{}),
-		jobTriggerChan:   make(chan *schedulerv1pb.StreamJobResponse),
+		jobTriggerChan:   make(chan *schedulerv1pb.ScheduleJobRequest),
 		jobWatcherWG:     sync.WaitGroup{},
 
 		sidecarConnChan: make(chan *connections.Connection),
