@@ -52,12 +52,9 @@ type Manager struct {
 	Clients     []*Client
 	ConnDetails scheduler.SidecarConnDetails
 	Lock        sync.Mutex
-	LastUsedIdx int            // Track the index of the last used client
-	wg          sync.WaitGroup // Wait group for goroutine synchronization
+	LastUsedIdx int
+	wg          sync.WaitGroup
 }
-
-// for as many addresses as I have, create a client and maintain those client connections,
-// if 1 drops backoff & trigger reconnecting for all connections
 
 func NewManager(ctx context.Context, sched Scheduler) (*Manager, error) {
 	manager := &Manager{
@@ -69,7 +66,6 @@ func NewManager(ctx context.Context, sched Scheduler) (*Manager, error) {
 		},
 	}
 
-	// Create a client for each scheduler address
 	for _, address := range sched.Addresses {
 		conn, client, err := schedulerclient.New(ctx, address, sched.Sec)
 
@@ -85,23 +81,18 @@ func NewManager(ctx context.Context, sched Scheduler) (*Manager, error) {
 			secHandler: sched.Sec,
 		})
 	}
-	// close for loop
+
 	return manager, nil
 }
 
 // Run starts watching for job triggers from all scheduler clients.
-// func (m *Manager) Run(ctx context.Context) {
 func (m *Manager) Run(ctx context.Context) {
-	// Add the number of goroutines to the wait group
-	m.wg.Add(len(m.Clients)) // schedulers will go up and down, need to fix this logic to acct for that
+	m.wg.Add(len(m.Clients))
 
 	// Start a goroutine for each client to watch for job updates
 	for _, client := range m.Clients {
-		// Increment the wait group counter before starting the goroutine
-		//m.wg.Add(1)
-
 		go func(client *Client) {
-			defer m.wg.Done() // Decrement the wait group counter when the goroutine exits
+			defer m.wg.Done()
 			m.watchJob(ctx, client)
 		}(client)
 	}
@@ -116,7 +107,6 @@ func (m *Manager) watchJob(ctx context.Context, client *Client) {
 		Port:      int32(m.ConnDetails.Port),
 	}
 
-	// close the conn when watchJob exits
 	defer func() {
 		if err := client.conn.Close(); err != nil {
 			log.Errorf("Error closing connection: %v", err)
@@ -124,9 +114,9 @@ func (m *Manager) watchJob(ctx context.Context, client *Client) {
 	}()
 
 	backoffPolicy := backoff.NewExponentialBackOff()
-	backoffPolicy.MaxElapsedTime = 0                 // Retry indefinitely
-	backoffPolicy.InitialInterval = 30 * time.Second // Initial retry interval
-	backoffPolicy.MaxInterval = 5 * time.Minute      // Max interval after which retries are capped
+	backoffPolicy.MaxElapsedTime = 0 // Retry indefinitely
+	backoffPolicy.InitialInterval = 30 * time.Second
+	backoffPolicy.MaxInterval = 5 * time.Minute
 
 	err := backoff.Retry(func() error {
 		select {
@@ -148,71 +138,17 @@ func (m *Manager) watchJob(ctx context.Context, client *Client) {
 				default:
 					resp, err := stream.Recv()
 					if err != nil {
-						log.Errorf("Error while receiving job updates: %v. Retrying...\n", err)
+						log.Errorf("Error while receiving job triggers: %v. Retrying...\n", err)
 						return err // retryable error
 					}
-					log.Infof("Received response: %v", resp)
+					log.Infof("Received response: %v", resp) // TODO: Send resp back to apps
 				}
 			}
 		}
 	}, backoffPolicy)
 
 	if err != nil {
-		log.Errorf("Retry attempts exhausted. Closing connections and reconnecting.")
-		m.closeAndReconnect(ctx)
-	}
-	//
-	//for {
-	//	select {
-	//	case <-ctx.Done():
-	//		log.Infof("Context cancelled. Exiting watchJob goroutine.")
-	//		return
-	//	default:
-	//		stream, err := client.scheduler.WatchJob(ctx, streamReq)
-	//		if err != nil {
-	//			log.Errorf("Error while streaming with Scheduler: %v", err)
-	//			m.closeAndReconnect(ctx)
-	//			time.Sleep(5 * time.Second) // Sleep for 5 seconds before retrying
-	//			continue
-	//			//return
-	//		}
-	//
-	//		for {
-	//			select {
-	//			case <-ctx.Done():
-	//				log.Infof("Context cancelled. Exiting watchJob goroutine.")
-	//				return
-	//			default:
-	//				resp, err := stream.Recv() // TODO: look at resilency policies on daprd
-	//				if err != nil {
-	//					log.Errorf("Error while receiving job updates: %v", err)
-	//					break // Exit inner loop and retry the connection
-	//
-	//					//return // dont exit, backoff and retry conn
-	//				}
-	//				log.Infof("Received response: %v", resp)
-	//			}
-	//		}
-	//	}
-	//}
-}
-
-// closeAndReconnect closes all client connections and reconnects.
-func (m *Manager) closeAndReconnect(ctx context.Context) {
-	m.Lock.Lock()
-	defer m.Lock.Unlock()
-
-	for _, client := range m.Clients {
-		if err := client.conn.Close(); err != nil {
-			log.Errorf("Error closing connection: %v", err)
-		}
-		conn, schedulerClient, err := schedulerclient.New(ctx, client.address, client.secHandler)
-		if err != nil {
-			log.Errorf("Error creating scheduler client for address %s: %v", client.address, err)
-			continue
-		}
-		client.conn = conn
-		client.scheduler = schedulerClient
+		log.Errorf("Error from backoff retry to Scheduler. Likely ctx cancelled.")
 	}
 }
 
