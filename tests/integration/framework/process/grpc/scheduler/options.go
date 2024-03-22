@@ -34,7 +34,6 @@ type options struct {
 	getJobFn      func(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.GetJobResponse, error)
 	listJobFn     func(context.Context, *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error)
 	deleteJobFn   func(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error)
-	connectHostFn func(context.Context, *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error)
 }
 
 func WithSentry(sentry *sentry.Sentry) func(*options) {
@@ -70,11 +69,5 @@ func WithListJobsFn(fn func(ctx context.Context, request *schedulerv1pb.ListJobs
 func WithDeleteJobFn(fn func(ctx context.Context, request *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error)) func(*options) {
 	return func(o *options) {
 		o.deleteJobFn = fn
-	}
-}
-
-func WithConnectHostFn(fn func(ctx context.Context, request *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error)) func(*options) {
-	return func(o *options) {
-		o.connectHostFn = fn
 	}
 }

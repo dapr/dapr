@@ -86,7 +86,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 				getJobFn:      opts.getJobFn,
 				listJobFn:     opts.listJobFn,
 				deleteJobFn:   opts.deleteJobFn,
-				connectHostFn: opts.connectHostFn,
 			}
 
 			schedulerv1pb.RegisterSchedulerServer(s, srv)

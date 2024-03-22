@@ -19,7 +19,6 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	Scheduler_ConnectHost_FullMethodName = "/dapr.proto.scheduler.v1.Scheduler/ConnectHost"
 	Scheduler_ScheduleJob_FullMethodName = "/dapr.proto.scheduler.v1.Scheduler/ScheduleJob"
 	Scheduler_DeleteJob_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
 	Scheduler_GetJob_FullMethodName      = "/dapr.proto.scheduler.v1.Scheduler/GetJob"
@@ -31,8 +30,6 @@ const (
 //
 // For semantics around ctx use and closing/ending streaming RPCs, please refer to https://pkg.go.dev/google.golang.org/grpc/?tab=doc#ClientConn.NewStream.
 type SchedulerClient interface {
-	// ConnectHost is used by the daprd sidecar to connect to the scheduler service.
-	ConnectHost(ctx context.Context, in *ConnectHostRequest, opts ...grpc.CallOption) (*ConnectHostResponse, error)
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
 	ScheduleJob(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error)
 	// DeleteJob is used by the daprd sidecar to delete a job.
@@ -52,15 +49,6 @@ type schedulerClient struct {
 
 func NewSchedulerClient(cc grpc.ClientConnInterface) SchedulerClient {
 	return &schedulerClient{cc}
-}
-
-func (c *schedulerClient) ConnectHost(ctx context.Context, in *ConnectHostRequest, opts ...grpc.CallOption) (*ConnectHostResponse, error) {
-	out := new(ConnectHostResponse)
-	err := c.cc.Invoke(ctx, Scheduler_ConnectHost_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
 }
 
 func (c *schedulerClient) ScheduleJob(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error) {
@@ -135,8 +123,6 @@ func (x *schedulerWatchJobClient) Recv() (*StreamJobResponse, error) {
 // All implementations should embed UnimplementedSchedulerServer
 // for forward compatibility
 type SchedulerServer interface {
-	// ConnectHost is used by the daprd sidecar to connect to the scheduler service.
-	ConnectHost(context.Context, *ConnectHostRequest) (*ConnectHostResponse, error)
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
 	ScheduleJob(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error)
 	// DeleteJob is used by the daprd sidecar to delete a job.
@@ -154,9 +140,6 @@ type SchedulerServer interface {
 type UnimplementedSchedulerServer struct {
 }
 
-func (UnimplementedSchedulerServer) ConnectHost(context.Context, *ConnectHostRequest) (*ConnectHostResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ConnectHost not implemented")
-}
 func (UnimplementedSchedulerServer) ScheduleJob(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ScheduleJob not implemented")
 }
@@ -182,24 +165,6 @@ type UnsafeSchedulerServer interface {
 
 func RegisterSchedulerServer(s grpc.ServiceRegistrar, srv SchedulerServer) {
 	s.RegisterService(&Scheduler_ServiceDesc, srv)
-}
-
-func _Scheduler_ConnectHost_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConnectHostRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SchedulerServer).ConnectHost(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Scheduler_ConnectHost_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchedulerServer).ConnectHost(ctx, req.(*ConnectHostRequest))
-	}
-	return interceptor(ctx, in, info, handler)
 }
 
 func _Scheduler_ScheduleJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -302,10 +267,6 @@ var Scheduler_ServiceDesc = grpc.ServiceDesc{
 	ServiceName: "dapr.proto.scheduler.v1.Scheduler",
 	HandlerType: (*SchedulerServer)(nil),
 	Methods: []grpc.MethodDesc{
-		{
-			MethodName: "ConnectHost",
-			Handler:    _Scheduler_ConnectHost_Handler,
-		},
 		{
 			MethodName: "ScheduleJob",
 			Handler:    _Scheduler_ScheduleJob_Handler,

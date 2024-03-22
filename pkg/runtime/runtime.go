@@ -168,6 +168,7 @@ func newDaprRuntime(ctx context.Context,
 			return nil, err
 		}
 
+		// TODO: change addr to string and parse on ,
 		schedulerManager, err = runtimeScheduler.NewManager(ctx, runtimeScheduler.Scheduler{
 			Addresses:    []string{*runtimeConfig.schedulerAddress},
 			SidecarNS:    namespace,
@@ -181,7 +182,6 @@ func newDaprRuntime(ctx context.Context,
 		}
 
 		schedulerManager.Run(ctx)
-
 	}
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
