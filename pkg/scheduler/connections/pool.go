@@ -3,6 +3,7 @@ package connections
 import (
 	"context"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -58,7 +59,6 @@ func (p *Pool) Add(nsAppID string, conn *Connection) {
 		}
 	}
 
-	// Add the connection to the connections slice
 	p.NsAppIDPool[nsAppID].lock.Lock()
 	defer p.NsAppIDPool[nsAppID].lock.Unlock()
 	p.NsAppIDPool[nsAppID].connections = append(p.NsAppIDPool[nsAppID].connections, &Connection{
@@ -76,7 +76,6 @@ func (p *Pool) Remove(nsAppID string, conn *Connection) {
 		defer id.lock.Unlock()
 		for i, c := range id.connections {
 			if c.ConnDetails == conn.ConnDetails {
-				// Remove the connection and stream from the slice
 				id.connections = append(id.connections[:i], id.connections[i+1:]...)
 				break
 			}
@@ -84,7 +83,7 @@ func (p *Pool) Remove(nsAppID string, conn *Connection) {
 	}
 }
 
-// WaitUntilReachingMinConns waits until the minimum connection count (of sidecars) is reached for a given namespace/appID.
+// WaitUntilReachingMaxConns waits until the minimum connection count (of sidecars) is reached for a given namespace/appID.
 func (p *Pool) WaitUntilReachingMaxConns(ctx context.Context, nsAppID string, maxConnPerApp int, maxWaitTime time.Duration) error {
 	timeout := time.After(maxWaitTime)
 
@@ -100,9 +99,9 @@ func (p *Pool) WaitUntilReachingMaxConns(ctx context.Context, nsAppID string, ma
 		currentConnCount := len(appIDPool.connections)
 		appIDPool.lock.RUnlock()
 
-		// We don't want all sidecars connecting to the scheduler, so return once we meet the min connection count.
-		// This also accounts for enabling us to NOT have downtime, as we are waiting for the user specified minimum
-		// connection count of sidecars -> schedulers.
+		// We don't want all sidecars connecting to the scheduler, so return once we meet the max connection count.
+		// This also accounts for enabling us to NOT have downtime, as we are waiting for the user specified max
+		// connection count of sidecars per appID.
 		if currentConnCount >= maxConnPerApp {
 			log.Infof("Sufficient number of Sidecar connections to Scheduler reached for namespace/appID: %s. Current connection count: %d", nsAppID, currentConnCount)
 			return nil
@@ -134,10 +133,10 @@ func (p *Pool) Clear() {
 	p.NsAppIDPool = make(map[string]*AppIDPool)
 }
 
-// GetStreamAndContextForAppID returns a stream and its associated context corresponding to the given appID in a round-robin manner.
+// GetStreamAndContextForNSAppID returns a stream and its associated context corresponding to the given appID in a round-robin manner.
 func (p *Pool) GetStreamAndContextForNSAppID(nsAppID string) (schedulerv1pb.Scheduler_WatchJobServer, context.Context, error) {
-	p.Lock.Lock()
-	defer p.Lock.Unlock()
+	p.Lock.RLock()
+	defer p.Lock.RUnlock()
 
 	// Get the AppIDPool for the given appID
 	appIDPool, ok := p.NsAppIDPool[nsAppID]
@@ -145,9 +144,11 @@ func (p *Pool) GetStreamAndContextForNSAppID(nsAppID string) (schedulerv1pb.Sche
 		return nil, nil, fmt.Errorf("no connections available for appID: %s", nsAppID)
 	}
 
-	// Round-robin selection of connection
-	selectedConnection := appIDPool.connections[0]                                // Select the first connection
-	appIDPool.connections = append(appIDPool.connections[1:], selectedConnection) // Rotate the slice
+	appIDPool.lock.RLock()
+	defer appIDPool.lock.RUnlock()
+	// randomly select the appID connection to stream back to
+	//nolint:gosec // there is no need for a crypto secure rand.
+	selectedConnection := appIDPool.connections[rand.Intn(len(appIDPool.connections))]
 	ctx := selectedConnection.Stream.Context()
 
 	return selectedConnection.Stream, ctx, nil
