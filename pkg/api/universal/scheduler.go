@@ -45,7 +45,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	}
 
 	// TODO: add validation on dueTime and ttl
-	jobMetadata := map[string]string{"app_id": a.AppID(), "namespace": security.CurrentNamespace()}
+	jobMetadata := map[string]string{"appID": a.AppID(), "namespace": security.CurrentNamespace()}
 
 	jobName := a.AppID() + "||" + inReq.GetJob().GetName()
 

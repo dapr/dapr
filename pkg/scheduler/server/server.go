@@ -24,7 +24,6 @@ import (
 	"sync/atomic"
 	"time"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/scheduler/connections"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
@@ -298,7 +297,6 @@ func (s *Server) runJobWatcher(ctx context.Context) error {
 
 	errCh := make(chan error)
 
-	// Increment the wait group for each goroutine
 	s.jobWatcherWG.Add(2)
 
 	// Goroutine for handling sidecar connections
@@ -326,35 +324,18 @@ func (s *Server) runJobWatcher(ctx context.Context) error {
 	}
 }
 
-func extractAppID(str string) (string, string, error) {
-	parts := strings.Split(str, "||")
-	if len(parts) != 2 {
-		return "", "", fmt.Errorf("invalid format: %s", str)
-	}
-	return parts[0], parts[1], nil
-}
-
 // handleJobStreaming handles the streaming of jobs to Dapr sidecars.
 func (s *Server) handleJobStreaming(ctx context.Context, errCh chan<- error) {
 	for {
 		select {
 		case job := <-s.jobTriggerChan:
 			log.Infof("Got the job at trigger time in the jobWatcher. Job: %+v", job)
-			appID, jobName, err := extractAppID(job.GetJob().GetName())
-			if err != nil {
-				log.Errorf("Error separating job name from appID: %v", err)
-				errCh <- err
-				// continue to send back job details if it errs on the name parsing
-				jobName = job.GetJob().GetName()
-				continue
-			}
+			metadata := job.GetMetadata()
+			appID := metadata["appID"]
+
 			jobUpdate := &schedulerv1pb.StreamJobResponse{
-				Job: &runtimev1pb.Job{
-					Name:     jobName,
-					Schedule: job.GetJob().GetSchedule(),
-					Data:     job.GetJob().GetData(),
-					// TODO: fill rest of fields, but do people really care about the ttl/repeat val returned?
-				},
+				Data:     job.GetJob().GetData(),
+				Metadata: metadata,
 			}
 
 			namespace := job.GetNamespace()
@@ -370,7 +351,6 @@ func (s *Server) handleJobStreaming(ctx context.Context, errCh chan<- error) {
 				log.Errorf("Error sending job at trigger time: %v", err)
 				errCh <- err
 			}
-		// shouldn't need below since sharing main ctx thread
 		case <-ctx.Done():
 			log.Info("Job streaming ctx done.")
 			return
@@ -382,7 +362,6 @@ func (s *Server) handleJobStreaming(ctx context.Context, errCh chan<- error) {
 func (s *Server) handleSidecarConnections(ctx context.Context, errCh chan<- error) {
 	for {
 		select {
-		// shouldn't need below since sharing main ctx thread?
 		case <-ctx.Done():
 			log.Info("Job watcher shutting down. Clearing Sidecar connections.")
 			s.connectionPool.Clear()
@@ -390,8 +369,8 @@ func (s *Server) handleSidecarConnections(ctx context.Context, errCh chan<- erro
 		case conn := <-s.sidecarConnChan:
 			log.Infof("Adding a Sidecar connection to Scheduler for appID: %s.\n", conn.ConnDetails.AppID)
 			nsAppID := conn.ConnDetails.Namespace + conn.ConnDetails.AppID
-			// Add sidecar connection details to the connection pool
 
+			// Add sidecar connection details to the connection pool
 			s.connectionPool.Add(nsAppID, conn)
 
 			// Wait until reaching the max connection count

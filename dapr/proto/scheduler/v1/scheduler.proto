@@ -2,14 +2,13 @@ syntax = "proto3";
 
 package dapr.proto.scheduler.v1;
 
+import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "dapr/proto/runtime/v1/dapr.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
 
 service Scheduler {
-	// ConnectHost is used by the daprd sidecar to connect to the scheduler service.
-	rpc ConnectHost(ConnectHostRequest) returns (ConnectHostResponse) {}
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
 	rpc ScheduleJob(ScheduleJobRequest) returns (ScheduleJobResponse) {}
 	// DeleteJob is used by the daprd sidecar to delete a job.
@@ -36,25 +35,13 @@ message StreamJobRequest {
 }
 
 message StreamJobResponse {
-	// The job name to be triggered.
-	//	string job_name = 1;
-	// TODO probably just send job name & data
-	runtime.v1.Job job = 1;
-}
+	// Job data.
+	google.protobuf.Any data = 1;
 
-message ConnectHostRequest {
-	// The id of the application (app_id).
-	string app_id = 1;
-	// The namespace.
-	string namespace = 2;
-	// The hostname of the daprd sidecar.
-	string hostname = 3;
-	// The port of the daprd sidecar.
-	int32 port = 4;
-}
-
-message ConnectHostResponse {
-	// Empty as of now
+	// The metadata associated with the job.
+	// The sidecar will create the unique `key` for storing data in the state store and pass the generated `key` along to the scheduler service for data lookup upon ‘trigger’ time later on.
+	// The sidecar will also add metadata in order to know whether this job is registered for an actor. This is needed, as the routing mechanism for actors is different for the callback.
+	map<string,string> metadata = 2;
 }
 
 // UnregisterRequest is the message used by the daprd sidecar to unregister itself from the scheduler service.

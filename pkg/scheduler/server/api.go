@@ -25,10 +25,6 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/connections"
 )
 
-func (s *Server) ConnectHost(context.Context, *schedulerv1pb.ConnectHostRequest) (*schedulerv1pb.ConnectHostResponse, error) {
-	return nil, fmt.Errorf("not implemented")
-}
-
 // ScheduleJob is a placeholder method that needs to be implemented
 func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
 	select {
