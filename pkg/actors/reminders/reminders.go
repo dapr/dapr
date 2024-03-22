@@ -447,7 +447,6 @@ func (r *reminders) doDeleteReminder(ctx context.Context, actorType, actorID, na
 		}
 
 		// Save the partition in the database, in a transaction where we also save the metadata.
-		// Saving the metadata too avoids a race condition between an update and repartitioning.
 		stateMetadata := map[string]string{
 			metadataPartitionKey: databasePartitionKey,
 		}
@@ -457,11 +456,22 @@ func (r *reminders) doDeleteReminder(ctx context.Context, actorType, actorID, na
 		}
 		stateOperations := []state.TransactionalStateOperation{
 			partitionOp,
+		}
+		rErr = r.executeStateStoreTransaction(ctx, storeName, store, stateOperations, stateMetadata)
+		if rErr != nil {
+			return false, fmt.Errorf("error saving reminders partition: %w", rErr)
+		}
+
+		// Saving the metadata too avoids a race condition between an update and repartitioning.
+		stateMetadata = map[string]string{
+			metadataPartitionKey: constructCompositeKey("actors", actorType),
+		}
+		stateOperations = []state.TransactionalStateOperation{
 			r.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata),
 		}
 		rErr = r.executeStateStoreTransaction(ctx, storeName, store, stateOperations, stateMetadata)
 		if rErr != nil {
-			return false, fmt.Errorf("error saving reminders partition and metadata: %w", rErr)
+			return false, fmt.Errorf("error saving actor metadata: %w", rErr)
 		}
 
 		if r.metricsCollector != nil {
@@ -539,7 +549,6 @@ func (r *reminders) storeReminder(ctx context.Context, storeName string, store i
 		}
 
 		// Save the partition in the database, in a transaction where we also save the metadata.
-		// Saving the metadata too avoids a race condition between an update and repartitioning.
 		stateMetadata := map[string]string{
 			metadataPartitionKey: databasePartitionKey,
 		}
@@ -549,11 +558,22 @@ func (r *reminders) storeReminder(ctx context.Context, storeName string, store i
 		}
 		stateOperations := []state.TransactionalStateOperation{
 			partitionOp,
+		}
+		rErr = r.executeStateStoreTransaction(ctx, storeName, store, stateOperations, stateMetadata)
+		if rErr != nil {
+			return struct{}{}, fmt.Errorf("error saving reminders partition: %w", rErr)
+		}
+
+		// Saving the metadata too avoids a race condition between an update and repartitioning.
+		stateMetadata = map[string]string{
+			metadataPartitionKey: constructCompositeKey("actors", reminder.ActorType),
+		}
+		stateOperations = []state.TransactionalStateOperation{
 			r.saveActorTypeMetadataRequest(reminder.ActorType, actorMetadata, stateMetadata),
 		}
 		rErr = r.executeStateStoreTransaction(ctx, storeName, store, stateOperations, stateMetadata)
 		if rErr != nil {
-			return struct{}{}, fmt.Errorf("error saving reminders partition and metadata: %w", rErr)
+			return struct{}{}, fmt.Errorf("error saving actor metadata: %w", rErr)
 		}
 
 		if r.metricsCollector != nil {
@@ -969,12 +989,25 @@ func (r *reminders) migrateRemindersForActorType(ctx context.Context, storeName 
 	}
 
 	// Also create a request to save the new metadata, so the new "metadataID" becomes the new de facto referenced list for reminders
-	stateOperations[len(stateOperations)-1] = r.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata)
+	//stateOperations[len(stateOperations)-1] = r.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata)
 
 	// Perform all operations in a transaction
 	err = r.executeStateStoreTransaction(ctx, storeName, store, stateOperations, stateMetadata)
 	if err != nil {
 		return fmt.Errorf("failed to perform transaction to migrate records for actor type %s: %w", actorType, err)
+	}
+
+	// Create actor metadata with partitionKey based on constructCompositeKey
+	stateMetadata = map[string]string{
+		metadataPartitionKey: constructCompositeKey("actors", actorType),
+	}
+	stateOperations = []state.TransactionalStateOperation{
+		r.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata),
+	}
+	err = r.executeStateStoreTransaction(ctx, storeName, store, stateOperations, stateMetadata)
+
+	if err != nil {
+		return fmt.Errorf("failed to save actor metadata during migrating records for actor type %s: %w", actorType, err)
 	}
 
 	log.Warnf("Completed actor metadata record migration for actor type %s, new metadata ID = %s", actorType, actorMetadata.ID)
