@@ -269,10 +269,28 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	return *m.HTTP.IncreasedCardinality
 }
 
+// GetLatencyDistributionBuckets returns a []float64 to be used true for distribution latency buckets
+func (m MetricSpec) GetLatencyDistributionBuckets(log logger.Logger) []float64 {
+	var defaultLatencyDistribution = []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
+	if m.HTTP == nil || m.HTTP.LatencyDistributionBuckets == nil {
+		// The default is defaultLatencyDistribution
+		log.Infof("Using default latency distribution buckets: %v", defaultLatencyDistribution)
+		return defaultLatencyDistribution
+	}
+	log.Infof("Using custom latency distribution buckets: %v", *m.HTTP.LatencyDistributionBuckets)
+	floats := make([]float64, len(*m.HTTP.LatencyDistributionBuckets))
+	for i, v := range *m.HTTP.LatencyDistributionBuckets {
+		floats[i] = float64(v)
+	}
+	return floats
+}
+
 // MetricHTTP defines configuration for metrics for the HTTP server
 type MetricHTTP struct {
 	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
+	// Latency distribution buckets. If not set, the default buckets are used.
+	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty"`
 }
 
 // MetricsRu le defines configuration options for a metric.

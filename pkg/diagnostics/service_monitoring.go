@@ -209,7 +209,7 @@ func newServiceMetrics() *serviceMetrics {
 }
 
 // Init initialize metrics views for metrics.
-func (s *serviceMetrics) Init(appID string) error {
+func (s *serviceMetrics) Init(appID string, latencyDistribution *view.Aggregation) error {
 	s.appID = appID
 	s.enabled = true
 	return view.Register(
@@ -243,7 +243,7 @@ func (s *serviceMetrics) Init(appID string) error {
 		diagUtils.NewMeasureView(s.serviceInvocationRequestReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationResponseSentTotal, []tag.Key{appIDKey, destinationAppIDKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, statusKey, typeKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedLatency, []tag.Key{appIDKey, sourceAppIDKey, statusKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedLatency, []tag.Key{appIDKey, sourceAppIDKey, statusKey}, latencyDistribution),
 	)
 }
 

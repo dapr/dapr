@@ -17,6 +17,8 @@ func TestRegexRulesSingle(t *testing.T) {
 	const statName = "test_stat_regex"
 	methodKey := tag.MustNewKey("method")
 	testStat := stats.Int64(statName, "Stat used in unit test", stats.UnitDimensionless)
+	latencyDistributionBuckets := []float64{5, 50, 500, 5_000}
+	latencyDistribution := view.Distribution(latencyDistributionBuckets...)
 
 	InitMetrics("testAppId2", "", []config.MetricsRule{
 		{
@@ -31,7 +33,7 @@ func TestRegexRulesSingle(t *testing.T) {
 				},
 			},
 		},
-	}, false)
+	}, false, latencyDistributionBuckets)
 
 	t.Run("single regex rule applied", func(t *testing.T) {
 		view.Register(
@@ -62,7 +64,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		})
 
 		s := newGRPCMetrics()
-		s.Init("test")
+		s.Init("test", latencyDistribution)
 
 		stats.RecordWithTags(context.Background(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/siths/123"),
@@ -85,7 +87,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		})
 
 		s := newGRPCMetrics()
-		s.Init("test")
+		s.Init("test", latencyDistribution)
 
 		stats.RecordWithTags(context.Background(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123"),

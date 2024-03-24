@@ -222,6 +222,9 @@ type MetricHTTP struct {
 	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
 	// +optional
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty"`
+	// Latency distribution buckets. If not set, the default buckets are used.
+	// +optional
+	LatencyDistributionBuckets []int `json:"latencyDistributionBuckets,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.
