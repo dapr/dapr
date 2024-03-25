@@ -19,11 +19,3 @@ spec:
     port: {{ .Values.ports.port }}
     targetPort: {{ .Values.ports.targetPort }}
     name: grpc
-# Added for backwards compatibility where previous clients will attempt to
-# connect on port 80.
-{{ if (ne (int .Values.ports.port) 80) }}
-  - protocol: TCP
-    port: 80
-    targetPort: {{ .Values.ports.targetPort }}
-    name: legacy
-{{ end }}
