@@ -34,30 +34,18 @@ index d6b39a535..739d0481c 100644
 +		o.controlPlaneTrustDomain = &trustDomain
 +	}
 +}
-diff --git a/tests/integration/suite/daprd/hotreload/operator/informer/basic.go b/tests/integration/suite/daprd/hotreload/operator/informer/basic.go
-index a37051644..4c6908a17 100644
---- a/tests/integration/suite/daprd/hotreload/operator/informer/basic.go
-+++ b/tests/integration/suite/daprd/hotreload/operator/informer/basic.go
-@@ -99,6 +99,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
- 		daprd.WithConfigs("daprsystem"),
- 		daprd.WithSentryAddress(sentry.Address()),
- 		daprd.WithControlPlaneAddress(b.operator.Address()),
+diff --git a/tests/integration/suite/daprd/hotreload/operator/informer.go b/tests/integration/suite/daprd/hotreload/operator/informer.go
+index 1af786e19..b8b13652f 100644
+--- a/tests/integration/suite/daprd/hotreload/operator/informer.go
++++ b/tests/integration/suite/daprd/hotreload/operator/informer.go
+@@ -105,6 +105,7 @@ func (i *informer) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithExecOptions(exec.WithEnvVars(t,
+ 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+ 		)),
 +		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
- 		daprd.WithDisableK8sSecretStore(true),
- 		daprd.WithEnableMTLS(true),
- 		daprd.WithNamespace("default"),
-diff --git a/tests/integration/suite/daprd/hotreload/operator/informer/reconnect/components.go b/tests/integration/suite/daprd/hotreload/operator/informer/reconnect/components.go
-index 9ae9ac671..2689042ac 100644
---- a/tests/integration/suite/daprd/hotreload/operator/informer/reconnect/components.go
-+++ b/tests/integration/suite/daprd/hotreload/operator/informer/reconnect/components.go
-@@ -101,6 +101,7 @@ func (c *components) Setup(t *testing.T) []framework.Option {
- 		daprd.WithConfigs("daprsystem"),
- 		daprd.WithSentryAddress(sentry.Address()),
- 		daprd.WithControlPlaneAddress(c.operator1.Address()),
-+		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
- 		daprd.WithDisableK8sSecretStore(true),
- 		daprd.WithEnableMTLS(true),
- 		daprd.WithNamespace("default"),
+ 	)
+ 
+ 	return []framework.Option{
 diff --git a/tests/integration/suite/healthz/operator.go b/tests/integration/suite/healthz/operator.go
 index bcb188e10..7daf69f9e 100644
 --- a/tests/integration/suite/healthz/operator.go
