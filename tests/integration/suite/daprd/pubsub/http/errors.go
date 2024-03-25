@@ -47,14 +47,14 @@ const (
 )
 
 func init() {
-	suite.Register(new(standardizedErrors))
+	suite.Register(new(errorcodes))
 }
 
-type standardizedErrors struct {
+type errorcodes struct {
 	daprd *daprd.Daprd
 }
 
-func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
+func (e *errorcodes) Setup(t *testing.T) []framework.Option {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping unix socket based test on windows")
 	}
@@ -126,7 +126,7 @@ spec:
 	}
 }
 
-func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
+func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	httpClient := util.HTTPClient(t)
