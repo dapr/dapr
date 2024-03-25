@@ -81,7 +81,8 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.PlacementAddress, "placement-address", "", "Addresses for Dapr Actor Placement service")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
 	// TODO: make the below default to 3 after testing
-	fs.IntVar(&opts.MaxConnsPerAppID, "max-conns-per-appid", 1, "The minimum number of connections per appID for the job triggers to the Sidecar from the Scheduler")
+	// TODO: Cassie keep or rm the following 2 vars pending load tests
+	fs.IntVar(&opts.MaxConnsPerAppID, "max-conns-per-appid", -1, "The max number of connections per appID for the job triggers to the Sidecar from the Scheduler")
 	fs.IntVar(&opts.MaxTimeWaitForSidecars, "max-time-wait-for-sidecars", 30, "The maximum amount of time, in seconds, the Scheduler will wait for the Sidecars to be brought up")
 
 	fs.StringVar(&opts.EtcdID, "id", "dapr-scheduler-server-0", "Scheduler server ID")

@@ -373,13 +373,17 @@ func (s *Server) handleSidecarConnections(ctx context.Context, errCh chan<- erro
 			// Add sidecar connection details to the connection pool
 			s.connectionPool.Add(nsAppID, conn)
 
-			// Wait until reaching the max connection count
-			if err := s.connectionPool.WaitUntilReachingMaxConns(ctx, nsAppID, s.maxConnPerApp, time.Duration(s.maxTimeWaitForSidecars)*time.Second); err != nil {
-				// If there's an error waiting for minimum connection count
-				// remove the connection
-				log.Infof("Issue waiting for minimum Sidecar connections. Removing Sidecar connection for appID: %s.\n", conn.ConnDetails.AppID)
-				s.connectionPool.Remove(nsAppID, conn)
-				errCh <- err
+			// only wait until reaching max conns if that is set explicitly
+			// TODO: Cassie pending load tests keep or rm the s.maxConnPerApp && s.maxTimeWaitForSidecars
+			if s.maxConnPerApp != -1 {
+				// Wait until reaching the max connection count
+				if err := s.connectionPool.WaitUntilReachingMaxConns(ctx, nsAppID, s.maxConnPerApp, time.Duration(s.maxTimeWaitForSidecars)*time.Second); err != nil {
+					// If there's an error waiting for minimum connection count
+					// remove the connection
+					log.Infof("Issue waiting for minimum Sidecar connections. Removing Sidecar connection for appID: %s.\n", conn.ConnDetails.AppID)
+					s.connectionPool.Remove(nsAppID, conn)
+					errCh <- err
+				}
 			}
 		}
 	}
