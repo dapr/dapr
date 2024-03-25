@@ -27,14 +27,17 @@ type options struct {
 	initialClusterPorts []int
 	etcdClientPorts     []string
 
-	logLevel         string
-	port             int
-	healthzPort      int
-	metricsPort      int
-	tlsEnabled       bool
-	sentryAddress    *string
-	trustAnchorsFile *string
-	listenAddress    *string
+	logLevel               string
+	port                   int
+	healthzPort            int
+	metricsPort            int
+	tlsEnabled             bool
+	sentryAddress          *string
+	trustAnchorsFile       *string
+	listenAddress          *string
+	placementAddress       *string
+	maxConnsPerAppID       int
+	maxTimeWaitForSidecars int
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -110,8 +113,26 @@ func WithTrustAnchorsFile(file string) Option {
 	}
 }
 
+func WithPlacementAddress(placementAddress string) Option {
+	return func(o *options) {
+		o.placementAddress = &placementAddress
+	}
+}
+
 func WithListenAddress(address string) Option {
 	return func(o *options) {
 		o.listenAddress = &address
+	}
+}
+
+func WithMaxConnsPerAppID(max int) Option {
+	return func(o *options) {
+		o.maxConnsPerAppID = max
+	}
+}
+
+func WithMaxTimeWaitForSidecars(waitTime int) Option {
+	return func(o *options) {
+		o.maxTimeWaitForSidecars = waitTime
 	}
 }

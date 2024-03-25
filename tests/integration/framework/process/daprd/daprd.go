@@ -59,7 +59,7 @@ type Daprd struct {
 	publicPort       int
 	metricsPort      int
 	profilePort      int
-	schedulerAddress *string
+	schedulerAddress string
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
@@ -143,8 +143,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.blockShutdownDuration != nil {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
-	if opts.schedulerAddress != nil {
-		args = append(args, "--scheduler-host-address="+*opts.schedulerAddress)
+	if len(opts.schedulerAddresses) > 0 {
+		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
 	}
 
 	ns := "default"
@@ -168,7 +168,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       opts.publicPort,
 		metricsPort:      opts.metricsPort,
 		profilePort:      opts.profilePort,
-		schedulerAddress: opts.schedulerAddress,
+		schedulerAddress: strings.Join(opts.schedulerAddresses, ","),
 	}
 }
 

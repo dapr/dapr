@@ -55,7 +55,7 @@ func (j *jobs) Setup(t *testing.T) []framework.Option {
 	)
 
 	j.daprd = daprd.New(t,
-		daprd.WithSchedulerAddress(j.scheduler.Address()),
+		daprd.WithSchedulerAddresses(j.scheduler.Address()),
 	)
 
 	fp.Free(t)

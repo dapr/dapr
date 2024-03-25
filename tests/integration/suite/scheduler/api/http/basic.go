@@ -44,7 +44,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	b.scheduler = scheduler.New(t)
 
 	b.daprd = daprd.New(t,
-		daprd.WithSchedulerAddress(b.scheduler.Address()),
+		daprd.WithSchedulerAddresses(b.scheduler.Address()),
 	)
 
 	return []framework.Option{

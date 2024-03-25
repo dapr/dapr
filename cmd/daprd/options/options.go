@@ -64,7 +64,7 @@ type Options struct {
 	DaprBlockShutdownDuration    *time.Duration
 	ActorsService                string
 	RemindersService             string
-	SchedulerAddress             *string
+	SchedulerAddress             string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
 	AppHealthProbeTimeout        int
@@ -249,7 +249,7 @@ func New(origArgs []string) (*Options, error) {
 	}
 
 	if fs.Changed("scheduler-host-address") {
-		opts.SchedulerAddress = &opts.schedulerAddressFlag
+		opts.SchedulerAddress = opts.schedulerAddressFlag
 	}
 
 	return &opts, nil

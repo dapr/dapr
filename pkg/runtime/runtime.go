@@ -168,9 +168,19 @@ func newDaprRuntime(ctx context.Context,
 			return nil, err
 		}
 
-		// TODO: change addr to string and parse on ,
+		var hostPorts []string
+		if strings.Contains(runtimeConfig.schedulerAddress, ",") {
+			parts := strings.Split(runtimeConfig.schedulerAddress, ",")
+			for _, part := range parts {
+				hostPort := strings.TrimSpace(part)
+				hostPorts = append(hostPorts, hostPort)
+			}
+		} else {
+			hostPorts = []string{runtimeConfig.schedulerAddress}
+		}
+
 		schedulerManager, err = runtimeScheduler.NewManager(ctx, runtimeScheduler.Scheduler{
-			Addresses:    []string{*runtimeConfig.schedulerAddress},
+			Addresses:    hostPorts,
 			SidecarNS:    namespace,
 			SidecarAddr:  host,
 			SidecarPort:  runtimeConfig.apiGRPCPort,
@@ -212,7 +222,7 @@ func newDaprRuntime(ctx context.Context,
 		Namespace:        namespace,
 		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
-		SchedulerEnabled: runtimeConfig.schedulerAddress != nil,
+		SchedulerEnabled: runtimeConfig.schedulerAddress != "",
 		Registry:         runtimeConfig.registry,
 		ComponentStore:   compStore,
 		Meta:             meta,

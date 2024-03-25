@@ -20,10 +20,11 @@ import (
 )
 
 type server struct {
-	scheduleJobFn func(ctx context.Context, request *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)
+	scheduleJobFn func(context.Context, *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)
 	getJobFn      func(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.GetJobResponse, error)
 	listJobFn     func(context.Context, *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error)
 	deleteJobFn   func(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error)
+	watchJobFn    func(*schedulerv1pb.StreamJobRequest, schedulerv1pb.Scheduler_WatchJobServer) error
 }
 
 func (s *server) ScheduleJob(ctx context.Context, request *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
@@ -52,4 +53,11 @@ func (s *server) DeleteJob(ctx context.Context, request *schedulerv1pb.JobReques
 		return s.deleteJobFn(ctx, request)
 	}
 	return nil, nil
+}
+
+func (s *server) WatchJob(request *schedulerv1pb.StreamJobRequest, srv schedulerv1pb.Scheduler_WatchJobServer) error {
+	if s.watchJobFn != nil {
+		return s.watchJobFn(request, srv)
+	}
+	return nil
 }

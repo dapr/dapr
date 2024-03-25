@@ -27,10 +27,12 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -42,6 +44,7 @@ func init() {
 
 // notls tests scheduler can find quorum with tls disabled.
 type notls struct {
+	daprd      *daprd.Daprd
 	schedulers []*scheduler.Scheduler
 }
 
@@ -64,9 +67,14 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 		scheduler.New(t, append(opts, scheduler.WithID("scheduler2"), scheduler.WithEtcdClientPorts(clientPorts))...),
 	}
 
+	schedulerAddresses := []string{n.schedulers[0].Address(), n.schedulers[1].Address(), n.schedulers[2].Address()}
+	n.daprd = daprd.New(t,
+		daprd.WithSchedulerAddresses(strings.Join(schedulerAddresses, ",")),
+	)
+
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(n.schedulers[0], n.schedulers[1], n.schedulers[2]),
+		framework.WithProcesses(n.schedulers[0], n.schedulers[1], n.schedulers[2], n.daprd),
 	}
 }
 
@@ -74,6 +82,9 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	n.schedulers[0].WaitUntilRunning(t, ctx)
 	n.schedulers[1].WaitUntilRunning(t, ctx)
 	n.schedulers[2].WaitUntilRunning(t, ctx)
+
+	// this is needed since the scheduler streams the job at trigger time back to the sidecar
+	n.daprd.WaitUntilRunning(t, ctx)
 
 	// Schedule job to random scheduler instance
 	chosenScheduler := n.schedulers[rand.Intn(3)]
@@ -88,14 +99,19 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 	client := schedulerv1pb.NewSchedulerClient(conn)
 
-	jobName := "appID||testJob"
+	appID := n.daprd.AppID()
+
+	jobName := appID + "||testJob"
 	req := &schedulerv1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     jobName,
-			Schedule: "@every 1s",
+			Schedule: "@every 2s",
+			Data: &anypb.Any{
+				TypeUrl: "type.googleapis.com/google.type.Expr",
+			},
 		},
 		Namespace: "default",
-		Metadata:  nil,
+		Metadata:  map[string]string{"appID": appID, "namespace": n.daprd.Namespace()},
 	}
 
 	_, err = client.ScheduleJob(ctx, req)
@@ -108,7 +124,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	require.NotEmptyf(t, chosenSchedulerPort, "chosenSchedulerPort should not be empty")
 
 	chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
-	checkKeysForAppID(t, chosenSchedulerEtcdKeys)
+	checkKeysForAppID(t, chosenSchedulerEtcdKeys, appID)
 
 	// ensure data exists on ALL schedulers
 	for i := 0; i < 3; i++ {
@@ -118,18 +134,20 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		require.NotEmptyf(t, diffSchedulerPort, "diffSchedulerPort should not be empty")
 
 		diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
-		checkKeysForAppID(t, diffSchedulerEtcdKeys)
+		checkKeysForAppID(t, diffSchedulerEtcdKeys, appID)
 	}
 }
 
-func checkKeysForAppID(t *testing.T, keys []*mvccpb.KeyValue) {
+func checkKeysForAppID(t *testing.T, keys []*mvccpb.KeyValue, appID string) {
 	for _, kv := range keys {
-		if strings.Contains(string(kv.Key), "etcd_cron/appid__testjob") {
-			require.True(t, true, "Key exists: 'etcd_cron/appid__testjob'")
+		// Checking the key value before the appID and after appID
+		// since the cron lib changes the - in the appID to _
+		if strings.Contains(string(kv.Key), "etcd_cron/") && strings.Contains(string(kv.Key), "__testjob") {
+			// If the key exists, the assertion should pass
 			return
 		}
 	}
-	require.Fail(t, "Key not found: 'etcd_cron/appid__testjob'")
+	require.Fail(t, fmt.Sprintf("Key not found for appID: %s", appID))
 }
 
 func getEtcdKeys(t *testing.T, port string) []*mvccpb.KeyValue {
