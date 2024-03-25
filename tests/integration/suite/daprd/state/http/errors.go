@@ -397,7 +397,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		storeName := "mystore-pluggable-querier"
 
 		e.queryErr = func(*testing.T) error {
-			return apierrors.StateStoreQueryFailed(storeName, "this is a custom error string")
+			return apierrors.StateStore(storeName).QueryFailed("this is a custom error string")
 		}
 
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/state/%s/query", e.daprd.HTTPPort(), storeName)

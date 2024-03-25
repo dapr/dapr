@@ -16,12 +16,8 @@ package universal
 import (
 	"context"
 	"encoding/json"
-	"net/http"
 	"time"
 
-	"google.golang.org/grpc/codes"
-
-	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/api/errors"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
@@ -29,19 +25,18 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	kiterrors "github.com/dapr/kit/errors"
 )
 
 func (a *Universal) GetStateStore(name string) (state.Store, error) {
 	if a.compStore.StateStoresLen() == 0 {
-		err := errors.NotConfigured(name, string(contribMetadata.StateStoreType)+" store", nil, codes.FailedPrecondition, http.StatusInternalServerError, "ERR_STATE_STORE_NOT_CONFIGURED", kiterrors.CodePrefixStateStore+kiterrors.CodeNotConfigured)
+		err := errors.StateStore(name).NotConfigured("")
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	stateStore, ok := a.compStore.GetStateStore(name)
 	if !ok {
-		err := errors.NotFound(name, string(contribMetadata.StateStoreType)+" store", nil, codes.InvalidArgument, http.StatusBadRequest, "ERR_STATE_STORE_NOT_FOUND", kiterrors.CodePrefixStateStore+kiterrors.CodeNotFound)
+		err := errors.StateStore(name).NotFound("")
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -58,20 +53,20 @@ func (a *Universal) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryS
 
 	querier, ok := store.(state.Querier)
 	if !ok {
-		err = errors.StateStoreQueryUnsupported(in.GetStoreName())
+		err = errors.StateStore(in.GetStoreName()).QueryUnsupported()
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	if encryption.EncryptedStateStore(in.GetStoreName()) {
-		err = errors.StateStoreQueryFailed(in.GetStoreName(), "cannot query encrypted store")
+		err = errors.StateStore(in.GetStoreName()).QueryFailed("cannot query encrypted store")
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	var req state.QueryRequest
 	if err = json.Unmarshal([]byte(in.GetQuery()), &req.Query); err != nil {
-		err = errors.StateStoreQueryFailed(in.GetStoreName(), "failed to parse JSON query body: "+err.Error())
+		err = errors.StateStore(in.GetStoreName()).QueryFailed("failed to parse JSON query body: " + err.Error())
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -90,7 +85,7 @@ func (a *Universal) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryS
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.StateQuery, err == nil, elapsed)
 
 	if err != nil {
-		err = errors.StateStoreQueryFailed(in.GetStoreName(), err.Error())
+		err = errors.StateStore(in.GetStoreName()).QueryFailed(err.Error())
 		a.logger.Debug(err)
 		return nil, err
 	}

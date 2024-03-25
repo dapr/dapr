@@ -1,3 +1,4 @@
+
 /*
 Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
@@ -54,7 +55,6 @@ func NotConfigured(name string, componentType string, metadata map[string]string
 		WithErrorInfo(reason, metadata).
 		Build()
 }
-
 func Empty(name string, metadata map[string]string, reason string) error {
 	message := name + " is empty"
 	return kiterrors.NewBuilder(
