@@ -149,9 +149,20 @@ type MTLSSpec struct {
 	// +optional
 	WorkloadCertTTL *string `json:"workloadCertTTL,omitempty"`
 	// +optional
-	AllowedClockSkew        *string `json:"allowedClockSkew,omitempty"`
-	SentryAddress           string  `json:"sentryAddress"`
-	ControlPlaneTrustDomain string  `json:"controlPlaneTrustDomain"`
+	AllowedClockSkew *string `json:"allowedClockSkew,omitempty"`
+
+	// +optional
+	SentryAddress string `json:"sentryAddress"`
+
+	// +optional
+	ControlPlaneTrustDomain string `json:"controlPlaneTrustDomain"`
+
+	// +optional
+	// MetadataAuthorizedIDs is a list of SPIFFE client IDs that are authorized
+	// to access all Dapr metadata APIs. Is appended to the list of authorized
+	// clients specified in the Dapr CLI flag --dapr-metadata-authorized-ids.
+	MetadataAuthorizedIDs []string `json:"metadataAuthorizedIDs,omitempty"`
+
 	// Additional token validators to use.
 	// When Dapr is running in Kubernetes mode, this is in addition to the built-in "kubernetes" validator.
 	// In self-hosted mode, enabling a custom validator will disable the built-in "insecure" validator.

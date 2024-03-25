@@ -59,6 +59,8 @@ type Options struct {
 	ProfilePort                  string
 	DaprInternalGRPCPort         string
 	DaprPublicPort               string
+	DaprMetadataPort             string
+	DaprMetadataAuthorizedIDs    []string
 	AppPort                      string
 	DaprGracefulShutdownSeconds  int
 	DaprBlockShutdownDuration    *time.Duration
@@ -116,7 +118,9 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr")
 	fs.StringVar(&opts.DaprHTTPPort, "dapr-http-port", strconv.Itoa(runtime.DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
 	fs.StringVar(&opts.DaprAPIListenAddresses, "dapr-listen-addresses", runtime.DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
-	fs.StringVar(&opts.DaprPublicPort, "dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
+	fs.StringVar(&opts.DaprPublicPort, "dapr-public-port", "", "Public port for Dapr Health to listen on")
+	fs.StringVar(&opts.DaprMetadataPort, "dapr-metadata-port", "", "Metadata port for Dapr API to listen on")
+	fs.StringSliceVar(&opts.DaprMetadataAuthorizedIDs, "dapr-metadata-authorized-ids", nil, "SPIFFE IDs that are authorized to access the metadata API. Ignored when mTLS is disabled")
 	fs.StringVar(&opts.DaprAPIGRPCPort, "dapr-grpc-port", strconv.Itoa(runtime.DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	fs.StringVar(&opts.DaprInternalGRPCPort, "dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
 	fs.StringVar(&opts.AppPort, "app-port", "", "The port the application is listening on")

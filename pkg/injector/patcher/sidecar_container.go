@@ -66,6 +66,8 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		"--dapr-internal-grpc-port", strconv.FormatInt(int64(c.SidecarInternalGRPCPort), 10),
 		"--dapr-listen-addresses", c.SidecarListenAddresses,
 		"--dapr-public-port", strconv.FormatInt(int64(c.SidecarPublicPort), 10),
+		"--dapr-metadata-port", strconv.FormatInt(int64(c.SidecarMetadataPort), 10),
+		"--dapr-metadata-authorized-ids", strings.Join(c.SidecarMetadataAuthorizedIDs, ","),
 		"--app-id", c.GetAppID(),
 		"--app-protocol", c.AppProtocol,
 		"--log-level", c.LogLevel,

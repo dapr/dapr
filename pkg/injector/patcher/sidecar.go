@@ -60,6 +60,9 @@ type SidecarConfig struct {
 	SidecarInternalGRPCPort     int32 `default:"50002"`
 	SidecarPublicPort           int32 `default:"3501"`
 
+	SidecarMetadataPort          int32 `default:"3502"`
+	SidecarMetadataAuthorizedIDs []string
+
 	Enabled                             bool    `annotation:"dapr.io/enabled"`
 	AppPort                             int32   `annotation:"dapr.io/app-port"`
 	Config                              string  `annotation:"dapr.io/config"`
