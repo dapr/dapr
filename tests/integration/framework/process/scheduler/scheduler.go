@@ -39,15 +39,18 @@ type Scheduler struct {
 	freeport *util.FreePort
 	running  atomic.Bool
 
-	port        int
-	healthzPort int
-	metricsPort int
-	dataDir     string
+	port             int
+	healthzPort      int
+	metricsPort      int
+	placementAddress string
 
-	id                  string
-	initialCluster      string
-	initialClusterPorts []int
-	etcdClientPorts     map[string]string
+	dataDir                string
+	id                     string
+	initialCluster         string
+	initialClusterPorts    []int
+	etcdClientPorts        map[string]string
+	maxConnsPerAppID       int
+	maxTimeWaitForSidecars int
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
@@ -58,14 +61,16 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	fp := util.ReservePorts(t, 5)
 	opts := options{
-		id:                  uid.String(),
-		logLevel:            "info",
-		port:                fp.Port(t, 0),
-		healthzPort:         fp.Port(t, 1),
-		metricsPort:         fp.Port(t, 2),
-		initialCluster:      uid.String() + "=http://localhost:" + strconv.Itoa(fp.Port(t, 3)),
-		initialClusterPorts: []int{fp.Port(t, 3)},
-		etcdClientPorts:     []string{uid.String() + "=" + strconv.Itoa(fp.Port(t, 4))},
+		id:                     uid.String(),
+		logLevel:               "debug",
+		port:                   fp.Port(t, 0),
+		healthzPort:            fp.Port(t, 1),
+		metricsPort:            fp.Port(t, 2),
+		initialCluster:         uid.String() + "=http://localhost:" + strconv.Itoa(fp.Port(t, 3)),
+		initialClusterPorts:    []int{fp.Port(t, 3)},
+		etcdClientPorts:        []string{uid.String() + "=" + strconv.Itoa(fp.Port(t, 4))},
+		maxConnsPerAppID:       1,
+		maxTimeWaitForSidecars: 30,
 	}
 
 	for _, fopt := range fopts {
@@ -87,6 +92,8 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
 		"--etcd-data-dir=" + tmpDir,
 		"--etcd-client-ports=" + strings.Join(opts.etcdClientPorts, ","),
+		"max-conns-per-appid=" + strconv.Itoa(opts.maxConnsPerAppID),
+		"max-time-wait-for-sidecars=" + strconv.Itoa(opts.maxTimeWaitForSidecars),
 	}
 
 	if opts.listenAddress != nil {
@@ -94,6 +101,9 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 	if opts.sentryAddress != nil {
 		args = append(args, "--sentry-address="+*opts.sentryAddress)
+	}
+	if opts.placementAddress != nil {
+		args = append(args, "--placement-address="+*opts.placementAddress)
 	}
 	if opts.trustAnchorsFile != nil {
 		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
@@ -110,16 +120,18 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 
 	return &Scheduler{
-		exec:                exec.New(t, binary.EnvValue("scheduler"), args, opts.execOpts...),
-		freeport:            fp,
-		id:                  opts.id,
-		port:                opts.port,
-		healthzPort:         opts.healthzPort,
-		metricsPort:         opts.metricsPort,
-		initialCluster:      opts.initialCluster,
-		initialClusterPorts: opts.initialClusterPorts,
-		etcdClientPorts:     clientPorts,
-		dataDir:             tmpDir,
+		exec:                   exec.New(t, binary.EnvValue("scheduler"), args, opts.execOpts...),
+		freeport:               fp,
+		id:                     opts.id,
+		port:                   opts.port,
+		healthzPort:            opts.healthzPort,
+		metricsPort:            opts.metricsPort,
+		initialCluster:         opts.initialCluster,
+		initialClusterPorts:    opts.initialClusterPorts,
+		etcdClientPorts:        clientPorts,
+		dataDir:                tmpDir,
+		maxConnsPerAppID:       opts.maxConnsPerAppID,
+		maxTimeWaitForSidecars: opts.maxTimeWaitForSidecars,
 	}
 }
 
@@ -193,4 +205,16 @@ func (s *Scheduler) ListenAddress() string {
 
 func (s *Scheduler) DataDir() string {
 	return s.dataDir
+}
+
+func (s *Scheduler) PlacementAddress() string {
+	return s.placementAddress
+}
+
+func (s *Scheduler) MaxConnsPerAppID() int {
+	return s.maxConnsPerAppID
+}
+
+func (s *Scheduler) MaxTimeWaitForSidecars() int {
+	return s.maxTimeWaitForSidecars
 }

@@ -85,7 +85,7 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithControlPlaneAddress(e.operator.Address(t)),
 		procdaprd.WithDisableK8sSecretStore(true),
 		procdaprd.WithPlacementAddresses(e.placement.Address()),
-		procdaprd.WithSchedulerAddress(e.scheduler.Address()),
+		procdaprd.WithSchedulerAddresses(e.scheduler.Address()),
 
 		// Enable mTLS
 		procdaprd.WithEnableMTLS(true),

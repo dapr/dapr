@@ -126,7 +126,7 @@ func (m *Manager) watchJob(ctx context.Context, client *Client) {
 		default:
 			stream, err := client.scheduler.WatchJob(ctx, streamReq)
 			if err != nil {
-				log.Errorf("Error while streaming with Scheduler: %v. Retrying...\n", err)
+				log.Errorf("Error while streaming with Scheduler: %v. Retrying...", err)
 				return err // retryable error
 			}
 
@@ -138,7 +138,7 @@ func (m *Manager) watchJob(ctx context.Context, client *Client) {
 				default:
 					resp, err := stream.Recv()
 					if err != nil {
-						log.Errorf("Error while receiving job triggers: %v. Retrying...\n", err)
+						log.Errorf("Error while receiving job triggers: %v. Retrying...", err)
 						return err // retryable error
 					}
 					log.Infof("Received response: %v", resp) // TODO: Send resp back to apps

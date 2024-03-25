@@ -202,11 +202,11 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 	// Wait for errors from the goroutine
 	select {
 	case err := <-errCh:
-		log.Infof("WatchJob stream closed from sidecar due to err. Removing Sidecar connection for sidecar: %s.\n", sidecarConnDetails.AppID)
+		log.Infof("WatchJob stream closed from sidecar due to err. Removing Sidecar connection for sidecar: %s", sidecarConnDetails.AppID)
 		s.connectionPool.Remove(req.Namespace+req.AppId, conn)
 		return err
 	case <-stream.Context().Done(): // sidecar closed stream
-		log.Infof("WatchJob stream closed from sidecar due to ctx cancel. Removing Sidecar connection for sidecar: %s.\n", sidecarConnDetails.AppID)
+		log.Infof("WatchJob stream closed from sidecar due to ctx cancel. Removing Sidecar connection for sidecar: %s", sidecarConnDetails.AppID)
 		s.connectionPool.Remove(req.Namespace+req.AppId, conn)
 		return nil
 	}
