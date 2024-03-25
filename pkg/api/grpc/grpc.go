@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -60,7 +59,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
-	kiterrors "github.com/dapr/kit/errors"
 	"github.com/dapr/kit/logger"
 )
 
@@ -129,32 +127,30 @@ func NewAPI(opts APIOpts) API {
 // or an error.
 func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, error) {
 	var err error
-	pubsubType := string(contribMetadata.PubSubType)
-
 	if a.pubsubAdapter == nil {
-		err = apierrors.NotConfigured(pubsubName, pubsubType, reqMeta, codes.FailedPrecondition, http.StatusBadRequest, "ERR_PUBSUB_NOT_CONFIGURED", kiterrors.CodePrefixPubSub+kiterrors.CodeNotConfigured)
+		err = apierrors.PubSub(pubsubName).WithMetadata(nil).NotConfigured()
 		return nil, "", "", false, err
 	}
 
 	if pubsubName == "" {
-		err = apierrors.PubSubNameEmpty(pubsubName, pubsubType, reqMeta)
+		err = apierrors.PubSub(pubsubName).WithMetadata(reqMeta).NameEmpty()
 		return nil, "", "", false, err
 	}
 
 	thepubsub, ok := a.Universal.CompStore().GetPubSub(pubsubName)
 	if !ok {
-		err = apierrors.NotFound(pubsubName, pubsubType, reqMeta, codes.InvalidArgument, http.StatusNotFound, "ERR_PUBSUB_NOT_FOUND", kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound)
+		err = apierrors.PubSub(pubsubName).WithMetadata(nil).NotFound()
 		return nil, "", "", false, err
 	}
 
 	if topic == "" {
-		err = apierrors.PubSubTopicEmpty(pubsubName, pubsubType, reqMeta)
+		err = apierrors.PubSub(pubsubName).WithMetadata(reqMeta).TopicEmpty()
 		return nil, "", "", false, err
 	}
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(reqMeta)
 	if metaErr != nil {
-		err = apierrors.PubSubMetadataDeserialize(pubsubName, pubsubType, reqMeta, metaErr)
+		err = apierrors.PubSub(pubsubName).WithMetadata(reqMeta).DeserializeError(metaErr)
 		return nil, "", "", false, err
 	}
 
@@ -189,7 +185,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			Pubsub:          in.GetPubsubName(),
 		}, in.GetMetadata())
 		if err != nil {
-			nerr := apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID(), "error": err.Error()})
+			nerr := apierrors.PubSub(pubsubName).WithAppError(
+				a.AppID(), err,
+			).CloudEventCreation()
 			apiServerLogger.Debug(nerr)
 			return &emptypb.Empty{}, nerr
 		}
@@ -199,7 +197,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 		data, err = json.Marshal(envelope)
 		if err != nil {
-			err = apierrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID()})
+			err = apierrors.PubSub(pubsubName).WithAppError(
+				a.AppID(), nil,
+			).WithTopic(topic).MarshalEnvelope()
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
@@ -223,11 +223,11 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 		switch {
 		case errors.As(err, &runtimePubsub.NotAllowedError{}):
-			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.AppID(), err)
+			nerr = apierrors.PubSub(pubsubName).PublishForbidden(topic, a.AppID(), err)
 		case errors.As(err, &runtimePubsub.NotFoundError{}):
-			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).TestNotFound(topic, err)
 		default:
-			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).PublishMessage(topic, err)
 		}
 
 		apiServerLogger.Debug(nerr)
@@ -368,7 +368,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	for i, entry := range in.GetEntries() {
 		// Validate entry_id
 		if _, ok := entryIdSet[entry.GetEntryId()]; ok || entry.GetEntryId() == "" {
-			err := apierrors.PubSubMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.AppID(), "error": "entryId is duplicated or not present for entry"})
+			err := apierrors.PubSub(pubsubName).WithAppError(
+				a.AppID(), errors.New("entryId is duplicated or not present for entry"),
+			).WithTopic(topic).MarshalEvents()
 			apiServerLogger.Debug(err)
 			return &runtimev1pb.BulkPublishResponse{}, err
 		}
@@ -401,7 +403,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
-				nerr := apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID(), "err": err.Error()})
+				nerr := apierrors.PubSub(pubsubName).WithAppError(
+					a.AppID(), err,
+				).CloudEventCreation()
 				apiServerLogger.Debug(nerr)
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
@@ -411,7 +415,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 			entries[i].Event, err = json.Marshal(envelope)
 			if err != nil {
-				nerr := apierrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID(), "err": err.Error()})
+				nerr := apierrors.PubSub(pubsubName).WithAppError(
+					a.AppID(), err,
+				).WithTopic(topic).MarshalEnvelope()
 				apiServerLogger.Debug(nerr)
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
@@ -449,11 +455,11 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		// On error, the response will be empty.
 		switch {
 		case errors.As(err, &runtimePubsub.NotAllowedError{}):
-			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.AppID(), err)
+			nerr = apierrors.PubSub(pubsubName).PublishForbidden(topic, a.AppID(), err)
 		case errors.As(err, &runtimePubsub.NotFoundError{}):
-			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).TestNotFound(topic, err)
 		default:
-			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).PublishMessage(topic, err)
 		}
 
 		apiServerLogger.Debug(nerr)
@@ -862,7 +868,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	transactionalStore, ok := store.(state.TransactionalStore)
 	if !ok || !state.FeatureTransactional.IsPresent(store.Features()) {
-		err := apierrors.StateStoreTransactionsNotSupported(in.GetStoreName())
+		err := apierrors.StateStore(in.GetStoreName()).TransactionsNotSupported()
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
@@ -927,7 +933,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
-			err := apierrors.StateStoreTooManyTransactionalOps(in.GetStoreName(), len(operations), max)
+			err := apierrors.StateStore(in.GetStoreName()).TooManyTransactionalOps(len(operations), max)
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
@@ -957,7 +963,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
 		trs, err := a.pubsubAdapter.Outbox().PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), corID, traceState)
 		if err != nil {
-			nerr := apierrors.PubSubOubox(a.AppID(), err)
+			nerr := apierrors.PubSubOutbox(a.AppID(), err)
 			apiServerLogger.Debug(nerr)
 			return &emptypb.Empty{}, nerr
 		}
