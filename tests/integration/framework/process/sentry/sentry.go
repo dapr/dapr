@@ -50,6 +50,7 @@ type Sentry struct {
 	port        int
 	healthzPort int
 	metricsPort int
+	trustDomain *string
 }
 
 func New(t *testing.T, fopts ...Option) *Sentry {
@@ -137,6 +138,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		port:        opts.port,
 		metricsPort: opts.metricsPort,
 		healthzPort: opts.healthzPort,
+		trustDomain: opts.trustDomain,
 	}
 }
 
@@ -189,6 +191,11 @@ func (s *Sentry) MetricsPort() int {
 
 func (s *Sentry) HealthzPort() int {
 	return s.healthzPort
+}
+
+func (s *Sentry) TrustDomain(t *testing.T) string {
+	require.NotNil(t, s.trustDomain)
+	return *s.trustDomain
 }
 
 // DialGRPC dials the sentry using the given context and returns a grpc client
