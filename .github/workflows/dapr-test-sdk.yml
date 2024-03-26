@@ -559,10 +559,16 @@ jobs:
       - name: Check Examples
         run: |
           cd go-sdk/examples
+          ./validate.sh actor
+          ./validate.sh configuration
+          ./validate.sh crypto
+          ./validate.sh grpc-service
           ./validate.sh hello-world
           ./validate.sh pubsub
           ./validate.sh service
-          ./validate.sh actor
+          ./validate.sh socket
+          ./validate.sh workflow
+          ./validate.sh workflow-parallel
       - name: Update PR comment for success
         if: ${{ success() }}
         uses: artursouza/sticky-pull-request-comment@v2.2.0
