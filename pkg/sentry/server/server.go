@@ -123,7 +123,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 
 	log.Debugf("Processing SignCertificate request for %s/%s (validator: %s)", namespace, req.GetId(), validator.String())
 
-	trustDomain, overrideDuration, err := s.vals[validator].Validate(ctx, req)
+	trustDomain, err := s.vals[validator].Validate(ctx, req)
 	if err != nil {
 		log.Debugf("Failed to validate request for %s/%s: %s", namespace, req.GetId(), err)
 		return nil, status.Error(codes.PermissionDenied, err.Error())
@@ -134,12 +134,14 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		log.Debugf("Invalid CSR: PEM block is nil for %s/%s", namespace, req.GetId())
 		return nil, status.Error(codes.InvalidArgument, "invalid certificate signing request")
 	}
+
 	// TODO: @joshvanl: Before v1.12, daprd was sending CSRs with the PEM block type "CERTIFICATE"
 	// After 1.14, allow only "CERTIFICATE REQUEST"
 	if der.Type != "CERTIFICATE REQUEST" && der.Type != "CERTIFICATE" {
 		log.Debugf("Invalid CSR: PEM block type is invalid for %s/%s: %s", namespace, req.GetId(), der.Type)
 		return nil, status.Error(codes.InvalidArgument, "invalid certificate signing request")
 	}
+
 	csr, err := x509.ParseCertificateRequest(der.Bytes)
 	if err != nil {
 		log.Debugf("Failed to parse CSR for %s/%s: %v", namespace, req.GetId(), err)
@@ -151,23 +153,12 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		return nil, status.Error(codes.InvalidArgument, "invalid signature")
 	}
 
-	// TODO: @joshvanl: before v1.12, daprd was matching on
-	// `<app-id>.<namespace>.svc.cluster.local` DNS SAN name so without this,
-	// daprd->daprd connections would fail. This is no longer the case since we
-	// now match with SPIFFE URI SAN, but we need to keep this here for backwards
-	// compatibility. Remove after v1.14.
 	var dns []string
 	switch {
-	case namespace == security.CurrentNamespace() && req.GetId() == "dapr-injector":
-		dns = []string{fmt.Sprintf("dapr-sidecar-injector.%s.svc", namespace)}
-	case namespace == security.CurrentNamespace() && req.GetId() == "dapr-operator":
-		// TODO: @joshvanl: before v1.12, daprd was matching on the operator server
-		// having `cluster.local` as a DNS SAN name. Remove after v1.13.
-		dns = []string{"cluster.local", fmt.Sprintf("dapr-webhook.%s.svc", namespace)}
-	case namespace == security.CurrentNamespace() && req.GetId() == "dapr-placement":
-		dns = []string{"cluster.local"}
-	default:
-		dns = []string{fmt.Sprintf("%s.%s.svc.cluster.local", req.GetId(), namespace)}
+	case req.GetNamespace() == security.CurrentNamespace() && req.GetId() == "dapr-injector":
+		dns = []string{fmt.Sprintf("dapr-sidecar-injector.%s.svc", req.GetNamespace())}
+	case req.GetNamespace() == security.CurrentNamespace() && req.GetId() == "dapr-operator":
+		dns = []string{fmt.Sprintf("dapr-webhook.%s.svc", req.GetNamespace())}
 	}
 
 	chain, err := s.ca.SignIdentity(ctx, &ca.SignRequest{
@@ -177,7 +168,7 @@ func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 		Namespace:          namespace,
 		AppID:              req.GetId(),
 		DNS:                dns,
-	}, overrideDuration)
+	})
 	if err != nil {
 		log.Errorf("Error signing identity: %v", err)
 		return nil, status.Error(codes.Internal, "failed to sign certificate")

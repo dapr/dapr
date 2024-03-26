@@ -29,13 +29,11 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/security/legacy"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
@@ -273,9 +271,10 @@ func (s *security) GRPCDialOptionMTLS(appID spiffeid.ID) grpc.DialOption {
 	if s.source == nil {
 		return grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
-	return grpc.WithTransportCredentials(credentials.NewTLS(
-		legacy.NewDialClient(s.source, s.source, tlsconfig.AuthorizeID(appID)),
-	))
+
+	return grpc.WithTransportCredentials(
+		grpccredentials.MTLSClientCredentials(s.source, s.source, tlsconfig.AuthorizeID(appID)),
+	)
 }
 
 // GRPCServerOptionMTLS returns a gRPC server option which instruments
@@ -317,9 +316,9 @@ func (s *security) GRPCDialOptionMTLSUnknownTrustDomain(ns, appID string) grpc.D
 		return nil
 	}
 
-	return grpc.WithTransportCredentials(credentials.NewTLS(
-		legacy.NewDialClient(s.source, s.source, tlsconfig.AdaptMatcher(matcher)),
-	))
+	return grpc.WithTransportCredentials(
+		grpccredentials.MTLSClientCredentials(s.source, s.source, tlsconfig.AdaptMatcher(matcher)),
+	)
 }
 
 // CurrentTrustAnchors returns the current trust anchors for this Dapr

@@ -24,13 +24,13 @@ import (
 )
 
 type Fake struct {
-	signIdentityFn func(context.Context, *ca.SignRequest, bool) ([]*x509.Certificate, error)
+	signIdentityFn func(context.Context, *ca.SignRequest) ([]*x509.Certificate, error)
 	trustAnchorsFn func() []byte
 }
 
 func New() *Fake {
 	return &Fake{
-		signIdentityFn: func(context.Context, *ca.SignRequest, bool) ([]*x509.Certificate, error) {
+		signIdentityFn: func(context.Context, *ca.SignRequest) ([]*x509.Certificate, error) {
 			return nil, nil
 		},
 		trustAnchorsFn: func() []byte {
@@ -39,7 +39,7 @@ func New() *Fake {
 	}
 }
 
-func (f *Fake) WithSignIdentity(fn func(context.Context, *ca.SignRequest, bool) ([]*x509.Certificate, error)) *Fake {
+func (f *Fake) WithSignIdentity(fn func(context.Context, *ca.SignRequest) ([]*x509.Certificate, error)) *Fake {
 	f.signIdentityFn = fn
 	return f
 }
@@ -49,8 +49,8 @@ func (f *Fake) WithTrustAnchors(fn func() []byte) *Fake {
 	return f
 }
 
-func (f *Fake) SignIdentity(ctx context.Context, req *ca.SignRequest, overrideDuration bool) ([]*x509.Certificate, error) {
-	return f.signIdentityFn(ctx, req, overrideDuration)
+func (f *Fake) SignIdentity(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
+	return f.signIdentityFn(ctx, req)
 }
 
 func (f *Fake) TrustAnchors() []byte {
