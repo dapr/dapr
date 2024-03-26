@@ -182,9 +182,6 @@ func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRe
 func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv1pb.Scheduler_WatchJobServer) error {
 	//errCh := make(chan error)
 
-	// use req details to add sidecar connection details so scheduler knows how many sidecars there are and
-	// maintains a conn pool
-
 	sidecarConnDetails := &scheduler.SidecarConnDetails{
 		Namespace: req.Namespace,
 		AppID:     req.AppId,
