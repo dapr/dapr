@@ -24,14 +24,10 @@ service Scheduler {
 }
 
 message StreamJobRequest {
-	// The id of the application (app_id).
+	// The app_id of the sidecar.
 	string app_id = 1;
-	// The namespace.
+	// The namespace of the sidecar.
 	string namespace = 2;
-	// The hostname of the daprd sidecar.
-	string hostname = 3;
-	// The port of the daprd sidecar.
-	int32 port = 4;
 }
 
 message StreamJobResponse {

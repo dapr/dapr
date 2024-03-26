@@ -295,28 +295,24 @@ func clientEndpoints(initialPeersListIP []string, idToPort map[string]string) []
 func (s *Server) runJobWatcher(ctx context.Context) error {
 	log.Infof("Starting job watcher")
 
-	errCh := make(chan error)
-
 	s.jobWatcherWG.Add(2)
 
 	// Goroutine for handling sidecar connections
 	go func() {
 		defer log.Info("Sidecar connections goroutine shutting down.")
 		defer s.jobWatcherWG.Done()
-		s.handleSidecarConnections(ctx, errCh)
+		s.handleSidecarConnections(ctx)
 	}()
 
 	// Goroutine for handling job streaming at trigger time
 	go func() {
 		defer log.Info("Job streaming goroutine shutting down.")
 		defer s.jobWatcherWG.Done()
-		s.handleJobStreaming(ctx, errCh)
+		s.handleJobStreaming(ctx)
 	}()
 
 	// Wait for any errors from either goroutine
 	select {
-	case err := <-errCh:
-		return err
 	case <-ctx.Done():
 		s.jobWatcherWG.Wait()
 		log.Info("JobWatcher go routines exited successfully")
@@ -325,15 +321,15 @@ func (s *Server) runJobWatcher(ctx context.Context) error {
 }
 
 // handleJobStreaming handles the streaming of jobs to Dapr sidecars.
-func (s *Server) handleJobStreaming(ctx context.Context, errCh chan<- error) {
+func (s *Server) handleJobStreaming(ctx context.Context) {
 	for {
 		select {
 		case job := <-s.jobTriggerChan:
-			log.Infof("Got the job at trigger time in the jobWatcher. Job: %+v", job)
+			log.Infof("Got the job at trigger time in the jobWatcher. Job: %+v", job) // TODO: rm after debugging or change to debug
 			metadata := job.GetMetadata()
 			appID := metadata["appID"]
 
-			jobUpdate := &schedulerv1pb.StreamJobResponse{
+			jobTriggered := &schedulerv1pb.StreamJobResponse{
 				Data:     job.GetJob().GetData(),
 				Metadata: metadata,
 			}
@@ -343,13 +339,16 @@ func (s *Server) handleJobStreaming(ctx context.Context, errCh chan<- error) {
 			stream, _, err := s.connectionPool.GetStreamAndContextForNSAppID(namespace + appID)
 			if err != nil {
 				log.Errorf("Error getting stream for appID: %v", err)
-				errCh <- err
+				// TODO: add job to a queue or something to try later
+				// this should be another long running go routine that accepts this job on a channel
 				continue
 			}
+
 			// Send the job update to the sidecar
-			if err := stream.Send(jobUpdate); err != nil {
+			if err := stream.Send(jobTriggered); err != nil {
 				log.Errorf("Error sending job at trigger time: %v", err)
-				errCh <- err
+				// TODO: add job to a queue or something to try later
+				// this should be another long running go routine that accepts this job on a channel
 			}
 		case <-ctx.Done():
 			log.Info("Job streaming ctx done.")
@@ -359,7 +358,7 @@ func (s *Server) handleJobStreaming(ctx context.Context, errCh chan<- error) {
 }
 
 // handleSidecarConnections handles the (client) sidecar connections and adds them to the connection pool.
-func (s *Server) handleSidecarConnections(ctx context.Context, errCh chan<- error) {
+func (s *Server) handleSidecarConnections(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
@@ -367,7 +366,7 @@ func (s *Server) handleSidecarConnections(ctx context.Context, errCh chan<- erro
 			s.connectionPool.Clear()
 			return
 		case conn := <-s.sidecarConnChan:
-			log.Infof("Adding a Sidecar connection to Scheduler for appID: %s.\n", conn.ConnDetails.AppID)
+			log.Infof("Adding a Sidecar connection to Scheduler for appID: %s.", conn.ConnDetails.AppID)
 			nsAppID := conn.ConnDetails.Namespace + conn.ConnDetails.AppID
 
 			// Add sidecar connection details to the connection pool
@@ -380,9 +379,8 @@ func (s *Server) handleSidecarConnections(ctx context.Context, errCh chan<- erro
 				if err := s.connectionPool.WaitUntilReachingMaxConns(ctx, nsAppID, s.maxConnPerApp, time.Duration(s.maxTimeWaitForSidecars)*time.Second); err != nil {
 					// If there's an error waiting for minimum connection count
 					// remove the connection
-					log.Infof("Issue waiting for minimum Sidecar connections. Removing Sidecar connection for appID: %s.\n", conn.ConnDetails.AppID)
+					log.Errorf("Issue waiting for minimum Sidecar connections. Removing Sidecar connection for appID: %s.", conn.ConnDetails.AppID)
 					s.connectionPool.Remove(nsAppID, conn)
-					errCh <- err
 				}
 			}
 		}

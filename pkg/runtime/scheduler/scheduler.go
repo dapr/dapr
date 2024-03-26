@@ -16,24 +16,24 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"io"
 	"sync"
 	"time"
 
-	"github.com/cenkalti/backoff/v4"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler"
 	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 )
 
 var log = logger.NewLogger("dapr.runtime.scheduler")
 
 type Scheduler struct {
 	Addresses    []string
-	SidecarAddr  string
-	SidecarPort  int
 	SidecarNS    string
 	SidecarAppID string
 	Sec          security.Handler
@@ -60,8 +60,6 @@ func NewManager(ctx context.Context, sched Scheduler) (*Manager, error) {
 	manager := &Manager{
 		ConnDetails: scheduler.SidecarConnDetails{
 			Namespace: sched.SidecarNS,
-			Host:      sched.SidecarAddr,
-			Port:      sched.SidecarPort,
 			AppID:     sched.SidecarAppID,
 		},
 	}
@@ -72,7 +70,7 @@ func NewManager(ctx context.Context, sched Scheduler) (*Manager, error) {
 		if err != nil {
 			return nil, fmt.Errorf("error creating scheduler client for address %s: %w", address, err)
 		}
-		log.Infof("Scheduler client initialized for address: %s\n", address)
+		log.Infof("Scheduler client initialized for address: %s", address)
 
 		manager.Clients = append(manager.Clients, &Client{
 			conn:       conn,
@@ -92,6 +90,7 @@ func (m *Manager) Run(ctx context.Context) {
 	// Start a goroutine for each client to watch for job updates
 	for _, client := range m.Clients {
 		go func(client *Client) {
+			defer client.conn.Close()
 			defer m.wg.Done()
 			m.watchJob(ctx, client)
 		}(client)
@@ -103,53 +102,79 @@ func (m *Manager) watchJob(ctx context.Context, client *Client) {
 	streamReq := &schedulerv1pb.StreamJobRequest{
 		AppId:     m.ConnDetails.AppID,
 		Namespace: m.ConnDetails.Namespace,
-		Hostname:  m.ConnDetails.Host,
-		Port:      int32(m.ConnDetails.Port),
 	}
 
-	defer func() {
-		if err := client.conn.Close(); err != nil {
-			log.Errorf("Error closing connection: %v", err)
-		}
-	}()
-
-	backoffPolicy := backoff.NewExponentialBackOff()
-	backoffPolicy.MaxElapsedTime = 0 // Retry indefinitely
-	backoffPolicy.InitialInterval = 30 * time.Second
-	backoffPolicy.MaxInterval = 5 * time.Minute
-
-	err := backoff.Retry(func() error {
+	// TODO add retry logic without the lib
+	// indefinitely stream with Scheduler
+streamScheduler:
+	for {
 		select {
 		case <-ctx.Done():
-			log.Infof("Context cancelled. Exiting watchJob goroutine.")
-			return backoff.Permanent(ctx.Err())
+			log.Infof("Context cancelled. Exiting watchJob goroutine.") // TODO: rm this after debugging
+			return
 		default:
 			stream, err := client.scheduler.WatchJob(ctx, streamReq)
 			if err != nil {
-				log.Errorf("Error while streaming with Scheduler: %v. Retrying...", err)
-				return err // retryable error
+				log.Errorf("Error while streaming with Scheduler: %v", err) // TODO: rm this after debugging
+				if err := client.closeAndReconnect(ctx); err != nil {
+					log.Errorf("Error reconnecting client: %v", err)
+				}
+				time.Sleep(5 * time.Second)
+				continue
 			}
 
+			// process streamed jobs
 			for {
 				select {
+				case <-stream.Context().Done():
+					log.Infof("Stream closed") // TODO: rm this after debugging
+					if err := stream.CloseSend(); err != nil {
+						log.Errorf("Error closing stream")
+					}
+					time.Sleep(5 * time.Second)
+					continue streamScheduler // Exit inner loop and retry the connection
 				case <-ctx.Done():
-					log.Infof("Context cancelled. Exiting watchJob goroutine.")
-					return nil
+					log.Infof("Context cancelled") // TODO: rm this after debugging
+					if err := stream.CloseSend(); err != nil {
+						log.Errorf("Error closing stream")
+					}
+					continue streamScheduler // Exit inner loop and retry the connection
 				default:
+					// TODO: add resiliency policy for scheduler
 					resp, err := stream.Recv()
 					if err != nil {
-						log.Errorf("Error while receiving job triggers: %v. Retrying...", err)
-						return err // retryable error
+						if status.Code(err) == codes.Canceled || status.Code(err) == codes.Unavailable || err == io.EOF {
+							log.Infof("Scheduler stream recv ctx cancelled.")
+							// get a new client here
+						} else {
+							log.Errorf("Error while receiving job trigger: %v", err)
+						}
+
+						if err := stream.CloseSend(); err != nil {
+							log.Errorf("Error closing stream")
+						}
+						time.Sleep(5 * time.Second)
+						continue streamScheduler // Exit inner loop and retry the connection
 					}
-					log.Infof("Received response: %v", resp) // TODO: Send resp back to apps
+					log.Infof("Received response: %v", resp)
 				}
 			}
 		}
-	}, backoffPolicy)
-
-	if err != nil {
-		log.Errorf("Error from backoff retry to Scheduler. Likely ctx cancelled.")
 	}
+}
+
+// closeAndReconnect closes the connection and reconnects the client.
+func (client *Client) closeAndReconnect(ctx context.Context) error {
+	if err := client.conn.Close(); err != nil {
+		return fmt.Errorf("error closing connection: %v", err)
+	}
+	conn, schedulerClient, err := schedulerclient.New(ctx, client.address, client.secHandler)
+	if err != nil {
+		return fmt.Errorf("error creating scheduler client for address %s: %v", client.address, err)
+	}
+	client.conn = conn
+	client.scheduler = schedulerClient
+	return nil
 }
 
 // NextClient returns the next client in a round-robin manner.
