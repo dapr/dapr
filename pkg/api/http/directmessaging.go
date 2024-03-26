@@ -276,7 +276,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		if len(codeErr.headers) > 0 && !headersSet {
 			invokev1.InternalMetadataToHTTPHeader(r.Context(), codeErr.headers, w.Header().Add)
 		}
-		respondWithHTTPRawResponse(w, &UniversalHTTPRawResponse{
+		respondWithHTTPRawResponse(w, UniversalHTTPRawResponse{
 			Body:        codeErr.msg,
 			ContentType: codeErr.contentType,
 			StatusCode:  codeErr.statusCode,

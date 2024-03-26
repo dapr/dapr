@@ -138,6 +138,9 @@ func UniversalHTTPHandler[T proto.Message, U proto.Message](
 			respondWithEmpty(w)
 			return
 		case *UniversalHTTPRawResponse:
+			respondWithHTTPRawResponse(w, *m, opts.SuccessStatusCode)
+			return
+		case UniversalHTTPRawResponse:
 			respondWithHTTPRawResponse(w, m, opts.SuccessStatusCode)
 			return
 		case protoreflect.ProtoMessage:

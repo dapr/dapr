@@ -355,13 +355,50 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		assert.Equal(t, "42", strings.TrimSpace(string(respBody)))
 	})
 
-	t.Run("Option OutModifier returns UniversalHTTPRawResponse", func(t *testing.T) {
+	t.Run("Option OutModifier returns *UniversalHTTPRawResponse", func(t *testing.T) {
 		// Create the handler
 		h := UniversalHTTPHandler(
 			pingPongHandler,
 			UniversalHTTPHandlerOpts[*wrapperspb.StringValue, *wrapperspb.StringValue]{
 				OutModifier: func(out *wrapperspb.StringValue) (any, error) {
 					return &UniversalHTTPRawResponse{
+						Body:        []byte("con te partirò"),
+						ContentType: "text/plain",
+						StatusCode:  http.StatusTeapot,
+					}, nil
+				},
+			},
+		)
+		require.NotNil(t, h)
+
+		// Create the request
+		r := httptest.NewRequest(http.MethodPost, "http://localhost/test", strings.NewReader(`"ping"`))
+		r.Header.Set("content-type", "application/json")
+
+		// Execute the handler
+		w := httptest.NewRecorder()
+		h(w, r)
+
+		// Assertions
+		resp := w.Result()
+		defer resp.Body.Close()
+		require.NotNil(t, resp)
+		assert.Equal(t, http.StatusTeapot, resp.StatusCode)
+		assert.Equal(t, "text/plain", resp.Header.Get("content-type"))
+
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+
+		assert.Equal(t, "con te partirò", string(respBody))
+	})
+
+	t.Run("Option OutModifier returns UniversalHTTPRawResponse", func(t *testing.T) {
+		// Create the handler
+		h := UniversalHTTPHandler(
+			pingPongHandler,
+			UniversalHTTPHandlerOpts[*wrapperspb.StringValue, *wrapperspb.StringValue]{
+				OutModifier: func(out *wrapperspb.StringValue) (any, error) {
+					return UniversalHTTPRawResponse{
 						Body:        []byte("con te partirò"),
 						ContentType: "text/plain",
 						StatusCode:  http.StatusTeapot,
