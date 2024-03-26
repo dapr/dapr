@@ -58,6 +58,7 @@ type options struct {
 	disableK8sSecretStore   *bool
 	gracefulShutdownSeconds *int
 	blockShutdownDuration   *string
+	controlPlaneTrustDomain *string
 	schedulerAddresses      []string
 }
 
@@ -278,5 +279,11 @@ func WithDaprGracefulShutdownSeconds(seconds int) Option {
 func WithDaprBlockShutdownDuration(duration string) Option {
 	return func(o *options) {
 		o.blockShutdownDuration = &duration
+	}
+}
+
+func WithControlPlaneTrustDomain(trustDomain string) Option {
+	return func(o *options) {
+		o.controlPlaneTrustDomain = &trustDomain
 	}
 }
