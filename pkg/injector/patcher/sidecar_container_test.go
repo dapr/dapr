@@ -329,8 +329,6 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Identity = "pod_identity"
 		c.ControlPlaneNamespace = "my-namespace"
 		c.ControlPlaneTrustDomain = "test.example.com"
-		c.CertChain = "my-cert-chain"
-		c.CertKey = "my-cert-key"
 
 		c.SetFromPodAnnotations()
 
@@ -362,7 +360,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		// Command should be empty, image's entrypoint to be used.
 		assert.Empty(t, container.Command)
-		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_CERT_CHAIN","value":"my-cert-chain"},{"name":"DAPR_CERT_KEY","value":"my-cert-key"},{"name":"SENTRY_LOCAL_IDENTITY","value":"pod_identity"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
+		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -394,8 +392,6 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Identity = "pod_identity"
 		c.ControlPlaneNamespace = "my-namespace"
 		c.ControlPlaneTrustDomain = "test.example.com"
-		c.CertChain = "my-cert-chain"
-		c.CertKey = "my-cert-key"
 		c.EnableK8sDownwardAPIs = true
 
 		c.SetFromPodAnnotations()
@@ -436,7 +432,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		// Command should be empty, image's entrypoint to be used.
 		assert.Empty(t, container.Command)
-		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_HOST_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},{"name":"DAPR_CERT_CHAIN","value":"my-cert-chain"},{"name":"DAPR_CERT_KEY","value":"my-cert-key"},{"name":"SENTRY_LOCAL_IDENTITY","value":"pod_identity"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
+		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_HOST_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)

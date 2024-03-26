@@ -15,7 +15,6 @@ package service
 
 import (
 	"bytes"
-	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -55,9 +54,6 @@ func TestHandleRequest(t *testing.T) {
 	injector := i.(*injector)
 	injector.currentTrustAnchors = func() ([]byte, error) {
 		return nil, nil
-	}
-	injector.signDaprdCertificate = func(context.Context, string) ([]byte, []byte, error) {
-		return []byte("test-cert"), []byte("test-key"), nil
 	}
 
 	podBytes, _ := json.Marshal(corev1.Pod{

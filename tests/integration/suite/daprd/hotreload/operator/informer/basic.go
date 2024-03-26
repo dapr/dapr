@@ -105,6 +105,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 		)),
+		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 	)
 
 	return []framework.Option{

@@ -42,7 +42,6 @@ func (s shared) Run(t *testing.T, parentCtx context.Context) {
 		defaultNamespace = "default"
 	)
 	defaultAppSPIFFEID := fmt.Sprintf("spiffe://public/ns/%s/%s", defaultNamespace, defaultAppID)
-	defaultAppDNSName := fmt.Sprintf("%s.%s.svc.cluster.local", defaultAppID, defaultNamespace)
 
 	s.proc.WaitUntilRunning(t, parentCtx)
 
@@ -124,7 +123,7 @@ func (s shared) Run(t *testing.T, parentCtx context.Context) {
 		require.NoError(t, err)
 		require.NotEmpty(t, res.GetWorkloadCertificate())
 
-		validateCertificateResponse(t, res, s.proc.CABundle(), defaultAppSPIFFEID, defaultAppDNSName)
+		validateCertificateResponse(t, res, s.proc.CABundle(), defaultAppSPIFFEID)
 	})
 
 	testWithTokenError := func(fn func(builder *jwt.Builder), assertErr func(t *testing.T, grpcStatus *status.Status)) func(t *testing.T) {
