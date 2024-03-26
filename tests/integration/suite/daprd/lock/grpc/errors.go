@@ -261,4 +261,97 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "dapr.io", errInfo.(*errdetails.ErrorInfo).GetDomain())
 		require.Nil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata())
 	})
+
+	// Covers errors.ERR_TRY_LOCK
+	t.Run("try lock failed", func(t *testing.T) {
+		name := "lockstore"
+		resourceID := "resource||"
+		req := &rtv1.TryLockRequest{
+			StoreName:       name,
+			ExpiryInSeconds: 10,
+			ResourceId:      resourceID,
+			LockOwner:       "owner",
+		}
+		_, err := client.TryLockAlpha1(ctx, req)
+
+		require.Error(t, err)
+		s, ok := status.FromError(err)
+		require.True(t, ok)
+		require.Equal(t, grpcCodes.Internal, s.Code())
+		t.Log(err.Error())
+		// checkKeyIllegal error
+		require.Equal(t, fmt.Sprintf("failed to try acquiring lock: input key/keyPrefix '%s' can't contain '%s'", resourceID, "||"), s.Message())
+
+		// Check status details
+		require.Len(t, s.Details(), 2)
+
+		var errInfo *errdetails.ErrorInfo
+		var resInfo *errdetails.ResourceInfo
+
+		for _, detail := range s.Details() {
+			switch d := detail.(type) {
+			case *errdetails.ErrorInfo:
+				errInfo = d
+			case *errdetails.ResourceInfo:
+				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
+		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixTryLock, errInfo.GetReason())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
+		require.Nil(t, errInfo.GetMetadata())
+
+		require.NotNil(t, resInfo, "ResourceInfo should be present")
+		require.Equal(t, "lock", resInfo.GetResourceType())
+		require.Equal(t, "lockstore", resInfo.GetResourceName())
+		require.Equal(t, "owner", resInfo.GetOwner())
+	})
+
+	// Covers errors.ERR_Unlock
+	t.Run("unlock failed", func(t *testing.T) {
+		name := "lockstore"
+		resourceID := "resource||"
+		req := &rtv1.UnlockRequest{
+			StoreName:  name,
+			ResourceId: resourceID,
+			LockOwner:  "owner",
+		}
+		_, err := client.UnlockAlpha1(ctx, req)
+
+		require.Error(t, err)
+		s, ok := status.FromError(err)
+		require.True(t, ok)
+		require.Equal(t, grpcCodes.Internal, s.Code())
+		t.Log(err.Error())
+		// checkKeyIllegal error
+		require.Equal(t, fmt.Sprintf("failed to release lock: input key/keyPrefix '%s' can't contain '%s'", resourceID, "||"), s.Message())
+
+		// Check status details
+		require.Len(t, s.Details(), 2)
+
+		var errInfo *errdetails.ErrorInfo
+		var resInfo *errdetails.ResourceInfo
+
+		for _, detail := range s.Details() {
+			switch d := detail.(type) {
+			case *errdetails.ErrorInfo:
+				errInfo = d
+			case *errdetails.ResourceInfo:
+				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+		require.NotNil(t, errInfo, "ErrorInfo should be present")
+		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixUnlock, errInfo.GetReason())
+		require.Equal(t, "dapr.io", errInfo.GetDomain())
+		require.Nil(t, errInfo.GetMetadata())
+
+		require.NotNil(t, resInfo, "ResourceInfo should be present")
+		require.Equal(t, "lock", resInfo.GetResourceType())
+		require.Equal(t, "lockstore", resInfo.GetResourceName())
+		require.Equal(t, "owner", resInfo.GetOwner())
+	})
 }
