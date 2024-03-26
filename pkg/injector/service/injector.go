@@ -38,7 +38,6 @@ import (
 )
 
 const (
-	port                                      = 4000
 	getKubernetesServiceAccountTimeoutSeconds = 10
 	systemGroup                               = "system:masters"
 	serviceAccountUserInfoPrefix              = "system:serviceaccount:"
@@ -71,6 +70,7 @@ type Options struct {
 	Config     Config
 	DaprClient scheme.Interface
 	KubeClient kubernetes.Interface
+	Port       int
 
 	ControlPlaneNamespace   string
 	ControlPlaneTrustDomain string
@@ -138,7 +138,7 @@ func NewInjector(opts Options) (Injector, error) {
 			runtime.NewScheme(),
 		).UniversalDeserializer(),
 		server: &http.Server{
-			Addr:              fmt.Sprintf(":%d", port),
+			Addr:              fmt.Sprintf(":%d", opts.Port),
 			Handler:           mux,
 			ReadHeaderTimeout: 10 * time.Second,
 		},

@@ -101,6 +101,7 @@ func Run() {
 	}
 
 	inj, err := service.NewInjector(service.Options{
+		Port:                    opts.Port,
 		AuthUIDs:                uids,
 		Config:                  cfg,
 		DaprClient:              daprClient,
