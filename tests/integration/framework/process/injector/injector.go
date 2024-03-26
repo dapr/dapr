@@ -31,13 +31,14 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Injector struct {
 	kubeapi  *kubernetes.Kubernetes
 	exec     process.Interface
-	freeport *util.FreePort
+	freeport *ports.Ports
 
 	port        int
 	namespace   string
@@ -48,13 +49,13 @@ type Injector struct {
 func New(t *testing.T, fopts ...Option) *Injector {
 	t.Helper()
 
-	fp := util.ReservePorts(t, 3)
+	fp := ports.Reserve(t, 3)
 	opts := options{
 		logLevel:      "info",
 		enableMetrics: true,
-		port:          fp.Port(t, 0),
-		metricsPort:   fp.Port(t, 1),
-		healthzPort:   fp.Port(t, 2),
+		port:          fp.Port(t),
+		metricsPort:   fp.Port(t),
+		healthzPort:   fp.Port(t),
 		sidecarImage:  "integration.dapr.io/dapr",
 	}
 
@@ -118,6 +119,7 @@ func (i *Injector) Run(t *testing.T, ctx context.Context) {
 
 func (i *Injector) Cleanup(t *testing.T) {
 	i.exec.Cleanup(t)
+	i.freeport.Cleanup(t)
 	i.kubeapi.Cleanup(t)
 }
 
