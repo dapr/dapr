@@ -106,7 +106,7 @@ func signJWT(builder *jwt.Builder) ([]byte, error) {
 	return jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtSigningKeyPriv))
 }
 
-func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID, expectDNSName string) {
+func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID string) {
 	t.Helper()
 
 	require.NotEmpty(t, res.GetWorkloadCertificate())
@@ -128,7 +128,7 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
 			certURIs[i] = v.String()
 		}
 		assert.Equal(t, []string{expectSPIFFEID}, certURIs)
-		assert.Equal(t, []string{expectDNSName}, cert.DNSNames)
+		assert.Empty(t, cert.DNSNames)
 		assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
 		assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
 	}
@@ -144,7 +144,7 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
 		cert, err := x509.ParseCertificate(block.Bytes)
 		require.NoError(t, err)
 
-		assert.Equal(t, []string{"cluster.local"}, cert.DNSNames)
+		assert.Empty(t, cert.DNSNames)
 	}
 }
 

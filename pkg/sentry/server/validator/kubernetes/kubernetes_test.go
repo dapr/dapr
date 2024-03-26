@@ -59,9 +59,8 @@ func TestValidate(t *testing.T) {
 
 		sentryAudience string
 
-		expTD               spiffeid.TrustDomain
-		expOverrideDuration bool
-		expErr              bool
+		expTD  spiffeid.TrustDomain
+		expErr bool
 	}{
 		"if pod in different namespace, expect error": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -732,52 +731,6 @@ func TestValidate(t *testing.T) {
 			expErr: false,
 			expTD:  spiffeid.RequireTrustDomainFromString("cluster.local"),
 		},
-		"valid authentication, config annotation, using legacy request ID, return the trust domain from config": {
-			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
-			reactor: func(t *testing.T) core.ReactionFunc {
-				return func(action core.Action) (bool, runtime.Object, error) {
-					obj := action.(core.CreateAction).GetObject().(*kauthapi.TokenReview)
-					assert.Equal(t, []string{"dapr.io/sentry", "spiffe://cluster.local/ns/dapr-test/dapr-sentry"}, obj.Spec.Audiences)
-					return true, &kauthapi.TokenReview{Status: kauthapi.TokenReviewStatus{
-						Authenticated: true,
-						User: kauthapi.UserInfo{
-							Username: "system:serviceaccount:dapr-test:my-sa",
-						},
-					}}, nil
-				}
-			},
-			req: &sentryv1pb.SignCertificateRequest{
-				CertificateSigningRequest: []byte("csr"),
-				Namespace:                 "dapr-test",
-				Token:                     newToken(t, "dapr-test", "my-pod"),
-				TrustDomain:               "example.test.dapr.io",
-				Id:                        "dapr-test:my-sa",
-			},
-			pod: &corev1.Pod{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-pod",
-					Namespace: "dapr-test",
-					Annotations: map[string]string{
-						"dapr.io/app-id": "my-app-id",
-						"dapr.io/config": "my-config",
-					},
-				},
-				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
-			},
-			config: &configapi.Configuration{
-				ObjectMeta: metav1.ObjectMeta{
-					Name:      "my-config",
-					Namespace: "dapr-test",
-				},
-				Spec: configapi.ConfigurationSpec{
-					AccessControlSpec: &configapi.AccessControlSpec{
-						TrustDomain: "example.test.dapr.io",
-					},
-				},
-			},
-			expErr: false,
-			expTD:  spiffeid.RequireTrustDomainFromString("example.test.dapr.io"),
-		},
 
 		"if both app-id and control-plane annotation present, should error": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -934,7 +887,7 @@ func TestValidate(t *testing.T) {
 				Namespace:                 "dapr-test",
 				Token:                     newToken(t, "dapr-test", "my-pod"),
 				TrustDomain:               "example.test.dapr.io",
-				Id:                        "dapr-test:my-sa",
+				Id:                        "dapr-placement",
 			},
 			pod: &corev1.Pod{
 				ObjectMeta: metav1.ObjectMeta{
@@ -961,7 +914,7 @@ func TestValidate(t *testing.T) {
 			expErr: false,
 			expTD:  spiffeid.RequireTrustDomainFromString("cluster.local"),
 		},
-		"injector is able to request for whatever identity it wants (name)": {
+		"injector is not able to request for whatever identity it wants (name)": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
@@ -992,11 +945,10 @@ func TestValidate(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
 			},
-			expErr:              false,
-			expOverrideDuration: true,
-			expTD:               spiffeid.RequireTrustDomainFromString("cluster.local"),
+			expErr: true,
+			expTD:  spiffeid.TrustDomain{},
 		},
-		"injector is able to request for whatever identity it wants (namespace)": {
+		"injector is not able to request for whatever identity it wants (namespace)": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
@@ -1027,11 +979,10 @@ func TestValidate(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
 			},
-			expErr:              false,
-			expOverrideDuration: true,
-			expTD:               spiffeid.RequireTrustDomainFromString("cluster.local"),
+			expErr: true,
+			expTD:  spiffeid.TrustDomain{},
 		},
-		"injector is able to request for whatever identity it wants (namespace + name)": {
+		"injector is not able to request for whatever identity it wants (namespace + name)": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
@@ -1062,9 +1013,8 @@ func TestValidate(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{ServiceAccountName: "my-sa"},
 			},
-			expErr:              false,
-			expOverrideDuration: true,
-			expTD:               spiffeid.RequireTrustDomainFromString("cluster.local"),
+			expErr: true,
+			expTD:  spiffeid.TrustDomain{},
 		},
 		"injector is not able to request for whatever identity it wants if not in control plane namespace": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
@@ -1235,7 +1185,7 @@ func TestValidate(t *testing.T) {
 			expErr: true,
 			expTD:  spiffeid.TrustDomain{},
 		},
-		"if requester is using the legacy request ID, and namespace+service account name is over 64 characters, don't error": {
+		"if requester is using the legacy request ID, and namespace+service account name is over 64 characters, error": {
 			sentryAudience: "spiffe://cluster.local/ns/dapr-test/dapr-sentry",
 			reactor: func(t *testing.T) core.ReactionFunc {
 				return func(action core.Action) (bool, runtime.Object, error) {
@@ -1263,8 +1213,8 @@ func TestValidate(t *testing.T) {
 				},
 				Spec: corev1.PodSpec{ServiceAccountName: strings.Repeat("a", 65)},
 			},
-			expErr: false,
-			expTD:  spiffeid.RequireTrustDomainFromString("public"),
+			expErr: true,
+			expTD:  spiffeid.TrustDomain{},
 		},
 	}
 
@@ -1295,10 +1245,9 @@ func TestValidate(t *testing.T) {
 				ready:          func(_ context.Context) bool { return true },
 			}
 
-			td, overrideDuration, err := k.Validate(context.Background(), test.req)
+			td, err := k.Validate(context.Background(), test.req)
 			assert.Equal(t, test.expErr, err != nil, "%v", err)
 			assert.Equal(t, test.expTD, td)
-			assert.Equal(t, test.expOverrideDuration, overrideDuration)
 		})
 	}
 }
