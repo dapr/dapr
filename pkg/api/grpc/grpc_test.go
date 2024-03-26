@@ -362,11 +362,13 @@ func TestAPIToken(t *testing.T) {
 	mockDirectMessaging := new(daprt.MockDirectMessaging)
 
 	// Setup Dapr API server
+	log := logger.NewLogger("api")
 	fakeAPI := &api{
-		logger: logger.NewLogger("api"),
+		logger: log,
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			Resiliency: resiliency.New(nil),
+			Logger:     log,
 		}),
 		directMessaging: mockDirectMessaging,
 	}
@@ -2716,7 +2718,7 @@ func TestTransactionStateStoreNotImplemented(t *testing.T) {
 func TestExecuteStateTransaction(t *testing.T) {
 	fakeStore := &daprt.TransactionalStoreMock{}
 	fakeStore.MaxOperations = 10
-	matchKeyFn := func(ctx context.Context, req *state.TransactionalStateRequest, key string) bool {
+	matchKeyFn := func(_ context.Context, req *state.TransactionalStateRequest, key string) bool {
 		if len(req.Operations) == 1 {
 			if rr, ok := req.Operations[0].(state.SetRequest); ok {
 				if rr.Key == "fakeAPI||"+key {

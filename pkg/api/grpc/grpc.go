@@ -354,7 +354,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 	spanMap := map[int]otelTrace.Span{}
 	// closeChildSpans method is called on every respond() call in all return paths in the following block of code.
-	closeChildSpans := func(ctx context.Context, err error) {
+	closeChildSpans := func(_ context.Context, err error) {
 		for _, span := range spanMap {
 			diag.UpdateSpanStatusFromGRPCError(span, err)
 			span.End()
@@ -994,97 +994,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	return &emptypb.Empty{}, nil
 }
 
-func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.CreateTimerRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-		DueTime:   in.GetDueTime(),
-		Period:    in.GetPeriod(),
-		TTL:       in.GetTtl(),
-		Callback:  in.GetCallback(),
-	}
-
-	if in.GetData() != nil {
-		j, err := json.Marshal(in.GetData())
-		if err != nil {
-			return &emptypb.Empty{}, err
-		}
-		req.Data = j
-	}
-	err := a.Universal.Actors().CreateTimer(ctx, req)
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.DeleteTimerRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-	}
-
-	err := a.Universal.Actors().DeleteTimer(ctx, req)
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.CreateReminderRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-		DueTime:   in.GetDueTime(),
-		Period:    in.GetPeriod(),
-		TTL:       in.GetTtl(),
-	}
-
-	if in.GetData() != nil {
-		j, err := json.Marshal(in.GetData())
-		if err != nil {
-			return &emptypb.Empty{}, err
-		}
-		req.Data = j
-	}
-	err := a.Universal.Actors().CreateReminder(ctx, req)
-	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
-		return nil, messages.ErrActorReminderOpActorNotHosted
-	}
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.DeleteReminderRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-	}
-
-	err := a.Universal.Actors().DeleteReminder(ctx, req)
-	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
-		return nil, messages.ErrActorReminderOpActorNotHosted
-	}
-	return &emptypb.Empty{}, err
-}
-
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
+	err := a.Universal.ActorReadinessCheck(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1098,7 +1010,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	})
 
 	if !hosted {
-		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		err = messages.ErrActorInstanceMissing
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1111,7 +1023,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 
 	resp, err := a.Universal.Actors().GetState(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
+		err = messages.ErrActorStateGet.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1123,7 +1035,8 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 }
 
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
+	err := a.Universal.ActorReadinessCheck(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1160,9 +1073,9 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 			}
 
 		default:
-			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, op.GetOperationType())
+			err = status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, op.GetOperationType())
 			apiServerLogger.Debug(err)
-			return &emptypb.Empty{}, err
+			return nil, err
 		}
 
 		actorOps = append(actorOps, actorOp)
@@ -1174,9 +1087,9 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 	})
 
 	if !hosted {
-		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		err = messages.ErrActorInstanceMissing
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	req := actors.TransactionalRequest{
@@ -1185,11 +1098,11 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		Operations: actorOps,
 	}
 
-	err := a.Universal.Actors().TransactionalStateOperation(ctx, &req)
+	err = a.Universal.Actors().TransactionalStateOperation(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
+		err = messages.ErrActorStateTransactionSave.WithFormat(err)
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	return &emptypb.Empty{}, nil
@@ -1198,7 +1111,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	response := &runtimev1pb.InvokeActorResponse{}
 
-	if err := a.actorReadinessCheck(ctx); err != nil {
+	if err := a.Universal.ActorReadinessCheck(ctx); err != nil {
 		return response, err
 	}
 
@@ -1218,7 +1131,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return a.Universal.Actors().Call(ctx, req)
 	})
 	if err != nil && !actorerrors.Is(err) {
-		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
+		err = messages.ErrActorInvoke.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return response, err
 	}
@@ -1227,18 +1140,6 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		response.Data = res.GetMessage().GetData().GetValue()
 	}
 	return response, nil
-}
-
-// This function makes sure that the actor subsystem is ready.
-func (a *api) actorReadinessCheck(ctx context.Context) error {
-	a.Universal.WaitForActorsReady(ctx)
-
-	if a.Universal.Actors() == nil {
-		apiServerLogger.Debug(messages.ErrActorRuntimeNotFound)
-		return messages.ErrActorRuntimeNotFound
-	}
-
-	return nil
 }
 
 func stringValueOrEmpty(value *string) string {
