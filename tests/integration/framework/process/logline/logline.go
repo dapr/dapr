@@ -101,7 +101,7 @@ func (l *LogLine) Cleanup(t *testing.T) {
 	close(l.closeCh)
 	for i := 0; i < 2; i++ {
 		for expLine := range <-l.outCheck {
-			assert.Fail(t, "expected to log line: "+expLine)
+			assert.Fail(t, "expected to log line", expLine)
 		}
 	}
 }

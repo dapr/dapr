@@ -39,13 +39,14 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Placement struct {
-	exec     process.Interface
-	freeport *util.FreePort
-	running  atomic.Bool
+	exec    process.Interface
+	ports   *ports.Ports
+	running atomic.Bool
 
 	id                  string
 	port                int
@@ -61,15 +62,16 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	uid, err := uuid.NewUUID()
 	require.NoError(t, err)
 
-	fp := util.ReservePorts(t, 4)
+	fp := ports.Reserve(t, 4)
+	port := fp.Port(t)
 	opts := options{
 		id:                  uid.String(),
 		logLevel:            "info",
-		port:                fp.Port(t, 0),
-		healthzPort:         fp.Port(t, 1),
-		metricsPort:         fp.Port(t, 2),
-		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(fp.Port(t, 3)),
-		initialClusterPorts: []int{fp.Port(t, 3)},
+		port:                fp.Port(t),
+		healthzPort:         fp.Port(t),
+		metricsPort:         fp.Port(t),
+		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(port),
+		initialClusterPorts: []int{port},
 		metadataEnabled:     false,
 	}
 
@@ -102,7 +104,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 
 	return &Placement{
 		exec:                exec.New(t, binary.EnvValue("placement"), args, opts.execOpts...),
-		freeport:            fp,
+		ports:               fp,
 		id:                  opts.id,
 		port:                opts.port,
 		healthzPort:         opts.healthzPort,
@@ -117,7 +119,7 @@ func (p *Placement) Run(t *testing.T, ctx context.Context) {
 		t.Fatal("Process is already running")
 	}
 
-	p.freeport.Free(t)
+	p.ports.Free(t)
 	p.exec.Run(t, ctx)
 }
 

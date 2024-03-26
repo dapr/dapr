@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,11 +11,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package loader
 
-import componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+import (
+	"context"
 
-// ComponentHandler is an interface for reacting on component changes.
-type ComponentHandler interface {
-	OnComponentUpdated(component componentsV1alpha1.Component)
+	"github.com/dapr/dapr/pkg/runtime/meta"
+)
+
+// Loader loads manifest-like files.
+type Loader[T meta.Resource] interface {
+	// Load loads all manifests.
+	Load(context.Context) ([]T, error)
 }
