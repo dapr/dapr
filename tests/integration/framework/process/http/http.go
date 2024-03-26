@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
 // Option is a function that configures the process.
@@ -55,13 +57,10 @@ func New(t *testing.T, fopts ...Option) *HTTP {
 		opts.handler = handler
 	}
 
-	// Start the listener in New so we can squat on the port immediately, and
-	// keep it for the entire test case.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
+	fp := ports.Reserve(t, 1)
 
 	return &HTTP{
-		listener: listener,
+		listener: fp.Listener(t),
 		srvErrCh: make(chan error, 2),
 		stopCh:   make(chan struct{}),
 		server: &http.Server{
