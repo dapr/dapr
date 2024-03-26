@@ -1,0 +1,48 @@
+diff --git a/tests/integration/framework/process/daprd/daprd.go b/tests/integration/framework/process/daprd/daprd.go
+index 8e6960f7c..06c9c9185 100644
+--- a/tests/integration/framework/process/daprd/daprd.go
++++ b/tests/integration/framework/process/daprd/daprd.go
+@@ -140,6 +140,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
+ 	if opts.blockShutdownDuration != nil {
+ 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
+ 	}
++	if opts.controlPlaneTrustDomain != nil {
++		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
++	}
+ 
+ 	ns := "default"
+ 	if opts.namespace != nil {
+diff --git a/tests/integration/framework/process/daprd/options.go b/tests/integration/framework/process/daprd/options.go
+index d6b39a535..739d0481c 100644
+--- a/tests/integration/framework/process/daprd/options.go
++++ b/tests/integration/framework/process/daprd/options.go
+@@ -55,6 +55,7 @@ type options struct {
+ 	disableK8sSecretStore   *bool
+ 	gracefulShutdownSeconds *int
+ 	blockShutdownDuration   *string
++	controlPlaneTrustDomain *string
+ }
+ 
+ func WithExecOptions(execOptions ...exec.Option) Option {
+@@ -246,3 +247,9 @@ func WithDaprBlockShutdownDuration(duration string) Option {
+ 		o.blockShutdownDuration = &duration
+ 	}
+ }
++
++func WithControlPlaneTrustDomain(trustDomain string) Option {
++	return func(o *options) {
++		o.controlPlaneTrustDomain = &trustDomain
++	}
++}
+diff --git a/tests/integration/suite/daprd/hotreload/operator/informer.go b/tests/integration/suite/daprd/hotreload/operator/informer.go
+index 1af786e19..b8b13652f 100644
+--- a/tests/integration/suite/daprd/hotreload/operator/informer.go
++++ b/tests/integration/suite/daprd/hotreload/operator/informer.go
+@@ -105,6 +105,7 @@ func (i *informer) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithExecOptions(exec.WithEnvVars(t,
+ 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+ 		)),
++		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
+ 	)
+ 
+ 	return []framework.Option{
