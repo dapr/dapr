@@ -20,10 +20,10 @@ import (
 	"time"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/components"
+	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
-	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
@@ -59,8 +59,8 @@ func New(opts Options) (loader.Interface, error) {
 	return &disk{
 		fs: fs,
 		component: newResource[componentsapi.Component](
-			components.NewLocalComponents(opts.Dirs...),
-			loadercompstore.NewComponent(opts.ComponentStore),
+			loaderdisk.New[componentsapi.Component](opts.Dirs...),
+			store.NewComponent(opts.ComponentStore),
 			updateCh,
 		),
 		updateCh: updateCh,

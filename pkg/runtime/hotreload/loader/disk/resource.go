@@ -19,7 +19,7 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/dapr/dapr/pkg/components"
+	internalloader "github.com/dapr/dapr/pkg/internal/loader"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -32,7 +32,7 @@ import (
 type resource[T differ.Resource] struct {
 	batcher    *batcher.Batcher[int]
 	store      store.Store[T]
-	diskLoader components.ManifestLoader[T]
+	diskLoader internalloader.Loader[T]
 	updateCh   <-chan struct{}
 
 	lock          sync.RWMutex
@@ -43,7 +43,7 @@ type resource[T differ.Resource] struct {
 	closed  atomic.Bool
 }
 
-func newResource[T differ.Resource](loader components.ManifestLoader[T], store store.Store[T], updateCh <-chan struct{}) *resource[T] {
+func newResource[T differ.Resource](loader internalloader.Loader[T], store store.Store[T], updateCh <-chan struct{}) *resource[T] {
 	return &resource[T]{
 		batcher:    batcher.New[int](0),
 		store:      store,
@@ -55,7 +55,7 @@ func newResource[T differ.Resource](loader components.ManifestLoader[T], store s
 
 // List returns the current list of resources loaded from disk.
 func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], error) {
-	remotes, err := r.diskLoader.Load()
+	remotes, err := r.diskLoader.Load(ctx)
 	if err != nil {
 		return nil, err
 	}

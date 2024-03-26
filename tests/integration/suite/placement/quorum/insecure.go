@@ -30,8 +30,8 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -52,10 +52,11 @@ func (i *insecure) Setup(t *testing.T) []framework.Option {
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
 
-	fp := util.ReservePorts(t, 3)
+	fp := ports.Reserve(t, 3)
+	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 	opts := []placement.Option{
-		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
-		placement.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
+		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", port1, port2, port3)),
+		placement.WithInitialClusterPorts(port1, port2, port3),
 		placement.WithEnableTLS(true),
 		placement.WithTrustAnchorsFile(taFile),
 		placement.WithSentryAddress(i.sentry.Address()),
@@ -66,9 +67,8 @@ func (i *insecure) Setup(t *testing.T) []framework.Option {
 		placement.New(t, append(opts, placement.WithID("p3"))...),
 	}
 
-	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(i.sentry, i.places[0], i.places[1], i.places[2]),
+		framework.WithProcesses(i.sentry, fp, i.places[0], i.places[1], i.places[2]),
 	}
 }
 
