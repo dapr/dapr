@@ -85,16 +85,20 @@ type Options struct {
 type operator struct {
 	apiServer api.Server
 
-	config *Config
-
+	config      *Config
 	mgr         ctrl.Manager
 	secProvider security.Provider
-	tshealthz   []healthz.Target
+
+	secHealthz                  healthz.Target
+	apiServerHealthz            healthz.Target
+	webhookHealthz              healthz.Target
+	compInformerHealthz         healthz.Target
+	httpEndpointInformerHealthz healthz.Target
 }
 
 // NewOperator returns a new Dapr Operator.
 func NewOperator(ctx context.Context, opts Options) (Operator, error) {
-	htargets := opts.Healthz.AddTargetSet(5)
+	htargets := opts.Healthz.AddTargetSet(4)
 
 	conf, err := ctrl.GetConfig()
 	if err != nil {
@@ -186,10 +190,13 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}
 
 	return &operator{
-		mgr:         mgr,
-		secProvider: secProvider,
-		config:      config,
-		tshealthz:   htargets,
+		mgr:                         mgr,
+		secProvider:                 secProvider,
+		config:                      config,
+		secHealthz:                  htargets[0],
+		apiServerHealthz:            htargets[1],
+		webhookHealthz:              htargets[2],
+		httpEndpointInformerHealthz: htargets[3],
 		apiServer: api.NewAPIServer(api.Options{
 			Client:   mgr.GetClient(),
 			Cache:    mgr.GetCache(),
@@ -257,14 +264,14 @@ func (o *operator) Start(ctx context.Context) error {
 			if rErr != nil {
 				return rErr
 			}
-			o.tshealthz[0].Ready()
+			o.secHealthz.Ready()
 			return o.mgr.Start(ctx)
 		},
 		func(ctx context.Context) error {
 			if rErr := o.apiServer.Ready(ctx); rErr != nil {
 				return fmt.Errorf("API server did not become ready in time: %w", rErr)
 			}
-			o.tshealthz[1].Ready()
+			o.apiServerHealthz.Ready()
 			log.Infof("Dapr Operator started")
 			<-ctx.Done()
 			return nil
@@ -283,7 +290,7 @@ func (o *operator) Start(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			if !enableConversionWebhooks {
-				o.tshealthz[2].Ready()
+				o.webhookHealthz.Ready()
 				<-ctx.Done()
 				return nil
 			}
@@ -304,7 +311,7 @@ func (o *operator) Start(ctx context.Context) error {
 					return rErr
 				}
 
-				o.tshealthz[2].Ready()
+				o.webhookHealthz.Ready()
 
 				select {
 				case caBundle = <-caBundleCh:
@@ -340,7 +347,7 @@ func (o *operator) Start(ctx context.Context) error {
 			if rErr != nil {
 				return fmt.Errorf("unable to add http endpoint informer event handler: %w", rErr)
 			}
-			o.tshealthz[3].Ready()
+			o.httpEndpointInformerHealthz.Ready()
 			<-ctx.Done()
 			return nil
 		},
