@@ -57,7 +57,7 @@ spec:
 	u.resDir = t.TempDir()
 
 	u.logline = logline.New(t, logline.WithStdoutLineContains(
-		`Fatal error from runtime: failed to load resources from disk: duplicate definition of component name foo (pubsub.in-memory/v1) with existing foo (state.in-memory/v1)\nduplicate definition of component name foo (state.in-memory/v1) with existing foo (state.in-memory/v1)`,
+		`Fatal error from runtime: failed to load resources from disk: duplicate definition of Component name foo (pubsub.in-memory/v1) with existing foo (state.in-memory/v1)\nduplicate definition of Component name foo (state.in-memory/v1) with existing foo (state.in-memory/v1)`,
 	))
 
 	u.daprd = daprd.New(t,

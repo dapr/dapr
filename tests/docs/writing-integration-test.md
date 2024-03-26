@@ -8,6 +8,8 @@ the daprd configuration to suit the test. Tests are expected to complete within
 seconds, ideally less than 5, and should not take longer than 30. Binaries are
 always built from source within the test.
 
+You can find out more about the background and design decisions of the integration tests through a talk by joshvanl [here](https://www.youtube.com/watch?v=CcaV5_rQBzY).
+
 
 ## Invoking the test
 

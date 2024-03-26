@@ -14,6 +14,7 @@ limitations under the License.
 package authorizer
 
 import (
+	"os"
 	"reflect"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -34,7 +35,6 @@ type HTTPEndpointAuthorizer func(endpoint httpendpointsapi.HTTPEndpoint) bool
 
 type Options struct {
 	ID           string
-	Namespace    string
 	GlobalConfig *config.Configuration
 }
 
@@ -49,7 +49,7 @@ type Authorizer struct {
 func New(opts Options) *Authorizer {
 	r := &Authorizer{
 		id:        opts.ID,
-		namespace: opts.Namespace,
+		namespace: os.Getenv("NAMESPACE"),
 	}
 
 	r.componentAuthorizers = []ComponentAuthorizer{r.namespaceComponentAuthorizer}

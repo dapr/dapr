@@ -1,4 +1,17 @@
-package components
+/*
+Copyright 2024 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package kubernetes
 
 import (
 	"context"
@@ -6,7 +19,6 @@ import (
 	"fmt"
 	"net"
 	"testing"
-	"time"
 
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
@@ -75,15 +87,13 @@ func TestLoadComponents(t *testing.T) {
 
 	s := grpc.NewServer()
 	operatorv1pb.RegisterOperatorServer(s, &mockOperator{})
-	defer s.Stop()
+	t.Cleanup(s.Stop)
 
 	go func() {
 		s.Serve(lis)
 	}()
 
-	time.Sleep(time.Second * 1)
-
-	request := &KubernetesComponents{
+	request := &components{
 		client: getOperatorClient(fmt.Sprintf("localhost:%d", port)),
 		config: config.KubernetesConfig{
 			ControlPlaneAddress: fmt.Sprintf("localhost:%v", port),
@@ -91,7 +101,7 @@ func TestLoadComponents(t *testing.T) {
 		podName: "testPodName",
 	}
 
-	response, err := request.Load()
+	response, err := request.Load(context.Background())
 	require.NoError(t, err)
 	assert.NotNil(t, response)
 	assert.Equal(t, "test", response[0].Name)

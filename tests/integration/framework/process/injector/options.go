@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,25 +11,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package operator
+package injector
 
 import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 )
 
-// options contains the options for running Operator in integration tests.
+// options contains the options for running Injector in integration tests.
 type options struct {
 	execOpts []exec.Option
 
-	logLevel              string
-	namespace             *string
-	port                  int
-	healthzPort           int
-	metricsPort           int
-	kubeconfigPath        *string
-	configPath            *string
-	disableLeaderElection bool
-	trustAnchorsFile      *string
+	logLevel      string
+	namespace     *string
+	port          int
+	enableMetrics bool
+	metricsPort   int
+	healthzPort   int
+
+	sidecarImage string
+
+	sentry *sentry.Sentry
 }
 
 // Option is a function that configures the process.
@@ -47,15 +49,15 @@ func WithLogLevel(level string) Option {
 	}
 }
 
-func WithAPIPort(port int) Option {
+func WithNamespace(namespace string) Option {
 	return func(o *options) {
-		o.port = port
+		o.namespace = &namespace
 	}
 }
 
-func WithHealthzPort(port int) Option {
+func WithPort(port int) Option {
 	return func(o *options) {
-		o.healthzPort = port
+		o.port = port
 	}
 }
 
@@ -65,32 +67,26 @@ func WithMetricsPort(port int) Option {
 	}
 }
 
-func WithKubeconfigPath(path string) Option {
+func WithEnableMetrics(enable bool) Option {
 	return func(o *options) {
-		o.kubeconfigPath = &path
+		o.enableMetrics = enable
 	}
 }
 
-func WithConfigPath(path string) Option {
+func WithHealthzPort(port int) Option {
 	return func(o *options) {
-		o.configPath = &path
+		o.healthzPort = port
 	}
 }
 
-func WithDisableLeaderElection(disable bool) Option {
+func WithSidecarImage(image string) Option {
 	return func(o *options) {
-		o.disableLeaderElection = disable
+		o.sidecarImage = image
 	}
 }
 
-func WithTrustAnchorsFile(path string) Option {
+func WithSentry(sentry *sentry.Sentry) Option {
 	return func(o *options) {
-		o.trustAnchorsFile = &path
-	}
-}
-
-func WithNamespace(namespace string) Option {
-	return func(o *options) {
-		o.namespace = &namespace
+		o.sentry = sentry
 	}
 }
