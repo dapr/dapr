@@ -180,15 +180,13 @@ func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRe
 
 // WatchJob sends jobs to Dapr sidecars upon component changes.
 func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv1pb.Scheduler_WatchJobServer) error {
-	errCh := make(chan error)
+	//errCh := make(chan error)
 
 	// use req details to add sidecar connection details so scheduler knows how many sidecars there are and
 	// maintains a conn pool
 
 	sidecarConnDetails := &scheduler.SidecarConnDetails{
 		Namespace: req.Namespace,
-		Host:      req.Hostname,
-		Port:      int(req.Port),
 		AppID:     req.AppId,
 	}
 
@@ -201,10 +199,10 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 
 	// Wait for errors from the goroutine
 	select {
-	case err := <-errCh:
-		log.Infof("WatchJob stream closed from sidecar due to err. Removing Sidecar connection for sidecar: %s", sidecarConnDetails.AppID)
-		s.connectionPool.Remove(req.Namespace+req.AppId, conn)
-		return err
+	//case err := <-errCh:
+	//	log.Infof("WatchJob stream closed from sidecar due to err. Removing Sidecar connection for sidecar: %s", sidecarConnDetails.AppID)
+	//	s.connectionPool.Remove(req.Namespace+req.AppId, conn)
+	//	return err
 	case <-stream.Context().Done(): // sidecar closed stream
 		log.Infof("WatchJob stream closed from sidecar due to ctx cancel. Removing Sidecar connection for sidecar: %s", sidecarConnDetails.AppID)
 		s.connectionPool.Remove(req.Namespace+req.AppId, conn)

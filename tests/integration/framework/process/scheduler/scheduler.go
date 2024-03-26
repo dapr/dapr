@@ -69,7 +69,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		initialCluster:         uid.String() + "=http://localhost:" + strconv.Itoa(fp.Port(t, 3)),
 		initialClusterPorts:    []int{fp.Port(t, 3)},
 		etcdClientPorts:        []string{uid.String() + "=" + strconv.Itoa(fp.Port(t, 4))},
-		maxConnsPerAppID:       1,
+		maxConnsPerAppID:       -1,
 		maxTimeWaitForSidecars: 30,
 	}
 

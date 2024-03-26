@@ -162,28 +162,20 @@ func newDaprRuntime(ctx context.Context,
 	var schedClient schedulerv1pb.SchedulerClient
 	var schedulerManager *runtimeScheduler.Manager
 	if runtimeConfig.SchedulerEnabled() {
-		host, err := utils.GetHostAddress()
-		if err != nil {
-			log.Infof("Error getting host address for sidecar: %v\n", err)
-			return nil, err
-		}
-
-		var hostPorts []string
+		var schedulerHostPorts []string
 		if strings.Contains(runtimeConfig.schedulerAddress, ",") {
 			parts := strings.Split(runtimeConfig.schedulerAddress, ",")
 			for _, part := range parts {
 				hostPort := strings.TrimSpace(part)
-				hostPorts = append(hostPorts, hostPort)
+				schedulerHostPorts = append(schedulerHostPorts, hostPort)
 			}
 		} else {
-			hostPorts = []string{runtimeConfig.schedulerAddress}
+			schedulerHostPorts = []string{runtimeConfig.schedulerAddress}
 		}
 
 		schedulerManager, err = runtimeScheduler.NewManager(ctx, runtimeScheduler.Scheduler{
-			Addresses:    hostPorts,
+			Addresses:    schedulerHostPorts,
 			SidecarNS:    namespace,
-			SidecarAddr:  host,
-			SidecarPort:  runtimeConfig.apiGRPCPort,
 			SidecarAppID: runtimeConfig.id,
 			Sec:          sec,
 		})

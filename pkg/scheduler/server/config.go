@@ -54,7 +54,7 @@ func (s *Server) conf() *embed.Config {
 		Host:   fmt.Sprintf("%s:%s", etcdURL, s.etcdClientPorts[s.etcdID]),
 	}}
 
-	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
+	config.LogLevel = "error" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
 	// TODO: Look into etcd config and if we need to do any raft compacting
 
 	// TODO: Cassie do extra validation that the client port != peer port -> dont fail silently
