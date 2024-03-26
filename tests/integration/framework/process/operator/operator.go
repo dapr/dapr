@@ -32,13 +32,14 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Operator struct {
-	exec     process.Interface
-	freeport *util.FreePort
+	exec  process.Interface
+	ports *ports.Ports
 
 	port        int
 	metricsPort int
@@ -49,13 +50,13 @@ type Operator struct {
 func New(t *testing.T, fopts ...Option) *Operator {
 	t.Helper()
 
-	fp := util.ReservePorts(t, 4)
+	fp := ports.Reserve(t, 4)
 	opts := options{
 		logLevel:              "info",
 		disableLeaderElection: true,
-		port:                  fp.Port(t, 0),
-		metricsPort:           fp.Port(t, 1),
-		healthzPort:           fp.Port(t, 2),
+		port:                  fp.Port(t),
+		metricsPort:           fp.Port(t),
+		healthzPort:           fp.Port(t),
 	}
 
 	for _, fopt := range fopts {
@@ -74,7 +75,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 		"-trust-anchors-file=" + *opts.trustAnchorsFile,
 		"-disable-leader-election=" + strconv.FormatBool(opts.disableLeaderElection),
 		"-kubeconfig=" + *opts.kubeconfigPath,
-		"-webhook-server-port=" + strconv.Itoa(fp.Port(t, 3)),
+		"-webhook-server-port=" + strconv.Itoa(fp.Port(t)),
 	}
 
 	if opts.configPath != nil {
@@ -92,7 +93,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 				),
 			)...,
 		),
-		freeport:    fp,
+		ports:       fp,
 		port:        opts.port,
 		metricsPort: opts.metricsPort,
 		healthzPort: opts.healthzPort,
@@ -101,7 +102,7 @@ func New(t *testing.T, fopts ...Option) *Operator {
 }
 
 func (o *Operator) Run(t *testing.T, ctx context.Context) {
-	o.freeport.Free(t)
+	o.ports.Free(t)
 	o.exec.Run(t, ctx)
 }
 

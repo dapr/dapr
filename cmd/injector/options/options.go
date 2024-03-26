@@ -26,6 +26,7 @@ import (
 type Options struct {
 	HealthzPort int
 	Kubeconfig  string
+	Port        int
 	Logger      logger.Options
 	Metrics     *metrics.Options
 }
@@ -53,6 +54,7 @@ func New(origArgs []string) *Options {
 	fs.SortFlags = true
 
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port used for health checks")
+	fs.IntVar(&opts.Port, "port", 4000, "The port used for the injector service")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
