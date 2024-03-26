@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,13 +11,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package httpendpoint
+package kubernetes
 
 import (
-	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	"time"
+
+	config "github.com/dapr/dapr/pkg/config/modes"
+	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/kit/logger"
 )
 
-// HTTPEndpointHandler is an interface for reacting on HTTP endpoint changes.
-type HTTPEndpointHandler interface {
-	OnHTTPEndpointUpdated(endpoint httpEndpointsV1alpha1.HTTPEndpoint)
+var log = logger.NewLogger("dapr.runtime.loader.kubernetes")
+
+const (
+	operatorCallTimeout = time.Second * 5
+	operatorMaxRetries  = 100
+)
+
+type Options struct {
+	Config    config.KubernetesConfig
+	Client    operatorv1pb.OperatorClient
+	Namespace string
+	PodName   string
 }
