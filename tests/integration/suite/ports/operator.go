@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	procoperator "github.com/dapr/dapr/tests/integration/framework/process/operator"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -40,7 +41,10 @@ type operator struct {
 }
 
 func (o *operator) Setup(t *testing.T) []framework.Option {
-	sentry := procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
+	sentry := procsentry.New(t,
+		procsentry.WithTrustDomain("integration.test.dapr.io"),
+		procsentry.WithExecOptions(exec.WithEnvVars(t, "NAMESPACE", "dapr-system")),
+	)
 
 	kubeAPI := kubernetes.New(t, kubernetes.WithBaseOperatorAPI(t,
 		spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
