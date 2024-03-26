@@ -70,7 +70,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)
 
-	// Covers errors.ERR_LOCK_STORE_NOT_FOUND
+	// Covers apierrors.ERR_LOCK_STORE_NOT_FOUND
 	t.Run("lock doesn't exist", func(t *testing.T) {
 		name := "lock-doesn't-exist"
 		req := &rtv1.TryLockRequest{
@@ -98,7 +98,42 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
-	// Covers errors.ERR_RESOURCE_ID_EMPTY
+	// Covers apierrors.ERR_LOCK_STORE_NOT_CONFIGURED
+	t.Run("lock store not configured", func(t *testing.T) {
+		// Start a new daprd without lock store
+		daprdNoLockStore := daprd.New(t, daprd.WithAppID("daprd_no_lock_store"))
+		daprdNoLockStore.Run(t, ctx)
+		daprdNoLockStore.WaitUntilRunning(t, ctx)
+		defer daprdNoLockStore.Cleanup(t)
+		connNoLockStore, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", daprdNoLockStore.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, connNoLockStore.Close()) })
+		clientNoLockStore := rtv1.NewDaprClient(connNoLockStore)
+
+		name := "lockstore"
+		req := &rtv1.TryLockRequest{
+			StoreName:       name,
+			ExpiryInSeconds: 10,
+			ResourceId:      "resource",
+			LockOwner:       "owner",
+		}
+		_, err = clientNoLockStore.TryLockAlpha1(ctx, req)
+		require.Error(t, err)
+		s, ok := status.FromError(err)
+		require.True(t, ok)
+		require.Equal(t, grpcCodes.FailedPrecondition, s.Code())
+		require.Equal(t, fmt.Sprintf("lock store %s is not configured", name), s.Message())
+
+		// Check status details
+		require.Len(t, s.Details(), 1)
+		errInfo := s.Details()[0]
+		require.IsType(t, &errdetails.ErrorInfo{}, errInfo)
+		require.Equal(t, "DAPR_LOCK_NOT_CONFIGURED", errInfo.(*errdetails.ErrorInfo).GetReason())
+		require.Equal(t, "dapr.io", errInfo.(*errdetails.ErrorInfo).GetDomain())
+		require.Nil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata())
+	})
+
+	// Covers apierrors.ERR_RESOURCE_ID_EMPTY
 	t.Run("lock resource id empty", func(t *testing.T) {
 		name := "lockstore"
 		req := &rtv1.TryLockRequest{
@@ -141,7 +176,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "owner", resInfo.GetOwner())
 	})
 
-	// Covers errors.ERR_LOCK_OWNER_EMPTY
+	// Covers apierrors.ERR_LOCK_OWNER_EMPTY
 	t.Run("lock owner empty", func(t *testing.T) {
 		name := "lockstore"
 		req := &rtv1.TryLockRequest{
@@ -183,7 +218,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "lockstore", resInfo.GetResourceName())
 	})
 
-	// Covers errors.ERR_EXPIRY_NOT_POSITIVE
+	// Covers apierrors.ERR_EXPIRY_NOT_POSITIVE
 	t.Run("lock expiry in seconds not positive", func(t *testing.T) {
 		name := "lockstore"
 		req := &rtv1.TryLockRequest{
@@ -227,42 +262,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "owner", resInfo.GetOwner())
 	})
 
-	// Covers errors.ERR_LOCK_STORE_NOT_CONFIGURED
-	t.Run("lock store not configured", func(t *testing.T) {
-		// Start a new daprd without lock store
-		daprdNoLockStore := daprd.New(t, daprd.WithAppID("daprd_no_lock_store"))
-		daprdNoLockStore.Run(t, ctx)
-		daprdNoLockStore.WaitUntilRunning(t, ctx)
-		defer daprdNoLockStore.Cleanup(t)
-		connNoLockStore, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", daprdNoLockStore.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-		require.NoError(t, err)
-		t.Cleanup(func() { require.NoError(t, connNoLockStore.Close()) })
-		clientNoLockStore := rtv1.NewDaprClient(connNoLockStore)
-
-		name := "lockstore"
-		req := &rtv1.TryLockRequest{
-			StoreName:       name,
-			ExpiryInSeconds: 10,
-			ResourceId:      "resource",
-			LockOwner:       "owner",
-		}
-		_, err = clientNoLockStore.TryLockAlpha1(ctx, req)
-		require.Error(t, err)
-		s, ok := status.FromError(err)
-		require.True(t, ok)
-		require.Equal(t, grpcCodes.FailedPrecondition, s.Code())
-		require.Equal(t, fmt.Sprintf("lock store %s is not configured", name), s.Message())
-
-		// Check status details
-		require.Len(t, s.Details(), 1)
-		errInfo := s.Details()[0]
-		require.IsType(t, &errdetails.ErrorInfo{}, errInfo)
-		require.Equal(t, "DAPR_LOCK_NOT_CONFIGURED", errInfo.(*errdetails.ErrorInfo).GetReason())
-		require.Equal(t, "dapr.io", errInfo.(*errdetails.ErrorInfo).GetDomain())
-		require.Nil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata())
-	})
-
-	// Covers errors.ERR_TRY_LOCK
+	// Covers apierrors.ERR_TRY_LOCK
 	t.Run("try lock failed", func(t *testing.T) {
 		name := "lockstore"
 		resourceID := "resource||"
@@ -280,7 +280,8 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, grpcCodes.Internal, s.Code())
 		t.Log(err.Error())
 		// checkKeyIllegal error
-		require.Equal(t, fmt.Sprintf("failed to try acquiring lock: input key/keyPrefix '%s' can't contain '%s'", resourceID, "||"), s.Message())
+		expectedErr := fmt.Sprintf("input key/keyPrefix '%s' can't contain '%s'", resourceID, "||")
+		require.Equal(t, fmt.Sprintf("failed to try acquiring lock: "+expectedErr), s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 2)
@@ -309,7 +310,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "owner", resInfo.GetOwner())
 	})
 
-	// Covers errors.ERR_Unlock
+	// Covers apierrors.ERR_Unlock
 	t.Run("unlock failed", func(t *testing.T) {
 		name := "lockstore"
 		resourceID := "resource||"
@@ -326,7 +327,8 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, grpcCodes.Internal, s.Code())
 		t.Log(err.Error())
 		// checkKeyIllegal error
-		require.Equal(t, fmt.Sprintf("failed to release lock: input key/keyPrefix '%s' can't contain '%s'", resourceID, "||"), s.Message())
+		expectedErr := fmt.Sprintf("input key/keyPrefix '%s' can't contain '%s'", resourceID, "||")
+		require.Equal(t, fmt.Sprintf("failed to release lock: "+expectedErr), s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 2)
