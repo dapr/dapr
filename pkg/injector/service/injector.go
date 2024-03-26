@@ -56,13 +56,12 @@ var AllowedServiceAccountInfos = []string{
 }
 
 type (
-	signDaprdCertificateFn func(ctx context.Context, namespace string) (cert []byte, key []byte, err error)
-	currentTrustAnchorsFn  func() (ca []byte, err error)
+	currentTrustAnchorsFn func() (ca []byte, err error)
 )
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
 type Injector interface {
-	Run(context.Context, *tls.Config, spiffeid.ID, signDaprdCertificateFn, currentTrustAnchorsFn) error
+	Run(context.Context, *tls.Config, spiffeid.ID, currentTrustAnchorsFn) error
 	Ready(context.Context) error
 }
 
@@ -89,7 +88,6 @@ type injector struct {
 	controlPlaneTrustDomain string
 	currentTrustAnchors     currentTrustAnchorsFn
 	sentrySPIFFEID          spiffeid.ID
-	signDaprdCertificate    signDaprdCertificateFn
 
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
 	ready                chan struct{}
@@ -215,7 +213,7 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 	return allowedUids, nil
 }
 
-func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spiffeid.ID, signDaprdFn signDaprdCertificateFn, currentTrustAnchors currentTrustAnchorsFn) error {
+func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spiffeid.ID, currentTrustAnchors currentTrustAnchorsFn) error {
 	select {
 	case <-i.ready:
 		return errors.New("injector already running")
@@ -226,7 +224,6 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spif
 	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", i.server.Addr)
 
 	i.currentTrustAnchors = currentTrustAnchors
-	i.signDaprdCertificate = signDaprdFn
 	i.sentrySPIFFEID = sentryID
 	i.server.TLSConfig = tlsConfig
 

@@ -1,0 +1,406 @@
+diff --git a/tests/integration/framework/process/daprd/daprd.go b/tests/integration/framework/process/daprd/daprd.go
+index 8e6960f7c..06c9c9185 100644
+--- a/tests/integration/framework/process/daprd/daprd.go
++++ b/tests/integration/framework/process/daprd/daprd.go
+@@ -140,6 +140,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
+ 	if opts.blockShutdownDuration != nil {
+ 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
+ 	}
++	if opts.controlPlaneTrustDomain != nil {
++		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
++	}
+ 
+ 	ns := "default"
+ 	if opts.namespace != nil {
+diff --git a/tests/integration/framework/process/daprd/options.go b/tests/integration/framework/process/daprd/options.go
+index d6b39a535..739d0481c 100644
+--- a/tests/integration/framework/process/daprd/options.go
++++ b/tests/integration/framework/process/daprd/options.go
+@@ -55,6 +55,7 @@ type options struct {
+ 	disableK8sSecretStore   *bool
+ 	gracefulShutdownSeconds *int
+ 	blockShutdownDuration   *string
++	controlPlaneTrustDomain *string
+ }
+ 
+ func WithExecOptions(execOptions ...exec.Option) Option {
+@@ -246,3 +247,9 @@ func WithDaprBlockShutdownDuration(duration string) Option {
+ 		o.blockShutdownDuration = &duration
+ 	}
+ }
++
++func WithControlPlaneTrustDomain(trustDomain string) Option {
++	return func(o *options) {
++		o.controlPlaneTrustDomain = &trustDomain
++	}
++}
+diff --git a/tests/integration/suite/daprd/hotreload/operator/informer.go b/tests/integration/suite/daprd/hotreload/operator/informer.go
+index 1af786e19..b8b13652f 100644
+--- a/tests/integration/suite/daprd/hotreload/operator/informer.go
++++ b/tests/integration/suite/daprd/hotreload/operator/informer.go
+@@ -105,6 +105,7 @@ func (i *informer) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithExecOptions(exec.WithEnvVars(t,
+ 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+ 		)),
++		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/healthz/operator.go b/tests/integration/suite/healthz/operator.go
+index bcb188e10..7daf69f9e 100644
+--- a/tests/integration/suite/healthz/operator.go
++++ b/tests/integration/suite/healthz/operator.go
+@@ -43,7 +43,10 @@ type operator struct {
+ }
+ 
+ func (o *operator) Setup(t *testing.T) []framework.Option {
+-	o.sentry = procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
++	o.sentry = procsentry.New(t,
++		procsentry.WithTrustDomain("integration.test.dapr.io"),
++		procsentry.WithNamespace("dapr-system"),
++	)
+ 
+ 	kubeAPI := kubernetes.New(t, kubernetes.WithBaseOperatorAPI(t,
+ 		spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
+diff --git a/tests/integration/suite/ports/operator.go b/tests/integration/suite/ports/operator.go
+index 093fe0bd0..a9643eee0 100644
+--- a/tests/integration/suite/ports/operator.go
++++ b/tests/integration/suite/ports/operator.go
+@@ -40,7 +40,10 @@ type operator struct {
+ }
+ 
+ func (o *operator) Setup(t *testing.T) []framework.Option {
+-	sentry := procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
++	sentry := procsentry.New(t,
++		procsentry.WithTrustDomain("integration.test.dapr.io"),
++		procsentry.WithNamespace("dapr-system"),
++	)
+ 
+ 	kubeAPI := kubernetes.New(t, kubernetes.WithBaseOperatorAPI(t,
+ 		spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
+diff --git a/tests/integration/suite/sentry/validator/insecure/insecure.go b/tests/integration/suite/sentry/validator/insecure/insecure.go
+index 53152d78b..0b4334805 100644
+--- a/tests/integration/suite/sentry/validator/insecure/insecure.go
++++ b/tests/integration/suite/sentry/validator/insecure/insecure.go
+@@ -59,7 +59,6 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
+ 		defaultNamespace = "default"
+ 	)
+ 	defaultAppSPIFFEID := fmt.Sprintf("spiffe://public/ns/%s/%s", defaultNamespace, defaultAppID)
+-	defaultAppDNSName := fmt.Sprintf("%s.%s.svc.cluster.local", defaultAppID, defaultNamespace)
+ 
+ 	m.proc.WaitUntilRunning(t, parentCtx)
+ 
+@@ -102,7 +101,7 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
+ 		require.NoError(t, err)
+ 		require.NotEmpty(t, res.GetWorkloadCertificate())
+ 
+-		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID, defaultAppDNSName)
++		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID)
+ 	})
+ 
+ 	t.Run("insecure validator is the default", func(t *testing.T) {
+@@ -117,7 +116,7 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
+ 		require.NoError(t, err)
+ 		require.NotEmpty(t, res.GetWorkloadCertificate())
+ 
+-		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID, defaultAppDNSName)
++		validateCertificateResponse(t, res, m.proc.CABundle(), defaultAppSPIFFEID)
+ 	})
+ 
+ 	t.Run("fails with missing CSR", func(t *testing.T) {
+@@ -172,7 +171,7 @@ func (m *insecure) Run(t *testing.T, parentCtx context.Context) {
+ 	})
+ }
+ 
+-func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID, expectDNSName string) {
++func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID string) {
+ 	t.Helper()
+ 
+ 	require.NotEmpty(t, res.GetWorkloadCertificate())
+@@ -193,7 +192,7 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
+ 		certURIs[i] = v.String()
+ 	}
+ 	assert.Equal(t, []string{expectSPIFFEID}, certURIs)
+-	assert.Equal(t, []string{expectDNSName}, cert.DNSNames)
++	assert.Empty(t, cert.DNSNames)
+ 	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
+ 	assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
+ 
+diff --git a/tests/integration/suite/sentry/validator/jwks/shared.go b/tests/integration/suite/sentry/validator/jwks/shared.go
+index 0a5c4e65e..2d355fc17 100644
+--- a/tests/integration/suite/sentry/validator/jwks/shared.go
++++ b/tests/integration/suite/sentry/validator/jwks/shared.go
+@@ -42,7 +42,6 @@ func (s shared) Run(t *testing.T, parentCtx context.Context) {
+ 		defaultNamespace = "default"
+ 	)
+ 	defaultAppSPIFFEID := fmt.Sprintf("spiffe://public/ns/%s/%s", defaultNamespace, defaultAppID)
+-	defaultAppDNSName := fmt.Sprintf("%s.%s.svc.cluster.local", defaultAppID, defaultNamespace)
+ 
+ 	s.proc.WaitUntilRunning(t, parentCtx)
+ 
+@@ -124,7 +123,7 @@ func (s shared) Run(t *testing.T, parentCtx context.Context) {
+ 		require.NoError(t, err)
+ 		require.NotEmpty(t, res.GetWorkloadCertificate())
+ 
+-		validateCertificateResponse(t, res, s.proc.CABundle(), defaultAppSPIFFEID, defaultAppDNSName)
++		validateCertificateResponse(t, res, s.proc.CABundle(), defaultAppSPIFFEID)
+ 	})
+ 
+ 	testWithTokenError := func(fn func(builder *jwt.Builder), assertErr func(t *testing.T, grpcStatus *status.Status)) func(t *testing.T) {
+diff --git a/tests/integration/suite/sentry/validator/jwks/utils.go b/tests/integration/suite/sentry/validator/jwks/utils.go
+index 74eb4a09b..14114a56e 100644
+--- a/tests/integration/suite/sentry/validator/jwks/utils.go
++++ b/tests/integration/suite/sentry/validator/jwks/utils.go
+@@ -106,7 +106,7 @@ func signJWT(builder *jwt.Builder) ([]byte, error) {
+ 	return jwt.Sign(token, jwt.WithKey(jwa.ES256, jwtSigningKeyPriv))
+ }
+ 
+-func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID, expectDNSName string) {
++func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateResponse, sentryBundle ca.Bundle, expectSPIFFEID string) {
+ 	t.Helper()
+ 
+ 	require.NotEmpty(t, res.GetWorkloadCertificate())
+@@ -128,7 +128,7 @@ func validateCertificateResponse(t *testing.T, res *sentrypbv1.SignCertificateRe
+ 			certURIs[i] = v.String()
+ 		}
+ 		assert.Equal(t, []string{expectSPIFFEID}, certURIs)
+-		assert.Equal(t, []string{expectDNSName}, cert.DNSNames)
++		assert.Empty(t, cert.DNSNames)
+ 		assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageServerAuth)
+ 		assert.Contains(t, cert.ExtKeyUsage, x509.ExtKeyUsageClientAuth)
+ 	}
+diff --git a/tests/integration/suite/sentry/validator/kubernetes/common.go b/tests/integration/suite/sentry/validator/kubernetes/common.go
+index e93e2f4dd..4e0f7dd6a 100644
+--- a/tests/integration/suite/sentry/validator/kubernetes/common.go
++++ b/tests/integration/suite/sentry/validator/kubernetes/common.go
+@@ -30,7 +30,14 @@ import (
+ 	prockube "github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
+ )
+ 
+-func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *prockube.Kubernetes {
++type kubeAPIOptions struct {
++	bundle         ca.Bundle
++	namespace      string
++	serviceAccount string
++	appID          string
++}
++
++func kubeAPI(t *testing.T, opts kubeAPIOptions) *prockube.Kubernetes {
+ 	t.Helper()
+ 
+ 	return prockube.New(t,
+@@ -46,15 +53,15 @@ func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *
+ 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Secret"},
+ 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
+ 			Data: map[string][]byte{
+-				"ca.crt":     bundle.TrustAnchors,
+-				"issuer.crt": bundle.IssChainPEM,
+-				"issuer.key": bundle.IssKeyPEM,
++				"ca.crt":     opts.bundle.TrustAnchors,
++				"issuer.crt": opts.bundle.IssChainPEM,
++				"issuer.key": opts.bundle.IssKeyPEM,
+ 			},
+ 		}),
+ 		prockube.WithConfigMapGet(t, &corev1.ConfigMap{
+ 			TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "ConfigMap"},
+ 			ObjectMeta: metav1.ObjectMeta{Namespace: "sentrynamespace", Name: "dapr-trust-bundle"},
+-			Data:       map[string]string{"ca.crt": string(bundle.TrustAnchors)},
++			Data:       map[string]string{"ca.crt": string(opts.bundle.TrustAnchors)},
+ 		}),
+ 		prockube.WithClusterPodList(t, &corev1.PodList{
+ 			TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "PodList"},
+@@ -62,10 +69,10 @@ func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *
+ 				{
+ 					TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "Pod"},
+ 					ObjectMeta: metav1.ObjectMeta{
+-						Namespace: namespace, Name: "mypod",
+-						Annotations: map[string]string{"dapr.io/app-id": "myappid"},
++						Namespace: opts.namespace, Name: "mypod",
++						Annotations: map[string]string{"dapr.io/app-id": opts.appID},
+ 					},
+-					Spec: corev1.PodSpec{ServiceAccountName: serviceaccount},
++					Spec: corev1.PodSpec{ServiceAccountName: opts.serviceAccount},
+ 				},
+ 			},
+ 		}),
+@@ -81,7 +88,7 @@ func kubeAPI(t *testing.T, bundle ca.Bundle, namespace, serviceaccount string) *
+ 			resp, err := json.Marshal(&authapi.TokenReview{
+ 				Status: authapi.TokenReviewStatus{
+ 					Authenticated: true,
+-					User:          authapi.UserInfo{Username: fmt.Sprintf("system:serviceaccount:%s:%s", namespace, serviceaccount)},
++					User:          authapi.UserInfo{Username: fmt.Sprintf("system:serviceaccount:%s:%s", opts.namespace, opts.serviceAccount)},
+ 				},
+ 			})
+ 			require.NoError(t, err)
+diff --git a/tests/integration/suite/sentry/validator/kubernetes/kubernetes.go b/tests/integration/suite/sentry/validator/kubernetes/kubernetes.go
+index ce272e4ea..fa917a424 100644
+--- a/tests/integration/suite/sentry/validator/kubernetes/kubernetes.go
++++ b/tests/integration/suite/sentry/validator/kubernetes/kubernetes.go
+@@ -50,7 +50,12 @@ func (k *kubernetes) Setup(t *testing.T) []framework.Option {
+ 	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
+ 	require.NoError(t, err)
+ 
+-	kubeAPI := kubeAPI(t, bundle, "mynamespace", "myserviceaccount")
++	kubeAPI := kubeAPI(t, kubeAPIOptions{
++		bundle:         bundle,
++		namespace:      "mynamespace",
++		serviceAccount: "myserviceaccount",
++		appID:          "myappid",
++	})
+ 
+ 	k.sentry = sentry.New(t,
+ 		sentry.WithWriteConfig(false),
+diff --git a/tests/integration/suite/sentry/validator/kubernetes/longname.go b/tests/integration/suite/sentry/validator/kubernetes/longname.go
+index 3a4c4f180..37f449e16 100644
+--- a/tests/integration/suite/sentry/validator/kubernetes/longname.go
++++ b/tests/integration/suite/sentry/validator/kubernetes/longname.go
+@@ -24,12 +24,16 @@ import (
+ 	"testing"
+ 	"time"
+ 
++	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
++	"google.golang.org/grpc/codes"
++	"google.golang.org/grpc/status"
+ 
+ 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
+ 	"github.com/dapr/dapr/pkg/sentry/server/ca"
+ 	"github.com/dapr/dapr/tests/integration/framework"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
++	prockube "github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+ 	"github.com/dapr/dapr/tests/integration/suite"
+ )
+@@ -38,10 +42,13 @@ func init() {
+ 	suite.Register(new(longname))
+ }
+ 
+-// longname tests that sentry with authenticate requests with legacy identities
+-// that use namespace + serviceaccount names longer than 253 characters.
++// longname tests that sentry with _not_ authenticate requests with legacy
++// identities that use namespace + serviceaccount names longer than 253
++// characters, or app IDs longer than 64 characters.
+ type longname struct {
+-	sentry *sentry.Sentry
++	sentry1 *sentry.Sentry
++	sentry2 *sentry.Sentry
++	sentry3 *sentry.Sentry
+ }
+ 
+ func (l *longname) Setup(t *testing.T) []framework.Option {
+@@ -50,43 +57,98 @@ func (l *longname) Setup(t *testing.T) []framework.Option {
+ 	bundle, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
+ 	require.NoError(t, err)
+ 
+-	kubeAPI := kubeAPI(t, bundle, strings.Repeat("n", 253), strings.Repeat("s", 253))
++	kubeAPI1 := kubeAPI(t, kubeAPIOptions{
++		bundle:         bundle,
++		namespace:      strings.Repeat("n", 253),
++		serviceAccount: strings.Repeat("s", 253),
++		appID:          "myapp",
++	})
++
++	kubeAPI2 := kubeAPI(t, kubeAPIOptions{
++		bundle:         bundle,
++		namespace:      strings.Repeat("n", 253),
++		serviceAccount: strings.Repeat("s", 253),
++		appID:          strings.Repeat("a", 65),
++	})
+ 
+-	l.sentry = sentry.New(t,
+-		sentry.WithWriteConfig(false),
+-		sentry.WithKubeconfig(kubeAPI.KubeconfigPath(t)),
+-		sentry.WithNamespace("sentrynamespace"),
+-		sentry.WithExecOptions(
+-			// Enable Kubernetes validator.
+-			exec.WithEnvVars(t, "KUBERNETES_SERVICE_HOST", "anything"),
+-		),
+-		sentry.WithCABundle(bundle),
+-		sentry.WithTrustDomain("integration.test.dapr.io"),
+-	)
++	kubeAPI3 := kubeAPI(t, kubeAPIOptions{
++		bundle:         bundle,
++		namespace:      strings.Repeat("n", 253),
++		serviceAccount: strings.Repeat("s", 253),
++		appID:          strings.Repeat("a", 64),
++	})
++
++	sentryOpts := func(kubeAPI *prockube.Kubernetes) *sentry.Sentry {
++		return sentry.New(t,
++			sentry.WithWriteConfig(false),
++			sentry.WithKubeconfig(kubeAPI.KubeconfigPath(t)),
++			sentry.WithExecOptions(
++				// Enable Kubernetes validator.
++				exec.WithEnvVars(t, "KUBERNETES_SERVICE_HOST", "anything"),
++				exec.WithEnvVars(t, "NAMESPACE", "sentrynamespace"),
++			),
++			sentry.WithCABundle(bundle),
++			sentry.WithTrustDomain("integration.test.dapr.io"),
++		)
++	}
++
++	l.sentry1 = sentryOpts(kubeAPI1)
++	l.sentry2 = sentryOpts(kubeAPI2)
++	l.sentry3 = sentryOpts(kubeAPI3)
+ 
+ 	return []framework.Option{
+-		framework.WithProcesses(l.sentry, kubeAPI),
++		framework.WithProcesses(kubeAPI1, kubeAPI2, kubeAPI3, l.sentry1, l.sentry2, l.sentry3),
+ 	}
+ }
+ 
+ func (l *longname) Run(t *testing.T, ctx context.Context) {
+-	l.sentry.WaitUntilRunning(t, ctx)
++	l.sentry1.WaitUntilRunning(t, ctx)
++	l.sentry2.WaitUntilRunning(t, ctx)
++	l.sentry3.WaitUntilRunning(t, ctx)
+ 
+-	conn := l.sentry.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")
+-	client := sentrypbv1.NewCAClient(conn)
++	conn1 := l.sentry1.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")
++	client1 := sentrypbv1.NewCAClient(conn1)
+ 
+ 	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+ 	require.NoError(t, err)
+ 	csrDer, err := x509.CreateCertificateRequest(rand.Reader, new(x509.CertificateRequest), pk)
+ 	require.NoError(t, err)
+ 
+-	resp, err := client.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
++	resp, err := client1.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
+ 		Id:                        strings.Repeat("n", 253) + ":" + strings.Repeat("s", 253),
+ 		Namespace:                 strings.Repeat("n", 253),
+ 		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
+ 		TokenValidator:            sentrypbv1.SignCertificateRequest_KUBERNETES,
+ 		Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
+ 	})
++	assert.Nil(t, resp)
++	require.ErrorContains(t, err, "app ID must be 64 characters or less")
++	assert.Equal(t, codes.PermissionDenied, status.Code(err))
++
++	conn2 := l.sentry2.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")
++	client2 := sentrypbv1.NewCAClient(conn2)
++
++	resp, err = client2.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
++		Id:                        strings.Repeat("a", 65),
++		Namespace:                 strings.Repeat("n", 253),
++		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
++		TokenValidator:            sentrypbv1.SignCertificateRequest_KUBERNETES,
++		Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
++	})
++	assert.Nil(t, resp)
++	require.ErrorContains(t, err, "app ID must be 64 characters or less")
++	assert.Equal(t, codes.PermissionDenied, status.Code(err))
++
++	conn3 := l.sentry3.DialGRPC(t, ctx, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry")
++	client3 := sentrypbv1.NewCAClient(conn3)
++
++	resp, err = client3.SignCertificate(ctx, &sentrypbv1.SignCertificateRequest{
++		Id:                        strings.Repeat("a", 64),
++		Namespace:                 strings.Repeat("n", 253),
++		CertificateSigningRequest: pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE REQUEST", Bytes: csrDer}),
++		TokenValidator:            sentrypbv1.SignCertificateRequest_KUBERNETES,
++		Token:                     `{"kubernetes.io":{"pod":{"name":"mypod"}}}`,
++	})
+ 	require.NoError(t, err)
+ 	require.NotEmpty(t, resp.GetWorkloadCertificate())
+ }

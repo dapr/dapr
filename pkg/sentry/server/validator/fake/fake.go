@@ -26,7 +26,7 @@ import (
 
 // Fake implements the validator.Interface. It is used in tests.
 type Fake struct {
-	validateFn func(context.Context, *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, bool, error)
+	validateFn func(context.Context, *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error)
 	startFn    func(context.Context) error
 }
 
@@ -35,13 +35,13 @@ func New() *Fake {
 		startFn: func(context.Context) error {
 			return nil
 		},
-		validateFn: func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, bool, error) {
-			return spiffeid.TrustDomain{}, false, nil
+		validateFn: func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
+			return spiffeid.TrustDomain{}, nil
 		},
 	}
 }
 
-func (f *Fake) WithValidateFn(fn func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, bool, error)) *Fake {
+func (f *Fake) WithValidateFn(fn func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error)) *Fake {
 	f.validateFn = fn
 	return f
 }
@@ -51,7 +51,7 @@ func (f *Fake) WithStartFn(fn func(ctx context.Context) error) *Fake {
 	return f
 }
 
-func (f *Fake) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, bool, error) {
+func (f *Fake) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
 	return f.validateFn(ctx, req)
 }
 

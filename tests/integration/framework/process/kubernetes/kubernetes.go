@@ -18,8 +18,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -31,6 +33,7 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
 
+	securitypem "github.com/dapr/dapr/pkg/security/pem"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/informer"
@@ -111,11 +114,31 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 	require.NoError(t, err)
 	bundle, err := ca.GenerateBundle(pk, "kubernetes.integration.dapr.io", time.Second*5, nil)
 	require.NoError(t, err)
+	leafpk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	leafCert := &x509.Certificate{
+		SerialNumber:       big.NewInt(1),
+		NotBefore:          time.Now(),
+		NotAfter:           time.Now().Add(time.Minute * 5),
+		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:           []string{"cluster.local"},
+		SignatureAlgorithm: x509.ECDSAWithSHA256,
+	}
+	leafCertDER, err := x509.CreateCertificate(rand.Reader, leafCert, bundle.IssChain[0], leafpk.Public(), bundle.IssKey)
+	require.NoError(t, err)
+	leafCert, err = x509.ParseCertificate(leafCertDER)
+	require.NoError(t, err)
+
+	chainPEM, err := securitypem.EncodeX509Chain(append([]*x509.Certificate{leafCert}, bundle.IssChain...))
+	require.NoError(t, err)
+	keyPEM, err := securitypem.EncodePrivateKey(leafpk)
+	require.NoError(t, err)
 
 	return &Kubernetes{
 		http: prochttp.New(t,
 			prochttp.WithHandler(handler),
-			prochttp.WithMTLS(t, bundle.TrustAnchors, bundle.IssChainPEM, bundle.IssKeyPEM),
+			prochttp.WithMTLS(t, bundle.TrustAnchors, chainPEM, keyPEM),
 		),
 		bundle:   bundle,
 		informer: informer,
