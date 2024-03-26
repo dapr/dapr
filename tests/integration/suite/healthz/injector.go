@@ -39,7 +39,10 @@ type injector struct {
 }
 
 func (i *injector) Setup(t *testing.T) []framework.Option {
-	sentry := procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
+	sentry := procsentry.New(t,
+		procsentry.WithTrustDomain("integration.test.dapr.io"),
+		procsentry.WithNamespace("dapr-system"),
+	)
 
 	i.injector = procinjector.New(t,
 		procinjector.WithNamespace("dapr-system"),
