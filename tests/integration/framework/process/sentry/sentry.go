@@ -38,12 +38,13 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Sentry struct {
-	exec     process.Interface
-	freeport *util.FreePort
+	exec  process.Interface
+	ports *ports.Ports
 
 	bundle      *ca.Bundle
 	port        int
@@ -54,11 +55,11 @@ type Sentry struct {
 func New(t *testing.T, fopts ...Option) *Sentry {
 	t.Helper()
 
-	fp := util.ReservePorts(t, 3)
+	fp := ports.Reserve(t, 3)
 	opts := options{
-		port:        fp.Port(t, 0),
-		healthzPort: fp.Port(t, 1),
-		metricsPort: fp.Port(t, 2),
+		port:        fp.Port(t),
+		healthzPort: fp.Port(t),
+		metricsPort: fp.Port(t),
 		writeBundle: true,
 		writeConfig: true,
 	}
@@ -131,7 +132,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 
 	return &Sentry{
 		exec:        exec.New(t, binary.EnvValue("sentry"), args, opts.execOpts...),
-		freeport:    fp,
+		ports:       fp,
 		bundle:      opts.bundle,
 		port:        opts.port,
 		metricsPort: opts.metricsPort,
@@ -140,7 +141,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 }
 
 func (s *Sentry) Run(t *testing.T, ctx context.Context) {
-	s.freeport.Free(t)
+	s.ports.Free(t)
 	s.exec.Run(t, ctx)
 }
 

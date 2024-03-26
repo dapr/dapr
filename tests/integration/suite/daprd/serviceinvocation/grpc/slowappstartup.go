@@ -32,7 +32,7 @@ import (
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
-	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/suite"
 	testpb "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc/proto"
 )
@@ -61,27 +61,27 @@ func (s *slowappstartup) Setup(t *testing.T) []framework.Option {
 		}, nil
 	}
 
-	fp := util.ReservePorts(t, 1)
-	fp.Free(t)
+	fp := ports.Reserve(t, 1)
+	port := fp.Port(t)
 
 	s.app = newGRPCServer(t, onInvoke, procgrpc.WithListener(func() (net.Listener, error) {
 		// Simulate a slow startup by not opening the listener until 2 seconds after
 		// the process starts. This sleep value must be more than the health probe
 		// interval.
 		time.Sleep(time.Second * 2)
-		return net.Listen("tcp", "localhost:"+strconv.Itoa(fp.Port(t, 0)))
+		return net.Listen("tcp", "localhost:"+strconv.Itoa(port))
 	}))
 
 	s.daprd = procdaprd.New(t,
 		procdaprd.WithAppProtocol("grpc"),
-		procdaprd.WithAppPort(fp.Port(t, 0)),
+		procdaprd.WithAppPort(port),
 		procdaprd.WithAppHealthCheck(true),
 		procdaprd.WithAppHealthProbeInterval(1),
 		procdaprd.WithAppHealthProbeThreshold(1),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.app, s.daprd),
+		framework.WithProcesses(fp, s.app, s.daprd),
 	}
 }
 
