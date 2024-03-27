@@ -86,6 +86,8 @@ type Server struct {
 
 	grpcManager  *manager.Manager
 	actorRuntime actors.ActorRuntime
+
+	closeCh chan struct{}
 }
 
 func New(opts Options) *Server {
@@ -120,6 +122,7 @@ func New(opts Options) *Server {
 		},
 		maxConnPerApp:          opts.MaxConnsPerAppID,
 		maxTimeWaitForSidecars: opts.MaxTimeWaitForSidecars,
+		closeCh:                make(chan struct{}),
 	}
 
 	s.srv = grpc.NewServer(opts.Security.GRPCServerOptionMTLS())
@@ -175,6 +178,11 @@ func (s *Server) Run(ctx context.Context) error {
 		s.runServer,
 		s.runEtcd,
 		s.runJobWatcher,
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			close(s.closeCh)
+			return nil
+		},
 	).Run(ctx)
 }
 
