@@ -48,17 +48,6 @@ const (
 	// AppHealth.
 	ErrAppUnhealthy = "app is not in a healthy state"
 
-	// Actor.
-	ErrActorInstanceMissing      = "actor instance is missing"
-	ErrActorInvoke               = "error invoke actor method: %s"
-	ErrActorReminderCreate       = "error creating actor reminder: %s"
-	ErrActorReminderGet          = "error getting actor reminder: %s"
-	ErrActorReminderDelete       = "error deleting actor reminder: %s"
-	ErrActorTimerCreate          = "error creating actor timer: %s"
-	ErrActorTimerDelete          = "error deleting actor timer: %s"
-	ErrActorStateGet             = "error getting actor state: %s"
-	ErrActorStateTransactionSave = "error saving actor transaction state: %s"
-
 	// Configuration.
 	ErrConfigurationStoresNotConfigured = "configuration stores not configured"
 	ErrConfigurationStoreNotFound       = "configuration store %s not found"
