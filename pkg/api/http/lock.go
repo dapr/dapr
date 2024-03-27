@@ -88,7 +88,7 @@ func (a *api) onUnlockAlpha1() http.HandlerFunc {
 				if err != nil {
 					return nil, fmt.Errorf("failed to marshal response as JSON: %w", err)
 				}
-				return &UniversalHTTPRawResponse{
+				return UniversalHTTPRawResponse{
 					Body:        b,
 					ContentType: jsonContentTypeHeader,
 				}, nil

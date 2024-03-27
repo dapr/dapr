@@ -294,8 +294,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 			return res, nil
 		}
 
-		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
-		return nil, err
+		return nil, messages.ErrActorInvoke.WithFormat(err)
 	}
 	return res, nil
 }
