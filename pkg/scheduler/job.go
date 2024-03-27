@@ -15,11 +15,7 @@ package scheduler
 
 import (
 	"google.golang.org/protobuf/types/known/anypb"
-
-	"github.com/dapr/kit/logger"
 )
-
-var log = logger.NewLogger("dapr.runtime.scheduler")
 
 type Job struct {
 	Name     string
