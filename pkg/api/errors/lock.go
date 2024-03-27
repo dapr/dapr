@@ -75,8 +75,8 @@ func (l *LockMetadataError) LockOwnerEmpty() error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		"lock owner is empty",
-		"ERR_LOCK_OWNER_EMPTY",
-		"LOCK_OWNER_EMPTY",
+		"ERR_OWNER_EMPTY",
+		"OWNER_EMPTY",
 	)
 }
 

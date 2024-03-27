@@ -22,7 +22,6 @@ import (
 	"strings"
 	"testing"
 
-	apiErrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/util"
@@ -104,7 +103,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("lock store %s is not found", name), errMsg)
+		require.Equal(t, fmt.Sprintf("lock %s is not found", name), errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
@@ -158,7 +157,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("lock store %s is not configured", name), errMsg)
+		require.Equal(t, fmt.Sprintf("lock %s is not configured", name), errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
@@ -207,7 +206,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("ResourceId is empty in lock store "+name), errMsg)
+		require.Equal(t, "lock resource id is empty", errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
@@ -237,7 +236,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, "dapr.io", errInfo["domain"])
-		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixIDEmpty, errInfo["reason"])
+		require.Equal(t, "DAPR_LOCK_RESOURCE_ID_EMPTY", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
@@ -276,7 +275,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("LockOwner is empty in lock store "+name), errMsg)
+		require.Equal(t, "lock owner is empty", errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
@@ -306,7 +305,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, "dapr.io", errInfo["domain"])
-		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixLockOwnerEmpty, errInfo["reason"])
+		require.Equal(t, "DAPR_LOCK_OWNER_EMPTY", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
@@ -345,7 +344,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("ExpiryInSeconds is not positive in lock store "+name), errMsg)
+		require.Equal(t, "expiry in seconds is not positive", errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
@@ -375,7 +374,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, "dapr.io", errInfo["domain"])
-		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixExpiryInSecondsNotPositive, errInfo["reason"])
+		require.Equal(t, "DAPR_LOCK_EXPIRY_NOT_POSITIVE", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
@@ -447,7 +446,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, "dapr.io", errInfo["domain"])
-		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixTryLock, errInfo["reason"])
+		require.Equal(t, "DAPR_LOCK_TRY_LOCK_FAILED", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
@@ -519,7 +518,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ErrorInfo details are correct
 		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
 		require.Equal(t, "dapr.io", errInfo["domain"])
-		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixUnlock, errInfo["reason"])
+		require.Equal(t, "DAPR_LOCK_UNLOCK_FAILED", errInfo["reason"])
 
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)

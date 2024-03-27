@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"testing"
 
-	apiErrors "github.com/dapr/dapr/pkg/api/errors"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -33,14 +32,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(standardizedErrors))
+	suite.Register(new(testlock))
 }
 
-type standardizedErrors struct {
+type testlock struct {
 	daprd *daprd.Daprd
 }
 
-func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
+func (e *testlock) Setup(t *testing.T) []framework.Option {
 	e.daprd = daprd.New(t,
 		daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
@@ -62,7 +61,7 @@ spec:
 	}
 }
 
-func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
+func (e *testlock) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	conn, err := grpc.DialContext(ctx, e.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
@@ -85,7 +84,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
-		require.Equal(t, fmt.Sprintf("lock store %s is not found", "lock-doesn't-exist"), s.Message())
+		require.Equal(t, fmt.Sprintf("lock %s is not found", "lock-doesn't-exist"), s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)
@@ -122,7 +121,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.FailedPrecondition, s.Code())
-		require.Equal(t, fmt.Sprintf("lock store %s is not configured", name), s.Message())
+		require.Equal(t, fmt.Sprintf("lock %s is not configured", name), s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)
@@ -147,7 +146,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
-		require.Equal(t, fmt.Sprintf("ResourceId is empty in lock store %s", name), s.Message())
+		require.Equal(t, "lock resource id is empty", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 2)
@@ -166,7 +165,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
-		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixIDEmpty, errInfo.GetReason())
+		require.Equal(t, "DAPR_LOCK_RESOURCE_ID_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 
@@ -190,7 +189,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
-		require.Equal(t, fmt.Sprintf("LockOwner is empty in lock store %s", name), s.Message())
+		require.Equal(t, "lock owner is empty", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 2)
@@ -209,7 +208,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
-		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixLockOwnerEmpty, errInfo.GetReason())
+		require.Equal(t, "DAPR_LOCK_OWNER_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 
@@ -233,7 +232,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
-		require.Equal(t, fmt.Sprintf("ExpiryInSeconds is not positive in lock store %s", name), s.Message())
+		require.Equal(t, "expiry in seconds is not positive", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 2)
@@ -252,7 +251,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
-		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixExpiryInSecondsNotPositive, errInfo.GetReason())
+		require.Equal(t, "DAPR_LOCK_EXPIRY_NOT_POSITIVE", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 
@@ -279,9 +278,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.Internal, s.Code())
 		t.Log(err.Error())
-		// checkKeyIllegal error
-		expectedErr := fmt.Sprintf("input key/keyPrefix '%s' can't contain '%s'", resourceID, "||")
-		require.Equal(t, fmt.Sprintf("failed to try acquiring lock: "+expectedErr), s.Message())
+		require.Equal(t, "failed to try acquiring lock", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 2)
@@ -300,7 +297,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
-		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixTryLock, errInfo.GetReason())
+		require.Equal(t, "DAPR_LOCK_TRY_LOCK_FAILED", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 
@@ -326,9 +323,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.Internal, s.Code())
 		t.Log(err.Error())
-		// checkKeyIllegal error
-		expectedErr := fmt.Sprintf("input key/keyPrefix '%s' can't contain '%s'", resourceID, "||")
-		require.Equal(t, fmt.Sprintf("failed to release lock: "+expectedErr), s.Message())
+		require.Equal(t, "failed to release lock", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 2)
@@ -347,7 +342,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
-		require.Equal(t, kitErrors.CodePrefixLock+apiErrors.PostFixUnlock, errInfo.GetReason())
+		require.Equal(t, "DAPR_LOCK_UNLOCK_FAILED", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 
