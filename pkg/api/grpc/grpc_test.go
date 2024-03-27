@@ -3859,7 +3859,7 @@ func TestTryLock(t *testing.T) {
 			ExpiryInSeconds: 10,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "api error: code = FailedPrecondition desc = lock store abc is not configured", err.Error())
+		assert.Equal(t, "api error: code = FailedPrecondition desc = lock abc is not configured", err.Error())
 	})
 
 	t.Run("InvalidArgument: ResourceID empty", func(t *testing.T) {
@@ -3880,7 +3880,7 @@ func TestTryLock(t *testing.T) {
 			ExpiryInSeconds: 10,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "api error: code = InvalidArgument desc = ResourceId is empty in lock store mock", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = lock resource id is empty", err.Error())
 	})
 
 	t.Run("InvalidArgument: LockOwner empty", func(t *testing.T) {
@@ -3903,7 +3903,7 @@ func TestTryLock(t *testing.T) {
 			ExpiryInSeconds: 10,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "api error: code = InvalidArgument desc = LockOwner is empty in lock store mock", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = lock owner is empty", err.Error())
 	})
 
 	t.Run("InvalidArgument: ExpiryInSeconds is not positive", func(t *testing.T) {
@@ -3928,7 +3928,7 @@ func TestTryLock(t *testing.T) {
 			ExpiryInSeconds: 0,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "api error: code = InvalidArgument desc = ExpiryInSeconds is not positive in lock store mock", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = expiry in seconds is not positive", err.Error())
 	})
 
 	t.Run("InvalidArgument: lock store not found", func(t *testing.T) {
@@ -3953,7 +3953,7 @@ func TestTryLock(t *testing.T) {
 			ExpiryInSeconds: 1,
 		}
 		_, err := api.TryLockAlpha1(context.Background(), req)
-		assert.Equal(t, "api error: code = InvalidArgument desc = lock store abc is not found", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = lock abc is not found", err.Error())
 	})
 
 	t.Run("successful", func(t *testing.T) {
@@ -4010,7 +4010,7 @@ func TestUnlock(t *testing.T) {
 			StoreName: "abc",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "api error: code = FailedPrecondition desc = lock store abc is not configured", err.Error())
+		assert.Equal(t, "api error: code = FailedPrecondition desc = lock abc is not configured", err.Error())
 	})
 
 	t.Run("InvalidArgument: ResourceId empty", func(t *testing.T) {
@@ -4031,7 +4031,7 @@ func TestUnlock(t *testing.T) {
 			StoreName: "abc",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "api error: code = InvalidArgument desc = ResourceId is empty in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = lock resource id is empty", err.Error())
 	})
 
 	t.Run("InvalidArgument: lock owner empty", func(t *testing.T) {
@@ -4052,7 +4052,7 @@ func TestUnlock(t *testing.T) {
 			ResourceId: "resource",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "api error: code = InvalidArgument desc = LockOwner is empty in lock store abc", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = lock owner is empty", err.Error())
 	})
 
 	t.Run("InvalidArgument: lock store not found", func(t *testing.T) {
@@ -4075,7 +4075,7 @@ func TestUnlock(t *testing.T) {
 			LockOwner:  "owner",
 		}
 		_, err := api.UnlockAlpha1(context.Background(), req)
-		assert.Equal(t, "api error: code = InvalidArgument desc = lock store abc is not found", err.Error())
+		assert.Equal(t, "api error: code = InvalidArgument desc = lock abc is not found", err.Error())
 	})
 
 	t.Run("successful", func(t *testing.T) {

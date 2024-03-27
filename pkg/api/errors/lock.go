@@ -14,89 +14,131 @@ limitations under the License.
 package errors
 
 import (
+	"fmt"
 	"net/http"
 
-	kitErrors "github.com/dapr/kit/errors"
-	grpcCodes "google.golang.org/grpc/codes"
+	"github.com/dapr/components-contrib/metadata"
+	"github.com/dapr/kit/errors"
+	"google.golang.org/grpc/codes"
 )
 
-const (
-	// Lock Error PostFix
-	PostFixIDEmpty                    = "RESOURCE_ID_EMPTY"
-	PostFixLockOwnerEmpty             = "LOCK_OWNER_EMPTY"
-	PostFixExpiryInSecondsNotPositive = "NEGATIVE_EXPIRY"
-	PostFixTryLock                    = "TRY_LOCK"
-	PostFixUnlock                     = "UNLOCK"
+type LockError struct {
+	name  string
+	owner string
+}
 
-	// Lock Error Message
-	MsgIDEmpty                    = "ResourceId is empty in lock store "
-	MsgLockOwnerEmpty             = "LockOwner is empty in lock store "
-	MsgExpiryInSecondsNotPositive = "ExpiryInSeconds is not positive in lock store "
-	MsgTryLock                    = "failed to try acquiring lock: "
-	MsgUnlock                     = "failed to release lock: "
-)
+type LockMetadataError struct {
+	l                *LockError
+	metadata         map[string]string
+	skipResourceInfo bool
+}
 
-func DistributedLockResourceIDEmpty(storeName, owner string) error {
-	msg := MsgIDEmpty + storeName
-	return kitErrors.NewBuilder(
-		grpcCodes.InvalidArgument,
+func Lock(name string, owner string) *LockError {
+	return &LockError{
+		name:  name,
+		owner: owner,
+	}
+}
+
+func (l *LockError) WithMetadata(metadata map[string]string) *LockMetadataError {
+	return &LockMetadataError{
+		l:        l,
+		metadata: metadata,
+	}
+}
+
+func (l *LockError) WithAppError(appID string, err error) *LockMetadataError {
+	meta := map[string]string{
+		"appID": appID,
+	}
+	if err != nil {
+		meta["error"] = err.Error()
+	}
+	return &LockMetadataError{
+		l:        l,
+		metadata: meta,
+	}
+}
+
+func (l *LockMetadataError) ResourceIDEmpty() error {
+	return l.build(
+		codes.InvalidArgument,
 		http.StatusBadRequest,
-		msg,
+		"lock resource id is empty",
 		"ERR_RESOURCE_ID_EMPTY",
-	).
-		WithErrorInfo(kitErrors.CodePrefixLock+PostFixIDEmpty, nil).
-		WithResourceInfo("lock", storeName, owner, "").
-		Build()
+		"RESOURCE_ID_EMPTY",
+	)
 }
 
-func DistributedLockOwnerEmpty(storeName string) error {
-	msg := MsgLockOwnerEmpty + storeName
-	return kitErrors.NewBuilder(
-		grpcCodes.InvalidArgument,
+func (l *LockMetadataError) LockOwnerEmpty() error {
+	return l.build(
+		codes.InvalidArgument,
 		http.StatusBadRequest,
-		msg,
+		"lock owner is empty",
 		"ERR_LOCK_OWNER_EMPTY",
-	).
-		WithErrorInfo(kitErrors.CodePrefixLock+PostFixLockOwnerEmpty, nil).
-		WithResourceInfo("lock", storeName, "", "").
-		Build()
+		"LOCK_OWNER_EMPTY",
+	)
 }
 
-func DistributedLockExpiryNotPositive(storeName, owner string) error {
-	msg := MsgExpiryInSecondsNotPositive + storeName
-	return kitErrors.NewBuilder(
-		grpcCodes.InvalidArgument,
+func (l *LockMetadataError) ExpiryInSecondsNotPositive() error {
+	return l.build(
+		codes.InvalidArgument,
 		http.StatusBadRequest,
-		msg,
+		"expiry in seconds is not positive",
 		"ERR_EXPIRY_NOT_POSITIVE",
-	).
-		WithErrorInfo(kitErrors.CodePrefixLock+PostFixExpiryInSecondsNotPositive, nil).
-		WithResourceInfo("lock", storeName, owner, "").
-		Build()
+		"EXPIRY_NOT_POSITIVE",
+	)
 }
 
-func DistributedTryLockFailed(storeName, owner string, err error) error {
-	msg := MsgTryLock + err.Error()
-	return kitErrors.NewBuilder(
-		grpcCodes.Internal,
+func (l *LockMetadataError) TryLockFailed() error {
+	return l.build(
+		codes.InvalidArgument,
 		http.StatusInternalServerError,
-		msg,
+		"failed to try acquiring lock",
 		"ERR_TRY_LOCK",
-	).
-		WithErrorInfo(kitErrors.CodePrefixLock+PostFixTryLock, nil).
-		WithResourceInfo("lock", storeName, owner, "").
-		Build()
+		"TRY_LOCK_FAILED",
+	)
 }
 
-func DistributedUnlockFailed(storeName, owner string, err error) error {
-	msg := MsgUnlock + err.Error()
-	return kitErrors.NewBuilder(
-		grpcCodes.Internal,
+func (l *LockMetadataError) UnlockFailed() error {
+	return l.build(
+		codes.InvalidArgument,
 		http.StatusInternalServerError,
-		msg,
+		"failed to release lock",
 		"ERR_UNLOCK",
-	).
-		WithErrorInfo(kitErrors.CodePrefixLock+PostFixUnlock, nil).
-		WithResourceInfo("lock", storeName, owner, "").
-		Build()
+		"UNLOCK_FAILED",
+	)
+}
+
+func (l *LockMetadataError) NotFound() error {
+	l.skipResourceInfo = true
+	return l.build(
+		codes.InvalidArgument,
+		http.StatusNotFound,
+		fmt.Sprintf("%s %s is not found", metadata.LockStoreType, l.l.name),
+		"ERR_LOCK_NOT_FOUND",
+		errors.CodeNotFound,
+	)
+}
+
+func (l *LockMetadataError) NotConfigured() error {
+	l.skipResourceInfo = true
+	return l.build(
+		codes.FailedPrecondition,
+		http.StatusInternalServerError,
+		fmt.Sprintf("%s %s is not configured", metadata.LockStoreType, l.l.name),
+		"ERR_LOCK_NOT_CONFIGURED",
+		errors.CodeNotConfigured,
+	)
+}
+
+func (l *LockMetadataError) build(grpcCode codes.Code, httpCode int, msg, tag, errCode string) error {
+	err := errors.NewBuilder(grpcCode, httpCode, msg, tag)
+	if !l.skipResourceInfo {
+		err = err.WithResourceInfo(string(metadata.LockStoreType), l.l.name, l.l.owner, msg)
+	}
+	return err.WithErrorInfo(
+		errors.CodePrefixLock+errCode,
+		nil,
+	).Build()
 }

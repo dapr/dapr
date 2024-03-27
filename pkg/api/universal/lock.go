@@ -15,22 +15,21 @@ package universal
 
 import (
 	"context"
-	"net/http"
 
 	"github.com/dapr/components-contrib/lock"
-	contribMetadata "github.com/dapr/components-contrib/metadata"
 	apiErrors "github.com/dapr/dapr/pkg/api/errors"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	kitErrors "github.com/dapr/kit/errors"
-	"google.golang.org/grpc/codes"
 )
 
 func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
+	ownerName := req.GetLockOwner()
+	storeName := req.GetStoreName()
+
 	// 1. validate and find lock component
 	if req.GetExpiryInSeconds() <= 0 {
-		err := apiErrors.DistributedLockExpiryNotPositive(req.GetStoreName(), req.GetLockOwner())
+		err := apiErrors.Lock(storeName, ownerName).WithMetadata(nil).ExpiryInSecondsNotPositive()
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -46,22 +45,22 @@ func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockR
 		ExpiryInSeconds: req.GetExpiryInSeconds(),
 	}
 	// modify key
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.GetStoreName(), a.appID)
+	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, storeName, a.appID)
 	if err != nil {
-		err := apiErrors.DistributedTryLockFailed(req.GetStoreName(), req.GetLockOwner(), err)
+		err := apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).TryLockFailed()
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
 
 	// 3. delegate to the component
 	policyRunner := resiliency.NewRunner[*lock.TryLockResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(req.GetStoreName(), resiliency.Lock),
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Lock),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*lock.TryLockResponse, error) {
 		return store.TryLock(ctx, compReq)
 	})
 	if err != nil {
-		err := apiErrors.DistributedTryLockFailed(req.GetStoreName(), req.GetLockOwner(), err)
+		err := apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).TryLockFailed()
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -78,6 +77,9 @@ func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockR
 func (a *Universal) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockRequest) (*runtimev1pb.UnlockResponse, error) {
 	var err error
 
+	ownerName := req.GetLockOwner()
+	storeName := req.GetStoreName()
+
 	// 1. validate and find lock component
 	store, err := a.lockValidateRequest(req)
 	if err != nil {
@@ -87,25 +89,25 @@ func (a *Universal) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockReq
 	// 2. convert request
 	compReq := &lock.UnlockRequest{
 		ResourceID: req.GetResourceId(),
-		LockOwner:  req.GetLockOwner(),
+		LockOwner:  ownerName,
 	}
 	// modify key
-	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, req.GetStoreName(), a.appID)
+	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, storeName, a.appID)
 	if err != nil {
-		err := apiErrors.DistributedUnlockFailed(req.GetStoreName(), req.GetLockOwner(), err)
+		err := apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).UnlockFailed()
 		a.logger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
 	}
 
 	// 3. delegate to the component
 	policyRunner := resiliency.NewRunner[*lock.UnlockResponse](ctx,
-		a.resiliency.ComponentOutboundPolicy(req.GetStoreName(), resiliency.Lock),
+		a.resiliency.ComponentOutboundPolicy(storeName, resiliency.Lock),
 	)
 	resp, err := policyRunner(func(ctx context.Context) (*lock.UnlockResponse, error) {
 		return store.Unlock(ctx, compReq)
 	})
 	if err != nil {
-		err := apiErrors.DistributedUnlockFailed(req.GetStoreName(), req.GetLockOwner(), err)
+		err := apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).UnlockFailed()
 		a.logger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
 	}
@@ -130,28 +132,28 @@ type tryLockUnlockRequest interface {
 // Internal method that checks if the request is for a lock store component.
 func (a *Universal) lockValidateRequest(req tryLockUnlockRequest) (lock.Store, error) {
 	var err error
-	lockType := string(contribMetadata.LockStoreType)
-
+	storeName := req.GetStoreName()
+	ownerName := req.GetLockOwner()
 	if a.compStore.LocksLen() == 0 {
-		err = apiErrors.NotConfigured(req.GetStoreName(), lockType+" store", nil, codes.FailedPrecondition, http.StatusInternalServerError, "ERR_LOCK_STORE_NOT_CONFIGURED", kitErrors.CodePrefixLock+kitErrors.CodeNotConfigured)
+		err = apiErrors.Lock(storeName, ownerName).WithMetadata(nil).NotConfigured()
 		a.logger.Debug(err)
 		return nil, err
 	}
 	if req.GetResourceId() == "" {
-		err = apiErrors.DistributedLockResourceIDEmpty(req.GetStoreName(), req.GetLockOwner())
+		err = apiErrors.Lock(storeName, ownerName).WithMetadata(nil).ResourceIDEmpty()
 		a.logger.Debug(err)
 		return nil, err
 	}
-	if req.GetLockOwner() == "" {
-		err = apiErrors.DistributedLockOwnerEmpty(req.GetStoreName())
+	if ownerName == "" {
+		err = apiErrors.Lock(storeName, ownerName).WithMetadata(nil).LockOwnerEmpty()
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	// 2. find lock component
-	store, ok := a.compStore.GetLock(req.GetStoreName())
+	store, ok := a.compStore.GetLock(storeName)
 	if !ok {
-		err = apiErrors.NotFound(req.GetStoreName(), lockType+" store", nil, codes.InvalidArgument, http.StatusNotFound, "ERR_LOCK_STORE_NOT_FOUND", kitErrors.CodePrefixLock+kitErrors.CodeNotFound)
+		err = apiErrors.Lock(storeName, ownerName).WithMetadata(nil).NotFound()
 		a.logger.Debug(err)
 		return nil, err
 	}
