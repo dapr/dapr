@@ -59,6 +59,7 @@ type options struct {
 	gracefulShutdownSeconds *int
 	blockShutdownDuration   *string
 	controlPlaneTrustDomain *string
+	trustAnchorsFile        *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -278,5 +279,11 @@ func WithDaprBlockShutdownDuration(duration string) Option {
 func WithControlPlaneTrustDomain(trustDomain string) Option {
 	return func(o *options) {
 		o.controlPlaneTrustDomain = &trustDomain
+	}
+}
+
+func WithTrustAnchorsFile(file string) Option {
+	return func(o *options) {
+		o.trustAnchorsFile = &file
 	}
 }

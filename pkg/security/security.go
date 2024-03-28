@@ -210,7 +210,7 @@ func (p *provider) Run(ctx context.Context) error {
 	if len(p.trustAnchorsFile) > 0 {
 		caEvent := make(chan struct{})
 
-		fs, err := fswatcher.New(fswatcher.Options{
+		fw, err := fswatcher.New(fswatcher.Options{
 			Targets:  []string{filepath.Dir(p.trustAnchorsFile)},
 			Interval: &p.fswatcherInterval,
 		})
@@ -221,7 +221,7 @@ func (p *provider) Run(ctx context.Context) error {
 		err = mngr.Add(
 			func(ctx context.Context) error {
 				log.Infof("Watching trust anchors file '%s' for changes", p.trustAnchorsFile)
-				return fs.Run(ctx, caEvent)
+				return fw.Run(ctx, caEvent)
 			},
 			func(ctx context.Context) error {
 				for {
