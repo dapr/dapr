@@ -140,6 +140,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.blockShutdownDuration != nil {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
+	if opts.controlPlaneTrustDomain != nil {
+		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
+	}
 
 	ns := "default"
 	if opts.namespace != nil {
