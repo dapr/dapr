@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package api
+package authz
 
 import (
 	"context"
@@ -22,17 +22,17 @@ import (
 	"github.com/dapr/dapr/pkg/security/spiffe"
 )
 
-// authzRequest ensures that the requesting identity resides in the same
+// Request ensures that the requesting identity resides in the same
 // namespace as that of the requested namespace.
-func (a *apiServer) authzRequest(ctx context.Context, namespace string) error {
-	spiffeID, ok, err := spiffe.FromGRPCContext(ctx)
+func Request(ctx context.Context, namespace string) (*spiffe.Parsed, error) {
+	id, ok, err := spiffe.FromGRPCContext(ctx)
 	if err != nil || !ok {
-		return status.New(codes.PermissionDenied, "failed to determine identity").Err()
+		return nil, status.New(codes.PermissionDenied, "failed to determine identity").Err()
 	}
 
-	if len(namespace) == 0 || spiffeID.Namespace() != namespace {
-		return status.New(codes.PermissionDenied, "identity does not match requested namespace").Err()
+	if len(namespace) == 0 || id.Namespace() != namespace {
+		return nil, status.New(codes.PermissionDenied, "identity does not match requested namespace").Err()
 	}
 
-	return nil
+	return id, nil
 }

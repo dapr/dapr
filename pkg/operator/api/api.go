@@ -30,6 +30,7 @@ import (
 	corev1 "k8s.io/api/core/v1"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"k8s.io/apimachinery/pkg/types"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -38,8 +39,12 @@ import (
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/operator/api/authz"
+	"github.com/dapr/dapr/pkg/operator/api/informer"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
 
@@ -53,6 +58,7 @@ var log = logger.NewLogger("dapr.operator.api")
 
 type Options struct {
 	Client   client.Client
+	Cache    cache.Cache
 	Security security.Provider
 	Port     int
 }
@@ -61,7 +67,6 @@ type Options struct {
 type Server interface {
 	Run(context.Context) error
 	Ready(context.Context) error
-	OnComponentUpdated(context.Context, operatorv1pb.ResourceEventType, *componentsapi.Component)
 	OnHTTPEndpointUpdated(context.Context, *httpendpointsapi.HTTPEndpoint)
 }
 
@@ -75,10 +80,11 @@ type apiServer struct {
 	Client client.Client
 	sec    security.Provider
 	port   string
+
+	compInformer informer.Interface[componentsapi.Component]
+
 	// notify all dapr runtime
-	connLock               sync.Mutex
 	endpointLock           sync.Mutex
-	allConnUpdateChan      map[string]chan *ComponentUpdateEvent
 	allEndpointsUpdateChan map[string]chan *httpendpointsapi.HTTPEndpoint
 	readyCh                chan struct{}
 	running                atomic.Bool
@@ -87,10 +93,12 @@ type apiServer struct {
 // NewAPIServer returns a new API server.
 func NewAPIServer(opts Options) Server {
 	return &apiServer{
-		Client:                 opts.Client,
+		Client: opts.Client,
+		compInformer: informer.New[componentsapi.Component](informer.Options{
+			Cache: opts.Cache,
+		}),
 		sec:                    opts.Security,
 		port:                   strconv.Itoa(opts.Port),
-		allConnUpdateChan:      make(map[string]chan *ComponentUpdateEvent),
 		allEndpointsUpdateChan: make(map[string]chan *httpendpointsapi.HTTPEndpoint),
 		readyCh:                make(chan struct{}),
 	}
@@ -118,55 +126,21 @@ func (a *apiServer) Run(ctx context.Context) error {
 	}
 	close(a.readyCh)
 
-	errCh := make(chan error)
-	go func() {
-		if rErr := s.Serve(lis); rErr != nil {
-			errCh <- fmt.Errorf("gRPC server error: %w", rErr)
-			return
-		}
-		errCh <- nil
-	}()
-
-	// Block until context is done
-	<-ctx.Done()
-
-	a.connLock.Lock()
-	for key, ch := range a.allConnUpdateChan {
-		close(ch)
-		delete(a.allConnUpdateChan, key)
-	}
-	a.connLock.Unlock()
-
-	s.GracefulStop()
-	err = <-errCh
-	if err != nil {
-		return err
-	}
-	err = lis.Close()
-	if err != nil && !errors.Is(err, net.ErrClosed) {
-		return fmt.Errorf("error closing listener: %w", err)
-	}
-	return nil
-}
-
-func (a *apiServer) OnComponentUpdated(ctx context.Context, eventType operatorv1pb.ResourceEventType, component *componentsapi.Component) {
-	a.connLock.Lock()
-	var wg sync.WaitGroup
-	wg.Add(len(a.allConnUpdateChan))
-	for _, connUpdateChan := range a.allConnUpdateChan {
-		go func(connUpdateChan chan *ComponentUpdateEvent) {
-			defer wg.Done()
-			select {
-			case connUpdateChan <- &ComponentUpdateEvent{
-				Component: component,
-				EventType: eventType,
-			}:
-			case <-ctx.Done():
+	return concurrency.NewRunnerManager(
+		a.compInformer.Run,
+		func(ctx context.Context) error {
+			if err := s.Serve(lis); err != nil {
+				return fmt.Errorf("gRPC server error: %w", err)
 			}
-		}(connUpdateChan)
-	}
-	wg.Wait()
-	a.connLock.Unlock()
+			return nil
+		},
+		func(ctx context.Context) error {
+			// Block until context is done
+			<-ctx.Done()
+			s.GracefulStop()
+			return nil
+		},
+	).Run(ctx)
 }
 
 func (a *apiServer) OnHTTPEndpointUpdated(ctx context.Context, endpoint *httpendpointsapi.HTTPEndpoint) {
@@ -190,7 +164,7 @@ func (a *apiServer) Ready(ctx context.Context) error {
 
 // GetConfiguration returns a Dapr configuration.
 func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetConfigurationRequest) (*operatorv1pb.GetConfigurationResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -210,7 +184,8 @@ func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetCo
 
 // ListComponents returns a list of Dapr components.
 func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	id, err := authz.Request(ctx, in.GetNamespace())
+	if err != nil {
 		return nil, err
 	}
 
@@ -223,7 +198,13 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	resp := &operatorv1pb.ListComponentResponse{
 		Components: [][]byte{},
 	}
+
+	appID := id.AppID()
 	for i := range components.Items {
+		if !(len(components.Items[i].Scopes) == 0 || utils.Contains(components.Items[i].Scopes, appID)) {
+			continue
+		}
+
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
 		err := processComponentSecrets(ctx, &c, in.GetNamespace(), a.Client)
 		if err != nil {
@@ -365,7 +346,7 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 
 // ListSubscriptionsV2 returns a list of Dapr pub/sub subscriptions. Use ListSubscriptionsRequest to expose pod info.
 func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -398,7 +379,7 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 
 // GetResiliency returns a specified resiliency object.
 func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetResiliencyResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -418,7 +399,7 @@ func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResil
 
 // ListResiliency gets the list of applied resiliencies.
 func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListResiliencyRequest) (*operatorv1pb.ListResiliencyResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -449,27 +430,12 @@ func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListRes
 // TODO: @joshvanl: Authorize pod name and namespace matches the SPIFFE ID of
 // the caller.
 func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv operatorv1pb.Operator_ComponentUpdateServer) error { //nolint:nosnakecase
-	if err := a.authzRequest(srv.Context(), in.GetNamespace()); err != nil {
-		return err
-	}
-
 	log.Info("sidecar connected for component updates")
-	keyObj, err := uuid.NewRandom()
+
+	ch, err := a.compInformer.WatchUpdates(srv.Context(), in.GetNamespace())
 	if err != nil {
 		return err
 	}
-	key := keyObj.String()
-
-	a.connLock.Lock()
-	a.allConnUpdateChan[key] = make(chan *ComponentUpdateEvent)
-	updateChan := a.allConnUpdateChan[key]
-	a.connLock.Unlock()
-
-	defer func() {
-		a.connLock.Lock()
-		defer a.connLock.Unlock()
-		delete(a.allConnUpdateChan, key)
-	}()
 
 	updateComponentFunc := func(ctx context.Context, t operatorv1pb.ResourceEventType, c *componentsapi.Component) {
 		if c.Namespace != in.GetNamespace() {
@@ -506,22 +472,18 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 		select {
 		case <-srv.Context().Done():
 			return nil
-		case c, ok := <-updateChan:
+		case event, ok := <-ch:
 			if !ok {
 				return nil
 			}
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
-				updateComponentFunc(srv.Context(), c.EventType, c.Component)
-			}()
+			updateComponentFunc(srv.Context(), event.Type, &event.Manifest)
 		}
 	}
 }
 
 // GetHTTPEndpoint returns a specified http endpoint object.
 func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetHTTPEndpointResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -541,7 +503,7 @@ func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetRes
 
 // ListHTTPEndpoints gets the list of applied http endpoints.
 func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListHTTPEndpointsRequest) (*operatorv1pb.ListHTTPEndpointsResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -577,7 +539,7 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 
 // HTTPEndpointUpdate updates Dapr sidecars whenever an http endpoint in the cluster is modified.
 func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateRequest, srv operatorv1pb.Operator_HTTPEndpointUpdateServer) error { //nolint:nosnakecase
-	if err := a.authzRequest(srv.Context(), in.GetNamespace()); err != nil {
+	if _, err := authz.Request(srv.Context(), in.GetNamespace()); err != nil {
 		return err
 	}
 
