@@ -73,6 +73,8 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 		l.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
 		metrics := l.daprd.Metrics(t, ctx)
 		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:InvokeService/myapp|status:200"]))
+		assert.NotContains(t, metrics, "dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200")
+		assert.NotContains(t, metrics, "dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/healthz|status:204 1.000000")
 	})
 
 	t.Run("state stores", func(t *testing.T) {
