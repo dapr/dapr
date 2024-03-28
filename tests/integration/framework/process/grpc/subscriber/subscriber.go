@@ -29,9 +29,10 @@ import (
 type Option func(*options)
 
 type Subscriber struct {
-	app     *app.App
-	inCh    chan *rtv1.TopicEventRequest
-	closeCh chan struct{}
+	app      *app.App
+	inCh     chan *rtv1.TopicEventRequest
+	inBulkCh chan *rtv1.TopicEventBulkRequest
+	closeCh  chan struct{}
 }
 
 func New(t *testing.T, fopts ...Option) *Subscriber {
@@ -43,12 +44,15 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 	}
 
 	inCh := make(chan *rtv1.TopicEventRequest, 100)
+	inBulkCh := make(chan *rtv1.TopicEventBulkRequest, 100)
 	closeCh := make(chan struct{})
 
 	return &Subscriber{
-		inCh:    inCh,
-		closeCh: closeCh,
+		inCh:     inCh,
+		inBulkCh: inBulkCh,
+		closeCh:  closeCh,
 		app: app.New(t,
+			app.WithListTopicSubscriptions(opts.listTopicSubFn),
 			app.WithOnTopicEventFn(func(ctx context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
 				select {
 				case inCh <- in:
@@ -56,6 +60,21 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 				case <-closeCh:
 				}
 				return new(rtv1.TopicEventResponse), nil
+			}),
+			app.WithOnBulkTopicEventFn(func(ctx context.Context, in *rtv1.TopicEventBulkRequest) (*rtv1.TopicEventBulkResponse, error) {
+				select {
+				case inBulkCh <- in:
+				case <-ctx.Done():
+				case <-closeCh:
+				}
+				stats := make([]*rtv1.TopicEventBulkResponseEntry, len(in.GetEntries()))
+				for i, e := range in.GetEntries() {
+					stats[i] = &rtv1.TopicEventBulkResponseEntry{
+						EntryId: e.GetEntryId(),
+						Status:  rtv1.TopicEventResponse_SUCCESS,
+					}
+				}
+				return &rtv1.TopicEventBulkResponse{Statuses: stats}, nil
 			}),
 		),
 	}
@@ -92,9 +111,29 @@ func (s *Subscriber) Receive(t *testing.T, ctx context.Context) *rtv1.TopicEvent
 	}
 }
 
+func (s *Subscriber) ReceiveBulk(t *testing.T, ctx context.Context) *rtv1.TopicEventBulkRequest {
+	t.Helper()
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*3)
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		require.Fail(t, "timed out waiting for event response")
+		return nil
+	case in := <-s.inBulkCh:
+		return in
+	}
+}
+
 func (s *Subscriber) AssertEventChanLen(t *testing.T, l int) {
 	t.Helper()
 	assert.Len(t, s.inCh, l)
+}
+
+func (s *Subscriber) AssertBulkEventChanLen(t *testing.T, l int) {
+	t.Helper()
+	assert.Len(t, s.inBulkCh, l)
 }
 
 func (s *Subscriber) ExpectPublishReceive(t *testing.T, ctx context.Context, daprd *daprd.Daprd, req *rtv1.PublishEventRequest) {
