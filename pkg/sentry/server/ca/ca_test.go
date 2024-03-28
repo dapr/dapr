@@ -171,7 +171,7 @@ func TestSignIdentity(t *testing.T) {
 			Namespace:          "my-test-namespace",
 			AppID:              "my-app-id",
 			DNS:                []string{"my-app-id.my-test-namespace.svc.cluster.local", "example.com"},
-		}, false)
+		})
 		require.NoError(t, err)
 
 		require.Len(t, clientCert, 3)

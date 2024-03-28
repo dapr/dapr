@@ -312,7 +312,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		})
 
 		e.queryErr = func(*testing.T) error {
-			return apierrors.StateStoreQueryFailed(stateStoreName, "this is a custom error string")
+			return apierrors.StateStore(stateStoreName).QueryFailed("this is a custom error string")
 		}
 
 		req := &rtv1.QueryStateRequest{
