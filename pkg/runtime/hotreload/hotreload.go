@@ -29,6 +29,7 @@ import (
 )
 
 type OptionsReloaderDisk struct {
+	AppID          string
 	Dirs           []string
 	ComponentStore *compstore.ComponentStore
 	Authorizer     *authorizer.Authorizer
@@ -51,6 +52,7 @@ type Reloader struct {
 
 func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 	loader, err := disk.New(disk.Options{
+		AppID:          opts.AppID,
 		Dirs:           opts.Dirs,
 		ComponentStore: opts.ComponentStore,
 	})

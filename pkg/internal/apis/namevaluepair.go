@@ -56,3 +56,7 @@ func (g GenericNameValueResource) LogName() string {
 func (g GenericNameValueResource) EmptyMetaDeepCopy() metav1.Object {
 	return &metav1.ObjectMeta{Name: g.Name}
 }
+
+func (g GenericNameValueResource) GetScopes() []string {
+	return nil
+}

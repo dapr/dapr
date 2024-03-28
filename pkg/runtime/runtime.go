@@ -236,6 +236,7 @@ func newDaprRuntime(ctx context.Context,
 			})
 		case modes.StandaloneMode:
 			rt.reloader, err = hotreload.NewDisk(hotreload.OptionsReloaderDisk{
+				AppID:          runtimeConfig.id,
 				Dirs:           runtimeConfig.standalone.ResourcesPath,
 				ComponentStore: compStore,
 				Authorizer:     authz,
@@ -999,7 +1000,10 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.New[compapi.Component](a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.New[compapi.Component](disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
 	default:
 		return nil
 	}
@@ -1063,7 +1067,10 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.New[endpointapi.HTTPEndpoint](a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.New[endpointapi.HTTPEndpoint](disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
 	default:
 		return nil
 	}

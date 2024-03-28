@@ -27,6 +27,7 @@ type Resource interface {
 	GetNamespace() string
 	LogName() string
 	GetSecretStore() string
+	GetScopes() []string
 	NameValuePairs() []common.NameValuePair
 
 	// Returns a deep copy of the resource, with the object meta set only with
