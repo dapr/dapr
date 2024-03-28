@@ -1,0 +1,144 @@
+/*
+Copyright 2022 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package errors
+
+import (
+	"fmt"
+	"net/http"
+
+	"github.com/dapr/components-contrib/metadata"
+	"github.com/dapr/kit/errors"
+	"google.golang.org/grpc/codes"
+)
+
+type LockError struct {
+	name  string
+	owner string
+}
+
+type LockMetadataError struct {
+	l                *LockError
+	metadata         map[string]string
+	skipResourceInfo bool
+}
+
+func Lock(name string, owner string) *LockError {
+	return &LockError{
+		name:  name,
+		owner: owner,
+	}
+}
+
+func (l *LockError) WithMetadata(metadata map[string]string) *LockMetadataError {
+	return &LockMetadataError{
+		l:        l,
+		metadata: metadata,
+	}
+}
+
+func (l *LockError) WithAppError(appID string, err error) *LockMetadataError {
+	meta := map[string]string{
+		"appID": appID,
+	}
+	if err != nil {
+		meta["error"] = err.Error()
+	}
+	return &LockMetadataError{
+		l:        l,
+		metadata: meta,
+	}
+}
+
+func (l *LockMetadataError) ResourceIDEmpty() error {
+	return l.build(
+		codes.InvalidArgument,
+		http.StatusBadRequest,
+		"lock resource id is empty",
+		"ERR_RESOURCE_ID_EMPTY",
+		"RESOURCE_ID_EMPTY",
+	)
+}
+
+func (l *LockMetadataError) LockOwnerEmpty() error {
+	return l.build(
+		codes.InvalidArgument,
+		http.StatusBadRequest,
+		"lock owner is empty",
+		"ERR_LOCK_OWNER_EMPTY",
+		"LOCK_OWNER_EMPTY",
+	)
+}
+
+func (l *LockMetadataError) ExpiryInSecondsNotPositive() error {
+	return l.build(
+		codes.InvalidArgument,
+		http.StatusBadRequest,
+		"expiry in seconds is not positive",
+		"ERR_EXPIRY_NOT_POSITIVE",
+		"EXPIRY_NOT_POSITIVE",
+	)
+}
+
+func (l *LockMetadataError) TryLockFailed() error {
+	return l.build(
+		codes.InvalidArgument,
+		http.StatusInternalServerError,
+		"failed to try acquiring lock",
+		"ERR_TRY_LOCK",
+		"TRY_LOCK_FAILED",
+	)
+}
+
+func (l *LockMetadataError) UnlockFailed() error {
+	return l.build(
+		codes.InvalidArgument,
+		http.StatusInternalServerError,
+		"failed to release lock",
+		"ERR_UNLOCK",
+		"UNLOCK_FAILED",
+	)
+}
+
+func (l *LockMetadataError) NotFound() error {
+	l.skipResourceInfo = true
+	return l.build(
+		codes.InvalidArgument,
+		http.StatusNotFound,
+		fmt.Sprintf("%s %s is not found", metadata.LockStoreType, l.l.name),
+		"ERR_LOCK_NOT_FOUND",
+		errors.CodeNotFound,
+	)
+}
+
+func (l *LockMetadataError) NotConfigured() error {
+	l.skipResourceInfo = true
+	return l.build(
+		codes.FailedPrecondition,
+		http.StatusInternalServerError,
+		fmt.Sprintf("%s %s is not configured", metadata.LockStoreType, l.l.name),
+		"ERR_LOCK_NOT_CONFIGURED",
+		errors.CodeNotConfigured,
+	)
+}
+
+func (l *LockMetadataError) build(grpcCode codes.Code, httpCode int, msg, tag, errCode string) error {
+	err := errors.NewBuilder(grpcCode, httpCode, msg, tag)
+	if !l.skipResourceInfo {
+		err = err.WithResourceInfo(string(metadata.LockStoreType), l.l.name, l.l.owner, msg)
+	}
+	return err.WithErrorInfo(
+		errors.CodePrefixLock+errCode,
+		nil,
+	).Build()
+}

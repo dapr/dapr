@@ -2570,8 +2570,8 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		assert.Equal(t, 400, resp.StatusCode)
 
 		// assert
-		assert.Contains(t, string(resp.RawBody), "ERR_MALFORMED_REQUEST")
-		assert.Contains(t, string(resp.RawBody), "ResourceId is empty in lock store store1")
+		assert.Contains(t, string(resp.RawBody), "ERR_RESOURCE_ID_EMPTY")
+		assert.Contains(t, string(resp.RawBody), "lock resource id is empty")
 	})
 
 	t.Run("Unlock with invalid resource id that returns 500", func(t *testing.T) {
