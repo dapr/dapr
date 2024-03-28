@@ -41,14 +41,16 @@ func New(t *testing.T, fopts ...Option) *App {
 	return &App{
 		GRPC: procgrpc.New(t, append(opts.grpcopts, procgrpc.WithRegister(func(s *grpc.Server) {
 			srv := &server{
-				onInvokeFn:       opts.onInvokeFn,
-				onTopicEventFn:   opts.onTopicEventFn,
-				listTopicSubFn:   opts.listTopicSubFn,
-				listInputBindFn:  opts.listInputBindFn,
-				onBindingEventFn: opts.onBindingEventFn,
-				healthCheckFn:    opts.healthCheckFn,
+				onInvokeFn:         opts.onInvokeFn,
+				onTopicEventFn:     opts.onTopicEventFn,
+				onBulkTopicEventFn: opts.onBulkTopicEventFn,
+				listTopicSubFn:     opts.listTopicSubFn,
+				listInputBindFn:    opts.listInputBindFn,
+				onBindingEventFn:   opts.onBindingEventFn,
+				healthCheckFn:      opts.healthCheckFn,
 			}
 			rtv1.RegisterAppCallbackServer(s, srv)
+			rtv1.RegisterAppCallbackAlphaServer(s, srv)
 			rtv1.RegisterAppCallbackHealthCheckServer(s, srv)
 			if opts.withRegister != nil {
 				opts.withRegister(s)

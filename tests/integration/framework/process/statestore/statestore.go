@@ -17,7 +17,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"path/filepath"
 	"testing"
 	"time"
 
@@ -29,7 +28,6 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	compv1pb "github.com/dapr/dapr/pkg/proto/components/v1"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 // Option is a function that configures the process.
@@ -52,16 +50,14 @@ func New(t *testing.T, fopts ...Option) *StateStore {
 		fopt(&opts)
 	}
 
-	require.NotEmpty(t, opts.socketDir)
-
-	socketFile := util.RandomString(t, 8)
+	require.NotNil(t, opts.socket)
 
 	require.NotNil(t, opts.statestore)
 
 	// Start the listener in New so we can squat on the path immediately, and
 	// keep it for the entire test case.
-	path := filepath.Join(opts.socketDir, socketFile+".sock")
-	listener, err := net.Listen("unix", path)
+	socketFile := opts.socket.File(t)
+	listener, err := net.Listen("unix", socketFile.Filename())
 	require.NoError(t, err)
 
 	component := newComponent(t, opts)
@@ -76,9 +72,10 @@ func New(t *testing.T, fopts ...Option) *StateStore {
 	return &StateStore{
 		listener:   listener,
 		component:  component,
-		socketName: socketFile,
+		socketName: socketFile.Name(),
 		server:     server,
-		srvErrCh:   make(chan error),
+
+		srvErrCh: make(chan error),
 	}
 }
 
