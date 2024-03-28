@@ -17,7 +17,6 @@ import (
 	"context"
 	"io"
 	"net"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -26,7 +25,6 @@ import (
 
 	"github.com/dapr/components-contrib/pubsub"
 	compv1pb "github.com/dapr/dapr/pkg/proto/components/v1"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 // Option is a function that configures the process.
@@ -44,26 +42,26 @@ type PubSub struct {
 func New(t *testing.T, fopts ...Option) *PubSub {
 	t.Helper()
 
-	var opts options
+	opts := options{
+		pmrCh: make(chan *compv1pb.PullMessagesResponse),
+	}
 	for _, fopts := range fopts {
 		fopts(&opts)
 	}
 
-	require.NotEmpty(t, opts.socketDir)
-
-	socketFile := util.RandomString(t, 8)
+	require.NotNil(t, opts.socket)
 	require.NotNil(t, opts.pubsub)
 
 	// Start the listener in New, so we can sit on the path immediately, and
 	// keep it for the entire test case.
-	path := filepath.Join(opts.socketDir, socketFile+".sock")
-	listener, err := net.Listen("unix", path)
+	socketFile := opts.socket.File(t)
+	listener, err := net.Listen("unix", socketFile.Filename())
 	require.NoError(t, err)
 
 	return &PubSub{
 		listener:   listener,
 		component:  newComponent(t, opts),
-		socketName: socketFile,
+		socketName: socketFile.Name(),
 		srvErrCh:   make(chan error),
 		stopCh:     make(chan struct{}),
 	}

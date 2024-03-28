@@ -15,17 +15,18 @@ package statestore
 
 import (
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/tests/integration/framework/socket"
 )
 
 // options contains the options for running a pluggable state store in integration tests.
 type options struct {
-	socketDir  string
+	socket     *socket.Socket
 	statestore state.Store
 }
 
-func WithSocketDirectory(dir string) Option {
+func WithSocket(socket *socket.Socket) Option {
 	return func(o *options) {
-		o.socketDir = dir
+		o.socket = socket
 	}
 }
 
