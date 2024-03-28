@@ -18,8 +18,6 @@ type ApplicationConfig struct {
 	Entities []string `json:"entities"`
 	// Duration. example: "1h".
 	ActorIdleTimeout string `json:"actorIdleTimeout"`
-	// Duration. example: "30s". This value is global.
-	ActorScanInterval string `json:"actorScanInterval"`
 	// Duration. example: "30s".
 	DrainOngoingCallTimeout    string           `json:"drainOngoingCallTimeout"`
 	DrainRebalancedActors      bool             `json:"drainRebalancedActors"`

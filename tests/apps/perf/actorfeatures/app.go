@@ -33,7 +33,6 @@ const (
 	defaultActorType        = "testactorfeatures"   // Actor type must be unique per test app.
 	actorTypeEnvName        = "TEST_APP_ACTOR_TYPE" // Env variable tests can set to change actor type.
 	actorIdleTimeout        = "1h"
-	actorScanInterval       = "30s"
 	drainOngoingCallTimeout = "30s"
 	drainRebalancedActors   = true
 	secondsToWaitInMethod   = 5
@@ -42,7 +41,6 @@ const (
 type daprConfig struct {
 	Entities                []string `json:"entities,omitempty"`
 	ActorIdleTimeout        string   `json:"actorIdleTimeout,omitempty"`
-	ActorScanInterval       string   `json:"actorScanInterval,omitempty"`
 	DrainOngoingCallTimeout string   `json:"drainOngoingCallTimeout,omitempty"`
 	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 }
@@ -52,7 +50,6 @@ var registeredActorType = map[string]bool{}
 var daprConfigResponse = daprConfig{
 	getActorType(),
 	actorIdleTimeout,
-	actorScanInterval,
 	drainOngoingCallTimeout,
 	drainRebalancedActors,
 }

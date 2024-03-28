@@ -36,7 +36,6 @@ const (
 	actorTypesEnvName  = "TEST_APP_ACTOR_TYPES" // To set to change actor types.
 
 	actorIdleTimeout        = "5s" // Short idle timeout.
-	actorScanInterval       = "1s" // Smaller then actorIdleTimeout and short for speedy test.
 	drainOngoingCallTimeout = "1s"
 	drainRebalancedActors   = true
 )
@@ -68,7 +67,6 @@ type callRequest struct {
 type daprConfig struct {
 	Entities                []string `json:"entities,omitempty"`
 	ActorIdleTimeout        string   `json:"actorIdleTimeout,omitempty"`
-	ActorScanInterval       string   `json:"actorScanInterval,omitempty"`
 	DrainOngoingCallTimeout string   `json:"drainOngoingCallTimeout,omitempty"`
 	DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 }
@@ -76,7 +74,6 @@ type daprConfig struct {
 var daprConfigResponse = daprConfig{
 	getActorTypes(),
 	actorIdleTimeout,
-	actorScanInterval,
 	drainOngoingCallTimeout,
 	drainRebalancedActors,
 }
