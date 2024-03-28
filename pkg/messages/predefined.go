@@ -48,17 +48,6 @@ const (
 	// AppHealth.
 	ErrAppUnhealthy = "app is not in a healthy state"
 
-	// Actor.
-	ErrActorInstanceMissing      = "actor instance is missing"
-	ErrActorInvoke               = "error invoke actor method: %s"
-	ErrActorReminderCreate       = "error creating actor reminder: %s"
-	ErrActorReminderGet          = "error getting actor reminder: %s"
-	ErrActorReminderDelete       = "error deleting actor reminder: %s"
-	ErrActorTimerCreate          = "error creating actor timer: %s"
-	ErrActorTimerDelete          = "error deleting actor timer: %s"
-	ErrActorStateGet             = "error getting actor state: %s"
-	ErrActorStateTransactionSave = "error saving actor transaction state: %s"
-
 	// Configuration.
 	ErrConfigurationStoresNotConfigured = "configuration stores not configured"
 	ErrConfigurationStoreNotFound       = "configuration store %s not found"
@@ -102,6 +91,15 @@ var (
 	// Actor.
 	ErrActorReminderOpActorNotHosted = APIError{"operations on actor reminders are only possible on hosted actor types", "ERR_ACTOR_REMINDER_NON_HOSTED", http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrActorRuntimeNotFound          = APIError{`the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: "true" in your state store component file?`, "ERR_ACTOR_RUNTIME_NOT_FOUND", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorInstanceMissing          = APIError{"actor instance is missing", "ERR_ACTOR_INSTANCE_MISSING", http.StatusBadRequest, grpcCodes.Internal}
+	ErrActorInvoke                   = APIError{"error invoke actor method: %s", "ERR_ACTOR_INVOKE_METHOD", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorStateGet                 = APIError{"error getting actor state: %s", "ERR_ACTOR_STATE_GET", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorStateTransactionSave     = APIError{"error saving actor transaction state: %s", "ERR_ACTOR_STATE_TRANSACTION_SAVE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorReminderCreate           = APIError{"error creating actor reminder: %s", "ERR_ACTOR_REMINDER_CREATE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorReminderGet              = APIError{"error getting actor reminder: %s", "ERR_ACTOR_REMINDER_GET", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorReminderDelete           = APIError{"error deleting actor reminder: %s", "ERR_ACTOR_REMINDER_DELETE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorTimerCreate              = APIError{"error creating actor timer: %s", "ERR_ACTOR_TIMER_CREATE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorTimerDelete              = APIError{"error deleting actor timer: %s", "ERR_ACTOR_TIMER_DELETE", http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", "ERR_LOCK_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}

@@ -27,7 +27,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/components"
+	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -113,7 +113,7 @@ func Test_Disk(t *testing.T) {
 		{
 			Type: operatorpb.ResourceEventType_CREATED,
 			Resource: componentsapi.Component{
-				ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: ""},
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 				Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 			},
@@ -121,7 +121,7 @@ func Test_Disk(t *testing.T) {
 		{
 			Type: operatorpb.ResourceEventType_CREATED,
 			Resource: componentsapi.Component{
-				ObjectMeta: metav1.ObjectMeta{Name: "comp2", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "comp2", Namespace: ""},
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 				Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 			},
@@ -129,7 +129,7 @@ func Test_Disk(t *testing.T) {
 		{
 			Type: operatorpb.ResourceEventType_CREATED,
 			Resource: componentsapi.Component{
-				ObjectMeta: metav1.ObjectMeta{Name: "comp3", Namespace: "default"},
+				ObjectMeta: metav1.ObjectMeta{Name: "comp3", Namespace: ""},
 				TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 				Spec:       componentsapi.ComponentSpec{Type: "state.in-memory", Version: "v1"},
 			},
@@ -151,7 +151,7 @@ func Test_Stream(t *testing.T) {
 
 		updateCh := make(chan struct{})
 		r := newResource[componentsapi.Component](
-			components.NewDiskManifestLoader[componentsapi.Component](dir),
+			loaderdisk.New[componentsapi.Component](dir),
 			loadercompstore.NewComponent(store),
 			updateCh,
 		)
@@ -226,7 +226,7 @@ func Test_Stream(t *testing.T) {
 
 		updateCh := make(chan struct{})
 		r := newResource[componentsapi.Component](
-			components.NewDiskManifestLoader[componentsapi.Component](dir),
+			loaderdisk.New[componentsapi.Component](dir),
 			loadercompstore.NewComponent(store),
 			updateCh,
 		)
@@ -302,7 +302,7 @@ func Test_Stream(t *testing.T) {
 
 		updateCh := make(chan struct{})
 		r := newResource[componentsapi.Component](
-			components.NewDiskManifestLoader[componentsapi.Component](dir),
+			loaderdisk.New[componentsapi.Component](dir),
 			loadercompstore.NewComponent(store),
 			updateCh,
 		)

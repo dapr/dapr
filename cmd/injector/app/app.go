@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/injector/sentry"
 	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -83,10 +82,15 @@ func Run() {
 		log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
 	}
 
+	namespace, err := security.CurrentNamespaceOrError()
+	if err != nil {
+		log.Fatalf("Failed to get current namespace: %s", err)
+	}
+
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           cfg.SentryAddress,
 		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
-		ControlPlaneNamespace:   security.CurrentNamespace(),
+		ControlPlaneNamespace:   namespace,
 		TrustAnchorsFile:        cfg.TrustAnchorsFile,
 		AppID:                   "dapr-injector",
 		MTLSEnabled:             true,
@@ -97,6 +101,7 @@ func Run() {
 	}
 
 	inj, err := service.NewInjector(service.Options{
+		Port:                    opts.Port,
 		AuthUIDs:                uids,
 		Config:                  cfg,
 		DaprClient:              daprClient,
@@ -122,19 +127,9 @@ func Run() {
 			if err != nil {
 				return rerr
 			}
-			requester, derr := sentry.New(ctx, sentry.Options{
-				SentryAddress: cfg.SentryAddress,
-				SentryID:      sentryID,
-				Security:      sec,
-			})
-			if derr != nil {
-				return derr
-			}
-
 			return inj.Run(ctx,
 				sec.TLSServerConfigNoClientAuth(),
 				sentryID,
-				requester.RequestCertificateFromSentry,
 				sec.CurrentTrustAnchors,
 			)
 		},
