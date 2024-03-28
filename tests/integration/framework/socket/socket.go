@@ -36,6 +36,10 @@ type File struct {
 }
 
 func New(t *testing.T) *Socket {
+	if runtime.OS() == "windows" {
+		t.Skip("Unix sockets are not supported on Windows")
+	}
+
 	// Darwin enforces a maximum 104 byte socket name limit, so we need to be a
 	// bit fancy on how we generate the name.
 	tmp, err := nettest.LocalPath()
