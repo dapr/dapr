@@ -47,26 +47,26 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-func TestIsBindingOfExplicitDirection(t *testing.T) {
+func TestIsBindingOfDirection(t *testing.T) {
 	t.Run("no direction in metadata input binding", func(t *testing.T) {
 		m := map[string]string{}
-		r := isBindingOfExplicitDirection("input", m)
+		r := IsBindingOfDirection("input", m)
 
-		assert.False(t, r)
+		assert.True(t, r)
 	})
 
 	t.Run("no direction in metadata output binding", func(t *testing.T) {
 		m := map[string]string{}
-		r := isBindingOfExplicitDirection("input", m)
+		r := IsBindingOfDirection("output", m)
 
-		assert.False(t, r)
+		assert.True(t, r)
 	})
 
 	t.Run("direction is input binding", func(t *testing.T) {
 		m := map[string]string{
 			"direction": "input",
 		}
-		r := isBindingOfExplicitDirection("input", m)
+		r := IsBindingOfDirection("input", m)
 
 		assert.True(t, r)
 	})
@@ -75,7 +75,7 @@ func TestIsBindingOfExplicitDirection(t *testing.T) {
 		m := map[string]string{
 			"direction": "output",
 		}
-		r := isBindingOfExplicitDirection("output", m)
+		r := IsBindingOfDirection("output", m)
 
 		assert.True(t, r)
 	})
@@ -84,7 +84,7 @@ func TestIsBindingOfExplicitDirection(t *testing.T) {
 		m := map[string]string{
 			"direction": "input",
 		}
-		r := isBindingOfExplicitDirection("output", m)
+		r := IsBindingOfDirection("output", m)
 
 		assert.False(t, r)
 	})
@@ -93,7 +93,7 @@ func TestIsBindingOfExplicitDirection(t *testing.T) {
 		m := map[string]string{
 			"direction": "output",
 		}
-		r := isBindingOfExplicitDirection("input", m)
+		r := IsBindingOfDirection("input", m)
 
 		assert.False(t, r)
 	})
@@ -103,11 +103,10 @@ func TestIsBindingOfExplicitDirection(t *testing.T) {
 			"direction": "output, input",
 		}
 
-		r := isBindingOfExplicitDirection("input", m)
+		r := IsBindingOfDirection("input", m)
 		assert.True(t, r)
 
-		r2 := isBindingOfExplicitDirection("output", m)
-
+		r2 := IsBindingOfDirection("output", m)
 		assert.True(t, r2)
 	})
 }
@@ -173,6 +172,76 @@ func TestStartReadingFromBindings(t *testing.T) {
 		err := b.StartReadingFromBindings(context.Background())
 		require.NoError(t, err)
 		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
+	})
+
+	t.Run("Skip reading from input binding when app has not subscribed to it", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		b := New(Options{
+			IsHTTP:         true,
+			Resiliency:     resiliency.New(log),
+			ComponentStore: compstore.New(),
+			Meta:           meta.New(meta.Options{}),
+		})
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+
+		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(404, "NotFound", nil), nil)
+
+		closeCh := make(chan struct{})
+		defer close(closeCh)
+
+		mockBinding := &daprt.MockBinding{}
+		mockBinding.SetOnReadCloseCh(closeCh)
+
+		b.compStore.AddInputBinding("test", mockBinding)
+		err := b.StartReadingFromBindings(context.Background())
+
+		require.NoError(t, err)
+		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
+		assert.True(t, mockBinding.AssertNotCalled(t, "Read"))
+	})
+
+	t.Run("Skip reading from input binding when only output direction is specified", func(t *testing.T) {
+		mockAppChannel := new(channelt.MockAppChannel)
+		b := New(Options{
+			IsHTTP:         true,
+			Resiliency:     resiliency.New(log),
+			ComponentStore: compstore.New(),
+			Meta:           meta.New(meta.Options{}),
+		})
+		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+
+		mockAppChannel.On("InvokeMethod", mock.Anything, mock.Anything).Return(invokev1.NewInvokeMethodResponse(200, "OK", nil), nil)
+
+		closeCh := make(chan struct{})
+		defer close(closeCh)
+
+		mockBinding := &daprt.MockBinding{}
+		mockBinding.SetOnReadCloseCh(closeCh)
+
+		b.compStore.AddInputBinding("test", mockBinding)
+		require.NoError(t, b.compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type: "bindings.test",
+				Metadata: []commonapi.NameValuePair{
+					{
+						Name: "direction",
+						Value: commonapi.DynamicValue{
+							JSON: v1.JSON{Raw: []byte("output")},
+						},
+					},
+				},
+			},
+		}))
+		require.NoError(t, b.compStore.CommitPendingComponent())
+
+		err := b.StartReadingFromBindings(context.Background())
+
+		require.NoError(t, err)
+		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
+		assert.True(t, mockBinding.AssertNumberOfCalls(t, "Read", 0))
 	})
 }
 
