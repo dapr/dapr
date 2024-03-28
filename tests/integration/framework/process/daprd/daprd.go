@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -291,8 +292,12 @@ func (d *Daprd) AppPort() int {
 	return d.appPort
 }
 
+func (d *Daprd) ipPort(port int) string {
+	return "127.0.0.1:" + strconv.Itoa(port)
+}
+
 func (d *Daprd) AppAddress() string {
-	return "127.0.0.1:" + strconv.Itoa(d.AppPort())
+	return d.ipPort(d.AppPort())
 }
 
 func (d *Daprd) GRPCPort() int {
@@ -300,7 +305,7 @@ func (d *Daprd) GRPCPort() int {
 }
 
 func (d *Daprd) GRPCAddress() string {
-	return "127.0.0.1:" + strconv.Itoa(d.GRPCPort())
+	return d.ipPort(d.GRPCPort())
 }
 
 func (d *Daprd) HTTPPort() int {
@@ -308,7 +313,7 @@ func (d *Daprd) HTTPPort() int {
 }
 
 func (d *Daprd) HTTPAddress() string {
-	return "127.0.0.1:" + strconv.Itoa(d.HTTPPort())
+	return d.ipPort(d.HTTPPort())
 }
 
 func (d *Daprd) InternalGRPCPort() int {
@@ -316,7 +321,7 @@ func (d *Daprd) InternalGRPCPort() int {
 }
 
 func (d *Daprd) InternalGRPCAddress() string {
-	return "127.0.0.1:" + strconv.Itoa(d.InternalGRPCPort())
+	return d.ipPort(d.InternalGRPCPort())
 }
 
 func (d *Daprd) PublicPort() int {
@@ -327,6 +332,41 @@ func (d *Daprd) MetricsPort() int {
 	return d.metricsPort
 }
 
+func (d *Daprd) MetricsAddress() string {
+	return d.ipPort(d.MetricsPort())
+}
+
 func (d *Daprd) ProfilePort() int {
 	return d.profilePort
+}
+
+// Returns a subset of metrics scraped from the metrics endpoint
+func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()), nil)
+	require.NoError(t, err)
+
+	resp, err := d.httpClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Extract the metrics
+	parser := expfmt.TextParser{}
+	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	metrics := make(map[string]float64)
+	for _, mf := range metricFamilies {
+		for _, m := range mf.GetMetric() {
+			key := mf.GetName()
+			for _, l := range m.GetLabel() {
+				key += "|" + l.GetName() + ":" + l.GetValue()
+			}
+			metrics[key] = m.GetCounter().GetValue()
+		}
+	}
+
+	return metrics
 }
