@@ -13,21 +13,32 @@ limitations under the License.
 
 package pubsub
 
-import "github.com/dapr/components-contrib/pubsub"
+import (
+	"github.com/dapr/components-contrib/pubsub"
+	compv1pb "github.com/dapr/dapr/pkg/proto/components/v1"
+	"github.com/dapr/dapr/tests/integration/framework/socket"
+)
 
 type options struct {
-	socketDir string
-	pubsub    pubsub.PubSub
+	socket *socket.Socket
+	pubsub pubsub.PubSub
+	pmrCh  <-chan *compv1pb.PullMessagesResponse
 }
 
-func WithSocketDirectory(dir string) Option {
+func WithSocket(socket *socket.Socket) Option {
 	return func(o *options) {
-		o.socketDir = dir
+		o.socket = socket
 	}
 }
 
 func WithPubSub(pubsub pubsub.PubSub) Option {
 	return func(o *options) {
 		o.pubsub = pubsub
+	}
+}
+
+func WithPullMessagesChannel(ch <-chan *compv1pb.PullMessagesResponse) Option {
+	return func(o *options) {
+		o.pmrCh = ch
 	}
 }
