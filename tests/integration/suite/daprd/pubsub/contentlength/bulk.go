@@ -24,7 +24,8 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/http/subscriber"
+	grpcsub "github.com/dapr/dapr/tests/integration/framework/process/grpc/subscriber"
+	httpsub "github.com/dapr/dapr/tests/integration/framework/process/http/subscriber"
 	"github.com/dapr/dapr/tests/integration/framework/process/pubsub"
 	inmemory "github.com/dapr/dapr/tests/integration/framework/process/pubsub/in-memory"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
@@ -36,14 +37,17 @@ func init() {
 }
 
 type bulk struct {
-	daprd *daprd.Daprd
-	app   *subscriber.Subscriber
-	pmrCh chan *compv1pb.PullMessagesResponse
+	daprdhttp *daprd.Daprd
+	daprdgrpc *daprd.Daprd
+	apphttp   *httpsub.Subscriber
+	appgrpc   *grpcsub.Subscriber
+	pmrCh     chan *compv1pb.PullMessagesResponse
 }
 
 func (b *bulk) Setup(t *testing.T) []framework.Option {
 	b.pmrCh = make(chan *compv1pb.PullMessagesResponse)
-	b.app = subscriber.New(t, subscriber.WithBulkRoutes("/abc"))
+	b.apphttp = httpsub.New(t, httpsub.WithRoutes("/abc"))
+	b.appgrpc = grpcsub.New(t)
 
 	socket := socket.New(t)
 
@@ -53,8 +57,8 @@ func (b *bulk) Setup(t *testing.T) []framework.Option {
 		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t)),
 	)
 
-	b.daprd = daprd.New(t,
-		daprd.WithAppPort(b.app.Port()),
+	b.daprdhttp = daprd.New(t,
+		daprd.WithAppPort(b.apphttp.Port()),
 		daprd.WithSocket(t, socket),
 		daprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
@@ -64,44 +68,76 @@ metadata:
 spec:
  type: pubsub.%s
  version: v1
- metadata:
- - name: host
-   value: "localhost:6650"
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Subscription
 metadata:
- name: mysub
+ name: mysub1
 spec:
- pubsubname: foo
- topic: bar
+ topic: bar1
  route: /abc
+ pubsubname: foo
  bulkSubscribe:
   enabled: true
-  maxMessagesCount: 100
-  maxAwaitDurationMs: 40
+`, inmem.SocketName())),
+	)
+
+	b.daprdgrpc = daprd.New(t,
+		daprd.WithAppPort(b.appgrpc.Port(t)),
+		daprd.WithAppProtocol("grpc"),
+		daprd.WithSocket(t, socket),
+		daprd.WithResourceFiles(fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+ name: foo
+spec:
+ type: pubsub.%s
+ version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+ name: mysub1
+spec:
+ topic: bar2
+ route: /abc
+ pubsubname: foo
+ bulkSubscribe:
+  enabled: true
 `, inmem.SocketName())),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(inmem, b.app, b.daprd),
+		framework.WithProcesses(inmem, b.daprdhttp, b.daprdgrpc, b.apphttp, b.appgrpc),
 	}
 }
 
 func (b *bulk) Run(t *testing.T, ctx context.Context) {
-	b.daprd.WaitUntilRunning(t, ctx)
+	b.daprdhttp.WaitUntilRunning(t, ctx)
+	b.daprdgrpc.WaitUntilRunning(t, ctx)
 
-	client := b.daprd.GRPCClient(t, ctx)
-	meta, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	clientHTTP := b.daprdhttp.GRPCClient(t, ctx)
+	meta, err := clientHTTP.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 	require.Len(t, meta.GetSubscriptions(), 1)
-
 	b.pmrCh <- &compv1pb.PullMessagesResponse{
 		Data:      []byte(`{"data":"helloworld","datacontenttype":"text/plain","id":"b959cd5a-29e5-42ca-89e2-c66f4402f273","pubsubname":"foo","source":"foo","specversion":"1.0","time":"2024-03-27T23:47:53Z","topic":"bar","traceid":"00-00000000000000000000000000000000-0000000000000000-00","traceparent":"00-00000000000000000000000000000000-0000000000000000-00","tracestate":"","type":"com.dapr.event.sent"}`),
 		TopicName: "bar",
 		Id:        "foo",
 		Metadata:  map[string]string{"content-length": "123"},
 	}
+	b.apphttp.ReceiveBulk(t, ctx)
 
-	b.app.ReceiveBulk(t, ctx)
+	clientGRPC := b.daprdgrpc.GRPCClient(t, ctx)
+	meta, err = clientGRPC.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	require.NoError(t, err)
+	require.Len(t, meta.GetSubscriptions(), 1)
+	b.pmrCh <- &compv1pb.PullMessagesResponse{
+		Data:      []byte(`{"data":{"foo": "helloworld"},"datacontenttype":"application/json","id":"b959cd5a-29e5-42ca-89e2-c66f4402f273","pubsubname":"foo","source":"foo","specversion":"1.0","time":"2024-03-27T23:47:53Z","topic":"bar2","traceid":"00-00000000000000000000000000000000-0000000000000000-00","traceparent":"00-00000000000000000000000000000000-0000000000000000-00","tracestate":"","type":"com.dapr.event.sent"}`),
+		TopicName: "bar",
+		Id:        "foo",
+		Metadata:  map[string]string{"content-length": "123"},
+	}
+	b.appgrpc.Receive(t, ctx)
 }
