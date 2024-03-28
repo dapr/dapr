@@ -41,25 +41,26 @@ type bulk struct {
 	daprdgrpc *daprd.Daprd
 	apphttp   *httpsub.Subscriber
 	appgrpc   *grpcsub.Subscriber
-	pmrCh     chan *compv1pb.PullMessagesResponse
+	pmrChHTTP chan *compv1pb.PullMessagesResponse
+	pmrChGRPC chan *compv1pb.PullMessagesResponse
 }
 
 func (b *bulk) Setup(t *testing.T) []framework.Option {
-	b.pmrCh = make(chan *compv1pb.PullMessagesResponse)
-	b.apphttp = httpsub.New(t, httpsub.WithRoutes("/abc"))
+	b.pmrChHTTP = make(chan *compv1pb.PullMessagesResponse)
+	b.pmrChGRPC = make(chan *compv1pb.PullMessagesResponse)
+	b.apphttp = httpsub.New(t, httpsub.WithBulkRoutes("/abc"))
 	b.appgrpc = grpcsub.New(t)
 
-	socket := socket.New(t)
-
-	inmem := pubsub.New(t,
-		pubsub.WithSocket(socket),
-		pubsub.WithPullMessagesChannel(b.pmrCh),
+	socket1 := socket.New(t)
+	inmem1 := pubsub.New(t,
+		pubsub.WithSocket(socket1),
+		pubsub.WithPullMessagesChannel(b.pmrChHTTP),
 		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t)),
 	)
 
 	b.daprdhttp = daprd.New(t,
 		daprd.WithAppPort(b.apphttp.Port()),
-		daprd.WithSocket(t, socket),
+		daprd.WithSocket(t, socket1),
 		daprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -79,13 +80,20 @@ spec:
  pubsubname: foo
  bulkSubscribe:
   enabled: true
-`, inmem.SocketName())),
+`, inmem1.SocketName())),
+	)
+
+	socket2 := socket.New(t)
+	inmem2 := pubsub.New(t,
+		pubsub.WithSocket(socket2),
+		pubsub.WithPullMessagesChannel(b.pmrChGRPC),
+		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t)),
 	)
 
 	b.daprdgrpc = daprd.New(t,
 		daprd.WithAppPort(b.appgrpc.Port(t)),
 		daprd.WithAppProtocol("grpc"),
-		daprd.WithSocket(t, socket),
+		daprd.WithSocket(t, socket2),
 		daprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -105,11 +113,11 @@ spec:
  pubsubname: foo
  bulkSubscribe:
   enabled: true
-`, inmem.SocketName())),
+`, inmem2.SocketName())),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(inmem, b.daprdhttp, b.daprdgrpc, b.apphttp, b.appgrpc),
+		framework.WithProcesses(inmem1, inmem2, b.daprdhttp, b.daprdgrpc, b.apphttp, b.appgrpc),
 	}
 }
 
@@ -121,8 +129,8 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 	meta, err := clientHTTP.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 	require.Len(t, meta.GetSubscriptions(), 1)
-	b.pmrCh <- &compv1pb.PullMessagesResponse{
-		Data:      []byte(`{"data":"helloworld","datacontenttype":"text/plain","id":"b959cd5a-29e5-42ca-89e2-c66f4402f273","pubsubname":"foo","source":"foo","specversion":"1.0","time":"2024-03-27T23:47:53Z","topic":"bar","traceid":"00-00000000000000000000000000000000-0000000000000000-00","traceparent":"00-00000000000000000000000000000000-0000000000000000-00","tracestate":"","type":"com.dapr.event.sent"}`),
+	b.pmrChHTTP <- &compv1pb.PullMessagesResponse{
+		Data:      []byte(`{"data":"helloworld","datacontenttype":"text/plain","id":"b959cd5a-29e5-42ca-89e2-c66f4402f273","pubsubname":"foo","source":"foo","specversion":"1.0","time":"2024-03-27T23:47:53Z","topic":"bar1","traceid":"00-00000000000000000000000000000000-0000000000000000-00","traceparent":"00-00000000000000000000000000000000-0000000000000000-00","tracestate":"","type":"com.dapr.event.sent"}`),
 		TopicName: "bar",
 		Id:        "foo",
 		Metadata:  map[string]string{"content-length": "123"},
@@ -133,11 +141,11 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 	meta, err = clientGRPC.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 	require.Len(t, meta.GetSubscriptions(), 1)
-	b.pmrCh <- &compv1pb.PullMessagesResponse{
-		Data:      []byte(`{"data":{"foo": "helloworld"},"datacontenttype":"application/json","id":"b959cd5a-29e5-42ca-89e2-c66f4402f273","pubsubname":"foo","source":"foo","specversion":"1.0","time":"2024-03-27T23:47:53Z","topic":"bar2","traceid":"00-00000000000000000000000000000000-0000000000000000-00","traceparent":"00-00000000000000000000000000000000-0000000000000000-00","tracestate":"","type":"com.dapr.event.sent"}`),
+	b.pmrChGRPC <- &compv1pb.PullMessagesResponse{
+		Data:      []byte(`{"data":"helloworld","datacontenttype":"text/plain","id":"b959cd5a-29e5-42ca-89e2-c66f4402f273","pubsubname":"foo","source":"foo","specversion":"1.0","time":"2024-03-27T23:47:53Z","topic":"bar2","traceid":"00-00000000000000000000000000000000-0000000000000000-00","traceparent":"00-00000000000000000000000000000000-0000000000000000-00","tracestate":"","type":"com.dapr.event.sent"}`),
 		TopicName: "bar",
 		Id:        "foo",
 		Metadata:  map[string]string{"content-length": "123"},
 	}
-	b.appgrpc.Receive(t, ctx)
+	b.appgrpc.ReceiveBulk(t, ctx)
 }
