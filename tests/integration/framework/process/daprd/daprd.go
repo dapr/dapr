@@ -264,7 +264,7 @@ func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 }
 
 //nolint:testifylint
-func (d *Daprd) RegistedComponents(t *assert.CollectT, ctx context.Context) []*rtv1.RegisteredComponents {
+func (d *Daprd) RegistedComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {
 	url := fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if !assert.NoError(t, err) {
