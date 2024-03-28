@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -151,6 +152,7 @@ func (o *Operator) Dial(t *testing.T, ctx context.Context, ns string, sentry *se
 		AppID:                   "myapp",
 		Mode:                    modes.StandaloneMode,
 		MTLSEnabled:             true,
+		Healthz:                 healthz.New(),
 	})
 	require.NoError(t, err)
 

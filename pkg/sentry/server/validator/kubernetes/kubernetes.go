@@ -33,6 +33,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	configv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security/consts"
@@ -58,6 +59,7 @@ type Options struct {
 	RestConfig     *rest.Config
 	SentryID       spiffeid.ID
 	ControlPlaneNS string
+	Healthz        healthz.Healthz
 }
 
 // kubernetes implements the validator.Interface. It validates the request by
@@ -69,9 +71,10 @@ type kubernetes struct {
 	sentryAudience string
 	controlPlaneNS string
 	controlPlaneTD spiffeid.TrustDomain
+	htarget        healthz.Target
 }
 
-func New(ctx context.Context, opts Options) (validator.Validator, error) {
+func New(opts Options) (validator.Validator, error) {
 	kubeClient, err := cl.NewForConfig(opts.RestConfig)
 	if err != nil {
 		return nil, err
@@ -90,15 +93,6 @@ func New(ctx context.Context, opts Options) (validator.Validator, error) {
 		return nil, err
 	}
 
-	for _, obj := range []client.Object{
-		&metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{Kind: "Pod", APIVersion: "v1"}},
-		&configv1alpha1.Configuration{},
-	} {
-		if _, err := cache.GetInformer(ctx, obj); err != nil {
-			return nil, err
-		}
-	}
-
 	return &kubernetes{
 		auth:           kubeClient.AuthenticationV1(),
 		client:         cache,
@@ -106,15 +100,33 @@ func New(ctx context.Context, opts Options) (validator.Validator, error) {
 		sentryAudience: opts.SentryID.String(),
 		controlPlaneNS: opts.ControlPlaneNS,
 		controlPlaneTD: opts.SentryID.TrustDomain(),
+		htarget:        opts.Healthz.AddTarget(),
 	}, nil
 }
 
 func (k *kubernetes) Start(ctx context.Context) error {
-	if err := k.client.(cache.Cache).Start(ctx); err != nil {
+	defer k.htarget.NotReady()
+
+	cache := k.client.(cache.Cache)
+	for _, obj := range []client.Object{
+		&metav1.PartialObjectMetadata{TypeMeta: metav1.TypeMeta{Kind: "Pod", APIVersion: "v1"}},
+		&configv1alpha1.Configuration{},
+	} {
+		if _, err := cache.GetInformer(ctx, obj); err != nil {
+			return err
+		}
+	}
+
+	go func() {
+		if k.ready(ctx) {
+			k.htarget.Ready()
+		}
+	}()
+
+	if err := cache.Start(ctx); err != nil {
 		return err
 	}
 
-	<-ctx.Done()
 	return nil
 }
 

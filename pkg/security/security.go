@@ -33,6 +33,7 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/fswatcher"
@@ -61,13 +62,13 @@ type Handler interface {
 	CurrentTrustAnchors() ([]byte, error)
 
 	MTLSEnabled() bool
-	WatchTrustAnchors(context.Context, chan<- []byte)
 }
 
 // Provider is the security provider.
 type Provider interface {
 	Run(context.Context) error
 	Handler(context.Context) (Handler, error)
+	WatchTrustAnchors(context.Context, chan<- []byte) error
 }
 
 // Options are the options for the security authenticator.
@@ -110,12 +111,16 @@ type Options struct {
 	// SentryTokenFile is an optional file containing the token to authenticate
 	// to sentry.
 	SentryTokenFile *string
+
+	// Healthz is used to signal the health of the security provider.
+	Healthz healthz.Healthz
 }
 
 type provider struct {
 	sec *security
 
 	running          atomic.Bool
+	htarget          healthz.Target
 	readyCh          chan struct{}
 	trustAnchorsFile string
 
@@ -137,6 +142,8 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	if len(opts.ControlPlaneTrustDomain) == 0 {
 		return nil, errors.New("control plane trust domain is required")
 	}
+
+	htarget := opts.Healthz.AddTarget()
 
 	td, err := spiffeid.TrustDomainFromString(opts.ControlPlaneTrustDomain)
 	if err != nil {
@@ -166,6 +173,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	}
 
 	return &provider{
+		htarget:           htarget,
 		fswatcherInterval: time.Millisecond * 500,
 		readyCh:           make(chan struct{}),
 		trustAnchorsFile:  opts.TrustAnchorsFile,
@@ -181,6 +189,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 // Run is a blocking function which starts the security provider, handling
 // rotation of credentials.
 func (p *provider) Run(ctx context.Context) error {
+	defer p.htarget.NotReady()
 	if !p.running.CompareAndSwap(false, true) {
 		return errors.New("security provider already started")
 	}
@@ -188,6 +197,7 @@ func (p *provider) Run(ctx context.Context) error {
 	// If the security source has not been initialized, then just wait to exit.
 	if p.sec.source == nil {
 		close(p.readyCh)
+		p.htarget.Ready()
 		<-ctx.Done()
 		return nil
 	}
@@ -245,6 +255,7 @@ func (p *provider) Run(ctx context.Context) error {
 
 	diagnostics.DefaultMonitoring.MTLSInitCompleted()
 	close(p.readyCh)
+	p.htarget.Ready()
 	log.Infof("Security is initialized successfully")
 
 	return mngr.Run(ctx)
@@ -348,18 +359,24 @@ func (s *security) ControlPlaneNamespace() string {
 // WatchTrustAnchors watches for changes to the trust domains and returns the
 // PEM encoded trust domain roots.
 // Returns when the given context is canceled.
-func (s *security) WatchTrustAnchors(ctx context.Context, trustAnchors chan<- []byte) {
+func (p *provider) WatchTrustAnchors(ctx context.Context, trustAnchors chan<- []byte) error {
+	secI, err := p.Handler(ctx)
+	if err != nil {
+		return err
+	}
+	sec := secI.(*security)
+
 	sub := make(chan struct{})
-	s.source.lock.Lock()
-	s.source.trustAnchorSubscribers = append(s.source.trustAnchorSubscribers, sub)
-	s.source.lock.Unlock()
+	sec.source.lock.Lock()
+	sec.source.trustAnchorSubscribers = append(sec.source.trustAnchorSubscribers, sub)
+	sec.source.lock.Unlock()
 
 	for {
 		select {
 		case <-ctx.Done():
-			return
+			return nil
 		case <-sub:
-			caBundle, err := s.CurrentTrustAnchors()
+			caBundle, err := sec.CurrentTrustAnchors()
 			if err != nil {
 				log.Errorf("failed to marshal trust anchors: %s", err)
 				continue

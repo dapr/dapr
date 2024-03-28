@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -85,6 +86,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		TrustAnchors:            i.sentry.CABundle().TrustAnchors,
 		AppID:                   "app-1",
 		MTLSEnabled:             true,
+		Healthz:                 healthz.New(),
 	})
 	require.NoError(t, err)
 

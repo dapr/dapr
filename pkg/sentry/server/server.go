@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	secpem "github.com/dapr/dapr/pkg/security/pem"
@@ -41,8 +42,8 @@ type Options struct {
 	// Port is the port that the server will listen on.
 	Port int
 
-	// Security is the security handler for the server.
-	Security security.Handler
+	// Security is the security Provider for the server.
+	Security security.Provider
 
 	// Validator are the client authentication validator.
 	Validators map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator
@@ -52,35 +53,51 @@ type Options struct {
 
 	// CA is the certificate authority which signs client certificates.
 	CA ca.Signer
+
+	// Healthz is the healthz handler for the server.
+	Healthz healthz.Healthz
 }
 
-// server is the gRPC server for the Sentry service.
-type server struct {
+// Server is the gRPC server for the Sentry service.
+type Server struct {
+	port             int
+	sec              security.Provider
 	vals             map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator
 	defaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
 	ca               ca.Signer
+	htarget          healthz.Target
 }
 
-// Start starts the server. Blocks until the context is cancelled.
-func Start(ctx context.Context, opts Options) error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", opts.Port))
-	if err != nil {
-		return fmt.Errorf("could not listen on port %d: %w", opts.Port, err)
-	}
-
-	// No client auth because we auth based on the client SignCertificateRequest.
-	srv := grpc.NewServer(opts.Security.GRPCServerOptionNoClientAuth())
-
-	s := &server{
+func New(opts Options) *Server {
+	return &Server{
+		port:             opts.Port,
+		sec:              opts.Security,
 		vals:             opts.Validators,
 		defaultValidator: opts.DefaultValidator,
 		ca:               opts.CA,
+		htarget:          opts.Healthz.AddTarget(),
 	}
+}
+
+// Start starts the server. Blocks until the context is cancelled.
+func (s *Server) Start(ctx context.Context) error {
+	sec, err := s.sec.Handler(ctx)
+	if err != nil {
+		return err
+	}
+
+	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", s.port))
+	if err != nil {
+		return fmt.Errorf("could not listen on port %d: %w", s.port, err)
+	}
+
+	// No client auth because we auth based on the client SignCertificateRequest.
+	srv := grpc.NewServer(sec.GRPCServerOptionNoClientAuth())
 	sentryv1pb.RegisterCAServer(srv, s)
 
 	errCh := make(chan error, 1)
 	go func() {
-		log.Infof("Running gRPC server on port %d", opts.Port)
+		log.Infof("Running gRPC server on port %d", s.port)
 		if err := srv.Serve(lis); err != nil {
 			errCh <- fmt.Errorf("failed to serve: %w", err)
 			return
@@ -88,14 +105,17 @@ func Start(ctx context.Context, opts Options) error {
 		errCh <- nil
 	}()
 
+	s.htarget.Ready()
+
 	<-ctx.Done()
+	s.htarget.NotReady()
 	log.Info("Shutting down gRPC server")
 	srv.GracefulStop()
 	return <-errCh
 }
 
 // SignCertificate implements the SignCertificate gRPC method.
-func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
+func (s *Server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
 	monitoring.CertSignRequestReceived()
 	resp, err := s.signCertificate(ctx, req)
 	if err != nil {
@@ -106,7 +126,7 @@ func (s *server) SignCertificate(ctx context.Context, req *sentryv1pb.SignCertif
 	return resp, nil
 }
 
-func (s *server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
+func (s *Server) signCertificate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (*sentryv1pb.SignCertificateResponse, error) {
 	validator := s.defaultValidator
 	if req.GetTokenValidator() != sentryv1pb.SignCertificateRequest_UNKNOWN && req.GetTokenValidator().String() != "" {
 		validator = req.GetTokenValidator()

@@ -29,6 +29,7 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/clock"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -153,8 +154,10 @@ type Service struct {
 	// clock keeps time. Mocked in tests.
 	clock clock.WithTicker
 
-	sec security.Provider
+	sec  security.Provider
+	port int
 
+	htarget  healthz.Target
 	running  atomic.Bool
 	closed   atomic.Bool
 	closedCh chan struct{}
@@ -167,6 +170,8 @@ type PlacementServiceOpts struct {
 	MaxAPILevel *uint32
 	MinAPILevel uint32
 	SecProvider security.Provider
+	Port        int
+	Healthz     healthz.Healthz
 }
 
 // NewPlacementService returns a new placement service.
@@ -184,12 +189,16 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
 		sec:                      opts.SecProvider,
+		port:                     opts.Port,
+		htarget:                  opts.Healthz.AddTarget(),
 	}
 }
 
-// Run starts the placement service gRPC server.
+// Start starts the placement service gRPC server.
 // Blocks until the service is closed and all connections are drained.
-func (p *Service) Run(ctx context.Context, port string) error {
+func (p *Service) Start(ctx context.Context) error {
+	defer p.htarget.NotReady()
+
 	if p.closed.Load() {
 		return errors.New("placement service is closed")
 	}
@@ -203,7 +212,7 @@ func (p *Service) Run(ctx context.Context, port string) error {
 		return err
 	}
 
-	serverListener, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+	serverListener, err := net.Listen("tcp", fmt.Sprintf(":%d", p.port))
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
@@ -219,6 +228,7 @@ func (p *Service) Run(ctx context.Context, port string) error {
 		log.Info("Placement service stopped")
 	}()
 
+	p.htarget.Ready()
 	<-ctx.Done()
 
 	if p.closed.CompareAndSwap(false, true) {

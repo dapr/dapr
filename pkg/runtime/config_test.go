@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/ptr"
@@ -98,6 +99,7 @@ func defaultTestConfig() Config {
 		DisableBuiltinK8sSecretStore: true,
 		AppChannelAddress:            "1.1.1.1",
 		Registry:                     registry.NewOptions(),
-		Metrics:                      &metrics.Options{MetricsEnabled: false},
+		Metrics:                      metrics.Options{Enabled: false, Healthz: healthz.New()},
+		Healthz:                      healthz.New(),
 	}
 }
