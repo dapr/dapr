@@ -173,15 +173,12 @@ func newDaprRuntime(ctx context.Context,
 			schedulerHostPorts = []string{runtimeConfig.schedulerAddress}
 		}
 
-		schedulerManager, err = runtimeScheduler.NewManager(ctx, runtimeScheduler.Scheduler{
+		schedulerManager = runtimeScheduler.NewManager(ctx, runtimeScheduler.Scheduler{
 			Addresses:    schedulerHostPorts,
 			SidecarNS:    namespace,
 			SidecarAppID: runtimeConfig.id,
 			Sec:          sec,
 		})
-		if err != nil {
-			return nil, err
-		}
 
 		schedulerManager.Run(ctx)
 	}

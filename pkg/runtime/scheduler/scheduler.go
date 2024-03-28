@@ -56,7 +56,7 @@ type Manager struct {
 	wg          sync.WaitGroup
 }
 
-func NewManager(ctx context.Context, sched Scheduler) (*Manager, error) {
+func NewManager(ctx context.Context, sched Scheduler) *Manager {
 	manager := &Manager{
 		ConnDetails: scheduler.SidecarConnDetails{
 			Namespace: sched.SidecarNS,
@@ -65,12 +65,13 @@ func NewManager(ctx context.Context, sched Scheduler) (*Manager, error) {
 	}
 
 	for _, address := range sched.Addresses {
+		//maybe dont do this here and only do it in the run?
 		conn, client, err := schedulerclient.New(ctx, address, sched.Sec)
-
 		if err != nil {
-			return nil, fmt.Errorf("error creating scheduler client for address %s: %w", address, err)
+			log.Infof("Scheduler client not initialized for address: %s", address)
+		} else {
+			log.Infof("Scheduler client initialized for address: %s", address)
 		}
-		log.Infof("Scheduler client initialized for address: %s", address)
 
 		manager.Clients = append(manager.Clients, &Client{
 			conn:       conn,
@@ -80,7 +81,7 @@ func NewManager(ctx context.Context, sched Scheduler) (*Manager, error) {
 		})
 	}
 
-	return manager, nil
+	return manager
 }
 
 // Run starts watching for job triggers from all scheduler clients.
@@ -90,7 +91,6 @@ func (m *Manager) Run(ctx context.Context) {
 	// Start a goroutine for each client to watch for job updates
 	for _, client := range m.Clients {
 		go func(client *Client) {
-			defer client.conn.Close()
 			defer m.wg.Done()
 			m.watchJob(ctx, client)
 		}(client)
@@ -111,17 +111,41 @@ streamScheduler:
 		select {
 		case <-ctx.Done():
 			log.Infof("Context cancelled. Exiting watchJob goroutine.") // TODO: rm this after debugging
+			if client.conn != nil {
+				if err := client.conn.Close(); err != nil {
+					log.Infof("error closing scheduler client connection: %v", err)
+				}
+			}
 			return
 		default:
+			// sidecar started before scheduler
+			if client.conn == nil || client.scheduler == nil {
+				if err := client.closeAndReconnect(ctx); err != nil {
+					log.Infof("Error connecting to client: %v", err)
+					// If reconnect fails, switch to the next client and retry
+					client.scheduler = m.NextClient()
+					time.Sleep(5 * time.Second)
+					continue streamScheduler
+				}
+				//time.Sleep(5 * time.Second)
+				//continue
+			}
+
 			stream, err := client.scheduler.WatchJob(ctx, streamReq)
 			if err != nil {
-				log.Errorf("Error while streaming with Scheduler: %v", err) // TODO: rm this after debugging
+				log.Infof("Error while streaming with Scheduler: %v", err) // TODO: rm this after debugging
 				if err := client.closeAndReconnect(ctx); err != nil {
-					log.Errorf("Error reconnecting client: %v", err)
+					log.Infof("Error reconnecting client: %v", err)
+					// If reconnect fails, switch to the next client and retry
+					client.scheduler = m.NextClient()
+					time.Sleep(5 * time.Second)
+					continue streamScheduler
 				}
 				time.Sleep(5 * time.Second)
 				continue
 			}
+
+			log.Infof("Connected to Scheduler at address %s", client.address)
 
 			// process streamed jobs
 			for {
@@ -144,7 +168,7 @@ streamScheduler:
 					resp, err := stream.Recv()
 					if err != nil {
 						if status.Code(err) == codes.Canceled || status.Code(err) == codes.Unavailable || err == io.EOF {
-							log.Infof("Scheduler stream recv ctx cancelled.")
+							log.Infof("Scheduler cancelled the stream ctx.")
 							// get a new client here
 						} else {
 							log.Errorf("Error while receiving job trigger: %v", err)
@@ -165,8 +189,10 @@ streamScheduler:
 
 // closeAndReconnect closes the connection and reconnects the client.
 func (client *Client) closeAndReconnect(ctx context.Context) error {
-	if err := client.conn.Close(); err != nil {
-		return fmt.Errorf("error closing connection: %v", err)
+	if client.conn != nil {
+		if err := client.conn.Close(); err != nil {
+			return fmt.Errorf("error closing connection: %v", err)
+		}
 	}
 	conn, schedulerClient, err := schedulerclient.New(ctx, client.address, client.secHandler)
 	if err != nil {
@@ -174,6 +200,8 @@ func (client *Client) closeAndReconnect(ctx context.Context) error {
 	}
 	client.conn = conn
 	client.scheduler = schedulerClient
+
+	log.Infof("Reconnected to scheduler at address %s", client.address)
 	return nil
 }
 
