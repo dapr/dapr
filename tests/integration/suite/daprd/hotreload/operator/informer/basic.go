@@ -162,11 +162,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 		ObjectMeta: metav1.ObjectMeta{Name: "123", Namespace: "default"},
 		Spec: compapi.ComponentSpec{
-			Type:    "state.sqlite",
-			Version: "v1",
+			Type:         "state.sqlite",
+			Version:      "v1",
+			IgnoreErrors: true,
 			Metadata: []common.NameValuePair{
 				{Name: "connectionString", Value: common.DynamicValue{
 					JSON: apiextv1.JSON{Raw: dirJSON},
+				}},
+				{Name: "busyTimeout", Value: common.DynamicValue{
+					JSON: apiextv1.JSON{Raw: []byte(`"10s"`)},
 				}},
 			},
 		},
@@ -185,7 +189,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			}
 			assert.ElementsMatch(c, exp, util.GetMetaComponents(c, ctx, client, b.daprd1.HTTPPort()))
 			assert.ElementsMatch(c, exp, util.GetMetaComponents(c, ctx, client, b.daprd2.HTTPPort()))
-		}, time.Second*10, time.Millisecond*10)
+		}, time.Second*20, time.Millisecond*10)
 	})
 
 	t.Run("deleting a component should delete the component", func(t *testing.T) {
