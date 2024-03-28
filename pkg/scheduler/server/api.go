@@ -197,6 +197,7 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 	case <-stream.Context().Done():
 	}
 
+	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s.", req.AppId)
 	s.connectionPool.Remove(req.Namespace+req.AppId, conn)
 	return nil
 }

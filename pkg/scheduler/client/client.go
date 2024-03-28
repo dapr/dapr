@@ -28,7 +28,7 @@ import (
 )
 
 const (
-	dialTimeout = 4 * time.Second
+	dialTimeout = 30 * time.Second
 )
 
 // New returns a new scheduler client and the underlying connection.
