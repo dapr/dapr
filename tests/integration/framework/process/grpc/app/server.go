@@ -23,12 +23,13 @@ import (
 )
 
 type server struct {
-	onInvokeFn       func(context.Context, *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)
-	onTopicEventFn   func(context.Context, *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error)
-	listTopicSubFn   func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)
-	listInputBindFn  func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error)
-	onBindingEventFn func(context.Context, *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error)
-	healthCheckFn    func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error)
+	onInvokeFn         func(context.Context, *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)
+	onTopicEventFn     func(context.Context, *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error)
+	onBulkTopicEventFn func(context.Context, *rtv1.TopicEventBulkRequest) (*rtv1.TopicEventBulkResponse, error)
+	listTopicSubFn     func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)
+	listInputBindFn    func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error)
+	onBindingEventFn   func(context.Context, *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error)
+	healthCheckFn      func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error)
 }
 
 func (s *server) OnInvoke(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
@@ -64,6 +65,13 @@ func (s *server) OnTopicEvent(ctx context.Context, in *rtv1.TopicEventRequest) (
 		return new(rtv1.TopicEventResponse), nil
 	}
 	return s.onTopicEventFn(ctx, in)
+}
+
+func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *rtv1.TopicEventBulkRequest) (*rtv1.TopicEventBulkResponse, error) {
+	if s.onBulkTopicEventFn == nil {
+		return new(rtv1.TopicEventBulkResponse), nil
+	}
+	return s.onBulkTopicEventFn(ctx, in)
 }
 
 func (s *server) HealthCheck(ctx context.Context, e *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {

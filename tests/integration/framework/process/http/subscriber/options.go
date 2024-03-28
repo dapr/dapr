@@ -23,6 +23,7 @@ type options struct {
 	routes       []string
 	bulkRoutes   []string
 	handlerFuncs []app.Option
+	progSubs     *[]SubscriptionJSON
 }
 
 func WithRoutes(routes ...string) Option {
@@ -40,5 +41,14 @@ func WithBulkRoutes(routes ...string) Option {
 func WithHandlerFunc(path string, fn http.HandlerFunc) Option {
 	return func(o *options) {
 		o.handlerFuncs = append(o.handlerFuncs, app.WithHandlerFunc(path, fn))
+	}
+}
+
+func WithProgrammaticSubscriptions(subs ...SubscriptionJSON) Option {
+	return func(o *options) {
+		if o.progSubs == nil {
+			o.progSubs = new([]SubscriptionJSON)
+		}
+		*o.progSubs = append(*o.progSubs, subs...)
 	}
 }
