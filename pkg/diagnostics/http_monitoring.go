@@ -49,6 +49,7 @@ type httpMetrics struct {
 	serverResponseBytes *stats.Int64Measure
 	serverLatency       *stats.Float64Measure
 	serverRequestCount  *stats.Int64Measure
+	serverResponseCount *stats.Int64Measure
 
 	clientSentBytes        *stats.Int64Measure
 	clientReceivedBytes    *stats.Int64Measure
@@ -82,6 +83,10 @@ func newHTTPMetrics() *httpMetrics {
 		serverRequestCount: stats.Int64(
 			"http/server/request_count",
 			"Count of HTTP requests processed by the server.",
+			stats.UnitDimensionless),
+		serverResponseCount: stats.Int64(
+			"http/server/response_count",
+			"The number of HTTP responses",
 			stats.UnitDimensionless),
 		clientSentBytes: stats.Int64(
 			"http/client/sent_bytes",
@@ -130,6 +135,10 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 			ctx,
 			diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
 			h.serverLatency.M(elapsed))
+		stats.RecordWithTags(
+			ctx,
+			diagUtils.WithTags(h.serverResponseCount.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
+			h.serverResponseCount.M(1))
 	} else {
 		stats.RecordWithTags(
 			ctx,
@@ -234,7 +243,8 @@ func (h *httpMetrics) Init(appID string, legacy bool) error {
 		serverTags = []tag.Key{appIDKey, httpMethodKey, httpStatusCodeKey}
 		clientTags = []tag.Key{appIDKey, httpStatusCodeKey}
 	}
-	return view.Register(
+
+	views := []*view.View{
 		diagUtils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.serverLatency, serverTags, defaultLatencyDistribution),
@@ -245,7 +255,13 @@ func (h *httpMetrics) Init(appID string, legacy bool) error {
 		diagUtils.NewMeasureView(h.clientCompletedCount, clientTags, view.Count()),
 		diagUtils.NewMeasureView(h.healthProbeRoundripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(h.healthProbeCompletedCount, []tag.Key{appIDKey, httpStatusCodeKey}, view.Count()),
-	)
+	}
+
+	if h.legacy {
+		views = append(views, diagUtils.NewMeasureView(h.serverResponseCount, serverTags, view.Count()))
+	}
+
+	return view.Register(views...)
 }
 
 // HTTPMiddleware is the middleware to track HTTP server-side requests.
