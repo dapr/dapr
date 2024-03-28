@@ -16,6 +16,7 @@ package socket
 import (
 	"os"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -36,7 +37,7 @@ type File struct {
 }
 
 func New(t *testing.T) *Socket {
-	if runtime.OS() == "windows" {
+	if runtime.GOOS == "windows" {
 		t.Skip("Unix sockets are not supported on Windows")
 	}
 
