@@ -62,16 +62,6 @@ func (a *api) constructSchedulerEndpoints() []endpoints.Endpoint {
 				Name: "GetJob",
 			},
 		},
-		{
-			Methods: []string{http.MethodGet},
-			Route:   "jobs/{app_id}",
-			Version: apiVersionV1,
-			Group:   endpointGroupSchedulerV1Alpha1,
-			Handler: a.onListJobsHandler(),
-			Settings: endpoints.EndpointSettings{
-				Name: "ListJobs",
-			},
-		},
 	}
 }
 
@@ -82,7 +72,7 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 			InModifier: func(r *http.Request, in *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobRequest, error) {
 				// Users should set the name in the url, and not in the url and body
 				if (chi.URLParam(r, nameParam) == "") || (in.GetJob().GetName() != "") {
-					return nil, apierrors.SchedulerURLName(map[string]string{"app_id": a.universal.AppID()})
+					return nil, apierrors.SchedulerURLName(map[string]string{"appId": a.universal.AppID()})
 				}
 
 				job := &runtimev1pb.Job{
@@ -138,26 +128,6 @@ func (a *api) onGetJobHandler() http.HandlerFunc {
 					return nil, nil // empty body
 				}
 				return out.GetJob(), nil // empty body
-			},
-		},
-	)
-}
-
-func (a *api) onListJobsHandler() http.HandlerFunc {
-	return UniversalHTTPHandler(
-		a.universal.ListJobs,
-		UniversalHTTPHandlerOpts[*runtimev1pb.ListJobsRequest, *runtimev1pb.ListJobsResponse]{
-			SkipInputBody: true,
-			InModifier: func(r *http.Request, in *runtimev1pb.ListJobsRequest) (*runtimev1pb.ListJobsRequest, error) {
-				appID := chi.URLParam(r, "app_id")
-				in.AppId = appID
-				return in, nil
-			},
-			OutModifier: func(out *runtimev1pb.ListJobsResponse) (any, error) {
-				if out == nil || out.GetJobs() == nil {
-					return nil, nil // empty body
-				}
-				return out.GetJobs(), nil // empty body
 			},
 		},
 	)

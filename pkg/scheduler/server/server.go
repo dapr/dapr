@@ -24,10 +24,11 @@ import (
 	"sync/atomic"
 	"time"
 
-	etcdcron "github.com/Scalingo/go-etcd-cron"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
+
+	etcdcron "github.com/diagridio/go-etcd-cron"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/config"
@@ -176,7 +177,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	return concurrency.NewRunnerManager(
 		s.runServer,
-		s.runEtcd,
+		s.runEtcdCron,
 		s.runJobWatcher,
 		func(ctx context.Context) error {
 			<-ctx.Done()
@@ -223,7 +224,7 @@ func (s *Server) runServer(ctx context.Context) error {
 	}
 }
 
-func (s *Server) runEtcd(ctx context.Context) error {
+func (s *Server) runEtcdCron(ctx context.Context) error {
 	log.Info("Starting etcd")
 
 	etcd, err := embed.StartEtcd(s.conf())
@@ -243,19 +244,21 @@ func (s *Server) runEtcd(ctx context.Context) error {
 
 	etcdEndpoints := clientEndpoints(s.etcdInitialPeers, s.etcdClientPorts)
 
-	c, err := etcdcron.NewEtcdMutexBuilder(clientv3.Config{Endpoints: etcdEndpoints})
+	c, err := clientv3.New(clientv3.Config{Endpoints: etcdEndpoints})
 	if err != nil {
 		return err
 	}
 
 	// pass in initial cluster endpoints, but with client ports
-	cron, err := etcdcron.New(etcdcron.WithEtcdMutexBuilder(c))
+	cron, err := etcdcron.New(
+		etcdcron.WithEtcdClient(c),
+		etcdcron.WithTriggerFunc(s.triggerJob),
+	)
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
 	}
 
 	cron.Start(ctx)
-	defer cron.Stop()
 
 	s.cron = cron
 	close(s.readyCh)
@@ -265,6 +268,8 @@ func (s *Server) runEtcd(ctx context.Context) error {
 		return err
 	case <-ctx.Done():
 		log.Info("Embedded Etcd shutting down")
+		cron.Wait()
+		// Don't close etcd here because it has a defer close() already.
 		return nil
 	}
 }

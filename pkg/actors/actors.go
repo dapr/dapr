@@ -1195,6 +1195,8 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
 	if a.scheduler != nil {
 		metadata := map[string]string{
+			"scope":        "actor",
+			"namespace":    a.actorsConfig.Namespace,
 			"appId":        a.actorsConfig.AppID,
 			"actorType":    req.ActorType,
 			"actorId":      req.ActorID,
@@ -1203,6 +1205,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		}
 
 		jobName := constructCompositeKey(
+			a.actorsConfig.Namespace,
 			"reminder",
 			req.ActorType,
 			req.ActorID,
@@ -1214,21 +1217,18 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			return err
 		}
 
-		// TODO: change the 3rd party library to take our format
-		jobSchedule := "@every " + req.Period
 		internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
-				Name:     a.actorsConfig.AppID + "||" + jobName,
-				Schedule: jobSchedule,
+				Name:     jobName,
+				Schedule: "@every " + req.Period,
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.protobuf.BytesValue",
-					Value:   data,
+					Value:   data, // TODO: this should go to actorStateStore
 				},
 				DueTime: req.DueTime,
 				Ttl:     req.TTL,
 			},
-			Namespace: "",       // TODO
-			Metadata:  metadata, // TODO: this should generate key if jobStateStore is configured
+			Metadata: metadata,
 		}
 
 		_, err = a.scheduler.ScheduleJob(ctx, internalScheduleJobReq)
@@ -1262,6 +1262,32 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
+	if a.scheduler != nil {
+		metadata := map[string]string{
+			"scope":     "actor",
+			"namespace": a.actorsConfig.Namespace,
+			"appId":     a.actorsConfig.AppID,
+			"actorType": req.ActorType,
+			"actorId":   req.ActorID,
+		}
+
+		jobName := constructCompositeKey(
+			a.actorsConfig.Namespace,
+			"reminder",
+			req.ActorType,
+			req.ActorID,
+			req.Name,
+		)
+
+		internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
+			JobName:  jobName,
+			Metadata: metadata,
+		}
+
+		_, err := a.scheduler.DeleteJob(ctx, internalDeleteJobReq)
+		return err
+	}
+
 	if !a.actorsConfig.Config.HostedActorTypes.IsActorTypeHosted(req.ActorType) {
 		return ErrReminderOpActorNotHosted
 	}

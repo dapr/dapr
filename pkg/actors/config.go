@@ -42,7 +42,7 @@ type ConfigOpts struct {
 	AppID             string
 	ActorsService     string
 	RemindersService  string
-	SchedulerService  string
+	SchedulerAddress  string
 	Port              int
 	Namespace         string
 	AppConfig         daprAppConfig.ApplicationConfig
@@ -59,7 +59,7 @@ func NewConfig(opts ConfigOpts) Config {
 		AppID:                         opts.AppID,
 		ActorsService:                 opts.ActorsService,
 		RemindersService:              opts.RemindersService,
-		SchedulerService:              opts.SchedulerService,
+		SchedulerService:              opts.SchedulerAddress,
 		Port:                          opts.Port,
 		Namespace:                     opts.Namespace,
 		DrainRebalancedActors:         opts.AppConfig.DrainRebalancedActors,
