@@ -194,27 +194,4 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
-
-	// Covers apierrors.Empty() job appID is empty
-	t.Run("list jobs appID is empty", func(t *testing.T) {
-		req := &rtv1.ListJobsRequest{AppId: ""}
-
-		_, err := client.ListJobs(ctx, req)
-
-		require.Error(t, err)
-		s, ok := status.FromError(err)
-		require.True(t, ok)
-		require.Equal(t, codes.InvalidArgument, s.Code())
-		require.Equal(t, "AppID is empty", s.Message())
-
-		// Check status details
-		require.Len(t, s.Details(), 1)
-
-		var errInfo *errdetails.ErrorInfo
-		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
-
-		require.True(t, ok)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixAppID, apierrors.PostFixEmpty), errInfo.GetReason())
-		require.Equal(t, "dapr.io", errInfo.GetDomain())
-	})
 }

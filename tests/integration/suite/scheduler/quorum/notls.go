@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -43,9 +44,13 @@ func init() {
 // notls tests scheduler can find quorum with tls disabled.
 type notls struct {
 	schedulers []*scheduler.Scheduler
+
+	jobName string
 }
 
 func (n *notls) Setup(t *testing.T) []framework.Option {
+	n.jobName = uuid.NewString()
+
 	fp := util.ReservePorts(t, 6)
 
 	opts := []scheduler.Option{
@@ -76,6 +81,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	n.schedulers[2].WaitUntilRunning(t, ctx)
 
 	// Schedule job to random scheduler instance
+	//nolint:gosec // there is no need for a crypto secure rand.
 	chosenScheduler := n.schedulers[rand.Intn(3)]
 
 	host := chosenScheduler.Address()
@@ -88,14 +94,14 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 	client := schedulerv1pb.NewSchedulerClient(conn)
 
-	jobName := "appID||testJob"
 	req := &schedulerv1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
-			Name:     jobName,
+			Name:     n.jobName,
 			Schedule: "@every 1s",
 		},
-		Namespace: "default",
-		Metadata:  nil,
+		Metadata: map[string]string{
+			"namespace": "default",
+		},
 	}
 
 	_, err = client.ScheduleJob(ctx, req)
@@ -108,7 +114,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	require.NotEmptyf(t, chosenSchedulerPort, "chosenSchedulerPort should not be empty")
 
 	chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
-	checkKeysForAppID(t, chosenSchedulerEtcdKeys)
+	checkKeysForAppID(t, n.jobName, chosenSchedulerEtcdKeys)
 
 	// ensure data exists on ALL schedulers
 	for i := 0; i < 3; i++ {
@@ -118,18 +124,19 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		require.NotEmptyf(t, diffSchedulerPort, "diffSchedulerPort should not be empty")
 
 		diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
-		checkKeysForAppID(t, diffSchedulerEtcdKeys)
+		checkKeysForAppID(t, n.jobName, diffSchedulerEtcdKeys)
 	}
 }
 
-func checkKeysForAppID(t *testing.T, keys []*mvccpb.KeyValue) {
+func checkKeysForAppID(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
+	found := false
 	for _, kv := range keys {
-		if strings.Contains(string(kv.Key), "etcd_cron/appid__testjob") {
-			require.True(t, true, "Key exists: 'etcd_cron/appid__testjob'")
-			return
+		if strings.HasSuffix(string(kv.Key), jobName) {
+			found = true
+			break
 		}
 	}
-	require.Fail(t, "Key not found: 'etcd_cron/appid__testjob'")
+	require.True(t, found, "job's key not found: '%s'", jobName)
 }
 
 func getEtcdKeys(t *testing.T, port string) []*mvccpb.KeyValue {

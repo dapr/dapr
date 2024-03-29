@@ -64,7 +64,7 @@ type Options struct {
 	DaprBlockShutdownDuration    *time.Duration
 	ActorsService                string
 	RemindersService             string
-	SchedulerAddress             *string
+	SchedulerAddress             string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
 	AppHealthProbeTimeout        int
@@ -79,8 +79,6 @@ type Options struct {
 	AppChannelAddress            string
 	Logger                       logger.Options
 	Metrics                      *metrics.Options
-
-	schedulerAddressFlag string
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -134,7 +132,6 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.SentryAddress, "sentry-address", "", "Address for the Sentry CA service")
 	fs.StringVar(&opts.ControlPlaneTrustDomain, "control-plane-trust-domain", "localhost", "Trust domain of the Dapr control plane")
 	fs.StringVar(&opts.ControlPlaneNamespace, "control-plane-namespace", "default", "Namespace of the Dapr control plane")
-	fs.StringVar(&opts.schedulerAddressFlag, "scheduler-host-address", "", "Addresses for Dapr Scheduler servers")
 	fs.StringVar(&opts.AllowedOrigins, "allowed-origins", cors.DefaultAllowedOrigins, "Allowed HTTP origins")
 	fs.BoolVar(&opts.EnableProfiling, "enable-profiling", false, "Enable profiling")
 	fs.BoolVar(&opts.RuntimeVersion, "version", false, "Prints the runtime version")
@@ -166,6 +163,7 @@ func New(origArgs []string) (*Options, error) {
 	// --placement-host-address is a legacy (but not deprecated) flag that is translated to the actors-service flag
 	var placementServiceHostAddr string
 	fs.StringVar(&placementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers (overrides actors-service)")
+	fs.StringVar(&opts.SchedulerAddress, "scheduler-host-address", "", "Addresses of the Scheduler service instance(s), as comma separated host:port pairs")
 	fs.StringVar(&opts.ActorsService, "actors-service", "", "Type and address of the actors service, in the format 'type:address'")
 	fs.StringVar(&opts.RemindersService, "reminders-service", "", "Type and address of the reminders service, in the format 'type:address'")
 
@@ -246,10 +244,6 @@ func New(origArgs []string) (*Options, error) {
 
 	if !fs.Changed("dapr-block-shutdown-duration") {
 		opts.DaprBlockShutdownDuration = nil
-	}
-
-	if fs.Changed("scheduler-host-address") {
-		opts.SchedulerAddress = &opts.schedulerAddressFlag
 	}
 
 	return &opts, nil

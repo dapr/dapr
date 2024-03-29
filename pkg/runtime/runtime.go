@@ -160,7 +160,7 @@ func newDaprRuntime(ctx context.Context,
 
 	var schedClient schedulerv1pb.SchedulerClient
 	if runtimeConfig.SchedulerEnabled() {
-		schedClient, err = schedulerclient.New(ctx, *runtimeConfig.schedulerAddress, sec)
+		schedClient, err = schedulerclient.New(ctx, runtimeConfig.schedulerAddress, sec)
 		if err != nil {
 			return nil, fmt.Errorf("error creating scheduler client: %w", err)
 		}
@@ -196,7 +196,7 @@ func newDaprRuntime(ctx context.Context,
 		Namespace:        namespace,
 		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
-		SchedulerEnabled: runtimeConfig.schedulerAddress != nil,
+		SchedulerEnabled: runtimeConfig.schedulerAddress != "",
 		Registry:         runtimeConfig.registry,
 		ComponentStore:   compStore,
 		Meta:             meta,
@@ -970,7 +970,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
 		RemindersService:  a.runtimeConfig.remindersService,
-		SchedulerService:  os.Getenv("DAPR_SCHEDULER_ADDRESS"), // TODO: take from cmd args.
+		SchedulerAddress:  a.runtimeConfig.schedulerAddress,
 		Port:              a.runtimeConfig.internalGRPCPort,
 		Namespace:         a.namespace,
 		AppConfig:         a.appConfig,
