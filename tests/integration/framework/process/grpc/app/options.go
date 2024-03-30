@@ -26,14 +26,15 @@ import (
 
 // options contains the options for running a GRPC server in integration tests.
 type options struct {
-	grpcopts         []procgrpc.Option
-	withRegister     func(s *grpc.Server)
-	onTopicEventFn   func(context.Context, *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error)
-	onInvokeFn       func(context.Context, *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)
-	listTopicSubFn   func(ctx context.Context, in *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)
-	listInputBindFn  func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error)
-	onBindingEventFn func(context.Context, *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error)
-	healthCheckFn    func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error)
+	grpcopts           []procgrpc.Option
+	withRegister       func(s *grpc.Server)
+	onTopicEventFn     func(context.Context, *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error)
+	onBulkTopicEventFn func(context.Context, *rtv1.TopicEventBulkRequest) (*rtv1.TopicEventBulkResponse, error)
+	onInvokeFn         func(context.Context, *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)
+	listTopicSubFn     func(ctx context.Context, in *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)
+	listInputBindFn    func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error)
+	onBindingEventFn   func(context.Context, *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error)
+	healthCheckFn      func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error)
 }
 
 func WithGRPCOptions(opts ...procgrpc.Option) func(*options) {
@@ -45,6 +46,12 @@ func WithGRPCOptions(opts ...procgrpc.Option) func(*options) {
 func WithOnTopicEventFn(fn func(context.Context, *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error)) func(*options) {
 	return func(opts *options) {
 		opts.onTopicEventFn = fn
+	}
+}
+
+func WithOnBulkTopicEventFn(fn func(context.Context, *rtv1.TopicEventBulkRequest) (*rtv1.TopicEventBulkResponse, error)) func(*options) {
+	return func(opts *options) {
+		opts.onBulkTopicEventFn = fn
 	}
 }
 

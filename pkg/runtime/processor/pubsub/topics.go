@@ -176,7 +176,7 @@ func (p *pubsub) subscribeTopic(name, topic string, route compstore.TopicRouteEl
 			path:       routePath,
 			pubsub:     name,
 		}
-		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
+		policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			var pErr error
 			if p.isHTTP {
