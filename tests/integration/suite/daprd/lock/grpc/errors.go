@@ -32,14 +32,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(testlock))
+	suite.Register(new(errorcodes))
 }
 
-type testlock struct {
+type errorcodes struct {
 	daprd *daprd.Daprd
 }
 
-func (e *testlock) Setup(t *testing.T) []framework.Option {
+func (e *errorcodes) Setup(t *testing.T) []framework.Option {
 	e.daprd = daprd.New(t,
 		daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
@@ -61,7 +61,7 @@ spec:
 	}
 }
 
-func (e *testlock) Run(t *testing.T, ctx context.Context) {
+func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	conn, err := grpc.DialContext(ctx, e.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
@@ -69,7 +69,7 @@ func (e *testlock) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)
 
-	// Covers apierrors.ERR_LOCK_STORE_NOT_FOUND
+	// Covers apierrors.ERR_LOCK_NOT_FOUND
 	t.Run("lock doesn't exist", func(t *testing.T) {
 		name := "lock-doesn't-exist"
 		req := &rtv1.TryLockRequest{
@@ -97,7 +97,7 @@ func (e *testlock) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
-	// Covers apierrors.ERR_LOCK_STORE_NOT_CONFIGURED
+	// Covers apierrors.ERR_LOCK_NOT_CONFIGURED
 	t.Run("lock store not configured", func(t *testing.T) {
 		// Start a new daprd without lock store
 		daprdNoLockStore := daprd.New(t, daprd.WithAppID("daprd_no_lock_store"))

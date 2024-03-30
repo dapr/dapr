@@ -38,14 +38,14 @@ const (
 )
 
 func init() {
-	suite.Register(new(standardizedErrors))
+	suite.Register(new(errorcodes))
 }
 
-type standardizedErrors struct {
+type errorcodes struct {
 	daprd *daprd.Daprd
 }
 
-func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
+func (e *errorcodes) Setup(t *testing.T) []framework.Option {
 	e.daprd = daprd.New(t,
 		daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
@@ -67,12 +67,12 @@ spec:
 	}
 }
 
-func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
+func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	httpClient := util.HTTPClient(t)
 
-	// Covers apierrors.ERR_LOCK_STORE_NOT_FOUND
+	// Covers apierrors.ERR_LOCK_NOT_FOUND
 	t.Run("lock doesn't exist", func(t *testing.T) {
 		name := "lock-doesn't-exist"
 		payload := `{"resourceId": "resource", "lockOwner": "owner", "expiryInSeconds": 10}`
@@ -98,7 +98,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, "ERR_LOCK_STORE_NOT_FOUND", errCode)
+		require.Equal(t, "ERR_LOCK_NOT_FOUND", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -121,7 +121,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
-	// Covers apierrors.ERR_LOCK_STORE_NOT_CONFIGURED
+	// Covers apierrors.ERR_LOCK_NOT_CONFIGURED
 	t.Run("lock store not configured", func(t *testing.T) {
 		daprdNoLockStore := daprd.New(t, daprd.WithAppID("daprd_no_lock_store"))
 		daprdNoLockStore.Run(t, ctx)
@@ -152,7 +152,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, "ERR_LOCK_STORE_NOT_CONFIGURED", errCode)
+		require.Equal(t, "ERR_LOCK_NOT_CONFIGURED", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -270,7 +270,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, "ERR_LOCK_OWNER_EMPTY", errCode)
+		require.Equal(t, "ERR_OWNER_EMPTY", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -414,9 +414,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		// checkKeyIllegal error
-		expectedErr := fmt.Sprintf("input key/keyPrefix '%s' can't contain '%s'", resourceId, "||")
-		require.Equal(t, fmt.Sprintf("failed to try acquiring lock: "+expectedErr), errMsg)
+		require.Equal(t, "failed to try acquiring lock", errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
@@ -486,9 +484,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		// checkKeyIllegal error
-		expectedErr := fmt.Sprintf("input key/keyPrefix '%s' can't contain '%s'", resourceId, "||")
-		require.Equal(t, fmt.Sprintf("failed to release lock: "+expectedErr), errMsg)
+		require.Equal(t, "failed to release lock", errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
