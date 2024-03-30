@@ -92,7 +92,7 @@ func (l *LockMetadataError) ExpiryInSecondsNotPositive() error {
 
 func (l *LockMetadataError) TryLockFailed() error {
 	return l.build(
-		codes.InvalidArgument,
+		codes.Internal,
 		http.StatusInternalServerError,
 		"failed to try acquiring lock",
 		"ERR_TRY_LOCK",
@@ -102,7 +102,7 @@ func (l *LockMetadataError) TryLockFailed() error {
 
 func (l *LockMetadataError) UnlockFailed() error {
 	return l.build(
-		codes.InvalidArgument,
+		codes.Internal,
 		http.StatusInternalServerError,
 		"failed to release lock",
 		"ERR_UNLOCK",
