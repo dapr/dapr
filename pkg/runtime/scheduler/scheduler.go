@@ -224,23 +224,3 @@ func (m *Manager) NextClient() schedulerv1pb.SchedulerClient {
 
 	return nextClient.scheduler
 }
-
-// GetRandomClient returns a random scheduler client from the manager's list of clients.
-//func (m *Manager) GetRandomClient() schedulerv1pb.SchedulerClient {
-//	m.Lock.Lock()
-//	defer m.Lock.Unlock()
-//
-//	if len(m.Clients) == 1 {
-//		log.Infof("Only one Scheduler client available at address: %s", m.Clients[0].address)
-//		return m.Clients[0].scheduler
-//	}
-//
-//	for {
-//		randomIndex := rand.Intn(len(m.Clients))
-//
-//		if m.Clients[randomIndex].scheduler != nil {
-//			log.Infof("Using Scheduler client at address: %s", m.Clients[randomIndex].address)
-//			return m.Clients[randomIndex].scheduler
-//		}
-//	}
-//}
