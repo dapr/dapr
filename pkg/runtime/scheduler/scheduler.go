@@ -17,67 +17,59 @@ import (
 	"context"
 	"fmt"
 	"io"
+	"math/rand"
 	"sync"
 	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler"
 	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 )
 
 var log = logger.NewLogger("dapr.runtime.scheduler")
 
-type Scheduler struct {
-	Addresses    []string
-	SidecarNS    string
-	SidecarAppID string
-	Sec          security.Handler
-}
-
 // Client represents a client for interacting with the scheduler.
 type Client struct {
-	conn       *grpc.ClientConn
-	scheduler  schedulerv1pb.SchedulerClient
-	address    string
-	secHandler security.Handler
+	conn      *grpc.ClientConn
+	scheduler schedulerv1pb.SchedulerClient
+	address   string
+	security  security.Handler
 }
 
 // Manager manages connections to multiple schedulers.
 type Manager struct {
-	Clients     []*Client
-	ConnDetails scheduler.SidecarConnDetails
-	Lock        sync.Mutex
-	LastUsedIdx int
+	clients     []*Client
+	connDetails scheduler.SidecarConnDetails
+	lock        sync.Mutex
+	lastUsedIdx int
 	wg          sync.WaitGroup
 }
 
-func NewManager(ctx context.Context, sched Scheduler) *Manager {
+func NewManager(ctx context.Context, sidecarDetails scheduler.SidecarConnDetails, addresses []string, sec security.Handler) *Manager {
 	manager := &Manager{
-		ConnDetails: scheduler.SidecarConnDetails{
-			Namespace: sched.SidecarNS,
-			AppID:     sched.SidecarAppID,
-		},
+		connDetails: sidecarDetails,
 	}
 
-	for _, address := range sched.Addresses {
+	for _, address := range addresses {
 		//maybe dont do this here and only do it in the run?
-		conn, client, err := schedulerclient.New(ctx, address, sched.Sec)
+		conn, client, err := schedulerclient.New(ctx, address, sec)
 		if err != nil {
 			log.Infof("Scheduler client not initialized for address: %s", address)
 		} else {
 			log.Infof("Scheduler client initialized for address: %s", address)
 		}
 
-		manager.Clients = append(manager.Clients, &Client{
-			conn:       conn,
-			scheduler:  client,
-			address:    address,
-			secHandler: sched.Sec,
+		manager.clients = append(manager.clients, &Client{
+			conn:      conn,
+			scheduler: client,
+			address:   address,
+			security:  sec,
 		})
 	}
 
@@ -86,10 +78,10 @@ func NewManager(ctx context.Context, sched Scheduler) *Manager {
 
 // Run starts watching for job triggers from all scheduler clients.
 func (m *Manager) Run(ctx context.Context) {
-	m.wg.Add(len(m.Clients))
+	m.wg.Add(len(m.clients))
 
 	// Start a goroutine for each client to watch for job updates
-	for _, client := range m.Clients {
+	for _, client := range m.clients {
 		go func(client *Client) {
 			defer m.wg.Done()
 			m.watchJob(ctx, client)
@@ -100,8 +92,8 @@ func (m *Manager) Run(ctx context.Context) {
 // watchJob starts watching for job triggers from a single scheduler client.
 func (m *Manager) watchJob(ctx context.Context, client *Client) {
 	streamReq := &schedulerv1pb.StreamJobRequest{
-		AppId:     m.ConnDetails.AppID,
-		Namespace: m.ConnDetails.Namespace,
+		AppId:     m.connDetails.AppID,
+		Namespace: m.connDetails.Namespace,
 	}
 
 	// TODO add retry logic without the lib
@@ -194,7 +186,7 @@ func (client *Client) closeAndReconnect(ctx context.Context) error {
 			return fmt.Errorf("error closing connection: %v", err)
 		}
 	}
-	conn, schedulerClient, err := schedulerclient.New(ctx, client.address, client.secHandler)
+	conn, schedulerClient, err := schedulerclient.New(ctx, client.address, client.security)
 	if err != nil {
 		return fmt.Errorf("error creating scheduler client for address %s: %v", client.address, err)
 	}
@@ -207,20 +199,21 @@ func (client *Client) closeAndReconnect(ctx context.Context) error {
 
 // NextClient returns the next client in a round-robin manner.
 func (m *Manager) NextClient() schedulerv1pb.SchedulerClient {
-	m.Lock.Lock()
-	defer m.Lock.Unlock()
+	m.lock.Lock()
+	defer m.lock.Unlock()
 
 	// Check if there is only one client available
-	if len(m.Clients) == 1 {
-		return m.Clients[0].scheduler
+	if len(m.clients) == 1 {
+		return m.clients[0].scheduler
 	}
 
-	// Get the next client
-	nextIdx := (m.LastUsedIdx + 1) % len(m.Clients)
-	nextClient := m.Clients[nextIdx]
+	// Randomly choose the starting index && get the next client
+	startingIndex := rand.Intn(len(m.clients))
+	nextIdx := (m.lastUsedIdx + startingIndex) % len(m.clients)
+	nextClient := m.clients[nextIdx]
 
 	// Update the last used index
-	m.LastUsedIdx = nextIdx
+	m.lastUsedIdx = nextIdx
 
 	return nextClient.scheduler
 }

@@ -17,12 +17,12 @@ import (
 	"context"
 	"strings"
 
-	"github.com/dapr/dapr/pkg/security"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/security"
 )
 
 func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
