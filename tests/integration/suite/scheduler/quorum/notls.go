@@ -87,6 +87,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	n.daprd.WaitUntilRunning(t, ctx)
 
 	// Schedule job to random scheduler instance
+	//nolint:gosec // there is no need for a crypto secure rand.
 	chosenScheduler := n.schedulers[rand.Intn(3)]
 
 	host := chosenScheduler.Address()

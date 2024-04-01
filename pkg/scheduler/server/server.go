@@ -24,12 +24,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dapr/dapr/pkg/scheduler/connections"
+	etcdcron "github.com/Scalingo/go-etcd-cron"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
-
-	etcdcron "github.com/Scalingo/go-etcd-cron"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/config"
@@ -38,6 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/scheduler/connections"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -371,7 +370,7 @@ func (s *Server) handleSidecarConnections(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			log.Info("Job watcher shutting down. Clearing Sidecar connections.")
-			s.connectionPool.Clear()
+			s.connectionPool.Cleanup()
 			return
 		case conn := <-s.sidecarConnChan:
 			log.Infof("Adding a Sidecar connection to Scheduler for appID: %s.", conn.ConnDetails.AppID)

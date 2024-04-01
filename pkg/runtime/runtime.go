@@ -28,8 +28,6 @@ import (
 	"sync"
 	"time"
 
-	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
-	"github.com/dapr/dapr/pkg/scheduler"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -75,7 +73,9 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/dapr/pkg/scheduler"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"

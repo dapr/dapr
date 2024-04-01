@@ -18,6 +18,7 @@ import (
 	"fmt"
 
 	etcdcron "github.com/Scalingo/go-etcd-cron"
+
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
@@ -181,8 +182,8 @@ func (s *Server) TriggerJob(ctx context.Context, req *schedulerv1pb.TriggerJobRe
 // WatchJob sends jobs to Dapr sidecars upon component changes.
 func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv1pb.Scheduler_WatchJobServer) error {
 	sidecarConnDetails := &scheduler.SidecarConnDetails{
-		Namespace: req.Namespace,
-		AppID:     req.AppId,
+		Namespace: req.GetNamespace(),
+		AppID:     req.GetAppId(),
 	}
 
 	conn := &connections.Connection{
@@ -197,7 +198,7 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 	case <-stream.Context().Done():
 	}
 
-	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s.", req.AppId)
-	s.connectionPool.Remove(req.Namespace+req.AppId, conn)
+	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s.", req.GetAppId())
+	s.connectionPool.Remove(req.GetNamespace()+req.GetAppId(), conn)
 	return nil
 }
