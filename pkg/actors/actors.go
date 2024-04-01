@@ -241,7 +241,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 
 		a.scheduler = schedulerClient
 		a.clientConn = schedulerConn
-
 	}
 
 	return a, nil

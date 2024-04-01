@@ -121,8 +121,8 @@ func (p *Pool) WaitUntilReachingMaxConns(ctx context.Context, nsAppID string, ma
 	}
 }
 
-// Clear removes all connections from the pool.
-func (p *Pool) Clear() {
+// Cleanup removes all connections from the pool.
+func (p *Pool) Cleanup() {
 	p.Lock.Lock()
 	defer p.Lock.Unlock()
 

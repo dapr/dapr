@@ -13,12 +13,6 @@ limitations under the License.
 
 package scheduler
 
-import (
-	"github.com/dapr/kit/logger"
-)
-
-var log = logger.NewLogger("dapr.runtime.scheduler")
-
 type SidecarConnDetails struct {
 	Namespace string
 	AppID     string

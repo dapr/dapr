@@ -45,7 +45,6 @@ func New(ctx context.Context, address string, sec security.Handler) (*grpc.Clien
 	schedulerID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", sec.ControlPlaneNamespace(), "dapr-scheduler")
 	if err != nil {
 		return nil, nil, err
-		//return nil, err
 	}
 
 	opts := []grpc.DialOption{
@@ -56,11 +55,8 @@ func New(ctx context.Context, address string, sec security.Handler) (*grpc.Clien
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 
-	// check mode. dns resolution. create len clients based on len of results of dns res
-	// handle re-est connections
 	conn, err := grpc.DialContext(ctx, address, opts...)
 	if err != nil {
-		//return nil, err
 		return nil, nil, err
 	}
 	return conn, schedulerv1pb.NewSchedulerClient(conn), nil
