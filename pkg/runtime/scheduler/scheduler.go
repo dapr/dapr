@@ -35,7 +35,7 @@ import (
 var log = logger.NewLogger("dapr.runtime.scheduler")
 
 // Client represents a client for interacting with the scheduler.
-type Client struct {
+type schedulerClient struct {
 	conn      *grpc.ClientConn
 	scheduler schedulerv1pb.SchedulerClient
 	address   string
@@ -44,7 +44,7 @@ type Client struct {
 
 // Manager manages connections to multiple schedulers.
 type Manager struct {
-	clients     []*Client
+	clients     []*schedulerClient
 	connDetails scheduler.SidecarConnDetails
 	lock        sync.Mutex
 	lastUsedIdx int
@@ -65,7 +65,7 @@ func NewManager(ctx context.Context, sidecarDetails scheduler.SidecarConnDetails
 			log.Infof("Scheduler client initialized for address: %s", address)
 		}
 
-		manager.clients = append(manager.clients, &Client{
+		manager.clients = append(manager.clients, &schedulerClient{
 			conn:      conn,
 			scheduler: client,
 			address:   address,
@@ -82,7 +82,7 @@ func (m *Manager) Run(ctx context.Context) {
 
 	// Start a goroutine for each client to watch for job updates
 	for _, client := range m.clients {
-		go func(client *Client) {
+		go func(client *schedulerClient) {
 			defer m.wg.Done()
 			m.watchJob(ctx, client)
 		}(client)
@@ -90,7 +90,7 @@ func (m *Manager) Run(ctx context.Context) {
 }
 
 // watchJob starts watching for job triggers from a single scheduler client.
-func (m *Manager) watchJob(ctx context.Context, client *Client) {
+func (m *Manager) watchJob(ctx context.Context, client *schedulerClient) {
 	streamReq := &schedulerv1pb.StreamJobRequest{
 		AppId:     m.connDetails.AppID,
 		Namespace: m.connDetails.Namespace,
@@ -180,7 +180,7 @@ streamScheduler:
 }
 
 // closeAndReconnect closes the connection and reconnects the client.
-func (client *Client) closeAndReconnect(ctx context.Context) error {
+func (client *schedulerClient) closeAndReconnect(ctx context.Context) error {
 	if client.conn != nil {
 		if err := client.conn.Close(); err != nil {
 			return fmt.Errorf("error closing connection: %v", err)
