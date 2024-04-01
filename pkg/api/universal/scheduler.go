@@ -63,10 +63,20 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	}
 
 	// TODO: do something with following response?
-	_, err := a.schedulerManager.NextClient().ScheduleJob(ctx, internalScheduleJobReq)
 	//_, err := a.schedulerClient.ScheduleJob(ctx, internalScheduleJobReq)
+	_, err := a.schedulerManager.NextClient().ScheduleJob(ctx, internalScheduleJobReq)
+	//if err != nil && status.Code(err) == codes.Unavailable {
+	//	schedClient := a.schedulerManager.GetRandomClient()
+	//	_, err = schedClient.ScheduleJob(ctx, internalScheduleJobReq)
+	//	if err != nil {
+	//		a.logger.Errorf("Error scheduling job %s with a different scheduler client: %v", inReq.GetJob().GetName(), err)
+	//		return &emptypb.Empty{}, apierrors.SchedulerScheduleJob(errMetadata, err)
+	//	}
+	//	a.schedulerClient = schedClient
+	//}
+
 	if err != nil {
-		a.logger.Errorf("Error scheduling job %s", inReq.GetJob().GetName())
+		a.logger.Errorf("Error scheduling job %s: %v", inReq.GetJob().GetName(), err)
 		return &emptypb.Empty{}, apierrors.SchedulerScheduleJob(errMetadata, err)
 	}
 
@@ -87,6 +97,18 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 	}
 
 	_, err := a.schedulerManager.NextClient().DeleteJob(ctx, internalDeleteJobReq)
+	//_, err := a.schedulerClient.DeleteJob(ctx, internalDeleteJobReq)
+	//
+	//if err != nil && status.Code(err) == codes.Unavailable {
+	//	schedClient := a.schedulerManager.GetRandomClient()
+	//	_, err = schedClient.DeleteJob(ctx, internalDeleteJobReq)
+	//	if err != nil {
+	//		a.logger.Errorf("Error deleting job %s with a different scheduler client: %v", inReq.GetName(), err)
+	//		return &emptypb.Empty{}, apierrors.SchedulerDeleteJob(errMetadata, err)
+	//	}
+	//	a.schedulerClient = schedClient
+	//}
+
 	if err != nil {
 		a.logger.Errorf("Error deleting job: %s", inReq.GetName())
 		return &emptypb.Empty{}, apierrors.SchedulerDeleteJob(errMetadata, err)
@@ -111,7 +133,18 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 		JobName: jobName,
 	}
 
+	//internalResp, err := a.schedulerClient.GetJob(ctx, internalGetJobReq)
 	internalResp, err := a.schedulerManager.NextClient().GetJob(ctx, internalGetJobReq)
+	//if err != nil && status.Code(err) == codes.Unavailable {
+	//	schedClient := a.schedulerManager.GetRandomClient()
+	//	_, err = schedClient.GetJob(ctx, internalGetJobReq)
+	//	if err != nil {
+	//		a.logger.Errorf("Error getting job %s with a different scheduler client: %v", inReq.GetName(), err)
+	//		return nil, apierrors.SchedulerGetJob(errMetadata, err)
+	//	}
+	//	a.schedulerClient = schedClient
+	//}
+
 	if err != nil {
 		a.logger.Errorf("Error getting job %s", inReq.GetName())
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
@@ -138,8 +171,19 @@ func (a *Universal) ListJobs(ctx context.Context, inReq *runtimev1pb.ListJobsReq
 	internalListReq := &schedulerv1pb.ListJobsRequest{
 		AppId: inReq.GetAppId(),
 	}
-
 	internalListResp, err := a.schedulerManager.NextClient().ListJobs(ctx, internalListReq)
+	//internalListResp, err := a.schedulerClient.ListJobs(ctx, internalListReq)
+
+	//if err != nil && status.Code(err) == codes.Unavailable {
+	//	schedClient := a.schedulerManager.GetRandomClient()
+	//	_, err = schedClient.ListJobs(ctx, internalListReq)
+	//	if err != nil {
+	//		a.logger.Errorf("Error listing jobs for app %s with a different scheduler client: %v", inReq.GetAppId(), err)
+	//		return nil, apierrors.SchedulerListJobs(map[string]string{"app_id": a.AppID()}, err)
+	//	}
+	//	a.schedulerClient = schedClient
+	//}
+
 	if err != nil {
 		a.logger.Errorf("Error listing jobs for app %s", inReq.GetAppId())
 		return nil, apierrors.SchedulerListJobs(map[string]string{"app_id": a.AppID()}, err)

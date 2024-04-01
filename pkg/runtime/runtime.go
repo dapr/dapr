@@ -181,6 +181,10 @@ func newDaprRuntime(ctx context.Context,
 		})
 
 		schedulerManager.Run(ctx)
+
+		// choose random Scheduler client for daprd to use until there is a connection err
+		// then, randomly choose a diff Scheduler client to use
+		//schedClient = schedulerManager.GetRandomClient()
 	}
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
