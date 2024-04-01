@@ -48,7 +48,7 @@ func (p *Pool) Add(nsAppID string, conn *Connection) {
 	// Check if adding the connection would exceed the maximum connection count only if it's explicitly set
 	if p.MaxConnsPerAppID != -1 {
 		if len(p.NsAppIDPool[nsAppID].connections) >= p.MaxConnsPerAppID {
-			log.Infof("Sufficient number of Sidecar connections to Scheduler reached. Not adding connection for namespace/appID: %s. Current connection count: %d\n", nsAppID, len(p.NsAppIDPool[nsAppID].connections))
+			log.Infof("Sufficient number of Sidecar connections to Scheduler reached. Not adding connection for namespace/appID: %s. Current connection count: %d", nsAppID, len(p.NsAppIDPool[nsAppID].connections))
 			return
 		}
 	}
@@ -56,7 +56,7 @@ func (p *Pool) Add(nsAppID string, conn *Connection) {
 	// Check if the connection already exists in the pool
 	for _, existingConn := range p.NsAppIDPool[nsAppID].connections {
 		if existingConn.ConnDetails == conn.ConnDetails {
-			log.Infof("Not adding connection for namespace/appID: %s. Connection already exists.\n", nsAppID)
+			log.Infof("Not adding connection for namespace/appID: %s. Connection already exists.", nsAppID)
 			return
 		}
 	}
