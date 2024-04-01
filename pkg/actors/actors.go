@@ -59,6 +59,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
+	"github.com/dapr/kit/signals"
 )
 
 const (
@@ -232,7 +233,8 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 	if opts.Config.SchedulerService != "" {
 		log.Info("Using Scheduler service for reminders.")
 		// TODO: have a wrapper that includes both client and conn.
-		schedulerConn, schedulerClient, err := schedulerclient.New(context.TODO(), opts.Config.SchedulerService, opts.Security)
+		ctx := signals.Context()
+		schedulerConn, schedulerClient, err := schedulerclient.New(ctx, opts.Config.SchedulerService, opts.Security)
 		if err != nil {
 			return nil, err
 		}

@@ -29,6 +29,7 @@ import (
 	"time"
 
 	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
+	"github.com/dapr/dapr/pkg/scheduler"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace"
 	otlptracegrpc "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	otlptracehttp "go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracehttp"
@@ -173,12 +174,12 @@ func newDaprRuntime(ctx context.Context,
 			schedulerHostPorts = []string{runtimeConfig.schedulerAddress}
 		}
 
-		schedulerManager = runtimeScheduler.NewManager(ctx, runtimeScheduler.Scheduler{
-			Addresses:    schedulerHostPorts,
-			SidecarNS:    namespace,
-			SidecarAppID: runtimeConfig.id,
-			Sec:          sec,
-		})
+		sidecarDetails := scheduler.SidecarConnDetails{
+			Namespace: namespace,
+			AppID:     runtimeConfig.id,
+		}
+
+		schedulerManager = runtimeScheduler.NewManager(ctx, sidecarDetails, schedulerHostPorts, sec)
 
 		schedulerManager.Run(ctx)
 	}

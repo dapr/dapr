@@ -42,7 +42,7 @@ type options struct {
 
 func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
-		o.execOpts = execOptions
+		o.execOpts = append(o.execOpts, execOptions...)
 	}
 }
 
