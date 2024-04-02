@@ -23,10 +23,12 @@ import (
 	"sync/atomic"
 	"time"
 
+	apiErrors "github.com/dapr/dapr/pkg/api/errors"
+
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
+	//"google.golang.org/grpc/status"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/placement/monitoring"
@@ -157,16 +159,18 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 // Blocks until the service is closed and all connections are drained.
 func (p *Service) Run(ctx context.Context, port string) error {
 	if p.closed.Load() {
-		return errors.New("placement service is closed")
+		//return errors.New("placement service is closed")
+		return apiErrors.PlacementServiceIsClosedOnRun("Service closed")
 	}
 
 	if !p.running.CompareAndSwap(false, true) {
-		return errors.New("placement service is already running")
+		//return errors.New("placement service is already running")
+		return apiErrors.PlacementServiceIsAlreadyRunning(fmt.Sprintf("Already running on port: %s", port))
 	}
 
 	sec, err := p.sec.Handler(ctx)
 	if err != nil {
-		return err
+		return apiErrors.PlacementServiceContextError("Context error occurred")
 	}
 
 	serverListener, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
@@ -204,7 +208,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 	sec, err := p.sec.Handler(stream.Context())
 	if err != nil {
-		return status.Errorf(codes.Internal, "")
+		return apiErrors.PlacementServiceInternalError(fmt.Sprintf("Internal Error: %s", codes.Internal))
 	}
 
 	var clientID *spiffe.Parsed
@@ -212,7 +216,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		id, ok, err := spiffe.FromGRPCContext(stream.Context())
 		if err != nil || !ok {
 			log.Debugf("failed to get client ID from context: err=%v, ok=%t", err, ok)
-			return status.Errorf(codes.Unauthenticated, "failed to get client ID from context")
+			return apiErrors.PlacementServiceUnAuthenticated(fmt.Sprintf("Failed to get client ID from context with code: %s", codes.Unauthenticated))
 		}
 		clientID = id
 	}
@@ -228,7 +232,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		switch err {
 		case nil:
 			if clientID != nil && req.GetId() != clientID.AppID() {
-				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
+				return apiErrors.PlacementServicePermissionDenied(fmt.Sprintf("Failed wih code %s. Client ID %s is not allowed", codes.PermissionDenied, req.GetId()))
 			}
 
 			state := p.raftNode.FSM().State()
@@ -244,7 +248,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 					clusterAPILevel = *p.maxAPILevel
 				}
 				if req.GetApiLevel() < clusterAPILevel {
-					return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.GetApiLevel())
+					return apiErrors.PlacementServiceFailedPrecondition(fmt.Sprintf("Failed with code: %s. The cluster's Actor API level is %d, which is higher than the reported API level %d", codes.FailedPrecondition, clusterAPILevel, req.GetApiLevel()))
 				}
 
 				registeredMemberID = req.GetName()
@@ -326,7 +330,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		}
 	}
 
-	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
+	return apiErrors.PlacementServiceFailedPrecondition(fmt.Sprintf("Failed with code: %s. Only leader can serve the request", codes.FailedPrecondition))
 }
 
 // addStreamConn adds stream connection between runtime and placement to the dissemination pool.
