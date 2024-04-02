@@ -13,5 +13,21 @@ limitations under the License.
 
 package subscriber
 
+import (
+	"context"
+
+	"google.golang.org/protobuf/types/known/emptypb"
+
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+)
+
 // options contains the options for running a pubsub subscriber gRPC server app.
-type options struct{}
+type options struct {
+	listTopicSubFn func(ctx context.Context, in *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)
+}
+
+func WithListTopicSubscriptions(fn func(ctx context.Context, in *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)) func(*options) {
+	return func(opts *options) {
+		opts.listTopicSubFn = fn
+	}
+}
