@@ -107,7 +107,6 @@ func (a *apiServer) Run(ctx context.Context) error {
 
 	sec, err := a.sec.Handler(ctx)
 	if err != nil {
-		// return err
 		return apiErrors.PlacementServiceContextError("Error in context")
 	}
 

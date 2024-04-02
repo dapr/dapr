@@ -28,7 +28,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	//"google.golang.org/grpc/status"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/placement/monitoring"
@@ -193,12 +192,10 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 // Blocks until the service is closed and all connections are drained.
 func (p *Service) Run(ctx context.Context, port string) error {
 	if p.closed.Load() {
-		//return errors.New("placement service is closed")
 		return apiErrors.PlacementServiceIsClosedOnRun("Service closed")
 	}
 
 	if !p.running.CompareAndSwap(false, true) {
-		//return errors.New("placement service is already running")
 		return apiErrors.PlacementServiceIsAlreadyRunning(fmt.Sprintf("Already running on port: %s", port))
 	}
 
@@ -266,7 +263,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		switch err {
 		case nil:
 			if clientID != nil && req.GetId() != clientID.AppID() {
-				return apiErrors.PlacementServicePermissionDenied(fmt.Sprintf("Failed wih code %s. Client ID %s is not allowed", codes.PermissionDenied, req.GetId()))
+				return apiErrors.PlacementServicePermissionDenied(fmt.Sprintf("Failed with code %s. Client ID %s is not allowed", codes.PermissionDenied, req.GetId()))
 			}
 
 			state := p.raftNode.FSM().State()
