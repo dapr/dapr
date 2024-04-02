@@ -26,7 +26,7 @@ const (
 	PlacementServiceClosed         = "CLOSED"
 	PlacementServiceAlreadyRunning = "ALREADY_RUNNING"
 
-	//todo - Remove this placeholder. Use kiterrors prefix instead.
+	// todo - Remove this placeholder. Use kiterrors prefix instead.
 	CodePrefixPlacement = "DAPR_PLACEMENT_"
 )
 
