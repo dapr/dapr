@@ -18,8 +18,8 @@ import (
 	"fmt"
 	"io"
 	"math/rand"
+	"strings"
 	"sync"
-	"time"
 
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler"
 	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
 
@@ -48,21 +49,31 @@ type Manager struct {
 	connDetails scheduler.SidecarConnDetails
 	lock        sync.Mutex
 	lastUsedIdx int
-	wg          sync.WaitGroup
 }
 
-func NewManager(ctx context.Context, sidecarDetails scheduler.SidecarConnDetails, addresses []string, sec security.Handler) *Manager {
+func NewManager(ctx context.Context, sidecarDetails scheduler.SidecarConnDetails, addresses string, sec security.Handler) *Manager {
 	manager := &Manager{
 		connDetails: sidecarDetails,
 	}
 
-	for _, address := range addresses {
-		//maybe dont do this here and only do it in the run?
+	var schedulerHostPorts []string
+	if strings.Contains(addresses, ",") {
+		parts := strings.Split(addresses, ",")
+		for _, part := range parts {
+			hostPort := strings.TrimSpace(part)
+			schedulerHostPorts = append(schedulerHostPorts, hostPort)
+		}
+	} else {
+		schedulerHostPorts = []string{addresses}
+	}
+
+	for _, address := range schedulerHostPorts {
+		log.Debug("Attempting to connect to Scheduler")
 		conn, client, err := schedulerclient.New(ctx, address, sec)
 		if err != nil {
-			log.Infof("Scheduler client not initialized for address: %s", address)
+			log.Debugf("Scheduler client not initialized for address: %s", address)
 		} else {
-			log.Infof("Scheduler client initialized for address: %s", address)
+			log.Debugf("Scheduler client initialized for address: %s", address)
 		}
 
 		manager.clients = append(manager.clients, &schedulerClient{
@@ -77,106 +88,157 @@ func NewManager(ctx context.Context, sidecarDetails scheduler.SidecarConnDetails
 }
 
 // Run starts watching for job triggers from all scheduler clients.
-func (m *Manager) Run(ctx context.Context) {
-	m.wg.Add(len(m.clients))
+func (m *Manager) Run(ctx context.Context) error {
+	mngr := concurrency.NewRunnerManager()
 
 	// Start a goroutine for each client to watch for job updates
 	for _, client := range m.clients {
-		go func(client *schedulerClient) {
-			defer m.wg.Done()
-			m.watchJob(ctx, client)
-		}(client)
+		client := client
+		err := mngr.Add(func(ctx context.Context) error {
+			return m.watchJob(ctx, client)
+		})
+		if err != nil {
+			return err
+		}
 	}
+	return mngr.Run(ctx)
 }
 
-// watchJob starts watching for job triggers from a single scheduler client.
-func (m *Manager) watchJob(ctx context.Context, client *schedulerClient) {
-	streamReq := &schedulerv1pb.StreamJobRequest{
-		AppId:     m.connDetails.AppID,
-		Namespace: m.connDetails.Namespace,
-	}
-
-	// TODO add retry logic without the lib
-	// indefinitely stream with Scheduler
-streamScheduler:
+func (m *Manager) establishConnection(ctx context.Context, client *schedulerClient) error {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Infof("Context cancelled. Exiting watchJob goroutine.") // TODO: rm this after debugging
 			if client.conn != nil {
 				if err := client.conn.Close(); err != nil {
-					log.Infof("error closing scheduler client connection: %v", err)
+					log.Debugf("error closing Scheduler client connection: %v", err)
 				}
 			}
-			return
+			return ctx.Err()
 		default:
-			// sidecar started before scheduler
-			if client.conn == nil || client.scheduler == nil {
+			if client.conn != nil {
+				// connection is established
+				return nil
+			} else {
 				if err := client.closeAndReconnect(ctx); err != nil {
-					log.Infof("Error connecting to client: %v", err)
-					// If reconnect fails, switch to the next client and retry
+					log.Infof("Error establishing conn to Scheduler client: %v. Trying the next client.", err)
 					client.scheduler = m.NextClient()
-					time.Sleep(5 * time.Second)
-					continue streamScheduler
-				}
-				//time.Sleep(5 * time.Second)
-				//continue
-			}
-
-			stream, err := client.scheduler.WatchJob(ctx, streamReq)
-			if err != nil {
-				log.Infof("Error while streaming with Scheduler: %v", err) // TODO: rm this after debugging
-				if err := client.closeAndReconnect(ctx); err != nil {
-					log.Infof("Error reconnecting client: %v", err)
-					// If reconnect fails, switch to the next client and retry
-					client.scheduler = m.NextClient()
-					time.Sleep(5 * time.Second)
-					continue streamScheduler
-				}
-				time.Sleep(5 * time.Second)
-				continue
-			}
-
-			log.Infof("Connected to Scheduler at address %s", client.address)
-
-			// process streamed jobs
-			for {
-				select {
-				case <-stream.Context().Done():
-					log.Infof("Stream closed") // TODO: rm this after debugging
-					if err := stream.CloseSend(); err != nil {
-						log.Errorf("Error closing stream")
-					}
-					time.Sleep(5 * time.Second)
-					continue streamScheduler // Exit inner loop and retry the connection
-				case <-ctx.Done():
-					log.Infof("Context cancelled") // TODO: rm this after debugging
-					if err := stream.CloseSend(); err != nil {
-						log.Errorf("Error closing stream")
-					}
-					continue streamScheduler // Exit inner loop and retry the connection
-				default:
-					// TODO: add resiliency policy for scheduler
-					resp, err := stream.Recv()
-					if err != nil {
-						if status.Code(err) == codes.Canceled || status.Code(err) == codes.Unavailable || err == io.EOF {
-							log.Infof("Scheduler cancelled the stream ctx.")
-							// get a new client here
-						} else {
-							log.Errorf("Error while receiving job trigger: %v", err)
-						}
-
-						if err := stream.CloseSend(); err != nil {
-							log.Errorf("Error closing stream")
-						}
-						time.Sleep(5 * time.Second)
-						continue streamScheduler // Exit inner loop and retry the connection
-					}
-					log.Infof("Received response: %+v", resp)
 				}
 			}
 		}
 	}
+}
+
+func (m *Manager) processStream(ctx context.Context, client *schedulerClient, streamReq *schedulerv1pb.StreamJobRequest) error {
+	var stream schedulerv1pb.Scheduler_WatchJobClient
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			var err error
+			stream, err = client.scheduler.WatchJob(ctx, streamReq)
+			if err != nil {
+				log.Infof("Error while streaming with Scheduler: %v", err)
+				if err := client.closeAndReconnect(ctx); err != nil {
+					log.Debugf("Error reconnecting client: %v. Trying a new client.", err)
+					client.scheduler = m.NextClient()
+					continue
+				}
+				continue
+			}
+
+		}
+
+		log.Infof("Established stream conn to Scheduler at address %s", client.address)
+
+		for {
+			select {
+			case <-stream.Context().Done():
+				if err := stream.CloseSend(); err != nil {
+					log.Debugf("Error closing stream")
+				}
+				if err := client.closeConnection(); err != nil {
+					log.Debugf("Error closing connection: %v", err)
+				}
+				return stream.Context().Err()
+			case <-ctx.Done():
+				if err := stream.CloseSend(); err != nil {
+					log.Debugf("Error closing stream")
+				}
+				if err := client.closeConnection(); err != nil {
+					log.Debugf("Error closing connection: %v", err)
+				}
+				return ctx.Err()
+			default:
+				resp, err := stream.Recv()
+				if err != nil {
+					switch status.Code(err) {
+					case codes.Canceled:
+						log.Debugf("Sidecar cancelled the Scheduler stream ctx.")
+					case codes.Unavailable:
+						log.Debugf("Scheduler cancelled the Scheduler stream ctx.")
+					default:
+						if err == io.EOF {
+							log.Debugf("Scheduler cancelled the Sidecar stream ctx.")
+						}
+						log.Infof("Error while receiving job trigger: %v", err)
+						if err := stream.CloseSend(); err != nil {
+							log.Debugf("Error closing stream")
+						}
+						if err := client.closeConnection(); err != nil {
+							log.Debugf("Error closing connection: %v", err)
+						}
+						return err
+					}
+				}
+				log.Infof("Received response: %+v", resp) // TODO rm this once it sends the triggered job back to the app
+			}
+		}
+	}
+}
+
+func (m *Manager) establishSchedulerConn(ctx context.Context, client *schedulerClient, streamReq *schedulerv1pb.StreamJobRequest) error {
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		default:
+			// Keep trying to establish connection and process stream
+			err := m.establishConnection(ctx, client)
+			if err != nil {
+				log.Debugf("Error establishing connection: %v", err)
+				continue
+			}
+			err = m.processStream(ctx, client, streamReq)
+			if err != nil {
+				log.Debugf("Error processing stream: %v", err)
+				continue
+			}
+		}
+	}
+}
+
+// watchJob starts watching for job triggers from a single scheduler client.
+func (m *Manager) watchJob(ctx context.Context, client *schedulerClient) error {
+	streamReq := &schedulerv1pb.StreamJobRequest{
+		AppId:     m.connDetails.AppID,
+		Namespace: m.connDetails.Namespace,
+	}
+	return m.establishSchedulerConn(ctx, client, streamReq)
+}
+
+func (client *schedulerClient) closeConnection() error {
+	if client.conn == nil {
+		return nil // Connection is already closed
+	}
+
+	if err := client.conn.Close(); err != nil {
+		return fmt.Errorf("error closing connection: %v", err)
+	}
+
+	client.conn = nil // Set the connection to nil to indicate it's closed
+	return nil
 }
 
 // closeAndReconnect closes the connection and reconnects the client.
@@ -186,9 +248,10 @@ func (client *schedulerClient) closeAndReconnect(ctx context.Context) error {
 			return fmt.Errorf("error closing connection: %v", err)
 		}
 	}
+	log.Info("Attempting to connect to Scheduler")
 	conn, schedulerClient, err := schedulerclient.New(ctx, client.address, client.security)
 	if err != nil {
-		return fmt.Errorf("error creating scheduler client for address %s: %v", client.address, err)
+		return fmt.Errorf("error creating Scheduler client for address %s: %v", client.address, err)
 	}
 	client.conn = conn
 	client.scheduler = schedulerClient

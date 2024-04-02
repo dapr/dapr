@@ -42,7 +42,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	opts := options{
 		// TODO: add scheduler server funcs here as needed
-		//TODO: add watchjob here
+		// TODO: add watchjob here
 	}
 
 	for _, fopt := range fopts {
