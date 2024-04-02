@@ -18,18 +18,21 @@ import (
 	"fmt"
 	"testing"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/suite"
-	kitErrors "github.com/dapr/kit/errors"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc"
 	grpcCodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
+
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/suite"
+	kitErrors "github.com/dapr/kit/errors"
 )
+
+const LockStoreName = "lockstore"
 
 func init() {
 	suite.Register(new(errorcodes))
@@ -109,9 +112,8 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		t.Cleanup(func() { require.NoError(t, connNoLockStore.Close()) })
 		clientNoLockStore := rtv1.NewDaprClient(connNoLockStore)
 
-		name := "lockstore"
 		req := &rtv1.TryLockRequest{
-			StoreName:       name,
+			StoreName:       LockStoreName,
 			ExpiryInSeconds: 10,
 			ResourceId:      "resource",
 			LockOwner:       "owner",
@@ -121,7 +123,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.FailedPrecondition, s.Code())
-		require.Equal(t, fmt.Sprintf("lock %s is not configured", name), s.Message())
+		require.Equal(t, fmt.Sprintf("lock %s is not configured", LockStoreName), s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)
@@ -134,9 +136,8 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.ERR_RESOURCE_ID_EMPTY
 	t.Run("lock resource id empty", func(t *testing.T) {
-		name := "lockstore"
 		req := &rtv1.TryLockRequest{
-			StoreName:       name,
+			StoreName:       LockStoreName,
 			ExpiryInSeconds: 10,
 			LockOwner:       "owner",
 		}
@@ -177,9 +178,8 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.ERR_LOCK_OWNER_EMPTY
 	t.Run("lock owner empty", func(t *testing.T) {
-		name := "lockstore"
 		req := &rtv1.TryLockRequest{
-			StoreName:       name,
+			StoreName:       LockStoreName,
 			ExpiryInSeconds: 10,
 			ResourceId:      "resource",
 		}
@@ -219,9 +219,8 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.ERR_EXPIRY_NOT_POSITIVE
 	t.Run("lock expiry in seconds not positive", func(t *testing.T) {
-		name := "lockstore"
 		req := &rtv1.TryLockRequest{
-			StoreName:       name,
+			StoreName:       LockStoreName,
 			ExpiryInSeconds: -1,
 			ResourceId:      "resource",
 			LockOwner:       "owner",
@@ -263,10 +262,9 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.ERR_TRY_LOCK
 	t.Run("try lock failed", func(t *testing.T) {
-		name := "lockstore"
 		resourceID := "resource||"
 		req := &rtv1.TryLockRequest{
-			StoreName:       name,
+			StoreName:       LockStoreName,
 			ExpiryInSeconds: 10,
 			ResourceId:      resourceID,
 			LockOwner:       "owner",
@@ -309,10 +307,9 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.ERR_Unlock
 	t.Run("unlock failed", func(t *testing.T) {
-		name := "lockstore"
 		resourceID := "resource||"
 		req := &rtv1.UnlockRequest{
-			StoreName:  name,
+			StoreName:  LockStoreName,
 			ResourceId: resourceID,
 			LockOwner:  "owner",
 		}

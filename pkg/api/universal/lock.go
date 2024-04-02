@@ -24,6 +24,7 @@ import (
 )
 
 func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
+
 	ownerName := req.GetLockOwner()
 	storeName := req.GetStoreName()
 
@@ -33,6 +34,8 @@ func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockR
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
+
+	var err error // Declare err here
 	store, err := a.lockValidateRequest(req)
 	if err != nil {
 		return &runtimev1pb.TryLockResponse{}, err

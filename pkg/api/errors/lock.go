@@ -17,9 +17,10 @@ import (
 	"fmt"
 	"net/http"
 
+	"google.golang.org/grpc/codes"
+
 	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/kit/errors"
-	"google.golang.org/grpc/codes"
 )
 
 type LockError struct {

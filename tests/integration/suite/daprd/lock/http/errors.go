@@ -22,12 +22,13 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 	kitErrors "github.com/dapr/kit/errors"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -35,6 +36,7 @@ const (
 	ResourceInfoType = "type.googleapis.com/google.rpc.ResourceInfo"
 	BadRequestType   = "type.googleapis.com/google.rpc.BadRequest"
 	HelpType         = "type.googleapis.com/google.rpc.Help"
+	LockStoreName    = "lockstore"
 )
 
 func init() {
@@ -128,9 +130,8 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		daprdNoLockStore.WaitUntilRunning(t, ctx)
 		defer daprdNoLockStore.Cleanup(t)
 
-		name := "lock"
 		payload := `{"resourceId": "resource", "lockOwner": "owner", "expiryInSeconds": 10}`
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", daprdNoLockStore.HTTPPort(), name)
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", daprdNoLockStore.HTTPPort(), LockStoreName)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
 		require.NoError(t, err)
@@ -157,7 +158,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("lock %s is not configured", name), errMsg)
+		require.Equal(t, fmt.Sprintf("lock %s is not configured", LockStoreName), errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
@@ -177,9 +178,8 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.ERR_RESOURCE_ID_EMPTY
 	t.Run("lock resource id empty", func(t *testing.T) {
-		name := "lockstore"
 		payload := `{"lockOwner":"owner", "expiryInSeconds": 10}`
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", e.daprd.HTTPPort(), name)
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", e.daprd.HTTPPort(), LockStoreName)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
 		require.NoError(t, err)
@@ -241,14 +241,13 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
 		require.Equal(t, "lock", resInfo["resource_type"])
-		require.Equal(t, name, resInfo["resource_name"])
+		require.Equal(t, LockStoreName, resInfo["resource_name"])
 	})
 
 	// Covers apierrors.ERR_LOCK_OWNER_EMPTY
 	t.Run("lock owner empty", func(t *testing.T) {
-		name := "lockstore"
 		payload := `{"resourceId": "resource", "expiryInSeconds": 10}`
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", e.daprd.HTTPPort(), name)
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", e.daprd.HTTPPort(), LockStoreName)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
 		require.NoError(t, err)
@@ -310,14 +309,13 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
 		require.Equal(t, "lock", resInfo["resource_type"])
-		require.Equal(t, name, resInfo["resource_name"])
+		require.Equal(t, LockStoreName, resInfo["resource_name"])
 	})
 
 	// Covers apierrors.ERR_EXPIRY_NOT_POSITIVE
 	t.Run("lock expiry in seconds not positive", func(t *testing.T) {
-		name := "lockstore"
 		payload := `{"resourceId": "resource", "lockOwner": "owner", "expiryInSeconds": -1}`
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", e.daprd.HTTPPort(), name)
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", e.daprd.HTTPPort(), LockStoreName)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
 		require.NoError(t, err)
@@ -379,15 +377,14 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
 		require.Equal(t, "lock", resInfo["resource_type"])
-		require.Equal(t, name, resInfo["resource_name"])
+		require.Equal(t, LockStoreName, resInfo["resource_name"])
 	})
 
 	// Covers apierrors.ERR_TRY_LOCK
 	t.Run("try lock failed", func(t *testing.T) {
-		name := "lockstore"
-		resourceId := "resource||"
-		payload := fmt.Sprintf(`{"resourceId": "%s", "lockOwner":"owner", "expiryInSeconds": 10}`, resourceId)
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", e.daprd.HTTPPort(), name)
+		resourceID := "resource||"
+		payload := fmt.Sprintf(`{"resourceId": "%s", "lockOwner":"owner", "expiryInSeconds": 10}`, resourceID)
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", e.daprd.HTTPPort(), LockStoreName)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
 		require.NoError(t, err)
@@ -449,15 +446,14 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
 		require.Equal(t, "lock", resInfo["resource_type"])
-		require.Equal(t, name, resInfo["resource_name"])
+		require.Equal(t, LockStoreName, resInfo["resource_name"])
 	})
 
 	// Covers apierrors.ERR_Unlock
 	t.Run("unlock failed", func(t *testing.T) {
-		name := "lockstore"
-		resourceId := "resource||"
-		payload := fmt.Sprintf(`{"resourceId": "%s", "lockOwner":"owner"}`, resourceId)
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/unlock/%s", e.daprd.HTTPPort(), name)
+		resourceID := "resource||"
+		payload := fmt.Sprintf(`{"resourceId": "%s", "lockOwner":"owner"}`, resourceID)
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/unlock/%s", e.daprd.HTTPPort(), LockStoreName)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
 		require.NoError(t, err)
@@ -519,6 +515,6 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the ResourceInfo details are correct
 		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
 		require.Equal(t, "lock", resInfo["resource_type"])
-		require.Equal(t, name, resInfo["resource_name"])
+		require.Equal(t, LockStoreName, resInfo["resource_name"])
 	})
 }
