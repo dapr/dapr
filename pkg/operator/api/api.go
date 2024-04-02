@@ -41,6 +41,7 @@ import (
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
+	apiErrors "github.com/dapr/dapr/pkg/api/errors"
 )
 
 const (
@@ -106,7 +107,8 @@ func (a *apiServer) Run(ctx context.Context) error {
 
 	sec, err := a.sec.Handler(ctx)
 	if err != nil {
-		return err
+		// return err
+		return apiErrors.PlacementServiceContextError("Error in context")
 	}
 
 	s := grpc.NewServer(sec.GRPCServerOptionMTLS())
