@@ -160,30 +160,6 @@ func newDaprRuntime(ctx context.Context,
 		return nil, err
 	}
 
-	var schedClient schedulerv1pb.SchedulerClient
-	var schedulerManager *runtimeScheduler.Manager
-	if runtimeConfig.SchedulerEnabled() {
-		var schedulerHostPorts []string
-		if strings.Contains(runtimeConfig.schedulerAddress, ",") {
-			parts := strings.Split(runtimeConfig.schedulerAddress, ",")
-			for _, part := range parts {
-				hostPort := strings.TrimSpace(part)
-				schedulerHostPorts = append(schedulerHostPorts, hostPort)
-			}
-		} else {
-			schedulerHostPorts = []string{runtimeConfig.schedulerAddress}
-		}
-
-		sidecarDetails := scheduler.SidecarConnDetails{
-			Namespace: namespace,
-			AppID:     runtimeConfig.id,
-		}
-
-		schedulerManager = runtimeScheduler.NewManager(ctx, sidecarDetails, schedulerHostPorts, sec)
-
-		schedulerManager.Run(ctx)
-	}
-
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
 
 	authz := authorizer.New(authorizer.Options{
@@ -238,18 +214,18 @@ func newDaprRuntime(ctx context.Context,
 		compStore:         compStore,
 		meta:              meta,
 		operatorClient:    operatorClient,
-		schedulerClient:   schedClient,
-		schedulerManager:  schedulerManager,
-		channels:          channels,
-		sec:               sec,
-		processor:         processor,
-		authz:             authz,
-		namespace:         namespace,
-		podName:           podName,
-		initComplete:      make(chan struct{}),
-		isAppHealthy:      make(chan struct{}),
-		clock:             new(clock.RealClock),
-		httpMiddleware:    httpMiddleware,
+		//schedulerClient:   schedClient, //TODO: update actor code to use next client from manager
+		//schedulerManager:  schedulerManager,
+		channels:       channels,
+		sec:            sec,
+		processor:      processor,
+		authz:          authz,
+		namespace:      namespace,
+		podName:        podName,
+		initComplete:   make(chan struct{}),
+		isAppHealthy:   make(chan struct{}),
+		clock:          new(clock.RealClock),
+		httpMiddleware: httpMiddleware,
 	}
 	close(rt.isAppHealthy)
 
@@ -317,6 +293,21 @@ func newDaprRuntime(ctx context.Context,
 	if rt.reloader != nil {
 		if err := rt.runnerCloser.Add(rt.reloader.Run); err != nil {
 			return nil, err
+		}
+	}
+
+	var schedulerManager *runtimeScheduler.Manager
+	if runtimeConfig.SchedulerEnabled() {
+		sidecarDetails := scheduler.SidecarConnDetails{
+			Namespace: namespace,
+			AppID:     runtimeConfig.id,
+		}
+		schedulerManager = runtimeScheduler.NewManager(ctx, sidecarDetails, runtimeConfig.schedulerAddress, sec)
+		if err := rt.runnerCloser.Add(schedulerManager.Run); err != nil {
+			return nil, err
+		}
+		if schedulerManager != nil {
+			rt.schedulerManager = schedulerManager
 		}
 	}
 

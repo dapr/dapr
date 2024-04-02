@@ -21,16 +21,16 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/anypb"
+
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/util"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/anypb"
-
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -129,7 +129,8 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.type.Expr",
 				},
-			}}
+			},
+		}
 
 		_, err := daprAclient.ScheduleJob(ctx, req)
 		require.NoError(t, err)
@@ -147,7 +148,8 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.type.Expr",
 				},
-			}}
+			},
+		}
 
 		_, err := daprBclient.ScheduleJob(ctx, req)
 		require.NoError(t, err)
