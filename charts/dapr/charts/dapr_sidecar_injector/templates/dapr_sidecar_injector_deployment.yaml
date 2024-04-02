@@ -260,6 +260,15 @@ spec:
                   values:
                   - dapr-sidecar-injector
               topologyKey: topology.kubernetes.io/zone
+          - weight: 50
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - dapr-sidecar-injector
+              topologyKey: kubernetes.io/hostname
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
