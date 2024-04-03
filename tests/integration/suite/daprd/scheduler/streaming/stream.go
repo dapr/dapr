@@ -29,8 +29,8 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -54,27 +54,28 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 
 	s.streamloglineDaprA = logline.New(t,
 		logline.WithStdoutLineContains(
-			`Received response: data:{[type.googleapis.com/google.type.Expr]:{}} metadata:{key:\"appID\" value:\"A\"} metadata:{key:\"namespace\" value:\"A\"}`,
+			`Received response: [type.googleapis.com/google.type.Expr]:{} map[appID:A namespace:A]`,
 		),
 	)
 
 	s.streamloglineDaprB = logline.New(t,
 		logline.WithStdoutLineContains(
-			`Received response: data:{[type.googleapis.com/google.type.Expr]:{}} metadata:{key:\"appID\" value:\"B\"} metadata:{key:\"namespace\" value:\"B\"}`,
+			`Received response: [type.googleapis.com/google.type.Expr]:{} map[appID:B namespace:B]`,
 		),
 	)
 
-	fp := util.ReservePorts(t, 6)
+	fp := ports.Reserve(t, 6)
+	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 
 	opts := []scheduler.Option{
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
-		scheduler.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", port1, port2, port3)),
+		scheduler.WithInitialClusterPorts(port1, port2, port3),
 	}
 
 	clientPorts := []string{
-		"scheduler0=" + strconv.Itoa(fp.Port(t, 3)),
-		"scheduler1=" + strconv.Itoa(fp.Port(t, 4)),
-		"scheduler2=" + strconv.Itoa(fp.Port(t, 5)),
+		"scheduler0=" + strconv.Itoa(fp.Port(t)),
+		"scheduler1=" + strconv.Itoa(fp.Port(t)),
+		"scheduler2=" + strconv.Itoa(fp.Port(t)),
 	}
 	s.schedulers = []*scheduler.Scheduler{
 		scheduler.New(t, append(opts, scheduler.WithID("scheduler0"), scheduler.WithEtcdClientPorts(clientPorts))...),
@@ -126,6 +127,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			Job: &runtimev1pb.Job{
 				Name:     "test",
 				Schedule: "@every 1s",
+				Repeats:  1,
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.type.Expr",
 				},
@@ -145,6 +147,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			Job: &runtimev1pb.Job{
 				Name:     "test",
 				Schedule: "@every 1s",
+				Repeats:  1,
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.type.Expr",
 				},

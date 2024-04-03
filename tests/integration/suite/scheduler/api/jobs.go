@@ -17,16 +17,22 @@ import (
 	"context"
 	"fmt"
 	"strconv"
+	"strings"
 	"testing"
+	"time"
 
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -38,19 +44,27 @@ func init() {
 type jobs struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
+
+	clientPort int
+	idPrefix   string
 }
 
 func (j *jobs) Setup(t *testing.T) []framework.Option {
-	fp := util.ReservePorts(t, 2)
+	j.idPrefix = uuid.NewString()
+
+	fp := ports.Reserve(t, 2)
+	port1 := fp.Port(t)
+	port2 := fp.Port(t)
+
+	j.clientPort = port2
 
 	clientPorts := []string{
-		"scheduler0=" + strconv.Itoa(fp.Port(t, 1)),
+		"scheduler0=" + strconv.Itoa(j.clientPort),
 	}
-
 	j.scheduler = scheduler.New(t,
 		scheduler.WithID("scheduler0"),
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d", fp.Port(t, 0))),
-		scheduler.WithInitialClusterPorts(fp.Port(t, 0)),
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d", port1)),
+		scheduler.WithInitialClusterPorts(port1),
 		scheduler.WithEtcdClientPorts(clientPorts),
 	)
 
@@ -60,7 +74,7 @@ func (j *jobs) Setup(t *testing.T) []framework.Option {
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(j.daprd, j.scheduler),
+		framework.WithProcesses(fp, j.daprd, j.scheduler),
 	}
 }
 
@@ -72,14 +86,15 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("CRUD 10 jobs", func(t *testing.T) {
 		for i := 1; i <= 10; i++ {
-			name := "test" + strconv.Itoa(i)
+			name := j.idPrefix + "_" + strconv.Itoa(i)
 
 			req := &rtv1.ScheduleJobRequest{
 				Job: &rtv1.Job{
 					Name:     name,
 					Schedule: "@every 1s",
+					Repeats:  1,
 					Data: &anypb.Any{
-						Value: []byte("test"),
+						Value: []byte(j.idPrefix),
 					},
 					Ttl: "20s",
 				},
@@ -88,34 +103,48 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
 
+			chosenSchedulerEtcdKeys := getEtcdKeys(t, ctx, j.clientPort)
+			assert.True(t, checkKeysForAppID(name, chosenSchedulerEtcdKeys))
+
 			resp, err := client.GetJob(ctx, &rtv1.GetJobRequest{Name: name})
 			require.NotNil(t, resp)
 			require.Equal(t, name, resp.GetJob().GetName())
 			require.NoError(t, err)
 		}
 
-		resp, err := client.ListJobs(ctx, &rtv1.ListJobsRequest{
-			AppId: j.daprd.AppID(),
-		})
-		require.NoError(t, err)
-		count := len(resp.GetJobs())
-		require.Equal(t, 10, count)
-
 		for i := 1; i <= 10; i++ {
-			name := "test" + strconv.Itoa(i)
+			name := j.idPrefix + "_" + strconv.Itoa(i)
 
-			_, err = client.DeleteJob(ctx, &rtv1.DeleteJobRequest{Name: name})
+			_, err := client.DeleteJob(ctx, &rtv1.DeleteJobRequest{Name: name})
 			require.NoError(t, err)
 
-			resp, nerr := client.GetJob(ctx, &rtv1.GetJobRequest{Name: name})
-			require.Nil(t, resp)
-			require.Error(t, nerr)
+			chosenSchedulerEtcdKeys := getEtcdKeys(t, ctx, j.clientPort)
+			assert.False(t, checkKeysForAppID(name, chosenSchedulerEtcdKeys))
 		}
-
-		resp, err = client.ListJobs(ctx, &rtv1.ListJobsRequest{
-			AppId: j.daprd.AppID(),
-		})
-		require.Empty(t, resp.GetJobs())
-		require.NoError(t, err)
 	})
+}
+
+func getEtcdKeys(t *testing.T, ctx context.Context, port int) []*mvccpb.KeyValue {
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{fmt.Sprintf("localhost:%d", port)},
+		DialTimeout: 5 * time.Second,
+	})
+	require.NoError(t, err)
+	defer client.Close()
+
+	// Get keys with prefix
+	resp, err := client.Get(ctx, "", clientv3.WithPrefix())
+	require.NoError(t, err)
+
+	return resp.Kvs
+}
+
+func checkKeysForAppID(key string, keys []*mvccpb.KeyValue) bool {
+	for _, kv := range keys {
+		if strings.HasSuffix(string(kv.Key), "||"+key) {
+			return true
+		}
+	}
+
+	return false
 }

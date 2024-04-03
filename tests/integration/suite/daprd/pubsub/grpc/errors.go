@@ -17,19 +17,14 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"os"
-	"path/filepath"
 	"runtime"
 	"testing"
 
-	"golang.org/x/net/nettest"
-
 	componentspubsub "github.com/dapr/components-contrib/pubsub"
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/pubsub"
 	inmemory "github.com/dapr/dapr/tests/integration/framework/process/pubsub/in-memory"
-	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/dapr/tests/integration/framework/socket"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
@@ -38,7 +33,6 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
-	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -47,31 +41,22 @@ import (
 )
 
 func init() {
-	suite.Register(new(standardizedErrors))
+	suite.Register(new(errorcodes))
 }
 
-type standardizedErrors struct {
+type errorcodes struct {
 	daprd *daprd.Daprd
 }
 
-func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
+func (e *errorcodes) Setup(t *testing.T) []framework.Option {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping unix socket based test on windows")
 	}
 
-	// Darwin enforces a maximum 104 byte socket name limit, so we need to be a
-	// bit fancy on how we generate the name.
-	tmp, err := nettest.LocalPath()
-	require.NoError(t, err)
-
-	socketDir := filepath.Join(tmp, util.RandomString(t, 4))
-	require.NoError(t, os.MkdirAll(socketDir, 0o700))
-	t.Cleanup(func() {
-		require.NoError(t, os.RemoveAll(socketDir))
-	})
+	socket := socket.New(t)
 
 	pubsubInMem := pubsub.New(t,
-		pubsub.WithSocketDirectory(socketDir),
+		pubsub.WithSocket(socket),
 		pubsub.WithPubSub(inmemory.NewWrappedInMemory(t,
 			inmemory.WithFeatures(),
 			inmemory.WithPublishFn(func(ctx context.Context, req *componentspubsub.PublishRequest) error {
@@ -116,9 +101,7 @@ spec:
   - name: outboxDiscardWhenMissingState #Optional. Defaults to false
     value: false
 `, pubsubInMem.SocketName())),
-		daprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
-		)),
+		daprd.WithSocket(t, socket),
 	)
 
 	return []framework.Option{
@@ -126,7 +109,7 @@ spec:
 	}
 }
 
-func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
+func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	conn, connErr := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", e.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
@@ -190,7 +173,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
-		require.Equal(t, kiterrors.CodePrefixPubSub+apierrors.PostFixNameEmpty, errInfo.GetReason())
+		require.Equal(t, "DAPR_PUBSUB_NAME_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 
@@ -233,7 +216,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
-		require.Equal(t, kiterrors.CodePrefixPubSub+"TOPIC"+apierrors.PostFixNameEmpty, errInfo.GetReason())
+		require.Equal(t, "DAPR_PUBSUB_TOPIC_NAME_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.Nil(t, errInfo.GetMetadata())
 

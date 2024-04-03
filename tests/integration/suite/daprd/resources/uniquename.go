@@ -49,7 +49,7 @@ func (u *uniquename) Setup(t *testing.T) []framework.Option {
 
 	u.logline = logline.New(t,
 		logline.WithStdoutLineContains(
-			"Fatal error from runtime: failed to load components: duplicate definition of component name foo (state.in-memory/v1) with existing foo (secretstores.local.file/v1)",
+			"Fatal error from runtime: failed to load components: duplicate definition of Component name foo (state.in-memory/v1) with existing foo (secretstores.local.file/v1)",
 		),
 	)
 

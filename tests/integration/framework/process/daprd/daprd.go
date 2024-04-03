@@ -40,13 +40,14 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Daprd struct {
 	exec       process.Interface
 	appHTTP    process.Interface
-	freeport   *util.FreePort
+	ports      *ports.Ports
 	httpClient *http.Client
 
 	appID            string
@@ -70,17 +71,17 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 	appHTTP := prochttp.New(t)
 
-	fp := util.ReservePorts(t, 6)
+	fp := ports.Reserve(t, 6)
 	opts := options{
 		appID:            uid.String(),
 		appPort:          appHTTP.Port(),
 		appProtocol:      "http",
-		grpcPort:         fp.Port(t, 0),
-		httpPort:         fp.Port(t, 1),
-		internalGRPCPort: fp.Port(t, 2),
-		publicPort:       fp.Port(t, 3),
-		metricsPort:      fp.Port(t, 4),
-		profilePort:      fp.Port(t, 5),
+		grpcPort:         fp.Port(t),
+		httpPort:         fp.Port(t),
+		internalGRPCPort: fp.Port(t),
+		publicPort:       fp.Port(t),
+		metricsPort:      fp.Port(t),
+		profilePort:      fp.Port(t),
 		logLevel:         "info",
 		mode:             "standalone",
 	}
@@ -146,6 +147,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if len(opts.schedulerAddresses) > 0 {
 		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
 	}
+	if opts.controlPlaneTrustDomain != nil {
+		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
+	}
 
 	ns := "default"
 	if opts.namespace != nil {
@@ -155,7 +159,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
-		freeport:         fp,
+		ports:            fp,
 		httpClient:       util.HTTPClient(t),
 		appHTTP:          appHTTP,
 		appID:            opts.appID,
@@ -174,7 +178,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 func (d *Daprd) Run(t *testing.T, ctx context.Context) {
 	d.appHTTP.Run(t, ctx)
-	d.freeport.Free(t)
+	d.ports.Free(t)
 	d.exec.Run(t, ctx)
 }
 
@@ -260,7 +264,7 @@ func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 }
 
 //nolint:testifylint
-func (d *Daprd) RegistedComponents(t *assert.CollectT, ctx context.Context) []*rtv1.RegisteredComponents {
+func (d *Daprd) RegistedComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {
 	url := fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	if !assert.NoError(t, err) {

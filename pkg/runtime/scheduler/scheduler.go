@@ -192,7 +192,7 @@ func (m *Manager) processStream(ctx context.Context, client *schedulerClient, st
 						return err
 					}
 				}
-				log.Infof("Received response: %+v", resp) // TODO rm this once it sends the triggered job back to the app
+				log.Infof("Received response: %+v %+v", resp.GetData(), resp.GetMetadata()) // TODO rm this once it sends the triggered job back to the app
 			}
 		}
 	}

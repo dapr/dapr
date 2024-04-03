@@ -100,8 +100,10 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 			Name:     "testJob",
 			Schedule: "@daily",
 		},
-		Namespace: "default",
-		Metadata:  map[string]string{"app_id": "test"},
+		Metadata: map[string]string{
+			"appId":     "test",
+			"namespace": "default",
+		},
 	}
 
 	_, err = client.ScheduleJob(ctx, req)

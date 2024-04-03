@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -60,7 +59,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
-	kiterrors "github.com/dapr/kit/errors"
 	"github.com/dapr/kit/logger"
 )
 
@@ -129,32 +127,30 @@ func NewAPI(opts APIOpts) API {
 // or an error.
 func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, error) {
 	var err error
-	pubsubType := string(contribMetadata.PubSubType)
-
 	if a.pubsubAdapter == nil {
-		err = apierrors.NotConfigured(pubsubName, pubsubType, reqMeta, codes.FailedPrecondition, http.StatusBadRequest, "ERR_PUBSUB_NOT_CONFIGURED", kiterrors.CodePrefixPubSub+kiterrors.CodeNotConfigured)
+		err = apierrors.PubSub(pubsubName).WithMetadata(nil).NotConfigured()
 		return nil, "", "", false, err
 	}
 
 	if pubsubName == "" {
-		err = apierrors.PubSubNameEmpty(pubsubName, pubsubType, reqMeta)
+		err = apierrors.PubSub(pubsubName).WithMetadata(reqMeta).NameEmpty()
 		return nil, "", "", false, err
 	}
 
 	thepubsub, ok := a.Universal.CompStore().GetPubSub(pubsubName)
 	if !ok {
-		err = apierrors.NotFound(pubsubName, pubsubType, reqMeta, codes.InvalidArgument, http.StatusNotFound, "ERR_PUBSUB_NOT_FOUND", kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound)
+		err = apierrors.PubSub(pubsubName).WithMetadata(nil).NotFound()
 		return nil, "", "", false, err
 	}
 
 	if topic == "" {
-		err = apierrors.PubSubTopicEmpty(pubsubName, pubsubType, reqMeta)
+		err = apierrors.PubSub(pubsubName).WithMetadata(reqMeta).TopicEmpty()
 		return nil, "", "", false, err
 	}
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(reqMeta)
 	if metaErr != nil {
-		err = apierrors.PubSubMetadataDeserialize(pubsubName, pubsubType, reqMeta, metaErr)
+		err = apierrors.PubSub(pubsubName).WithMetadata(reqMeta).DeserializeError(metaErr)
 		return nil, "", "", false, err
 	}
 
@@ -189,7 +185,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			Pubsub:          in.GetPubsubName(),
 		}, in.GetMetadata())
 		if err != nil {
-			nerr := apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID(), "error": err.Error()})
+			nerr := apierrors.PubSub(pubsubName).WithAppError(
+				a.AppID(), err,
+			).CloudEventCreation()
 			apiServerLogger.Debug(nerr)
 			return &emptypb.Empty{}, nerr
 		}
@@ -199,7 +197,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 		data, err = json.Marshal(envelope)
 		if err != nil {
-			err = apierrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID()})
+			err = apierrors.PubSub(pubsubName).WithAppError(
+				a.AppID(), nil,
+			).WithTopic(topic).MarshalEnvelope()
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
@@ -223,11 +223,11 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 		switch {
 		case errors.As(err, &runtimePubsub.NotAllowedError{}):
-			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.AppID(), err)
+			nerr = apierrors.PubSub(pubsubName).PublishForbidden(topic, a.AppID(), err)
 		case errors.As(err, &runtimePubsub.NotFoundError{}):
-			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).TestNotFound(topic, err)
 		default:
-			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).PublishMessage(topic, err)
 		}
 
 		apiServerLogger.Debug(nerr)
@@ -354,7 +354,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 	spanMap := map[int]otelTrace.Span{}
 	// closeChildSpans method is called on every respond() call in all return paths in the following block of code.
-	closeChildSpans := func(ctx context.Context, err error) {
+	closeChildSpans := func(_ context.Context, err error) {
 		for _, span := range spanMap {
 			diag.UpdateSpanStatusFromGRPCError(span, err)
 			span.End()
@@ -368,7 +368,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	for i, entry := range in.GetEntries() {
 		// Validate entry_id
 		if _, ok := entryIdSet[entry.GetEntryId()]; ok || entry.GetEntryId() == "" {
-			err := apierrors.PubSubMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.AppID(), "error": "entryId is duplicated or not present for entry"})
+			err := apierrors.PubSub(pubsubName).WithAppError(
+				a.AppID(), errors.New("entryId is duplicated or not present for entry"),
+			).WithTopic(topic).MarshalEvents()
 			apiServerLogger.Debug(err)
 			return &runtimev1pb.BulkPublishResponse{}, err
 		}
@@ -401,7 +403,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
-				nerr := apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID(), "err": err.Error()})
+				nerr := apierrors.PubSub(pubsubName).WithAppError(
+					a.AppID(), err,
+				).CloudEventCreation()
 				apiServerLogger.Debug(nerr)
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
@@ -411,7 +415,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 			entries[i].Event, err = json.Marshal(envelope)
 			if err != nil {
-				nerr := apierrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID(), "err": err.Error()})
+				nerr := apierrors.PubSub(pubsubName).WithAppError(
+					a.AppID(), err,
+				).WithTopic(topic).MarshalEnvelope()
 				apiServerLogger.Debug(nerr)
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
@@ -449,11 +455,11 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		// On error, the response will be empty.
 		switch {
 		case errors.As(err, &runtimePubsub.NotAllowedError{}):
-			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.AppID(), err)
+			nerr = apierrors.PubSub(pubsubName).PublishForbidden(topic, a.AppID(), err)
 		case errors.As(err, &runtimePubsub.NotFoundError{}):
-			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).TestNotFound(topic, err)
 		default:
-			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).PublishMessage(topic, err)
 		}
 
 		apiServerLogger.Debug(nerr)
@@ -862,7 +868,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	transactionalStore, ok := store.(state.TransactionalStore)
 	if !ok || !state.FeatureTransactional.IsPresent(store.Features()) {
-		err := apierrors.StateStoreTransactionsNotSupported(in.GetStoreName())
+		err := apierrors.StateStore(in.GetStoreName()).TransactionsNotSupported()
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
@@ -927,7 +933,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
-			err := apierrors.StateStoreTooManyTransactionalOps(in.GetStoreName(), len(operations), max)
+			err := apierrors.StateStore(in.GetStoreName()).TooManyTransactionalOps(len(operations), max)
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
@@ -957,7 +963,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
 		trs, err := a.pubsubAdapter.Outbox().PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), corID, traceState)
 		if err != nil {
-			nerr := apierrors.PubSubOubox(a.AppID(), err)
+			nerr := apierrors.PubSubOutbox(a.AppID(), err)
 			apiServerLogger.Debug(nerr)
 			return &emptypb.Empty{}, nerr
 		}
@@ -988,97 +994,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	return &emptypb.Empty{}, nil
 }
 
-func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.CreateTimerRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-		DueTime:   in.GetDueTime(),
-		Period:    in.GetPeriod(),
-		TTL:       in.GetTtl(),
-		Callback:  in.GetCallback(),
-	}
-
-	if in.GetData() != nil {
-		j, err := json.Marshal(in.GetData())
-		if err != nil {
-			return &emptypb.Empty{}, err
-		}
-		req.Data = j
-	}
-	err := a.Universal.Actors().CreateTimer(ctx, req)
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.DeleteTimerRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-	}
-
-	err := a.Universal.Actors().DeleteTimer(ctx, req)
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.CreateReminderRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-		DueTime:   in.GetDueTime(),
-		Period:    in.GetPeriod(),
-		TTL:       in.GetTtl(),
-	}
-
-	if in.GetData() != nil {
-		j, err := json.Marshal(in.GetData())
-		if err != nil {
-			return &emptypb.Empty{}, err
-		}
-		req.Data = j
-	}
-	err := a.Universal.Actors().CreateReminder(ctx, req)
-	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
-		return nil, messages.ErrActorReminderOpActorNotHosted
-	}
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.DeleteReminderRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-	}
-
-	err := a.Universal.Actors().DeleteReminder(ctx, req)
-	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
-		return nil, messages.ErrActorReminderOpActorNotHosted
-	}
-	return &emptypb.Empty{}, err
-}
-
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
+	err := a.Universal.ActorReadinessCheck(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1092,7 +1010,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	})
 
 	if !hosted {
-		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		err = messages.ErrActorInstanceMissing
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1105,7 +1023,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 
 	resp, err := a.Universal.Actors().GetState(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
+		err = messages.ErrActorStateGet.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1117,7 +1035,8 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 }
 
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
+	err := a.Universal.ActorReadinessCheck(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1154,9 +1073,9 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 			}
 
 		default:
-			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, op.GetOperationType())
+			err = status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, op.GetOperationType())
 			apiServerLogger.Debug(err)
-			return &emptypb.Empty{}, err
+			return nil, err
 		}
 
 		actorOps = append(actorOps, actorOp)
@@ -1168,9 +1087,9 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 	})
 
 	if !hosted {
-		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		err = messages.ErrActorInstanceMissing
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	req := actors.TransactionalRequest{
@@ -1179,11 +1098,11 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		Operations: actorOps,
 	}
 
-	err := a.Universal.Actors().TransactionalStateOperation(ctx, &req)
+	err = a.Universal.Actors().TransactionalStateOperation(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
+		err = messages.ErrActorStateTransactionSave.WithFormat(err)
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	return &emptypb.Empty{}, nil
@@ -1192,7 +1111,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	response := &runtimev1pb.InvokeActorResponse{}
 
-	if err := a.actorReadinessCheck(ctx); err != nil {
+	if err := a.Universal.ActorReadinessCheck(ctx); err != nil {
 		return response, err
 	}
 
@@ -1212,7 +1131,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return a.Universal.Actors().Call(ctx, req)
 	})
 	if err != nil && !actorerrors.Is(err) {
-		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
+		err = messages.ErrActorInvoke.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return response, err
 	}
@@ -1221,18 +1140,6 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		response.Data = res.GetMessage().GetData().GetValue()
 	}
 	return response, nil
-}
-
-// This function makes sure that the actor subsystem is ready.
-func (a *api) actorReadinessCheck(ctx context.Context) error {
-	a.Universal.WaitForActorsReady(ctx)
-
-	if a.Universal.Actors() == nil {
-		apiServerLogger.Debug(messages.ErrActorRuntimeNotFound)
-		return messages.ErrActorRuntimeNotFound
-	}
-
-	return nil
 }
 
 func stringValueOrEmpty(value *string) string {

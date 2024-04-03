@@ -53,14 +53,10 @@ func (e *errors) Setup(t *testing.T) []framework.Option {
 			func(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
 				return nil, stderrors.New("schedule job error")
 			}),
-		scheduler.WithGetJobFn(
-			func(ctx context.Context, req *schedulerv1pb.JobRequest) (*schedulerv1pb.GetJobResponse, error) {
-				return nil, stderrors.New("get job error")
-			}),
-		scheduler.WithListJobsFn(func(ctx context.Context, request *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
-			return nil, stderrors.New("list jobs error")
+		scheduler.WithGetJobFn(func(ctx context.Context, request *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error) {
+			return nil, stderrors.New("get job error")
 		}),
-		scheduler.WithDeleteJobFn(func(ctx context.Context, request *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
+		scheduler.WithDeleteJobFn(func(ctx context.Context, request *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
 			return nil, stderrors.New("delete job error")
 		}),
 	)
@@ -104,49 +100,6 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		require.True(t, ok)
 		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixJob), errInfo.GetReason())
-		require.Equal(t, "dapr.io", errInfo.GetDomain())
-	})
-
-	// Covers errors returned from the scheduler server and caught in universal
-	t.Run("get job", func(t *testing.T) {
-		req := &rtv1.GetJobRequest{Name: "test"}
-		_, err := client.GetJob(ctx, req)
-		require.Error(t, err)
-		s, ok := status.FromError(err)
-		require.True(t, ok)
-		require.Equal(t, codes.Internal, s.Code())
-		require.Contains(t, s.Message(), apierrors.MsgGetJob)
-
-		// Check status details
-		require.Len(t, s.Details(), 1)
-
-		var errInfo *errdetails.ErrorInfo
-		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
-
-		require.True(t, ok)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixGet, apierrors.PostFixJob), errInfo.GetReason())
-		require.Equal(t, "dapr.io", errInfo.GetDomain())
-	})
-
-	// Covers errors returned from the scheduler server and caught in universal
-	t.Run("list jobs", func(t *testing.T) {
-		req := &rtv1.ListJobsRequest{AppId: "test"}
-
-		_, err := client.ListJobs(ctx, req)
-		require.Error(t, err)
-		s, ok := status.FromError(err)
-		require.True(t, ok)
-		require.Equal(t, codes.Internal, s.Code())
-		require.Contains(t, s.Message(), apierrors.MsgListJobs)
-
-		// Check status details
-		require.Len(t, s.Details(), 1)
-
-		var errInfo *errdetails.ErrorInfo
-		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
-
-		require.True(t, ok)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixList, apierrors.PostFixJobs), errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 

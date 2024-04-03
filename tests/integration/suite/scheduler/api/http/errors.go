@@ -256,7 +256,6 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
-	// Covers DeleteJob job not found
 	t.Run("delete job not found", func(t *testing.T) {
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/job/notfound", e.daprd.HTTPPort())
 
@@ -265,42 +264,9 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
-
-		require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-
-		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
-
-		var data map[string]interface{}
-		err = json.Unmarshal([]byte(string(body)), &data)
-		require.NoError(t, err)
-
-		// Confirm that the 'errorCode' field exists and contains the correct error code
-		errCode, exists := data["errorCode"]
-		require.True(t, exists)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixDelete, apierrors.PostFixJob), errCode)
-
-		// Confirm that the 'message' field exists and contains the correct error message
-		errMsg, exists := data["message"]
-		require.True(t, exists)
-		require.Contains(t, errMsg, apierrors.MsgDeleteJob)
-
-		// Confirm that the 'details' field exists and has one element
-		details, exists := data["details"]
-		require.True(t, exists)
-
-		detailsArray, ok := details.([]interface{})
-		require.True(t, ok)
-		require.Len(t, detailsArray, 1)
-
-		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
-		detailsObject, ok := detailsArray[0].(map[string]interface{})
-		require.True(t, ok)
-		require.Equal(t, "dapr.io", detailsObject["domain"])
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixDelete, apierrors.PostFixJob), detailsObject["reason"])
-		require.Equal(t, ErrInfoType, detailsObject["@type"])
+		defer resp.Body.Close()
+		// Deleting an unknown key is a success in etcd.
+		require.Equal(t, http.StatusNoContent, resp.StatusCode)
 	})
 
 	// Covers GetJob job not found

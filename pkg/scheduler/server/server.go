@@ -24,7 +24,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	etcdcron "github.com/Scalingo/go-etcd-cron"
+	etcdcron "github.com/diagridio/go-etcd-cron"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
@@ -67,6 +67,7 @@ type Server struct {
 	port          int
 	srv           *grpc.Server
 	listenAddress string
+	mode          modes.DaprMode
 
 	dataDir          string
 	etcdID           string
@@ -74,7 +75,7 @@ type Server struct {
 	etcdClientPorts  map[string]string
 	cron             *etcdcron.Cron
 	readyCh          chan struct{}
-	jobTriggerChan   chan *schedulerv1pb.ScheduleJobRequest // used to trigger the WatchJob logic
+	jobTriggerChan   chan *schedulerv1pb.StreamJobResponse // used to trigger the WatchJob logic
 	jobWatcherWG     sync.WaitGroup
 
 	sidecarConnChan        chan *connections.Connection
@@ -104,13 +105,14 @@ func New(opts Options) *Server {
 	s := &Server{
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
+		mode:          opts.Mode,
 
 		etcdID:           opts.EtcdID,
 		etcdInitialPeers: opts.EtcdInitialPeers,
 		etcdClientPorts:  clientPorts,
 		dataDir:          opts.DataDir,
 		readyCh:          make(chan struct{}),
-		jobTriggerChan:   make(chan *schedulerv1pb.ScheduleJobRequest),
+		jobTriggerChan:   make(chan *schedulerv1pb.StreamJobResponse),
 		jobWatcherWG:     sync.WaitGroup{},
 
 		sidecarConnChan: make(chan *connections.Connection),
@@ -174,7 +176,7 @@ func (s *Server) Run(ctx context.Context) error {
 	}
 	return concurrency.NewRunnerManager(
 		s.runServer,
-		s.runEtcd,
+		s.runEtcdCron,
 		s.runJobWatcher,
 		func(ctx context.Context) error {
 			<-ctx.Done()
@@ -221,7 +223,7 @@ func (s *Server) runServer(ctx context.Context) error {
 	}
 }
 
-func (s *Server) runEtcd(ctx context.Context) error {
+func (s *Server) runEtcdCron(ctx context.Context) error {
 	log.Info("Starting etcd")
 
 	etcd, err := embed.StartEtcd(s.conf())
@@ -241,19 +243,21 @@ func (s *Server) runEtcd(ctx context.Context) error {
 
 	etcdEndpoints := clientEndpoints(s.etcdInitialPeers, s.etcdClientPorts)
 
-	c, err := etcdcron.NewEtcdMutexBuilder(clientv3.Config{Endpoints: etcdEndpoints})
+	c, err := clientv3.New(clientv3.Config{Endpoints: etcdEndpoints})
 	if err != nil {
 		return err
 	}
 
 	// pass in initial cluster endpoints, but with client ports
-	cron, err := etcdcron.New(etcdcron.WithEtcdMutexBuilder(c))
+	cron, err := etcdcron.New(
+		etcdcron.WithEtcdClient(c),
+		etcdcron.WithTriggerFunc(s.triggerJob),
+	)
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
 	}
 
 	cron.Start(ctx)
-	defer cron.Stop()
 
 	s.cron = cron
 	close(s.readyCh)
@@ -263,6 +267,8 @@ func (s *Server) runEtcd(ctx context.Context) error {
 		return err
 	case <-ctx.Done():
 		log.Info("Embedded Etcd shutting down")
+		cron.Wait()
+		// Don't close etcd here because it has a defer close() already.
 		return nil
 	}
 }
@@ -331,16 +337,10 @@ func (s *Server) handleJobStreaming(ctx context.Context) {
 	for {
 		select {
 		case job := <-s.jobTriggerChan:
-			log.Infof("Got the job at trigger time in the jobWatcher. Job: %+v", job) // TODO: rm after debugging or change to debug
 			metadata := job.GetMetadata()
 			appID := metadata["appID"]
+			namespace := metadata["namespace"]
 
-			jobTriggered := &schedulerv1pb.StreamJobResponse{
-				Data:     job.GetJob().GetData(),
-				Metadata: metadata,
-			}
-
-			namespace := job.GetNamespace()
 			// Pick a stream corresponding to the appID
 			stream, _, err := s.connectionPool.GetStreamAndContextForNSAppID(namespace + appID)
 			if err != nil {
@@ -351,8 +351,8 @@ func (s *Server) handleJobStreaming(ctx context.Context) {
 			}
 
 			// Send the job update to the sidecar
-			if err := stream.Send(jobTriggered); err != nil {
-				log.Debugf("Error sending job at trigger time: %v", err)
+			if err := stream.Send(job); err != nil {
+				log.Warnf("Error sending job at trigger time: %v", err)
 				// TODO: add job to a queue or something to try later
 				// this should be another long running go routine that accepts this job on a channel
 			}

@@ -72,6 +72,7 @@ func NewParallel(t *testing.T, fns ...func(*assert.CollectT)) *ParallelTest {
 		wg.Wait()
 
 		for _, collect := range collects {
+			// TODO: this panics in newer versions of testify.
 			collect.Copy(t)
 		}
 

@@ -27,7 +27,7 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -41,10 +41,11 @@ type notls struct {
 }
 
 func (n *notls) Setup(t *testing.T) []framework.Option {
-	fp := util.ReservePorts(t, 3)
+	fp := ports.Reserve(t, 3)
+	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 	opts := []placement.Option{
-		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
-		placement.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
+		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", port1, port2, port3)),
+		placement.WithInitialClusterPorts(port1, port2, port3),
 	}
 	n.places = []*placement.Placement{
 		placement.New(t, append(opts, placement.WithID("p1"))...),
@@ -52,9 +53,8 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 		placement.New(t, append(opts, placement.WithID("p3"))...),
 	}
 
-	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(n.places[0], n.places[1], n.places[2]),
+		framework.WithProcesses(fp, n.places[0], n.places[1], n.places[2]),
 	}
 }
 

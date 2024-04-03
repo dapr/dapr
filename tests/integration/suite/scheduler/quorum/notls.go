@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -33,8 +34,8 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -46,20 +47,25 @@ func init() {
 type notls struct {
 	daprd      *daprd.Daprd
 	schedulers []*scheduler.Scheduler
+
+	jobName string
 }
 
 func (n *notls) Setup(t *testing.T) []framework.Option {
-	fp := util.ReservePorts(t, 6)
+	n.jobName = uuid.NewString()
+
+	fp := ports.Reserve(t, 6)
+	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 
 	opts := []scheduler.Option{
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
-		scheduler.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", port1, port2, port3)),
+		scheduler.WithInitialClusterPorts(port1, port2, port3),
 	}
 
 	clientPorts := []string{
-		"scheduler0=" + strconv.Itoa(fp.Port(t, 3)),
-		"scheduler1=" + strconv.Itoa(fp.Port(t, 4)),
-		"scheduler2=" + strconv.Itoa(fp.Port(t, 5)),
+		"scheduler0=" + strconv.Itoa(fp.Port(t)),
+		"scheduler1=" + strconv.Itoa(fp.Port(t)),
+		"scheduler2=" + strconv.Itoa(fp.Port(t)),
 	}
 	n.schedulers = []*scheduler.Scheduler{
 		scheduler.New(t, append(opts, scheduler.WithID("scheduler0"), scheduler.WithEtcdClientPorts(clientPorts))...),
@@ -74,7 +80,7 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(n.schedulers[0], n.schedulers[1], n.schedulers[2], n.daprd),
+		framework.WithProcesses(fp, n.schedulers[0], n.schedulers[1], n.schedulers[2], n.daprd),
 	}
 }
 
@@ -102,17 +108,18 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 	appID := n.daprd.AppID()
 
-	jobName := appID + "||testJob"
 	req := &schedulerv1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
-			Name:     jobName,
+			Name:     n.jobName,
 			Schedule: "@every 2s",
 			Data: &anypb.Any{
 				TypeUrl: "type.googleapis.com/google.type.Expr",
 			},
 		},
-		Namespace: "default",
-		Metadata:  map[string]string{"appID": appID, "namespace": n.daprd.Namespace()},
+		Metadata: map[string]string{
+			"namespace": "default",
+			"appID":     appID,
+		},
 	}
 
 	_, err = client.ScheduleJob(ctx, req)
@@ -125,7 +132,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	require.NotEmptyf(t, chosenSchedulerPort, "chosenSchedulerPort should not be empty")
 
 	chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
-	checkKeysForAppID(t, chosenSchedulerEtcdKeys, appID)
+	checkKeysForJobName(t, n.jobName, chosenSchedulerEtcdKeys)
 
 	// ensure data exists on ALL schedulers
 	for i := 0; i < 3; i++ {
@@ -135,20 +142,19 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		require.NotEmptyf(t, diffSchedulerPort, "diffSchedulerPort should not be empty")
 
 		diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
-		checkKeysForAppID(t, diffSchedulerEtcdKeys, appID)
+		checkKeysForJobName(t, n.jobName, diffSchedulerEtcdKeys)
 	}
 }
 
-func checkKeysForAppID(t *testing.T, keys []*mvccpb.KeyValue, appID string) {
+func checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
+	found := false
 	for _, kv := range keys {
-		// Checking the key value before the appID and after appID
-		// since the cron lib changes the - in the appID to _
-		if strings.Contains(string(kv.Key), "etcd_cron/") && strings.Contains(string(kv.Key), "__testjob") {
-			// If the key exists, the assertion should pass
-			return
+		if strings.HasSuffix(string(kv.Key), jobName) {
+			found = true
+			break
 		}
 	}
-	require.Fail(t, fmt.Sprintf("Key not found for appID: %s", appID))
+	require.True(t, found, "job's key not found: '%s'", jobName)
 }
 
 func getEtcdKeys(t *testing.T, port string) []*mvccpb.KeyValue {

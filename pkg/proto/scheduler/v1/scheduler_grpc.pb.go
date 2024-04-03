@@ -20,9 +20,8 @@ const _ = grpc.SupportPackageIsVersion7
 
 const (
 	Scheduler_ScheduleJob_FullMethodName = "/dapr.proto.scheduler.v1.Scheduler/ScheduleJob"
-	Scheduler_DeleteJob_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
 	Scheduler_GetJob_FullMethodName      = "/dapr.proto.scheduler.v1.Scheduler/GetJob"
-	Scheduler_ListJobs_FullMethodName    = "/dapr.proto.scheduler.v1.Scheduler/ListJobs"
+	Scheduler_DeleteJob_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
 	Scheduler_WatchJob_FullMethodName    = "/dapr.proto.scheduler.v1.Scheduler/WatchJob"
 )
 
@@ -32,12 +31,10 @@ const (
 type SchedulerClient interface {
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
 	ScheduleJob(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error)
+	// Get a job
+	GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
 	// DeleteJob is used by the daprd sidecar to delete a job.
-	DeleteJob(ctx context.Context, in *JobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
-	// GetJob is used by the daprd sidecar to get details of a job.
-	GetJob(ctx context.Context, in *JobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
-	// ListJobs is used by the daprd sidecar to list jobs by app_id.
-	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
+	DeleteJob(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
 	// WatchJob is used by the daprd sidecar to connect to the Scheduler
 	// service to watch for jobs triggering back.
 	WatchJob(ctx context.Context, in *StreamJobRequest, opts ...grpc.CallOption) (Scheduler_WatchJobClient, error)
@@ -60,16 +57,7 @@ func (c *schedulerClient) ScheduleJob(ctx context.Context, in *ScheduleJobReques
 	return out, nil
 }
 
-func (c *schedulerClient) DeleteJob(ctx context.Context, in *JobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error) {
-	out := new(DeleteJobResponse)
-	err := c.cc.Invoke(ctx, Scheduler_DeleteJob_FullMethodName, in, out, opts...)
-	if err != nil {
-		return nil, err
-	}
-	return out, nil
-}
-
-func (c *schedulerClient) GetJob(ctx context.Context, in *JobRequest, opts ...grpc.CallOption) (*GetJobResponse, error) {
+func (c *schedulerClient) GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error) {
 	out := new(GetJobResponse)
 	err := c.cc.Invoke(ctx, Scheduler_GetJob_FullMethodName, in, out, opts...)
 	if err != nil {
@@ -78,9 +66,9 @@ func (c *schedulerClient) GetJob(ctx context.Context, in *JobRequest, opts ...gr
 	return out, nil
 }
 
-func (c *schedulerClient) ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error) {
-	out := new(ListJobsResponse)
-	err := c.cc.Invoke(ctx, Scheduler_ListJobs_FullMethodName, in, out, opts...)
+func (c *schedulerClient) DeleteJob(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error) {
+	out := new(DeleteJobResponse)
+	err := c.cc.Invoke(ctx, Scheduler_DeleteJob_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -125,12 +113,10 @@ func (x *schedulerWatchJobClient) Recv() (*StreamJobResponse, error) {
 type SchedulerServer interface {
 	// ScheduleJob is used by the daprd sidecar to schedule a job.
 	ScheduleJob(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error)
+	// Get a job
+	GetJob(context.Context, *GetJobRequest) (*GetJobResponse, error)
 	// DeleteJob is used by the daprd sidecar to delete a job.
-	DeleteJob(context.Context, *JobRequest) (*DeleteJobResponse, error)
-	// GetJob is used by the daprd sidecar to get details of a job.
-	GetJob(context.Context, *JobRequest) (*GetJobResponse, error)
-	// ListJobs is used by the daprd sidecar to list jobs by app_id.
-	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
+	DeleteJob(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
 	// WatchJob is used by the daprd sidecar to connect to the Scheduler
 	// service to watch for jobs triggering back.
 	WatchJob(*StreamJobRequest, Scheduler_WatchJobServer) error
@@ -143,14 +129,11 @@ type UnimplementedSchedulerServer struct {
 func (UnimplementedSchedulerServer) ScheduleJob(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ScheduleJob not implemented")
 }
-func (UnimplementedSchedulerServer) DeleteJob(context.Context, *JobRequest) (*DeleteJobResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method DeleteJob not implemented")
-}
-func (UnimplementedSchedulerServer) GetJob(context.Context, *JobRequest) (*GetJobResponse, error) {
+func (UnimplementedSchedulerServer) GetJob(context.Context, *GetJobRequest) (*GetJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetJob not implemented")
 }
-func (UnimplementedSchedulerServer) ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error) {
-	return nil, status.Errorf(codes.Unimplemented, "method ListJobs not implemented")
+func (UnimplementedSchedulerServer) DeleteJob(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteJob not implemented")
 }
 func (UnimplementedSchedulerServer) WatchJob(*StreamJobRequest, Scheduler_WatchJobServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchJob not implemented")
@@ -185,26 +168,8 @@ func _Scheduler_ScheduleJob_Handler(srv interface{}, ctx context.Context, dec fu
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Scheduler_DeleteJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(JobRequest)
-	if err := dec(in); err != nil {
-		return nil, err
-	}
-	if interceptor == nil {
-		return srv.(SchedulerServer).DeleteJob(ctx, in)
-	}
-	info := &grpc.UnaryServerInfo{
-		Server:     srv,
-		FullMethod: Scheduler_DeleteJob_FullMethodName,
-	}
-	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchedulerServer).DeleteJob(ctx, req.(*JobRequest))
-	}
-	return interceptor(ctx, in, info, handler)
-}
-
 func _Scheduler_GetJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(JobRequest)
+	in := new(GetJobRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -216,25 +181,25 @@ func _Scheduler_GetJob_Handler(srv interface{}, ctx context.Context, dec func(in
 		FullMethod: Scheduler_GetJob_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchedulerServer).GetJob(ctx, req.(*JobRequest))
+		return srv.(SchedulerServer).GetJob(ctx, req.(*GetJobRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Scheduler_ListJobs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ListJobsRequest)
+func _Scheduler_DeleteJob_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteJobRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
 	if interceptor == nil {
-		return srv.(SchedulerServer).ListJobs(ctx, in)
+		return srv.(SchedulerServer).DeleteJob(ctx, in)
 	}
 	info := &grpc.UnaryServerInfo{
 		Server:     srv,
-		FullMethod: Scheduler_ListJobs_FullMethodName,
+		FullMethod: Scheduler_DeleteJob_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(SchedulerServer).ListJobs(ctx, req.(*ListJobsRequest))
+		return srv.(SchedulerServer).DeleteJob(ctx, req.(*DeleteJobRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
@@ -272,16 +237,12 @@ var Scheduler_ServiceDesc = grpc.ServiceDesc{
 			Handler:    _Scheduler_ScheduleJob_Handler,
 		},
 		{
-			MethodName: "DeleteJob",
-			Handler:    _Scheduler_DeleteJob_Handler,
-		},
-		{
 			MethodName: "GetJob",
 			Handler:    _Scheduler_GetJob_Handler,
 		},
 		{
-			MethodName: "ListJobs",
-			Handler:    _Scheduler_ListJobs_Handler,
+			MethodName: "DeleteJob",
+			Handler:    _Scheduler_DeleteJob_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{
