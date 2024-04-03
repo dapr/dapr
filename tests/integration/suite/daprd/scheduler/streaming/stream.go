@@ -54,13 +54,13 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 
 	s.streamloglineDaprA = logline.New(t,
 		logline.WithStdoutLineContains(
-			`Received response: data:{[type.googleapis.com/google.type.Expr]:{}}  metadata:{key:\"appID\"  value:\"A\"}  metadata:{key:\"namespace\"  value:\"A\"}`,
+			`Received response: data:{[type.googleapis.com/google.type.Expr]:{}} metadata:{key:\"appID\" value:\"A\"} metadata:{key:\"namespace\" value:\"A\"}`,
 		),
 	)
 
 	s.streamloglineDaprB = logline.New(t,
 		logline.WithStdoutLineContains(
-			`Received response: data:{[type.googleapis.com/google.type.Expr]:{}}  metadata:{key:\"appID\"  value:\"B\"}  metadata:{key:\"namespace\"  value:\"B\"}`,
+			`Received response: data:{[type.googleapis.com/google.type.Expr]:{}} metadata:{key:\"appID\" value:\"B\"} metadata:{key:\"namespace\" value:\"B\"}`,
 		),
 	)
 

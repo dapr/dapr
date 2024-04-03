@@ -78,7 +78,6 @@ type Server struct {
 	jobWatcherWG     sync.WaitGroup
 
 	sidecarConnChan        chan *connections.Connection
-	poolLock               sync.RWMutex
 	connectionPool         *connections.Pool // Connection pool for sidecars
 	maxConnPerApp          int
 	maxTimeWaitForSidecars int
@@ -345,7 +344,7 @@ func (s *Server) handleJobStreaming(ctx context.Context) {
 			// Pick a stream corresponding to the appID
 			stream, _, err := s.connectionPool.GetStreamAndContextForNSAppID(namespace + appID)
 			if err != nil {
-				log.Errorf("Error getting stream for appID: %v", err)
+				log.Debugf("Error getting stream for appID: %v", err)
 				// TODO: add job to a queue or something to try later
 				// this should be another long running go routine that accepts this job on a channel
 				continue
@@ -353,12 +352,11 @@ func (s *Server) handleJobStreaming(ctx context.Context) {
 
 			// Send the job update to the sidecar
 			if err := stream.Send(jobTriggered); err != nil {
-				log.Errorf("Error sending job at trigger time: %v", err)
+				log.Debugf("Error sending job at trigger time: %v", err)
 				// TODO: add job to a queue or something to try later
 				// this should be another long running go routine that accepts this job on a channel
 			}
 		case <-ctx.Done():
-			log.Info("Job streaming ctx done.")
 			return
 		}
 	}
@@ -369,7 +367,6 @@ func (s *Server) handleSidecarConnections(ctx context.Context) {
 	for {
 		select {
 		case <-ctx.Done():
-			log.Info("Job watcher shutting down. Clearing Sidecar connections.")
 			s.connectionPool.Cleanup()
 			return
 		case conn := <-s.sidecarConnChan:
