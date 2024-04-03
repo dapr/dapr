@@ -119,6 +119,12 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 		}))
 	}
 
+	if opts.progSubs != nil {
+		appOpts = append(appOpts, app.WithHandlerFunc("/dapr/subscribe", func(w http.ResponseWriter, r *http.Request) {
+			require.NoError(t, json.NewEncoder(w).Encode(*opts.progSubs))
+		}))
+	}
+
 	appOpts = append(appOpts, opts.handlerFuncs...)
 
 	return &Subscriber{
