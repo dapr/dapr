@@ -36,7 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/scheduler/connections"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -78,8 +78,8 @@ type Server struct {
 	jobTriggerChan   chan *schedulerv1pb.StreamJobResponse // used to trigger the WatchJob logic
 	jobWatcherWG     sync.WaitGroup
 
-	sidecarConnChan        chan *connections.Connection
-	connectionPool         *connections.Pool // Connection pool for sidecars
+	sidecarConnChan        chan *internal.Connection
+	connectionPool         *internal.Pool // Connection pool for sidecars
 	maxConnPerApp          int
 	maxTimeWaitForSidecars int
 
@@ -115,9 +115,9 @@ func New(opts Options) *Server {
 		jobTriggerChan:   make(chan *schedulerv1pb.StreamJobResponse),
 		jobWatcherWG:     sync.WaitGroup{},
 
-		sidecarConnChan: make(chan *connections.Connection),
-		connectionPool: &connections.Pool{
-			NsAppIDPool:      make(map[string]*connections.AppIDPool),
+		sidecarConnChan: make(chan *internal.Connection),
+		connectionPool: &internal.Pool{
+			NsAppIDPool:      make(map[string]*internal.AppIDPool),
 			MaxConnsPerAppID: opts.MaxConnsPerAppID,
 		},
 		maxConnPerApp:          opts.MaxConnsPerAppID,

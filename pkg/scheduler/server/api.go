@@ -26,7 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler"
-	"github.com/dapr/dapr/pkg/scheduler/connections"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal"
 	timeutils "github.com/dapr/kit/time"
 )
 
@@ -195,7 +195,7 @@ func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv
 		AppID:     req.GetAppId(),
 	}
 
-	conn := &connections.Connection{
+	conn := &internal.Connection{
 		ConnDetails: sidecarConnDetails,
 		Stream:      stream,
 	}
