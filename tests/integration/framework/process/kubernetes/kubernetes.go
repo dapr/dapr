@@ -33,10 +33,10 @@ import (
 	apiextensionsv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	"sigs.k8s.io/yaml"
 
-	securitypem "github.com/dapr/dapr/pkg/security/pem"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/informer"
+	cryptopem "github.com/dapr/kit/crypto/pem"
 )
 
 const (
@@ -130,9 +130,9 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 	leafCert, err = x509.ParseCertificate(leafCertDER)
 	require.NoError(t, err)
 
-	chainPEM, err := securitypem.EncodeX509Chain(append([]*x509.Certificate{leafCert}, bundle.IssChain...))
+	chainPEM, err := cryptopem.EncodeX509Chain(append([]*x509.Certificate{leafCert}, bundle.IssChain...))
 	require.NoError(t, err)
-	keyPEM, err := securitypem.EncodePrivateKey(leafpk)
+	keyPEM, err := cryptopem.EncodePrivateKey(leafpk)
 	require.NoError(t, err)
 
 	return &Kubernetes{
