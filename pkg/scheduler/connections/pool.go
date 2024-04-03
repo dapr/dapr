@@ -23,7 +23,6 @@ type Pool struct {
 
 // AppIDPool represents a pool of connections for a single appID.
 type AppIDPool struct {
-	lock        sync.RWMutex
 	connections []*Connection
 }
 
@@ -40,7 +39,6 @@ func (p *Pool) Add(nsAppID string, conn *Connection) {
 	// Ensure the AppIDPool exists for the given nsAppID
 	if p.NsAppIDPool[nsAppID] == nil {
 		p.NsAppIDPool[nsAppID] = &AppIDPool{
-			lock:        sync.RWMutex{},
 			connections: make([]*Connection, 0),
 		}
 	}
@@ -61,8 +59,6 @@ func (p *Pool) Add(nsAppID string, conn *Connection) {
 		}
 	}
 
-	p.NsAppIDPool[nsAppID].lock.Lock()
-	defer p.NsAppIDPool[nsAppID].lock.Unlock()
 	p.NsAppIDPool[nsAppID].connections = append(p.NsAppIDPool[nsAppID].connections, &Connection{
 		ConnDetails: conn.ConnDetails,
 		Stream:      conn.Stream,
@@ -73,9 +69,8 @@ func (p *Pool) Add(nsAppID string, conn *Connection) {
 func (p *Pool) Remove(nsAppID string, conn *Connection) {
 	p.Lock.Lock()
 	defer p.Lock.Unlock()
+
 	if id, ok := p.NsAppIDPool[nsAppID]; ok {
-		id.lock.Lock()
-		defer id.lock.Unlock()
 		for i, c := range id.connections {
 			if c.ConnDetails == conn.ConnDetails {
 				id.connections = append(id.connections[:i], id.connections[i+1:]...)
@@ -92,14 +87,11 @@ func (p *Pool) WaitUntilReachingMaxConns(ctx context.Context, nsAppID string, ma
 	for {
 		p.Lock.RLock()
 		appIDPool, ok := p.NsAppIDPool[nsAppID]
-		p.Lock.RUnlock()
 		if !ok {
 			return fmt.Errorf("no connections available for appID: %s", nsAppID)
 		}
-
-		appIDPool.lock.RLock()
 		currentConnCount := len(appIDPool.connections)
-		appIDPool.lock.RUnlock()
+		p.Lock.RUnlock()
 
 		// We don't want all sidecars connecting to the scheduler, so return once we meet the max connection count.
 		// This also accounts for enabling us to NOT have downtime, as we are waiting for the user specified max
@@ -127,9 +119,7 @@ func (p *Pool) Cleanup() {
 	defer p.Lock.Unlock()
 
 	for _, appIDPool := range p.NsAppIDPool {
-		appIDPool.lock.Lock()
 		appIDPool.connections = []*Connection{}
-		appIDPool.lock.Unlock()
 	}
 
 	p.NsAppIDPool = make(map[string]*AppIDPool)
@@ -146,8 +136,6 @@ func (p *Pool) GetStreamAndContextForNSAppID(nsAppID string) (schedulerv1pb.Sche
 		return nil, nil, fmt.Errorf("no connections available for appID: %s", nsAppID)
 	}
 
-	appIDPool.lock.RLock()
-	defer appIDPool.lock.RUnlock()
 	// randomly select the appID connection to stream back to
 	//nolint:gosec // there is no need for a crypto secure rand.
 	selectedConnection := appIDPool.connections[rand.Intn(len(appIDPool.connections))]
