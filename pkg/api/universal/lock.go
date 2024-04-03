@@ -24,18 +24,18 @@ import (
 )
 
 func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockRequest) (*runtimev1pb.TryLockResponse, error) {
+	var err error // Declare err here to avoid shadow declaration
 
 	ownerName := req.GetLockOwner()
 	storeName := req.GetStoreName()
 
 	// 1. validate and find lock component
 	if req.GetExpiryInSeconds() <= 0 {
-		err := apiErrors.Lock(storeName, ownerName).WithMetadata(nil).ExpiryInSecondsNotPositive()
+		err = apiErrors.Lock(storeName, ownerName).WithMetadata(nil).ExpiryInSecondsNotPositive()
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
 
-	var err error // Declare err here
 	store, err := a.lockValidateRequest(req)
 	if err != nil {
 		return &runtimev1pb.TryLockResponse{}, err
@@ -50,7 +50,7 @@ func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockR
 	// modify key
 	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, storeName, a.appID)
 	if err != nil {
-		err := apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).TryLockFailed()
+		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).TryLockFailed()
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -63,7 +63,7 @@ func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockR
 		return store.TryLock(ctx, compReq)
 	})
 	if err != nil {
-		err := apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).TryLockFailed()
+		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).TryLockFailed()
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -97,7 +97,7 @@ func (a *Universal) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockReq
 	// modify key
 	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, storeName, a.appID)
 	if err != nil {
-		err := apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).UnlockFailed()
+		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).UnlockFailed()
 		a.logger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
 	}
@@ -110,7 +110,7 @@ func (a *Universal) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockReq
 		return store.Unlock(ctx, compReq)
 	})
 	if err != nil {
-		err := apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).UnlockFailed()
+		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).UnlockFailed()
 		a.logger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
 	}
