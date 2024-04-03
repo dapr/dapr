@@ -147,7 +147,6 @@ func (m *Manager) processStream(ctx context.Context, client *schedulerClient, st
 				}
 				continue
 			}
-
 		}
 
 		log.Infof("Established stream conn to Scheduler at address %s", client.address)
@@ -171,25 +170,25 @@ func (m *Manager) processStream(ctx context.Context, client *schedulerClient, st
 				}
 				return ctx.Err()
 			default:
-				resp, err := stream.Recv()
-				if err != nil {
-					switch status.Code(err) {
+				resp, streamerr := stream.Recv()
+				if streamerr != nil {
+					switch status.Code(streamerr) {
 					case codes.Canceled:
 						log.Debugf("Sidecar cancelled the Scheduler stream ctx.")
 					case codes.Unavailable:
 						log.Debugf("Scheduler cancelled the Scheduler stream ctx.")
 					default:
-						if err == io.EOF {
+						if streamerr == io.EOF {
 							log.Debugf("Scheduler cancelled the Sidecar stream ctx.")
 						}
-						log.Infof("Error while receiving job trigger: %v", err)
+						log.Infof("Error while receiving job trigger: %v", streamerr)
 						if err := stream.CloseSend(); err != nil {
 							log.Debugf("Error closing stream")
 						}
-						if err := client.closeConnection(); err != nil {
-							log.Debugf("Error closing connection: %v", err)
+						if nerr := client.closeConnection(); nerr != nil {
+							log.Debugf("Error closing connection: %v", nerr)
 						}
-						return err
+						return streamerr
 					}
 				}
 				log.Infof("Received response: %+v", resp) // TODO rm this once it sends the triggered job back to the app
