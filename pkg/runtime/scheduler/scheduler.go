@@ -51,7 +51,12 @@ type Manager struct {
 	lastUsedIdx int
 }
 
-func NewManager(ctx context.Context, sidecarDetails scheduler.SidecarConnDetails, addresses string, sec security.Handler) *Manager {
+func NewManager(ctx context.Context, ns string, appID string, addresses string, sec security.Handler) *Manager {
+	sidecarDetails := scheduler.SidecarConnDetails{
+		Namespace: ns,
+		AppID:     appID,
+	}
+
 	manager := &Manager{
 		connDetails: sidecarDetails,
 	}
