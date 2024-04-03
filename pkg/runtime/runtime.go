@@ -215,8 +215,8 @@ func newDaprRuntime(ctx context.Context,
 		compStore:         compStore,
 		meta:              meta,
 		operatorClient:    operatorClient,
-		//schedulerClient:   schedClient, //TODO(CASSIE): update actor code to use next client from manager
-		//schedulerManager:  schedulerManager,
+		// schedulerClient:   schedClient, //TODO(CASSIE): update actor code to use next client from manager
+		// schedulerManager:  schedulerManager,
 		channels:       channels,
 		sec:            sec,
 		processor:      processor,
@@ -980,7 +980,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
 		RemindersService:  a.runtimeConfig.remindersService,
-		SchedulerAddress:  a.runtimeConfig.schedulerAddress, //TODO: CASSIE Update actor logic to use scheduler manager to get next client
+		SchedulerAddress:  a.runtimeConfig.schedulerAddress, // TODO: CASSIE Update actor logic to use scheduler manager to get next client
 		Port:              a.runtimeConfig.internalGRPCPort,
 		Namespace:         a.namespace,
 		AppConfig:         a.appConfig,

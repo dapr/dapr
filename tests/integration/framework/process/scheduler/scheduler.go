@@ -64,14 +64,14 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	port1 := fp.Port(t)
 
 	opts := options{
-		id:                  uid.String(),
-		logLevel:            "info",
-		port:                fp.Port(t),
-		healthzPort:         fp.Port(t),
-		metricsPort:         fp.Port(t),
-		initialCluster:      uid.String() + "=http://localhost:" + strconv.Itoa(port1),
-		initialClusterPorts: []int{port1},
-		etcdClientPorts:     []string{uid.String() + "=" + strconv.Itoa(fp.Port(t))},
+		id:                     uid.String(),
+		logLevel:               "info",
+		port:                   fp.Port(t),
+		healthzPort:            fp.Port(t),
+		metricsPort:            fp.Port(t),
+		initialCluster:         uid.String() + "=http://localhost:" + strconv.Itoa(port1),
+		initialClusterPorts:    []int{port1},
+		etcdClientPorts:        []string{uid.String() + "=" + strconv.Itoa(fp.Port(t))},
 		maxConnsPerAppID:       -1,
 		maxTimeWaitForSidecars: 30,
 	}
@@ -123,16 +123,16 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 
 	return &Scheduler{
-		exec:                exec.New(t, binary.EnvValue("scheduler"), args, opts.execOpts...),
-		ports:               fp,
-		id:                  opts.id,
-		port:                opts.port,
-		healthzPort:         opts.healthzPort,
-		metricsPort:         opts.metricsPort,
-		initialCluster:      opts.initialCluster,
-		initialClusterPorts: opts.initialClusterPorts,
-		etcdClientPorts:     clientPorts,
-		dataDir:             tmpDir,
+		exec:                   exec.New(t, binary.EnvValue("scheduler"), args, opts.execOpts...),
+		ports:                  fp,
+		id:                     opts.id,
+		port:                   opts.port,
+		healthzPort:            opts.healthzPort,
+		metricsPort:            opts.metricsPort,
+		initialCluster:         opts.initialCluster,
+		initialClusterPorts:    opts.initialClusterPorts,
+		etcdClientPorts:        clientPorts,
+		dataDir:                tmpDir,
 		maxConnsPerAppID:       opts.maxConnsPerAppID,
 		maxTimeWaitForSidecars: opts.maxTimeWaitForSidecars,
 	}
