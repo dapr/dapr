@@ -76,7 +76,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
-	"github.com/dapr/dapr/pkg/scheduler"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
@@ -295,11 +294,7 @@ func newDaprRuntime(ctx context.Context,
 
 	var schedulerManager *runtimeScheduler.Manager
 	if runtimeConfig.SchedulerEnabled() {
-		sidecarDetails := scheduler.SidecarConnDetails{
-			Namespace: namespace,
-			AppID:     runtimeConfig.id,
-		}
-		schedulerManager = runtimeScheduler.NewManager(ctx, sidecarDetails, runtimeConfig.schedulerAddress, sec)
+		schedulerManager = runtimeScheduler.NewManager(ctx, namespace, runtimeConfig.id, runtimeConfig.schedulerAddress, sec)
 		if err := rt.runnerCloser.Add(schedulerManager.Run); err != nil {
 			return nil, err
 		}
