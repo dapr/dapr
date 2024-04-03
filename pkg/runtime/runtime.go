@@ -64,7 +64,6 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -106,7 +105,6 @@ type DaprRuntime struct {
 	daprHTTPAPI         http.API
 	daprGRPCAPI         grpc.API
 	operatorClient      operatorv1pb.OperatorClient
-	schedulerClient     schedulerv1pb.SchedulerClient
 	schedulerManager    *runtimeScheduler.Manager
 	isAppHealthy        chan struct{}
 	appHealth           *apphealth.AppHealth
@@ -215,16 +213,16 @@ func newDaprRuntime(ctx context.Context,
 		compStore:         compStore,
 		meta:              meta,
 		operatorClient:    operatorClient,
-		channels:       channels,
-		sec:            sec,
-		processor:      processor,
-		authz:          authz,
-		namespace:      namespace,
-		podName:        podName,
-		initComplete:   make(chan struct{}),
-		isAppHealthy:   make(chan struct{}),
-		clock:          new(clock.RealClock),
-		httpMiddleware: httpMiddleware,
+		channels:          channels,
+		sec:               sec,
+		processor:         processor,
+		authz:             authz,
+		namespace:         namespace,
+		podName:           podName,
+		initComplete:      make(chan struct{}),
+		isAppHealthy:      make(chan struct{}),
+		clock:             new(clock.RealClock),
+		httpMiddleware:    httpMiddleware,
 	}
 	close(rt.isAppHealthy)
 
@@ -526,7 +524,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
-		SchedulerClient:             a.schedulerClient,
 		SchedulerManager:            a.schedulerManager,
 		WorkflowEngine:              wfe,
 	})
@@ -978,7 +975,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
 		RemindersService:  a.runtimeConfig.remindersService,
-		SchedulerAddress:  a.runtimeConfig.schedulerAddress,
+		SchedulerManager:  a.schedulerManager,
 		Port:              a.runtimeConfig.internalGRPCPort,
 		Namespace:         a.namespace,
 		AppConfig:         a.appConfig,

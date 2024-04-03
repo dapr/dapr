@@ -58,7 +58,6 @@ type Universal struct {
 	appConnectionConfig         config.AppConnectionConfig
 	globalConfig                *config.Configuration
 	workflowEngine              *wfengine.WorkflowEngine
-	schedulerClient             schedulerv1pb.SchedulerClient
 	schedulerManager            *runtimeScheduler.Manager
 
 	extendedMetadataLock sync.RWMutex
@@ -81,7 +80,6 @@ func New(opts Options) *Universal {
 		globalConfig:                opts.GlobalConfig,
 		workflowEngine:              opts.WorkflowEngine,
 		actorsReadyCh:               make(chan struct{}),
-		schedulerClient:             opts.SchedulerClient,
 		schedulerManager:            opts.SchedulerManager,
 	}
 }

@@ -55,11 +55,10 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
+	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
-	"github.com/dapr/kit/signals"
 )
 
 const (
@@ -117,8 +116,7 @@ type GRPCConnectionFn func(ctx context.Context, address string, id string, names
 type actorsRuntime struct {
 	appChannel         channel.AppChannel
 	placement          placement.PlacementService
-	scheduler          schedulerv1pb.SchedulerClient
-	clientConn         *grpc.ClientConn
+	schedulerManager   *runtimeScheduler.Manager
 	placementEnabled   bool
 	grpcConnectionFn   GRPCConnectionFn
 	actorsConfig       Config
@@ -230,17 +228,8 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
-	if opts.Config.SchedulerService != "" {
+	if opts.Config.SchedulerManager != nil {
 		log.Info("Using Scheduler service for reminders.")
-		// TODO: have a wrapper that includes both client and conn.
-		ctx := signals.Context()
-		schedulerConn, schedulerClient, err := schedulerclient.New(ctx, opts.Config.SchedulerService, opts.Security)
-		if err != nil {
-			return nil, err
-		}
-
-		a.scheduler = schedulerClient
-		a.clientConn = schedulerConn
 	}
 
 	return a, nil
@@ -1193,7 +1182,7 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 }
 
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
-	if a.scheduler != nil {
+	if a.schedulerManager != nil {
 		metadata := map[string]string{
 			"scope":        "actor",
 			"namespace":    a.actorsConfig.Namespace,
@@ -1231,7 +1220,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			Metadata: metadata,
 		}
 
-		_, err = a.scheduler.ScheduleJob(ctx, internalScheduleJobReq)
+		_, err = a.schedulerManager.NextClient().ScheduleJob(ctx, internalScheduleJobReq)
 		return err
 	}
 
@@ -1262,7 +1251,7 @@ func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest
 }
 
 func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderRequest) error {
-	if a.scheduler != nil {
+	if a.schedulerManager != nil {
 		metadata := map[string]string{
 			"scope":     "actor",
 			"namespace": a.actorsConfig.Namespace,
@@ -1284,7 +1273,7 @@ func (a *actorsRuntime) DeleteReminder(ctx context.Context, req *DeleteReminderR
 			Metadata: metadata,
 		}
 
-		_, err := a.scheduler.DeleteJob(ctx, internalDeleteJobReq)
+		_, err := a.schedulerManager.NextClient().DeleteJob(ctx, internalDeleteJobReq)
 		return err
 	}
 
