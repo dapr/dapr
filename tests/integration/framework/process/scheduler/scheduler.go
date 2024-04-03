@@ -31,13 +31,14 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Scheduler struct {
-	exec     process.Interface
-	freeport *util.FreePort
-	running  atomic.Bool
+	exec    process.Interface
+	ports   *ports.Ports
+	running atomic.Bool
 
 	port        int
 	healthzPort int
@@ -56,16 +57,18 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	uid, err := uuid.NewUUID()
 	require.NoError(t, err)
 
-	fp := util.ReservePorts(t, 5)
+	fp := ports.Reserve(t, 5)
+	port1 := fp.Port(t)
+
 	opts := options{
 		id:                  uid.String(),
 		logLevel:            "info",
-		port:                fp.Port(t, 0),
-		healthzPort:         fp.Port(t, 1),
-		metricsPort:         fp.Port(t, 2),
-		initialCluster:      uid.String() + "=http://localhost:" + strconv.Itoa(fp.Port(t, 3)),
-		initialClusterPorts: []int{fp.Port(t, 3)},
-		etcdClientPorts:     []string{uid.String() + "=" + strconv.Itoa(fp.Port(t, 4))},
+		port:                fp.Port(t),
+		healthzPort:         fp.Port(t),
+		metricsPort:         fp.Port(t),
+		initialCluster:      uid.String() + "=http://localhost:" + strconv.Itoa(port1),
+		initialClusterPorts: []int{port1},
+		etcdClientPorts:     []string{uid.String() + "=" + strconv.Itoa(fp.Port(t))},
 	}
 
 	for _, fopt := range fopts {
@@ -111,7 +114,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	return &Scheduler{
 		exec:                exec.New(t, binary.EnvValue("scheduler"), args, opts.execOpts...),
-		freeport:            fp,
+		ports:               fp,
 		id:                  opts.id,
 		port:                opts.port,
 		healthzPort:         opts.healthzPort,
@@ -128,7 +131,7 @@ func (s *Scheduler) Run(t *testing.T, ctx context.Context) {
 		t.Fatal("Process is already running")
 	}
 
-	s.freeport.Free(t)
+	s.ports.Free(t)
 	s.exec.Run(t, ctx)
 }
 

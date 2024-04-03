@@ -513,45 +513,45 @@ message ExecuteStateTransactionRequest {
 
 // RegisterActorTimerRequest is the message to register a timer for an actor of a given type and id.
 message RegisterActorTimerRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
-  string due_time = 4;
+  string due_time = 4 [json_name = "dueTime"];
   string period = 5;
   string callback = 6;
-  bytes  data = 7;
+  bytes data = 7;
   string ttl = 8;
 }
 
 // UnregisterActorTimerRequest is the message to unregister an actor timer
 message UnregisterActorTimerRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
 }
 
 // RegisterActorReminderRequest is the message to register a reminder for an actor of a given type and id.
 message RegisterActorReminderRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
-  string due_time = 4;
+  string due_time = 4 [json_name = "dueTime"];
   string period = 5;
-  bytes  data = 6;
+  bytes data = 6;
   string ttl = 7;
 }
 
 // UnregisterActorReminderRequest is the message to unregister an actor reminder.
 message UnregisterActorReminderRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
 }
 
 // GetActorStateRequest is the message to get key-value states from specific actor.
 message GetActorStateRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string key = 3;
 }
 
@@ -565,8 +565,8 @@ message GetActorStateResponse {
 
 // ExecuteActorStateTransactionRequest is the message to execute multiple operations on a specified actor.
 message ExecuteActorStateTransactionRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   repeated TransactionalActorStateOperation operations = 3;
 }
 
@@ -584,8 +584,8 @@ message TransactionalActorStateOperation {
 
 // InvokeActorRequest is the message to call an actor.
 message InvokeActorRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string method = 3;
   bytes  data = 4;
   map<string, string> metadata = 5;

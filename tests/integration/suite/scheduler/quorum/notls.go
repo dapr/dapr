@@ -32,8 +32,8 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -51,17 +51,18 @@ type notls struct {
 func (n *notls) Setup(t *testing.T) []framework.Option {
 	n.jobName = uuid.NewString()
 
-	fp := util.ReservePorts(t, 6)
+	fp := ports.Reserve(t, 6)
+	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 
 	opts := []scheduler.Option{
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
-		scheduler.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", port1, port2, port3)),
+		scheduler.WithInitialClusterPorts(port1, port2, port3),
 	}
 
 	clientPorts := []string{
-		"scheduler0=" + strconv.Itoa(fp.Port(t, 3)),
-		"scheduler1=" + strconv.Itoa(fp.Port(t, 4)),
-		"scheduler2=" + strconv.Itoa(fp.Port(t, 5)),
+		"scheduler0=" + strconv.Itoa(fp.Port(t)),
+		"scheduler1=" + strconv.Itoa(fp.Port(t)),
+		"scheduler2=" + strconv.Itoa(fp.Port(t)),
 	}
 	n.schedulers = []*scheduler.Scheduler{
 		scheduler.New(t, append(opts, scheduler.WithID("scheduler0"), scheduler.WithEtcdClientPorts(clientPorts))...),
@@ -71,7 +72,7 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(n.schedulers[0], n.schedulers[1], n.schedulers[2]),
+		framework.WithProcesses(fp, n.schedulers[0], n.schedulers[1], n.schedulers[2]),
 	}
 }
 

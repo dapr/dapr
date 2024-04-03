@@ -28,17 +28,17 @@ As we move predefined errors to the rich error model and a new location (`pkg/ap
 3. **Reference implementation**: You can check out `pkg/api/errors/state.go` for a reference implementation. The following code snippet shows how to create a new error using the helper methods:
 
 ```go
-func StateStoreInvalidKeyName(storeName string, key string, msg string) error {
-	return kiterrors.NewBuilder(
-		codes.InvalidArgument,
-		http.StatusBadRequest,
-		msg,
-		"ERR_MALFORMED_REQUEST",
-	).
-		WithErrorInfo(kiterrors.CodePrefixStateStore+kiterrors.CodeIllegalKey, nil).
-		WithResourceInfo("state", storeName, "", "").
-		WithFieldViolation(key, msg).
-		Build()
+func (s *StateStoreError) InvalidKeyName(key string, msg string) error {
+	return s.build(
+		errors.NewBuilder(
+			codes.InvalidArgument,
+			http.StatusBadRequest,
+			msg,
+			"ERR_MALFORMED_REQUEST",
+		).WithFieldViolation(key, msg),
+		errors.CodeIllegalKey,
+		nil,
+	)
 }
 ```
 4. **Mandatory and Optional Information**:

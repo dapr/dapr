@@ -29,9 +29,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	testCompName := "fakeComponent"
 
 	t.Run("standalone mode, no namespce", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "default")
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
-			Namespace:    "default",
 			GlobalConfig: &config.Configuration{},
 		})
 		component := componentsV1alpha1.Component{}
@@ -45,9 +45,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("namespace mismatch", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "a")
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
-			Namespace:    "a",
 			GlobalConfig: &config.Configuration{},
 		})
 
@@ -62,9 +62,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("namespace match", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "a")
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
-			Namespace:    "a",
 			GlobalConfig: &config.Configuration{},
 		})
 
@@ -79,9 +79,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("in scope, namespace match", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "a")
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
-			Namespace:    "a",
 			GlobalConfig: &config.Configuration{},
 		})
 
@@ -97,9 +97,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("not in scope, namespace match", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "a")
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
-			Namespace:    "a",
 			GlobalConfig: &config.Configuration{},
 		})
 
@@ -115,9 +115,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("in scope, namespace mismatch", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "a")
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
-			Namespace:    "a",
 			GlobalConfig: &config.Configuration{},
 		})
 
@@ -133,9 +133,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("not in scope, namespace mismatch", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "a")
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
-			Namespace:    "a",
 			GlobalConfig: &config.Configuration{},
 		})
 
@@ -151,10 +151,10 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("no authorizers", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "a")
 		auth := New(Options{
 			ID: "test",
 			// Namespace mismatch, should be accepted anyways
-			Namespace:    "a",
 			GlobalConfig: &config.Configuration{},
 		})
 		auth.componentAuthorizers = []ComponentAuthorizer{}
@@ -171,9 +171,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("only deny all", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "a")
 		auth := New(Options{
 			ID:           daprt.TestRuntimeConfigID,
-			Namespace:    "a",
 			GlobalConfig: &config.Configuration{},
 		})
 		auth.componentAuthorizers = []ComponentAuthorizer{
@@ -192,9 +192,9 @@ func TestAuthorizedComponents(t *testing.T) {
 	})
 
 	t.Run("additional authorizer denies all", func(t *testing.T) {
+		t.Setenv("NAMESPACE", "a")
 		auth := New(Options{
-			ID:        "test",
-			Namespace: "a",
+			ID: "test",
 			GlobalConfig: &config.Configuration{
 				Spec: config.ConfigurationSpec{},
 			},
@@ -215,9 +215,9 @@ func TestAuthorizedComponents(t *testing.T) {
 }
 
 func TestAuthorizedHTTPEndpoints(t *testing.T) {
+	t.Setenv("NAMESPACE", "a")
 	auth := New(Options{
-		ID:        daprt.TestRuntimeConfigID,
-		Namespace: "a",
+		ID: daprt.TestRuntimeConfigID,
 		GlobalConfig: &config.Configuration{
 			Spec: config.ConfigurationSpec{},
 		},

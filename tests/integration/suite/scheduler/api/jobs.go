@@ -31,8 +31,8 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -52,18 +52,19 @@ type jobs struct {
 func (j *jobs) Setup(t *testing.T) []framework.Option {
 	j.idPrefix = uuid.NewString()
 
-	fp := util.ReservePorts(t, 2)
+	fp := ports.Reserve(t, 2)
+	port1 := fp.Port(t)
+	port2 := fp.Port(t)
 
-	j.clientPort = fp.Port(t, 1)
+	j.clientPort = port2
 
 	clientPorts := []string{
 		"scheduler0=" + strconv.Itoa(j.clientPort),
 	}
-
 	j.scheduler = scheduler.New(t,
 		scheduler.WithID("scheduler0"),
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d", fp.Port(t, 0))),
-		scheduler.WithInitialClusterPorts(fp.Port(t, 0)),
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d", port1)),
+		scheduler.WithInitialClusterPorts(port1),
 		scheduler.WithEtcdClientPorts(clientPorts),
 	)
 
@@ -73,7 +74,7 @@ func (j *jobs) Setup(t *testing.T) []framework.Option {
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(j.daprd, j.scheduler),
+		framework.WithProcesses(fp, j.daprd, j.scheduler),
 	}
 }
 
