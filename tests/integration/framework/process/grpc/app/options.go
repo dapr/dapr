@@ -24,7 +24,8 @@ import (
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
 )
 
-// options contains the options for running a GRPC server in integration tests.
+// options contains the options for running a GRPC server app in integration
+// tests.
 type options struct {
 	grpcopts           []procgrpc.Option
 	withRegister       func(s *grpc.Server)
