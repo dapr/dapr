@@ -60,7 +60,6 @@ type Daprd struct {
 	publicPort       int
 	metricsPort      int
 	profilePort      int
-	schedulerAddress string
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {

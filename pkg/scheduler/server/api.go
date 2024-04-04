@@ -54,7 +54,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		Rhythm:    req.GetJob().GetSchedule(),
 		Repeats:   req.GetJob().GetRepeats(),
 		StartTime: startTime,
-		//Expiration:       ttl,
+		// Expiration:       ttl,
 		Payload:  req.GetJob().GetData(),
 		Metadata: req.GetMetadata(),
 	}
@@ -146,7 +146,7 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 			Name:     jobName,
 			Schedule: job.Rhythm,
 			Repeats:  job.Repeats,
-			//Ttl:      ttl,
+			// Ttl:      ttl,
 			DueTime: job.StartTime.Format(time.RFC3339),
 			Data:    job.Payload,
 		},
