@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -77,12 +76,10 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 		scheduler.New(t, append(opts, scheduler.WithID("scheduler2"), scheduler.WithEtcdClientPorts(clientPorts))...),
 	}
 
-	schedulerAddresses := []string{s.schedulers[0].Address(), s.schedulers[1].Address(), s.schedulers[2].Address()}
-
 	s.daprdA = daprd.New(t,
 		daprd.WithAppID("A"),
 		daprd.WithNamespace("A"),
-		daprd.WithSchedulerAddresses(strings.Join(schedulerAddresses, ",")),
+		daprd.WithSchedulerAddresses(s.schedulers[0].Address(), s.schedulers[1].Address(), s.schedulers[2].Address()),
 		daprd.WithExecOptions(
 			exec.WithStdout(s.streamloglineDaprA.Stdout()),
 		),
@@ -91,7 +88,7 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 	s.daprdB = daprd.New(t,
 		daprd.WithAppID("B"),
 		daprd.WithNamespace("B"),
-		daprd.WithSchedulerAddresses(strings.Join(schedulerAddresses, ",")),
+		daprd.WithSchedulerAddresses(s.schedulers[0].Address(), s.schedulers[1].Address(), s.schedulers[2].Address()),
 		daprd.WithExecOptions(
 			exec.WithStdout(s.streamloglineDaprB.Stdout()),
 		),

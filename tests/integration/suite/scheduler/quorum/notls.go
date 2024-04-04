@@ -73,9 +73,8 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 		scheduler.New(t, append(opts, scheduler.WithID("scheduler2"), scheduler.WithEtcdClientPorts(clientPorts))...),
 	}
 
-	schedulerAddresses := []string{n.schedulers[0].Address(), n.schedulers[1].Address(), n.schedulers[2].Address()}
 	n.daprd = daprd.New(t,
-		daprd.WithSchedulerAddresses(strings.Join(schedulerAddresses, ",")),
+		daprd.WithSchedulerAddresses(n.schedulers[0].Address(), n.schedulers[1].Address(), n.schedulers[2].Address()),
 	)
 
 	fp.Free(t)
