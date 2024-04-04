@@ -31,6 +31,7 @@ import (
 
 type Options struct {
 	AppID                       string
+	Namespace                   string
 	Logger                      logger.Logger
 	Resiliency                  resiliency.Provider
 	Actors                      actors.ActorRuntime
@@ -48,6 +49,7 @@ type Options struct {
 // Universal contains the implementation of gRPC APIs that are also used by the HTTP server.
 type Universal struct {
 	appID                       string
+	namespace                   string
 	logger                      logger.Logger
 	resiliency                  resiliency.Provider
 	actors                      actors.ActorRuntime
@@ -69,6 +71,7 @@ type Universal struct {
 func New(opts Options) *Universal {
 	return &Universal{
 		appID:                       opts.AppID,
+		namespace:                   opts.Namespace,
 		logger:                      opts.Logger,
 		resiliency:                  opts.Resiliency,
 		actors:                      opts.Actors,
@@ -86,6 +89,10 @@ func New(opts Options) *Universal {
 
 func (a *Universal) AppID() string {
 	return a.appID
+}
+
+func (a *Universal) Namespace() string {
+	return a.namespace
 }
 
 func (a *Universal) Resiliency() resiliency.Provider {

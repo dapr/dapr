@@ -27,7 +27,6 @@ import (
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
-
 	etcdcron "github.com/diagridio/go-etcd-cron"
 
 	"github.com/dapr/dapr/pkg/actors"
@@ -73,7 +72,7 @@ type Server struct {
 	etcdClientPorts  map[string]string
 	cron             *etcdcron.Cron
 	readyCh          chan struct{}
-	jobTriggerChan   chan *schedulerv1pb.ScheduleJobRequest // used to trigger the WatchJob logic
+	jobTriggerChan   chan *schedulerv1pb.StreamJobResponse // used to trigger the WatchJob logic
 	jobWatcherWG     sync.WaitGroup
 
 	sidecarConnChan chan *internal.Connection
@@ -107,7 +106,7 @@ func New(opts Options) *Server {
 		etcdClientPorts:  clientPorts,
 		dataDir:          opts.DataDir,
 		readyCh:          make(chan struct{}),
-		jobTriggerChan:   make(chan *schedulerv1pb.ScheduleJobRequest),
+		jobTriggerChan:   make(chan *schedulerv1pb.StreamJobResponse),
 		jobWatcherWG:     sync.WaitGroup{},
 
 		sidecarConnChan: make(chan *internal.Connection),
@@ -329,7 +328,9 @@ func (s *Server) handleJobStreaming(ctx context.Context) {
 	for {
 		select {
 		case job := <-s.jobTriggerChan:
-			log.Infof("Got the job at trigger time in the jobWatcher. Job: %+v", job) // TODO: rm after debugging or change to debug
+			// TODO(CASSIE): once the ns + appID is sent back on the triggerJob,
+			// dont use metadata to lookup those fields
+
 			metadata := job.GetMetadata()
 			appID := metadata["appID"]
 

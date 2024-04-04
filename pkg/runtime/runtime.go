@@ -508,9 +508,12 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Setup allow/deny list for secrets
 	a.populateSecretsConfiguration()
 
+	a.namespace = security.CurrentNamespace()
+
 	// Create and start the external gRPC server
 	a.daprUniversal = universal.New(universal.Options{
 		AppID:                       a.runtimeConfig.id,
+		Namespace:                   a.namespace,
 		Logger:                      logger.NewLogger("dapr.api"),
 		CompStore:                   a.compStore,
 		Resiliency:                  a.resiliency,

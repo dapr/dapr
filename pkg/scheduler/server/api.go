@@ -42,19 +42,21 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	if err != nil {
 		return nil, fmt.Errorf("error parsing due time: %w", err)
 	}
-	ttl, err := parseTTL(req.GetJob().GetTtl())
-	if err != nil {
-		return nil, fmt.Errorf("error parsing TTL: %w", err)
-	}
+	// TODO: ONLY add expiration if ttl is parsed
+
+	//ttl, err := parseTTL(req.GetJob().GetTtl())
+	//if err != nil {
+	//	return nil, fmt.Errorf("error parsing TTL: %w", err)
+	//}
 
 	job := etcdcron.Job{
 		Name:      req.GetJob().GetName(),
 		Rhythm:    req.GetJob().GetSchedule(),
 		Repeats:   req.GetJob().GetRepeats(),
 		StartTime: startTime,
-		TTL:       ttl,
-		Payload:   req.GetJob().GetData(),
-		Metadata:  req.GetMetadata(),
+		//Expiration:       ttl,
+		Payload:  req.GetJob().GetData(),
+		Metadata: req.GetMetadata(),
 	}
 
 	err = s.cron.AddJob(ctx, job)
@@ -66,6 +68,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
 }
 
+// TODO: triggerJob should send along ns, appID, scope here so dont need to do lookup from metadata
 func (s *Server) triggerJob(ctx context.Context, metadata map[string]string, payload *anypb.Any) (etcdcron.TriggerResult, error) {
 	log.Debug("Triggering job")
 	actorType := metadata["actorType"]
@@ -133,19 +136,19 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 		return nil, fmt.Errorf("job not found: %s", jobName)
 	}
 
-	ttl := ""
-	if job.TTL > 0 {
-		ttl = job.TTL.String()
-	}
+	//ttl := ""
+	//if job.TTL > 0 {
+	//	ttl = job.TTL.String()
+	//}
 
 	return &schedulerv1pb.GetJobResponse{
 		Job: &runtime.Job{
 			Name:     jobName,
 			Schedule: job.Rhythm,
 			Repeats:  job.Repeats,
-			Ttl:      ttl,
-			DueTime:  job.StartTime.Format(time.RFC3339),
-			Data:     job.Payload,
+			//Ttl:      ttl,
+			DueTime: job.StartTime.Format(time.RFC3339),
+			Data:    job.Payload,
 		},
 	}, nil
 }
