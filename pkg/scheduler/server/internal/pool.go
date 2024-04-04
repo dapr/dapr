@@ -5,7 +5,6 @@ import (
 	"fmt"
 	"math/rand"
 	"sync"
-	"time"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler"
@@ -16,9 +15,8 @@ var log = logger.NewLogger("dapr.runtime.scheduler")
 
 // Pool represents a connection pool for namespace/appID separation of sidecars to schedulers.
 type Pool struct {
-	Lock             sync.RWMutex
-	NsAppIDPool      map[string]*AppIDPool
-	MaxConnsPerAppID int // future expand to diff conn count for diff appIDs?
+	Lock        sync.RWMutex
+	NsAppIDPool map[string]*AppIDPool
 }
 
 // AppIDPool represents a pool of connections for a single appID.
@@ -40,14 +38,6 @@ func (p *Pool) Add(nsAppID string, conn *Connection) {
 	if p.NsAppIDPool[nsAppID] == nil {
 		p.NsAppIDPool[nsAppID] = &AppIDPool{
 			connections: make([]*Connection, 0),
-		}
-	}
-
-	// Check if adding the connection would exceed the maximum connection count only if it's explicitly set
-	if p.MaxConnsPerAppID != -1 {
-		if len(p.NsAppIDPool[nsAppID].connections) >= p.MaxConnsPerAppID {
-			log.Infof("Sufficient number of Sidecar connections to Scheduler reached. Not adding connection for namespace/appID: %s. Current connection count: %d", nsAppID, len(p.NsAppIDPool[nsAppID].connections))
-			return
 		}
 	}
 
@@ -76,39 +66,6 @@ func (p *Pool) Remove(nsAppID string, conn *Connection) {
 				id.connections = append(id.connections[:i], id.connections[i+1:]...)
 				break
 			}
-		}
-	}
-}
-
-// WaitUntilReachingMaxConns waits until the minimum connection count (of sidecars) is reached for a given namespace/appID.
-func (p *Pool) WaitUntilReachingMaxConns(ctx context.Context, nsAppID string, maxConnPerApp int, maxWaitTime time.Duration) error {
-	timeout := time.After(maxWaitTime)
-
-	for {
-		p.Lock.RLock()
-		appIDPool, ok := p.NsAppIDPool[nsAppID]
-		if !ok {
-			return fmt.Errorf("no connections available for appID: %s", nsAppID)
-		}
-		currentConnCount := len(appIDPool.connections)
-		p.Lock.RUnlock()
-
-		// We don't want all sidecars connecting to the scheduler, so return once we meet the max connection count.
-		// This also accounts for enabling us to NOT have downtime, as we are waiting for the user specified max
-		// connection count of sidecars per appID.
-		if currentConnCount >= maxConnPerApp {
-			log.Infof("Sufficient number of Sidecar connections to Scheduler reached for namespace/appID: %s. Current connection count: %d", nsAppID, currentConnCount)
-			return nil
-		}
-
-		// Check if the context is done
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-timeout:
-			return fmt.Errorf("timeout waiting to reach max sidecar connection count")
-		case <-time.After(maxWaitTime):
-			// Continue checking until the timeout or context is done
 		}
 	}
 }

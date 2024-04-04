@@ -83,19 +83,18 @@ func Run() {
 			}
 
 			server := server.New(server.Options{
-				AppID:                  appID,
-				HostAddress:            hostAddress,
-				ListenAddress:          opts.ListenAddress,
-				PlacementAddress:       opts.PlacementAddress,
-				Mode:                   modes.DaprMode(opts.Mode),
-				Port:                   opts.Port,
-				MaxConnsPerAppID:       opts.MaxConnsPerAppID,
-				MaxTimeWaitForSidecars: opts.MaxTimeWaitForSidecars,
-				DataDir:                opts.EtcdDataDir,
-				EtcdID:                 opts.EtcdID,
-				EtcdInitialPeers:       opts.EtcdInitialPeers,
-				EtcdClientPorts:        opts.EtcdClientPorts,
-				Security:               secHandler,
+				AppID:            appID,
+				HostAddress:      hostAddress,
+				ListenAddress:    opts.ListenAddress,
+				PlacementAddress: opts.PlacementAddress,
+				Mode:             modes.DaprMode(opts.Mode),
+				Port:             opts.Port,
+				Security:         secHandler,
+
+				DataDir:          opts.EtcdDataDir,
+				EtcdID:           opts.EtcdID,
+				EtcdInitialPeers: opts.EtcdInitialPeers,
+				EtcdClientPorts:  opts.EtcdClientPorts,
 			})
 
 			return server.Run(ctx)
