@@ -172,7 +172,6 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		publicPort:       opts.publicPort,
 		metricsPort:      opts.metricsPort,
 		profilePort:      opts.profilePort,
-		schedulerAddress: strings.Join(opts.schedulerAddresses, ","),
 	}
 }
 
