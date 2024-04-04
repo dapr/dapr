@@ -149,6 +149,7 @@ func Run() {
 				DaprAPIGRPCPort:              opts.DaprAPIGRPCPort,
 				DaprAPIListenAddresses:       opts.DaprAPIListenAddresses,
 				DaprPublicPort:               opts.DaprPublicPort,
+				DaprPublicListenAddress:      opts.DaprPublicListenAddress,
 				ApplicationPort:              opts.AppPort,
 				ProfilePort:                  opts.ProfilePort,
 				EnableProfiling:              opts.EnableProfiling,

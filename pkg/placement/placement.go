@@ -189,7 +189,7 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 
 // Run starts the placement service gRPC server.
 // Blocks until the service is closed and all connections are drained.
-func (p *Service) Run(ctx context.Context, port string) error {
+func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	if p.closed.Load() {
 		return errors.New("placement service is closed")
 	}
@@ -203,7 +203,7 @@ func (p *Service) Run(ctx context.Context, port string) error {
 		return err
 	}
 
-	serverListener, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+	serverListener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", listenAddress, port))
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}

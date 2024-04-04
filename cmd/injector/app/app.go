@@ -102,6 +102,7 @@ func Run() {
 
 	inj, err := service.NewInjector(service.Options{
 		Port:                    opts.Port,
+		ListenAddress:           opts.ListenAddress,
 		AuthUIDs:                uids,
 		Config:                  cfg,
 		DaprClient:              daprClient,
@@ -143,7 +144,7 @@ func Run() {
 			return nil
 		},
 		func(ctx context.Context) error {
-			healhtzErr := healthzServer.Run(ctx, opts.HealthzPort)
+			healhtzErr := healthzServer.Run(ctx, opts.HealthzListenAddress, opts.HealthzPort)
 			if healhtzErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", healhtzErr)
 			}

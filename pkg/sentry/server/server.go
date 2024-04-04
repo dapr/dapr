@@ -41,6 +41,9 @@ type Options struct {
 	// Port is the port that the server will listen on.
 	Port int
 
+	// ListenAddress is the address that the server will listen on.
+	ListenAddress string
+
 	// Security is the security handler for the server.
 	Security security.Handler
 
@@ -63,7 +66,7 @@ type server struct {
 
 // Start starts the server. Blocks until the context is cancelled.
 func Start(ctx context.Context, opts Options) error {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", opts.Port))
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%d", opts.ListenAddress, opts.Port))
 	if err != nil {
 		return fmt.Errorf("could not listen on port %d: %w", opts.Port, err)
 	}

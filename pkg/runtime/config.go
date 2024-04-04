@@ -90,6 +90,7 @@ type Config struct {
 	ProfilePort                  string
 	DaprInternalGRPCPort         string
 	DaprPublicPort               string
+	DaprPublicListenAddress      string
 	ApplicationPort              string
 	DaprGracefulShutdownSeconds  int
 	DaprBlockShutdownDuration    *time.Duration
@@ -116,6 +117,7 @@ type internalConfig struct {
 	id                           string
 	httpPort                     int
 	publicPort                   *int
+	publicListenAddress          string
 	profilePort                  int
 	enableProfiling              bool
 	apiGRPCPort                  int
@@ -296,6 +298,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		blockShutdownDuration: c.DaprBlockShutdownDuration,
 		actorsService:         c.ActorsService,
 		remindersService:      c.RemindersService,
+		publicListenAddress:   c.DaprPublicListenAddress,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {

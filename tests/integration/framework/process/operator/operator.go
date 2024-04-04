@@ -70,12 +70,16 @@ func New(t *testing.T, fopts ...Option) *Operator {
 	args := []string{
 		"-log-level=" + opts.logLevel,
 		"-port=" + strconv.Itoa(opts.port),
+		"-listen-address=127.0.0.1",
 		"-healthz-port=" + strconv.Itoa(opts.healthzPort),
+		"-healthz-listen-address=127.0.0.1",
 		"-metrics-port=" + strconv.Itoa(opts.metricsPort),
+		"-metrics-listen-address=127.0.0.1",
 		"-trust-anchors-file=" + *opts.trustAnchorsFile,
 		"-disable-leader-election=" + strconv.FormatBool(opts.disableLeaderElection),
 		"-kubeconfig=" + *opts.kubeconfigPath,
 		"-webhook-server-port=" + strconv.Itoa(fp.Port(t)),
+		"-webhook-server-listen-address=127.0.0.1",
 	}
 
 	if opts.configPath != nil {

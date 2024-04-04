@@ -47,11 +47,13 @@ type Options struct {
 	RaftLogStorePath string
 
 	// Placement server configurations
-	PlacementPort   int
-	HealthzPort     int
-	MetadataEnabled bool
-	MaxAPILevel     int
-	MinAPILevel     int
+	PlacementPort          int
+	PlacementListenAddress string
+	HealthzPort            int
+	HealthzListenAddress   string
+	MetadataEnabled        bool
+	MaxAPILevel            int
+	MinAPILevel            int
 
 	TLSEnabled       bool
 	TrustDomain      string
@@ -96,7 +98,9 @@ func New(origArgs []string) *Options {
 	fs.BoolVar(&opts.RaftInMemEnabled, "inmem-store-enabled", true, "Enable in-memory log and snapshot store unless --raft-logstore-path is set")
 	fs.StringVar(&opts.RaftLogStorePath, "raft-logstore-path", "", "raft log store path.")
 	fs.IntVar(&opts.PlacementPort, "port", defaultPlacementPort, "sets the gRPC port for the placement service")
+	fs.StringVar(&opts.PlacementListenAddress, "listen-address", "0.0.0.0", "The listening address for the placement service")
 	fs.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
+	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "0.0.0.0", "The listening address for the healthz server")
 	fs.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
 	fs.BoolVar(&opts.MetadataEnabled, "metadata-enabled", opts.MetadataEnabled, "Expose the placement tables on the healthz server")
 	fs.IntVar(&opts.MaxAPILevel, "max-api-level", 10, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
