@@ -45,21 +45,18 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
-	AppID                  string
-	HostAddress            string
-	ListenAddress          string
-	PlacementAddress       string
-	Mode                   modes.DaprMode
-	Port                   int
-	MaxConnsPerAppID       int
-	MaxTimeWaitForSidecars int
+	AppID            string
+	HostAddress      string
+	ListenAddress    string
+	PlacementAddress string
+	Mode             modes.DaprMode
+	Port             int
+	Security         security.Handler
 
 	DataDir          string
 	EtcdID           string
 	EtcdInitialPeers []string
 	EtcdClientPorts  []string
-
-	Security security.Handler
 }
 
 // Server is the gRPC server for the Scheduler service.
@@ -78,15 +75,12 @@ type Server struct {
 	jobTriggerChan   chan *schedulerv1pb.StreamJobResponse // used to trigger the WatchJob logic
 	jobWatcherWG     sync.WaitGroup
 
-	sidecarConnChan        chan *internal.Connection
-	connectionPool         *internal.Pool // Connection pool for sidecars
-	maxConnPerApp          int
-	maxTimeWaitForSidecars int
+	sidecarConnChan chan *internal.Connection
+	connectionPool  *internal.Pool // Connection pool for sidecars
+	closeCh         chan struct{}
 
 	grpcManager  *manager.Manager
 	actorRuntime actors.ActorRuntime
-
-	closeCh chan struct{}
 }
 
 func New(opts Options) *Server {
@@ -117,12 +111,9 @@ func New(opts Options) *Server {
 
 		sidecarConnChan: make(chan *internal.Connection),
 		connectionPool: &internal.Pool{
-			NsAppIDPool:      make(map[string]*internal.AppIDPool),
-			MaxConnsPerAppID: opts.MaxConnsPerAppID,
+			NsAppIDPool: make(map[string]*internal.AppIDPool),
 		},
-		maxConnPerApp:          opts.MaxConnsPerAppID,
-		maxTimeWaitForSidecars: opts.MaxTimeWaitForSidecars,
-		closeCh:                make(chan struct{}),
+		closeCh: make(chan struct{}),
 	}
 
 	s.srv = grpc.NewServer(opts.Security.GRPCServerOptionMTLS())
@@ -375,18 +366,6 @@ func (s *Server) handleSidecarConnections(ctx context.Context) {
 
 			// Add sidecar connection details to the connection pool
 			s.connectionPool.Add(nsAppID, conn)
-
-			// only wait until reaching max conns if that is set explicitly
-			// TODO: Cassie pending load tests keep or rm the s.maxConnPerApp && s.maxTimeWaitForSidecars
-			if s.maxConnPerApp != -1 {
-				// Wait until reaching the max connection count
-				if err := s.connectionPool.WaitUntilReachingMaxConns(ctx, nsAppID, s.maxConnPerApp, time.Duration(s.maxTimeWaitForSidecars)*time.Second); err != nil {
-					// If there's an error waiting for minimum connection count
-					// remove the connection
-					log.Errorf("Issue waiting for minimum Sidecar connections. Removing Sidecar connection for appID: %s.", conn.ConnDetails.AppID)
-					s.connectionPool.Remove(nsAppID, conn)
-				}
-			}
 		}
 	}
 }
