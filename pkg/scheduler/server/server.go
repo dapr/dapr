@@ -24,10 +24,10 @@ import (
 	"sync/atomic"
 	"time"
 
+	etcdcron "github.com/diagridio/go-etcd-cron"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
-	etcdcron "github.com/diagridio/go-etcd-cron"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/config"
@@ -341,7 +341,7 @@ func (s *Server) handleJobStreaming(ctx context.Context) {
 
 			namespace := job.GetNamespace()
 			// Pick a stream corresponding to the appID
-			stream, _, err := s.connectionPool.GetStreamAndContextForNSAppID(namespace + appID)
+			stream, _, err := s.connectionPool.GetStreamAndContextForNSAppID(namespace, appID)
 			if err != nil {
 				log.Debugf("Error getting stream for appID: %v", err)
 				// TODO: add job to a queue or something to try later

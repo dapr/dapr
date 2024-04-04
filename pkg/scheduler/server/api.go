@@ -70,7 +70,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 
 // TODO: triggerJob should send along ns, appID, scope here so dont need to do lookup from metadata
 func (s *Server) triggerJob(ctx context.Context, metadata map[string]string, payload *anypb.Any) (etcdcron.TriggerResult, error) {
-	log.Debug("Triggering job")
+	log.Debug("Triggering job") // TODO(CASSIE): add job name as output once the triggerJob sends it back here for better debugging
 	actorType := metadata["actorType"]
 	actorID := metadata["actorId"]
 	reminderName := metadata["reminder"]

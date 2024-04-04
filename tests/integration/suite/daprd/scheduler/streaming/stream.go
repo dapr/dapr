@@ -16,7 +16,6 @@ package streaming
 import (
 	"context"
 	"fmt"
-	"runtime"
 	"strconv"
 	"strings"
 	"testing"
@@ -48,10 +47,6 @@ type streaming struct {
 }
 
 func (s *streaming) Setup(t *testing.T) []framework.Option {
-	if runtime.GOOS == "windows" {
-		t.Skip("Skipping test on windows which relies on unix process signals")
-	}
-
 	s.streamloglineDaprA = logline.New(t,
 		logline.WithStdoutLineContains(
 			`Received response: data:{[type.googleapis.com/google.type.Expr]:{}} metadata:{key:\"appID\" value:\"A\"} metadata:{key:\"namespace\" value:\"A\"}`,

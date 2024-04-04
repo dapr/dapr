@@ -23,6 +23,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -105,27 +106,36 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 	client := schedulerv1pb.NewSchedulerClient(conn)
 
+	appID := n.daprd.AppID()
+
 	req := &schedulerv1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     n.jobName,
-			Schedule: "@every 1s",
+			Schedule: "@every 10s", // Set to 10 so the job doesn't get cleaned up before I check for it in etcd
+			Repeats:  1,
+			Data: &anypb.Any{
+				TypeUrl: "type.googleapis.com/google.type.Expr",
+			},
 		},
 		Metadata: map[string]string{
-			"namespace": "default",
+			"namespace": n.daprd.Namespace(),
+			"appID":     appID,
 		},
+		Namespace: n.daprd.Namespace(),
+		AppId:     appID,
 	}
 
 	_, err = client.ScheduleJob(ctx, req)
 	require.NoError(t, err)
 
-	// Keep this, I believe the record is added to the db at trigger time, so I need the sleep for the db check to pass
-	time.Sleep(2 * time.Second) // allow time for the record to be added to the db
-
 	chosenSchedulerPort := chosenScheduler.EtcdClientPort()
 	require.NotEmptyf(t, chosenSchedulerPort, "chosenSchedulerPort should not be empty")
 
-	chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
-	checkKeysForAppID(t, n.jobName, chosenSchedulerEtcdKeys)
+	// Check if the job's key exists in the etcd database
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
+		checkKeysForJobName(t, n.jobName, chosenSchedulerEtcdKeys)
+	}, time.Second*3, time.Millisecond*10, "failed to find job's key in etcd")
 
 	// ensure data exists on ALL schedulers
 	for i := 0; i < 3; i++ {
@@ -134,15 +144,17 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		diffSchedulerPort := diffScheduler.EtcdClientPort()
 		require.NotEmptyf(t, diffSchedulerPort, "diffSchedulerPort should not be empty")
 
-		diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
-		checkKeysForAppID(t, n.jobName, diffSchedulerEtcdKeys)
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
+			checkKeysForJobName(t, n.jobName, diffSchedulerEtcdKeys)
+		}, time.Second*3, time.Millisecond*10, "failed to find job's key in etcd")
 	}
 }
 
-func checkKeysForAppID(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
+func checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
 	found := false
 	for _, kv := range keys {
-		if strings.HasSuffix(string(kv.Key), jobName) {
+		if strings.HasSuffix(string(kv.Key), "etcd_cron/partitions/0/jobs/"+jobName) {
 			found = true
 			break
 		}
