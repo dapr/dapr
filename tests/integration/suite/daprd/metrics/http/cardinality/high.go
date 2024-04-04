@@ -73,6 +73,8 @@ func (h *high) Run(t *testing.T, ctx context.Context) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
 		metrics := h.daprd.Metrics(t, ctx)
 		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/healthz|status:204"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
 	})
 
 	t.Run("state stores", func(t *testing.T) {
