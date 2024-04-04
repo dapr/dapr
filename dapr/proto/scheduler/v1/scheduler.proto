@@ -37,24 +37,18 @@ message StreamJobResponse {
 	map<string,string> metadata = 2;
 }
 
-// UnregisterRequest is the message used by the daprd sidecar to unregister itself from the scheduler service.
-message UnregisterRequest {
-	// The id of the application (app_id).
-	string app_id = 1;
-	// The namespace.
-	string namespace = 2;
-	// The hostname of the daprd sidecar.
-	string hostname = 3;
-	// The port of the daprd sidecar.
-	int32 port = 4;
-}
-
 message ScheduleJobRequest {
 	// The job to be scheduled.
 	runtime.v1.Job job = 1;
 
 	// The metadata associated with the job.
 	map<string,string> metadata = 2;
+
+	// The app_id of the sidecar.
+	string app_id = 3;
+
+	// The namespace of the sidecar.
+	string namespace = 4;
 }
 
 message ScheduleJobResponse {
@@ -67,6 +61,12 @@ message GetJobRequest {
 
 	// The metadata associated with the job.
 	map<string,string> metadata = 2;
+
+	// The app_id of the sidecar.
+	string app_id = 3;
+
+	// The namespace of the sidecar.
+	string namespace = 4;
 }
 
 // GetJobResponse is the response message to convey the details of a job.
@@ -80,6 +80,12 @@ message DeleteJobRequest {
 
 	// The metadata associated with the job.
 	map<string,string> metadata = 2;
+
+	// The app_id of the sidecar.
+	string app_id = 3;
+
+	// The namespace of the sidecar.
+	string namespace = 4;
 }
 
 message DeleteJobResponse {

@@ -328,6 +328,9 @@ func (s *Server) handleJobStreaming(ctx context.Context) {
 	for {
 		select {
 		case job := <-s.jobTriggerChan:
+			// TODO(CASSIE): once the ns + appID is sent back on the triggerJob,
+			// dont use metadata to lookup those fields
+
 			metadata := job.GetMetadata()
 			appID := metadata["appID"]
 			namespace := metadata["namespace"]

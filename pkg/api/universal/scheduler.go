@@ -21,13 +21,15 @@ import (
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/security"
 )
 
 func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
+	// TODO: make this specific for error metadata and dont send along to scheduler since these are now first class fields
+	// However, this change will need to be done once the 'triggerJob' from the cron library sends the data back
+	// So rm this once the cron lib sends the trigger job appID && namespace && scope back
 	metadata := map[string]string{
 		"appID":     a.AppID(),
-		"namespace": security.CurrentNamespace(),
+		"namespace": a.Namespace(),
 	}
 
 	if inReq.GetJob() == nil {
@@ -46,7 +48,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 		return &emptypb.Empty{}, apierrors.IncorrectNegative("Repeats", metadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats))
 	}
 
-	jobName := a.globalConfig.Namespace + "||job||" + a.AppID() + "||" + inReq.GetJob().GetName()
+	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetJob().GetName()
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
@@ -57,7 +59,9 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 			DueTime:  inReq.GetJob().GetDueTime(),
 			Ttl:      inReq.GetJob().GetTtl(),
 		},
-		Metadata: metadata, // TODO: this should generate key if jobStateStore is configured
+		Metadata:  metadata, // TODO: this should generate key if jobStateStore is configured
+		Namespace: a.Namespace(),
+		AppId:     a.appID,
 	}
 
 	_, err := a.schedulerManager.NextClient().ScheduleJob(ctx, internalScheduleJobReq)
@@ -72,7 +76,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*emptypb.Empty, error) {
 	metadata := map[string]string{
 		"appID":     a.AppID(),
-		"namespace": security.CurrentNamespace(),
+		"namespace": a.Namespace(),
 	}
 
 	if inReq.GetName() == "" {
@@ -80,10 +84,12 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 		return &emptypb.Empty{}, apierrors.Empty("Name", metadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
-	jobName := a.globalConfig.Namespace + "||job||" + a.AppID() + "||" + inReq.GetName()
+	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetName()
 	internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
-		JobName:  jobName,
-		Metadata: metadata,
+		JobName:   jobName,
+		Metadata:  metadata, // TODO: rm the appID & NS from here once triggerJob is updated to send back appID + NS + Scope
+		Namespace: a.Namespace(),
+		AppId:     a.appID,
 	}
 
 	_, err := a.schedulerManager.NextClient().DeleteJob(ctx, internalDeleteJobReq)
@@ -98,7 +104,7 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
 	metadata := map[string]string{
 		"appID":     a.AppID(),
-		"namespace": security.CurrentNamespace(),
+		"namespace": a.Namespace(),
 	}
 
 	response := &runtimev1pb.GetJobResponse{}
@@ -109,10 +115,12 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 		return response, apierrors.Empty("Name", metadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
-	jobName := a.globalConfig.Namespace + "||job||" + a.AppID() + "||" + inReq.GetName()
+	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetName()
 	internalGetJobReq := &schedulerv1pb.GetJobRequest{
-		JobName:  jobName,
-		Metadata: metadata,
+		JobName:   jobName,
+		Metadata:  metadata, // TODO: rm the appID & NS from here once triggerJob is updated to send back appID + NS + Scope
+		Namespace: a.Namespace(),
+		AppId:     a.appID,
 	}
 
 	internalResp, err := a.schedulerManager.NextClient().GetJob(ctx, internalGetJobReq)
