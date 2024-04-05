@@ -20,7 +20,6 @@ import (
 
 	etcdcron "github.com/diagridio/go-etcd-cron"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -69,8 +68,9 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 }
 
 // TODO: triggerJob should send along ns, appID, scope here so dont need to do lookup from metadata
-func (s *Server) triggerJob(ctx context.Context, metadata map[string]string, payload *anypb.Any) (etcdcron.TriggerResult, error) {
-	log.Debug("Triggering job") // TODO(CASSIE): add job name as output once the triggerJob sends it back here for better debugging
+func (s *Server) triggerJob(ctx context.Context, req etcdcron.TriggerRequest) (etcdcron.TriggerResult, error) {
+	log.Debugf("Triggering job: %s", req.JobName)
+	metadata := req.Metadata
 	actorType := metadata["actorType"]
 	actorID := metadata["actorId"]
 	reminderName := metadata["reminder"]
@@ -83,7 +83,7 @@ func (s *Server) triggerJob(ctx context.Context, metadata map[string]string, pay
 		contentType := metadata["content-type"]
 		invokeReq := internalv1pb.NewInternalInvokeRequest(invokeMethod).
 			WithActor(actorType, actorID).
-			WithData(payload.GetValue()).
+			WithData(req.Payload.GetValue()).
 			WithContentType(contentType)
 
 		res, err := s.actorRuntime.Call(ctx, invokeReq)
@@ -99,7 +99,7 @@ func (s *Server) triggerJob(ctx context.Context, metadata map[string]string, pay
 	} else {
 		// Normal job type to trigger
 		triggeredJob := &schedulerv1pb.StreamJobResponse{
-			Data:     payload,
+			Data:     req.Payload,
 			Metadata: metadata,
 		}
 
