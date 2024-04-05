@@ -108,7 +108,7 @@ var testResiliency = &v1alpha1.Resiliency{
 			Apps: map[string]v1alpha1.EndpointPolicyNames{
 				"failingApp": {
 					Retry:   "singleRetry",
-					Timeout: "fast",
+				Timeout: "fast",
 				},
 				"circuitBreakerApp": {
 					Retry:          "tenRetries",
@@ -2499,6 +2499,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 		// assert
 		assert.Nil(t, resp.JSONBody)
+		assert.Contains(t, string(resp.RawBody), "ERR_MALFORMED_REQUEST")
 	})
 
 	t.Run("Lock with invalid owner", func(t *testing.T) {
@@ -2517,6 +2518,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 		// assert
 		assert.Nil(t, resp.JSONBody)
+		assert.Contains(t, string(resp.RawBody), "ERR_MALFORMED_REQUEST")
 	})
 
 	t.Run("Lock with invalid expiry", func(t *testing.T) {
@@ -2534,6 +2536,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 
 		// assert
 		assert.Nil(t, resp.JSONBody)
+		assert.Contains(t, string(resp.RawBody), "ERR_MALFORMED_REQUEST")
 	})
 
 	t.Run("Unlock with valid request", func(t *testing.T) {
