@@ -31,7 +31,7 @@ func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockR
 
 	// 1. validate and find lock component
 	if req.GetExpiryInSeconds() <= 0 {
-		err = apiErrors.Lock(storeName, ownerName).WithMetadata(nil).ExpiryInSecondsNotPositive()
+		err = apiErrors.Lock(storeName, ownerName).WithMetadata(map[string]string{"appID": a.AppID()}).ExpiryInSecondsNotPositive()
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -50,7 +50,7 @@ func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockR
 	// modify key
 	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, storeName, a.appID)
 	if err != nil {
-		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).TryLockFailed()
+		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.AppID(), err).TryLockFailed()
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -63,7 +63,7 @@ func (a *Universal) TryLockAlpha1(ctx context.Context, req *runtimev1pb.TryLockR
 		return store.TryLock(ctx, compReq)
 	})
 	if err != nil {
-		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).TryLockFailed()
+		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.AppID(), err).TryLockFailed()
 		a.logger.Debug(err)
 		return &runtimev1pb.TryLockResponse{}, err
 	}
@@ -97,7 +97,7 @@ func (a *Universal) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockReq
 	// modify key
 	compReq.ResourceID, err = lockLoader.GetModifiedLockKey(compReq.ResourceID, storeName, a.appID)
 	if err != nil {
-		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).UnlockFailed()
+		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.AppID(), err).UnlockFailed()
 		a.logger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
 	}
@@ -110,7 +110,7 @@ func (a *Universal) UnlockAlpha1(ctx context.Context, req *runtimev1pb.UnlockReq
 		return store.Unlock(ctx, compReq)
 	})
 	if err != nil {
-		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.appID, err).UnlockFailed()
+		err = apiErrors.Lock(storeName, ownerName).WithAppError(a.AppID(), err).UnlockFailed()
 		a.logger.Debug(err)
 		return newInternalErrorUnlockResponse(), err
 	}
@@ -138,17 +138,17 @@ func (a *Universal) lockValidateRequest(req tryLockUnlockRequest) (lock.Store, e
 	storeName := req.GetStoreName()
 	ownerName := req.GetLockOwner()
 	if a.compStore.LocksLen() == 0 {
-		err = apiErrors.Lock(storeName, ownerName).WithMetadata(nil).NotConfigured()
+		err = apiErrors.Lock(storeName, ownerName).WithMetadata(map[string]string{"appID": a.AppID()}).NotConfigured()
 		a.logger.Debug(err)
 		return nil, err
 	}
 	if req.GetResourceId() == "" {
-		err = apiErrors.Lock(storeName, ownerName).WithMetadata(nil).ResourceIDEmpty()
+		err = apiErrors.Lock(storeName, ownerName).WithMetadata(map[string]string{"appID": a.AppID()}).ResourceIDEmpty()
 		a.logger.Debug(err)
 		return nil, err
 	}
 	if ownerName == "" {
-		err = apiErrors.Lock(storeName, ownerName).WithMetadata(nil).LockOwnerEmpty()
+		err = apiErrors.Lock(storeName, ownerName).WithMetadata(map[string]string{"appID": a.AppID()}).LockOwnerEmpty()
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -156,7 +156,7 @@ func (a *Universal) lockValidateRequest(req tryLockUnlockRequest) (lock.Store, e
 	// 2. find lock component
 	store, ok := a.compStore.GetLock(storeName)
 	if !ok {
-		err = apiErrors.Lock(storeName, ownerName).WithMetadata(nil).NotFound()
+		err = apiErrors.Lock(storeName, ownerName).WithMetadata(map[string]string{"appID": a.AppID()}).NotFound()
 		a.logger.Debug(err)
 		return nil, err
 	}
