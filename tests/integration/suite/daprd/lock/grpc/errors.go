@@ -32,8 +32,6 @@ import (
 	kitErrors "github.com/dapr/kit/errors"
 )
 
-const LockStoreName = "lockstore"
-
 func init() {
 	suite.Register(new(errorcodes))
 }
@@ -65,6 +63,8 @@ spec:
 }
 
 func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
+	const LockStoreName = "lockstore"
+
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	conn, err := grpc.DialContext(ctx, e.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
@@ -72,7 +72,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)
 
-	// Covers apierrors.ERR_LOCK_NOT_FOUND
+	// Covers apierrors.ERR_LOCK_STORE_NOT_FOUND
 	t.Run("lock doesn't exist", func(t *testing.T) {
 		name := "lock-doesn't-exist"
 		req := &rtv1.TryLockRequest{
@@ -98,9 +98,10 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.True(t, ok)
 		require.Equal(t, kitErrors.CodePrefixLock+kitErrors.CodeNotFound, errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
+		require.NotNil(t, errInfo.GetMetadata(), "Metadata should be present")
 	})
 
-	// Covers apierrors.ERR_LOCK_NOT_CONFIGURED
+	// Covers apierrors.ERR_LOCK_STORE_NOT_CONFIGURED
 	t.Run("lock store not configured", func(t *testing.T) {
 		// Start a new daprd without lock store
 		daprdNoLockStore := daprd.New(t, daprd.WithAppID("daprd_no_lock_store"))
@@ -131,10 +132,10 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.IsType(t, &errdetails.ErrorInfo{}, errInfo)
 		require.Equal(t, "DAPR_LOCK_NOT_CONFIGURED", errInfo.(*errdetails.ErrorInfo).GetReason())
 		require.Equal(t, "dapr.io", errInfo.(*errdetails.ErrorInfo).GetDomain())
-		require.Nil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata())
+		require.NotNil(t, errInfo.(*errdetails.ErrorInfo).GetMetadata(), "Metadata should be present")
 	})
 
-	// Covers apierrors.ERR_RESOURCE_ID_EMPTY
+	// Covers apierrors.ERR_MALFORMED_REQUEST
 	t.Run("lock resource id empty", func(t *testing.T) {
 		req := &rtv1.TryLockRequest{
 			StoreName:       LockStoreName,
@@ -168,7 +169,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, "DAPR_LOCK_RESOURCE_ID_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
-		require.Nil(t, errInfo.GetMetadata())
+		require.NotNil(t, errInfo.GetMetadata(), "Metadata should be present")
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
 		require.Equal(t, "lock", resInfo.GetResourceType())
@@ -210,14 +211,14 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, "DAPR_LOCK_OWNER_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
-		require.Nil(t, errInfo.GetMetadata())
+		require.NotNil(t, errInfo.GetMetadata(), "Metadata should be present")
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
 		require.Equal(t, "lock", resInfo.GetResourceType())
 		require.Equal(t, "lockstore", resInfo.GetResourceName())
 	})
 
-	// Covers apierrors.ERR_EXPIRY_NOT_POSITIVE
+	// Covers apierrors.ERR_MALFORMED_REQUEST
 	t.Run("lock expiry in seconds not positive", func(t *testing.T) {
 		req := &rtv1.TryLockRequest{
 			StoreName:       LockStoreName,
@@ -252,7 +253,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, "DAPR_LOCK_EXPIRY_NOT_POSITIVE", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
-		require.Nil(t, errInfo.GetMetadata())
+		require.NotNil(t, errInfo.GetMetadata(), "Metadata should be present")
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
 		require.Equal(t, "lock", resInfo.GetResourceType())
@@ -297,7 +298,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, "DAPR_LOCK_TRY_LOCK_FAILED", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
-		require.Nil(t, errInfo.GetMetadata())
+		require.NotNil(t, errInfo.GetMetadata(), "Metadata should be present")
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
 		require.Equal(t, "lock", resInfo.GetResourceType())
@@ -341,7 +342,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, errInfo, "ErrorInfo should be present")
 		require.Equal(t, "DAPR_LOCK_UNLOCK_FAILED", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
-		require.Nil(t, errInfo.GetMetadata())
+		require.NotNil(t, errInfo.GetMetadata(), "Metadata should be present")
 
 		require.NotNil(t, resInfo, "ResourceInfo should be present")
 		require.Equal(t, "lock", resInfo.GetResourceType())

@@ -34,9 +34,6 @@ import (
 const (
 	ErrInfoType      = "type.googleapis.com/google.rpc.ErrorInfo"
 	ResourceInfoType = "type.googleapis.com/google.rpc.ResourceInfo"
-	BadRequestType   = "type.googleapis.com/google.rpc.BadRequest"
-	HelpType         = "type.googleapis.com/google.rpc.Help"
-	LockStoreName    = "lockstore"
 )
 
 func init() {
@@ -73,8 +70,9 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	httpClient := util.HTTPClient(t)
+	const LockStoreName = "lockstore"
 
-	// Covers apierrors.ERR_LOCK_NOT_FOUND
+	// Covers apierrors.ERR_LOCK_STORE_NOT_FOUND
 	t.Run("lock doesn't exist", func(t *testing.T) {
 		name := "lock-doesn't-exist"
 		payload := `{"resourceId": "resource", "lockOwner": "owner", "expiryInSeconds": 10}`
@@ -87,7 +85,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		require.Equal(t, http.StatusNotFound, resp.StatusCode)
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
@@ -100,7 +98,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, "ERR_LOCK_NOT_FOUND", errCode)
+		require.Equal(t, "ERR_LOCK_STORE_NOT_FOUND", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -123,7 +121,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
-	// Covers apierrors.ERR_LOCK_NOT_CONFIGURED
+	// Covers apierrors.ERR_LOCK_STORE_NOT_CONFIGURED
 	t.Run("lock store not configured", func(t *testing.T) {
 		daprdNoLockStore := daprd.New(t, daprd.WithAppID("daprd_no_lock_store"))
 		daprdNoLockStore.Run(t, ctx)
@@ -153,7 +151,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, "ERR_LOCK_NOT_CONFIGURED", errCode)
+		require.Equal(t, "ERR_LOCK_STORE_NOT_CONFIGURED", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -176,7 +174,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
-	// Covers apierrors.ERR_RESOURCE_ID_EMPTY
+	// Covers apierrors.ERR_MALFORMED_REQUEST
 	t.Run("lock resource id empty", func(t *testing.T) {
 		payload := `{"lockOwner":"owner", "expiryInSeconds": 10}`
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", e.daprd.HTTPPort(), LockStoreName)
@@ -201,7 +199,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, "ERR_RESOURCE_ID_EMPTY", errCode)
+		require.Equal(t, "ERR_MALFORMED_REQUEST", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -269,7 +267,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, "ERR_OWNER_EMPTY", errCode)
+		require.Equal(t, "ERR_MALFORMED_REQUEST", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -312,7 +310,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, LockStoreName, resInfo["resource_name"])
 	})
 
-	// Covers apierrors.ERR_EXPIRY_NOT_POSITIVE
+	// Covers apierrors.ERR_MALFORMED_REQUEST
 	t.Run("lock expiry in seconds not positive", func(t *testing.T) {
 		payload := `{"resourceId": "resource", "lockOwner": "owner", "expiryInSeconds": -1}`
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/lock/%s", e.daprd.HTTPPort(), LockStoreName)
@@ -337,7 +335,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, "ERR_EXPIRY_NOT_POSITIVE", errCode)
+		require.Equal(t, "ERR_MALFORMED_REQUEST", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
