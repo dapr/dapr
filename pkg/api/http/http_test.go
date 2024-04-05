@@ -108,7 +108,7 @@ var testResiliency = &v1alpha1.Resiliency{
 			Apps: map[string]v1alpha1.EndpointPolicyNames{
 				"failingApp": {
 					Retry:   "singleRetry",
-				Timeout: "fast",
+					Timeout: "fast",
 				},
 				"circuitBreakerApp": {
 					Retry:          "tenRetries",

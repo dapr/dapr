@@ -115,7 +115,7 @@ func (l *LockMetadataError) NotFound() error {
 	l.skipResourceInfo = true
 	return l.build(
 		codes.InvalidArgument,
-		http.StatusBadRequest,// TODO: change this to be http.StatusNotFound in 2 releases since it would be a breaking change to the errors/lock.go
+		http.StatusBadRequest, // TODO: change this to be http.StatusNotFound in 2 releases since it would be a breaking change to the errors/lock.go
 		fmt.Sprintf("%s %s is not found", metadata.LockStoreType, l.l.name),
 		"ERR_LOCK_STORE_NOT_FOUND",
 		errors.CodeNotFound,
