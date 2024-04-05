@@ -66,7 +66,7 @@ func (l *LockMetadataError) ResourceIDEmpty() error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		"lock resource id is empty",
-		"ERR_RESOURCE_ID_EMPTY",
+		"ERR_MALFORMED_REQUEST",
 		"RESOURCE_ID_EMPTY",
 	)
 }
@@ -76,7 +76,7 @@ func (l *LockMetadataError) LockOwnerEmpty() error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		"lock owner is empty",
-		"ERR_OWNER_EMPTY",
+		"ERR_MALFORMED_REQUEST",
 		"OWNER_EMPTY",
 	)
 }
@@ -86,7 +86,7 @@ func (l *LockMetadataError) ExpiryInSecondsNotPositive() error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		"expiry in seconds is not positive",
-		"ERR_EXPIRY_NOT_POSITIVE",
+		"ERR_MALFORMED_REQUEST",
 		"EXPIRY_NOT_POSITIVE",
 	)
 }
@@ -115,9 +115,9 @@ func (l *LockMetadataError) NotFound() error {
 	l.skipResourceInfo = true
 	return l.build(
 		codes.InvalidArgument,
-		http.StatusNotFound,
+		http.StatusBadRequest,// TODO: change this to be http.StatusNotFound in 2 releases since it would be a breaking change to the errors/lock.go
 		fmt.Sprintf("%s %s is not found", metadata.LockStoreType, l.l.name),
-		"ERR_LOCK_NOT_FOUND",
+		"ERR_LOCK_STORE_NOT_FOUND",
 		errors.CodeNotFound,
 	)
 }
@@ -128,7 +128,7 @@ func (l *LockMetadataError) NotConfigured() error {
 		codes.FailedPrecondition,
 		http.StatusInternalServerError,
 		fmt.Sprintf("%s %s is not configured", metadata.LockStoreType, l.l.name),
-		"ERR_LOCK_NOT_CONFIGURED",
+		"ERR_LOCK_STORE_NOT_CONFIGURED",
 		errors.CodeNotConfigured,
 	)
 }
@@ -140,6 +140,6 @@ func (l *LockMetadataError) build(grpcCode codes.Code, httpCode int, msg, tag, e
 	}
 	return err.WithErrorInfo(
 		errors.CodePrefixLock+errCode,
-		nil,
+		l.metadata,
 	).Build()
 }
