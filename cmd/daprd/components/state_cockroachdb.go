@@ -26,7 +26,7 @@ func init() {
 	stateLoader.DefaultRegistry.RegisterComponentWithVersions("cockroachdb", components.Versioning{
 		Preferred: components.VersionConstructor{
 			// For v2, this component uses the same implementation as the postgres state store
-			Version: "v2", Constructor: pgv2.NewPostgreSQLStateStoreWithAzureAD,
+			Version: "v2", Constructor: pgv2.NewPostgreSQLStateStoreWithTrueOptions,
 		},
 		Others: []components.VersionConstructor{
 			{Version: "v1", Constructor: cockroachdb.New},
