@@ -35,15 +35,15 @@ Create chart name and version as used by the chart label.
 Formats imagePullSecrets. Input is dict( "imagePullSecrets" .{specific imagePullSecrets}).
 */}}
 {{- define "dapr.imagePullSecrets" -}}
-{{- if eq (typeOf .imagePullSecrets) "string" -}} {{- /* Single string value */ -}}
+{{- if eq (typeOf .imagePullSecrets) "string" }}
 - name: {{ .imagePullSecrets }}
-{{- else -}} {{- /* Not a string value, iterate */ -}}
-{{- range .imagePullSecrets -}}
-{{- if eq (typeOf .) "map[string]interface {}" -}} {{- /* k8s style */ -}}
+{{- else }}
+{{- range .imagePullSecrets }}
+{{- if eq (typeOf .) "map[string]interface {}" }}
 - {{ toYaml (dict "name" .name) | trim }}
-{{ else }} {{- /* helm style */ -}}
+{{- else }}
 - name: {{ . }}
-{{ end }} {{- /* End of inner if */ -}}
-{{- end -}}
-{{- end -}}
-{{- end -}}
+{{- end }}
+{{- end }}
+{{- end }}
+{{- end }}
