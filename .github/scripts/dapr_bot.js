@@ -6,6 +6,7 @@ const owners = [
     'artursouza',
     'ashiquemd',
     'berndverst',
+    'cicoyle',
     'daixiang0',
     'deepanshua',
     'halspang',
