@@ -22,6 +22,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -108,11 +109,11 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
-			Methods: []string{http.MethodPost, http.MethodPut},
-			Route:   "actors/{actorType}/{actorId}/reminders/{name}",
-			Version: apiVersionV1,
-			Group:   endpointGroupActorV1Misc,
-			Handler: a.onCreateActorReminder,
+			Methods:         []string{http.MethodPost, http.MethodPut},
+			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
+			Version:         apiVersionV1,
+			Group:           endpointGroupActorV1Misc,
+			FastHTTPHandler: a.onCreateActorReminder,
 			Settings: endpoints.EndpointSettings{
 				Name: "RegisterActorReminder",
 			},
@@ -160,44 +161,42 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 	}
 }
 
-func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
-	ctx := r.Context()
-
-	err := a.universal.ActorReadinessCheck(ctx)
-	if err != nil {
-		respondWithError(w, err)
+func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
+	if !a.actorReadinessCheckFastHTTP(reqCtx) {
 		return
 	}
+	actorType := reqCtx.UserValue(actorTypeParam).(string)
+	actorID := reqCtx.UserValue(actorIDParam).(string)
+	name := reqCtx.UserValue(nameParam).(string)
 
 	var req actors.CreateReminderRequest
-	err = json.NewDecoder(r.Body).Decode(&req)
+	err := json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
-		respondWithError(w, msg)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
 
-	req.Name = chi.URLParamFromCtx(ctx, nameParam)
-	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
-	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
+	req.Name = name
+	req.ActorType = actorType
+	req.ActorID = actorID
 
-	err = a.universal.Actors().CreateReminder(ctx, &req)
+	err = a.universal.Actors().CreateReminder(reqCtx, &req)
 	if err != nil {
 		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
 			msg := messages.ErrActorReminderOpActorNotHosted
-			respondWithError(w, msg)
+			universalFastHTTPErrorResponder(reqCtx, msg)
 			log.Debug(msg)
 			return
 		}
 
 		msg := messages.ErrActorReminderCreate.WithFormat(err)
-		respondWithError(w, msg)
+		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
 	}
-
-	respondWithEmpty(w)
+	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
@@ -473,4 +472,20 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	setResponseMetadataHeaders(w, resp.Metadata)
 
 	respondWithData(w, http.StatusOK, resp.Data)
+}
+
+// This function makes sure that the actor subsystem is ready.
+// If it returns false, handlers should return without performing any other action: responses will be sent to the client already.
+func (a *api) actorReadinessCheckFastHTTP(reqCtx *fasthttp.RequestCtx) bool {
+	// Note: with FastHTTP, reqCtx is tied to the context of the *server* and not the request.
+	// See: https://github.com/valyala/fasthttp/issues/1219#issuecomment-1041548933
+	// So, this is effectively a background context when using FastHTTP.
+	// There's no workaround besides migrating to the standard library's server.
+	a.universal.WaitForActorsReady(reqCtx)
+	if a.universal.Actors() == nil {
+		universalFastHTTPErrorResponder(reqCtx, messages.ErrActorRuntimeNotFound)
+		log.Debug(messages.ErrActorRuntimeNotFound)
+		return false
+	}
+	return true
 }
