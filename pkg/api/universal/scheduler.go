@@ -24,9 +24,6 @@ import (
 )
 
 func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
-	// TODO: make this specific for error metadata and dont send along to scheduler since these are now first class fields
-	// However, this change will need to be done once the 'triggerJob' from the cron library sends the data back
-	// So rm this once the cron lib sends the trigger job appID && namespace && scope back
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
