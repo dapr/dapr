@@ -274,10 +274,7 @@ func (m *Manager) NextClient() schedulerv1pb.SchedulerClient {
 		return m.clients[0].scheduler
 	}
 
-	// Randomly choose the starting index && get the next client
-	//nolint:gosec // there is no need for a crypto secure rand.
-	startingIndex := rand.Intn(len(m.clients))
-	nextIdx := (m.lastUsedIdx + startingIndex) % len(m.clients)
+	nextIdx := rand.Intn(len(m.clients))
 	nextClient := m.clients[nextIdx]
 
 	// Update the last used index
