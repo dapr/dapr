@@ -48,6 +48,13 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	//	return nil, fmt.Errorf("error parsing TTL: %w", err)
 	//}
 
+	metadata := req.GetMetadata()
+	if metadata == nil {
+		metadata = map[string]string{}
+	}
+	metadata["namespace"] = req.GetNamespace()
+	metadata["appID"] = req.GetAppId()
+
 	job := etcdcron.Job{
 		Name:      req.GetJob().GetName(),
 		Rhythm:    req.GetJob().GetSchedule(),
@@ -55,7 +62,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		StartTime: startTime,
 		// Expiration:       ttl,
 		Payload:  req.GetJob().GetData(),
-		Metadata: req.GetMetadata(),
+		Metadata: metadata,
 	}
 
 	err = s.cron.AddJob(ctx, job)
