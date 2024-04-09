@@ -27,25 +27,25 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	// TODO: make this specific for error metadata and dont send along to scheduler since these are now first class fields
 	// However, this change will need to be done once the 'triggerJob' from the cron library sends the data back
 	// So rm this once the cron lib sends the trigger job appID && namespace && scope back
-	metadata := map[string]string{
+	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
 	}
 
 	if inReq.GetJob() == nil {
-		return &emptypb.Empty{}, apierrors.Empty("Job", metadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
+		return &emptypb.Empty{}, apierrors.Empty("Job", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
 	}
 
 	if inReq.GetJob().GetName() == "" || inReq.GetJob().GetName() == " " {
-		return &emptypb.Empty{}, apierrors.Empty("Name", metadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
+		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
 	if inReq.GetJob().GetSchedule() == "" {
-		return &emptypb.Empty{}, apierrors.Empty("Schedule", metadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty))
+		return &emptypb.Empty{}, apierrors.Empty("Schedule", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty))
 	}
 
 	if inReq.GetJob().GetRepeats() < 0 {
-		return &emptypb.Empty{}, apierrors.IncorrectNegative("Repeats", metadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats))
+		return &emptypb.Empty{}, apierrors.IncorrectNegative("Repeats", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats))
 	}
 
 	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetJob().GetName()
@@ -59,7 +59,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 			DueTime:  inReq.GetJob().GetDueTime(),
 			Ttl:      inReq.GetJob().GetTtl(),
 		},
-		Metadata:  metadata, // TODO: this should generate key if jobStateStore is configured
+		// TODO: add Metadata for lookup if using state store: this should generate key if jobStateStore is configured
 		Namespace: a.Namespace(),
 		AppId:     a.appID,
 	}
@@ -67,27 +67,27 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	_, err := a.schedulerManager.NextClient().ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
 		a.logger.Errorf("Error scheduling job %s", inReq.GetJob().GetName())
-		return &emptypb.Empty{}, apierrors.SchedulerScheduleJob(metadata, err)
+		return &emptypb.Empty{}, apierrors.SchedulerScheduleJob(errMetadata, err)
 	}
 
 	return &emptypb.Empty{}, nil
 }
 
 func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*emptypb.Empty, error) {
-	metadata := map[string]string{
+	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
 	}
 
 	if inReq.GetName() == "" {
 		a.logger.Error("Job name is empty.")
-		return &emptypb.Empty{}, apierrors.Empty("Name", metadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
+		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
 	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetName()
 	internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
-		JobName:   jobName,
-		Metadata:  metadata, // TODO: rm the appID & NS from here once triggerJob is updated to send back appID + NS + Scope
+		JobName: jobName,
+		// TODO: add Metadata for lookup if using state store
 		Namespace: a.Namespace(),
 		AppId:     a.appID,
 	}
@@ -95,14 +95,14 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 	_, err := a.schedulerManager.NextClient().DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
 		a.logger.Errorf("Error deleting job: %s", inReq.GetName())
-		return &emptypb.Empty{}, apierrors.SchedulerDeleteJob(metadata, err)
+		return &emptypb.Empty{}, apierrors.SchedulerDeleteJob(errMetadata, err)
 	}
 
 	return &emptypb.Empty{}, nil
 }
 
 func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
-	metadata := map[string]string{
+	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
 	}
@@ -112,13 +112,13 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 
 	if inReq.GetName() == "" {
 		a.logger.Error("Job name is empty.")
-		return response, apierrors.Empty("Name", metadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
+		return response, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
 	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetName()
 	internalGetJobReq := &schedulerv1pb.GetJobRequest{
-		JobName:   jobName,
-		Metadata:  metadata, // TODO: rm the appID & NS from here once triggerJob is updated to send back appID + NS + Scope
+		JobName: jobName,
+		// TODO: add Metadata for lookup if using state store
 		Namespace: a.Namespace(),
 		AppId:     a.appID,
 	}
@@ -126,7 +126,7 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 	internalResp, err := a.schedulerManager.NextClient().GetJob(ctx, internalGetJobReq)
 	if err != nil {
 		a.logger.Errorf("Error getting job %s", inReq.GetName())
-		return nil, apierrors.SchedulerGetJob(metadata, err)
+		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 
 	response.Job = internalResp.GetJob()
