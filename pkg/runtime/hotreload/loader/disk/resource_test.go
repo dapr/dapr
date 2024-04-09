@@ -151,7 +151,7 @@ func Test_Stream(t *testing.T) {
 
 		updateCh := make(chan struct{})
 		r := newResource[componentsapi.Component](
-			loaderdisk.New[componentsapi.Component](dir),
+			loaderdisk.NewComponents(dir),
 			loadercompstore.NewComponent(store),
 			updateCh,
 		)
@@ -226,7 +226,7 @@ func Test_Stream(t *testing.T) {
 
 		updateCh := make(chan struct{})
 		r := newResource[componentsapi.Component](
-			loaderdisk.New[componentsapi.Component](dir),
+			loaderdisk.NewComponents(dir),
 			loadercompstore.NewComponent(store),
 			updateCh,
 		)
@@ -302,7 +302,7 @@ func Test_Stream(t *testing.T) {
 
 		updateCh := make(chan struct{})
 		r := newResource[componentsapi.Component](
-			loaderdisk.New[componentsapi.Component](dir),
+			loaderdisk.NewComponents(dir),
 			loadercompstore.NewComponent(store),
 			updateCh,
 		)

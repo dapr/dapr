@@ -33,7 +33,7 @@ import (
 func TestLoad(t *testing.T) {
 	t.Run("valid yaml content", func(t *testing.T) {
 		tmp := t.TempDir()
-		request := New[compapi.Component](tmp)
+		request := NewComponents(tmp)
 		filename := "test-component-valid.yaml"
 		yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -56,7 +56,7 @@ spec:
 
 	t.Run("invalid yaml head", func(t *testing.T) {
 		tmp := t.TempDir()
-		request := New[compapi.Component](tmp)
+		request := NewComponents(tmp)
 
 		filename := "test-component-invalid.yaml"
 		yaml := `
@@ -72,7 +72,7 @@ name: statestore`
 	})
 
 	t.Run("load components file not exist", func(t *testing.T) {
-		request := New[compapi.Component]("test-path-no-exists")
+		request := NewComponents("test-path-no-exists")
 
 		components, err := request.Load(context.Background())
 		require.Error(t, err)
@@ -195,13 +195,136 @@ metadata:
 				if test.namespace != nil {
 					t.Setenv("NAMESPACE", *test.namespace)
 				}
-
-				loader := New[compapi.Component](tmp)
+				loader := NewComponents(tmp)
 				components, err := loader.Load(context.Background())
-
 				assert.Equal(t, test.expErr, err != nil, "%v", err)
 				assert.Equal(t, test.expComps, components)
 			})
 		}
+	})
+}
+
+func Test_loadWithOrder(t *testing.T) {
+	t.Run("no file should return empty set", func(t *testing.T) {
+		tmp := t.TempDir()
+		d := NewComponents(tmp).(*disk[compapi.Component])
+		set, err := d.loadWithOrder()
+		require.NoError(t, err)
+		assert.Empty(t, set.order)
+		assert.Empty(t, set.ts)
+	})
+
+	t.Run("single manifest file should return", func(t *testing.T) {
+		tmp := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(tmp, "test-component.yaml"), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.couchbase
+`), fs.FileMode(0o600)))
+
+		d := NewComponents(tmp).(*disk[compapi.Component])
+		set, err := d.loadWithOrder()
+		require.NoError(t, err)
+		assert.Equal(t, []manifestOrder{
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 0},
+		}, set.order)
+		assert.Len(t, set.ts, 1)
+	})
+
+	t.Run("3 manifest file should have order set", func(t *testing.T) {
+		tmp := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(tmp, "test-component.yaml"), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.couchbase
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.couchbase
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.couchbase
+`), fs.FileMode(0o600)))
+
+		d := NewComponents(tmp).(*disk[compapi.Component])
+		set, err := d.loadWithOrder()
+		require.NoError(t, err)
+		assert.Equal(t, []manifestOrder{
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 0},
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 1},
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 2},
+		}, set.order)
+		assert.Len(t, set.ts, 3)
+	})
+
+	t.Run("3 dirs, 3 files, 3 manifests should return order. Skips manifests of different type", func(t *testing.T) {
+		tmp1, tmp2, tmp3 := t.TempDir(), t.TempDir(), t.TempDir()
+
+		for _, dir := range []string{tmp1, tmp2, tmp3} {
+			for _, file := range []string{"1.yaml", "2.yaml", "3.yaml"} {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.couchbase
+---
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+  name: statestore
+spec:
+  type: state.couchbase
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.couchbase
+`), fs.FileMode(0o600)))
+			}
+		}
+
+		d := NewComponents(tmp1, tmp2, tmp3).(*disk[compapi.Component])
+		set, err := d.loadWithOrder()
+		require.NoError(t, err)
+		assert.Equal(t, []manifestOrder{
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 0},
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 2},
+			{dirIndex: 0, fileIndex: 1, manifestIndex: 0},
+			{dirIndex: 0, fileIndex: 1, manifestIndex: 2},
+			{dirIndex: 0, fileIndex: 2, manifestIndex: 0},
+			{dirIndex: 0, fileIndex: 2, manifestIndex: 2},
+
+			{dirIndex: 1, fileIndex: 0, manifestIndex: 0},
+			{dirIndex: 1, fileIndex: 0, manifestIndex: 2},
+			{dirIndex: 1, fileIndex: 1, manifestIndex: 0},
+			{dirIndex: 1, fileIndex: 1, manifestIndex: 2},
+			{dirIndex: 1, fileIndex: 2, manifestIndex: 0},
+			{dirIndex: 1, fileIndex: 2, manifestIndex: 2},
+
+			{dirIndex: 2, fileIndex: 0, manifestIndex: 0},
+			{dirIndex: 2, fileIndex: 0, manifestIndex: 2},
+			{dirIndex: 2, fileIndex: 1, manifestIndex: 0},
+			{dirIndex: 2, fileIndex: 1, manifestIndex: 2},
+			{dirIndex: 2, fileIndex: 2, manifestIndex: 0},
+			{dirIndex: 2, fileIndex: 2, manifestIndex: 2},
+		}, set.order)
+		assert.Len(t, set.ts, 18)
 	})
 }
