@@ -23,7 +23,7 @@ import (
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 
-	"github.com/dapr/components-contrib/workflows" // This will be removed
+	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/kit/logger"
 )
 
