@@ -17,24 +17,24 @@ import (
 	"context"
 	"sort"
 
-	subv1api "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	subv2api "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	"github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/internal/loader"
 )
 
 type subscriptions struct {
-	v1 *disk[subv1api.Subscription]
-	v2 *disk[subv2api.Subscription]
+	v1 *disk[v1alpha1.Subscription]
+	v2 *disk[v2alpha1.Subscription]
 }
 
-func NewSubscriptions(paths ...string) loader.Loader[subv2api.Subscription] {
+func NewSubscriptions(paths ...string) loader.Loader[v2alpha1.Subscription] {
 	return &subscriptions{
-		v1: new[subv1api.Subscription](paths...),
-		v2: new[subv2api.Subscription](paths...),
+		v1: new[v1alpha1.Subscription](paths...),
+		v2: new[v2alpha1.Subscription](paths...),
 	}
 }
 
-func (s *subscriptions) Load(context.Context) ([]subv2api.Subscription, error) {
+func (s *subscriptions) Load(context.Context) ([]v2alpha1.Subscription, error) {
 	v1, err := s.v1.loadWithOrder()
 	if err != nil {
 		return nil, err
@@ -48,7 +48,7 @@ func (s *subscriptions) Load(context.Context) ([]subv2api.Subscription, error) {
 	v2.order = append(v2.order, v1.order...)
 
 	for _, s := range v1.ts {
-		var subv2 subv2api.Subscription
+		var subv2 v2alpha1.Subscription
 		if err := subv2.ConvertFrom(s.DeepCopy()); err != nil {
 			return nil, err
 		}
