@@ -196,7 +196,8 @@ func (m *Manager) processStream(ctx context.Context, client *schedulerClient, st
 						return streamerr
 					}
 				}
-				log.Infof("Received response: %+v %+v", resp.GetData(), resp.GetMetadata()) // TODO rm this once it sends the triggered job back to the app
+				// TODO(Cassie): rm this once it sends the triggered job back to the app
+				log.Infof("Received response: %+v %+v", resp.GetData(), resp.GetMetadata())
 			}
 		}
 	}

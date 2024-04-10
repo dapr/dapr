@@ -20,6 +20,8 @@ service Scheduler {
   rpc WatchJob(StreamJobRequest) returns (stream StreamJobResponse) {}
 }
 
+// TODO(Cassie): add an internal Job message to have a diff one than dapr.proto
+
 message StreamJobRequest {
 	// The app_id of the sidecar.
 	string app_id = 1;

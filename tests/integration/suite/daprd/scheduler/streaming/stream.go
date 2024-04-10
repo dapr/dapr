@@ -62,6 +62,7 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 
 	opts := []scheduler.Option{
+		// TODO(Cassie): clean up having to do the string templating here. mv it to the test framework.
 		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", port1, port2, port3)),
 		scheduler.WithInitialClusterPorts(port1, port2, port3),
 	}
