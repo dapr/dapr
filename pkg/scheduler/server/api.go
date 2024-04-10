@@ -60,7 +60,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		Rhythm:    req.GetJob().GetSchedule(),
 		Repeats:   req.GetJob().GetRepeats(),
 		StartTime: startTime,
-		// Expiration:       ttl,
+		// Expiration:       ttl, // TODO: add this back in once artur opens his PR
 		Payload:  req.GetJob().GetData(),
 		Metadata: metadata,
 	}
