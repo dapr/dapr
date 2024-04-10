@@ -131,8 +131,8 @@ func (m *manifestSet[T]) decodeYaml(f io.Reader) error {
 			continue
 		}
 
-		if errS := path.IsValidPathSegmentName(ti.Name); len(errS) > 0 {
-			errs = append(errs, fmt.Errorf("invalid name %q for %q: %s", ti.Name, m.d.kind, strings.Join(errS, "; ")))
+		if patherrs := path.IsValidPathSegmentName(ti.Name); len(patherrs) > 0 {
+			errs = append(errs, fmt.Errorf("invalid name %q for %q: %s", ti.Name, m.d.kind, strings.Join(patherrs, "; ")))
 			continue
 		}
 
