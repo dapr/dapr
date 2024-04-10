@@ -17,8 +17,12 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"net/http"
+	nethttp "net/http"
 	"strings"
+
+	"github.com/go-chi/chi/v5"
+	"github.com/valyala/fasthttp"
+	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
@@ -28,9 +32,6 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/go-chi/chi/v5"
-	"github.com/valyala/fasthttp"
-	"google.golang.org/grpc/codes"
 )
 
 var endpointGroupActorV1State = &endpoints.EndpointGroup{
@@ -46,7 +47,7 @@ var endpointGroupActorV1Misc = &endpoints.EndpointGroup{
 	AppendSpanAttributes: nil, // TODO
 }
 
-func appendActorStateSpanAttributesFn(r *http.Request, m map[string]string) {
+func appendActorStateSpanAttributesFn(r *nethttp.Request, m map[string]string) {
 	m[diagConsts.DaprAPIActorTypeID] = chi.URLParam(r, actorTypeParam) + "." + chi.URLParam(r, actorIDParam)
 	m[diagConsts.DBSystemSpanAttributeKey] = diagConsts.StateBuildingBlockType
 	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.StateBuildingBlockType
@@ -54,7 +55,7 @@ func appendActorStateSpanAttributesFn(r *http.Request, m map[string]string) {
 	m[diagConsts.DBNameSpanAttributeKey] = "actor"
 }
 
-func appendActorInvocationSpanAttributesFn(r *http.Request, m map[string]string) {
+func appendActorInvocationSpanAttributesFn(r *nethttp.Request, m map[string]string) {
 	actorType := chi.URLParam(r, actorTypeParam)
 	actorTypeID := actorType + "." + chi.URLParam(r, actorIDParam)
 	m[diagConsts.DaprAPIActorTypeID] = actorTypeID
@@ -63,14 +64,14 @@ func appendActorInvocationSpanAttributesFn(r *http.Request, m map[string]string)
 	m[diagConsts.DaprAPISpanNameInternal] = "CallActor/" + actorType + "/" + chi.URLParam(r, "method")
 }
 
-func actorInvocationMethodNameFn(r *http.Request) string {
+func actorInvocationMethodNameFn(r *nethttp.Request) string {
 	return "InvokeActor/" + chi.URLParam(r, actorTypeParam) + "." + chi.URLParam(r, actorIDParam)
 }
 
 func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 	return []endpoints.Endpoint{
 		{
-			Methods:         []string{http.MethodPost, http.MethodPut},
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:           "actors/{actorType}/{actorId}/state",
 			Version:         apiVersionV1,
 			Group:           endpointGroupActorV1State,
@@ -80,7 +81,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
-			Methods: []string{http.MethodGet, http.MethodPost, http.MethodDelete, http.MethodPut},
+			Methods: []string{nethttp.MethodGet, nethttp.MethodPost, nethttp.MethodDelete, nethttp.MethodPut},
 			Route:   "actors/{actorType}/{actorId}/method/{method}",
 			Version: apiVersionV1,
 			Group: &endpoints.EndpointGroup{
@@ -95,7 +96,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
-			Methods:         []string{http.MethodGet},
+			Methods:         []string{nethttp.MethodGet},
 			Route:           "actors/{actorType}/{actorId}/state/{key}",
 			Version:         apiVersionV1,
 			Group:           endpointGroupActorV1State,
@@ -105,7 +106,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
-			Methods:         []string{http.MethodPost, http.MethodPut},
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
 			Version:         apiVersionV1,
 			Group:           endpointGroupActorV1Misc,
@@ -115,7 +116,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
-			Methods:         []string{http.MethodPost, http.MethodPut},
+			Methods:         []string{nethttp.MethodPost, nethttp.MethodPut},
 			Route:           "actors/{actorType}/{actorId}/timers/{name}",
 			Version:         apiVersionV1,
 			Group:           endpointGroupActorV1Misc,
@@ -125,7 +126,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
-			Methods:         []string{http.MethodDelete},
+			Methods:         []string{nethttp.MethodDelete},
 			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
 			Version:         apiVersionV1,
 			Group:           endpointGroupActorV1Misc,
@@ -135,7 +136,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
-			Methods:         []string{http.MethodDelete},
+			Methods:         []string{nethttp.MethodDelete},
 			Route:           "actors/{actorType}/{actorId}/timers/{name}",
 			Version:         apiVersionV1,
 			Group:           endpointGroupActorV1Misc,
@@ -145,7 +146,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 			},
 		},
 		{
-			Methods:         []string{http.MethodGet},
+			Methods:         []string{nethttp.MethodGet},
 			Route:           "actors/{actorType}/{actorId}/reminders/{name}",
 			Version:         apiVersionV1,
 			Group:           endpointGroupActorV1Misc,
@@ -159,8 +160,10 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 
 func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 	if !a.actorReadinessCheckFastHTTP(reqCtx) {
+		// Response already sent
 		return
 	}
+
 	actorType := reqCtx.UserValue(actorTypeParam).(string)
 	actorID := reqCtx.UserValue(actorIDParam).(string)
 	name := reqCtx.UserValue(nameParam).(string)
@@ -188,10 +191,11 @@ func (a *api) onCreateActorReminder(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		msg := messages.ErrActorReminderCreate.WithFormat(err)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
+
 	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
@@ -221,12 +225,11 @@ func (a *api) onCreateActorTimer(reqCtx *fasthttp.RequestCtx) {
 	err = a.universal.Actors().CreateTimer(reqCtx, &req)
 	if err != nil {
 		msg := messages.ErrActorTimerCreate.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
-		return
+	} else {
+		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 	}
-
-	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
@@ -255,7 +258,7 @@ func (a *api) onDeleteActorReminder(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		msg := messages.ErrActorReminderDelete.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
@@ -276,8 +279,8 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	var ops []actors.TransactionalOperation
 	err := json.Unmarshal(body, &ops)
 	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusBadRequest, msg))
+		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
 	}
@@ -289,7 +292,7 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 	if !hosted {
 		msg := messages.ErrActorInstanceMissing
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusBadRequest, msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
 	}
@@ -303,12 +306,11 @@ func (a *api) onActorStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	err = a.universal.Actors().TransactionalStateOperation(reqCtx, &req)
 	if err != nil {
 		msg := messages.ErrActorStateTransactionSave.WithFormat(err)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
-		return
+	} else {
+		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 	}
-
-	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
@@ -335,7 +337,7 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 		}
 
 		msg := messages.ErrActorReminderGet.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
@@ -343,12 +345,12 @@ func (a *api) onGetActorReminder(reqCtx *fasthttp.RequestCtx) {
 	b, err := json.Marshal(resp)
 	if err != nil {
 		msg := messages.ErrActorReminderGet.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
 
-	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(http.StatusOK, b, nil))
+	fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, b, nil))
 }
 
 func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
@@ -369,11 +371,11 @@ func (a *api) onDeleteActorTimer(reqCtx *fasthttp.RequestCtx) {
 	err := a.universal.Actors().DeleteTimer(reqCtx, &req)
 	if err != nil {
 		msg := messages.ErrActorTimerDelete.WithFormat(err)
-		universalFastHTTPErrorResponder(reqCtx, msg)
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
-		return
+	} else {
+		fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 	}
-	fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 }
 
 func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
@@ -411,7 +413,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 		actorErr, isActorError := actorerrors.As(err)
 		if !isActorError {
 			msg := messages.ErrActorInvoke.WithFormat(err)
-			fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 			log.Debug(msg)
 			return
 		}
@@ -429,7 +431,7 @@ func (a *api) onDirectActorMessage(reqCtx *fasthttp.RequestCtx) {
 
 	if res == nil {
 		msg := messages.ErrActorInvoke.WithFormat("failed to cast response")
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
 	}
@@ -464,26 +466,28 @@ func (a *api) onGetActorState(reqCtx *fasthttp.RequestCtx) {
 
 	if !hosted {
 		msg := messages.ErrActorInstanceMissing
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusBadRequest, msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
 	}
 
-	resp, err := a.universal.Actors().GetState(reqCtx, &actors.GetStateRequest{
+	req := actors.GetStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Key:       key,
-	})
+	}
+
+	resp, err := a.universal.Actors().GetState(reqCtx, &req)
 	if err != nil {
 		msg := messages.ErrActorStateGet.WithFormat(err)
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {
 		if resp == nil || len(resp.Data) == 0 {
 			fasthttpRespond(reqCtx, fasthttpResponseWithEmpty())
 			return
 		}
-		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(http.StatusOK, resp.Data, resp.Metadata))
+		fasthttpRespond(reqCtx, fasthttpResponseWithJSON(nethttp.StatusOK, resp.Data, resp.Metadata))
 	}
 }
 
@@ -495,10 +499,12 @@ func (a *api) actorReadinessCheckFastHTTP(reqCtx *fasthttp.RequestCtx) bool {
 	// So, this is effectively a background context when using FastHTTP.
 	// There's no workaround besides migrating to the standard library's server.
 	a.universal.WaitForActorsReady(reqCtx)
+
 	if a.universal.Actors() == nil {
 		universalFastHTTPErrorResponder(reqCtx, messages.ErrActorRuntimeNotFound)
 		log.Debug(messages.ErrActorRuntimeNotFound)
 		return false
 	}
+
 	return true
 }
