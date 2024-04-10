@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"os"
@@ -288,12 +289,12 @@ func (d *Daprd) Namespace() string {
 	return d.namespace
 }
 
-func (d *Daprd) AppPort() int {
-	return d.appPort
-}
-
 func (d *Daprd) ipPort(port int) string {
 	return "127.0.0.1:" + strconv.Itoa(port)
+}
+
+func (d *Daprd) AppPort() int {
+	return d.appPort
 }
 
 func (d *Daprd) AppAddress() string {
@@ -369,4 +370,35 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	}
 
 	return metrics
+}
+
+func (d *Daprd) HTTPGet2xx(t *testing.T, ctx context.Context, path string) {
+	t.Helper()
+	d.http2xx(t, ctx, http.MethodGet, path, nil)
+}
+
+func (d *Daprd) HTTPPost2xx(t *testing.T, ctx context.Context, path string, body io.Reader, headers ...string) {
+	t.Helper()
+	d.http2xx(t, ctx, http.MethodPost, path, body, headers...)
+}
+
+func (d *Daprd) http2xx(t *testing.T, ctx context.Context, method, path string, body io.Reader, headers ...string) {
+	t.Helper()
+
+	require.Zero(t, len(headers)%2, "headers must be key-value pairs")
+
+	path = strings.TrimPrefix(path, "/")
+	url := fmt.Sprintf("http://%s/%s", d.HTTPAddress(), path)
+	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	require.NoError(t, err)
+
+	for i := 0; i < len(headers); i += 2 {
+		req.Header.Set(headers[i], headers[i+1])
+	}
+
+	resp, err := d.httpClient.Do(req)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	require.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code")
+	require.Less(t, resp.StatusCode, 300, "expected 2xx status code")
 }
