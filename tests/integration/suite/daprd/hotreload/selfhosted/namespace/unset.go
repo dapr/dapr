@@ -91,7 +91,7 @@ func (u *unset) Run(t *testing.T, ctx context.Context) {
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 			},
-		}, u.daprd.RegistedComponents(t, ctx))
+		}, u.daprd.GetMetaRegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(u.resDir, "1.yaml"), []byte(`
@@ -111,7 +111,7 @@ spec:
 				Name: "123", Type: "pubsub.in-memory", Version: "v1",
 				Capabilities: []string{"SUBSCRIBE_WILDCARDS"},
 			},
-		}, u.daprd.RegistedComponents(t, ctx))
+		}, u.daprd.GetMetaRegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(u.resDir, "1.yaml"), []byte(`
@@ -131,7 +131,7 @@ spec:
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 			},
-		}, u.daprd.RegistedComponents(t, ctx))
+		}, u.daprd.GetMetaRegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(u.resDir, "1.yaml"), []byte(`
@@ -164,7 +164,7 @@ spec:
 				Name: "foo", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 			},
-		}, u.daprd.RegistedComponents(t, ctx))
+		}, u.daprd.GetMetaRegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(u.resDir, "1.yaml"), []byte(`

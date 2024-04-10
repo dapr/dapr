@@ -47,6 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/universal"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	endpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
@@ -192,12 +193,38 @@ func newDaprRuntime(ctx context.Context,
 		Resiliency:     resiliencyProvider,
 		Mode:           runtimeConfig.mode,
 		PodName:        podName,
-		Standalone:     runtimeConfig.standalone,
 		OperatorClient: operatorClient,
 		GRPC:           grpc,
 		Channels:       channels,
 		MiddlewareHTTP: httpMiddleware,
 	})
+
+	var reloader *hotreload.Reloader
+	switch runtimeConfig.mode {
+	case modes.KubernetesMode:
+		reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
+			PodName:        podName,
+			Namespace:      namespace,
+			Client:         operatorClient,
+			Config:         globalConfig,
+			ComponentStore: compStore,
+			Authorizer:     authz,
+			Processor:      processor,
+		})
+	case modes.StandaloneMode:
+		reloader, err = hotreload.NewDisk(hotreload.OptionsReloaderDisk{
+			Config:         globalConfig,
+			Dirs:           runtimeConfig.standalone.ResourcesPath,
+			ComponentStore: compStore,
+			Authorizer:     authz,
+			Processor:      processor,
+		})
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
+	}
 
 	rt := &DaprRuntime{
 		runtimeConfig:     runtimeConfig,
@@ -214,6 +241,7 @@ func newDaprRuntime(ctx context.Context,
 		sec:               sec,
 		processor:         processor,
 		authz:             authz,
+		reloader:          reloader,
 		namespace:         namespace,
 		podName:           podName,
 		initComplete:      make(chan struct{}),
@@ -223,35 +251,6 @@ func newDaprRuntime(ctx context.Context,
 	}
 	close(rt.isAppHealthy)
 
-	if globalConfig.IsFeatureEnabled(config.HotReload) {
-		log.Info("Hot reloading enabled. Daprd will reload 'Component' resources on change.")
-		switch runtimeConfig.mode {
-		case modes.KubernetesMode:
-			rt.reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
-				PodName:        podName,
-				Namespace:      namespace,
-				Client:         operatorClient,
-				ComponentStore: compStore,
-				Authorizer:     authz,
-				Processor:      processor,
-			})
-		case modes.StandaloneMode:
-			rt.reloader, err = hotreload.NewDisk(hotreload.OptionsReloaderDisk{
-				Dirs:           runtimeConfig.standalone.ResourcesPath,
-				ComponentStore: compStore,
-				Authorizer:     authz,
-				Processor:      processor,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to create hot reload disk reloader: %w", err)
-			}
-		default:
-			return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
-		}
-	} else {
-		log.Debug("Hot reloading disabled")
-	}
-
 	var gracePeriod *time.Duration
 	if duration := runtimeConfig.gracefulShutdownDuration; duration > 0 {
 		gracePeriod = &duration
@@ -260,6 +259,7 @@ func newDaprRuntime(ctx context.Context,
 	rt.runnerCloser = concurrency.NewRunnerCloserManager(gracePeriod,
 		rt.runtimeConfig.metricsExporter.Run,
 		rt.processor.Process,
+		rt.reloader.Run,
 		func(ctx context.Context) error {
 			start := time.Now()
 			log.Infof("%s mode configured", rt.runtimeConfig.mode)
@@ -283,12 +283,6 @@ func newDaprRuntime(ctx context.Context,
 			return nil
 		},
 	)
-
-	if rt.reloader != nil {
-		if err := rt.runnerCloser.Add(rt.reloader.Run); err != nil {
-			return nil, err
-		}
-	}
 
 	if err := rt.runnerCloser.AddCloser(
 		func() error {
@@ -485,8 +479,13 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if err != nil {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
 	}
-
 	a.flushOutstandingHTTPEndpoints(ctx)
+
+	err = a.loadDeclarativeSubscriptions(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load declarative subscriptions: %s", err)
+	}
+	a.flushOutstandingSubscriptions(ctx)
 
 	if err = a.channels.Refresh(); err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
@@ -1036,6 +1035,38 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 	return nil
 }
 
+func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
+	var loader loader.Loader[subapi.Subscription]
+
+	switch a.runtimeConfig.mode {
+	case modes.KubernetesMode:
+		loader = kubernetes.NewSubscriptions(kubernetes.Options{
+			Client:    a.operatorClient,
+			Namespace: a.namespace,
+			PodName:   a.podName,
+		})
+	case modes.StandaloneMode:
+		loader = disk.NewSubscriptions(a.runtimeConfig.standalone.ResourcesPath...)
+	default:
+		return nil
+	}
+
+	log.Info("Loading Declarative Subscriptions…")
+	subs, err := loader.Load(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, s := range subs {
+		log.Infof("Found Subscription: %s", s.Name)
+		if !a.processor.AddPendingSubscription(ctx, s) {
+			return nil
+		}
+	}
+
+	return nil
+}
+
 func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
 	log.Info("Waiting for all outstanding http endpoints to be processed…")
 	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
@@ -1050,6 +1081,12 @@ func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
 	a.processor.AddPendingComponent(ctx, compapi.Component{})
 	log.Info("All outstanding components processed")
+}
+
+func (a *DaprRuntime) flushOutstandingSubscriptions(ctx context.Context) {
+	log.Info("Waiting for all outstanding Subscriptions to be processed…")
+	a.processor.AddPendingSubscription(ctx, subapi.Subscription{})
+	log.Info("All outstanding declarative Subscriptions processed")
 }
 
 func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
