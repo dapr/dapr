@@ -316,7 +316,6 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 				// This disseminates the latest consistent hashing tables to Dapr runtime.
 				if err := p.performTableDissemination(ctx); err != nil {
 					log.Errorf("fail to perform table dissemination. Details: %v", err)
-					p.revokeLeadership()
 				}
 			}
 		}
