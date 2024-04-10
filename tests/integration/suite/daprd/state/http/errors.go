@@ -19,22 +19,19 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/nettest"
 
 	"github.com/dapr/components-contrib/state"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore/inmemory"
+	"github.com/dapr/dapr/tests/integration/framework/socket"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -61,16 +58,7 @@ func (e *errors) Setup(t *testing.T) []framework.Option {
 		t.Skip("skipping unix socket based test on windows")
 	}
 
-	// Darwin enforces a maximum 104 byte socket name limit, so we need to be a
-	// bit fancy on how we generate the name.
-	tmp, err := nettest.LocalPath()
-	require.NoError(t, err)
-
-	socketDir := filepath.Join(tmp, util.RandomString(t, 4))
-	require.NoError(t, os.MkdirAll(socketDir, 0o700))
-	t.Cleanup(func() {
-		require.NoError(t, os.RemoveAll(socketDir))
-	})
+	socket := socket.New(t)
 
 	e.queryErr = func(t *testing.T) error {
 		require.FailNow(t, "query should not be called")
@@ -78,14 +66,14 @@ func (e *errors) Setup(t *testing.T) []framework.Option {
 	}
 
 	storeWithNoTransactional := statestore.New(t,
-		statestore.WithSocketDirectory(socketDir),
+		statestore.WithSocket(socket),
 		statestore.WithStateStore(inmemory.New(t,
 			inmemory.WithFeatures(),
 		)),
 	)
 
 	storeWithQuerier := statestore.New(t,
-		statestore.WithSocketDirectory(socketDir),
+		statestore.WithSocket(socket),
 		statestore.WithStateStore(inmemory.NewQuerier(t,
 			inmemory.WithQueryFn(func(context.Context, *state.QueryRequest) (*state.QueryResponse, error) {
 				return nil, e.queryErr(t)
@@ -93,7 +81,7 @@ func (e *errors) Setup(t *testing.T) []framework.Option {
 		)),
 	)
 	storeWithMultiMaxSize := statestore.New(t,
-		statestore.WithSocketDirectory(socketDir),
+		statestore.WithSocket(socket),
 		statestore.WithStateStore(inmemory.NewTransactionalMultiMaxSize(t,
 			inmemory.WithTransactionalStoreMultiMaxSizeFn(func() int {
 				return 1
@@ -134,9 +122,7 @@ spec:
   type: state.%s
   version: v1
 `, storeWithNoTransactional.SocketName(), storeWithQuerier.SocketName(), storeWithMultiMaxSize.SocketName())),
-		procdaprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
-		)),
+		procdaprd.WithSocket(t, socket),
 	)
 
 	return []framework.Option{
@@ -397,7 +383,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		storeName := "mystore-pluggable-querier"
 
 		e.queryErr = func(*testing.T) error {
-			return apierrors.StateStoreQueryFailed(storeName, "this is a custom error string")
+			return apierrors.StateStore(storeName).QueryFailed("this is a custom error string")
 		}
 
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/state/%s/query", e.daprd.HTTPPort(), storeName)

@@ -39,7 +39,7 @@ type unique struct {
 
 func (u *unique) Setup(t *testing.T) []framework.Option {
 	u.logline = logline.New(t, logline.WithStdoutLineContains(
-		`Fatal error from runtime: failed to load components: duplicate definition of component name abc (pubsub.in-memory/v1) with existing abc (state.in-memory/v1)\nduplicate definition of component name abc (state.in-memory/v1) with existing abc (state.in-memory/v1)\nduplicate definition of component name 123 (state.in-memory/v1) with existing 123 (state.in-memory/v1)\nduplicate definition of component name 123 (pubsub.in-memory/v1) with existing 123 (state.in-memory/v1)`,
+		`Fatal error from runtime: failed to load components: duplicate definition of Component name abc (pubsub.in-memory/v1) with existing abc (state.in-memory/v1)\nduplicate definition of Component name abc (state.in-memory/v1) with existing abc (state.in-memory/v1)\nduplicate definition of Component name 123 (state.in-memory/v1) with existing 123 (state.in-memory/v1)\nduplicate definition of Component name 123 (pubsub.in-memory/v1) with existing 123 (state.in-memory/v1)`,
 	))
 
 	u.daprd = daprd.New(t, daprd.WithResourceFiles(`

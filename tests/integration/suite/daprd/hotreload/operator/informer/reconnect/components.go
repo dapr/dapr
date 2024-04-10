@@ -101,6 +101,7 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 		daprd.WithConfigs("daprsystem"),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(c.operator1.Address()),
+		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithEnableMTLS(true),
 		daprd.WithNamespace("default"),
