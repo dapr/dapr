@@ -210,6 +210,10 @@ func (f *Fake) WatchTrustAnchors(ctx context.Context, ch chan<- []byte) {
 	f.watchTrustAnchorsFn(ctx, ch)
 }
 
+func (f *Fake) WithSVIDContext(ctx context.Context) context.Context {
+	return ctx
+}
+
 func (f *Fake) GRPCDialOption(id spiffeid.ID) grpc.DialOption {
 	return f.grpcDialOptionFn(id)
 }

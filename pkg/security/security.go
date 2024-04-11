@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/crypto/spiffe"
+	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
 	"github.com/dapr/kit/crypto/spiffe/trustanchors"
 	"github.com/dapr/kit/logger"
 )
@@ -55,6 +56,7 @@ type Handler interface {
 	ControlPlaneTrustDomain() spiffeid.TrustDomain
 	ControlPlaneNamespace() string
 	CurrentTrustAnchors(context.Context) ([]byte, error)
+	WithSVIDContext(context.Context) context.Context
 
 	MTLSEnabled() bool
 	WatchTrustAnchors(context.Context, chan<- []byte)
@@ -383,4 +385,12 @@ func SentryID(sentryTrustDomain spiffeid.TrustDomain, sentryNamespace string) (s
 	}
 
 	return sentryID, nil
+}
+
+func (s *security) WithSVIDContext(ctx context.Context) context.Context {
+	if s.spiffe == nil {
+		return ctx
+	}
+
+	return spiffecontext.With(ctx, s.spiffe)
 }
