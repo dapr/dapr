@@ -24,7 +24,6 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/scheduler"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal"
 	timeutils "github.com/dapr/kit/time"
 )
@@ -200,14 +199,10 @@ func parseTTL(ttl string) (time.Duration, error) {
 
 // WatchJobs sends jobs to Dapr sidecars upon component changes.
 func (s *Server) WatchJobs(req *schedulerv1pb.WatchJobsRequest, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
-	sidecarConnDetails := &scheduler.SidecarConnDetails{
+	conn := &internal.Connection{
 		Namespace: req.GetNamespace(),
 		AppID:     req.GetAppId(),
-	}
-
-	conn := &internal.Connection{
-		ConnDetails: sidecarConnDetails,
-		Stream:      stream,
+		Stream:    stream,
 	}
 
 	s.sidecarConnChan <- conn

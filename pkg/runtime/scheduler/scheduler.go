@@ -23,7 +23,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/scheduler"
 	"github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
@@ -35,7 +34,8 @@ var log = logger.NewLogger("dapr.runtime.scheduler")
 // Manager manages connections to multiple schedulers.
 type Manager struct {
 	clients     []*client.Client
-	connDetails scheduler.SidecarConnDetails
+	namespace   string
+	appID       string
 	lastUsedIdx int64
 }
 
@@ -47,13 +47,9 @@ type Options struct {
 }
 
 func NewManager(ctx context.Context, opts Options) *Manager {
-	sidecarDetails := scheduler.SidecarConnDetails{
-		Namespace: opts.Namespace,
-		AppID:     opts.AppID,
-	}
-
 	manager := &Manager{
-		connDetails: sidecarDetails,
+		namespace: opts.Namespace,
+		appID:     opts.AppID,
 	}
 
 	schedulerHostPorts := strings.Split(opts.Addresses, ",")
@@ -220,8 +216,8 @@ func (m *Manager) establishSchedulerConn(ctx context.Context, client *client.Cli
 // watchJobs starts watching for job triggers from a single scheduler client.
 func (m *Manager) watchJobs(ctx context.Context, client *client.Client) error {
 	streamReq := &schedulerv1pb.WatchJobsRequest{
-		AppId:     m.connDetails.AppID,
-		Namespace: m.connDetails.Namespace,
+		AppId:     m.appID,
+		Namespace: m.namespace,
 	}
 	return m.establishSchedulerConn(ctx, client, streamReq)
 }
