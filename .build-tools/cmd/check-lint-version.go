@@ -92,7 +92,7 @@ func getCmdCheckLint(cmdType string) *cobra.Command {
 			res, err := compareVersions(path)
 			fmt.Println(res)
 			if err != nil {
-				fmt.Println("Please install the correct version using the guide - https://golangci-lint.run/usage/install/")
+				fmt.Println("Please install the correct version using the guide - https://golangci-lint.run/welcome/install/")
 				if err == ErrVersionNotSupported {
 					fmt.Println("Alternatively review the golangci-lint version in the workflow file at .github/workflows/dapr.yml")
 				}
