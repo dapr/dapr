@@ -1959,6 +1959,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		Mode:           rt.runtimeConfig.mode,
 		Channels:       rt.channels,
 		GRPC:           rt.grpc,
+		Security:       rt.sec,
 	})
 
 	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))
