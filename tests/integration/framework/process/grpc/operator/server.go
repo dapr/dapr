@@ -86,12 +86,12 @@ func (s *server) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*ope
 	if s.listSubscriptionsFn != nil {
 		return s.listSubscriptionsFn(ctx, in)
 	}
-	return nil, nil
+	return new(operatorv1.ListSubscriptionsResponse), nil
 }
 
 func (s *server) ListSubscriptionsV2(ctx context.Context, in *operatorv1.ListSubscriptionsRequest) (*operatorv1.ListSubscriptionsResponse, error) {
 	if s.listSubscriptionsV2Fn != nil {
 		return s.listSubscriptionsV2Fn(ctx, in)
 	}
-	return nil, nil
+	return new(operatorv1.ListSubscriptionsResponse), nil
 }
