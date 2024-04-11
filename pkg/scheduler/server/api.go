@@ -43,10 +43,10 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	}
 	// TODO: ONLY add expiration if ttl is parsed
 
-	//ttl, err := parseTTL(req.GetJob().GetTtl())
-	//if err != nil {
+	// ttl, err := parseTTL(req.GetJob().GetTtl())
+	// if err != nil {
 	//	return nil, fmt.Errorf("error parsing TTL: %w", err)
-	//}
+	// }
 
 	metadata := req.GetMetadata()
 	if metadata == nil {
