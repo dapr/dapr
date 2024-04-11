@@ -240,21 +240,21 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: statestore
+  name: foo1
 spec:
   type: state.couchbase
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: statestore
+  name: foo2
 spec:
   type: state.couchbase
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: statestore
+  name: foo3
 spec:
   type: state.couchbase
 `), fs.FileMode(0o600)))
@@ -279,21 +279,21 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: statestore
+  name: foo1
 spec:
   type: state.couchbase
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Subscription
 metadata:
-  name: statestore
+  name: foo2
 spec:
   type: state.couchbase
 ---
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
-  name: statestore
+  name: foo3
 spec:
   type: state.couchbase
 `), fs.FileMode(0o600)))
