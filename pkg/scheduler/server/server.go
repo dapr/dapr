@@ -302,25 +302,22 @@ func (s *Server) runJobWatcher(ctx context.Context) error {
 
 	// Goroutine for handling sidecar connections
 	go func() {
-		defer log.Info("Sidecar connections goroutine shutting down.")
+		defer log.Info("Sidecar connections shutting down.")
 		defer s.jobWatcherWG.Done()
 		s.handleSidecarConnections(ctx)
 	}()
 
 	// Goroutine for handling job streaming at trigger time
 	go func() {
-		defer log.Info("Job streaming goroutine shutting down.")
+		defer log.Info("Job streaming shutting down.")
 		defer s.jobWatcherWG.Done()
 		s.handleJobStreaming(ctx)
 	}()
 
-	// Wait for any errors from either goroutine
-	select {
-	case <-ctx.Done():
+	 <-ctx.Done()
 		s.jobWatcherWG.Wait()
-		log.Info("JobWatcher go routines exited successfully")
+		log.Info("JobWatcher exited")
 		return ctx.Err()
-	}
 }
 
 // handleJobStreaming handles the streaming of jobs to Dapr sidecars.
