@@ -100,7 +100,5 @@ func (p *Pool) GetStreamAndContextForNSAppID(ns, appID string) (schedulerv1pb.Sc
 	// randomly select the appID connection to stream back to
 	//nolint:gosec // there is no need for a crypto secure rand.
 	selectedConnection := appIDPool.connections[rand.Intn(len(appIDPool.connections))]
-	ctx := selectedConnection.Stream.Context()
-
-	return selectedConnection.Stream, ctx, nil
+	return selectedConnection.Stream, nil
 }
