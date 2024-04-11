@@ -370,10 +370,9 @@ func (s *Server) handleSidecarConnections(ctx context.Context) {
 			return
 		case conn := <-s.sidecarConnChan:
 			log.Infof("Adding a Sidecar connection to Scheduler for appID: %s.", conn.AppID)
-			nsAppID := conn.Namespace + conn.AppID
 
 			// Add sidecar connection details to the connection pool
-			s.connectionPool.Add(nsAppID, conn)
+			s.connectionPool.Add(conn.Namespace, conn.AppID, conn)
 		}
 	}
 }

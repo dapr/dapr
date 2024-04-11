@@ -30,10 +30,11 @@ type Connection struct {
 }
 
 // Add adds a connection to the pool for a given namespace/appID.
-func (p *Pool) Add(nsAppID string, conn *Connection) {
+func (p *Pool) Add(ns, appID string, conn *Connection) {
 	p.Lock.Lock()
 	defer p.Lock.Unlock()
 
+	nsAppID := ns + "||" + appID
 	// Ensure the AppIDPool exists for the given nsAppID
 	if p.NsAppIDPool[nsAppID] == nil {
 		p.NsAppIDPool[nsAppID] = &AppIDPool{
@@ -57,10 +58,11 @@ func (p *Pool) Add(nsAppID string, conn *Connection) {
 }
 
 // Remove removes a connection from the pool for a given namespace/appID.
-func (p *Pool) Remove(nsAppID string, conn *Connection) {
+func (p *Pool) Remove(ns, appID string, conn *Connection) {
 	p.Lock.Lock()
 	defer p.Lock.Unlock()
 
+	nsAppID := ns + "||" + appID
 	if id, ok := p.NsAppIDPool[nsAppID]; ok {
 		for i, c := range id.connections {
 			if (c.Namespace == conn.Namespace) && (c.AppID == conn.AppID) {
@@ -88,10 +90,11 @@ func (p *Pool) GetStreamAndContextForNSAppID(ns, appID string) (schedulerv1pb.Sc
 	p.Lock.RLock()
 	defer p.Lock.RUnlock()
 
+	nsAppID := ns + "||" + appID
 	// Get the AppIDPool for the given appID
-	appIDPool, ok := p.NsAppIDPool[ns+appID]
+	appIDPool, ok := p.NsAppIDPool[nsAppID]
 	if !ok || len(appIDPool.connections) == 0 {
-		return nil, nil, fmt.Errorf("no connections available for appID: %s", ns+appID)
+		return nil, nil, fmt.Errorf("no connections available for appID: %s", nsAppID)
 	}
 
 	// randomly select the appID connection to stream back to
