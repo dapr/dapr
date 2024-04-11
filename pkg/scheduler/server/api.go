@@ -213,6 +213,6 @@ func (s *Server) WatchJobs(req *schedulerv1pb.WatchJobsRequest, stream scheduler
 	}
 
 	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s.", req.GetAppId())
-	s.connectionPool.Remove(req.GetNamespace()+req.GetAppId(), conn)
+	s.connectionPool.Remove(req.GetNamespace(), req.GetAppId(), conn)
 	return nil
 }
