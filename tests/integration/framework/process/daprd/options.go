@@ -231,7 +231,7 @@ func WithPlacementAddresses(addresses ...string) Option {
 
 func WithSchedulerAddresses(addresses ...string) Option {
 	return func(o *options) {
-		o.schedulerAddresses = addresses
+		o.schedulerAddresses = append(o.schedulerAddresses, addresses...)
 	}
 }
 
