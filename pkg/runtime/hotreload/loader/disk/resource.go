@@ -30,7 +30,7 @@ import (
 // resource is a generic implementation of a disk resource loader. resource
 // will watch and load resources from disk.
 type resource[T differ.Resource] struct {
-	batcher    *batcher.Batcher[int]
+	batcher    *batcher.Batcher[int, struct{}]
 	store      store.Store[T]
 	diskLoader internalloader.Loader[T]
 	updateCh   <-chan struct{}
@@ -45,7 +45,7 @@ type resource[T differ.Resource] struct {
 
 func newResource[T differ.Resource](loader internalloader.Loader[T], store store.Store[T], updateCh <-chan struct{}) *resource[T] {
 	return &resource[T]{
-		batcher:    batcher.New[int](0),
+		batcher:    batcher.New[int, struct{}](0),
 		store:      store,
 		diskLoader: loader,
 		updateCh:   updateCh,
@@ -75,7 +75,7 @@ func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error)
 	}
 
 	batchCh := make(chan struct{})
-	r.batcher.Subscribe(batchCh)
+	r.batcher.Subscribe(ctx, batchCh)
 
 	r.wg.Add(1)
 	go func() {
@@ -167,6 +167,6 @@ func (r *resource[T]) start(ctx context.Context) error {
 		// Use a separate: index every batch to prevent deduplicates of separate
 		// file updates happening at the same time.
 		i++
-		r.batcher.Batch(i)
+		r.batcher.Batch(i, struct{}{})
 	}
 }
