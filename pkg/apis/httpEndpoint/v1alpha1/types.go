@@ -49,6 +49,10 @@ func (HTTPEndpoint) Kind() string {
 	return kind
 }
 
+func (HTTPEndpoint) APIVersion() string {
+	return httpendpoint.GroupName + "/" + Version
+}
+
 // GetName returns the component name.
 func (h HTTPEndpoint) GetName() string {
 	return h.Name

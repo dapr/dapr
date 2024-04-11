@@ -15,6 +15,14 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/dapr/pkg/apis/common"
+	"github.com/dapr/dapr/pkg/apis/subscriptions"
+)
+
+const (
+	Kind    = "Subscription"
+	Version = "v1alpha1"
 )
 
 // +genclient
@@ -58,4 +66,44 @@ type SubscriptionList struct {
 	metav1.ListMeta `json:"metadata"`
 
 	Items []Subscription `json:"items"`
+}
+
+func (Subscription) Kind() string {
+	return Kind
+}
+
+func (Subscription) APIVersion() string {
+	return subscriptions.GroupName + "/" + Version
+}
+
+// EmptyMetaDeepCopy returns a new instance of the subscription type with the
+// TypeMeta's Kind and APIVersion fields set.
+func (s Subscription) EmptyMetaDeepCopy() metav1.Object {
+	n := s.DeepCopy()
+	n.TypeMeta = metav1.TypeMeta{
+		Kind:       Kind,
+		APIVersion: subscriptions.GroupName + "/" + Version,
+	}
+	n.ObjectMeta = metav1.ObjectMeta{Name: s.Name}
+	return n
+}
+
+func (s Subscription) GetName() string {
+	return s.Name
+}
+
+func (s Subscription) GetNamespace() string {
+	return s.Namespace
+}
+
+func (s Subscription) GetSecretStore() string {
+	return ""
+}
+
+func (s Subscription) LogName() string {
+	return s.GetName()
+}
+
+func (s Subscription) NameValuePairs() []common.NameValuePair {
+	return nil
 }
