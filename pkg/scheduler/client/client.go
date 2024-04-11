@@ -15,6 +15,7 @@ package client
 
 import (
 	"context"
+	"fmt"
 	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
@@ -30,6 +31,14 @@ import (
 const (
 	dialTimeout = 30 * time.Second
 )
+
+// Client represents a client for interacting with the scheduler.
+type Client struct {
+	Conn      *grpc.ClientConn
+	Scheduler schedulerv1pb.SchedulerClient
+	Address   string
+	Security  security.Handler
+}
 
 // New returns a new scheduler client and the underlying connection.
 func New(ctx context.Context, address string, sec security.Handler) (*grpc.ClientConn, schedulerv1pb.SchedulerClient, error) {
@@ -60,4 +69,34 @@ func New(ctx context.Context, address string, sec security.Handler) (*grpc.Clien
 		return nil, nil, err
 	}
 	return conn, schedulerv1pb.NewSchedulerClient(conn), nil
+}
+
+func (c *Client) CloseConnection() error {
+	if c.Conn == nil {
+		return nil // Connection is already closed
+	}
+
+	if err := c.Conn.Close(); err != nil {
+		return fmt.Errorf("error closing connection: %v", err)
+	}
+
+	c.Conn = nil // Set the connection to nil to indicate it's closed
+	return nil
+}
+
+// CloseAndReconnect closes the connection and reconnects the client.
+func (c *Client) CloseAndReconnect(ctx context.Context) error {
+	if c.Conn != nil {
+		if err := c.Conn.Close(); err != nil {
+			return fmt.Errorf("error closing connection: %v", err)
+		}
+	}
+	conn, schedulerClient, err := New(ctx, c.Address, c.Security)
+	if err != nil {
+		return fmt.Errorf("error creating Scheduler client for address %s: %v", c.Address, err)
+	}
+	c.Conn = conn
+	c.Scheduler = schedulerClient
+
+	return nil
 }
