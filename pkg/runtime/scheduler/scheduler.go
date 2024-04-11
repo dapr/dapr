@@ -41,10 +41,17 @@ type Manager struct {
 	lastUsedIdx int
 }
 
-func NewManager(ctx context.Context, ns string, appID string, addresses string, sec security.Handler) *Manager {
+type Options struct {
+	Namespace string
+	AppID     string
+	Addresses string
+	Security  security.Handler
+}
+
+func NewManager(ctx context.Context, opts Options) *Manager {
 	sidecarDetails := scheduler.SidecarConnDetails{
-		Namespace: ns,
-		AppID:     appID,
+		Namespace: opts.Namespace,
+		AppID:     opts.AppID,
 	}
 
 	manager := &Manager{
@@ -52,19 +59,19 @@ func NewManager(ctx context.Context, ns string, appID string, addresses string, 
 	}
 
 	var schedulerHostPorts []string
-	if strings.Contains(addresses, ",") {
-		parts := strings.Split(addresses, ",")
+	if strings.Contains(opts.Addresses, ",") {
+		parts := strings.Split(opts.Addresses, ",")
 		for _, part := range parts {
 			hostPort := strings.TrimSpace(part)
 			schedulerHostPorts = append(schedulerHostPorts, hostPort)
 		}
 	} else {
-		schedulerHostPorts = []string{addresses}
+		schedulerHostPorts = []string{opts.Addresses}
 	}
 
 	for _, address := range schedulerHostPorts {
 		log.Debug("Attempting to connect to Scheduler")
-		conn, cli, err := client.New(ctx, address, sec)
+		conn, cli, err := client.New(ctx, address, opts.Security)
 		if err != nil {
 			log.Debugf("Scheduler client not initialized for address: %s", address)
 		} else {
@@ -75,7 +82,7 @@ func NewManager(ctx context.Context, ns string, appID string, addresses string, 
 			Conn:      conn,
 			Scheduler: cli,
 			Address:   address,
-			Security:  sec,
+			Security:  opts.Security,
 		})
 	}
 
