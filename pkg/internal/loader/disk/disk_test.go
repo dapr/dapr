@@ -241,7 +241,7 @@ metadata:
 func Test_loadWithOrder(t *testing.T) {
 	t.Run("no file should return empty set", func(t *testing.T) {
 		tmp := t.TempDir()
-		d := NewComponents(tmp).(*disk[compapi.Component])
+		d := NewComponents(Options{Paths: []string{tmp}}).(*disk[compapi.Component])
 		set, err := d.loadWithOrder()
 		require.NoError(t, err)
 		assert.Empty(t, set.order)
@@ -259,7 +259,7 @@ spec:
   type: state.couchbase
 `), fs.FileMode(0o600)))
 
-		d := NewComponents(tmp).(*disk[compapi.Component])
+		d := NewComponents(Options{Paths: []string{tmp}}).(*disk[compapi.Component])
 		set, err := d.loadWithOrder()
 		require.NoError(t, err)
 		assert.Equal(t, []manifestOrder{
@@ -293,7 +293,7 @@ spec:
   type: state.couchbase
 `), fs.FileMode(0o600)))
 
-		d := NewComponents(tmp).(*disk[compapi.Component])
+		d := NewComponents(Options{Paths: []string{tmp}}).(*disk[compapi.Component])
 		set, err := d.loadWithOrder()
 		require.NoError(t, err)
 		assert.Equal(t, []manifestOrder{
@@ -334,7 +334,9 @@ spec:
 			}
 		}
 
-		d := NewComponents(tmp1, tmp2, tmp3).(*disk[compapi.Component])
+		d := NewComponents(Options{
+			Paths: []string{tmp1, tmp2, tmp3},
+		}).(*disk[compapi.Component])
 		set, err := d.loadWithOrder()
 		require.NoError(t, err)
 		assert.Equal(t, []manifestOrder{
