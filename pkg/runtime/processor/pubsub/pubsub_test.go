@@ -17,9 +17,9 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
 	"os"
+	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -57,7 +57,6 @@ import (
 const (
 	TestPubsubName       = "testpubsub"
 	TestSecondPubsubName = "testpubsub2"
-	resourcesDir         = "./components"
 )
 
 func TestInitPubSub(t *testing.T) {
@@ -463,17 +462,13 @@ func TestInitPubSub(t *testing.T) {
 			Channels:   new(channels.Channels),
 		})
 
-		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
-		defer os.RemoveAll(resourcesDir)
-
 		s := testDeclarativeSubscription()
 
-		cleanup, err := writeComponentToDisk(s, "sub.yaml")
-		require.NoError(t, err)
-		defer cleanup()
+		resourcesDir := writeComponentToDisk(t, s)
 
 		pst.resourcesPath = []string{resourcesDir}
-		subs := pst.declarativeSubscriptions(context.Background())
+		subs, err := pst.declarativeSubscriptions(context.Background())
+		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 1) {
@@ -495,18 +490,14 @@ func TestInitPubSub(t *testing.T) {
 			Channels:   new(channels.Channels),
 		})
 
-		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
-		defer os.RemoveAll(resourcesDir)
-
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{TestRuntimeConfigID}
 
-		cleanup, err := writeComponentToDisk(s, "sub.yaml")
-		require.NoError(t, err)
-		defer cleanup()
+		resourcesDir := writeComponentToDisk(t, s)
 
 		pst.resourcesPath = []string{resourcesDir}
-		subs := pst.declarativeSubscriptions(context.Background())
+		subs, err := pst.declarativeSubscriptions(context.Background())
+		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 1) {
@@ -528,18 +519,14 @@ func TestInitPubSub(t *testing.T) {
 			Channels:   new(channels.Channels),
 		})
 
-		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
-		defer os.RemoveAll(resourcesDir)
-
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{"scope1"}
 
-		cleanup, err := writeComponentToDisk(s, "sub.yaml")
-		require.NoError(t, err)
-		defer cleanup()
+		resourcesDir := writeComponentToDisk(t, s)
 
 		pst.resourcesPath = []string{resourcesDir}
-		subs := pst.declarativeSubscriptions(context.Background())
+		subs, err := pst.declarativeSubscriptions(context.Background())
+		require.NoError(t, err)
 		assert.Empty(t, subs)
 	})
 
@@ -1414,7 +1401,7 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	return subscriptionsapi.Subscription{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Subscription",
-			APIVersion: "v1alpha1",
+			APIVersion: "dapr.io/v1alpha1",
 		},
 		Spec: subscriptionsapi.SubscriptionSpec{
 			Topic:      "topic1",
@@ -1424,16 +1411,13 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	}
 }
 
-// writeComponentToDisk the given content into a file inside components directory.
-func writeComponentToDisk(content any, fileName string) (cleanup func(), error error) {
-	filePath := fmt.Sprintf("%s/%s", resourcesDir, fileName)
+func writeComponentToDisk(t *testing.T, content any) string {
+	dir := t.TempDir()
+	filePath := filepath.Join(dir, "comp.yaml")
 	b, err := yaml.Marshal(content)
-	if err != nil {
-		return nil, err
-	}
-	return func() {
-		os.Remove(filePath)
-	}, os.WriteFile(filePath, b, 0o600)
+	require.NoError(t, err)
+	require.NoError(t, os.WriteFile(filePath, b, 0o600))
+	return dir
 }
 
 func TestNamespacedPublisher(t *testing.T) {
