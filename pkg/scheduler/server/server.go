@@ -336,7 +336,7 @@ func (s *Server) handleJobStreaming(ctx context.Context) {
 			namespace := metadata["namespace"]
 
 			// Pick a stream corresponding to the appID
-			stream, _, err := s.connectionPool.GetStreamAndContextForNSAppID(namespace, appID)
+			stream, err := s.connectionPool.GetStreamAndContextForNSAppID(namespace, appID)
 			if err != nil {
 				log.Debugf("Error getting stream for appID: %v", err)
 				// TODO: add job to a queue or something to try later

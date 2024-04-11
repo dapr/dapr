@@ -1,7 +1,6 @@
 package internal
 
 import (
-	"context"
 	"fmt"
 	"math/rand"
 	"sync"
@@ -86,7 +85,7 @@ func (p *Pool) Cleanup() {
 }
 
 // GetStreamAndContextForNSAppID returns a stream and its associated context corresponding to the given appID in a round-robin manner.
-func (p *Pool) GetStreamAndContextForNSAppID(ns, appID string) (schedulerv1pb.Scheduler_WatchJobsServer, context.Context, error) {
+func (p *Pool) GetStreamAndContextForNSAppID(ns, appID string) (schedulerv1pb.Scheduler_WatchJobsServer, error) {
 	p.Lock.RLock()
 	defer p.Lock.RUnlock()
 
@@ -94,7 +93,7 @@ func (p *Pool) GetStreamAndContextForNSAppID(ns, appID string) (schedulerv1pb.Sc
 	// Get the AppIDPool for the given appID
 	appIDPool, ok := p.NsAppIDPool[nsAppID]
 	if !ok || len(appIDPool.connections) == 0 {
-		return nil, nil, fmt.Errorf("no connections available for appID: %s", nsAppID)
+		return nil, fmt.Errorf("no connections available for appID: %s", nsAppID)
 	}
 
 	// randomly select the appID connection to stream back to
