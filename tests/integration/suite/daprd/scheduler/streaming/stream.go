@@ -79,6 +79,7 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 	}
 
 	s.daprdA = daprd.New(t,
+		// TODO(Cassie): rm appID + ns here and log line once streaming to the proper app is tested
 		daprd.WithAppID("A"),
 		daprd.WithNamespace("A"),
 		daprd.WithSchedulerAddresses(s.schedulers[0].Address(), s.schedulers[1].Address(), s.schedulers[2].Address()),
@@ -88,6 +89,7 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 	)
 
 	s.daprdB = daprd.New(t,
+		// TODO(Cassie): rm appID + ns here and log line once streaming to the proper app is tested
 		daprd.WithAppID("B"),
 		daprd.WithNamespace("B"),
 		daprd.WithSchedulerAddresses(s.schedulers[0].Address(), s.schedulers[1].Address(), s.schedulers[2].Address()),
