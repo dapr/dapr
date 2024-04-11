@@ -485,7 +485,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("failed to load declarative subscriptions: %s", err)
 	}
-	a.flushOutstandingSubscriptions(ctx)
 
 	if err = a.channels.Refresh(); err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
@@ -1059,10 +1058,9 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 
 	for _, s := range subs {
 		log.Infof("Found Subscription: %s", s.Name)
-		if !a.processor.AddPendingSubscription(ctx, s) {
-			return nil
-		}
 	}
+
+	a.processor.AddPendingSubscription(ctx, subs...)
 
 	return nil
 }
@@ -1081,12 +1079,6 @@ func (a *DaprRuntime) flushOutstandingComponents(ctx context.Context) {
 	// We know that once the no-op component is read from the channel, all previous components will have been fully processed.
 	a.processor.AddPendingComponent(ctx, compapi.Component{})
 	log.Info("All outstanding components processed")
-}
-
-func (a *DaprRuntime) flushOutstandingSubscriptions(ctx context.Context) {
-	log.Info("Waiting for all outstanding Subscriptions to be processed…")
-	a.processor.AddPendingSubscription(ctx, subapi.Subscription{})
-	log.Info("All outstanding declarative Subscriptions processed")
 }
 
 func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {

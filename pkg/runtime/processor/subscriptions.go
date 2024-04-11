@@ -20,21 +20,40 @@ import (
 	"github.com/dapr/dapr/utils"
 )
 
-func (p *Processor) AddPendingSubscription(ctx context.Context, subscription subapi.Subscription) bool {
-	p.chlock.RLock()
-	defer p.chlock.RUnlock()
+func (p *Processor) AddPendingSubscription(ctx context.Context, subscriptions ...subapi.Subscription) bool {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	if p.shutdown.Load() {
 		return false
 	}
 
-	select {
-	case <-ctx.Done():
-		return false
-	case <-p.closedCh:
-		return false
-	case p.pendingSubscriptions <- subscription:
+	scopedSubs := make([]subapi.Subscription, 0, len(subscriptions))
+	for i, subscription := range subscriptions {
+		if len(subscription.Scopes) > 0 && !utils.Contains[string](subscription.Scopes, p.appID) {
+			continue
+		}
+		scopedSubs = append(scopedSubs, subscriptions[i])
+	}
+
+	if len(scopedSubs) == 0 {
 		return true
 	}
+
+	if err := p.compStore.AddDeclarativeSubscription(scopedSubs...); err != nil {
+		p.errorSubscriptions(ctx, err)
+		return false
+	}
+	if err := p.PubSub().ReloadSubscriptions(ctx); err != nil {
+		names := make([]string, len(scopedSubs))
+		for i, sub := range scopedSubs {
+			names[i] = sub.Name
+		}
+		p.compStore.DeleteDeclaraiveSubscription(names...)
+		p.errorSubscriptions(ctx, err)
+		return false
+	}
+
+	return true
 }
 
 func (p *Processor) CloseSubscription(ctx context.Context, sub subapi.Subscription) error {
@@ -51,20 +70,20 @@ func (p *Processor) CloseSubscription(ctx context.Context, sub subapi.Subscripti
 }
 
 func (p *Processor) processSubscriptions(ctx context.Context) error {
-	for subscription := range p.pendingSubscriptions {
-		if len(subscription.Name) == 0 {
-			continue
-		}
-		if len(subscription.Scopes) > 0 && !utils.Contains[string](subscription.Scopes, p.appID) {
-			continue
-		}
-		if err := p.compStore.AddDeclarativeSubscription(subscription); err != nil {
-			return err
-		}
-		if err := p.PubSub().ReloadSubscriptions(ctx); err != nil {
-			return err
-		}
+	select {
+	case <-ctx.Done():
+		return nil
+	case <-p.closedCh:
+		return nil
+	case err := <-p.subErrCh:
+		return err
 	}
+}
 
-	return nil
+func (p *Processor) errorSubscriptions(ctx context.Context, err error) {
+	select {
+	case p.subErrCh <- err:
+	case <-ctx.Done():
+	case <-p.closedCh:
+	}
 }

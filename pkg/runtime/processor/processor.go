@@ -23,7 +23,6 @@ import (
 	grpcmanager "github.com/dapr/dapr/pkg/api/grpc/manager"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
-	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/middleware/http"
@@ -108,10 +107,10 @@ type Processor struct {
 	workflowBackend WorkflowBackendManager
 
 	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
-	pendingSubscriptions       chan subapi.Subscription
 	pendingComponents          chan componentsapi.Component
 	pendingComponentsWaiting   sync.WaitGroup
 	pendingComponentDependents map[string][]componentsapi.Component
+	subErrCh                   chan error
 
 	lock     sync.RWMutex
 	chlock   sync.RWMutex
@@ -173,9 +172,9 @@ func New(opts Options) *Processor {
 	return &Processor{
 		appID:                      opts.ID,
 		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
-		pendingSubscriptions:       make(chan subapi.Subscription),
 		pendingComponents:          make(chan componentsapi.Component),
 		pendingComponentDependents: make(map[string][]componentsapi.Component),
+		subErrCh:                   make(chan error),
 		closedCh:                   make(chan struct{}),
 		compStore:                  opts.ComponentStore,
 		state:                      state,
@@ -230,7 +229,6 @@ func (p *Processor) Process(ctx context.Context) error {
 			p.shutdown.Store(true)
 			close(p.pendingComponents)
 			close(p.pendingHTTPEndpoints)
-			close(p.pendingSubscriptions)
 			return nil
 		},
 	).Run(ctx)

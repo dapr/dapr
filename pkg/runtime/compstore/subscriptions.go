@@ -93,14 +93,16 @@ func (c *ComponentStore) GetDeclarativeSubscription(name string) (subapi.Subscri
 	return subapi.Subscription{}, false
 }
 
-func (c *ComponentStore) DeleteDeclaraiveSubscription(name string) {
+func (c *ComponentStore) DeleteDeclaraiveSubscription(names ...string) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	for i, sub := range c.declarativeSubscriptions {
-		if sub.ObjectMeta.Name == name {
-			c.declarativeSubscriptions = append(c.declarativeSubscriptions[:i], c.declarativeSubscriptions[i+1:]...)
-			return
+	for _, name := range names {
+		for i, sub := range c.declarativeSubscriptions {
+			if sub.ObjectMeta.Name == name {
+				c.declarativeSubscriptions = append(c.declarativeSubscriptions[:i], c.declarativeSubscriptions[i+1:]...)
+				break
+			}
 		}
 	}
 }
