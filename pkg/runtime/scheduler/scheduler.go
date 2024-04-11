@@ -16,9 +16,8 @@ package scheduler
 import (
 	"context"
 	"io"
-	"math/rand"
 	"strings"
-	"sync"
+	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -37,8 +36,7 @@ var log = logger.NewLogger("dapr.runtime.scheduler")
 type Manager struct {
 	clients     []*client.Client
 	connDetails scheduler.SidecarConnDetails
-	lock        sync.Mutex
-	lastUsedIdx int
+	lastUsedIdx int64
 }
 
 type Options struct {
@@ -229,19 +227,13 @@ func (m *Manager) watchJobs(ctx context.Context, client *client.Client) error {
 
 // NextClient returns the next client in a round-robin manner.
 func (m *Manager) NextClient() schedulerv1pb.SchedulerClient {
-	m.lock.Lock()
-	defer m.lock.Unlock()
-
 	// Check if there is only one client available
 	if len(m.clients) == 1 {
 		return m.clients[0].Scheduler
 	}
 
-	nextIdx := rand.Intn(len(m.clients))
-	nextClient := m.clients[nextIdx]
-
-	// Update the last used index
-	m.lastUsedIdx = nextIdx
+	nextIdx := atomic.AddInt64(&m.lastUsedIdx, 1)
+	nextClient := m.clients[int(nextIdx)%len(m.clients)]
 
 	return nextClient.Scheduler
 }
