@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	wfbeComp "github.com/dapr/dapr/pkg/components/wfbackend"
@@ -128,4 +129,12 @@ func (w *workflowBackend) Backend() (backend.Backend, bool) {
 		return nil, false
 	}
 	return w.backend, true
+}
+
+func ComponentDefinition() compapi.Component {
+	return compapi.Component{
+		TypeMeta:   metav1.TypeMeta{Kind: "Component"},
+		ObjectMeta: metav1.ObjectMeta{Name: "dapr"},
+		Spec:       compapi.ComponentSpec{Type: "workflow.dapr", Version: "v1"},
+	}
 }
