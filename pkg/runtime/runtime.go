@@ -294,7 +294,12 @@ func newDaprRuntime(ctx context.Context,
 
 	var schedulerManager *runtimeScheduler.Manager
 	if runtimeConfig.SchedulerEnabled() {
-		schedulerManager = runtimeScheduler.NewManager(ctx, namespace, runtimeConfig.id, runtimeConfig.schedulerAddress, sec)
+		schedulerManager = runtimeScheduler.NewManager(ctx, runtimeScheduler.Options{
+			Namespace: namespace,
+			AppID:     runtimeConfig.id,
+			Addresses: runtimeConfig.schedulerAddress,
+			Security:  sec,
+		})
 		if err := rt.runnerCloser.Add(schedulerManager.Run); err != nil {
 			return nil, err
 		}
