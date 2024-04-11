@@ -55,7 +55,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
+	"github.com/dapr/dapr/pkg/runtime/scheduler"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -116,7 +116,7 @@ type GRPCConnectionFn func(ctx context.Context, address string, id string, names
 type actorsRuntime struct {
 	appChannel         channel.AppChannel
 	placement          placement.PlacementService
-	schedulerManager   *runtimeScheduler.Manager
+	schedulerManager   *scheduler.Manager
 	placementEnabled   bool
 	grpcConnectionFn   GRPCConnectionFn
 	actorsConfig       Config

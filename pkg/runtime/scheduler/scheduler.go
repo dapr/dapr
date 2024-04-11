@@ -100,7 +100,7 @@ func (m *Manager) Run(ctx context.Context) error {
 	for _, client := range m.clients {
 		client := client
 		err := mngr.Add(func(ctx context.Context) error {
-			return m.watchJob(ctx, client)
+			return m.watchJobs(ctx, client)
 		})
 		if err != nil {
 			return err
@@ -133,8 +133,8 @@ func (m *Manager) establishConnection(ctx context.Context, client *schedulerClie
 	}
 }
 
-func (m *Manager) processStream(ctx context.Context, client *schedulerClient, streamReq *schedulerv1pb.StreamJobRequest) error {
-	var stream schedulerv1pb.Scheduler_WatchJobClient
+func (m *Manager) processStream(ctx context.Context, client *schedulerClient, streamReq *schedulerv1pb.WatchJobsRequest) error {
+	var stream schedulerv1pb.Scheduler_WatchJobsClient
 
 	for {
 		select {
@@ -142,7 +142,7 @@ func (m *Manager) processStream(ctx context.Context, client *schedulerClient, st
 			return ctx.Err()
 		default:
 			var err error
-			stream, err = client.scheduler.WatchJob(ctx, streamReq)
+			stream, err = client.scheduler.WatchJobs(ctx, streamReq)
 			if err != nil {
 				log.Infof("Error while streaming with Scheduler: %v", err)
 				if err := client.closeAndReconnect(ctx); err != nil {
@@ -203,7 +203,7 @@ func (m *Manager) processStream(ctx context.Context, client *schedulerClient, st
 	}
 }
 
-func (m *Manager) establishSchedulerConn(ctx context.Context, client *schedulerClient, streamReq *schedulerv1pb.StreamJobRequest) error {
+func (m *Manager) establishSchedulerConn(ctx context.Context, client *schedulerClient, streamReq *schedulerv1pb.WatchJobsRequest) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -224,9 +224,9 @@ func (m *Manager) establishSchedulerConn(ctx context.Context, client *schedulerC
 	}
 }
 
-// watchJob starts watching for job triggers from a single scheduler client.
-func (m *Manager) watchJob(ctx context.Context, client *schedulerClient) error {
-	streamReq := &schedulerv1pb.StreamJobRequest{
+// watchJobs starts watching for job triggers from a single scheduler client.
+func (m *Manager) watchJobs(ctx context.Context, client *schedulerClient) error {
+	streamReq := &schedulerv1pb.WatchJobsRequest{
 		AppId:     m.connDetails.AppID,
 		Namespace: m.connDetails.Namespace,
 	}

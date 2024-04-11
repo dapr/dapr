@@ -26,7 +26,7 @@ type AppIDPool struct {
 
 type Connection struct {
 	ConnDetails *scheduler.SidecarConnDetails
-	Stream      schedulerv1pb.Scheduler_WatchJobServer
+	Stream      schedulerv1pb.Scheduler_WatchJobsServer
 }
 
 // Add adds a connection to the pool for a given namespace/appID.
@@ -83,7 +83,7 @@ func (p *Pool) Cleanup() {
 }
 
 // GetStreamAndContextForNSAppID returns a stream and its associated context corresponding to the given appID in a round-robin manner.
-func (p *Pool) GetStreamAndContextForNSAppID(ns, appID string) (schedulerv1pb.Scheduler_WatchJobServer, context.Context, error) {
+func (p *Pool) GetStreamAndContextForNSAppID(ns, appID string) (schedulerv1pb.Scheduler_WatchJobsServer, context.Context, error) {
 	p.Lock.RLock()
 	defer p.Lock.RUnlock()
 
