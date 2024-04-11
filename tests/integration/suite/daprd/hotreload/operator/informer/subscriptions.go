@@ -130,7 +130,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 	s.operator.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
 
-	assert.Len(t, s.daprd.GetMetaRegistedComponents(t, ctx), 1)
+	assert.Len(t, s.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 
 	newReq := func(pubsub, topic string) *rtv1.PublishEventRequest {
 		return &rtv1.PublishEventRequest{PubsubName: pubsub, Topic: topic, Data: []byte(`{"status": "completed"}`)}

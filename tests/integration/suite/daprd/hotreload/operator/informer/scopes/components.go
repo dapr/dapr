@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
 )
@@ -116,8 +115,6 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator1.WaitUntilRunning(t, ctx)
 	c.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
-
 	comp := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 		ObjectMeta: metav1.ObjectMeta{Name: "123", Namespace: "default"},
@@ -126,22 +123,22 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.store.Add(&comp)
 	c.kubeapi.Informer().Add(t, &comp)
 
-	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
+	require.EventuallyWithT(t, func(ct *assert.CollectT) {
+		assert.Len(t, c.daprd.GetMetaRegisteredComponents(ct, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	comp.Scopes = []string{"foo"}
 	c.store.Set(&comp)
 	c.kubeapi.Informer().Modify(t, &comp)
-	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()))
+	require.EventuallyWithT(t, func(ct *assert.CollectT) {
+		assert.Empty(t, c.daprd.GetMetaRegisteredComponents(ct, ctx))
 	}, time.Second*10, time.Millisecond*10)
 
 	comp.Scopes = []string{"foo", c.daprd.AppID()}
 	c.store.Set(&comp)
 	c.kubeapi.Informer().Modify(t, &comp)
-	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
+	require.EventuallyWithT(t, func(ct *assert.CollectT) {
+		assert.Len(t, c.daprd.GetMetaRegisteredComponents(ct, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	comp.Scopes = []string{"foo"}
@@ -152,15 +149,15 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator2.WaitUntilRunning(t, ctx)
 	c.store.Set(&comp)
 	c.kubeapi.Informer().Modify(t, &comp)
-	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()))
+	require.EventuallyWithT(t, func(ct *assert.CollectT) {
+		assert.Empty(t, c.daprd.GetMetaRegisteredComponents(ct, ctx))
 	}, time.Second*10, time.Millisecond*10)
 
 	comp.Scopes = []string{}
 	c.store.Set(&comp)
 	c.kubeapi.Informer().Modify(t, &comp)
-	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
+	require.EventuallyWithT(t, func(ct *assert.CollectT) {
+		assert.Len(t, c.daprd.GetMetaRegisteredComponents(ct, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	comp2 := comp.DeepCopy()
@@ -168,7 +165,7 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	comp2.Scopes = []string{c.daprd.AppID()}
 	c.store.Set(&comp, comp2)
 	c.kubeapi.Informer().Modify(t, comp2)
-	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 2)
+	require.EventuallyWithT(t, func(ct *assert.CollectT) {
+		assert.Len(t, c.daprd.GetMetaRegisteredComponents(ct, ctx), 2)
 	}, time.Second*10, time.Millisecond*10)
 }

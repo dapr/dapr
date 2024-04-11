@@ -26,10 +26,10 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -106,7 +106,7 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 		t.Fatal("timed out waiting for healthz call")
 	}
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fooActorURL(n.daprd), nil)
 	require.NoError(t, err)

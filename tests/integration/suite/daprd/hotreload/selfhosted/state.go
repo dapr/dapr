@@ -30,8 +30,8 @@ import (
 
 	rtpbv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -74,10 +74,10 @@ spec:
 func (s *state) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()))
+		assert.Empty(t, s.daprd.GetMetaRegisteredComponents(t, ctx))
 		s.writeExpectError(t, ctx, client, "123", http.StatusInternalServerError)
 	})
 
@@ -94,9 +94,9 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 1)
+			assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)
-		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
+		resp := s.daprd.GetMetaRegisteredComponents(t, ctx)
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
@@ -137,9 +137,9 @@ spec:
  `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 3)
+			assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 3)
 		}, time.Second*5, time.Millisecond*10)
-		resp := util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort())
+		resp := s.daprd.GetMetaRegisteredComponents(t, ctx)
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
@@ -180,7 +180,7 @@ spec:
 `, tmpDir)), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
+			resp := s.daprd.GetMetaRegisteredComponents(c, ctx)
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{
 					Name: "123", Type: "state.in-memory", Version: "v1",
@@ -242,7 +242,7 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
+			resp := s.daprd.GetMetaRegisteredComponents(c, ctx)
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
@@ -287,7 +287,7 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
+			resp := s.daprd.GetMetaRegisteredComponents(c, ctx)
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{
 					Name: "123", Type: "state.sqlite", Version: "v1",
@@ -337,7 +337,7 @@ spec:
 `, secPath)), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
+			resp := s.daprd.GetMetaRegisteredComponents(c, ctx)
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 				{
@@ -371,7 +371,7 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(s.resDir3, "3.yaml")))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort())
+			resp := s.daprd.GetMetaRegisteredComponents(c, ctx)
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 			}, resp)
@@ -396,7 +396,7 @@ spec:
 `), 0o600))
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 2)
+			assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 2)
 		}, time.Second*5, time.Millisecond*10)
 
 		s.writeRead(t, ctx, client, "123")

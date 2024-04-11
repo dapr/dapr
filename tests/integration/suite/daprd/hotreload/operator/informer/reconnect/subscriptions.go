@@ -146,7 +146,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 	s.kubeapi.Informer().Add(t, &sub)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, s.daprd.GetMetaRegistedComponents(c, ctx), 1)
+		assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 		assert.Len(c, s.daprd.GetMetaSubscriptions(c, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
@@ -157,7 +157,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 	s.operator2.WaitUntilRunning(t, ctx)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, s.daprd.GetMetaRegistedComponents(c, ctx), 1)
+		assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 		assert.Empty(c, s.daprd.GetMetaSubscriptions(c, ctx))
 	}, time.Second*10, time.Millisecond*10)
 
@@ -167,7 +167,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 	s.operator3.Run(t, ctx)
 	s.operator3.WaitUntilRunning(t, ctx)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, s.daprd.GetMetaRegistedComponents(c, ctx), 1)
+		assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 		assert.Len(c, s.daprd.GetMetaSubscriptions(c, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 

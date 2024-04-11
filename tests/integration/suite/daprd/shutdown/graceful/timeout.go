@@ -24,11 +24,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -86,7 +86,7 @@ func (i *timeout) Setup(t *testing.T) []framework.Option {
 func (i *timeout) Run(t *testing.T, ctx context.Context) {
 	i.daprd.Run(t, ctx)
 	i.daprd.WaitUntilRunning(t, ctx)
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", i.daprd.HTTPPort(), i.daprd.AppID())
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
