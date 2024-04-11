@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,26 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package meta
+package disk
 
 import (
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
-	"github.com/dapr/dapr/pkg/apis/common"
+	endpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	"github.com/dapr/dapr/pkg/internal/loader"
 )
 
-// Resource interface that applies to both Component and HTTPEndpoint
-// resources.
-type Resource interface {
-	Kind() string
-	APIVersion() string
-	GetName() string
-	GetNamespace() string
-	LogName() string
-	GetSecretStore() string
-	NameValuePairs() []common.NameValuePair
-
-	// Returns a deep copy of the resource, with the object meta set only with
-	// Name and Namespace.
-	EmptyMetaDeepCopy() metav1.Object
+func NewHTTPEndpoints(paths ...string) loader.Loader[endpointapi.HTTPEndpoint] {
+	return new[endpointapi.HTTPEndpoint](paths...)
 }
