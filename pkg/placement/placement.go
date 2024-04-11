@@ -41,6 +41,19 @@ var log = logger.NewLogger("dapr.placement")
 
 type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer //nolint:nosnakecase
 
+type daprdStream struct {
+	id        uint32
+	namespace string
+	stream    placementGRPCStream
+}
+
+func newDaprdStream(ns string, stream placementGRPCStream) daprdStream {
+	return daprdStream{
+		namespace: ns,
+		stream:    stream,
+	}
+}
+
 const (
 	// membershipChangeChSize is the channel size of membership change request from Dapr runtime.
 	// MembershipChangeWorker will process actor host member change request.
@@ -113,11 +126,9 @@ func (r *tablesUpdateRequest) SetAPILevel(minAPILevel uint32, maxAPILevel *uint3
 
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
-	// streamConnPool has the stream connections established between placement gRPC server and Dapr runtime.
-	streamConnPool []placementGRPCStream
+	streamConnPool *streamConnPool
 
-	// streamConnPoolLock is the lock for streamConnPool change.
-	streamConnPoolLock sync.RWMutex
+	streamIndexCnt atomic.Uint32
 
 	// raftNode is the raft server instance.
 	raftNode *raft.Server
@@ -175,7 +186,7 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 	fhdd.Store(int64(faultyHostDetectInitialDuration))
 
 	return &Service{
-		streamConnPool:           []placementGRPCStream{},
+		streamConnPool:           newStreamConnPool(),
 		membershipCh:             make(chan hostMemberChange, membershipChangeChSize),
 		faultyHostDetectDuration: fhdd,
 		raftNode:                 opts.RaftNode,
@@ -251,19 +262,42 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		clientID = id
 	}
 
+	firstMessage, err := stream.Recv()
+	if err != nil {
+		return status.Errorf(codes.Internal, "failed to receive the first message: %v", err)
+	}
+	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
+		return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", firstMessage.GetId())
+	}
+
+	if clientID != nil && firstMessage.GetNamespace() != clientID.Namespace() {
+		return status.Errorf(codes.PermissionDenied, "client namespace %s is not allowed", firstMessage.GetNamespace())
+	}
+	daprStream := newDaprdStream(firstMessage.GetNamespace(), stream)
 	p.streamConnGroup.Add(1)
 	defer func() {
 		p.streamConnGroup.Done()
-		p.deleteStreamConn(stream)
+		p.streamConnPool.delete(daprStream)
 	}()
 
 	for p.hasLeadership.Load() {
-		req, err := stream.Recv()
+		var req *placementv1pb.Host
+		if firstMessage != nil {
+			req, err = firstMessage, nil
+			firstMessage = nil
+		} else {
+			req, err = stream.Recv()
+		}
+
 		switch err {
 		case nil:
-			if clientID != nil && req.GetId() != clientID.AppID() {
-				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
-			}
+			//if clientID != nil && req.GetId() != clientID.AppID() {
+			//	return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
+			//}
+			//
+			//if clientID != nil && req.GetNamespace() != clientID.Namespace() {
+			//	return status.Errorf(codes.PermissionDenied, "client namespace %s is not allowed", req.GetNamespace())
+			//}
 
 			state := p.raftNode.FSM().State()
 
@@ -282,7 +316,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				}
 
 				registeredMemberID = req.GetName()
-				p.addStreamConn(stream)
+				p.streamConnPool.add(daprStream)
 
 				updateReq := &tablesUpdateRequest{
 					hosts: []placementGRPCStream{stream},
@@ -371,23 +405,26 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
 }
 
-// addStreamConn adds stream connection between runtime and placement to the dissemination pool.
-func (p *Service) addStreamConn(conn placementGRPCStream) {
-	p.streamConnPoolLock.Lock()
-	p.streamConnPool = append(p.streamConnPool, conn)
-	p.streamConnPoolLock.Unlock()
-}
+//// addStreamConn adds stream connection between runtime and placement to the dissemination pool.
+//func (p *Service) addStreamConn(s daprdStream) {
+//	//func (p *Service) addStreamConn(ns string, conn placementGRPCStream) {
+//	p.streamConnPoolLock.Lock()
+//	id := p.streamIndexCnt.Add(1)
+//	p.streamConnPool[s.namespace][id] = s
+//	p.streamConnPoolLock.Unlock()
+//}
 
-func (p *Service) deleteStreamConn(conn placementGRPCStream) {
-	p.streamConnPoolLock.Lock()
-	for i, c := range p.streamConnPool {
-		if c == conn {
-			p.streamConnPool = append(p.streamConnPool[:i], p.streamConnPool[i+1:]...)
-			break
-		}
-	}
-	p.streamConnPoolLock.Unlock()
-}
+//func (p *Service) deleteStreamConn(s daprStream) {
+//	p.streamConnPoolLock.Lock()
+//
+//	for i, c := range p.streamConnPool {
+//		if c == conn {
+//			p.streamConnPool = append(p.streamConnPool[:i], p.streamConnPool[i+1:]...)
+//			break
+//		}
+//	}
+//	p.streamConnPoolLock.Unlock()
+//}
 
 func (p *Service) hasStreamConn(conn placementGRPCStream) bool {
 	p.streamConnPoolLock.RLock()

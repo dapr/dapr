@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 
 	"github.com/dapr/kit/logger"
@@ -276,7 +277,8 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				Pod:      p.config.PodName,
 				// Port is redundant because Name should include port number
 				// Port: 0,
-				ApiLevel: internal.ActorAPILevel,
+				ApiLevel:  internal.ActorAPILevel,
+				Namespace: security.CurrentNamespace(),
 			}
 
 			err := p.client.send(&host)
