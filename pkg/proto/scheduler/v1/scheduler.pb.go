@@ -88,8 +88,10 @@ type WatchJobsResponse struct {
 	// Job data.
 	Data *anypb.Any `protobuf:"bytes,1,opt,name=data,proto3" json:"data,omitempty"`
 	// The metadata associated with the job.
-	// The sidecar will create the unique `key` for storing data in the state store and pass the generated `key` along to the scheduler service for data lookup upon ‘trigger’ time later on.
-	// The sidecar will also add metadata in order to know whether this job is registered for an actor. This is needed, as the routing mechanism for actors is different for the callback.
+	// The sidecar will create the unique `key` for storing data in the state store and pass the generated
+	// `key` along to the scheduler service for data lookup upon ‘trigger’ time later on.
+	// The sidecar will also add metadata in order to know whether this job is registered for an actor.
+	// This is needed, as the routing mechanism for actors is different for the callback.
 	Metadata map[string]string `protobuf:"bytes,2,rep,name=metadata,proto3" json:"metadata,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 

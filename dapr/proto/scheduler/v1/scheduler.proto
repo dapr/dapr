@@ -15,9 +15,9 @@ service Scheduler {
 	rpc GetJob(GetJobRequest) returns (GetJobResponse) {}
 	// DeleteJob is used by the daprd sidecar to delete a job.
 	rpc DeleteJob(DeleteJobRequest) returns (DeleteJobResponse) {}
-  // WatchJobs is used by the daprd sidecar to connect to the Scheduler
-  // service to watch for jobs triggering back.
-  rpc WatchJobs(WatchJobsRequest) returns (stream WatchJobsResponse) {}
+	// WatchJobs is used by the daprd sidecar to connect to the Scheduler
+	// service to watch for jobs triggering back.
+	rpc WatchJobs(WatchJobsRequest) returns (stream WatchJobsResponse) {}
 }
 
 // TODO(Cassie): add an internal Job message to have a diff one than dapr.proto
