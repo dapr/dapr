@@ -58,19 +58,10 @@ func NewManager(ctx context.Context, opts Options) *Manager {
 		connDetails: sidecarDetails,
 	}
 
-	var schedulerHostPorts []string
-	if strings.Contains(opts.Addresses, ",") {
-		parts := strings.Split(opts.Addresses, ",")
-		for _, part := range parts {
-			hostPort := strings.TrimSpace(part)
-			schedulerHostPorts = append(schedulerHostPorts, hostPort)
-		}
-	} else {
-		schedulerHostPorts = []string{opts.Addresses}
-	}
+	schedulerHostPorts := strings.Split(opts.Addresses, ",")
 
 	for _, address := range schedulerHostPorts {
-		log.Debug("Attempting to connect to Scheduler")
+		log.Debugf("Attempting to connect to Scheduler at address: %s", address)
 		conn, cli, err := client.New(ctx, address, opts.Security)
 		if err != nil {
 			log.Debugf("Scheduler client not initialized for address: %s", address)
@@ -110,22 +101,23 @@ func (m *Manager) establishConnection(ctx context.Context, client *client.Client
 	for {
 		select {
 		case <-ctx.Done():
+			var err error
 			if client.Conn != nil {
-				if err := client.Conn.Close(); err != nil {
-					log.Debugf("error closing Scheduler client connection: %v", err)
+				if err = client.Conn.Close(); err != nil {
+					log.Errorf("error closing Scheduler client connection: %v", err)
 				}
 			}
-			return ctx.Err()
+			return err
 		default:
 			if client.Conn != nil {
 				// connection is established
+				log.Debugf("Connection established with Scheduler at address %s", client.Address)
 				return nil
 			} else {
 				if err := client.CloseAndReconnect(ctx); err != nil {
-					log.Infof("Error establishing conn to Scheduler client: %v. Trying the next client.", err)
+					log.Errorf("Error establishing conn to Scheduler client at address %s: %v. Trying the next client.", client.Address, err)
 					client.Scheduler = m.NextClient()
 				}
-				log.Infof("Reconnected to scheduler at address %s", client.Address)
 			}
 		}
 	}
@@ -142,13 +134,15 @@ func (m *Manager) processStream(ctx context.Context, client *client.Client, stre
 			var err error
 			stream, err = client.Scheduler.WatchJobs(ctx, streamReq)
 			if err != nil {
-				log.Infof("Error while streaming with Scheduler: %v. Going to close and reconnect.", err)
+				log.Errorf("Error while streaming with Scheduler at address %s: %v. Going to close and reconnect.", client.Address, err)
 				if err := client.CloseAndReconnect(ctx); err != nil {
-					log.Debugf("Error reconnecting client: %v. Trying a new client.", err)
+					log.Errorf("Error reconnecting Scheduler client at address %s: %v. Trying a new client.", client.Address, err)
 					client.Scheduler = m.NextClient()
 					continue
 				}
-				log.Infof("Reconnected to scheduler at address %s", client.Address)
+				if client.Conn != nil {
+					log.Infof("Reconnected to Scheduler at address %s", client.Address)
+				}
 				continue
 			}
 		}
@@ -159,40 +153,42 @@ func (m *Manager) processStream(ctx context.Context, client *client.Client, stre
 			select {
 			case <-stream.Context().Done():
 				if err := stream.CloseSend(); err != nil {
-					log.Debugf("Error closing stream")
+					log.Errorf("Error closing stream for Scheduler address %s: %v", client.Address, err)
 				}
 				if err := client.CloseConnection(); err != nil {
-					log.Debugf("Error closing connection: %v", err)
+					log.Errorf("Error closing conn for Scheduler address %s: %v", client.Address, err)
 				}
 				return stream.Context().Err()
 			case <-ctx.Done():
 				if err := stream.CloseSend(); err != nil {
-					log.Debugf("Error closing stream")
+					log.Errorf("Error closing stream for Scheduler address %s", client.Address)
 				}
 				if err := client.CloseConnection(); err != nil {
-					log.Debugf("Error closing connection: %v", err)
+					log.Errorf("Error closing connection for Scheduler address %s: %v", client.Address, err)
 				}
 				return ctx.Err()
 			default:
-				resp, streamerr := stream.Recv()
-				if streamerr != nil {
-					switch status.Code(streamerr) {
+				resp, err := stream.Recv()
+				if err != nil {
+					switch status.Code(err) {
 					case codes.Canceled:
-						log.Debugf("Sidecar cancelled the Scheduler stream ctx.")
+						log.Errorf("Sidecar cancelled the stream ctx for Scheduler address %s.", client.Address)
 					case codes.Unavailable:
-						log.Debugf("Scheduler cancelled the Scheduler stream ctx.")
+						log.Errorf("Scheduler cancelled the stream ctx for address %s.", client.Address)
 					default:
-						if streamerr == io.EOF {
-							log.Debugf("Scheduler cancelled the Sidecar stream ctx.")
+						if err == io.EOF {
+							log.Errorf("Scheduler cancelled the Sidecar stream ctx for Scheduler address %s.", client.Address)
+						} else {
+							log.Errorf("Error while receiving job trigger from Scheduler at address %s: %v", client.Address, err)
 						}
-						log.Infof("Error while receiving job trigger: %v", streamerr)
-						if err := stream.CloseSend(); err != nil {
-							log.Debugf("Error closing stream")
+
+						if nerr := stream.CloseSend(); nerr != nil {
+							log.Errorf("Error closing stream for Scheduler address: %s", client.Address)
 						}
 						if nerr := client.CloseConnection(); nerr != nil {
-							log.Debugf("Error closing connection: %v", nerr)
+							log.Errorf("Error closing conn for Scheduler address %s: %v", client.Address, nerr)
 						}
-						return streamerr
+						return err
 					}
 				}
 				log.Infof("Received response: %+v", resp) // TODO rm this once it sends the triggered job back to the app
@@ -210,12 +206,12 @@ func (m *Manager) establishSchedulerConn(ctx context.Context, client *client.Cli
 			// Keep trying to establish connection and process stream
 			err := m.establishConnection(ctx, client)
 			if err != nil {
-				log.Debugf("Error establishing connection: %v", err)
+				log.Errorf("Error establishing conn for Scheduler address %s: %v", client.Address, err)
 				continue
 			}
 			err = m.processStream(ctx, client, streamReq)
 			if err != nil {
-				log.Debugf("Error processing stream: %v", err)
+				log.Errorf("Error processing stream for Scheduler address %s: %v", client.Address, err)
 				continue
 			}
 		}
