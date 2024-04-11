@@ -995,7 +995,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
-	err := a.actorReadinessCheck(ctx)
+	err := a.Universal.ActorReadinessCheck(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1035,7 +1035,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 }
 
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
-	err := a.actorReadinessCheck(ctx)
+	err := a.Universal.ActorReadinessCheck(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -1111,7 +1111,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	response := &runtimev1pb.InvokeActorResponse{}
 
-	if err := a.actorReadinessCheck(ctx); err != nil {
+	if err := a.Universal.ActorReadinessCheck(ctx); err != nil {
 		return response, err
 	}
 
@@ -1406,107 +1406,6 @@ func (a *api) Close() error {
 	}
 
 	a.CompStore().DeleteAllConfigurationSubscribe()
-
-	return nil
-}
-
-func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.CreateTimerRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-		DueTime:   in.GetDueTime(),
-		Period:    in.GetPeriod(),
-		TTL:       in.GetTtl(),
-		Callback:  in.GetCallback(),
-	}
-
-	if in.GetData() != nil {
-		j, err := json.Marshal(in.GetData())
-		if err != nil {
-			return &emptypb.Empty{}, err
-		}
-		req.Data = j
-	}
-	err := a.Universal.Actors().CreateTimer(ctx, req)
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.DeleteTimerRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-	}
-
-	err := a.Universal.Actors().DeleteTimer(ctx, req)
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.CreateReminderRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-		DueTime:   in.GetDueTime(),
-		Period:    in.GetPeriod(),
-		TTL:       in.GetTtl(),
-	}
-
-	if in.GetData() != nil {
-		j, err := json.Marshal(in.GetData())
-		if err != nil {
-			return &emptypb.Empty{}, err
-		}
-		req.Data = j
-	}
-	err := a.Universal.Actors().CreateReminder(ctx, req)
-	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
-		return nil, messages.ErrActorReminderOpActorNotHosted
-	}
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.DeleteReminderRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-	}
-
-	err := a.Universal.Actors().DeleteReminder(ctx, req)
-	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
-		return nil, messages.ErrActorReminderOpActorNotHosted
-	}
-	return &emptypb.Empty{}, err
-}
-
-// This function makes sure that the actor subsystem is ready.
-func (a *api) actorReadinessCheck(ctx context.Context) error {
-	a.Universal.WaitForActorsReady(ctx)
-
-	if a.Universal.Actors() == nil {
-		apiServerLogger.Debug(messages.ErrActorRuntimeNotFound)
-		return messages.ErrActorRuntimeNotFound
-	}
 
 	return nil
 }
