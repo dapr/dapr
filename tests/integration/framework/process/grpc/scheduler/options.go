@@ -31,9 +31,9 @@ type options struct {
 	withRegister func(*grpc.Server)
 
 	scheduleJobFn func(context.Context, *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)
-	getJobFn      func(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.GetJobResponse, error)
-	deleteJobFn   func(context.Context, *schedulerv1pb.JobRequest) (*schedulerv1pb.DeleteJobResponse, error)
-	watchJobFn    func(*schedulerv1pb.StreamJobRequest, schedulerv1pb.Scheduler_WatchJobServer) error
+	getJobFn      func(context.Context, *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error)
+	deleteJobFn   func(context.Context, *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error)
+	watchJobsFn   func(*schedulerv1pb.WatchJobsRequest, schedulerv1pb.Scheduler_WatchJobsServer) error
 }
 
 func WithSentry(sentry *sentry.Sentry) func(*options) {
@@ -66,8 +66,8 @@ func WithDeleteJobFn(fn func(ctx context.Context, request *schedulerv1pb.DeleteJ
 	}
 }
 
-func WithWatchJobFn(fn func(*schedulerv1pb.StreamJobRequest, schedulerv1pb.Scheduler_WatchJobServer) error) func(*options) {
+func WithWatchJobsFn(fn func(*schedulerv1pb.WatchJobsRequest, schedulerv1pb.Scheduler_WatchJobsServer) error) func(*options) {
 	return func(o *options) {
-		o.watchJobFn = fn
+		o.watchJobsFn = fn
 	}
 }

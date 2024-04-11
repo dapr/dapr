@@ -105,15 +105,15 @@ func (s *Server) triggerJob(ctx context.Context, req etcdcron.TriggerRequest) (e
 		return etcdcron.OK, err
 	} else {
 		// Normal job type to trigger
-		triggeredJob := &schedulerv1pb.StreamJobResponse{
+		triggeredJob := &schedulerv1pb.WatchJobsResponse{
 			Data:     req.Payload,
 			Metadata: metadata,
 		}
-	}
 
-	// TODO(artursouza): echo the job's name instead once we change the library's callback method.
-	log.Warn("Cannot trigger job: %v", metadata)
-	return etcdcron.Failure, nil
+		s.jobTriggerChan <- triggeredJob // send job to be consumed and sent to sidecar from WatchJobs()
+
+		return etcdcron.OK, nil
+	}
 }
 
 func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
@@ -198,8 +198,8 @@ func parseTTL(ttl string) (time.Duration, error) {
 	return time.Until(time.Now().AddDate(years, months, days).Add(period)), nil
 }
 
-// WatchJob sends jobs to Dapr sidecars upon component changes.
-func (s *Server) WatchJob(req *schedulerv1pb.StreamJobRequest, stream schedulerv1pb.Scheduler_WatchJobServer) error {
+// WatchJobs sends jobs to Dapr sidecars upon component changes.
+func (s *Server) WatchJobs(req *schedulerv1pb.WatchJobsRequest, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
 	sidecarConnDetails := &scheduler.SidecarConnDetails{
 		Namespace: req.GetNamespace(),
 		AppID:     req.GetAppId(),

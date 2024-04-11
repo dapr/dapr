@@ -42,7 +42,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	opts := options{
 		// TODO: add scheduler server funcs here as needed
-		// TODO: add watchjob here
+		// TODO: add watchjobs here
 	}
 
 	for _, fopt := range fopts {
@@ -85,7 +85,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 			srv := &server{
 				scheduleJobFn: opts.scheduleJobFn,
 				deleteJobFn:   opts.deleteJobFn,
-				watchJobFn:    opts.watchJobFn,
+				watchJobsFn:   opts.watchJobsFn,
 			}
 
 			schedulerv1pb.RegisterSchedulerServer(s, srv)

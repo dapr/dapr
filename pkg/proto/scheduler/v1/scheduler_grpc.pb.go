@@ -22,7 +22,7 @@ const (
 	Scheduler_ScheduleJob_FullMethodName = "/dapr.proto.scheduler.v1.Scheduler/ScheduleJob"
 	Scheduler_GetJob_FullMethodName      = "/dapr.proto.scheduler.v1.Scheduler/GetJob"
 	Scheduler_DeleteJob_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
-	Scheduler_WatchJob_FullMethodName    = "/dapr.proto.scheduler.v1.Scheduler/WatchJob"
+	Scheduler_WatchJobs_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/WatchJobs"
 )
 
 // SchedulerClient is the client API for Scheduler service.
@@ -35,9 +35,9 @@ type SchedulerClient interface {
 	GetJob(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
 	// DeleteJob is used by the daprd sidecar to delete a job.
 	DeleteJob(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
-	// WatchJob is used by the daprd sidecar to connect to the Scheduler
+	// WatchJobs is used by the daprd sidecar to connect to the Scheduler
 	// service to watch for jobs triggering back.
-	WatchJob(ctx context.Context, in *StreamJobRequest, opts ...grpc.CallOption) (Scheduler_WatchJobClient, error)
+	WatchJobs(ctx context.Context, in *WatchJobsRequest, opts ...grpc.CallOption) (Scheduler_WatchJobsClient, error)
 }
 
 type schedulerClient struct {
@@ -75,12 +75,12 @@ func (c *schedulerClient) DeleteJob(ctx context.Context, in *DeleteJobRequest, o
 	return out, nil
 }
 
-func (c *schedulerClient) WatchJob(ctx context.Context, in *StreamJobRequest, opts ...grpc.CallOption) (Scheduler_WatchJobClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Scheduler_ServiceDesc.Streams[0], Scheduler_WatchJob_FullMethodName, opts...)
+func (c *schedulerClient) WatchJobs(ctx context.Context, in *WatchJobsRequest, opts ...grpc.CallOption) (Scheduler_WatchJobsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Scheduler_ServiceDesc.Streams[0], Scheduler_WatchJobs_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &schedulerWatchJobClient{stream}
+	x := &schedulerWatchJobsClient{stream}
 	if err := x.ClientStream.SendMsg(in); err != nil {
 		return nil, err
 	}
@@ -90,17 +90,17 @@ func (c *schedulerClient) WatchJob(ctx context.Context, in *StreamJobRequest, op
 	return x, nil
 }
 
-type Scheduler_WatchJobClient interface {
-	Recv() (*StreamJobResponse, error)
+type Scheduler_WatchJobsClient interface {
+	Recv() (*WatchJobsResponse, error)
 	grpc.ClientStream
 }
 
-type schedulerWatchJobClient struct {
+type schedulerWatchJobsClient struct {
 	grpc.ClientStream
 }
 
-func (x *schedulerWatchJobClient) Recv() (*StreamJobResponse, error) {
-	m := new(StreamJobResponse)
+func (x *schedulerWatchJobsClient) Recv() (*WatchJobsResponse, error) {
+	m := new(WatchJobsResponse)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -117,9 +117,9 @@ type SchedulerServer interface {
 	GetJob(context.Context, *GetJobRequest) (*GetJobResponse, error)
 	// DeleteJob is used by the daprd sidecar to delete a job.
 	DeleteJob(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
-	// WatchJob is used by the daprd sidecar to connect to the Scheduler
+	// WatchJobs is used by the daprd sidecar to connect to the Scheduler
 	// service to watch for jobs triggering back.
-	WatchJob(*StreamJobRequest, Scheduler_WatchJobServer) error
+	WatchJobs(*WatchJobsRequest, Scheduler_WatchJobsServer) error
 }
 
 // UnimplementedSchedulerServer should be embedded to have forward compatible implementations.
@@ -135,8 +135,8 @@ func (UnimplementedSchedulerServer) GetJob(context.Context, *GetJobRequest) (*Ge
 func (UnimplementedSchedulerServer) DeleteJob(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteJob not implemented")
 }
-func (UnimplementedSchedulerServer) WatchJob(*StreamJobRequest, Scheduler_WatchJobServer) error {
-	return status.Errorf(codes.Unimplemented, "method WatchJob not implemented")
+func (UnimplementedSchedulerServer) WatchJobs(*WatchJobsRequest, Scheduler_WatchJobsServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchJobs not implemented")
 }
 
 // UnsafeSchedulerServer may be embedded to opt out of forward compatibility for this service.
@@ -204,24 +204,24 @@ func _Scheduler_DeleteJob_Handler(srv interface{}, ctx context.Context, dec func
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Scheduler_WatchJob_Handler(srv interface{}, stream grpc.ServerStream) error {
-	m := new(StreamJobRequest)
+func _Scheduler_WatchJobs_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchJobsRequest)
 	if err := stream.RecvMsg(m); err != nil {
 		return err
 	}
-	return srv.(SchedulerServer).WatchJob(m, &schedulerWatchJobServer{stream})
+	return srv.(SchedulerServer).WatchJobs(m, &schedulerWatchJobsServer{stream})
 }
 
-type Scheduler_WatchJobServer interface {
-	Send(*StreamJobResponse) error
+type Scheduler_WatchJobsServer interface {
+	Send(*WatchJobsResponse) error
 	grpc.ServerStream
 }
 
-type schedulerWatchJobServer struct {
+type schedulerWatchJobsServer struct {
 	grpc.ServerStream
 }
 
-func (x *schedulerWatchJobServer) Send(m *StreamJobResponse) error {
+func (x *schedulerWatchJobsServer) Send(m *WatchJobsResponse) error {
 	return x.ServerStream.SendMsg(m)
 }
 
@@ -247,8 +247,8 @@ var Scheduler_ServiceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "WatchJob",
-			Handler:       _Scheduler_WatchJob_Handler,
+			StreamName:    "WatchJobs",
+			Handler:       _Scheduler_WatchJobs_Handler,
 			ServerStreams: true,
 		},
 	},
