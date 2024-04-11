@@ -21,10 +21,10 @@ import (
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/runtime/meta"
-	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 )
 
-var wfengineComp = wfengine.ComponentDefinition()
+var wfengineComp = wfbackend.ComponentDefinition()
 
 // Resource is a generic type constraint.
 type Resource interface {

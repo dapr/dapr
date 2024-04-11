@@ -27,7 +27,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	subscriptions "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	config "github.com/dapr/dapr/pkg/config/modes"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
@@ -57,11 +57,11 @@ func (o *mockOperator) ListComponents(ctx context.Context, in *operatorv1pb.List
 }
 
 func (o *mockOperator) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
-	subscription := subscriptions.Subscription{}
+	subscription := subapi.Subscription{}
 	subscription.ObjectMeta.Name = "test"
-	subscription.Spec = subscriptions.SubscriptionSpec{
+	subscription.Spec = subapi.SubscriptionSpec{
 		Topic:      "topic",
-		Route:      "route",
+		Routes:     subapi.Routes{Default: "route"},
 		Pubsubname: "pubsub",
 	}
 	b, _ := json.Marshal(&subscription)
@@ -87,10 +87,15 @@ func TestLoadComponents(t *testing.T) {
 
 	s := grpc.NewServer()
 	operatorv1pb.RegisterOperatorServer(s, &mockOperator{})
-	t.Cleanup(s.Stop)
+	errCh := make(chan error)
+
+	t.Cleanup(func() {
+		s.Stop()
+		require.NoError(t, <-errCh)
+	})
 
 	go func() {
-		s.Serve(lis)
+		errCh <- s.Serve(lis)
 	}()
 
 	request := &components{
