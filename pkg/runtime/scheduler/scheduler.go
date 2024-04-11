@@ -15,19 +15,17 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"io"
 	"math/rand"
 	"strings"
 	"sync"
 
-	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler"
-	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
+	"github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -35,17 +33,9 @@ import (
 
 var log = logger.NewLogger("dapr.runtime.scheduler")
 
-// Client represents a client for interacting with the scheduler.
-type schedulerClient struct {
-	conn      *grpc.ClientConn
-	scheduler schedulerv1pb.SchedulerClient
-	address   string
-	security  security.Handler
-}
-
 // Manager manages connections to multiple schedulers.
 type Manager struct {
-	clients     []*schedulerClient
+	clients     []*client.Client
 	connDetails scheduler.SidecarConnDetails
 	lock        sync.Mutex
 	lastUsedIdx int
@@ -74,18 +64,18 @@ func NewManager(ctx context.Context, ns string, appID string, addresses string, 
 
 	for _, address := range schedulerHostPorts {
 		log.Debug("Attempting to connect to Scheduler")
-		conn, client, err := schedulerclient.New(ctx, address, sec)
+		conn, cli, err := client.New(ctx, address, sec)
 		if err != nil {
 			log.Debugf("Scheduler client not initialized for address: %s", address)
 		} else {
 			log.Debugf("Scheduler client initialized for address: %s", address)
 		}
 
-		manager.clients = append(manager.clients, &schedulerClient{
-			conn:      conn,
-			scheduler: client,
-			address:   address,
-			security:  sec,
+		manager.clients = append(manager.clients, &client.Client{
+			Conn:      conn,
+			Scheduler: cli,
+			Address:   address,
+			Security:  sec,
 		})
 	}
 
@@ -97,10 +87,10 @@ func (m *Manager) Run(ctx context.Context) error {
 	mngr := concurrency.NewRunnerManager()
 
 	// Start a goroutine for each client to watch for job updates
-	for _, client := range m.clients {
-		client := client
+	for _, cli := range m.clients {
+		cli := cli
 		err := mngr.Add(func(ctx context.Context) error {
-			return m.watchJobs(ctx, client)
+			return m.watchJobs(ctx, cli)
 		})
 		if err != nil {
 			return err
@@ -109,31 +99,32 @@ func (m *Manager) Run(ctx context.Context) error {
 	return mngr.Run(ctx)
 }
 
-func (m *Manager) establishConnection(ctx context.Context, client *schedulerClient) error {
+func (m *Manager) establishConnection(ctx context.Context, client *client.Client) error {
 	for {
 		select {
 		case <-ctx.Done():
-			if client.conn != nil {
-				if err := client.conn.Close(); err != nil {
+			if client.Conn != nil {
+				if err := client.Conn.Close(); err != nil {
 					log.Debugf("error closing Scheduler client connection: %v", err)
 				}
 			}
 			return ctx.Err()
 		default:
-			if client.conn != nil {
+			if client.Conn != nil {
 				// connection is established
 				return nil
 			} else {
-				if err := client.closeAndReconnect(ctx); err != nil {
+				if err := client.CloseAndReconnect(ctx); err != nil {
 					log.Infof("Error establishing conn to Scheduler client: %v. Trying the next client.", err)
-					client.scheduler = m.NextClient()
+					client.Scheduler = m.NextClient()
 				}
+				log.Infof("Reconnected to scheduler at address %s", client.Address)
 			}
 		}
 	}
 }
 
-func (m *Manager) processStream(ctx context.Context, client *schedulerClient, streamReq *schedulerv1pb.WatchJobsRequest) error {
+func (m *Manager) processStream(ctx context.Context, client *client.Client, streamReq *schedulerv1pb.WatchJobsRequest) error {
 	var stream schedulerv1pb.Scheduler_WatchJobsClient
 
 	for {
@@ -142,19 +133,20 @@ func (m *Manager) processStream(ctx context.Context, client *schedulerClient, st
 			return ctx.Err()
 		default:
 			var err error
-			stream, err = client.scheduler.WatchJobs(ctx, streamReq)
+			stream, err = client.Scheduler.WatchJobs(ctx, streamReq)
 			if err != nil {
-				log.Infof("Error while streaming with Scheduler: %v", err)
-				if err := client.closeAndReconnect(ctx); err != nil {
+				log.Infof("Error while streaming with Scheduler: %v. Going to close and reconnect.", err)
+				if err := client.CloseAndReconnect(ctx); err != nil {
 					log.Debugf("Error reconnecting client: %v. Trying a new client.", err)
-					client.scheduler = m.NextClient()
+					client.Scheduler = m.NextClient()
 					continue
 				}
+				log.Infof("Reconnected to scheduler at address %s", client.Address)
 				continue
 			}
 		}
 
-		log.Infof("Established stream conn to Scheduler at address %s", client.address)
+		log.Infof("Established stream conn to Scheduler at address %s", client.Address)
 
 		for {
 			select {
@@ -162,7 +154,7 @@ func (m *Manager) processStream(ctx context.Context, client *schedulerClient, st
 				if err := stream.CloseSend(); err != nil {
 					log.Debugf("Error closing stream")
 				}
-				if err := client.closeConnection(); err != nil {
+				if err := client.CloseConnection(); err != nil {
 					log.Debugf("Error closing connection: %v", err)
 				}
 				return stream.Context().Err()
@@ -170,7 +162,7 @@ func (m *Manager) processStream(ctx context.Context, client *schedulerClient, st
 				if err := stream.CloseSend(); err != nil {
 					log.Debugf("Error closing stream")
 				}
-				if err := client.closeConnection(); err != nil {
+				if err := client.CloseConnection(); err != nil {
 					log.Debugf("Error closing connection: %v", err)
 				}
 				return ctx.Err()
@@ -190,7 +182,7 @@ func (m *Manager) processStream(ctx context.Context, client *schedulerClient, st
 						if err := stream.CloseSend(); err != nil {
 							log.Debugf("Error closing stream")
 						}
-						if nerr := client.closeConnection(); nerr != nil {
+						if nerr := client.CloseConnection(); nerr != nil {
 							log.Debugf("Error closing connection: %v", nerr)
 						}
 						return streamerr
@@ -202,7 +194,7 @@ func (m *Manager) processStream(ctx context.Context, client *schedulerClient, st
 	}
 }
 
-func (m *Manager) establishSchedulerConn(ctx context.Context, client *schedulerClient, streamReq *schedulerv1pb.WatchJobsRequest) error {
+func (m *Manager) establishSchedulerConn(ctx context.Context, client *client.Client, streamReq *schedulerv1pb.WatchJobsRequest) error {
 	for {
 		select {
 		case <-ctx.Done():
@@ -224,44 +216,12 @@ func (m *Manager) establishSchedulerConn(ctx context.Context, client *schedulerC
 }
 
 // watchJobs starts watching for job triggers from a single scheduler client.
-func (m *Manager) watchJobs(ctx context.Context, client *schedulerClient) error {
+func (m *Manager) watchJobs(ctx context.Context, client *client.Client) error {
 	streamReq := &schedulerv1pb.WatchJobsRequest{
 		AppId:     m.connDetails.AppID,
 		Namespace: m.connDetails.Namespace,
 	}
 	return m.establishSchedulerConn(ctx, client, streamReq)
-}
-
-func (client *schedulerClient) closeConnection() error {
-	if client.conn == nil {
-		return nil // Connection is already closed
-	}
-
-	if err := client.conn.Close(); err != nil {
-		return fmt.Errorf("error closing connection: %v", err)
-	}
-
-	client.conn = nil // Set the connection to nil to indicate it's closed
-	return nil
-}
-
-// closeAndReconnect closes the connection and reconnects the client.
-func (client *schedulerClient) closeAndReconnect(ctx context.Context) error {
-	if client.conn != nil {
-		if err := client.conn.Close(); err != nil {
-			return fmt.Errorf("error closing connection: %v", err)
-		}
-	}
-	log.Info("Attempting to connect to Scheduler")
-	conn, schedulerClient, err := schedulerclient.New(ctx, client.address, client.security)
-	if err != nil {
-		return fmt.Errorf("error creating Scheduler client for address %s: %v", client.address, err)
-	}
-	client.conn = conn
-	client.scheduler = schedulerClient
-
-	log.Infof("Reconnected to scheduler at address %s", client.address)
-	return nil
 }
 
 // NextClient returns the next client in a round-robin manner.
@@ -271,7 +231,7 @@ func (m *Manager) NextClient() schedulerv1pb.SchedulerClient {
 
 	// Check if there is only one client available
 	if len(m.clients) == 1 {
-		return m.clients[0].scheduler
+		return m.clients[0].Scheduler
 	}
 
 	nextIdx := rand.Intn(len(m.clients))
@@ -280,5 +240,5 @@ func (m *Manager) NextClient() schedulerv1pb.SchedulerClient {
 	// Update the last used index
 	m.lastUsedIdx = nextIdx
 
-	return nextClient.scheduler
+	return nextClient.Scheduler
 }
