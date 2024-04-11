@@ -7,7 +7,6 @@ import (
 	"sync"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/scheduler"
 	"github.com/dapr/kit/logger"
 )
 
@@ -25,8 +24,9 @@ type AppIDPool struct {
 }
 
 type Connection struct {
-	ConnDetails *scheduler.SidecarConnDetails
-	Stream      schedulerv1pb.Scheduler_WatchJobsServer
+	Namespace string
+	AppID     string
+	Stream    schedulerv1pb.Scheduler_WatchJobsServer
 }
 
 // Add adds a connection to the pool for a given namespace/appID.
@@ -43,15 +43,16 @@ func (p *Pool) Add(nsAppID string, conn *Connection) {
 
 	// Check if the connection already exists in the pool
 	for _, existingConn := range p.NsAppIDPool[nsAppID].connections {
-		if existingConn.ConnDetails == conn.ConnDetails {
+		if (existingConn.Namespace == conn.Namespace) && (existingConn.AppID == conn.AppID) {
 			log.Infof("Not adding connection for namespace/appID: %s. Connection already exists.", nsAppID)
 			return
 		}
 	}
 
 	p.NsAppIDPool[nsAppID].connections = append(p.NsAppIDPool[nsAppID].connections, &Connection{
-		ConnDetails: conn.ConnDetails,
-		Stream:      conn.Stream,
+		Namespace: conn.Namespace,
+		AppID:     conn.AppID,
+		Stream:    conn.Stream,
 	})
 }
 
@@ -62,7 +63,7 @@ func (p *Pool) Remove(nsAppID string, conn *Connection) {
 
 	if id, ok := p.NsAppIDPool[nsAppID]; ok {
 		for i, c := range id.connections {
-			if c.ConnDetails == conn.ConnDetails {
+			if (c.Namespace == conn.Namespace) && (c.AppID == conn.AppID) {
 				id.connections = append(id.connections[:i], id.connections[i+1:]...)
 				break
 			}
