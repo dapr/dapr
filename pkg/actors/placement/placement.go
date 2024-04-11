@@ -28,6 +28,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/placement/raft"
+
 	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
@@ -549,11 +551,10 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 
 			// TODO: @elena in v1.15 remove the check for versions < 1.13
 			// only keep `hashing.NewFromExisting`
-
-			if in.GetReplicationFactor() > 0 && len(v.GetHosts()) == 0 {
-				entries[k] = hashing.NewFromExisting(loadMap, in.GetReplicationFactor(), p.virtualNodesCache)
-			} else {
+			if p.apiLevel < raft.NoVirtualNodesInPlacementTablesAPILevel {
 				entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
+			} else {
+				entries[k] = hashing.NewFromExisting(loadMap, in.GetReplicationFactor(), p.virtualNodesCache)
 			}
 		}
 
