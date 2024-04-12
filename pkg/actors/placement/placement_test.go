@@ -245,16 +245,13 @@ func TestOnPlacementOrder(t *testing.T) {
 				},
 			},
 		}
-		testPlacement.apiLevel = 20
-		t.Cleanup(func() {
-			testPlacement.apiLevel = 10
-		})
+
 		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
 			Operation: "update",
 			Tables: &placementv1pb.PlacementTables{
 				Version:           tableVersion,
 				Entries:           entries,
-				ApiLevel:          20,
+				ApiLevel:          10,
 				ReplicationFactor: 3,
 			},
 		})
@@ -314,17 +311,6 @@ func TestOnPlacementOrder(t *testing.T) {
 		assert.Containsf(t, table, "actorOne", "actorOne should be in the table")
 		assert.Len(t, table["actorOne"].VirtualNodes(), 6)
 		assert.Len(t, table["actorOne"].SortedSet(), 6)
-
-		// By not sending the replication factor, we simulate an older placement service
-		// In that case, we expect the vnodes and sorted set to be sent by the placement service
-		testPlacement.onPlacementOrder(&placementv1pb.PlacementOrder{
-			Operation: "update",
-			Tables: &placementv1pb.PlacementTables{
-				Version:  tableVersion,
-				Entries:  entries,
-				ApiLevel: 10,
-			},
-		})
 	})
 
 	t.Run("unlock operation", func(t *testing.T) {

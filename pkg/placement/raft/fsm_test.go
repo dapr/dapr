@@ -112,9 +112,7 @@ func TestRestore(t *testing.T) {
 
 func TestPlacementStateWithVirtualNodes(t *testing.T) {
 	fsm := newFSM(DaprHostMemberStateConfig{
-		replicationFactor: 100,
-		minAPILevel:       0,
-		maxAPILevel:       100,
+		replicationFactor: 5,
 	})
 
 	m := DaprHostMember{
@@ -133,14 +131,14 @@ func TestPlacementStateWithVirtualNodes(t *testing.T) {
 		Data:  cmdLog,
 	})
 
-	newTable := fsm.PlacementState()
+	newTable := fsm.PlacementState(true)
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
-	assert.Equal(t, int64(100), newTable.GetReplicationFactor())
+	assert.Equal(t, int64(5), newTable.GetReplicationFactor())
 
 	for _, host := range newTable.GetEntries() {
-		assert.Len(t, host.GetHosts(), 100)
-		assert.Len(t, host.GetSortedSet(), 100)
+		assert.Len(t, host.GetHosts(), 5)
+		assert.Len(t, host.GetSortedSet(), 5)
 		assert.Len(t, host.GetLoadMap(), 1)
 		assert.Contains(t, host.GetLoadMap(), "127.0.0.1:3030")
 	}
@@ -148,15 +146,12 @@ func TestPlacementStateWithVirtualNodes(t *testing.T) {
 
 func TestPlacementState(t *testing.T) {
 	fsm := newFSM(DaprHostMemberStateConfig{
-		replicationFactor: 100,
-		minAPILevel:       0,
-		maxAPILevel:       100,
+		replicationFactor: 5,
 	})
 	m := DaprHostMember{
 		Name:     "127.0.0.1:3030",
 		AppID:    "fakeAppID",
 		Entities: []string{"actorTypeOne", "actorTypeTwo"},
-		APILevel: 20,
 	}
 	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
 	require.NoError(t, err)
@@ -168,10 +163,10 @@ func TestPlacementState(t *testing.T) {
 		Data:  cmdLog,
 	})
 
-	newTable := fsm.PlacementState()
+	newTable := fsm.PlacementState(false)
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
-	assert.Equal(t, int64(100), newTable.GetReplicationFactor())
+	assert.Equal(t, int64(5), newTable.GetReplicationFactor())
 
 	for _, host := range newTable.GetEntries() {
 		assert.Empty(t, host.GetHosts())
