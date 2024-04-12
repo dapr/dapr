@@ -59,7 +59,7 @@ func New(opts Options) (loader.Interface, error) {
 	return &disk{
 		fs: fs,
 		component: newResource[componentsapi.Component](
-			loaderdisk.New[componentsapi.Component](opts.Dirs...),
+			loaderdisk.NewComponents(opts.Dirs...),
 			store.NewComponent(opts.ComponentStore),
 			updateCh,
 		),
