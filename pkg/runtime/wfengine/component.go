@@ -22,10 +22,8 @@ import (
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/workflows"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1" // This will be removed
 	"github.com/dapr/kit/logger"
 )
 
@@ -245,12 +243,4 @@ func getStatusString(status int32) string {
 		return statusStr
 	}
 	return "UNKNOWN"
-}
-
-func ComponentDefinition() componentsV1alpha1.Component {
-	return componentsV1alpha1.Component{
-		TypeMeta:   metav1.TypeMeta{Kind: "Component"},
-		ObjectMeta: metav1.ObjectMeta{Name: "dapr"},
-		Spec:       componentsV1alpha1.ComponentSpec{Type: "workflow.dapr", Version: "v1"},
-	}
 }

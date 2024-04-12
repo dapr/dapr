@@ -73,6 +73,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
@@ -672,14 +673,14 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
 		ComponentStore: a.compStore,
 		Meta:           a.meta,
 	})
-	if err := wfe.Init(ctx, wfengine.ComponentDefinition()); err != nil {
+	if err := wfe.Init(ctx, wfbackend.ComponentDefinition()); err != nil {
 		return fmt.Errorf("failed to initialize Dapr workflow component: %w", err)
 	}
 
 	log.Info("Workflow engine initialized.")
 
 	return a.runnerCloser.AddCloser(func() error {
-		return wfe.Close(wfengine.ComponentDefinition())
+		return wfe.Close(wfbackend.ComponentDefinition())
 	})
 }
 
@@ -1016,7 +1017,7 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.New[compapi.Component](a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewComponents(a.runtimeConfig.standalone.ResourcesPath...)
 	default:
 		return nil
 	}
@@ -1080,7 +1081,7 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.New[endpointapi.HTTPEndpoint](a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewHTTPEndpoints(a.runtimeConfig.standalone.ResourcesPath...)
 	default:
 		return nil
 	}
