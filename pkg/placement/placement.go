@@ -139,11 +139,14 @@ type Service struct {
 	membershipCh chan hostMemberChange
 	// disseminateLock is the lock for hashing table dissemination.
 	disseminateLock sync.Mutex
-	// disseminateNextTime is the time when the hashing tables are disseminated.
-	disseminateNextTime atomic.Int64
-	// memberUpdateCount represents how many dapr runtimes needs to change.
-	// consistent hashing table. Only actor runtime's heartbeat will increase this.
-	memberUpdateCount atomic.Uint32
+
+	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
+	disseminateNextTime map[string]atomic.Int64
+
+	// memberUpdateCount represents how many dapr runtimes needs to change in a namespace.
+	// Only actor runtime's heartbeat will increase this.
+	memberUpdateCountTotal        atomic.Uint32
+	memberUpdateCountPerNamespace map[string]*atomic.Uint32
 
 	// Maximum API level to return.
 	// If nil, there's no limit.
@@ -291,14 +294,6 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 		switch err {
 		case nil:
-			//if clientID != nil && req.GetId() != clientID.AppID() {
-			//	return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
-			//}
-			//
-			//if clientID != nil && req.GetNamespace() != clientID.Namespace() {
-			//	return status.Errorf(codes.PermissionDenied, "client namespace %s is not allowed", req.GetNamespace())
-			//}
-
 			state := p.raftNode.FSM().State()
 
 			if registeredMemberID == "" {
@@ -426,14 +421,14 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 //	p.streamConnPoolLock.Unlock()
 //}
 
-func (p *Service) hasStreamConn(conn placementGRPCStream) bool {
-	p.streamConnPoolLock.RLock()
-	defer p.streamConnPoolLock.RUnlock()
-
-	for _, c := range p.streamConnPool {
-		if c == conn {
-			return true
-		}
-	}
-	return false
-}
+//func (p *Service) hasStreamConn(conn placementGRPCStream) bool {
+//	p.streamConnPoolLock.RLock()
+//	defer p.streamConnPoolLock.RUnlock()
+//
+//	for _, c := range p.streamConnPool {
+//		if c == conn {
+//			return true
+//		}
+//	}
+//	return false
+//}

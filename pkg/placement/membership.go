@@ -188,7 +188,12 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 	disseminateTimer := p.clock.NewTicker(disseminateTimerInterval)
 	defer disseminateTimer.Stop()
 
-	p.memberUpdateCount.Store(0)
+	// Reset memberUpdateCount to zero for every namespace when leadership is acquired.
+	p.streamConnPool.lock.RLock()
+	for ns := range p.streamConnPool.streams {
+		p.memberUpdateCountPerNamespace[ns].Store(0)
+	}
+	p.streamConnPool.lock.RUnlock()
 
 	p.wg.Add(1)
 	go func() {
@@ -209,8 +214,8 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 
 			// check if there is actor runtime member change.
 			if p.disseminateNextTime.Load() <= t.UnixNano() && len(p.membershipCh) == 0 {
-				if cnt := p.memberUpdateCount.Load(); cnt > 0 {
-					log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCount count: %d", cnt)
+				if cnt := p.memberUpdateCountTotal.Load(); cnt > 0 {
+					log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCountTotal count: %d", cnt)
 					p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate}
 				}
 			}
@@ -302,7 +307,8 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 
 						// ApplyCommand returns true only if the command changes hashing table.
 						if updated {
-							p.memberUpdateCount.Add(1)
+							p.memberUpdateCountTotal.Add(1)
+
 							// disseminateNextTime will be updated whenever apply is done, so that
 							// it will keep moving the time to disseminate the table, which will
 							// reduce the unnecessary table dissemination.
