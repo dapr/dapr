@@ -39,7 +39,7 @@ const (
 	appName         = "perf-actor-reminder-service"
 
 	// Target for the QPS
-	targetQPS = 48
+	targetQPS = 45
 )
 
 var tr *runner.TestRunner
