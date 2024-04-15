@@ -21,6 +21,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/config"
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
+	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
 )
 
 // Config is the actor runtime configuration.
@@ -42,7 +43,7 @@ type ConfigOpts struct {
 	AppID             string
 	ActorsService     string
 	RemindersService  string
-	SchedulerAddress  string
+	SchedulerManager  *runtimeScheduler.Manager
 	Port              int
 	Namespace         string
 	AppConfig         daprAppConfig.ApplicationConfig
@@ -59,7 +60,7 @@ func NewConfig(opts ConfigOpts) Config {
 		AppID:                         opts.AppID,
 		ActorsService:                 opts.ActorsService,
 		RemindersService:              opts.RemindersService,
-		SchedulerService:              opts.SchedulerAddress,
+		SchedulerManager:              opts.SchedulerManager,
 		Port:                          opts.Port,
 		Namespace:                     opts.Namespace,
 		DrainRebalancedActors:         opts.AppConfig.DrainRebalancedActors,

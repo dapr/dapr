@@ -69,7 +69,7 @@ func (j *jobs) Setup(t *testing.T) []framework.Option {
 	)
 
 	j.daprd = daprd.New(t,
-		daprd.WithSchedulerAddress(j.scheduler.Address()),
+		daprd.WithSchedulerAddresses(j.scheduler.Address()),
 	)
 
 	fp.Free(t)
@@ -92,6 +92,7 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 				Job: &rtv1.Job{
 					Name:     name,
 					Schedule: "@every 1s",
+					Repeats:  1,
 					Data: &anypb.Any{
 						Value: []byte(j.idPrefix),
 					},

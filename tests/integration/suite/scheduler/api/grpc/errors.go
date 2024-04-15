@@ -43,7 +43,7 @@ func (e *standardizedErrors) Setup(t *testing.T) []framework.Option {
 	e.scheduler = scheduler.New(t)
 
 	e.daprd = daprd.New(t,
-		daprd.WithSchedulerAddress(e.scheduler.Address()),
+		daprd.WithSchedulerAddresses(e.scheduler.Address()),
 	)
 
 	return []framework.Option{

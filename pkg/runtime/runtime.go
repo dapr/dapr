@@ -64,7 +64,6 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -76,8 +75,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
-	schedulerclient "github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
@@ -106,7 +105,7 @@ type DaprRuntime struct {
 	daprHTTPAPI         http.API
 	daprGRPCAPI         grpc.API
 	operatorClient      operatorv1pb.OperatorClient
-	schedulerClient     schedulerv1pb.SchedulerClient
+	schedulerManager    *runtimeScheduler.Manager
 	isAppHealthy        chan struct{}
 	appHealth           *apphealth.AppHealth
 	appHealthReady      func(context.Context) error // Invoked the first time the app health becomes ready
@@ -159,16 +158,6 @@ func newDaprRuntime(ctx context.Context,
 	operatorClient, err := getOperatorClient(ctx, sec, runtimeConfig)
 	if err != nil {
 		return nil, err
-	}
-
-	var schedClient schedulerv1pb.SchedulerClient
-	if runtimeConfig.SchedulerEnabled() {
-		schedClient, err = schedulerclient.New(ctx, runtimeConfig.schedulerAddress, sec)
-		if err != nil {
-			return nil, fmt.Errorf("error creating scheduler client: %w", err)
-		}
-
-		log.Infof("Scheduler client initialized")
 	}
 
 	grpc := createGRPCManager(sec, runtimeConfig, globalConfig)
@@ -224,7 +213,6 @@ func newDaprRuntime(ctx context.Context,
 		compStore:         compStore,
 		meta:              meta,
 		operatorClient:    operatorClient,
-		schedulerClient:   schedClient,
 		channels:          channels,
 		sec:               sec,
 		processor:         processor,
@@ -302,6 +290,22 @@ func newDaprRuntime(ctx context.Context,
 	if rt.reloader != nil {
 		if err := rt.runnerCloser.Add(rt.reloader.Run); err != nil {
 			return nil, err
+		}
+	}
+
+	var schedulerManager *runtimeScheduler.Manager
+	if runtimeConfig.SchedulerEnabled() {
+		schedulerManager = runtimeScheduler.NewManager(ctx, runtimeScheduler.Options{
+			Namespace: namespace,
+			AppID:     runtimeConfig.id,
+			Addresses: runtimeConfig.schedulerAddress,
+			Security:  sec,
+		})
+		if err := rt.runnerCloser.Add(schedulerManager.Run); err != nil {
+			return nil, err
+		}
+		if schedulerManager != nil {
+			rt.schedulerManager = schedulerManager
 		}
 	}
 
@@ -510,9 +514,12 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Setup allow/deny list for secrets
 	a.populateSecretsConfiguration()
 
+	a.namespace = security.CurrentNamespace()
+
 	// Create and start the external gRPC server
 	a.daprUniversal = universal.New(universal.Options{
 		AppID:                       a.runtimeConfig.id,
+		Namespace:                   a.namespace,
 		Logger:                      logger.NewLogger("dapr.api"),
 		CompStore:                   a.compStore,
 		Resiliency:                  a.resiliency,
@@ -521,7 +528,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
-		SchedulerClient:             a.schedulerClient,
+		SchedulerManager:            a.schedulerManager,
 		WorkflowEngine:              wfe,
 	})
 
@@ -972,7 +979,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
 		RemindersService:  a.runtimeConfig.remindersService,
-		SchedulerAddress:  a.runtimeConfig.schedulerAddress,
+		SchedulerManager:  a.schedulerManager,
 		Port:              a.runtimeConfig.internalGRPCPort,
 		Namespace:         a.namespace,
 		AppConfig:         a.appConfig,

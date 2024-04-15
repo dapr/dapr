@@ -86,14 +86,15 @@ func Run() {
 				AppID:            appID,
 				HostAddress:      hostAddress,
 				ListenAddress:    opts.ListenAddress,
+				PlacementAddress: opts.PlacementAddress,
+				Mode:             modes.DaprMode(opts.Mode),
+				Port:             opts.Port,
+				Security:         secHandler,
+
 				DataDir:          opts.EtcdDataDir,
 				EtcdID:           opts.EtcdID,
 				EtcdInitialPeers: opts.EtcdInitialPeers,
 				EtcdClientPorts:  opts.EtcdClientPorts,
-				Port:             opts.Port,
-				Security:         secHandler,
-				PlacementAddress: opts.PlacementAddress,
-				Mode:             modes.DaprMode(opts.Mode),
 			})
 
 			return server.Run(ctx)

@@ -62,7 +62,7 @@ func (e *errors) Setup(t *testing.T) []framework.Option {
 	)
 
 	e.daprd = daprd.New(t,
-		daprd.WithSchedulerAddress(e.scheduler.Address(t)),
+		daprd.WithSchedulerAddresses(e.scheduler.Address(t)),
 		daprd.WithSentryAddress(e.sentry.Address()),
 		daprd.WithEnableMTLS(true),
 		daprd.WithExecOptions(

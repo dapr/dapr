@@ -40,11 +40,12 @@ type Scheduler struct {
 	ports   *ports.Ports
 	running atomic.Bool
 
-	port        int
-	healthzPort int
-	metricsPort int
-	dataDir     string
+	port             int
+	healthzPort      int
+	metricsPort      int
+	placementAddress string
 
+	dataDir             string
 	id                  string
 	initialCluster      string
 	initialClusterPorts []int
@@ -97,6 +98,9 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 	if opts.sentryAddress != nil {
 		args = append(args, "--sentry-address="+*opts.sentryAddress)
+	}
+	if opts.placementAddress != nil {
+		args = append(args, "--placement-address="+*opts.placementAddress)
 	}
 	if opts.trustAnchorsFile != nil {
 		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
@@ -196,4 +200,8 @@ func (s *Scheduler) ListenAddress() string {
 
 func (s *Scheduler) DataDir() string {
 	return s.dataDir
+}
+
+func (s *Scheduler) PlacementAddress() string {
+	return s.placementAddress
 }
