@@ -11,7 +11,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
 	github.com/dapr/components-contrib v1.13.0-rc.2.0.20240503231149-1f46231d875c
-	github.com/dapr/kit v0.13.1-0.20240402103809-0c7cfce53d9e
+	github.com/dapr/kit v0.13.1-0.20240415171926-a3f906d60908
 	github.com/evanphx/json-patch/v5 v5.8.1
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
@@ -470,8 +470,7 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
-replace github.com/dapr/kit => github.com/joshvanl/kit v0.0.0-20240411125444-edfbbf2bdf55
-
+// replace github.com/dapr/kit => ../kit
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
