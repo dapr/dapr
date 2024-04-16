@@ -41,7 +41,6 @@ const (
 	actorTypeEnvName                = "TEST_APP_ACTOR_TYPE"                 // To set to change actor type.
 	actorRemindersPartitionsEnvName = "TEST_APP_ACTOR_REMINDERS_PARTITIONS" // To set actor type partition count.
 	actorIdleTimeout                = "1h"
-	actorScanInterval               = "30s"
 	drainOngoingCallTimeout         = "30s"
 	drainRebalancedActors           = true
 	secondsToWaitInMethod           = 5
@@ -82,7 +81,6 @@ type actorLogEntry struct {
 type daprConfig struct {
 	Entities                   []string `json:"entities,omitempty"`
 	ActorIdleTimeout           string   `json:"actorIdleTimeout,omitempty"`
-	ActorScanInterval          string   `json:"actorScanInterval,omitempty"`
 	DrainOngoingCallTimeout    string   `json:"drainOngoingCallTimeout,omitempty"`
 	DrainRebalancedActors      bool     `json:"drainRebalancedActors,omitempty"`
 	RemindersStoragePartitions int      `json:"remindersStoragePartitions,omitempty"`
@@ -234,7 +232,6 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 	daprConfigResponse := daprConfig{
 		[]string{getActorType()},
 		actorIdleTimeout,
-		actorScanInterval,
 		drainOngoingCallTimeout,
 		drainRebalancedActors,
 		getActorRemindersPartitions(),
