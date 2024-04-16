@@ -51,6 +51,7 @@ type PlacementService interface {
 type LookupActorRequest struct {
 	ActorType string
 	ActorID   string
+	NoCache   bool
 }
 
 // ActorKey returns the key for the actor, which is "type/id".
