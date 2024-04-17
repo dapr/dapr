@@ -56,7 +56,6 @@ func NewActorService(port int, config *rt.DaprConfig) *ActorService {
 		daprConfig = rt.DaprConfig{
 			Entities:                []string{},
 			ActorIdleTimeout:        "60m",
-			ActorScanInterval:       "10s",
 			DrainOngoingCallTimeout: "10s",
 			DrainRebalancedActors:   true,
 		}
