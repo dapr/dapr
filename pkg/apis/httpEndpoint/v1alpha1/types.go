@@ -103,7 +103,7 @@ func (h HTTPEndpoint) HasTLSClientCert() bool {
 	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.Certificate != nil && h.Spec.ClientTLS.Certificate.Value != nil
 }
 
-// HasTLSClientKey returns a bool indicating if the HTTP endpoint contains a tls client key
+// HasTLSPrivateKey returns a bool indicating if the HTTP endpoint contains a tls client key
 func (h HTTPEndpoint) HasTLSPrivateKey() bool {
 	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.PrivateKey != nil && h.Spec.ClientTLS.PrivateKey.Value != nil
 }
