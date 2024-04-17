@@ -989,7 +989,6 @@ func (r *reminders) migrateRemindersForActorType(ctx context.Context, storeName 
 	}
 
 	// Also create a request to save the new metadata, so the new "metadataID" becomes the new de facto referenced list for reminders
-	//stateOperations[len(stateOperations)-1] = r.saveActorTypeMetadataRequest(actorType, actorMetadata, stateMetadata)
 
 	// Perform all operations in a transaction
 	err = r.executeStateStoreTransaction(ctx, storeName, store, stateOperations, stateMetadata)
