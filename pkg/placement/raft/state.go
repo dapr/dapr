@@ -127,16 +127,11 @@ func (s *DaprHostMemberState) Members(ns string) (map[string]*DaprHostMember, er
 	return members, nil
 }
 
-func (s *DaprHostMemberState) TableGeneration(ns string) (uint64, error) {
+func (s *DaprHostMemberState) TableGeneration() uint64 {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	n, ok := s.data.Namespace[ns]
-	if !ok {
-		return 0, ErrNamespaceNotFound
-	}
-
-	return n.TableGeneration, nil
+	return s.data.TableGeneration
 }
 
 // Internal function that updates the API level in the object.
@@ -196,21 +191,19 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 	newMembers := &DaprHostMemberState{
 		config: s.config,
 		data: DaprHostMemberStateData{
-			Index:     s.data.Index,
-			Namespace: make(map[string]*DaprNamespace, len(s.data.Namespace)),
-			//TableGeneration: s.data.TableGeneration,
-			//Members:         make(map[string]*DaprHostMember, len(s.data.Members)),
-			APILevel: s.data.APILevel,
+			Index:           s.data.Index,
+			Namespace:       make(map[string]*DaprNamespace, len(s.data.Namespace)),
+			TableGeneration: s.data.TableGeneration,
+			APILevel:        s.data.APILevel,
 		},
 	}
 
-	for i, ns := range s.data.Namespace {
-		newMembers.data.Namespace[i] = &DaprNamespace{
-			Members:         make(map[string]*DaprHostMember, len(ns.Members)),
-			TableGeneration: ns.TableGeneration,
-			hashingTableMap: make(map[string]*hashing.Consistent, len(ns.hashingTableMap)),
+	for nsName, nsData := range s.data.Namespace {
+		newMembers.data.Namespace[nsName] = &DaprNamespace{
+			Members:         make(map[string]*DaprHostMember, len(nsData.Members)),
+			hashingTableMap: make(map[string]*hashing.Consistent, len(nsData.hashingTableMap)),
 		}
-		for k, v := range ns.Members {
+		for k, v := range nsData.Members {
 			m := &DaprHostMember{
 				Name:      v.Name,
 				AppID:     v.AppID,
@@ -219,48 +212,35 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 				APILevel:  v.APILevel,
 			}
 			copy(m.Entities, v.Entities)
-			newMembers.data.Namespace[ns].Members[k] = m
-		}
-		for k, v := range ns.hashingTableMap {
-			newMembers.data.Namespace[ns].hashingTableMap[k] = v
+			newMembers.data.Namespace[nsName].Members[k] = m
 		}
 	}
 
-	for k, v := range s.data.Members {
-		m := &DaprHostMember{
-			Name:      v.Name,
-			AppID:     v.AppID,
-			Entities:  make([]string, len(v.Entities)),
-			UpdatedAt: v.UpdatedAt,
-			APILevel:  v.APILevel,
-		}
-		copy(m.Entities, v.Entities)
-		newMembers.data.Members[k] = m
-	}
 	return newMembers
 }
 
-// caller should holds lock.
+// caller should hold lock.
 func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
+	// TODO: @elena - come back to this and check if we can rely on s.data.Namespace[host.Namespace] existing
 	for _, e := range host.Entities {
-		if _, ok := s.data.hashingTableMap[e]; !ok {
-			s.data.hashingTableMap[e] = hashing.NewConsistentHash(s.config.replicationFactor)
+		if _, ok := s.data.Namespace[host.Namespace].hashingTableMap[e]; !ok {
+			s.data.Namespace[host.Namespace].hashingTableMap[e] = hashing.NewConsistentHash(s.config.replicationFactor)
 		}
 
-		s.data.hashingTableMap[e].Add(host.Name, host.AppID, 0)
+		s.data.Namespace[host.Namespace].hashingTableMap[e].Add(host.Name, host.AppID, 0)
 	}
 }
 
 // caller should holds lock.
 func (s *DaprHostMemberState) removeHashingTables(host *DaprHostMember) {
 	for _, e := range host.Entities {
-		if t, ok := s.data.hashingTableMap[e]; ok {
+		if t, ok := s.data.Namespace[host.Namespace].hashingTableMap[e]; ok {
 			t.Remove(host.Name)
 
 			// if no dedicated actor service instance for the particular actor type,
 			// we must delete consistent hashing table to avoid the memory leak.
 			if len(t.Hosts()) == 0 {
-				delete(s.data.hashingTableMap, e)
+				delete(s.data.Namespace[host.Namespace].hashingTableMap, e)
 			}
 		}
 	}
@@ -276,7 +256,15 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if m, ok := s.data.Members[host.Name]; ok {
+	ns, ok := s.data.Namespace[host.Namespace]
+	if !ok {
+		s.data.Namespace[host.Namespace] = &DaprNamespace{
+			Members: make(map[string]*DaprHostMember),
+		}
+		ns = s.data.Namespace[host.Namespace]
+	}
+
+	if m, ok := ns.Members[host.Name]; ok {
 		// No need to update consistent hashing table if the same dapr host member exists
 		if m.AppID == host.AppID && m.Name == host.Name && cmp.Equal(m.Entities, host.Entities) {
 			m.UpdatedAt = host.UpdatedAt
@@ -288,7 +276,7 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 		s.removeHashingTables(m)
 	}
 
-	s.data.Members[host.Name] = &DaprHostMember{
+	ns.Members[host.Name] = &DaprHostMember{
 		Name:      host.Name,
 		AppID:     host.AppID,
 		UpdatedAt: host.UpdatedAt,
@@ -296,10 +284,10 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 	}
 
 	// Update hashing table only when host reports actor types
-	s.data.Members[host.Name].Entities = make([]string, len(host.Entities))
-	copy(s.data.Members[host.Name].Entities, host.Entities)
+	ns.Members[host.Name].Entities = make([]string, len(host.Entities))
+	copy(ns.Members[host.Name].Entities, host.Entities)
 
-	s.updateHashingTables(s.data.Members[host.Name])
+	s.updateHashingTables(ns.Members[host.Name])
 	s.updateAPILevel()
 
 	// Increase hashing table generation version. Runtime will compare the table generation
@@ -315,10 +303,15 @@ func (s *DaprHostMemberState) removeMember(host *DaprHostMember) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if m, ok := s.data.Members[host.Name]; ok {
+	ns, ok := s.data.Namespace[host.Namespace]
+	if !ok {
+		return false
+	}
+
+	if m, ok := ns.Members[host.Name]; ok {
 		s.removeHashingTables(m)
 		s.data.TableGeneration++
-		delete(s.data.Members, host.Name)
+		delete(ns.Members, host.Name)
 		s.updateAPILevel()
 
 		return true
@@ -333,12 +326,14 @@ func (s *DaprHostMemberState) isActorHost(host *DaprHostMember) bool {
 
 // caller should hold lock.
 func (s *DaprHostMemberState) restoreHashingTables() {
-	if s.data.hashingTableMap == nil {
-		s.data.hashingTableMap = map[string]*hashing.Consistent{}
-	}
+	for _, ns := range s.data.Namespace {
+		if ns.hashingTableMap == nil {
+			ns.hashingTableMap = map[string]*hashing.Consistent{}
+		}
 
-	for _, m := range s.data.Members {
-		s.updateHashingTables(m)
+		for _, m := range ns.Members {
+			s.updateHashingTables(m)
+		}
 	}
 }
 
