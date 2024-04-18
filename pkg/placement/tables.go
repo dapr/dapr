@@ -29,7 +29,6 @@ type HostInfo struct {
 // GetPlacementTables returns the current placement host infos.
 func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 	state := p.raftNode.FSM().State()
-	m := state.Members()
 	response := &PlacementTables{
 		TableVersion: state.TableGeneration(),
 		APILevel:     state.APILevel(),
@@ -40,6 +39,10 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 	if p.maxAPILevel != nil && response.APILevel > *p.maxAPILevel {
 		response.APILevel = *p.maxAPILevel
 	}
+
+	state.Lock.RLock()
+	m := state.AllMembers()
+
 	members := make([]HostInfo, len(m))
 	// the key of the member map is the host name, so we can just ignore it.
 	var i int
@@ -54,5 +57,7 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 		i++
 	}
 	response.HostList = members
+	state.Lock.RUnlock()
+
 	return response, nil
 }

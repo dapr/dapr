@@ -471,7 +471,7 @@ func TestExpectsVNodes(t *testing.T) {
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			stream := MockPlacementGRPCStream{ctx: tt.ctx}
-			result := hostAcceptsVNodes(stream)
+			result := hostNeedsVNodes(stream)
 			if result != tt.expected {
 				t.Errorf("expectsVNodes() for %s: expected %v, got %v", tt.name, tt.expected, result)
 			}

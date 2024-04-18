@@ -1,9 +1,31 @@
 package placement
 
 import (
+	"strings"
 	"sync"
 	"sync/atomic"
+
+	"google.golang.org/grpc/metadata"
+
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
+
+type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer //nolint:nosnakecase
+
+type daprdStream struct {
+	id          uint32
+	namespace   string
+	needsVNodes bool
+	stream      placementGRPCStream
+}
+
+func newDaprdStream(ns string, stream placementGRPCStream) daprdStream {
+	return daprdStream{
+		namespace:   ns,
+		stream:      stream,
+		needsVNodes: hostNeedsVNodes(stream),
+	}
+}
 
 // streamConnPool has the stream connections established between the placement gRPC server
 // and the Dapr runtime grouped by namespace, with an assigned id for faster lookup/deletion
@@ -33,15 +55,22 @@ type streamConnPool struct {
 // add adds stream connection between runtime and placement to the namespaced dissemination pool.
 func (s *streamConnPool) add(stream daprdStream) {
 	s.lock.Lock()
+	defer s.lock.Unlock()
+
 	id := s.streamIndexCnt.Add(1)
 	stream.id = id
+
+	if _, ok := s.streams[stream.namespace]; !ok {
+		s.streams[stream.namespace] = make(map[uint32]daprdStream)
+	}
+
 	s.streams[stream.namespace][id] = stream
-	s.lock.Unlock()
 }
 
 // delete removes stream connection between runtime and placement from the namespaced dissemination pool.
 func (s *streamConnPool) delete(stream daprdStream) {
 	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	if streams, ok := s.streams[stream.namespace]; ok {
 		delete(streams, stream.id)
@@ -49,11 +78,38 @@ func (s *streamConnPool) delete(stream daprdStream) {
 			delete(s.streams, stream.namespace)
 		}
 	}
-	s.lock.Unlock()
+}
+
+// getStreams requires a lock (s.lock) to be held by the caller.
+func (s *streamConnPool) getStreams(namespace string) map[uint32]daprdStream {
+	return s.streams[namespace]
 }
 
 func newStreamConnPool() *streamConnPool {
 	return &streamConnPool{
 		streams: make(map[string]map[uint32]daprdStream),
 	}
+}
+
+func (s *streamConnPool) hasStream(id uint32) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	for _, streams := range s.streams {
+		if _, ok := streams[id]; ok {
+			return true
+		}
+	}
+	return false
+}
+
+func hostNeedsVNodes(stream placementGRPCStream) bool {
+	md, ok := metadata.FromIncomingContext(stream.Context())
+	if !ok {
+		return true // default to older versions that need vnodes
+	}
+
+	// Extract apiLevel from metadata
+	vmd := md.Get(GRPCContextKeyAcceptVNodes)
+	return !(len(vmd) > 0 && strings.EqualFold(vmd[0], "false"))
 }

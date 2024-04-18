@@ -77,7 +77,7 @@ func newDaprHostMemberStateData() DaprHostMemberStateData {
 // DaprHostMemberState is the state to store Dapr runtime host and
 // consistent hashing tables.
 type DaprHostMemberState struct {
-	lock sync.RWMutex
+	Lock sync.RWMutex
 
 	config DaprHostMemberStateConfig
 
@@ -98,45 +98,77 @@ func newDaprHostMemberState(config DaprHostMemberStateConfig) *DaprHostMemberSta
 }
 
 func (s *DaprHostMemberState) Index() uint64 {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.Lock.RLock()
+	defer s.Lock.RUnlock()
 
 	return s.data.Index
 }
 
 // APILevel returns the current API level of the cluster.
 func (s *DaprHostMemberState) APILevel() uint32 {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.Lock.RLock()
+	defer s.Lock.RUnlock()
 
 	return s.data.APILevel
 }
 
-func (s *DaprHostMemberState) Members(ns string) (map[string]*DaprHostMember, error) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+func (s *DaprHostMemberState) Namespaces() []string {
+	s.Lock.RLock()
+	defer s.Lock.RUnlock()
 
+	namespaces := make([]string, 0, len(s.data.Namespace))
+	for ns := range s.data.Namespace {
+		namespaces = append(namespaces, ns)
+	}
+
+	return namespaces
+}
+
+// Members requires a lock to be held by the caller.
+// TODO: @elena - update all callers so they hold a lock
+func (s *DaprHostMemberState) Members(ns string) (map[string]*DaprHostMember, error) {
 	n, ok := s.data.Namespace[ns]
 	if !ok {
 		return nil, ErrNamespaceNotFound
 	}
-	members := make(map[string]*DaprHostMember, len(n.Members))
-	for k, v := range n.Members {
-		members[k] = v
+	return n.Members, nil
+
+	//s.Lock.RLock()
+	//defer s.Lock.RUnlock()
+	//
+	//n, ok := s.data.Namespace[ns]
+	//if !ok {
+	//	return nil, ErrNamespaceNotFound
+	//}
+	//members := make(map[string]*DaprHostMember, len(n.Members))
+	//for k, v := range n.Members {
+	//	members[k] = v
+	//}
+	//return members, nil
+}
+
+// AllMembers requires a lock to be held by the caller.
+func (s *DaprHostMemberState) AllMembers() map[string]*DaprHostMember {
+	members := make(map[string]*DaprHostMember)
+	for _, ns := range s.data.Namespace {
+		for k, v := range ns.Members {
+			members[k] = v
+		}
 	}
-	return members, nil
+
+	return members
 }
 
 func (s *DaprHostMemberState) TableGeneration() uint64 {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.Lock.RLock()
+	defer s.Lock.RUnlock()
 
 	return s.data.TableGeneration
 }
 
 // Internal function that updates the API level in the object.
 // The API level can only be increased.
-// Make sure you have a lock before calling this method.
+// Make sure you have a Lock before calling this method.
 func (s *DaprHostMemberState) updateAPILevel() {
 	var observedMinLevel uint32
 
@@ -173,8 +205,8 @@ func (s *DaprHostMemberState) updateAPILevel() {
 }
 
 func (s *DaprHostMemberState) hashingTableMap(ns string) (map[string]*hashing.Consistent, error) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.Lock.RLock()
+	defer s.Lock.RUnlock()
 
 	n, ok := s.data.Namespace[ns]
 	if !ok {
@@ -185,8 +217,8 @@ func (s *DaprHostMemberState) hashingTableMap(ns string) (map[string]*hashing.Co
 }
 
 func (s *DaprHostMemberState) clone() *DaprHostMemberState {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.Lock.RLock()
+	defer s.Lock.RUnlock()
 
 	newMembers := &DaprHostMemberState{
 		config: s.config,
@@ -219,9 +251,15 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 	return newMembers
 }
 
-// caller should hold lock.
+// caller should hold Lock.
 func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
 	// TODO: @elena - come back to this and check if we can rely on s.data.Namespace[host.Namespace] existing
+	if _, ok := s.data.Namespace[host.Namespace]; !ok {
+		s.data.Namespace[host.Namespace] = &DaprNamespace{
+			Members:         make(map[string]*DaprHostMember),
+			hashingTableMap: make(map[string]*hashing.Consistent),
+		}
+	}
 	for _, e := range host.Entities {
 		if _, ok := s.data.Namespace[host.Namespace].hashingTableMap[e]; !ok {
 			s.data.Namespace[host.Namespace].hashingTableMap[e] = hashing.NewConsistentHash(s.config.replicationFactor)
@@ -231,7 +269,7 @@ func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
 	}
 }
 
-// caller should holds lock.
+// caller should holds Lock.
 func (s *DaprHostMemberState) removeHashingTables(host *DaprHostMember) {
 	for _, e := range host.Entities {
 		if t, ok := s.data.Namespace[host.Namespace].hashingTableMap[e]; ok {
@@ -253,8 +291,8 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 		return false
 	}
 
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.Lock.Lock()
+	defer s.Lock.Unlock()
 
 	ns, ok := s.data.Namespace[host.Namespace]
 	if !ok {
@@ -300,8 +338,8 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 // removeMember removes members from membership and update hashing table and returns true
 // if hashing table update happens.
 func (s *DaprHostMemberState) removeMember(host *DaprHostMember) bool {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.Lock.Lock()
+	defer s.Lock.Unlock()
 
 	ns, ok := s.data.Namespace[host.Namespace]
 	if !ok {
@@ -324,7 +362,7 @@ func (s *DaprHostMemberState) isActorHost(host *DaprHostMember) bool {
 	return len(host.Entities) > 0
 }
 
-// caller should hold lock.
+// caller should hold Lock.
 func (s *DaprHostMemberState) restoreHashingTables() {
 	for _, ns := range s.data.Namespace {
 		if ns.hashingTableMap == nil {
@@ -344,8 +382,8 @@ func (s *DaprHostMemberState) restore(r io.Reader) error {
 		return err
 	}
 
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.Lock.Lock()
+	defer s.Lock.Unlock()
 
 	s.data = data
 
@@ -355,8 +393,8 @@ func (s *DaprHostMemberState) restore(r io.Reader) error {
 }
 
 func (s *DaprHostMemberState) persist(w io.Writer) error {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.Lock.RLock()
+	defer s.Lock.RUnlock()
 
 	b, err := marshalMsgPack(s.data)
 	if err != nil {

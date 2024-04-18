@@ -283,13 +283,13 @@ func TestRestoreHashingTables(t *testing.T) {
 		},
 	}
 	for _, tn := range testnames {
-		s.lock.Lock()
+		s.Lock.Lock()
 		s.data.Members[tn] = &DaprHostMember{
 			Name:     tn,
 			AppID:    "fakeID",
 			Entities: []string{"actorTypeOne", "actorTypeTwo"},
 		}
-		s.lock.Unlock()
+		s.Lock.Unlock()
 	}
 	assert.Empty(t, s.hashingTableMap())
 

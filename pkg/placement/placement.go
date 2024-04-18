@@ -39,21 +39,6 @@ import (
 
 var log = logger.NewLogger("dapr.placement")
 
-type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer //nolint:nosnakecase
-
-type daprdStream struct {
-	id        uint32
-	namespace string
-	stream    placementGRPCStream
-}
-
-func newDaprdStream(ns string, stream placementGRPCStream) daprdStream {
-	return daprdStream{
-		namespace: ns,
-		stream:    stream,
-	}
-}
-
 const (
 	// membershipChangeChSize is the channel size of membership change request from Dapr runtime.
 	// MembershipChangeWorker will process actor host member change request.
@@ -91,7 +76,7 @@ type hostMemberChange struct {
 }
 
 type tablesUpdateRequest struct {
-	hosts            []placementGRPCStream
+	hosts            []daprdStream
 	tables           *placementv1pb.PlacementTables
 	tablesWithVNodes *placementv1pb.PlacementTables // Temporary. Will be removed in 1.15
 }
@@ -137,16 +122,20 @@ type Service struct {
 	lastHeartBeat sync.Map
 	// membershipCh is the channel to maintain Dapr runtime host membership update.
 	membershipCh chan hostMemberChange
-	// disseminateLock is the lock for hashing table dissemination.
-	disseminateLock sync.Mutex
+
+	// disseminateLocksMap contains the locks for hashing table dissemination, per namespace.
+	disseminateLocksMap map[string]*sync.Mutex
+	// disseminateLocksMapLock is the lock to protect the disseminateLocksMap.
+	disseminateLocksMapLock sync.RWMutex
 
 	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
-	disseminateNextTime map[string]atomic.Int64
+	disseminateNextTimeLock sync.RWMutex
+	disseminateNextTime     map[string]*atomic.Int64
 
 	// memberUpdateCount represents how many dapr runtimes needs to change in a namespace.
 	// Only actor runtime's heartbeat will increase this.
-	memberUpdateCountTotal        atomic.Uint32
-	memberUpdateCountPerNamespace map[string]*atomic.Uint32
+	memberUpdateCountLock sync.RWMutex
+	memberUpdateCount     map[string]*atomic.Uint32
 
 	// Maximum API level to return.
 	// If nil, there's no limit.
@@ -198,7 +187,11 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
 		sec:                      opts.SecProvider,
+		disseminateLocksMap:      make(map[string]*sync.Mutex),
+		memberUpdateCount:        map[string]*atomic.Uint32{},
+		disseminateNextTime:      map[string]*atomic.Int64{},
 	}
+
 }
 
 // Run starts the placement service gRPC server.
@@ -312,14 +305,17 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 				registeredMemberID = req.GetName()
 				p.streamConnPool.add(daprStream)
+				p.disseminateNextTimeLock.Lock()
+				p.disseminateNextTime[req.GetNamespace()] = &atomic.Int64{}
+				p.disseminateNextTimeLock.Unlock()
 
 				updateReq := &tablesUpdateRequest{
-					hosts: []placementGRPCStream{stream},
+					hosts: []daprdStream{daprStream},
 				}
-				if hostAcceptsVNodes(stream) {
-					updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false)
+				if daprStream.needsVNodes {
+					updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, req.GetNamespace())
 				} else {
-					updateReq.tables = p.raftNode.FSM().PlacementState(true)
+					updateReq.tables = p.raftNode.FSM().PlacementState(true, req.GetNamespace())
 				}
 
 				// We need to use a background context here so dissemination isn't tied to the context of this stream
@@ -348,14 +344,15 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// the member will be marked as faulty node and removed.
 			p.lastHeartBeat.Store(req.GetName(), now.UnixNano())
 
-			members := state.Members()
-
 			// Upsert incoming member only if it is an actor service (not actor client) and
 			// the existing member info is unmatched with the incoming member info.
 			upsertRequired := true
-			if m, ok := members[req.GetName()]; ok {
-				if m.AppID == req.GetId() && m.Name == req.GetName() && cmp.Equal(m.Entities, req.GetEntities()) {
-					upsertRequired = false
+			members, err := state.Members(req.GetNamespace())
+			if err == nil {
+				if m, ok := members[req.GetName()]; ok {
+					if m.AppID == req.GetId() && m.Name == req.GetName() && cmp.Equal(m.Entities, req.GetEntities()) {
+						upsertRequired = false
+					}
 				}
 			}
 
@@ -365,12 +362,13 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 					host: raft.DaprHostMember{
 						Name:      req.GetName(),
 						AppID:     req.GetId(),
+						Namespace: req.GetNamespace(),
 						Entities:  req.GetEntities(),
 						UpdatedAt: now.UnixNano(),
 						APILevel:  req.GetApiLevel(),
 					},
 				}
-				log.Debugf("Member changed upserting appid %s with entities %v", req.GetId(), req.GetEntities())
+				log.Debugf("Member changed; upserting appid %s in namespace %s with entities %v", req.GetId(), req.GetNamespace(), req.GetEntities())
 			}
 
 		default:
@@ -384,7 +382,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				if isActorRuntime {
 					p.membershipCh <- hostMemberChange{
 						cmdType: raft.MemberRemove,
-						host:    raft.DaprHostMember{Name: registeredMemberID},
+						host:    raft.DaprHostMember{Name: registeredMemberID, Namespace: req.GetNamespace()},
 					}
 				}
 			} else {

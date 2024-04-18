@@ -40,12 +40,12 @@ const (
 
 // FSM implements a finite state machine that is used
 // along with Raft to provide strong consistency. We implement
-// this outside the Server to avoid exposing this outside the package.
+// this outside the Server to avoid exposing it outside the package.
 type FSM struct {
 	// stateLock is only used to protect outside callers to State() from
 	// racing with Restore(), which is called by Raft (it puts in a totally
 	// new state store). Everything internal here is synchronized by the
-	// Raft side, so doesn't need to lock this.
+	// Raft side, so doesn't need to Lock this.
 	stateLock sync.RWMutex
 	state     *DaprHostMemberState
 	config    DaprHostMemberStateConfig
@@ -68,7 +68,7 @@ func (c *FSM) State() *DaprHostMemberState {
 // PlacementState returns the current placement tables.
 // the withVirtualNodes parameter is here for backwards compatibility and should be removed in 1.15
 // TODO in v1.15 remove the withVirtualNodes parameter
-func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
+func (c *FSM) PlacementState(withVirtualNodes bool, ns string) *v1pb.PlacementTables {
 	c.stateLock.RLock()
 	defer c.stateLock.RUnlock()
 
@@ -83,7 +83,11 @@ func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
 	totalSortedSet := 0
 	totalLoadMap := 0
 
-	entries := c.state.hashingTableMap()
+	entries, err := c.state.hashingTableMap(ns)
+	if err != nil {
+		logging.Errorf("Error getting hashing table map for namespace %s: %s", err)
+		return newTable
+	}
 	for k, v := range entries {
 		var table v1pb.PlacementTable
 		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {

@@ -32,9 +32,10 @@ func TestFSMApply(t *testing.T) {
 
 	t.Run("upsertMember", func(t *testing.T) {
 		cmdLog, err := makeRaftLogCommand(MemberUpsert, DaprHostMember{
-			Name:     "127.0.0.1:3030",
-			AppID:    "fakeAppID",
-			Entities: []string{"actorTypeOne", "actorTypeTwo"},
+			Name:      "127.0.0.1:3030",
+			AppID:     "fakeAppID",
+			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
+			Namespace: "ns1",
 		})
 
 		require.NoError(t, err)
@@ -49,10 +50,16 @@ func TestFSMApply(t *testing.T) {
 		resp := fsm.Apply(raftLog)
 		updated, ok := resp.(bool)
 
-		assert.True(t, ok)
-		assert.True(t, updated)
-		assert.Equal(t, uint64(1), fsm.state.TableGeneration())
-		assert.Len(t, fsm.state.Members(), 1)
+		require.True(t, ok)
+		require.True(t, updated)
+		require.Equal(t, uint64(1), fsm.state.TableGeneration())
+
+		require.Len(t, fsm.state.Namespaces(), 1)
+		require.Contains(t, fsm.state.Namespaces(), "ns1")
+		members, err := fsm.state.Members("ns1")
+		require.NoError(t, err)
+
+		assert.Len(t, members, 1)
 	})
 
 	t.Run("removeMember", func(t *testing.T) {
