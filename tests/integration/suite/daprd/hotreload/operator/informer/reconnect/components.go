@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package reconnect
 
 import (
 	"context"
@@ -131,7 +131,7 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.kubeapi.Informer().Add(t, &comp)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
+		assert.Len(t, c.daprd.GetMetaRegistedComponents(t, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	c.operator1.Cleanup(t)

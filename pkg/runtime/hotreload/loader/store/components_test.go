@@ -27,7 +27,7 @@ import (
 func Test_component(t *testing.T) {
 	var store Store[componentsapi.Component]
 	compStore := compstore.New()
-	store = NewComponent(compStore)
+	store = NewComponents(compStore)
 	comp1, comp2 := componentsapi.Component{
 		ObjectMeta: metav1.ObjectMeta{Name: "1"},
 	}, componentsapi.Component{

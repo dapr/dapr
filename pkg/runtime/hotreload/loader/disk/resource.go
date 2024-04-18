@@ -30,26 +30,34 @@ import (
 // resource is a generic implementation of a disk resource loader. resource
 // will watch and load resources from disk.
 type resource[T differ.Resource] struct {
-	batcher    *batcher.Batcher[int]
-	store      store.Store[T]
-	diskLoader internalloader.Loader[T]
-	updateCh   <-chan struct{}
+	sourceBatcher *batcher.Batcher[int, struct{}]
+	streamBatcher *batcher.Batcher[int, struct{}]
+	store         store.Store[T]
+	diskLoader    internalloader.Loader[T]
 
 	lock          sync.RWMutex
 	currentResult *differ.Result[T]
 
 	wg      sync.WaitGroup
+	running chan struct{}
 	closeCh chan struct{}
 	closed  atomic.Bool
 }
 
-func newResource[T differ.Resource](loader internalloader.Loader[T], store store.Store[T], updateCh <-chan struct{}) *resource[T] {
+type resourceOptions[T differ.Resource] struct {
+	loader  internalloader.Loader[T]
+	store   store.Store[T]
+	batcher *batcher.Batcher[int, struct{}]
+}
+
+func newResource[T differ.Resource](opts resourceOptions[T]) *resource[T] {
 	return &resource[T]{
-		batcher:    batcher.New[int](0),
-		store:      store,
-		diskLoader: loader,
-		updateCh:   updateCh,
-		closeCh:    make(chan struct{}),
+		sourceBatcher: opts.batcher,
+		store:         opts.store,
+		diskLoader:    opts.loader,
+		streamBatcher: batcher.New[int, struct{}](0),
+		running:       make(chan struct{}),
+		closeCh:       make(chan struct{}),
 	}
 }
 
@@ -75,7 +83,7 @@ func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error)
 	}
 
 	batchCh := make(chan struct{})
-	r.batcher.Subscribe(batchCh)
+	r.streamBatcher.Subscribe(ctx, batchCh)
 
 	r.wg.Add(1)
 	go func() {
@@ -126,14 +134,18 @@ func (r *resource[T]) triggerDiff(ctx context.Context, conn *loader.StreamConn[T
 	}
 }
 
-func (r *resource[T]) start(ctx context.Context) error {
+func (r *resource[T]) run(ctx context.Context) error {
 	defer func() {
 		if r.closed.CompareAndSwap(false, true) {
 			close(r.closeCh)
 		}
-		r.batcher.Close()
+		r.streamBatcher.Close()
 		r.wg.Wait()
 	}()
+
+	updateCh := make(chan struct{})
+	r.sourceBatcher.Subscribe(ctx, updateCh)
+	close(r.running)
 
 	var i int
 	for {
@@ -142,7 +154,7 @@ func (r *resource[T]) start(ctx context.Context) error {
 			return nil
 		case <-r.closeCh:
 			return nil
-		case <-r.updateCh:
+		case <-updateCh:
 		}
 
 		// List the resources which exist locally (those loaded already), and those
@@ -167,6 +179,6 @@ func (r *resource[T]) start(ctx context.Context) error {
 		// Use a separate: index every batch to prevent deduplicates of separate
 		// file updates happening at the same time.
 		i++
-		r.batcher.Batch(i)
+		r.streamBatcher.Batch(i, struct{}{})
 	}
 }
