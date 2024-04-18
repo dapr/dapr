@@ -222,7 +222,7 @@ func (o *operator) Run(ctx context.Context) error {
 	log.Info("Dapr Operator is starting")
 	healthzServer := health.NewServer(health.Options{
 		Log:     log,
-		Targets: ptr.Of(5),
+		Targets: ptr.Of(6),
 	})
 
 	/*

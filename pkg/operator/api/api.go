@@ -45,10 +45,11 @@ const (
 var log = logger.NewLogger("dapr.operator.api")
 
 type Options struct {
-	Client   client.Client
-	Cache    cache.Cache
-	Security security.Provider
-	Port     int
+	Client        client.Client
+	Cache         cache.Cache
+	Security      security.Provider
+	Port          int
+	ListenAddress string
 }
 
 // Server runs the Dapr API server for components and configurations.
@@ -62,9 +63,10 @@ type Server interface {
 
 type apiServer struct {
 	operatorv1pb.UnimplementedOperatorServer
-	Client client.Client
-	sec    security.Provider
-	port   string
+	Client        client.Client
+	sec           security.Provider
+	port          string
+	listenAddress string
 
 	compInformer informer.Interface[componentsapi.Component]
 
@@ -85,6 +87,7 @@ func NewAPIServer(opts Options) Server {
 		}),
 		sec:                       opts.Security,
 		port:                      strconv.Itoa(opts.Port),
+		listenAddress:             opts.ListenAddress,
 		allEndpointsUpdateChan:    make(map[string]chan *httpendpointsapi.HTTPEndpoint),
 		allSubscriptionUpdateChan: make(map[string]chan *SubscriptionUpdateEvent),
 		readyCh:                   make(chan struct{}),
@@ -97,7 +100,7 @@ func (a *apiServer) Run(ctx context.Context) error {
 		return errors.New("api server already running")
 	}
 
-	log.Infof("Starting gRPC server on port %s", a.port)
+	log.Infof("Starting gRPC server on %s:%s", a.listenAddress, a.port)
 
 	sec, err := a.sec.Handler(ctx)
 	if err != nil {
@@ -107,7 +110,7 @@ func (a *apiServer) Run(ctx context.Context) error {
 	s := grpc.NewServer(sec.GRPCServerOptionMTLS())
 	operatorv1pb.RegisterOperatorServer(s, a)
 
-	lis, err := net.Listen("tcp", ":"+a.port)
+	lis, err := net.Listen("tcp", fmt.Sprintf("%s:%s", a.listenAddress, a.port))
 	if err != nil {
 		return fmt.Errorf("error starting tcp listener: %w", err)
 	}

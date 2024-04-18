@@ -184,22 +184,22 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:               runtimeConfig.id,
-		Namespace:        namespace,
-		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
+		ID:             runtimeConfig.id,
+		Namespace:      namespace,
+		IsHTTP:         runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:  len(runtimeConfig.actorsService) > 0,
 		SchedulerEnabled: runtimeConfig.schedulerAddress != "",
-		Registry:         runtimeConfig.registry,
-		ComponentStore:   compStore,
-		Meta:             meta,
-		GlobalConfig:     globalConfig,
-		Resiliency:       resiliencyProvider,
-		Mode:             runtimeConfig.mode,
-		PodName:          podName,
-		OperatorClient:   operatorClient,
-		GRPC:             grpc,
-		Channels:         channels,
-		MiddlewareHTTP:   httpMiddleware,
+		Registry:       runtimeConfig.registry,
+		ComponentStore: compStore,
+		Meta:           meta,
+		GlobalConfig:   globalConfig,
+		Resiliency:     resiliencyProvider,
+		Mode:           runtimeConfig.mode,
+		PodName:        podName,
+		OperatorClient: operatorClient,
+		GRPC:           grpc,
+		Channels:       channels,
+		MiddlewareHTTP: httpMiddleware,
 	})
 
 	var reloader *hotreload.Reloader
@@ -1061,6 +1061,37 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 			}
 		}
 	}
+
+	return nil
+}
+
+func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
+	var loader loader.Loader[subapi.Subscription]
+
+	switch a.runtimeConfig.mode {
+	case modes.KubernetesMode:
+		loader = kubernetes.NewSubscriptions(kubernetes.Options{
+			Client:    a.operatorClient,
+			Namespace: a.namespace,
+			PodName:   a.podName,
+		})
+	case modes.StandaloneMode:
+		loader = disk.NewSubscriptions(a.runtimeConfig.standalone.ResourcesPath...)
+	default:
+		return nil
+	}
+
+	log.Info("Loading Declarative Subscriptions…")
+	subs, err := loader.Load(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, s := range subs {
+		log.Infof("Found Subscription: %s", s.Name)
+	}
+
+	a.processor.AddPendingSubscription(ctx, subs...)
 
 	return nil
 }
