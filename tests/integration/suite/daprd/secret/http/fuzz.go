@@ -22,7 +22,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -30,7 +29,6 @@ import (
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -54,21 +52,8 @@ type fuzzsecret struct {
 func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 	const numTests = 1000
 
-	reg, err := regexp.Compile("^([a-zA-Z].*)$")
-	require.NoError(t, err)
-
 	takenNames := make(map[string]bool)
-	fz := fuzz.New().Funcs(func(s *string, c fuzz.Continue) {
-		for *s == "" ||
-			takenNames[*s] ||
-			len(path.IsValidPathSegmentName(*s)) > 0 ||
-			!reg.MatchString(*s) ||
-			*s == "." {
-			*s = c.RandString()
-		}
-		takenNames[*s] = true
-	})
-	fz.Fuzz(&f.secretStoreName)
+	f.secretStoreName = util.RandomString(t, 10)
 
 	f.values = make(map[string]string)
 	for i := 0; i < numTests; i++ {
