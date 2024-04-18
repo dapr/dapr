@@ -31,6 +31,7 @@ type server struct {
 	listResiliencyFn      func(context.Context, *operatorv1.ListResiliencyRequest) (*operatorv1.ListResiliencyResponse, error)
 	listSubscriptionsFn   func(context.Context, *emptypb.Empty) (*operatorv1.ListSubscriptionsResponse, error)
 	listSubscriptionsV2Fn func(context.Context, *operatorv1.ListSubscriptionsRequest) (*operatorv1.ListSubscriptionsResponse, error)
+	subscriptionUpdateFn  func(*operatorv1.SubscriptionUpdateRequest, operatorv1.Operator_SubscriptionUpdateServer) error
 }
 
 func (s *server) ComponentUpdate(req *operatorv1.ComponentUpdateRequest, srv operatorv1.Operator_ComponentUpdateServer) error {
@@ -94,4 +95,11 @@ func (s *server) ListSubscriptionsV2(ctx context.Context, in *operatorv1.ListSub
 		return s.listSubscriptionsV2Fn(ctx, in)
 	}
 	return new(operatorv1.ListSubscriptionsResponse), nil
+}
+
+func (s *server) SubscriptionUpdate(req *operatorv1.SubscriptionUpdateRequest, srv operatorv1.Operator_SubscriptionUpdateServer) error {
+	if s.subscriptionUpdateFn != nil {
+		return s.subscriptionUpdateFn(req, srv)
+	}
+	return nil
 }

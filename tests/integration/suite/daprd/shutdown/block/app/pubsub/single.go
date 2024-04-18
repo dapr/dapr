@@ -112,7 +112,7 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 
 	client := s.daprd.GRPCClient(t, ctx)
 
-	assert.Len(t, s.daprd.RegistedComponents(t, ctx), 1)
+	assert.Len(t, s.daprd.GetMetaRegistedComponents(t, ctx), 1)
 
 	_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "foo",

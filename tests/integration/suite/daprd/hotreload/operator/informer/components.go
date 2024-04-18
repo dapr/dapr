@@ -43,27 +43,27 @@ import (
 )
 
 func init() {
-	suite.Register(new(basic))
+	suite.Register(new(components))
 }
 
-// basic tests operator hot reloading with a live operator and daprd, using
-// the process kubernetes informer.
-type basic struct {
+// components tests operator Comoponent hot reloading with a live operator and
+// daprd, using the process kubernetes informer.
+type components struct {
 	daprd    *daprd.Daprd
 	store    *store.Store
 	kubeapi  *kubernetes.Kubernetes
 	operator *operator.Operator
 }
 
-func (b *basic) Setup(t *testing.T) []framework.Option {
+func (c *components) Setup(t *testing.T) []framework.Option {
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
-	b.store = store.New(metav1.GroupVersionKind{
+	c.store = store.New(metav1.GroupVersionKind{
 		Group:   "dapr.io",
 		Version: "v1alpha1",
 		Kind:    "Component",
 	})
-	b.kubeapi = kubernetes.New(t,
+	c.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
 			"default",
@@ -85,20 +85,20 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 				},
 			}},
 		}),
-		kubernetes.WithClusterDaprComponentListFromStore(t, b.store),
+		kubernetes.WithClusterDaprComponentListFromStore(t, c.store),
 	)
 
-	b.operator = operator.New(t,
+	c.operator = operator.New(t,
 		operator.WithNamespace("default"),
-		operator.WithKubeconfigPath(b.kubeapi.KubeconfigPath(t)),
+		operator.WithKubeconfigPath(c.kubeapi.KubeconfigPath(t)),
 		operator.WithTrustAnchorsFile(sentry.TrustAnchorsFile(t)),
 	)
 
-	b.daprd = daprd.New(t,
+	c.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("daprsystem"),
 		daprd.WithSentryAddress(sentry.Address()),
-		daprd.WithControlPlaneAddress(b.operator.Address()),
+		daprd.WithControlPlaneAddress(c.operator.Address()),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithEnableMTLS(true),
 		daprd.WithNamespace("default"),
@@ -109,18 +109,18 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, b.kubeapi, b.operator, b.daprd),
+		framework.WithProcesses(sentry, c.kubeapi, c.operator, c.daprd),
 	}
 }
 
-func (b *basic) Run(t *testing.T, ctx context.Context) {
-	b.operator.WaitUntilRunning(t, ctx)
-	b.daprd.WaitUntilRunning(t, ctx)
+func (c *components) Run(t *testing.T, ctx context.Context) {
+	c.operator.WaitUntilRunning(t, ctx)
+	c.daprd.WaitUntilRunning(t, ctx)
 
 	client := util.HTTPClient(t)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, b.daprd.HTTPPort()))
+		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()))
 	})
 
 	t.Run("adding a component should become available", func(t *testing.T) {
@@ -132,13 +132,13 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				Version: "v1",
 			},
 		}
-		b.store.Add(&comp)
-		b.kubeapi.Informer().Add(t, &comp)
+		c.store.Add(&comp)
+		c.kubeapi.Informer().Add(t, &comp)
 
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, b.daprd.HTTPPort()), 1)
+		require.EventuallyWithT(t, func(ct *assert.CollectT) {
+			assert.Len(ct, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
 		}, time.Second*10, time.Millisecond*10)
-		metaComponents := util.GetMetaComponents(t, ctx, client, b.daprd.HTTPPort())
+		metaComponents := util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort())
 		assert.ElementsMatch(t, metaComponents, []*rtv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
@@ -147,7 +147,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		})
 	})
 
-	dir := filepath.Join(t.TempDir(), "db.sqlite")
+	dir := filepath.Join(t.TempDir(), "dc.sqlite")
 	dirJSON, err := json.Marshal(dir)
 	require.NoError(t, err)
 	comp := compapi.Component{
@@ -165,11 +165,11 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	}
 
 	t.Run("updating component should be updated", func(t *testing.T) {
-		b.store.Set(&comp)
-		b.kubeapi.Informer().Modify(t, &comp)
+		c.store.Set(&comp)
+		c.kubeapi.Informer().Modify(t, &comp)
 
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.ElementsMatch(c, util.GetMetaComponents(t, ctx, client, b.daprd.HTTPPort()), []*rtv1.RegisteredComponents{
+		require.EventuallyWithT(t, func(ct *assert.CollectT) {
+			assert.ElementsMatch(ct, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), []*rtv1.RegisteredComponents{
 				{
 					Name: "abc", Type: "state.sqlite", Version: "v1",
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
@@ -179,11 +179,11 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("deleting a component should delete the component", func(t *testing.T) {
-		b.store.Set()
-		b.kubeapi.Informer().Delete(t, &comp)
+		c.store.Set()
+		c.kubeapi.Informer().Delete(t, &comp)
 
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Empty(c, util.GetMetaComponents(c, ctx, client, b.daprd.HTTPPort()))
+		require.EventuallyWithT(t, func(ct *assert.CollectT) {
+			assert.Empty(ct, util.GetMetaComponents(ct, ctx, client, c.daprd.HTTPPort()))
 		}, time.Second*20, time.Millisecond*10)
 	})
 }

@@ -139,6 +139,10 @@ func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 			}
 		}
 
+		if ctx.Err() != nil {
+			return
+		}
+
 		if err := backoff.Retry(func() error {
 			berr := r.streamer.establish(ctx, r.opClient, r.namespace, r.podName)
 			if berr != nil {

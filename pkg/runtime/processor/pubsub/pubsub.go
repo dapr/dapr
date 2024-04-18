@@ -63,12 +63,11 @@ var (
 )
 
 type Options struct {
-	ID            string
-	Namespace     string
-	IsHTTP        bool
-	PodName       string
-	Mode          modes.DaprMode
-	ResourcesPath []string
+	ID        string
+	Namespace string
+	IsHTTP    bool
+	PodName   string
+	Mode      modes.DaprMode
 
 	Registry       *comppubsub.Registry
 	ComponentStore *compstore.ComponentStore
@@ -81,13 +80,12 @@ type Options struct {
 }
 
 type pubsub struct {
-	id            string
-	namespace     string
-	isHTTP        bool
-	podName       string
-	mode          modes.DaprMode
-	tracingSpec   *config.TracingSpec
-	resourcesPath []string
+	id          string
+	namespace   string
+	isHTTP      bool
+	podName     string
+	mode        modes.DaprMode
+	tracingSpec *config.TracingSpec
 
 	registry       *comppubsub.Registry
 	resiliency     resiliency.Provider
@@ -121,7 +119,6 @@ func New(opts Options) *pubsub {
 		isHTTP:         opts.IsHTTP,
 		podName:        opts.PodName,
 		mode:           opts.Mode,
-		resourcesPath:  opts.ResourcesPath,
 		registry:       opts.Registry,
 		resiliency:     opts.Resiliency,
 		compStore:      opts.ComponentStore,
