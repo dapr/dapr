@@ -16,9 +16,10 @@ package processor
 import (
 	"testing"
 
-	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 )
 
 func Test_scopeFilterSubscriptions(t *testing.T) {
@@ -36,98 +37,154 @@ func Test_scopeFilterSubscriptions(t *testing.T) {
 		},
 		"single no scope": {
 			input: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
-					Scopes: []string{}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+					Scopes:     []string{},
+				},
 			},
 			exp: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
-					Scopes: []string{}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+					Scopes:     []string{},
+				},
 			},
 		},
 		"multiple no scope": {
 			input: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
-					Scopes: []string{}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
-					Scopes: []string{}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
-					Scopes: []string{}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+					Scopes:     []string{},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
+					Scopes:     []string{},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
+					Scopes:     []string{},
+				},
 			},
 			exp: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
-					Scopes: []string{}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
-					Scopes: []string{}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
-					Scopes: []string{}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+					Scopes:     []string{},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
+					Scopes:     []string{},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
+					Scopes:     []string{},
+				},
 			},
 		},
 		"single scoped": {
 			input: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
-					Scopes: []string{"id-1", "id-2"}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+					Scopes:     []string{"id-1", "id-2"},
+				},
 			},
 			exp: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
-					Scopes: []string{"id-1", "id-2"}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+					Scopes:     []string{"id-1", "id-2"},
+				},
 			},
 		},
 		"multiple scoped": {
 			input: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
-					Scopes: []string{"id-1", "id-2"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
-					Scopes: []string{"id-1"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
-					Scopes: []string{}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+					Scopes:     []string{"id-1", "id-2"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
+					Scopes:     []string{"id-1"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
+					Scopes:     []string{},
+				},
 			},
 			exp: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
-					Scopes: []string{"id-1", "id-2"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
-					Scopes: []string{"id-1"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
-					Scopes: []string{}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+					Scopes:     []string{"id-1", "id-2"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
+					Scopes:     []string{"id-1"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
+					Scopes:     []string{},
+				},
 			},
 		},
 		"single out of scope": {
 			input: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
-					Scopes: []string{"id-2"}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+					Scopes:     []string{"id-2"},
+				},
 			},
 			exp: []subapi.Subscription{},
 		},
 		"multiple out of scope": {
 			input: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
-					Scopes: []string{"id-3", "id-2"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
-					Scopes: []string{"id-2"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
-					Scopes: []string{"id-3"}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+					Scopes:     []string{"id-3", "id-2"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
+					Scopes:     []string{"id-2"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
+					Scopes:     []string{"id-3"},
+				},
 			},
 			exp: []subapi.Subscription{},
 		},
 		"multiple some scoped": {
 			input: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
-					Scopes: []string{"id-3", "id-2"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
-					Scopes: []string{"id-1"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
-					Scopes: []string{"id-3", "id-1"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub4"},
-					Scopes: []string{}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub5"},
-					Scopes: []string{"id-3", "id-4"}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub1"},
+					Scopes:     []string{"id-3", "id-2"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
+					Scopes:     []string{"id-1"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
+					Scopes:     []string{"id-3", "id-1"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub4"},
+					Scopes:     []string{},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub5"},
+					Scopes:     []string{"id-3", "id-4"},
+				},
 			},
 			exp: []subapi.Subscription{
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
-					Scopes: []string{"id-1"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
-					Scopes: []string{"id-3", "id-1"}},
-				{ObjectMeta: metav1.ObjectMeta{Name: "sub4"},
-					Scopes: []string{}},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub2"},
+					Scopes:     []string{"id-1"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub3"},
+					Scopes:     []string{"id-3", "id-1"},
+				},
+				{
+					ObjectMeta: metav1.ObjectMeta{Name: "sub4"},
+					Scopes:     []string{},
+				},
 			},
 		},
 	}
