@@ -16,7 +16,8 @@ package loader
 import (
 	"context"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 )
@@ -25,7 +26,8 @@ import (
 // a source.
 type Interface interface {
 	Run(context.Context) error
-	Components() Loader[componentsapi.Component]
+	Components() Loader[compapi.Component]
+	Subscriptions() Loader[subapi.Subscription]
 }
 
 type StreamConn[T differ.Resource] struct {

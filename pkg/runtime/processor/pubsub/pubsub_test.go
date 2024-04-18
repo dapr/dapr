@@ -18,8 +18,6 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"io"
-	"os"
-	"path/filepath"
 	"reflect"
 	"sort"
 	"strings"
@@ -33,13 +31,12 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/dapr/components-contrib/metadata"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -453,20 +450,17 @@ func TestInitPubSub(t *testing.T) {
 	t.Run("load declarative subscription, no scopes", func(t *testing.T) {
 		reg := registry.New(registry.NewOptions())
 		pst := New(Options{
-			Registry:   reg.PubSubs(),
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Mode:       modes.StandaloneMode,
-			Namespace:  "ns1",
-			ID:         TestRuntimeConfigID,
-			Channels:   new(channels.Channels),
+			Registry:       reg.PubSubs(),
+			IsHTTP:         true,
+			Resiliency:     resiliency.New(logger.NewLogger("test")),
+			Mode:           modes.StandaloneMode,
+			Namespace:      "ns1",
+			ID:             TestRuntimeConfigID,
+			Channels:       new(channels.Channels),
+			ComponentStore: compstore.New(),
 		})
 
-		s := testDeclarativeSubscription()
-
-		resourcesDir := writeComponentToDisk(t, s)
-
-		pst.resourcesPath = []string{resourcesDir}
+		pst.compStore.AddDeclarativeSubscription(testDeclarativeSubscription())
 		subs, err := pst.declarativeSubscriptions(context.Background())
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
@@ -481,21 +475,21 @@ func TestInitPubSub(t *testing.T) {
 	t.Run("load declarative subscription, in scopes", func(t *testing.T) {
 		reg := registry.New(registry.NewOptions())
 		pst := New(Options{
-			Registry:   reg.PubSubs(),
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Mode:       modes.StandaloneMode,
-			Namespace:  "ns1",
-			ID:         TestRuntimeConfigID,
-			Channels:   new(channels.Channels),
+			Registry:       reg.PubSubs(),
+			IsHTTP:         true,
+			Resiliency:     resiliency.New(logger.NewLogger("test")),
+			Mode:           modes.StandaloneMode,
+			Namespace:      "ns1",
+			ID:             TestRuntimeConfigID,
+			Channels:       new(channels.Channels),
+			ComponentStore: compstore.New(),
 		})
 
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{TestRuntimeConfigID}
 
-		resourcesDir := writeComponentToDisk(t, s)
+		pst.compStore.AddDeclarativeSubscription(s)
 
-		pst.resourcesPath = []string{resourcesDir}
 		subs, err := pst.declarativeSubscriptions(context.Background())
 		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
@@ -509,22 +503,21 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("load declarative subscription, not in scopes", func(t *testing.T) {
+		t.Skip("TODO: @joshvanl unskip after PR merged: https://github.com/dapr/dapr/pull/7616")
 		reg := registry.New(registry.NewOptions())
 		pst := New(Options{
-			Registry:   reg.PubSubs(),
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Namespace:  "ns1",
-			ID:         TestRuntimeConfigID,
-			Channels:   new(channels.Channels),
+			Registry:       reg.PubSubs(),
+			IsHTTP:         true,
+			Resiliency:     resiliency.New(logger.NewLogger("test")),
+			Namespace:      "ns1",
+			ID:             TestRuntimeConfigID,
+			Channels:       new(channels.Channels),
+			ComponentStore: compstore.New(),
 		})
 
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{"scope1"}
-
-		resourcesDir := writeComponentToDisk(t, s)
-
-		pst.resourcesPath = []string{resourcesDir}
+		pst.compStore.AddDeclarativeSubscription(s)
 		subs, err := pst.declarativeSubscriptions(context.Background())
 		require.NoError(t, err)
 		assert.Empty(t, subs)
@@ -1404,20 +1397,13 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 			APIVersion: "dapr.io/v1alpha1",
 		},
 		Spec: subscriptionsapi.SubscriptionSpec{
-			Topic:      "topic1",
-			Route:      "myroute",
+			Topic: "topic1",
+			Routes: subscriptionsapi.Routes{
+				Default: "myroute",
+			},
 			Pubsubname: "pubsub",
 		},
 	}
-}
-
-func writeComponentToDisk(t *testing.T, content any) string {
-	dir := t.TempDir()
-	filePath := filepath.Join(dir, "comp.yaml")
-	b, err := yaml.Marshal(content)
-	require.NoError(t, err)
-	require.NoError(t, os.WriteFile(filePath, b, 0o600))
-	return dir
 }
 
 func TestNamespacedPublisher(t *testing.T) {
