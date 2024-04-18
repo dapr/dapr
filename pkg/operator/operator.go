@@ -92,13 +92,13 @@ type operator struct {
 	secHealthz                  healthz.Target
 	apiServerHealthz            healthz.Target
 	webhookHealthz              healthz.Target
-	compInformerHealthz         healthz.Target
 	httpEndpointInformerHealthz healthz.Target
+	subInformerHealthz          healthz.Target
 }
 
 // NewOperator returns a new Dapr Operator.
 func NewOperator(ctx context.Context, opts Options) (Operator, error) {
-	htargets := opts.Healthz.AddTargetSet(4)
+	htargets := opts.Healthz.AddTargetSet(5)
 
 	conf, err := ctrl.GetConfig()
 	if err != nil {
@@ -197,6 +197,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		apiServerHealthz:            htargets[1],
 		webhookHealthz:              htargets[2],
 		httpEndpointInformerHealthz: htargets[3],
+		subInformerHealthz:          htargets[4],
 		apiServer: api.NewAPIServer(api.Options{
 			Client:   mgr.GetClient(),
 			Cache:    mgr.GetCache(),
@@ -369,7 +370,7 @@ func (o *operator) Start(ctx context.Context) error {
 			if rErr != nil {
 				return fmt.Errorf("unable to add subscriptions informer event handler: %w", rErr)
 			}
-			o.tshealthz[4].Ready()
+			o.subInformerHealthz.Ready()
 			<-ctx.Done()
 			return nil
 		},

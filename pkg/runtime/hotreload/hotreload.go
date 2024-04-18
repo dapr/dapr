@@ -63,6 +63,11 @@ type Reloader struct {
 }
 
 func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
+	isEnabled := opts.Config.IsFeatureEnabled(config.HotReload)
+	if !isEnabled {
+		return &Reloader{isEnabled: false}, nil
+	}
+
 	loader, err := disk.New(disk.Options{
 		AppID:          opts.AppID,
 		Dirs:           opts.Dirs,
@@ -73,7 +78,7 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 	}
 
 	return &Reloader{
-		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
+		isEnabled: isEnabled,
 		loader:    loader,
 		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
 			Loader:     loader,
@@ -83,14 +88,21 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 			Healthz:    opts.Healthz,
 		}),
 		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
-			Loader:    loader,
-			CompStore: opts.ComponentStore,
-			Processor: opts.Processor,
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
 		}),
 	}, nil
 }
 
 func NewOperator(opts OptionsReloaderOperator) *Reloader {
+	isEnabled := opts.Config.IsFeatureEnabled(config.HotReload)
+	if !isEnabled {
+		return &Reloader{isEnabled: false}
+	}
+
 	loader := operator.New(operator.Options{
 		PodName:        opts.PodName,
 		Namespace:      opts.Namespace,
@@ -99,7 +111,7 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 	})
 
 	return &Reloader{
-		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
+		isEnabled: isEnabled,
 		loader:    loader,
 		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
 			Loader:     loader,
@@ -109,9 +121,11 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 			Healthz:    opts.Healthz,
 		}),
 		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
-			Loader:    loader,
-			CompStore: opts.ComponentStore,
-			Processor: opts.Processor,
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
 		}),
 	}
 }
