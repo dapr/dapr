@@ -965,8 +965,16 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	if !ok {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
+	// Override host address if the internal gRPC listen address is localhost.
+	hostAddress := a.hostAddress
+	if utils.Contains(
+		[]string{"127.0.0.1", "localhost", "[::1]"},
+		a.runtimeConfig.internalGRPCListenAddress,
+	) {
+		hostAddress = a.runtimeConfig.internalGRPCListenAddress
+	}
 	actorConfig := actors.NewConfig(actors.ConfigOpts{
-		HostAddress:       a.hostAddress,
+		HostAddress:       hostAddress,
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
 		RemindersService:  a.runtimeConfig.remindersService,

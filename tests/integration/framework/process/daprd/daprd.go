@@ -103,6 +103,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--dapr-http-port=" + strconv.Itoa(opts.httpPort),
 		"--dapr-internal-grpc-port=" + strconv.Itoa(opts.internalGRPCPort),
 		"--dapr-internal-grpc-listen-address=127.0.0.1",
+		"--dapr-listen-addresses=127.0.0.1",
 		"--dapr-public-port=" + strconv.Itoa(opts.publicPort),
 		"--dapr-public-listen-address=127.0.0.1",
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
