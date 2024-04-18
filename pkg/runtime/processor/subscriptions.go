@@ -27,14 +27,7 @@ func (p *Processor) AddPendingSubscription(ctx context.Context, subscriptions ..
 		return false
 	}
 
-	scopedSubs := make([]subapi.Subscription, 0, len(subscriptions))
-	for i, subscription := range subscriptions {
-		if len(subscription.Scopes) > 0 && !utils.Contains[string](subscription.Scopes, p.appID) {
-			continue
-		}
-		scopedSubs = append(scopedSubs, subscriptions[i])
-	}
-
+	scopedSubs := p.scopeFilterSubscriptions(subscriptions)
 	if len(scopedSubs) == 0 {
 		return true
 	}
@@ -54,6 +47,17 @@ func (p *Processor) AddPendingSubscription(ctx context.Context, subscriptions ..
 	}
 
 	return true
+}
+
+func (p *Processor) scopeFilterSubscriptions(subs []subapi.Subscription) []subapi.Subscription {
+	scopedSubs := make([]subapi.Subscription, 0, len(subs))
+	for _, sub := range subs {
+		if len(sub.Scopes) > 0 && !utils.Contains[string](sub.Scopes, p.appID) {
+			continue
+		}
+		scopedSubs = append(scopedSubs, sub)
+	}
+	return scopedSubs
 }
 
 func (p *Processor) CloseSubscription(ctx context.Context, sub subapi.Subscription) error {
