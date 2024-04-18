@@ -17,7 +17,7 @@ import (
 	"context"
 	"strings"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
@@ -26,18 +26,18 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 )
 
-type component struct {
+type components struct {
 	store *compstore.ComponentStore
 	proc  *processor.Processor
 	auth  *authorizer.Authorizer
-	loader.Loader[componentsapi.Component]
+	loader.Loader[compapi.Component]
 }
 
 // The go linter does not yet understand that these functions are being used by
 // the generic reconciler.
 //
 //nolint:unused
-func (c *component) update(ctx context.Context, comp componentsapi.Component) {
+func (c *components) update(ctx context.Context, comp compapi.Component) {
 	if !c.verify(comp) {
 		return
 	}
@@ -74,7 +74,7 @@ func (c *component) update(ctx context.Context, comp componentsapi.Component) {
 }
 
 //nolint:unused
-func (c *component) delete(comp componentsapi.Component) {
+func (c *components) delete(_ context.Context, comp compapi.Component) {
 	if !c.verify(comp) {
 		return
 	}
@@ -85,8 +85,8 @@ func (c *component) delete(comp componentsapi.Component) {
 }
 
 //nolint:unused
-func (c *component) verify(vcomp componentsapi.Component) bool {
-	toverify := []componentsapi.Component{vcomp}
+func (c *components) verify(vcomp compapi.Component) bool {
+	toverify := []compapi.Component{vcomp}
 	if comp, ok := c.store.GetComponent(vcomp.Name); ok {
 		toverify = append(toverify, comp)
 	}

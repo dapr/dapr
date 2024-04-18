@@ -119,6 +119,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 }
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
+	h.operator.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{

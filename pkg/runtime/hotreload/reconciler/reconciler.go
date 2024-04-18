@@ -21,7 +21,8 @@ import (
 
 	"k8s.io/utils/clock"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -50,18 +51,30 @@ type Reconciler[T differ.Resource] struct {
 type manager[T differ.Resource] interface {
 	loader.Loader[T]
 	update(context.Context, T)
-	delete(T)
+	delete(context.Context, T)
 }
 
-func NewComponent(opts Options[componentsapi.Component]) *Reconciler[componentsapi.Component] {
-	return &Reconciler[componentsapi.Component]{
+func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
+	return &Reconciler[compapi.Component]{
 		clock: clock.RealClock{},
-		kind:  componentsapi.Kind,
-		manager: &component{
+		kind:  compapi.Kind,
+		manager: &components{
 			Loader: opts.Loader.Components(),
 			store:  opts.CompStore,
 			proc:   opts.Processor,
 			auth:   opts.Authorizer,
+		},
+	}
+}
+
+func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subscription] {
+	return &Reconciler[subapi.Subscription]{
+		clock: clock.RealClock{},
+		kind:  subapi.Kind,
+		manager: &subscriptions{
+			Loader: opts.Loader.Subscriptions(),
+			store:  opts.CompStore,
+			proc:   opts.Processor,
 		},
 	}
 }
@@ -153,6 +166,6 @@ func (r *Reconciler[T]) handleEvent(ctx context.Context, event *loader.Event[T])
 		r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_DELETED:
 		log.Infof("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
-		r.manager.delete(event.Resource)
+		r.manager.delete(ctx, event.Resource)
 	}
 }

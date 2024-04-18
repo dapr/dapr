@@ -15,8 +15,11 @@ package operator
 
 import (
 	"context"
+	"errors"
+	"sync/atomic"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -34,20 +37,32 @@ type Options struct {
 }
 
 type operator struct {
-	component *resource[componentsapi.Component]
+	components    *resource[componentsapi.Component]
+	subscriptions *resource[subapi.Subscription]
+
+	running atomic.Bool
 }
 
 func New(opts Options) loader.Interface {
 	return &operator{
-		component: newResource[componentsapi.Component](opts, loadercompstore.NewComponent(opts.ComponentStore), new(component)),
+		components:    newResource[componentsapi.Component](opts, loadercompstore.NewComponents(opts.ComponentStore), new(components)),
+		subscriptions: newResource[subapi.Subscription](opts, loadercompstore.NewSubscriptions(opts.ComponentStore), new(subscriptions)),
 	}
 }
 
 func (o *operator) Run(ctx context.Context) error {
+	if !o.running.CompareAndSwap(false, true) {
+		return errors.New("already running")
+	}
+
 	<-ctx.Done()
-	return o.component.close()
+	return errors.Join(o.components.close(), o.subscriptions.close())
 }
 
 func (o *operator) Components() loader.Loader[componentsapi.Component] {
-	return o.component
+	return o.components
+}
+
+func (o *operator) Subscriptions() loader.Loader[subapi.Subscription] {
+	return o.subscriptions
 }
