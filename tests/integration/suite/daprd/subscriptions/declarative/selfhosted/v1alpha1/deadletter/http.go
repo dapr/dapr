@@ -57,7 +57,7 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Subscription
 metadata:
- name: mysub
+ name: mysub1
 spec:
  pubsubname: mypub
  topic: a
@@ -67,7 +67,7 @@ spec:
 apiVersion: dapr.io/v1alpha1
 kind: Subscription
 metadata:
- name: mysub
+ name: mysub2
 spec:
  pubsubname: mypub
  topic: mydead

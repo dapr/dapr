@@ -35,7 +35,7 @@ func Test_generic(t *testing.T) {
 		streamer := newFakeStreamer()
 		r := newResource[componentsapi.Component](
 			Options{},
-			loadercompstore.NewComponent(compstore.New()),
+			loadercompstore.NewComponents(compstore.New()),
 			streamer,
 		)
 
@@ -49,7 +49,7 @@ func Test_generic(t *testing.T) {
 		streamer := newFakeStreamer()
 		r := newResource[componentsapi.Component](
 			Options{},
-			loadercompstore.NewComponent(compstore.New()),
+			loadercompstore.NewComponents(compstore.New()),
 			streamer,
 		)
 
@@ -69,7 +69,7 @@ func Test_generic(t *testing.T) {
 		streamer := newFakeStreamer()
 		r := newResource[componentsapi.Component](
 			Options{},
-			loadercompstore.NewComponent(compstore.New()),
+			loadercompstore.NewComponents(compstore.New()),
 			streamer,
 		)
 
@@ -107,7 +107,7 @@ func Test_generic(t *testing.T) {
 		streamer := newFakeStreamer()
 		r := newResource[componentsapi.Component](
 			Options{},
-			loadercompstore.NewComponent(compstore.New()),
+			loadercompstore.NewComponents(compstore.New()),
 			streamer,
 		)
 
@@ -154,7 +154,7 @@ func Test_generic(t *testing.T) {
 		streamer := newFakeStreamer()
 		r := newResource[componentsapi.Component](
 			Options{},
-			loadercompstore.NewComponent(compstore.New()),
+			loadercompstore.NewComponents(compstore.New()),
 			streamer,
 		)
 
