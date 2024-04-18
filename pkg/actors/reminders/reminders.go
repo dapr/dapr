@@ -854,7 +854,7 @@ func (r *reminders) getRemindersForActorType(ctx context.Context, actorType stri
 	return reminderRefs, actorMetadata, nil
 }
 
-// getActorMetadata gets the metadata object for the given actor type.
+// getActorTypeMetadata gets the metadata object for the given actor type.
 // If "migrate" is true, it also performs migration of reminders if needed. Note that this should be set to "true" only by a caller who owns a lock via evaluationChan.
 func (r *reminders) getActorTypeMetadata(ctx context.Context, actorType string, migrate bool) (*ActorMetadata, error) {
 	storeName, store, err := r.stateStoreProviderFn()
