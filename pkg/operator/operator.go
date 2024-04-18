@@ -42,7 +42,7 @@ import (
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/api"
@@ -217,11 +217,27 @@ func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
 	}
 }
 
+func (o *operator) syncSubscription(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
+	return func(obj interface{}) {
+		var s *subapi.Subscription
+		switch o := obj.(type) {
+		case *subapi.Subscription:
+			s = o
+		case cache.DeletedFinalStateUnknown:
+			s = o.Obj.(*subapi.Subscription)
+		}
+		if s != nil {
+			log.Debugf("Observed Subscription to be synced: %s/%s", s.Namespace, s.Name)
+			o.apiServer.OnSubscriptionUpdated(ctx, eventType, s)
+		}
+	}
+}
+
 func (o *operator) Run(ctx context.Context) error {
 	log.Info("Dapr Operator is starting")
 	healthzServer := health.NewServer(health.Options{
 		Log:     log,
-		Targets: ptr.Of(5),
+		Targets: ptr.Of(6),
 	})
 
 	/*
@@ -236,7 +252,7 @@ func (o *operator) Run(ctx context.Context) error {
 			return fmt.Errorf("unable to create webhook Subscriptions v1alpha1: %w", err)
 		}
 		err = ctrl.NewWebhookManagedBy(o.mgr).
-			For(&subscriptionsapiV2alpha1.Subscription{}).
+			For(&subapi.Subscription{}).
 			Complete()
 		if err != nil {
 			return fmt.Errorf("unable to create webhook Subscriptions v2alpha1: %w", err)
@@ -372,6 +388,28 @@ func (o *operator) Run(ctx context.Context) error {
 			<-ctx.Done()
 			return nil
 		},
+		func(ctx context.Context) error {
+			if !o.mgr.GetCache().WaitForCacheSync(ctx) {
+				return errors.New("failed to wait for cache sync")
+			}
+			subscriptionInformer, rErr := o.mgr.GetCache().GetInformer(ctx, new(subapi.Subscription))
+			if rErr != nil {
+				return fmt.Errorf("unable to get setup subscriptions informer: %w", rErr)
+			}
+			_, rErr = subscriptionInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc: o.syncSubscription(ctx, operatorv1pb.ResourceEventType_CREATED),
+				UpdateFunc: func(_, newObj interface{}) {
+					o.syncSubscription(ctx, operatorv1pb.ResourceEventType_UPDATED)(newObj)
+				},
+				DeleteFunc: o.syncSubscription(ctx, operatorv1pb.ResourceEventType_DELETED),
+			})
+			if rErr != nil {
+				return fmt.Errorf("unable to add subscriptions informer event handler: %w", rErr)
+			}
+			healthzServer.Ready()
+			<-ctx.Done()
+			return nil
+		},
 	)
 
 	return runner.Run(ctx)
@@ -447,7 +485,7 @@ func buildScheme(opts Options) (*runtime.Scheme, error) {
 		resiliencyapi.AddToScheme,
 		httpendpointsapi.AddToScheme,
 		subscriptionsapiV1alpha1.AddToScheme,
-		subscriptionsapiV2alpha1.AddToScheme,
+		subapi.AddToScheme,
 	}
 
 	if opts.ArgoRolloutServiceReconcilerEnabled {

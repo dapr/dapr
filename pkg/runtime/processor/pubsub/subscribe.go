@@ -20,11 +20,6 @@ import (
 
 	"google.golang.org/grpc"
 
-	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
-	"github.com/dapr/dapr/pkg/internal/loader"
-	"github.com/dapr/dapr/pkg/internal/loader/disk"
-	"github.com/dapr/dapr/pkg/internal/loader/kubernetes"
-	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -32,12 +27,29 @@ import (
 
 // StartSubscriptions starts the pubsub subscriptions
 func (p *pubsub) StartSubscriptions(ctx context.Context) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
 	// Clean any previous state
-	p.StopSubscriptions(false)
+	p.stopSubscriptions()
+	return p.startSubscriptions(ctx)
+}
 
+// StopSubscriptions to all topics and cleans the cached topics
+func (p *pubsub) StopSubscriptions(forever bool) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	if forever {
+		// Mark if Dapr has stopped subscribing forever.
+		p.stopForever = true
+	}
+
+	p.subscribing = false
+
+	p.stopSubscriptions()
+}
+
+func (p *pubsub) startSubscriptions(ctx context.Context) error {
 	// If Dapr has stopped subscribing forever, return early.
 	if p.stopForever {
 		return nil
@@ -55,22 +67,25 @@ func (p *pubsub) StartSubscriptions(ctx context.Context) error {
 	return errors.Join(errs...)
 }
 
-// StopSubscriptions to all topics and cleans the cached topics
-func (p *pubsub) StopSubscriptions(forever bool) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	if forever {
-		// Mark if Dapr has stopped subscribing forever.
-		p.stopForever = true
-	}
-
-	p.subscribing = false
-
+func (p *pubsub) stopSubscriptions() {
 	for subKey := range p.topicCancels {
 		p.unsubscribeTopic(subKey)
 		p.compStore.DeleteTopicRoute(subKey)
 	}
+}
+
+// ReloadSubscriptions reloads subscribers if subscribing.
+func (p *pubsub) ReloadSubscriptions(ctx context.Context) error {
+	p.lock.Lock()
+	defer p.lock.Unlock()
+	p.compStore.SetSubscriptions(nil)
+	isSubscribing := p.subscribing
+	if !isSubscribing {
+		return nil
+	}
+	p.compStore.SetTopicRoutes(nil)
+	p.stopSubscriptions()
+	return p.startSubscriptions(ctx)
 }
 
 func (p *pubsub) beginPubSub(ctx context.Context, name string) error {
@@ -103,7 +118,7 @@ func (p *pubsub) topicRoutes(ctx context.Context) (map[string]compstore.TopicRou
 
 	topicRoutes := make(map[string]compstore.TopicRoutes)
 
-	if p.channels.AppChannel() == nil {
+	if p.channels == nil || p.channels.AppChannel() == nil {
 		log.Warn("app channel not initialized, make sure -app-port is specified if pubsub subscription is required")
 		return topicRoutes, nil
 	}
@@ -212,22 +227,7 @@ func (p *pubsub) subscriptions(ctx context.Context) ([]rtpubsub.Subscription, er
 // Refer for state store api decision
 // https://github.com/dapr/dapr/blob/master/docs/decision_records/api/API-008-multi-state-store-api-design.md
 func (p *pubsub) declarativeSubscriptions(ctx context.Context) ([]rtpubsub.Subscription, error) {
-	var loader loader.Loader[subapi.Subscription]
-	switch p.mode {
-	case modes.KubernetesMode:
-		loader = kubernetes.NewSubscriptions(kubernetes.Options{
-			Client:    p.operatorClient,
-			Namespace: p.namespace,
-			PodName:   p.podName,
-		})
-	default:
-		loader = disk.NewSubscriptions(p.resourcesPath...)
-	}
-
-	subsv2, err := loader.Load(ctx)
-	if err != nil {
-		return nil, err
-	}
+	subsv2 := p.compStore.ListDeclarativeSubscriptions()
 
 	subs := make([]rtpubsub.Subscription, len(subsv2))
 
@@ -260,25 +260,5 @@ func (p *pubsub) declarativeSubscriptions(ctx context.Context) ([]rtpubsub.Subsc
 		subs[i] = sub
 	}
 
-	// only return valid subscriptions for this app id
-	i := 0
-	for _, s := range subs {
-		keep := false
-		if len(s.Scopes) == 0 {
-			keep = true
-		} else {
-			for _, scope := range s.Scopes {
-				if scope == p.id {
-					keep = true
-					break
-				}
-			}
-		}
-
-		if keep {
-			subs[i] = s
-			i++
-		}
-	}
-	return subs[:i], nil
+	return subs, nil
 }
