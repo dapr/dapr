@@ -30,6 +30,7 @@ import (
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/operator/api/authz"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"github.com/dapr/dapr/utils"
 )
 
 type ComponentUpdateEvent struct {
@@ -94,7 +95,8 @@ func (a *apiServer) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, srv
 
 // ListComponents returns a list of Dapr components.
 func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListComponentsRequest) (*operatorv1pb.ListComponentResponse, error) {
-	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
+	id, err := authz.Request(ctx, in.GetNamespace())
+	if err != nil {
 		return nil, err
 	}
 
@@ -107,7 +109,13 @@ func (a *apiServer) ListComponents(ctx context.Context, in *operatorv1pb.ListCom
 	resp := &operatorv1pb.ListComponentResponse{
 		Components: [][]byte{},
 	}
+
+	appID := id.AppID()
 	for i := range components.Items {
+		if !(len(components.Items[i].Scopes) == 0 || utils.Contains(components.Items[i].Scopes, appID)) {
+			continue
+		}
+
 		c := components.Items[i] // Make a copy since we will refer to this as a reference in this loop.
 		err := processComponentSecrets(ctx, &c, in.GetNamespace(), a.Client)
 		if err != nil {
