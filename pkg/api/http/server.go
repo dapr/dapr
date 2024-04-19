@@ -150,7 +150,7 @@ func (s *server) StartNonBlocking() error {
 		srv := &http.Server{
 			Handler:           handler,
 			ReadHeaderTimeout: 10 * time.Second,
-			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
+			MaxHeaderBytes:    s.config.ReadBufferSize,
 			Addr:              listener.Addr().String(),
 		}
 		s.servers = append(s.servers, srv)
@@ -177,7 +177,7 @@ func (s *server) StartNonBlocking() error {
 			Addr:              fmt.Sprintf(":%d", *s.config.PublicPort),
 			Handler:           publicR,
 			ReadHeaderTimeout: 10 * time.Second,
-			MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
+			MaxHeaderBytes:    s.config.ReadBufferSize,
 		}
 		s.servers = append(s.servers, healthServer)
 
@@ -214,7 +214,7 @@ func (s *server) StartNonBlocking() error {
 				// pprof is automatically registered in the DefaultServerMux
 				Handler:           http.DefaultServeMux,
 				ReadHeaderTimeout: 10 * time.Second,
-				MaxHeaderBytes:    s.config.ReadBufferSizeKB << 10, // To bytes
+				MaxHeaderBytes:    s.config.ReadBufferSize,
 			}
 			s.servers = append(s.servers, profServer)
 
@@ -290,14 +290,13 @@ func (s *server) useMetrics(r chi.Router) {
 }
 
 func (s *server) useMaxBodySize(r chi.Router) {
-	if s.config.MaxRequestBodySizeMB <= 0 {
+	if s.config.MaxRequestBodySize <= 0 {
 		return
 	}
 
-	maxSize := int64(s.config.MaxRequestBodySizeMB) << 20 // To bytes
-	log.Infof("Enabled max body size HTTP middleware with size %d MB", s.config.MaxRequestBodySizeMB)
+	log.Infof("Enabled max body size HTTP middleware with size %d bytes", s.config.MaxRequestBodySize)
 
-	r.Use(MaxBodySizeMiddleware(maxSize))
+	r.Use(MaxBodySizeMiddleware(int64(s.config.MaxRequestBodySize)))
 }
 
 func (s *server) useContextSetup(mux chi.Router) {

@@ -86,8 +86,8 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 	secretStoreName := s.meta.AuthSecretStoreOrDefault(&comp)
 
 	secretStore, _ := s.compStore.GetSecretStore(secretStoreName)
-	encKeys, encErr := encryption.ComponentEncryptionKey(comp, secretStore)
-	if encErr != nil {
+	encKeys, err := encryption.ComponentEncryptionKey(comp, secretStore)
+	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "creation", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
 	}
@@ -95,7 +95,8 @@ func (s *state) Init(ctx context.Context, comp compapi.Component) error {
 	if encKeys.Primary.Key != "" {
 		ok := encryption.AddEncryptedStateStore(comp.ObjectMeta.Name, encKeys)
 		if ok {
-			log.Infof("automatic encryption enabled for state store %s", comp.ObjectMeta.Name)
+			log.Infof("Automatic encryption enabled for state store %s", comp.ObjectMeta.Name)
+			log.Info("WARNING: Automatic state store encryption should never be used to store more than 4 billion items in the state store (including updates). Storing more items than that can cause the private key to be exposed.")
 		}
 	}
 

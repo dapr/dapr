@@ -14,6 +14,7 @@ limitations under the License.
 package app
 
 import (
+	"context"
 	"testing"
 
 	"google.golang.org/grpc"
@@ -27,7 +28,7 @@ type Option func(*options)
 
 // App is a wrapper around a grpc.Server that implements a Dapr App.
 type App struct {
-	*procgrpc.GRPC
+	grpc *procgrpc.GRPC
 }
 
 func New(t *testing.T, fopts ...Option) *App {
@@ -39,20 +40,34 @@ func New(t *testing.T, fopts ...Option) *App {
 	}
 
 	return &App{
-		GRPC: procgrpc.New(t, append(opts.grpcopts, procgrpc.WithRegister(func(s *grpc.Server) {
+		grpc: procgrpc.New(t, append(opts.grpcopts, procgrpc.WithRegister(func(s *grpc.Server) {
 			srv := &server{
-				onInvokeFn:       opts.onInvokeFn,
-				onTopicEventFn:   opts.onTopicEventFn,
-				listTopicSubFn:   opts.listTopicSubFn,
-				listInputBindFn:  opts.listInputBindFn,
-				onBindingEventFn: opts.onBindingEventFn,
-				healthCheckFn:    opts.healthCheckFn,
+				onInvokeFn:         opts.onInvokeFn,
+				onTopicEventFn:     opts.onTopicEventFn,
+				onBulkTopicEventFn: opts.onBulkTopicEventFn,
+				listTopicSubFn:     opts.listTopicSubFn,
+				listInputBindFn:    opts.listInputBindFn,
+				onBindingEventFn:   opts.onBindingEventFn,
+				healthCheckFn:      opts.healthCheckFn,
 			}
 			rtv1.RegisterAppCallbackServer(s, srv)
+			rtv1.RegisterAppCallbackAlphaServer(s, srv)
 			rtv1.RegisterAppCallbackHealthCheckServer(s, srv)
 			if opts.withRegister != nil {
 				opts.withRegister(s)
 			}
 		}))...),
 	}
+}
+
+func (a *App) Run(t *testing.T, ctx context.Context) {
+	a.grpc.Run(t, ctx)
+}
+
+func (a *App) Cleanup(t *testing.T) {
+	a.grpc.Cleanup(t)
+}
+
+func (a *App) Port(t *testing.T) int {
+	return a.grpc.Port(t)
 }

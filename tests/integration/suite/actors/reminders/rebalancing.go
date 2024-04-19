@@ -126,7 +126,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 				assert.Equal(c, http.StatusOK, resp.StatusCode)
 			}
 		}
-	}, 15*time.Second, 100*time.Millisecond, "actors not ready")
+	}, 15*time.Second, 10*time.Millisecond, "actors not ready")
 
 	// Do a bunch of things in parallel
 	errCh := make(chan error)
@@ -212,7 +212,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 
 					rErr = nil
 					return true
-				}, 10*time.Second, 1*time.Second)
+				}, 20*time.Second, 1*time.Second)
 			errCh <- rErr
 		}(j)
 	}
@@ -371,7 +371,7 @@ func (i *rebalancing) getPlacementStream(t *testing.T, ctx context.Context) plac
 			stream.CloseSend()
 			stream = nil
 		}
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
 	return stream
 }

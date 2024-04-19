@@ -59,5 +59,5 @@ func (d *daprd) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusNoContent
-	}, time.Second*10, 100*time.Millisecond)
+	}, time.Second*10, 10*time.Millisecond)
 }

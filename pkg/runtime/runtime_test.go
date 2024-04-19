@@ -824,9 +824,9 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 		enableProfiling:              false,
 		mTLSEnabled:                  false,
 		sentryServiceAddress:         "",
-		maxRequestBodySize:           4,
+		maxRequestBodySize:           4 << 20,
+		readBufferSize:               4 << 10,
 		unixDomainSocket:             "",
-		readBufferSize:               4,
 		gracefulShutdownDuration:     time.Second,
 		enableAPILogging:             ptr.Of(true),
 		disableBuiltinK8sSecretStore: false,
@@ -944,7 +944,6 @@ func TestActorReentrancyConfig(t *testing.T) {
 	fullConfig := `{
 		"entities":["actorType1", "actorType2"],
 		"actorIdleTimeout": "1h",
-		"actorScanInterval": "30s",
 		"drainOngoingCallTimeout": "30s",
 		"drainRebalancedActors": true,
 		"reentrancy": {
@@ -957,7 +956,6 @@ func TestActorReentrancyConfig(t *testing.T) {
 	minimumConfig := `{
 		"entities":["actorType1", "actorType2"],
 		"actorIdleTimeout": "1h",
-		"actorScanInterval": "30s",
 		"drainOngoingCallTimeout": "30s",
 		"drainRebalancedActors": true,
 		"reentrancy": {
@@ -968,7 +966,6 @@ func TestActorReentrancyConfig(t *testing.T) {
 	emptyConfig := `{
 		"entities":["actorType1", "actorType2"],
 		"actorIdleTimeout": "1h",
-		"actorScanInterval": "30s",
 		"drainOngoingCallTimeout": "30s",
 		"drainRebalancedActors": true
 	  }`
@@ -1960,7 +1957,6 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		GlobalConfig:   rt.globalConfig,
 		Resiliency:     rt.resiliency,
 		Mode:           rt.runtimeConfig.mode,
-		Standalone:     rt.runtimeConfig.standalone,
 		Channels:       rt.channels,
 		GRPC:           rt.grpc,
 	})

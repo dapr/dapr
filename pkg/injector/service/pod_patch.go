@@ -55,10 +55,6 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	if err != nil {
 		return nil, err
 	}
-	daprdCert, daprdPrivateKey, err := i.signDaprdCertificate(ctx, ar.Request.Namespace)
-	if err != nil {
-		return nil, err
-	}
 
 	// Create the sidecar configuration object from the pod
 	sidecar := patcher.NewSidecarConfig(pod)
@@ -73,13 +69,12 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.SentryAddress = sentryAddress
 	sidecar.RunAsNonRoot = i.config.GetRunAsNonRoot()
 	sidecar.ReadOnlyRootFilesystem = i.config.GetReadOnlyRootFilesystem()
+	sidecar.EnableK8sDownwardAPIs = i.config.GetEnableK8sDownwardAPIs()
 	sidecar.SidecarDropALLCapabilities = i.config.GetDropCapabilities()
 	sidecar.ControlPlaneNamespace = i.controlPlaneNamespace
 	sidecar.ControlPlaneTrustDomain = i.controlPlaneTrustDomain
 	sidecar.SentrySPIFFEID = i.sentrySPIFFEID.String()
 	sidecar.CurrentTrustAnchors = trustAnchors
-	sidecar.CertChain = string(daprdCert)
-	sidecar.CertKey = string(daprdPrivateKey)
 	sidecar.DisableTokenVolume = !token.HasKubernetesToken()
 
 	// Set addresses for actor services
