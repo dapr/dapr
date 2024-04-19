@@ -105,16 +105,23 @@ func (n *noappentities) Run(t *testing.T, ctx context.Context) {
 	n.daprd.WaitUntilAppHealth(t, ctx)
 	n.daprdNoHealthz.WaitUntilAppHealth(t, ctx)
 
-	gclient := n.daprdNoHealthz.GRPCClient(t, ctx)
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		meta, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		//nolint:testifylint
-		assert.NoError(c, err)
-		assert.True(c, meta.GetActorRuntime().GetHostReady())
-		assert.Empty(c, meta.GetActorRuntime().GetActiveActors())
-		assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
-		assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
-	}, time.Second*15, time.Millisecond*100)
+	for _, tv := range []struct {
+		cl           rtv1.DaprClient
+		activeActors []*rtv1.ActiveActorsCount
+	}{
+		{cl: n.daprd.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{{Type: "myactortype"}}},
+		{cl: n.daprdNoHealthz.GRPCClient(t, ctx), activeActors: nil},
+	} {
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			meta, err := tv.cl.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+			//nolint:testifylint
+			assert.NoError(c, err)
+			assert.True(c, meta.GetActorRuntime().GetHostReady())
+			assert.Equal(c, tv.activeActors, meta.GetActorRuntime().GetActiveActors())
+			assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
+			assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
+		}, time.Second*30, time.Millisecond*10)
+	}
 
 	select {
 	case <-n.healthzCalled:

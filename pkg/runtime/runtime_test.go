@@ -448,6 +448,7 @@ func TestInitNameResolution(t *testing.T) {
 				AppPort:          rt.runtimeConfig.appConnectionConfig.Port,
 				Address:          rt.hostAddress,
 				AppID:            rt.runtimeConfig.id,
+				Namespace:        "default",
 			},
 		}
 
@@ -823,9 +824,9 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 		enableProfiling:              false,
 		mTLSEnabled:                  false,
 		sentryServiceAddress:         "",
-		maxRequestBodySize:           4,
+		maxRequestBodySize:           4 << 20,
+		readBufferSize:               4 << 10,
 		unixDomainSocket:             "",
-		readBufferSize:               4,
 		gracefulShutdownDuration:     time.Second,
 		enableAPILogging:             ptr.Of(true),
 		disableBuiltinK8sSecretStore: false,
@@ -846,17 +847,6 @@ func TestGracefulShutdown(t *testing.T) {
 	r, err := NewTestDaprRuntime(t, modes.StandaloneMode)
 	require.NoError(t, err)
 	assert.Equal(t, time.Second, r.runtimeConfig.gracefulShutdownDuration)
-}
-
-func TestNamespace(t *testing.T) {
-	t.Run("empty namespace", func(t *testing.T) {
-		assert.Empty(t, getNamespace())
-	})
-
-	t.Run("non-empty namespace", func(t *testing.T) {
-		t.Setenv("NAMESPACE", "a")
-		assert.Equal(t, "a", getNamespace())
-	})
 }
 
 func TestPodName(t *testing.T) {
@@ -954,7 +944,6 @@ func TestActorReentrancyConfig(t *testing.T) {
 	fullConfig := `{
 		"entities":["actorType1", "actorType2"],
 		"actorIdleTimeout": "1h",
-		"actorScanInterval": "30s",
 		"drainOngoingCallTimeout": "30s",
 		"drainRebalancedActors": true,
 		"reentrancy": {
@@ -967,7 +956,6 @@ func TestActorReentrancyConfig(t *testing.T) {
 	minimumConfig := `{
 		"entities":["actorType1", "actorType2"],
 		"actorIdleTimeout": "1h",
-		"actorScanInterval": "30s",
 		"drainOngoingCallTimeout": "30s",
 		"drainRebalancedActors": true,
 		"reentrancy": {
@@ -978,7 +966,6 @@ func TestActorReentrancyConfig(t *testing.T) {
 	emptyConfig := `{
 		"entities":["actorType1", "actorType2"],
 		"actorIdleTimeout": "1h",
-		"actorScanInterval": "30s",
 		"drainOngoingCallTimeout": "30s",
 		"drainRebalancedActors": true
 	  }`
@@ -1970,7 +1957,6 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		GlobalConfig:   rt.globalConfig,
 		Resiliency:     rt.resiliency,
 		Mode:           rt.runtimeConfig.mode,
-		Standalone:     rt.runtimeConfig.standalone,
 		Channels:       rt.channels,
 		GRPC:           rt.grpc,
 	})
@@ -2160,10 +2146,8 @@ func testSecurity(t *testing.T) security.Handler {
 	return sec
 }
 
-func testGetOtelServiceName(t *testing.T) {
+func TestGetOtelServiceName(t *testing.T) {
 	// Save the original value of the OTEL_SERVICE_NAME variable and restore at the end
-	original := os.Getenv("OTEL_SERVICE_NAME")
-	defer os.Setenv("OTEL_SERVICE_NAME", original)
 
 	tests := []struct {
 		env      string //The value of the OTEL_SERVICE_NAME variable
@@ -2177,7 +2161,7 @@ func testGetOtelServiceName(t *testing.T) {
 	for _, tc := range tests {
 		t.Run(tc.env, func(t *testing.T) {
 			//Set the environment variable to the test case value
-			os.Setenv("OTEL_SERVICE_NAME", tc.env)
+			t.Setenv("OTEL_SERVICE_NAME", tc.env)
 			//Call the function and check the result
 			got := getOtelServiceName(tc.fallback)
 			if got != tc.expected {

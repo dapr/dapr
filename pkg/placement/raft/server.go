@@ -41,8 +41,9 @@ const (
 
 	commandTimeout = 1 * time.Second
 
-	nameResolveRetryInterval = 2 * time.Second
-	nameResolveMaxRetry      = 120
+	nameResolveRetryInterval                = 2 * time.Second
+	nameResolveMaxRetry                     = 120
+	NoVirtualNodesInPlacementTablesAPILevel = 20
 )
 
 // PeerInfo represents raft peer node information.
@@ -83,6 +84,8 @@ type Options struct {
 	LogStorePath      string
 	Clock             clock.Clock
 	ReplicationFactor int64
+	MinAPILevel       uint32
+	MaxAPILevel       uint32
 }
 
 // New creates Raft server node.
@@ -105,7 +108,11 @@ func New(opts Options) *Server {
 		raftLogStorePath: opts.LogStorePath,
 		clock:            cl,
 		raftReady:        make(chan struct{}),
-		fsm:              newFSM(opts.ReplicationFactor),
+		fsm: newFSM(DaprHostMemberStateConfig{
+			replicationFactor: opts.ReplicationFactor,
+			minAPILevel:       opts.MinAPILevel,
+			maxAPILevel:       opts.MaxAPILevel,
+		}),
 	}
 }
 
@@ -212,17 +219,32 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 	// Setup Raft configuration.
 	if config == nil {
 		// Set default configuration for raft
-		s.config = &raft.Config{
-			ProtocolVersion:    raft.ProtocolVersionMax,
-			HeartbeatTimeout:   1000 * time.Millisecond,
-			ElectionTimeout:    1000 * time.Millisecond,
-			CommitTimeout:      50 * time.Millisecond,
-			MaxAppendEntries:   64,
-			ShutdownOnRemove:   true,
-			TrailingLogs:       10240,
-			SnapshotInterval:   120 * time.Second,
-			SnapshotThreshold:  8192,
-			LeaderLeaseTimeout: 500 * time.Millisecond,
+		if len(s.peers) == 1 {
+			s.config = &raft.Config{
+				ProtocolVersion:    raft.ProtocolVersionMax,
+				HeartbeatTimeout:   5 * time.Millisecond,
+				ElectionTimeout:    5 * time.Millisecond,
+				CommitTimeout:      5 * time.Millisecond,
+				MaxAppendEntries:   64,
+				ShutdownOnRemove:   true,
+				TrailingLogs:       10240,
+				SnapshotInterval:   120 * time.Second,
+				SnapshotThreshold:  8192,
+				LeaderLeaseTimeout: 5 * time.Millisecond,
+			}
+		} else {
+			s.config = &raft.Config{
+				ProtocolVersion:    raft.ProtocolVersionMax,
+				HeartbeatTimeout:   2 * time.Second,
+				ElectionTimeout:    2 * time.Second,
+				CommitTimeout:      100 * time.Millisecond,
+				MaxAppendEntries:   64,
+				ShutdownOnRemove:   true,
+				TrailingLogs:       10240,
+				SnapshotInterval:   120 * time.Second,
+				SnapshotThreshold:  8192,
+				LeaderLeaseTimeout: 2 * time.Second,
+			}
 		}
 	} else {
 		s.config = config

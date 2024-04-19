@@ -83,7 +83,7 @@ func (c *crypto) Setup(t *testing.T) []framework.Option {
 	c.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
-		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(c.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
@@ -131,7 +131,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -162,7 +162,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")
@@ -193,7 +193,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 3)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")
@@ -224,7 +224,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -241,7 +241,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 
 		delComp = c.operator.Components()[0]
 		c.operator.SetComponents(c.operator.Components()[1])
@@ -264,7 +264,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -289,7 +289,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*10, time.Millisecond*100)
+		}, time.Second*10, time.Millisecond*10)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")

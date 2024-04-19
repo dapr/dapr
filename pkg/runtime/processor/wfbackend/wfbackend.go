@@ -17,8 +17,10 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	wfbeComp "github.com/dapr/dapr/pkg/components/wfbackend"
@@ -56,18 +58,18 @@ func New(opts Options) *workflowBackend {
 	}
 }
 
-func (wfbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) error {
-	wfbe.lock.Lock()
-	defer wfbe.lock.Unlock()
+func (w *workflowBackend) Init(ctx context.Context, comp compapi.Component) error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 
-	if wfbe.backend != nil {
+	if w.backend != nil {
 		// Can only have 1 workflow backend component
 		return errors.New("cannot create more than one workflow backend component")
 	}
 
 	// Create the component
 	fName := comp.LogName()
-	beFactory, err := wfbe.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
+	beFactory, err := w.registry.Create(comp.Spec.Type, comp.Spec.Version, fName)
 	if err != nil {
 		log.Errorf("Error creating workflow backend component (%s): %v", fName, err)
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
@@ -79,14 +81,14 @@ func (wfbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) e
 	}
 
 	// Initialization
-	baseMetadata, err := wfbe.meta.ToBaseMetadata(comp)
+	baseMetadata, err := w.meta.ToBaseMetadata(comp)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
 	be, err := beFactory(wfbeComp.Metadata{
-		AppID: wfbe.appID,
+		AppID: w.appID,
 		Base:  baseMetadata,
 	})
 	if err != nil {
@@ -96,21 +98,43 @@ func (wfbe *workflowBackend) Init(ctx context.Context, comp compapi.Component) e
 
 	log.Infof("Using %s as workflow backend", comp.Spec.Type)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)
-	wfbe.backend = be
+	w.backend = be
+	w.compStore.AddWorkflowBackend(comp.Name, be)
 
 	return nil
 }
 
-func (wfbe *workflowBackend) Close(comp compapi.Component) error {
-	return nil
+func (w *workflowBackend) Close(comp compapi.Component) error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
+	backend, ok := w.compStore.GetWorkflowBackend(comp.Name)
+	if !ok {
+		return nil
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
+	defer w.compStore.DeleteWorkflowBackend(comp.Name)
+	w.backend = nil
+
+	return backend.Stop(ctx)
 }
 
-func (wfbe *workflowBackend) GetBackend() (backend.Backend, bool) {
-	wfbe.lock.Lock()
-	defer wfbe.lock.Unlock()
+func (w *workflowBackend) Backend() (backend.Backend, bool) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
 
-	if wfbe.backend == nil {
+	if w.backend == nil {
 		return nil, false
 	}
-	return wfbe.backend, true
+	return w.backend, true
+}
+
+func ComponentDefinition() compapi.Component {
+	return compapi.Component{
+		TypeMeta:   metav1.TypeMeta{Kind: "Component"},
+		ObjectMeta: metav1.ObjectMeta{Name: "dapr"},
+		Spec:       compapi.ComponentSpec{Type: "workflow.dapr", Version: "v1"},
+	}
 }

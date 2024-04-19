@@ -64,7 +64,7 @@ func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager pr
 
 	var ok bool
 	if backendManager != nil {
-		engine.Backend, ok = backendManager.GetBackend()
+		engine.Backend, ok = backendManager.Backend()
 	}
 	if !ok {
 		// If no backend was initialized by the manager, create a backend backed by actors

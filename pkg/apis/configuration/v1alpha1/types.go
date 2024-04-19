@@ -212,7 +212,16 @@ type ZipkinSpec struct {
 type MetricSpec struct {
 	Enabled *bool `json:"enabled"`
 	// +optional
+	HTTP *MetricHTTP `json:"http,omitempty"`
+	// +optional
 	Rules []MetricsRule `json:"rules,omitempty"`
+}
+
+// MetricHTTP defines configuration for metrics for the HTTP server
+type MetricHTTP struct {
+	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
+	// +optional
+	IncreasedCardinality *bool `json:"increasedCardinality,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.

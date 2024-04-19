@@ -16,6 +16,8 @@ package compstore
 import (
 	"sync"
 
+	"github.com/microsoft/durabletask-go/backend"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/crypto"
@@ -25,7 +27,7 @@ import (
 	"github.com/dapr/components-contrib/workflows"
 	compsv1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpEndpointV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
-	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
@@ -36,23 +38,28 @@ import (
 type ComponentStore struct {
 	lock sync.RWMutex
 
-	states                  map[string]state.Store
-	configurations          map[string]configuration.Store
-	configurationSubscribes map[string]chan struct{}
-	secretsConfigurations   map[string]config.SecretsScope
-	secrets                 map[string]secretstores.SecretStore
-	inputBindings           map[string]bindings.InputBinding
-	inputBindingRoutes      map[string]string
-	outputBindings          map[string]bindings.OutputBinding
-	locks                   map[string]lock.Store
-	pubSubs                 map[string]PubsubItem
-	topicRoutes             map[string]TopicRoutes
-	workflowComponents      map[string]workflows.Workflow
-	workflowBackends        map[string]wfbe.WorkflowBackend
-	cryptoProviders         map[string]crypto.SubtleCrypto
-	components              []compsv1alpha1.Component
-	subscriptions           []rtpubsub.Subscription
-	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
+	states                   map[string]state.Store
+	configurations           map[string]configuration.Store
+	configurationSubscribes  map[string]chan struct{}
+	secretsConfigurations    map[string]config.SecretsScope
+	secrets                  map[string]secretstores.SecretStore
+	inputBindings            map[string]bindings.InputBinding
+	inputBindingRoutes       map[string]string
+	outputBindings           map[string]bindings.OutputBinding
+	locks                    map[string]lock.Store
+	pubSubs                  map[string]PubsubItem
+	topicRoutes              map[string]TopicRoutes
+	workflowComponents       map[string]workflows.Workflow
+	workflowBackends         map[string]backend.Backend
+	cryptoProviders          map[string]crypto.SubtleCrypto
+	components               []compsv1alpha1.Component
+	subscriptions            []rtpubsub.Subscription
+	declarativeSubscriptions []subapi.Subscription
+	httpEndpoints            []httpEndpointV1alpha1.HTTPEndpoint
+	actorStateStore          struct {
+		name  string
+		store state.Store
+	}
 
 	compPendingLock sync.Mutex
 	compPending     *compsv1alpha1.Component
@@ -71,7 +78,7 @@ func New() *ComponentStore {
 		locks:                   make(map[string]lock.Store),
 		pubSubs:                 make(map[string]PubsubItem),
 		workflowComponents:      make(map[string]workflows.Workflow),
-		workflowBackends:        make(map[string]wfbe.WorkflowBackend),
+		workflowBackends:        make(map[string]backend.Backend),
 		cryptoProviders:         make(map[string]crypto.SubtleCrypto),
 		topicRoutes:             make(map[string]TopicRoutes),
 	}

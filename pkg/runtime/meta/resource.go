@@ -23,6 +23,7 @@ import (
 // resources.
 type Resource interface {
 	Kind() string
+	APIVersion() string
 	GetName() string
 	GetNamespace() string
 	LogName() string

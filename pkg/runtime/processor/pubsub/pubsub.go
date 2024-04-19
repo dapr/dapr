@@ -63,12 +63,11 @@ var (
 )
 
 type Options struct {
-	ID            string
-	Namespace     string
-	IsHTTP        bool
-	PodName       string
-	Mode          modes.DaprMode
-	ResourcesPath []string
+	ID        string
+	Namespace string
+	IsHTTP    bool
+	PodName   string
+	Mode      modes.DaprMode
 
 	Registry       *comppubsub.Registry
 	ComponentStore *compstore.ComponentStore
@@ -81,13 +80,12 @@ type Options struct {
 }
 
 type pubsub struct {
-	id            string
-	namespace     string
-	isHTTP        bool
-	podName       string
-	mode          modes.DaprMode
-	tracingSpec   *config.TracingSpec
-	resourcesPath []string
+	id          string
+	namespace   string
+	isHTTP      bool
+	podName     string
+	mode        modes.DaprMode
+	tracingSpec *config.TracingSpec
 
 	registry       *comppubsub.Registry
 	resiliency     resiliency.Provider
@@ -99,6 +97,7 @@ type pubsub struct {
 
 	lock        sync.RWMutex
 	subscribing bool
+	stopForever bool
 
 	topicCancels map[string]context.CancelFunc
 	outbox       outbox.Outbox
@@ -120,7 +119,6 @@ func New(opts Options) *pubsub {
 		isHTTP:         opts.IsHTTP,
 		podName:        opts.PodName,
 		mode:           opts.Mode,
-		resourcesPath:  opts.ResourcesPath,
 		registry:       opts.Registry,
 		resiliency:     opts.Resiliency,
 		compStore:      opts.ComponentStore,
@@ -235,7 +233,7 @@ func findMatchingRoute(rules []*rtpubsub.Rule, cloudEvent interface{}) (path str
 
 func matchRoutingRule(rules []*rtpubsub.Rule, data map[string]interface{}) (*rtpubsub.Rule, error) {
 	for _, rule := range rules {
-		if rule.Match == nil {
+		if rule.Match == nil || len(rule.Match.String()) == 0 {
 			return rule, nil
 		}
 		iResult, err := rule.Match.Eval(data)

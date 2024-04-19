@@ -72,7 +72,7 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 	e.daprd = procdaprd.New(t,
 		procdaprd.WithAppID("my-app"),
 		procdaprd.WithMode("kubernetes"),
-		procdaprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
+		procdaprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
 		procdaprd.WithSentryAddress(e.sentry.Address()),
 		procdaprd.WithControlPlaneAddress(e.operator.Address(t)),
 		procdaprd.WithDisableK8sSecretStore(true),
@@ -147,7 +147,7 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 				return !strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host.")
 			}
 			return true
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 10*time.Millisecond)
 		require.ErrorContains(t, err, "tls: first record does not look like a TLS handshake")
 	})
 }

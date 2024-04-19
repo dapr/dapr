@@ -15,13 +15,14 @@ package hotreload
 
 import (
 	"context"
-	"errors"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/config"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/disk"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/operator"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/reconciler"
@@ -51,12 +52,14 @@ type OptionsReloaderOperator struct {
 }
 
 type Reloader struct {
-	isEnabled            bool
-	componentsReconciler *reconciler.Reconciler[componentsapi.Component]
+	isEnabled               bool
+	loader                  loader.Interface
+	componentsReconciler    *reconciler.Reconciler[compapi.Component]
+	subscriptionsReconciler *reconciler.Reconciler[subapi.Subscription]
 }
 
-func NewDisk(ctx context.Context, opts OptionsReloaderDisk) (*Reloader, error) {
-	loader, err := disk.New(ctx, disk.Options{
+func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
+	loader, err := disk.New(disk.Options{
 		Dirs:           opts.Dirs,
 		ComponentStore: opts.ComponentStore,
 	})
@@ -66,11 +69,17 @@ func NewDisk(ctx context.Context, opts OptionsReloaderDisk) (*Reloader, error) {
 
 	return &Reloader{
 		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
-		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
+		loader:    loader,
+		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
 			Processor:  opts.Processor,
 			Authorizer: opts.Authorizer,
+		}),
+		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Processor: opts.Processor,
 		}),
 	}, nil
 }
@@ -85,11 +94,17 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 
 	return &Reloader{
 		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
-		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
+		loader:    loader,
+		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
 			Processor:  opts.Processor,
 			Authorizer: opts.Authorizer,
+		}),
+		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
+			Loader:    loader,
+			CompStore: opts.ComponentStore,
+			Processor: opts.Processor,
 		}),
 	}
 }
@@ -101,16 +116,11 @@ func (r *Reloader) Run(ctx context.Context) error {
 		return nil
 	}
 
-	log.Info("Hot reloading enabled. Daprd will reload 'Component' resources on change.")
+	log.Info("Hot reloading enabled. Daprd will reload 'Component' and 'Subscription' resources on change.")
 
 	return concurrency.NewRunnerManager(
+		r.loader.Run,
 		r.componentsReconciler.Run,
+		r.subscriptionsReconciler.Run,
 	).Run(ctx)
-}
-
-func (r *Reloader) Close() error {
-	if r.isEnabled {
-		log.Info("Closing hot reloader")
-	}
-	return errors.Join(r.componentsReconciler.Close())
 }

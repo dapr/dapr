@@ -292,9 +292,9 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 	}
 
 	opts = append(opts,
-		grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySizeMB<<20),
-		grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySizeMB<<20),
-		grpcGo.MaxHeaderListSize(uint32(s.config.ReadBufferSizeKB<<10)),
+		grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySize),
+		grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySize),
+		grpcGo.MaxHeaderListSize(uint32(s.config.ReadBufferSize<<10)),
 	)
 
 	if s.sec == nil {

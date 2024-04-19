@@ -39,7 +39,6 @@ import (
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/lock"
-	"github.com/dapr/components-contrib/middleware"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
@@ -52,14 +51,14 @@ import (
 	httpEndpointsV1alpha1 "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel/http"
-	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
+	"github.com/dapr/dapr/pkg/middleware"
+	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -1001,9 +1000,11 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	rc := resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency)
+	testLog := logger.NewLogger("test.api.http.actors")
+	rc := resiliency.FromConfigurations(testLog, testResiliency)
 	testAPI := &api{
 		universal: universal.New(universal.Options{
+			Logger:     testLog,
 			AppID:      "fakeAPI",
 			Resiliency: rc,
 		}),
@@ -1089,7 +1090,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, fakeData, resp.RawBody)
-		assert.Equal(t, "2020-01-01T00:00:00Z", resp.RawHeader.Get("metadata.ttlexpiretime"))
+		assert.Equalf(t, "2020-01-01T00:00:00Z", resp.RawHeader.Get("metadata.ttlexpiretime"), "Headers: %v", resp.RawHeader)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
@@ -1513,34 +1514,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
-	t.Run("Reminder Get - 500 on JSON encode failure from actor", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-		reminderRequest := actors.GetReminderRequest{
-			Name:      "reminder1",
-			ActorType: "fakeActorType",
-			ActorID:   "fakeActorID",
-		}
-
-		reminderResponse := actors.MockReminder{
-			// This is not valid JSON
-			Data: json.RawMessage(`foo`),
-		}
-
-		mockActors := new(actors.MockActors)
-
-		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
-
-		testAPI.universal.SetActorRuntime(mockActors)
-
-		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-		// assert
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
-	})
-
 	t.Run("Timer Create - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 
@@ -1884,6 +1857,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		universal: universal.New(universal.Options{
+			Logger:     logger.NewLogger("fakeLogger"),
 			Resiliency: resiliency.New(nil),
 		}),
 		tracingSpec: spec,
@@ -2122,7 +2096,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1.0"}
-	pipe := httpMiddleware.Pipeline{}
+	pipe := func(next gohttp.Handler) gohttp.Handler { return next }
 
 	createExporters(&buffer)
 	compStore := compstore.New()
@@ -2137,7 +2111,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
 		spec:     &spec,
-		pipeline: &pipe,
+		pipeline: pipe,
 	})
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
@@ -2818,30 +2792,6 @@ func TestV1Beta1Workflow(t *testing.T) {
 		assert.Nil(t, resp.ErrorBody)
 	})
 
-	t.Run("Terminate with non_recursive set to false", func(t *testing.T) {
-		// This has the same behavior as the case when non_recursive parameter is not set.
-		// This is because default case is set to recursive termination.
-
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate?non_recursive=false"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 202, resp.StatusCode)
-
-		// assert
-		assert.Nil(t, resp.ErrorBody)
-	})
-
-	t.Run("Terminate with non_recursive true", func(t *testing.T) {
-		// Note that in case of non_recursive true, MockWorkflow intentionally returns fake error, even when it is not an actual error.
-		// This is to test that non_recursive flag is being passed correctly to the workflow component.
-
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate?non_recursive=true"
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_TERMINATE_WORKFLOW", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrTerminateWorkflow.Message(), "instanceID", daprt.ErrFakeWorkflowNonRecursiveTerminateError), resp.ErrorBody["message"])
-	})
-
 	///////////////////////////
 	// RAISE EVENT API TESTS //
 	///////////////////////////
@@ -2952,46 +2902,22 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// assert
 		assert.Nil(t, resp.ErrorBody)
 	})
-
-	t.Run("Purge with non_recursive false", func(t *testing.T) {
-		// This has the same behavior as the case when non_recursive parameter is not set.
-		// This is because default case is set to recursive purge.
-
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge?non_recursive=false"
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 202, resp.StatusCode)
-
-		// assert
-		assert.Nil(t, resp.ErrorBody)
-	})
-	t.Run("Purge with non_recursive true", func(t *testing.T) {
-		// Note that in case of non_recursive true, MockWorkflow intentionally returns fake error, even when it is not an actual error.
-		// This is to test that non_recursive flag is being passed correctly to the workflow component.
-
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge?non_recursive=true"
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_PURGE_WORKFLOW", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrPurgeWorkflow.Message(), "instanceID", daprt.ErrFakeWorkflowNonRecurisvePurgeError), resp.ErrorBody["message"])
-	})
 }
 
-func buildHTTPPineline(spec config.PipelineSpec) httpMiddleware.Pipeline {
-	registry := httpMiddlewareLoader.NewRegistry()
-	registry.RegisterComponent(func(l logger.Logger) httpMiddlewareLoader.FactoryMethod {
-		return func(metadata middleware.Metadata) (httpMiddleware.Middleware, error) {
-			return utils.UppercaseRequestMiddleware, nil
-		}
-	}, "uppercase")
-	var handlers []httpMiddleware.Middleware
-	for i := 0; i < len(spec.Handlers); i++ {
-		handler, err := registry.Create(spec.Handlers[i].Type, spec.Handlers[i].Version, middleware.Metadata{}, "")
-		if err != nil {
-			return httpMiddleware.Pipeline{}
-		}
-		handlers = append(handlers, handler)
-	}
-	return httpMiddleware.Pipeline{Handlers: handlers}
+func buildHTTPPipeline(spec config.PipelineSpec) middleware.HTTP {
+	h := middlewarehttp.New()
+	h.Add(middlewarehttp.Spec{
+		Component: componentsV1alpha1.Component{
+			ObjectMeta: metaV1.ObjectMeta{Name: "middleware.http.uppercase"},
+			Spec: componentsV1alpha1.ComponentSpec{
+				Type:    "middleware.http.uppercase",
+				Version: "v1",
+			},
+		},
+		Implementation: utils.UppercaseRequestMiddleware,
+	})
+
+	return h.BuildPipelineFromSpec("test", &spec)
 }
 
 func TestSinglePipelineWithTracer(t *testing.T) {
@@ -3007,7 +2933,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1.0"}
 
-	pipeline := buildHTTPPineline(config.PipelineSpec{
+	pipeline := buildHTTPPipeline(config.PipelineSpec{
 		Handlers: []config.HandlerSpec{
 			{
 				Type: "middleware.http.uppercase",
@@ -3029,7 +2955,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
 		spec:     &spec,
-		pipeline: &pipeline,
+		pipeline: pipeline,
 	})
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
@@ -3069,7 +2995,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "0"}
 
-	pipeline := buildHTTPPineline(config.PipelineSpec{
+	pipeline := buildHTTPPipeline(config.PipelineSpec{
 		Handlers: []config.HandlerSpec{
 			{
 				Type: "middleware.http.uppercase",
@@ -3091,7 +3017,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	}
 	fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), &fakeHTTPServerOptions{
 		spec:     &spec,
-		pipeline: &pipeline,
+		pipeline: pipeline,
 	})
 
 	t.Run("Invoke direct messaging without querystring - 200 OK", func(t *testing.T) {
@@ -3140,7 +3066,7 @@ type fakeHTTPResponse struct {
 
 type fakeHTTPServerOptions struct {
 	spec     *config.TracingSpec
-	pipeline *httpMiddleware.Pipeline
+	pipeline middleware.HTTP
 	apiAuth  bool
 }
 
@@ -3155,7 +3081,7 @@ func (f *fakeHTTPServer) StartServer(endpoints []endpoints.Endpoint, opts *fakeH
 	go func() {
 		var handler gohttp.Handler = r
 		if opts.pipeline != nil {
-			handler = opts.pipeline.Apply(handler)
+			handler = opts.pipeline(handler)
 		}
 		if opts.spec != nil {
 			handler = diag.HTTPTraceMiddleware(handler, "fakeAppID", *opts.spec)
@@ -3198,7 +3124,7 @@ func (f *fakeHTTPServer) Shutdown() {
 }
 
 func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body []byte) fakeHTTPResponse {
-	url := fmt.Sprintf("http://localhost/%s", path)
+	url := fmt.Sprintf("http://127.0.0.1/%s", path)
 	r, _ := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("dapr-api-token", token)
@@ -3217,9 +3143,9 @@ func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body 
 }
 
 func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, params map[string]string, headers ...string) fakeHTTPResponse {
-	url := fmt.Sprintf("http://localhost/%s", path)
+	url := fmt.Sprintf("http://127.0.0.1/%s", path)
 	if basicAuth != "" {
-		url = fmt.Sprintf("http://%s@localhost/%s", basicAuth, path)
+		url = fmt.Sprintf("http://%s@127.0.0.1/%s", basicAuth, path)
 	}
 
 	if params != nil {

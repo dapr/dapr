@@ -59,7 +59,8 @@ func TestRegisterActorReminder(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
 			Universal: universal.New(universal.Options{
-				AppID: "fakeAPI",
+				AppID:  "fakeAPI",
+				Logger: apiServerLogger,
 			}),
 		}
 		api.SetActorsInitDone()
@@ -79,7 +80,8 @@ func TestUnregisterActorTimer(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
 			Universal: universal.New(universal.Options{
-				AppID: "fakeAPI",
+				AppID:  "fakeAPI",
+				Logger: apiServerLogger,
 			}),
 		}
 		api.SetActorsInitDone()
@@ -99,7 +101,8 @@ func TestRegisterActorTimer(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
 			Universal: universal.New(universal.Options{
-				AppID: "fakeAPI",
+				AppID:  "fakeAPI",
+				Logger: apiServerLogger,
 			}),
 		}
 		api.SetActorsInitDone()
@@ -119,7 +122,8 @@ func TestGetActorState(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
 			Universal: universal.New(universal.Options{
-				AppID: "fakeAPI",
+				AppID:  "fakeAPI",
+				Logger: apiServerLogger,
 			}),
 		}
 		api.SetActorsInitDone()
@@ -189,7 +193,8 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
 			Universal: universal.New(universal.Options{
-				AppID: "fakeAPI",
+				AppID:  "fakeAPI",
+				Logger: apiServerLogger,
 			}),
 		}
 		api.SetActorsInitDone()
@@ -283,7 +288,8 @@ func TestUnregisterActorReminder(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
 			Universal: universal.New(universal.Options{
-				AppID: "fakeAPI",
+				AppID:  "fakeAPI",
+				Logger: apiServerLogger,
 			}),
 		}
 		api.SetActorsInitDone()
@@ -303,7 +309,8 @@ func TestInvokeActor(t *testing.T) {
 	t.Run("actors not initialized", func(t *testing.T) {
 		api := &api{
 			Universal: universal.New(universal.Options{
-				AppID: "fakeAPI",
+				AppID:  "fakeAPI",
+				Logger: apiServerLogger,
 			}),
 		}
 		api.SetActorsInitDone()

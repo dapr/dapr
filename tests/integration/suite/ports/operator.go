@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	procoperator "github.com/dapr/dapr/tests/integration/framework/process/operator"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -40,7 +41,10 @@ type operator struct {
 }
 
 func (o *operator) Setup(t *testing.T) []framework.Option {
-	sentry := procsentry.New(t, procsentry.WithTrustDomain("integration.test.dapr.io"))
+	sentry := procsentry.New(t,
+		procsentry.WithTrustDomain("integration.test.dapr.io"),
+		procsentry.WithExecOptions(exec.WithEnvVars(t, "NAMESPACE", "dapr-system")),
+	)
 
 	kubeAPI := kubernetes.New(t, kubernetes.WithBaseOperatorAPI(t,
 		spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
@@ -70,6 +74,10 @@ func (o *operator) Run(t *testing.T, ctx context.Context) {
 			conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", port))
 			//nolint:testifylint
 			_ = assert.NoError(c, err) && assert.NoError(c, conn.Close())
-		}, time.Second*10, 100*time.Millisecond, "port %s (:%d) was not available in time", name, port)
+		}, time.Second*10, 10*time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}
+
+	// Shutting the operator down too fast will cause the operator to exit error
+	// as the cache has not had time to sync. Wait until healthz before exiting.
+	o.proc.WaitUntilRunning(t, ctx)
 }

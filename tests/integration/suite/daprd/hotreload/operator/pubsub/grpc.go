@@ -93,7 +93,7 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 	g.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
-		daprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors))),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(g.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
@@ -138,7 +138,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		g.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
 	})
@@ -161,7 +161,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 3)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		g.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
 		g.publishMessage(t, ctx, client, "pubsub3", "topic3", "/route3")
@@ -176,7 +176,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		g.publishMessage(t, ctx, client, "pubsub1", "topic1", "/route1")
 		g.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
 		g.publishMessage(t, ctx, client, "pubsub3", "topic3", "/route3")
@@ -191,7 +191,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		g.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
 		g.publishMessage(t, ctx, client, "pubsub3", "topic3", "/route3")
@@ -206,7 +206,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Empty(c, resp.GetRegisteredComponents())
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		g.publishMessageFails(t, ctx, client, "pubsub2", "topic2")
 		g.publishMessageFails(t, ctx, client, "pubsub3", "topic3")
@@ -230,7 +230,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 		g.publishMessageFails(t, ctx, client, "pubsub1", "topic1")
 		g.publishMessage(t, ctx, client, "pubsub2", "topic2", "/route2")
 		g.publishMessageFails(t, ctx, client, "pubsub3", "topic3")

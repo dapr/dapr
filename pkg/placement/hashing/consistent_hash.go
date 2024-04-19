@@ -57,7 +57,7 @@ type Consistent struct {
 	sortedSet         []uint64
 	loadMap           map[string]*Host
 	totalLoad         int64
-	replicationFactor int
+	replicationFactor int64
 
 	sync.RWMutex
 }
@@ -73,7 +73,7 @@ func NewHost(name, id string, load int64, port int64) *Host {
 }
 
 // NewConsistentHash returns a new consistent hash.
-func NewConsistentHash(replicationFactory int) *Consistent {
+func NewConsistentHash(replicationFactory int64) *Consistent {
 	return &Consistent{
 		hosts:             map[uint64]string{},
 		sortedSet:         []uint64{},
@@ -83,7 +83,7 @@ func NewConsistentHash(replicationFactory int) *Consistent {
 }
 
 // NewFromExisting creates a new consistent hash from existing values.
-func NewFromExisting(loadMap map[string]*Host, replicationFactor int, virtualNodesCache *VirtualNodesCache) *Consistent {
+func NewFromExisting(loadMap map[string]*Host, replicationFactor int64, virtualNodesCache *VirtualNodesCache) *Consistent {
 	newHash := &Consistent{
 		hosts:             map[uint64]string{},
 		sortedSet:         []uint64{},
@@ -92,7 +92,7 @@ func NewFromExisting(loadMap map[string]*Host, replicationFactor int, virtualNod
 	}
 
 	for hostName := range loadMap {
-		hashes := virtualNodesCache.GetHashes(int64(replicationFactor), hostName)
+		hashes := virtualNodesCache.GetHashes(replicationFactor, hostName)
 		for _, h := range hashes {
 			newHash.hosts[h] = hostName
 		}
@@ -212,9 +212,9 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 	// in 1.13, and the API level was increased to 20, but we still have to support sidecars
 	// running on 1.12 with placement services on 1.13. That's why we are keeping the
 	// vhosts in the store in v1.13.
-	// This should be removed in 1.14.
+	// This should be removed in 1.15.
 	// --Start remove--
-	for i := 0; i < c.replicationFactor; i++ {
+	for i := 0; i < int(c.replicationFactor); i++ {
 		h := hash(host + strconv.Itoa(i))
 		c.hosts[h] = host
 		c.sortedSet = append(c.sortedSet, h)
@@ -341,7 +341,7 @@ func (c *Consistent) Remove(host string) bool {
 	c.Lock()
 	defer c.Unlock()
 
-	for i := 0; i < c.replicationFactor; i++ {
+	for i := 0; i < int(c.replicationFactor); i++ {
 		h := hash(host + strconv.Itoa(i))
 		delete(c.hosts, h)
 		c.delSlice(h)
@@ -449,10 +449,7 @@ func (c *Consistent) SortedSet() (sortedSet []uint64) {
 	c.RLock()
 	defer c.RUnlock()
 
-	for k := range c.sortedSet {
-		sortedSet = append(sortedSet, uint64(k))
-	}
-	return sortedSet
+	return c.sortedSet
 }
 
 func hash(key string) uint64 {

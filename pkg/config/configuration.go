@@ -32,6 +32,7 @@ import (
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -42,7 +43,8 @@ type Feature string
 const (
 	// Enables support for setting TTL on Actor state keys.
 	ActorStateTTL Feature = "ActorStateTTL"
-	// Enables support for hot reloading of Daprd Components and HTTPEndpoints.
+
+	// Enables support for hot reloading of Daprd Components.
 	HotReload Feature = "HotReload"
 )
 
@@ -220,9 +222,9 @@ type SelectorField struct {
 
 type TracingSpec struct {
 	SamplingRate string      `json:"samplingRate,omitempty" yaml:"samplingRate,omitempty"`
-	Stdout       bool        `json:"stdout,omitempty"       yaml:"stdout,omitempty"`
-	Zipkin       *ZipkinSpec `json:"zipkin,omitempty"       yaml:"zipkin,omitempty"`
-	Otel         *OtelSpec   `json:"otel,omitempty"         yaml:"otel,omitempty"`
+	Stdout       bool        `json:"stdout,omitempty" yaml:"stdout,omitempty"`
+	Zipkin       *ZipkinSpec `json:"zipkin,omitempty" yaml:"zipkin,omitempty"`
+	Otel         *OtelSpec   `json:"otel,omitempty" yaml:"otel,omitempty"`
 }
 
 // ZipkinSpec defines Zipkin exporter configurations.
@@ -232,7 +234,7 @@ type ZipkinSpec struct {
 
 // OtelSpec defines Otel exporter configurations.
 type OtelSpec struct {
-	Protocol        string `json:"protocol,omitempty"        yaml:"protocol,omitempty"`
+	Protocol        string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
 	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
 	// Defaults to true
 	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
@@ -248,13 +250,29 @@ func (o OtelSpec) GetIsSecure() bool {
 type MetricSpec struct {
 	// Defaults to true
 	Enabled *bool         `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	Rules   []MetricsRule `json:"rules,omitempty"   yaml:"rules,omitempty"`
+	HTTP    *MetricHTTP   `json:"http,omitempty" yaml:"http,omitempty"`
+	Rules   []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
 }
 
 // GetEnabled returns true if metrics are enabled.
 func (m MetricSpec) GetEnabled() bool {
 	// Defaults to true if nil
 	return m.Enabled == nil || *m.Enabled
+}
+
+// GetHTTPIncreasedCardinality returns true if increased cardinality is enabled for HTTP metrics
+func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
+	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
+		// The default is false
+		return false
+	}
+	return *m.HTTP.IncreasedCardinality
+}
+
+// MetricHTTP defines configuration for metrics for the HTTP server
+type MetricHTTP struct {
+	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
+	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
 }
 
 // MetricsRu le defines configuration options for a metric.
@@ -271,18 +289,18 @@ type MetricLabel struct {
 
 // AppPolicySpec defines the policy data structure for each app.
 type AppPolicySpec struct {
-	AppName             string         `json:"appId,omitempty"         yaml:"appId,omitempty"`
+	AppName             string         `json:"appId,omitempty" yaml:"appId,omitempty"`
 	DefaultAction       string         `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
-	TrustDomain         string         `json:"trustDomain,omitempty"   yaml:"trustDomain,omitempty"`
-	Namespace           string         `json:"namespace,omitempty"     yaml:"namespace,omitempty"`
-	AppOperationActions []AppOperation `json:"operations,omitempty"    yaml:"operations,omitempty"`
+	TrustDomain         string         `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
+	Namespace           string         `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	AppOperationActions []AppOperation `json:"operations,omitempty" yaml:"operations,omitempty"`
 }
 
 // AppOperation defines the data structure for each app operation.
 type AppOperation struct {
-	Operation string   `json:"name,omitempty"     yaml:"name,omitempty"`
+	Operation string   `json:"name,omitempty" yaml:"name,omitempty"`
 	HTTPVerb  []string `json:"httpVerb,omitempty" yaml:"httpVerb,omitempty"`
-	Action    string   `json:"action,omitempty"   yaml:"action,omitempty"`
+	Action    string   `json:"action,omitempty" yaml:"action,omitempty"`
 }
 
 // AccessControlSpec is the spec object in ConfigurationSpec.
@@ -645,14 +663,20 @@ func (c *Configuration) String() string {
 
 // Apply .metrics if set. If not, retain .metric.
 func (c *Configuration) sortMetricsSpec() {
-	if c.Spec.MetricsSpec != nil {
-		if c.Spec.MetricsSpec.Enabled != nil {
-			c.Spec.MetricSpec.Enabled = c.Spec.MetricsSpec.Enabled
-		}
+	if c.Spec.MetricsSpec == nil {
+		return
+	}
 
-		if len(c.Spec.MetricsSpec.Rules) > 0 {
-			c.Spec.MetricSpec.Rules = c.Spec.MetricsSpec.Rules
-		}
+	if c.Spec.MetricsSpec.Enabled != nil {
+		c.Spec.MetricSpec.Enabled = c.Spec.MetricsSpec.Enabled
+	}
+
+	if len(c.Spec.MetricsSpec.Rules) > 0 {
+		c.Spec.MetricSpec.Rules = c.Spec.MetricsSpec.Rules
+	}
+
+	if c.Spec.MetricsSpec.HTTP != nil {
+		c.Spec.MetricSpec.HTTP = c.Spec.MetricsSpec.HTTP
 	}
 }
 

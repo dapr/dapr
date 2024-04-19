@@ -26,7 +26,6 @@ import (
 )
 
 const (
-	defaultInitialDelay           = time.Second * 1
 	defaultFailureThreshold       = 2
 	defaultRequestTimeout         = time.Second * 2
 	defaultHealthyStateInterval   = time.Second * 3
@@ -39,7 +38,6 @@ var healthLogger = logger.NewLogger("actorshealth")
 type options struct {
 	client                 *http.Client
 	address                string
-	initialDelay           time.Duration
 	requestTimeout         time.Duration
 	failureThreshold       int
 	healthyStateInterval   time.Duration
@@ -59,7 +57,6 @@ type Checker struct {
 	ch chan bool
 
 	address                string
-	initialDelay           time.Duration
 	requestTimeout         time.Duration
 	failureThreshold       int
 	healthyStateInterval   time.Duration
@@ -75,7 +72,6 @@ type Checker struct {
 func New(opts ...Option) (*Checker, error) {
 	options := &options{
 		failureThreshold:       defaultFailureThreshold,
-		initialDelay:           defaultInitialDelay,
 		requestTimeout:         defaultRequestTimeout,
 		successStatusCode:      defaultSuccessStatusCode,
 		healthyStateInterval:   defaultHealthyStateInterval,
@@ -99,7 +95,6 @@ func New(opts ...Option) (*Checker, error) {
 		ch:                     make(chan bool),
 		client:                 options.client,
 		address:                options.address,
-		initialDelay:           options.initialDelay,
 		requestTimeout:         options.requestTimeout,
 		failureThreshold:       options.failureThreshold,
 		healthyStateInterval:   options.healthyStateInterval,
@@ -125,12 +120,6 @@ func (c *Checker) Run(ctx context.Context) {
 		}
 		cancel()
 	}()
-
-	select {
-	case <-ctx.Done():
-		return
-	case <-c.clock.After(c.initialDelay):
-	}
 
 	for {
 		c.doUnHealthyStateCheck(ctx)
@@ -245,13 +234,6 @@ func (c *Checker) getStateHealth(ctx context.Context) bool {
 func WithAddress(address string) Option {
 	return func(o *options) {
 		o.address = address
-	}
-}
-
-// WithInitialDelay sets the initial delay for the health check.
-func WithInitialDelay(delay time.Duration) Option {
-	return func(o *options) {
-		o.initialDelay = delay
 	}
 }
 

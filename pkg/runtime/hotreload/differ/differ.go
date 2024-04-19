@@ -19,16 +19,17 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/runtime/meta"
-	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 )
 
-var wfengineComp = wfengine.ComponentDefinition()
+var wfengineComp = wfbackend.ComponentDefinition()
 
 // Resource is a generic type constraint.
 type Resource interface {
-	componentsapi.Component
+	componentsapi.Component | subapi.Subscription
 	meta.Resource
 }
 

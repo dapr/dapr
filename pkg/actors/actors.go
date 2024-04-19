@@ -41,7 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
-	configuration "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -53,8 +53,10 @@ import (
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/security"
+	eventqueue "github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
+	"github.com/dapr/kit/utils"
 )
 
 const (
@@ -63,6 +65,9 @@ const (
 
 	errStateStoreNotFound      = "actors: state store does not exist or incorrectly configured"
 	errStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
+
+	// If an idle actor is getting deactivated, but it's still busy, will be re-enqueued with its idle timeout increased by this duration.
+	actorBusyReEnqueueInterval = 10 * time.Second
 )
 
 var (
@@ -110,6 +115,8 @@ type Actors interface {
 type GRPCConnectionFn func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 type actorsRuntime struct {
+	idleActorProcessor *eventqueue.Processor[string, *actor]
+
 	appChannel         channel.AppChannel
 	placement          internal.PlacementService
 	placementEnabled   bool
@@ -118,7 +125,7 @@ type actorsRuntime struct {
 	timers             internal.TimersProvider
 	actorsReminders    internal.RemindersProvider
 	actorsTable        *sync.Map
-	tracingSpec        configuration.TracingSpec
+	tracingSpec        config.TracingSpec
 	resiliency         resiliency.Provider
 	storeName          string
 	compStore          *compstore.ComponentStore
@@ -141,7 +148,7 @@ type ActorsOpts struct {
 	AppChannel       channel.AppChannel
 	GRPCConnectionFn GRPCConnectionFn
 	Config           Config
-	TracingSpec      configuration.TracingSpec
+	TracingSpec      config.TracingSpec
 	Resiliency       resiliency.Provider
 	StateStoreName   string
 	CompStore        *compstore.ComponentStore
@@ -223,6 +230,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
+	a.idleActorProcessor = eventqueue.NewProcessor[string, *actor](a.idleProcessorExecuteFn).WithClock(clock)
 	return a, nil
 }
 
@@ -305,14 +313,7 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 		a.placement.Start(ctx)
 	}()
 
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		a.deactivationTicker(a.actorsConfig, a.haltActor)
-	}()
-
-	log.Infof("Actor runtime started. Actor idle timeout: %v. Actor scan interval: %v",
-		a.actorsConfig.Config.ActorIdleTimeout, a.actorsConfig.Config.ActorDeactivationScanInterval)
+	log.Infof("Actor runtime started. Idle timeout: %v", a.actorsConfig.Config.ActorIdleTimeout)
 
 	return nil
 }
@@ -405,7 +406,16 @@ func (a *actorsRuntime) haltAllActors() error {
 func (a *actorsRuntime) deactivateActor(act *actor) error {
 	// This uses a background context as it should be unrelated from the caller's context
 	// Once the decision to deactivate an actor has been made, we must go through with it or we could have an inconsistent state
-	ctx := context.Background()
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	go func() {
+		defer cancel()
+		select {
+		case <-ctx.Done():
+		case <-a.closeCh:
+		}
+	}()
 
 	// Delete the actor from the actor table regardless of the outcome of deactivation the actor in the app
 	actorKey := act.Key()
@@ -455,48 +465,9 @@ func (a *actorsRuntime) deactivateActor(act *actor) error {
 	return nil
 }
 
-func (a *actorsRuntime) removeActorFromTable(actorType, actorID string) {
-	a.actorsTable.Delete(constructCompositeKey(actorType, actorID))
-}
-
 func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
 	typ, id, _ := strings.Cut(key, daprSeparator)
 	return typ, id
-}
-
-func (a *actorsRuntime) deactivationTicker(configuration Config, haltFn internal.HaltActorFn) {
-	ticker := a.clock.NewTicker(configuration.ActorDeactivationScanInterval)
-	ch := ticker.C()
-	defer ticker.Stop()
-
-	for {
-		select {
-		case t := <-ch:
-			a.actorsTable.Range(func(key, value any) bool {
-				actorInstance := value.(*actor)
-
-				if actorInstance.isBusy() {
-					return true
-				}
-
-				if !t.Before(actorInstance.ScheduledTime()) {
-					a.wg.Add(1)
-					go func(actorKey string) {
-						defer a.wg.Done()
-						actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
-						err := haltFn(actorType, actorID)
-						if err != nil {
-							log.Errorf("failed to deactivate actor %s: %s", actorKey, err)
-						}
-					}(key.(string))
-				}
-
-				return true
-			})
-		case <-a.closeCh:
-			return
-		}
-	}
 }
 
 // Returns an internal actor instance, allocating it if needed.
@@ -639,6 +610,10 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 	if err != nil {
 		return nil, status.Error(codes.ResourceExhausted, err.Error())
 	}
+	err = a.idleActorProcessor.Enqueue(act)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enqueue actor in idle processor: %w", err)
+	}
 	defer act.unlock()
 
 	// Replace method to actors method.
@@ -700,6 +675,11 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 	// The .NET SDK indicates Actor failure via a header instead of a bad response
 	if _, ok := res.GetHeaders()["X-Daprerrorresponseheader"]; ok {
 		return res, actorerrors.NewActorError(res)
+	}
+
+	// Allow stopping a recurring reminder or timer
+	if v := res.GetHeaders()["X-Daprremindercancel"]; v != nil && len(v.GetValues()) > 0 && utils.IsTruthy(v.GetValues()[0]) {
+		return res, ErrReminderCanceled
 	}
 
 	return res, nil
@@ -813,8 +793,22 @@ func (a *actorsRuntime) callRemoteActor(
 }
 
 func (a *actorsRuntime) isActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
-	return strings.Contains(targetActorAddress, "localhost") || strings.Contains(targetActorAddress, "127.0.0.1") ||
-		targetActorAddress == hostAddress+":"+strconv.Itoa(grpcPort)
+	portStr := strconv.Itoa(grpcPort)
+
+	if targetActorAddress == hostAddress+":"+portStr {
+		// Easy case when there is a perfect match
+		return true
+	}
+
+	if isLocalhost(hostAddress) && strings.HasSuffix(targetActorAddress, ":"+portStr) {
+		return isLocalhost(targetActorAddress[0 : len(targetActorAddress)-len(portStr)-1])
+	}
+
+	return false
+}
+
+func isLocalhost(addr string) bool {
+	return addr == "localhost" || addr == "127.0.0.1" || addr == "[::1]" || addr == "::1"
 }
 
 func (a *actorsRuntime) GetState(ctx context.Context, req *GetStateRequest) (*StateResponse, error) {
@@ -1270,13 +1264,19 @@ func (a *actorsRuntime) Close() error {
 
 	var errs []error
 	if a.closed.CompareAndSwap(false, true) {
-		defer func() { close(a.closeCh) }()
+		close(a.closeCh)
 		if a.checker != nil {
 			a.checker.Close()
 		}
 		if a.placement != nil {
 			if err := a.placement.Close(); err != nil {
 				errs = append(errs, fmt.Errorf("failed to close placement service: %w", err))
+			}
+		}
+		if a.idleActorProcessor != nil {
+			err := a.idleActorProcessor.Close()
+			if err != nil {
+				errs = append(errs, fmt.Errorf("failed to close actor idle processor: %w", err))
 			}
 		}
 	}
