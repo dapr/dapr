@@ -158,7 +158,7 @@ LOOP:
 	close(s.returnPublish)
 
 	egressMetric := fmt.Sprintf("dapr_component_pubsub_egress_count|app_id:%s|component:foo|namespace:|success:true|topic:abc", s.daprd.AppID())
-	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:foo|namespace:|process_status:success|topic:abc", s.daprd.AppID())
+	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:foo|namespace:|process_status:success|status:success|topic:abc", s.daprd.AppID())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := s.daprd.Metrics(t, ctx)
