@@ -426,7 +426,7 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 	// Register a resource
 	r := resource.NewWithAttributes(
 		semconv.SchemaURL,
-		semconv.ServiceNameKey.String(a.runtimeConfig.id),
+		semconv.ServiceNameKey.String(getOtelServiceName(a.runtimeConfig.id)),
 	)
 
 	tpStore.RegisterResource(r)
@@ -439,6 +439,13 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 
 	a.tracerProvider = tpStore.RegisterTracerProvider()
 	return nil
+}
+
+func getOtelServiceName(fallback string) string {
+	if value := os.Getenv("OTEL_SERVICE_NAME"); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func (a *DaprRuntime) initRuntime(ctx context.Context) error {
