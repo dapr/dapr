@@ -218,6 +218,7 @@ func newDaprRuntime(ctx context.Context,
 			ComponentStore: compStore,
 			Authorizer:     authz,
 			Processor:      processor,
+			AppID:          runtimeConfig.id,
 		})
 		if err != nil {
 			return nil, err
