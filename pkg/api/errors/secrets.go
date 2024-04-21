@@ -52,7 +52,7 @@ func (s *SecretsStoreError) PermissionDenied(key string) error {
 			codes.PermissionDenied,
 			http.StatusForbidden,
 			fmt.Sprintf("access denied by policy to get %q from %q", key, s.name),
-			"ERR_SECRETS_PERMISSION_DENIED",
+			"ERR_PERMISSION_DENIED",
 		),
 		"PERMISSION_DENIED",
 	)
@@ -64,7 +64,7 @@ func (s *SecretsStoreError) NotFound() error {
 			codes.InvalidArgument,
 			http.StatusUnauthorized,
 			fmt.Sprintf("failed finding secret store with key %s", s.name),
-			"ERR_SECRET_STORE_NOT_FOUND",
+			"ERR_STORE_NOT_FOUND",
 		),
 		"NOT_FOUND",
 	)
@@ -76,9 +76,9 @@ func (s *SecretsStoreError) GetSecret(key string, error string) error {
 			codes.Internal,
 			http.StatusInternalServerError,
 			fmt.Sprintf("failed getting secret with key %s from secret store %s: %s", key, s.name, error),
-			"ERR_SECRET_GET",
+			"ERR_GET_SECRET",
 		),
-		"SECRET_GET",
+		"GET_SECRET",
 	)
 }
 
@@ -88,9 +88,9 @@ func (s *SecretsStoreError) BulkSecretGet(error string) error {
 			codes.Internal,
 			http.StatusInternalServerError,
 			fmt.Sprintf("failed getting secrets from secret store %s: %v", s.name, error),
-			"ERR_SECRET_GET",
+			"ERR_GET_SECRET",
 		),
-		"SECRET_GET",
+		"GET_BULK_SECRET",
 	)
 }
 

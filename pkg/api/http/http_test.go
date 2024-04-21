@@ -4103,7 +4103,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "reading existing key should succeed")
-		assert.Equal(t, "ERR_SECRET_GET", resp.ErrorBody["errorCode"], apiPath)
+		assert.Equal(t, "ERR_GET_SECRET", resp.ErrorBody["errorCode"], apiPath)
 	})
 
 	t.Run("Get secret - 500 for secret store not congfigured", func(t *testing.T) {
