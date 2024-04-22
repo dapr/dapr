@@ -116,7 +116,7 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 
 	client := b.daprd.GRPCClient(t, ctx)
 
-	assert.Len(t, b.daprd.RegistedComponents(t, ctx), 1)
+	assert.Len(t, b.daprd.GetMetaRegistedComponents(t, ctx), 1)
 
 	_, err := client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
 		PubsubName: "foo",
@@ -166,7 +166,7 @@ LOOP:
 	close(b.returnPublish)
 
 	egressMetric := fmt.Sprintf("dapr_component_pubsub_egress_bulk_count|app_id:%s|component:foo|namespace:|success:true|topic:abc", b.daprd.AppID())
-	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:foo|namespace:|process_status:success|topic:abc", b.daprd.AppID())
+	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:foo|namespace:|process_status:success|status:success|topic:abc", b.daprd.AppID())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := b.daprd.Metrics(t, ctx)

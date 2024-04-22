@@ -152,6 +152,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 }
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
+	h.operator.WaitUntilRunning(t, ctx)
 	h.daprd1.WaitUntilRunning(t, ctx)
 	h.daprd2.WaitUntilRunning(t, ctx)
 

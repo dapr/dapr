@@ -112,7 +112,7 @@ func (s *single) Run(t *testing.T, ctx context.Context) {
 
 	client := s.daprd.GRPCClient(t, ctx)
 
-	assert.Len(t, s.daprd.RegistedComponents(t, ctx), 1)
+	assert.Len(t, s.daprd.GetMetaRegistedComponents(t, ctx), 1)
 
 	_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "foo",
@@ -158,7 +158,7 @@ LOOP:
 	close(s.returnPublish)
 
 	egressMetric := fmt.Sprintf("dapr_component_pubsub_egress_count|app_id:%s|component:foo|namespace:|success:true|topic:abc", s.daprd.AppID())
-	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:foo|namespace:|process_status:success|topic:abc", s.daprd.AppID())
+	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:foo|namespace:|process_status:success|status:success|topic:abc", s.daprd.AppID())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := s.daprd.Metrics(t, ctx)
