@@ -259,7 +259,7 @@ func TestPublishInternal(t *testing.T) {
 		require.NoError(t, err)
 	})
 
-	t.Run("valid operation, correct overriden parameters", func(t *testing.T) {
+	t.Run("valid operation, correct overridden parameters", func(t *testing.T) {
 		o := newTestOutbox().(*outboxImpl)
 		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			var cloudEvent map[string]interface{}
