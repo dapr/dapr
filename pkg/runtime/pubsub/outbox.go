@@ -265,6 +265,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			}
 
 			cloudEvent[contribPubsub.TopicField] = c.publishTopic
+			cloudEvent[contribPubsub.PubsubField] = c.publishPubSub
 
 			b, err := json.Marshal(cloudEvent)
 			if err != nil {
