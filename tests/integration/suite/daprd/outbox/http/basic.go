@@ -130,8 +130,9 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 
 	postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/mystore/transaction", o.daprd.HTTPPort())
 	stateReq := state.SetRequest{
-		Key:   "1",
-		Value: "2",
+		Key:      "1",
+		Value:    "2",
+		Metadata: map[string]string{"outbox.cloudevent.myapp": "myapp1", "data": "a", "id": "b"},
 	}
 
 	tr := stateTransactionRequestBody{
@@ -174,5 +175,7 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 		//nolint:testifylint
 		assert.NoError(c, err)
 		assert.Equal(c, "2", ce["data"])
+		assert.Equal(c, "myapp1", ce["outbox.cloudevent.myapp"])
+		assert.Contains(c, ce["id"], "outbox-")
 	}, time.Second*10, time.Millisecond*10)
 }
