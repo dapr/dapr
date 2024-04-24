@@ -533,7 +533,7 @@ func TestPublishInternal(t *testing.T) {
 }
 
 func TestSubscribeToInternalTopics(t *testing.T) {
-	t.Run("correct configuration with trace and custom field", func(t *testing.T) {
+	t.Run("correct configuration with trace, custom field and nonoverridable fields", func(t *testing.T) {
 		o := newTestOutbox().(*outboxImpl)
 		o.cloudEventExtractorFn = extractCloudEventProperty
 
@@ -568,9 +568,13 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			traceID := ce[contribPubsub.TraceIDField]
 			traceState := ce[contribPubsub.TraceStateField]
 			customField := ce["outbox.cloudevent.customfield"]
+			data := ce[contribPubsub.DataField]
+			id := ce[contribPubsub.IDField]
 			assert.Equal(t, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", traceID)
 			assert.Equal(t, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", traceState)
 			assert.Equal(t, "a", customField)
+			assert.Equal(t, "hello", data)
+			assert.Contains(t, id, "outbox-")
 
 			return psMock.Publish(ctx, pr)
 		}
@@ -619,7 +623,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				state.SetRequest{
 					Key:      "1",
 					Value:    "hello",
-					Metadata: map[string]string{"outbox.cloudevent.customfield": "a"},
+					Metadata: map[string]string{"outbox.cloudevent.customfield": "a", "data": "a", "id": "b"},
 				},
 			}, appID, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01")
 

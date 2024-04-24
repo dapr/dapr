@@ -172,6 +172,10 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 			ce[contribPubsub.TraceIDField] = traceID
 
 			for k, v := range op.GetMetadata() {
+				if k == contribPubsub.DataField || k == contribPubsub.IDField {
+					continue
+				}
+
 				ce[k] = v
 			}
 
