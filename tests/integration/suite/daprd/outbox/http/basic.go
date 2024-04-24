@@ -132,7 +132,7 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 	stateReq := state.SetRequest{
 		Key:      "1",
 		Value:    "2",
-		Metadata: map[string]string{"outbox.cloudevent.myapp": "myapp1"},
+		Metadata: map[string]string{"outbox.cloudevent.myapp": "myapp1", "data": "a", "id": "b"},
 	}
 
 	tr := stateTransactionRequestBody{
@@ -176,5 +176,6 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 		assert.NoError(c, err)
 		assert.Equal(c, "2", ce["data"])
 		assert.Equal(c, "myapp1", ce["outbox.cloudevent.myapp"])
+		assert.Contains(c, ce["id"], "outbox-")
 	}, time.Second*10, time.Millisecond*10)
 }
