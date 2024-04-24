@@ -2,12 +2,12 @@ package placement
 
 import (
 	"strings"
-	"sync"
 	"sync/atomic"
 
 	"google.golang.org/grpc/metadata"
 
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
+	"github.com/dapr/kit/concurrency"
 )
 
 type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer //nolint:nosnakecase
@@ -31,10 +31,10 @@ func newDaprdStream(ns string, stream placementGRPCStream) daprdStream {
 // and the Dapr runtime grouped by namespace, with an assigned id for faster lookup/deletion
 // The id is a simple auto-incrementing number, for efficiency.
 type streamConnPool struct {
-	lock sync.RWMutex
+	mutexMap *concurrency.MutexMap
 
 	// Example representation of streams
-	//	streamConnPool = {
+	//	{
 	//	  "ns1": {
 	//	  	1: stream1,
 	//	 	2: stream2,
@@ -45,6 +45,7 @@ type streamConnPool struct {
 	//	  	4: stream4,
 	//	 	5: stream5,
 	//		},
+	//	}
 	streams map[string]map[uint32]daprdStream
 
 	// streamIndexCnt assigns an index to streams in the streamConnPool.
@@ -54,8 +55,8 @@ type streamConnPool struct {
 
 // add adds stream connection between runtime and placement to the namespaced dissemination pool.
 func (s *streamConnPool) add(stream daprdStream) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.mutexMap.Lock(stream.namespace)
+	defer s.mutexMap.Unlock(stream.namespace)
 
 	id := s.streamIndexCnt.Add(1)
 	stream.id = id
@@ -69,13 +70,14 @@ func (s *streamConnPool) add(stream daprdStream) {
 
 // delete removes stream connection between runtime and placement from the namespaced dissemination pool.
 func (s *streamConnPool) delete(stream daprdStream) {
-	s.lock.Lock()
-	defer s.lock.Unlock()
+	s.mutexMap.Lock(stream.namespace)
+	defer s.mutexMap.Unlock(stream.namespace)
 
 	if streams, ok := s.streams[stream.namespace]; ok {
 		delete(streams, stream.id)
 		if len(streams) == 0 {
 			delete(s.streams, stream.namespace)
+			s.mutexMap.Delete(stream.namespace, false)
 		}
 	}
 }
@@ -87,18 +89,22 @@ func (s *streamConnPool) getStreams(namespace string) map[uint32]daprdStream {
 
 func newStreamConnPool() *streamConnPool {
 	return &streamConnPool{
-		streams: make(map[string]map[uint32]daprdStream),
+		mutexMap: &concurrency.MutexMap{},
+		streams:  make(map[string]map[uint32]daprdStream),
 	}
 }
 
 func (s *streamConnPool) hasStream(id uint32) bool {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
+	s.mutexMap.OuterRLock()
+	defer s.mutexMap.OuterRUnlock()
 
-	for _, streams := range s.streams {
+	for ns, streams := range s.streams {
+		s.mutexMap.RLock(ns)
 		if _, ok := streams[id]; ok {
+			s.mutexMap.RUnlock(ns)
 			return true
 		}
+		s.mutexMap.RUnlock(ns)
 	}
 	return false
 }

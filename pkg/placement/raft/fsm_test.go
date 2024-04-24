@@ -33,9 +33,9 @@ func TestFSMApply(t *testing.T) {
 	t.Run("upsertMember", func(t *testing.T) {
 		cmdLog, err := makeRaftLogCommand(MemberUpsert, DaprHostMember{
 			Name:      "127.0.0.1:3030",
+			Namespace: "ns1",
 			AppID:     "fakeAppID",
 			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
-			Namespace: "ns1",
 		})
 
 		require.NoError(t, err)
@@ -64,7 +64,8 @@ func TestFSMApply(t *testing.T) {
 
 	t.Run("removeMember", func(t *testing.T) {
 		cmdLog, err := makeRaftLogCommand(MemberRemove, DaprHostMember{
-			Name: "127.0.0.1:3030",
+			Name:      "127.0.0.1:3030",
+			Namespace: "ns1",
 		})
 
 		require.NoError(t, err)
@@ -82,7 +83,9 @@ func TestFSMApply(t *testing.T) {
 		assert.True(t, ok)
 		assert.True(t, updated)
 		assert.Equal(t, uint64(2), fsm.state.TableGeneration())
-		assert.Empty(t, fsm.state.Members())
+		members, err := fsm.state.Members("ns1")
+		require.NoError(t, err)
+		require.Empty(t, members)
 	})
 }
 
@@ -100,9 +103,10 @@ func TestRestore(t *testing.T) {
 		maxAPILevel:       100,
 	})
 	s.upsertMember(&DaprHostMember{
-		Name:     "127.0.0.1:8080",
-		AppID:    "FakeID",
-		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		Name:      "127.0.0.1:8080",
+		Namespace: "ns1",
+		AppID:     "FakeID",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo"},
 	})
 	buf := bytes.NewBuffer(make([]byte, 0, 256))
 	err := s.persist(buf)
@@ -113,8 +117,12 @@ func TestRestore(t *testing.T) {
 
 	// assert
 	require.NoError(t, err)
-	assert.Len(t, fsm.State().Members(), 1)
-	assert.Len(t, fsm.State().hashingTableMap(), 2)
+	members, err := fsm.State().Members("ns1")
+	require.Len(t, members, 1)
+
+	hashingTable, err := fsm.State().hashingTableMap("ns1")
+	require.NoError(t, err)
+	require.Len(t, hashingTable, 2)
 }
 
 func TestPlacementStateWithVirtualNodes(t *testing.T) {
@@ -123,10 +131,11 @@ func TestPlacementStateWithVirtualNodes(t *testing.T) {
 	})
 
 	m := DaprHostMember{
-		Name:     "127.0.0.1:3030",
-		AppID:    "fakeAppID",
-		Entities: []string{"actorTypeOne", "actorTypeTwo"},
-		APILevel: 10,
+		Name:      "127.0.0.1:3030",
+		Namespace: "ns1",
+		AppID:     "fakeAppID",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo"},
+		APILevel:  10,
 	}
 	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
 	require.NoError(t, err)
@@ -138,7 +147,7 @@ func TestPlacementStateWithVirtualNodes(t *testing.T) {
 		Data:  cmdLog,
 	})
 
-	newTable := fsm.PlacementState(true)
+	newTable := fsm.PlacementState(true, "ns1")
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
 	assert.Equal(t, int64(5), newTable.GetReplicationFactor())
@@ -156,9 +165,10 @@ func TestPlacementState(t *testing.T) {
 		replicationFactor: 5,
 	})
 	m := DaprHostMember{
-		Name:     "127.0.0.1:3030",
-		AppID:    "fakeAppID",
-		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		Name:      "127.0.0.1:3030",
+		Namespace: "ns1",
+		AppID:     "fakeAppID",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo"},
 	}
 	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
 	require.NoError(t, err)
@@ -170,7 +180,7 @@ func TestPlacementState(t *testing.T) {
 		Data:  cmdLog,
 	})
 
-	newTable := fsm.PlacementState(false)
+	newTable := fsm.PlacementState(false, "ns1")
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
 	assert.Equal(t, int64(5), newTable.GetReplicationFactor())

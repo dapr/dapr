@@ -59,9 +59,8 @@ func newFSM(config DaprHostMemberStateConfig) *FSM {
 }
 
 // State is used to return a handle to the current state.
+// You need to hold a lock to call this function.
 func (c *FSM) State() *DaprHostMemberState {
-	c.stateLock.RLock()
-	defer c.stateLock.RUnlock()
 	return c.state
 }
 

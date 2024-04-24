@@ -57,6 +57,10 @@ type DaprNamespace struct {
 	hashingTableMap map[string]*hashing.Consistent
 }
 
+func (n *DaprNamespace) addMember(m *DaprHostMember) {
+	n.Members[m.Name] = m
+}
+
 type DaprHostMemberStateData struct {
 	// Index is the index number of raft log.
 	Index uint64
@@ -232,12 +236,13 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 
 	for nsName, nsData := range s.data.Namespace {
 		newMembers.data.Namespace[nsName] = &DaprNamespace{
-			Members:         make(map[string]*DaprHostMember, len(nsData.Members)),
-			hashingTableMap: make(map[string]*hashing.Consistent, len(nsData.hashingTableMap)),
+			Members: make(map[string]*DaprHostMember, len(nsData.Members)),
+			//hashingTableMap: make(map[string]*hashing.Consistent, len(nsData.hashingTableMap)),
 		}
 		for k, v := range nsData.Members {
 			m := &DaprHostMember{
 				Name:      v.Name,
+				Namespace: v.Namespace,
 				AppID:     v.AppID,
 				Entities:  make([]string, len(v.Entities)),
 				UpdatedAt: v.UpdatedAt,
@@ -253,7 +258,6 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 
 // caller should hold Lock.
 func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
-	// TODO: @elena - come back to this and check if we can rely on s.data.Namespace[host.Namespace] existing
 	if _, ok := s.data.Namespace[host.Namespace]; !ok {
 		s.data.Namespace[host.Namespace] = &DaprNamespace{
 			Members:         make(map[string]*DaprHostMember),
@@ -261,6 +265,10 @@ func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
 		}
 	}
 	for _, e := range host.Entities {
+		if s.data.Namespace[host.Namespace].hashingTableMap == nil {
+			s.data.Namespace[host.Namespace].hashingTableMap = make(map[string]*hashing.Consistent)
+		}
+
 		if _, ok := s.data.Namespace[host.Namespace].hashingTableMap[e]; !ok {
 			s.data.Namespace[host.Namespace].hashingTableMap[e] = hashing.NewConsistentHash(s.config.replicationFactor)
 		}
@@ -269,16 +277,20 @@ func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
 	}
 }
 
-// caller should holds Lock.
+// removeHashingTables caller should hold Lock.
 func (s *DaprHostMemberState) removeHashingTables(host *DaprHostMember) {
+	ns, ok := s.data.Namespace[host.Namespace]
+	if !ok {
+		return
+	}
 	for _, e := range host.Entities {
-		if t, ok := s.data.Namespace[host.Namespace].hashingTableMap[e]; ok {
+		if t, ok := ns.hashingTableMap[e]; ok {
 			t.Remove(host.Name)
 
-			// if no dedicated actor service instance for the particular actor type,
-			// we must delete consistent hashing table to avoid the memory leak.
+			// if no there are no other actor service instance for the particular actor type
+			// we should delete the hashing table map element to avoid memory leaks.
 			if len(t.Hosts()) == 0 {
-				delete(s.data.Namespace[host.Namespace].hashingTableMap, e)
+				delete(ns.hashingTableMap, e)
 			}
 		}
 	}
@@ -316,15 +328,16 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 
 	ns.Members[host.Name] = &DaprHostMember{
 		Name:      host.Name,
+		Namespace: host.Namespace,
 		AppID:     host.AppID,
 		UpdatedAt: host.UpdatedAt,
 		APILevel:  host.APILevel,
 	}
 
-	// Update hashing table only when host reports actor types
 	ns.Members[host.Name].Entities = make([]string, len(host.Entities))
 	copy(ns.Members[host.Name].Entities, host.Entities)
 
+	// Update hashing table only when host reports actor types
 	s.updateHashingTables(ns.Members[host.Name])
 	s.updateAPILevel()
 

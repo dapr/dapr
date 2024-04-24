@@ -15,10 +15,10 @@ package placement
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc/peer"
@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-
 	"github.com/dapr/kit/retry"
 )
 
@@ -188,11 +187,11 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 	defer disseminateTimer.Stop()
 
 	// Reset memberUpdateCount to zero for every namespace when leadership is acquired.
-	p.streamConnPool.lock.RLock()
+	p.streamConnPool.mutexMap.OuterRLock()
 	for ns := range p.streamConnPool.streams {
-		p.memberUpdateCount[ns].Store(0)
+		p.memberUpdateCount.Get(ns).Store(0)
 	}
-	p.streamConnPool.lock.RUnlock()
+	p.streamConnPool.mutexMap.OuterRUnlock()
 
 	p.wg.Add(1)
 	go func() {
@@ -212,16 +211,16 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 			}
 
 			// check if there are actor runtime member changes per namespace.
-			for ns, cnt := range p.memberUpdateCount {
-				p.disseminateNextTimeLock.Lock()
-				if p.disseminateNextTime[ns].Load() <= t.UnixNano() && len(p.membershipCh) == 0 {
+			p.memberUpdateCount.OuterRLock()
+			for ns, cnt := range p.memberUpdateCount.Items {
+				if p.disseminateNextTime.Get(ns).Load() <= t.UnixNano() && len(p.membershipCh) == 0 {
 					if cnt := cnt.Load(); cnt > 0 {
 						log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCountTotal count for namespace %s: %d", ns, cnt)
 						p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate, host: raft.DaprHostMember{Namespace: ns}}
 					}
 				}
-				p.disseminateNextTimeLock.Unlock()
 			}
+			p.memberUpdateCount.OuterRUnlock()
 
 		case t := <-faultyHostDetectTimer.C():
 			// Earlier stop when leadership is lost.
@@ -254,6 +253,10 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 					// in placement table will never have a heartbeat. With this new behavior, it will eventually expire and be
 					// removed.
 					heartbeat, loaded := p.lastHeartBeat.LoadOrStore(host.Name, baselineHeartbeatTimestamp)
+
+					// LEAVING OFF HERE:
+					//TODO @elena - would it be possible for sidecars in different namespaces to have a same host.Name??
+
 					if !loaded {
 						log.Warnf("Heartbeat not found for host: %s", host.Name)
 					}
@@ -262,7 +265,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 					if elapsed < p.faultyHostDetectDuration.Load() {
 						continue
 					}
-					log.Debugf("Try to remove outdated host: %s, elapsed: %d ns", host.Name, elapsed)
+					log.Debugf("Try to remove outdated host in namespace %s: %s, elapsed: %d ns", host.Namespace, host.Name, elapsed)
 
 					p.membershipCh <- hostMemberChange{
 						cmdType: raft.MemberRemove,
@@ -302,14 +305,8 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 					defer p.wg.Done()
 
 					// We lock dissemination to ensure the updates can complete before the table is disseminated.
-					p.disseminateLocksMapLock.Lock()
-					if _, ok := p.disseminateLocksMap[op.host.Namespace]; !ok {
-						p.disseminateLocksMap[op.host.Namespace] = &sync.Mutex{}
-					}
-					dl := p.disseminateLocksMap[op.host.Namespace]
-					dl.Lock()
-					p.disseminateLocksMapLock.Unlock()
-					defer dl.Unlock()
+					p.disseminateLocks.Lock(op.host.Namespace)
+					defer p.disseminateLocks.Unlock(op.host.Namespace)
 
 					updated, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
 					if raftErr != nil {
@@ -321,17 +318,12 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 
 						// ApplyCommand returns true only if the command changes hashing table.
 						if updated {
-							p.memberUpdateCountLock.Lock()
-							if _, ok := p.memberUpdateCount[op.host.Namespace]; !ok {
-								p.memberUpdateCount[op.host.Namespace] = &atomic.Uint32{}
-							}
-							p.memberUpdateCount[op.host.Namespace].Add(1)
-							p.memberUpdateCountLock.Unlock()
+							p.memberUpdateCount.Get(op.host.Namespace).Add(1)
 
 							// disseminateNextTime will be updated whenever apply is done, so that
 							// it will keep moving the time to disseminate the table, which will
 							// reduce the unnecessary table dissemination.
-							p.disseminateNextTime[op.host.Namespace].Store(p.clock.Now().Add(disseminateTimeout).UnixNano())
+							p.disseminateNextTime.Get(op.host.Namespace).Store(p.clock.Now().Add(disseminateTimeout).UnixNano())
 						}
 					}
 					<-logApplyConcurrency
@@ -347,9 +339,9 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 }
 
 func (p *Service) performTableDissemination(ctx context.Context, ns string) error {
-	p.streamConnPool.lock.RLock()
+	p.streamConnPool.mutexMap.RLock(ns)
 	nStreamConnPool := len(p.streamConnPool.getStreams(ns))
-	p.streamConnPool.lock.RUnlock()
+	p.streamConnPool.mutexMap.RUnlock(ns)
 
 	if nStreamConnPool == 0 {
 		return nil
@@ -368,17 +360,15 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 	monitoring.RecordActorRuntimesCount(nTargetConns)
 
 	// Ignore dissemination if there is no member update
-	cnt := p.memberUpdateCount[ns].Load()
+	cnt := p.memberUpdateCount.Get(ns).Load()
 	if cnt == 0 {
 		return nil
 	}
 
-	p.disseminateLocksMapLock.Lock()
-	p.disseminateLocksMap[ns].Lock()
-	defer p.disseminateLocksMap[ns].Unlock()
+	p.disseminateLocks.Lock(ns)
+	defer p.disseminateLocks.Unlock(ns)
 
-	p.streamConnPool.lock.RLock()
-	p.disseminateLocksMapLock.Unlock()
+	p.streamConnPool.mutexMap.RLock(ns)
 
 	streams := make([]daprdStream, 0, len(p.streamConnPool.streams[ns]))
 	for _, stream := range p.streamConnPool.streams[ns] {
@@ -403,20 +393,26 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 		}
 	}
 
-	p.streamConnPool.lock.RUnlock()
+	p.streamConnPool.mutexMap.RUnlock(ns)
 
 	log.Infof(
-		"Start disseminating tables. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-		cnt, nStreamConnPool, nTargetConns, req.GetVersion())
+		"Start disseminating tables for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion())
 
 	if err := p.performTablesUpdate(ctx, req); err != nil {
 		return err
 	}
 
+	fmt.Println("\n\n\n\n----------")
+	fmt.Println("---------------------------")
+	fmt.Println("---------------------------")
+	vd, _ := json.MarshalIndent(req, "", "  ")
+	fmt.Println(string(vd))
+
 	log.Infof(
-		"Completed dissemination. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-		cnt, nStreamConnPool, nTargetConns, req.GetVersion())
-	p.memberUpdateCount[ns].Store(0)
+		"Completed dissemination for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
+		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion())
+	p.memberUpdateCount.Get(ns).Store(0)
 
 	// set faultyHostDetectDuration to the default duration.
 	p.faultyHostDetectDuration.Store(int64(faultyHostDetectDefaultDuration))
@@ -496,17 +492,18 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 	backoff := config.NewBackOffWithContext(ctx)
 	return retry.NotifyRecover(func() error {
 		// Check stream in stream pool, if stream is not available, skip to next.
-		p.streamConnPool.lock.RLock()
+		//p.streamConnPool.lock.RLock()
+		p.streamConnPool.mutexMap.RLock(target.namespace)
 		if !p.streamConnPool.hasStream(target.id) {
 			remoteAddr := "n/a"
 			if p, ok := peer.FromContext(target.stream.Context()); ok {
 				remoteAddr = p.Addr.String()
 			}
-			log.Debugf("Runtime host %q is disconnected with server; go with next dissemination (operation: %s)", remoteAddr, operation)
-			p.streamConnPool.lock.RUnlock()
+			log.Debugf("Runtime host %q is disconnected from server; go with next dissemination (operation: %s)", remoteAddr, operation)
+			p.streamConnPool.mutexMap.RUnlock(target.namespace)
 			return nil
 		}
-		p.streamConnPool.lock.RUnlock()
+		p.streamConnPool.mutexMap.RUnlock(target.namespace)
 
 		if err := target.stream.Send(o); err != nil {
 			remoteAddr := "n/a"

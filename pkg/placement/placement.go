@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/clock"
 
@@ -34,6 +35,7 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
 
@@ -123,19 +125,15 @@ type Service struct {
 	// membershipCh is the channel to maintain Dapr runtime host membership update.
 	membershipCh chan hostMemberChange
 
-	// disseminateLocksMap contains the locks for hashing table dissemination, per namespace.
-	disseminateLocksMap map[string]*sync.Mutex
-	// disseminateLocksMapLock is the lock to protect the disseminateLocksMap.
-	disseminateLocksMapLock sync.RWMutex
+	// disseminateLocks is a map of lock per namespace for disseminating the hashing tables
+	disseminateLocks *concurrency.MutexMap
 
 	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
-	disseminateNextTimeLock sync.RWMutex
-	disseminateNextTime     map[string]*atomic.Int64
+	disseminateNextTime *concurrency.AtomicMapInt64
 
 	// memberUpdateCount represents how many dapr runtimes needs to change in a namespace.
 	// Only actor runtime's heartbeat will increase this.
-	memberUpdateCountLock sync.RWMutex
-	memberUpdateCount     map[string]*atomic.Uint32
+	memberUpdateCount *concurrency.AtomicMapUint32
 
 	// Maximum API level to return.
 	// If nil, there's no limit.
@@ -187,9 +185,9 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
 		sec:                      opts.SecProvider,
-		disseminateLocksMap:      make(map[string]*sync.Mutex),
-		memberUpdateCount:        map[string]*atomic.Uint32{},
-		disseminateNextTime:      map[string]*atomic.Int64{},
+		disseminateLocks:         concurrency.NewMutexMap(),
+		memberUpdateCount:        concurrency.NewAtomicMapUint32(),
+		disseminateNextTime:      concurrency.NewAtomicMapInt64(),
 	}
 
 }
@@ -214,7 +212,15 @@ func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
-	grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS())
+	//grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS())
+	grpcServer := grpc.NewServer(
+		sec.GRPCServerOptionMTLS(),
+		grpc.KeepaliveParams(keepalive.ServerParameters{
+			Time:    5 * time.Second, // Server pings the client if it hasn't received any requests for 5 seconds
+			Timeout: 3 * time.Second, // If a client has not responded to 3 pings, it is considered disconnected
+		}),
+		grpc.StreamInterceptor(serverStreamInterceptor),
+	)
 
 	placementv1pb.RegisterPlacementServer(grpcServer, p)
 
@@ -236,6 +242,17 @@ func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	p.wg.Wait()
 
 	return <-errCh
+}
+
+func serverStreamInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	err := handler(srv, ss)
+	if err != nil {
+		// Perform your action upon client disconnection here
+		fmt.Printf("\n\n\n\n-----------------------\nClient disconnected: %v\n", err)
+		fmt.Printf("\nStream: %v\n", ss)
+		fmt.Printf("\nStreamServerInfo: %v\n", info)
+	}
+	return err
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
@@ -269,6 +286,13 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	if clientID != nil && firstMessage.GetNamespace() != clientID.Namespace() {
 		return status.Errorf(codes.PermissionDenied, "client namespace %s is not allowed", firstMessage.GetNamespace())
 	}
+
+	// For older versions that are not sending their namespace as part of the message
+	// we will use the namespace from the Spiffe clientID
+	if clientID != nil && firstMessage.GetNamespace() == "" {
+		firstMessage.Namespace = clientID.Namespace()
+	}
+
 	daprStream := newDaprdStream(firstMessage.GetNamespace(), stream)
 	p.streamConnGroup.Add(1)
 	defer func() {
@@ -305,9 +329,6 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 				registeredMemberID = req.GetName()
 				p.streamConnPool.add(daprStream)
-				p.disseminateNextTimeLock.Lock()
-				p.disseminateNextTime[req.GetNamespace()] = &atomic.Int64{}
-				p.disseminateNextTimeLock.Unlock()
 
 				updateReq := &tablesUpdateRequest{
 					hosts: []daprdStream{daprStream},
@@ -343,6 +364,14 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// state maintained by raft is valid or not. If the member is outdated based the timestamp
 			// the member will be marked as faulty node and removed.
 			p.lastHeartBeat.Store(req.GetName(), now.UnixNano())
+			fmt.Println("\n\n\n\n=====\n")
+			p.lastHeartBeat.Range(func(key, value interface{}) bool {
+				// Print key and value
+				fmt.Printf("Key: %v, Value: %v\n", key, value)
+
+				// Continue iteration (returning true continues the iteration)
+				return true
+			})
 
 			// Upsert incoming member only if it is an actor service (not actor client) and
 			// the existing member info is unmatched with the incoming member info.
@@ -419,14 +448,14 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 //	p.streamConnPoolLock.Unlock()
 //}
 
-//func (p *Service) hasStreamConn(conn placementGRPCStream) bool {
-//	p.streamConnPoolLock.RLock()
-//	defer p.streamConnPoolLock.RUnlock()
+//	func (p *Service) hasStreamConn(conn placementGRPCStream) bool {
+//		p.streamConnPoolLock.RLock()
+//		defer p.streamConnPoolLock.RUnlock()
 //
-//	for _, c := range p.streamConnPool {
-//		if c == conn {
-//			return true
+//		for _, c := range p.streamConnPool {
+//			if c == conn {
+//				return true
+//			}
 //		}
+//		return false
 //	}
-//	return false
-//}
