@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	"github.com/dapr/dapr/pkg/operator/api/authz"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
@@ -81,7 +82,7 @@ func processHTTPEndpointSecrets(ctx context.Context, endpoint *httpendpointsapi.
 
 // GetHTTPEndpoint returns a specified http endpoint object.
 func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetHTTPEndpointResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -101,7 +102,7 @@ func (a *apiServer) GetHTTPEndpoint(ctx context.Context, in *operatorv1pb.GetRes
 
 // ListHTTPEndpoints gets the list of applied http endpoints.
 func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.ListHTTPEndpointsRequest) (*operatorv1pb.ListHTTPEndpointsResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -137,7 +138,7 @@ func (a *apiServer) ListHTTPEndpoints(ctx context.Context, in *operatorv1pb.List
 
 // HTTPEndpointUpdate updates Dapr sidecars whenever an http endpoint in the cluster is modified.
 func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateRequest, srv operatorv1pb.Operator_HTTPEndpointUpdateServer) error { //nolint:nosnakecase
-	if err := a.authzRequest(srv.Context(), in.GetNamespace()); err != nil {
+	if _, err := authz.Request(srv.Context(), in.GetNamespace()); err != nil {
 		return err
 	}
 
