@@ -11,9 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package api
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/informer/reconnect"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/informer/scopes"
+	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/componentupdate"
+	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/listcomponents"
 )

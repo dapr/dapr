@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reconnect
+package scopes
 
 import (
 	"context"
@@ -42,13 +42,11 @@ func init() {
 }
 
 type components struct {
-	daprd1    *daprd.Daprd
-	daprd2    *daprd.Daprd
+	daprd     *daprd.Daprd
 	store     *store.Store
 	kubeapi   *kubernetes.Kubernetes
 	operator1 *operator.Operator
 	operator2 *operator.Operator
-	operator3 *operator.Operator
 }
 
 func (c *components) Setup(t *testing.T) []framework.Option {
@@ -84,45 +82,39 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithClusterDaprComponentListFromStore(t, c.store),
 	)
 
-	oopts := []operator.Option{
+	opts := []operator.Option{
 		operator.WithNamespace("default"),
 		operator.WithKubeconfigPath(c.kubeapi.KubeconfigPath(t)),
 		operator.WithTrustAnchorsFile(sentry.TrustAnchorsFile(t)),
 	}
-	c.operator1 = operator.New(t, oopts...)
-	c.operator2 = operator.New(t, append(oopts,
-		operator.WithAPIPort(c.operator1.Port()),
-	)...)
-	c.operator3 = operator.New(t, append(oopts,
+	c.operator1 = operator.New(t, opts...)
+	c.operator2 = operator.New(t, append(opts,
 		operator.WithAPIPort(c.operator1.Port()),
 	)...)
 
-	dopts := []daprd.Option{
+	c.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("daprsystem"),
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(c.operator1.Address()),
-		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithEnableMTLS(true),
 		daprd.WithNamespace("default"),
+		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 		)),
-	}
-	c.daprd1 = daprd.New(t, dopts...)
-	c.daprd2 = daprd.New(t, dopts...)
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, c.kubeapi, c.daprd1, c.daprd2),
+		framework.WithProcesses(sentry, c.kubeapi, c.daprd),
 	}
 }
 
 func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator1.Run(t, ctx)
 	c.operator1.WaitUntilRunning(t, ctx)
-	c.daprd1.WaitUntilRunning(t, ctx)
-	c.daprd2.WaitUntilRunning(t, ctx)
+	c.daprd.WaitUntilRunning(t, ctx)
 
 	client := util.HTTPClient(t)
 
@@ -135,30 +127,47 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.kubeapi.Informer().Add(t, &comp)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, c.daprd1.GetMetaRegistedComponents(t, ctx), 1)
-		assert.Len(t, c.daprd2.GetMetaRegistedComponents(t, ctx), 1)
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
 	}, time.Second*10, time.Millisecond*10)
 
+	comp.Scopes = []string{"foo"}
+	c.store.Set(&comp)
+	c.kubeapi.Informer().Modify(t, &comp)
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()))
+	}, time.Second*10, time.Millisecond*10)
+
+	comp.Scopes = []string{"foo", c.daprd.AppID()}
+	c.store.Set(&comp)
+	c.kubeapi.Informer().Modify(t, &comp)
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
+	}, time.Second*10, time.Millisecond*10)
+
+	comp.Scopes = []string{"foo"}
 	c.operator1.Cleanup(t)
-	c.store.Set()
-	c.kubeapi.Informer().Delete(t, &comp)
+	c.store.Set(&comp)
 	c.operator2.Run(t, ctx)
 	c.operator2.WaitUntilRunning(t, ctx)
-
+	c.store.Set(&comp)
+	c.kubeapi.Informer().Modify(t, &comp)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd1.HTTPPort()))
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd2.HTTPPort()))
+		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()))
 	}, time.Second*10, time.Millisecond*10)
 
-	c.operator2.Cleanup(t)
-	c.store.Add(&comp)
-	c.kubeapi.Informer().Add(t, &comp)
-	c.operator3.Run(t, ctx)
-	c.operator3.WaitUntilRunning(t, ctx)
+	comp.Scopes = []string{}
+	c.store.Set(&comp)
+	c.kubeapi.Informer().Modify(t, &comp)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd1.HTTPPort()), 1)
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd2.HTTPPort()), 1)
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
 	}, time.Second*10, time.Millisecond*10)
 
-	c.operator3.Cleanup(t)
+	comp2 := comp.DeepCopy()
+	comp2.Name = "456"
+	comp2.Scopes = []string{c.daprd.AppID()}
+	c.store.Set(&comp, comp2)
+	c.kubeapi.Informer().Modify(t, comp2)
+	require.EventuallyWithT(t, func(t *assert.CollectT) {
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 2)
+	}, time.Second*10, time.Millisecond*10)
 }
