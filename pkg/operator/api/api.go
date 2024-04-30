@@ -23,13 +23,16 @@ import (
 	"sync/atomic"
 
 	"google.golang.org/grpc"
+	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/operator/api/informer"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
 
@@ -43,6 +46,7 @@ var log = logger.NewLogger("dapr.operator.api")
 
 type Options struct {
 	Client   client.Client
+	Cache    cache.Cache
 	Security security.Provider
 	Port     int
 }
@@ -51,9 +55,9 @@ type Options struct {
 type Server interface {
 	Run(context.Context) error
 	Ready(context.Context) error
-	OnComponentUpdated(context.Context, operatorv1pb.ResourceEventType, *componentsapi.Component)
-	OnHTTPEndpointUpdated(context.Context, *httpendpointsapi.HTTPEndpoint)
+
 	OnSubscriptionUpdated(context.Context, operatorv1pb.ResourceEventType, *subapi.Subscription)
+	OnHTTPEndpointUpdated(context.Context, *httpendpointsapi.HTTPEndpoint)
 }
 
 type apiServer struct {
@@ -61,12 +65,13 @@ type apiServer struct {
 	Client client.Client
 	sec    security.Provider
 	port   string
-	// notify all dapr runtime
-	connLock                  sync.Mutex
+
+	compInformer informer.Interface[componentsapi.Component]
+
 	endpointLock              sync.Mutex
-	allConnUpdateChan         map[string]chan *ComponentUpdateEvent
 	allEndpointsUpdateChan    map[string]chan *httpendpointsapi.HTTPEndpoint
 	allSubscriptionUpdateChan map[string]chan *SubscriptionUpdateEvent
+	connLock                  sync.Mutex
 	readyCh                   chan struct{}
 	running                   atomic.Bool
 }
@@ -74,10 +79,12 @@ type apiServer struct {
 // NewAPIServer returns a new API server.
 func NewAPIServer(opts Options) Server {
 	return &apiServer{
-		Client:                    opts.Client,
+		Client: opts.Client,
+		compInformer: informer.New[componentsapi.Component](informer.Options{
+			Cache: opts.Cache,
+		}),
 		sec:                       opts.Security,
 		port:                      strconv.Itoa(opts.Port),
-		allConnUpdateChan:         make(map[string]chan *ComponentUpdateEvent),
 		allEndpointsUpdateChan:    make(map[string]chan *httpendpointsapi.HTTPEndpoint),
 		allSubscriptionUpdateChan: make(map[string]chan *SubscriptionUpdateEvent),
 		readyCh:                   make(chan struct{}),
@@ -106,39 +113,27 @@ func (a *apiServer) Run(ctx context.Context) error {
 	}
 	close(a.readyCh)
 
-	errCh := make(chan error)
-	go func() {
-		if rErr := s.Serve(lis); rErr != nil {
-			errCh <- fmt.Errorf("gRPC server error: %w", rErr)
-			return
-		}
-		errCh <- nil
-	}()
-
-	// Block until context is done
-	<-ctx.Done()
-
-	a.connLock.Lock()
-	for key, ch := range a.allConnUpdateChan {
-		close(ch)
-		delete(a.allConnUpdateChan, key)
-	}
-	for key, ch := range a.allSubscriptionUpdateChan {
-		close(ch)
-		delete(a.allSubscriptionUpdateChan, key)
-	}
-	a.connLock.Unlock()
-
-	s.GracefulStop()
-	err = <-errCh
-	if err != nil {
-		return err
-	}
-	err = lis.Close()
-	if err != nil && !errors.Is(err, net.ErrClosed) {
-		return fmt.Errorf("error closing listener: %w", err)
-	}
-	return nil
+	return concurrency.NewRunnerManager(
+		a.compInformer.Run,
+		func(ctx context.Context) error {
+			if err := s.Serve(lis); err != nil {
+				return fmt.Errorf("gRPC server error: %w", err)
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			// Block until context is done
+			<-ctx.Done()
+			a.connLock.Lock()
+			for key, ch := range a.allSubscriptionUpdateChan {
+				close(ch)
+				delete(a.allSubscriptionUpdateChan, key)
+			}
+			a.connLock.Unlock()
+			s.GracefulStop()
+			return nil
+		},
+	).Run(ctx)
 }
 
 func (a *apiServer) Ready(ctx context.Context) error {
