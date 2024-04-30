@@ -15,6 +15,7 @@ package meta
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/apis/common"
 )
@@ -28,7 +29,9 @@ type Resource interface {
 	GetNamespace() string
 	LogName() string
 	GetSecretStore() string
+	GetScopes() []string
 	NameValuePairs() []common.NameValuePair
+	ClientObject() client.Object
 
 	// Returns a deep copy of the resource, with the object meta set only with
 	// Name and Namespace.

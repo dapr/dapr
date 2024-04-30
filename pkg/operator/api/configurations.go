@@ -21,12 +21,13 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 
 	configurationapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	"github.com/dapr/dapr/pkg/operator/api/authz"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
 // GetConfiguration returns a Dapr configuration.
 func (a *apiServer) GetConfiguration(ctx context.Context, in *operatorv1pb.GetConfigurationRequest) (*operatorv1pb.GetConfigurationResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 

@@ -22,12 +22,13 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	"github.com/dapr/dapr/pkg/operator/api/authz"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
 // GetResiliency returns a specified resiliency object.
 func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResiliencyRequest) (*operatorv1pb.GetResiliencyResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -47,7 +48,7 @@ func (a *apiServer) GetResiliency(ctx context.Context, in *operatorv1pb.GetResil
 
 // ListResiliency gets the list of applied resiliencies.
 func (a *apiServer) ListResiliency(ctx context.Context, in *operatorv1pb.ListResiliencyRequest) (*operatorv1pb.ListResiliencyResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
