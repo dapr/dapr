@@ -18,11 +18,8 @@ import (
 	"fmt"
 	"net"
 	"net/url"
-	"os"
 	"strings"
 	"sync"
-	"sync/atomic"
-	"time"
 
 	etcdcron "github.com/diagridio/go-etcd-cron"
 	clientv3 "go.etcd.io/etcd/client/v3"
@@ -30,7 +27,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/config"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	globalconfig "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
@@ -122,9 +118,6 @@ func New(opts Options) *Server {
 	s.srv = grpc.NewServer(opts.Security.GRPCServerOptionMTLS())
 	schedulerv1pb.RegisterSchedulerServer(s.srv, s)
 
-	apiLevel := &atomic.Uint32{}
-	apiLevel.Store(config.ActorAPILevel)
-
 	if opts.PlacementAddress != "" {
 		// Create gRPC manager
 		grpcAppChannelConfig := &manager.AppChannelConfig{}
@@ -134,16 +127,16 @@ func New(opts Options) *Server {
 		act, _ := actors.NewActors(actors.ActorsOpts{
 			AppChannel:       nil,
 			GRPCConnectionFn: s.grpcManager.GetGRPCConnection,
-			Config: actors.Config{
-				Config: config.Config{
-					ActorsService:                 "placement:" + opts.PlacementAddress,
-					AppID:                         opts.AppID,
-					HostAddress:                   opts.HostAddress,
-					Port:                          s.port,
-					PodName:                       os.Getenv("POD_NAME"),
-					HostedActorTypes:              config.NewHostedActors([]string{}),
-					ActorDeactivationScanInterval: time.Hour, // TODO: disable this feature since we just need to invoke actors
-				},
+			Config:           actors.Config{
+				// This will be rm-ed in the next PR
+				//Config: actorInternal.Config{
+				//	ActorsService:    "placement:" + opts.PlacementAddress,
+				//	AppID:            opts.AppID,
+				//	HostAddress:      opts.HostAddress,
+				//	Port:             s.port,
+				//	PodName:          os.Getenv("POD_NAME"),
+				//	HostedActorTypes: actorInternal.NewHostedActors([]string{}),
+				//},
 			},
 			TracingSpec:     globalconfig.TracingSpec{},
 			Resiliency:      resiliency.New(log),

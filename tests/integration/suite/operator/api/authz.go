@@ -114,7 +114,7 @@ func (a *authz) Run(t *testing.T, ctx context.Context) {
 		assert.Nil(t, resp)
 	})
 
-	client := a.op.Dial(t, ctx, "default", a.sentry)
+	client := a.op.Dial(t, ctx, a.sentry, "myapp")
 
 	type tcase struct {
 		funcGoodNamespace func() (any, error)

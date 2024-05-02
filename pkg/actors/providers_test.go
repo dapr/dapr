@@ -21,7 +21,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/actors/config"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
@@ -47,7 +46,7 @@ func TestConfig_GetPlacementProvider(t *testing.T) {
 
 	t.Run("ActorsService with placement provider", func(t *testing.T) {
 		c := Config{
-			Config: config.Config{
+			Config: internal.Config{
 				ActorsService: "placement:localhost",
 			},
 		}
@@ -59,7 +58,7 @@ func TestConfig_GetPlacementProvider(t *testing.T) {
 
 	t.Run("ActorsService with invalid provider", func(t *testing.T) {
 		c := Config{
-			Config: config.Config{
+			Config: internal.Config{
 				ActorsService: "invalidprovider:localhost",
 			},
 		}
@@ -70,7 +69,7 @@ func TestConfig_GetPlacementProvider(t *testing.T) {
 
 	t.Run("ActorsService without provider name", func(t *testing.T) {
 		c := Config{
-			Config: config.Config{
+			Config: internal.Config{
 				ActorsService: "localhost",
 			},
 		}
@@ -91,7 +90,7 @@ func TestConfig_GetRemindersProvider(t *testing.T) {
 
 	t.Run("RemindersService with default provider", func(t *testing.T) {
 		c := Config{
-			Config: config.Config{
+			Config: internal.Config{
 				RemindersService: "default",
 			},
 		}
@@ -101,10 +100,10 @@ func TestConfig_GetRemindersProvider(t *testing.T) {
 	})
 
 	t.Run("RemindersService with custom provider", func(t *testing.T) {
-		nilProvider := func(opts config.ActorsProviderOptions) internal.RemindersProvider {
+		nilProvider := func(opts internal.ActorsProviderOptions) internal.RemindersProvider {
 			return struct{ internal.RemindersProvider }{}
 		}
-		remindersProviders["custom"] = func(config Config, placement placement.PlacementService) (remindersProviderFactory, error) {
+		remindersProviders["custom"] = func(config Config, placement internal.PlacementService) (remindersProviderFactory, error) {
 			return nilProvider, nil
 		}
 		t.Cleanup(func() {
@@ -112,7 +111,7 @@ func TestConfig_GetRemindersProvider(t *testing.T) {
 		})
 
 		c := Config{
-			Config: config.Config{
+			Config: internal.Config{
 				RemindersService: "custom:localhost",
 			},
 		}
@@ -123,7 +122,7 @@ func TestConfig_GetRemindersProvider(t *testing.T) {
 
 	t.Run("RemindersService with invalid provider", func(t *testing.T) {
 		c := Config{
-			Config: config.Config{
+			Config: internal.Config{
 				RemindersService: "invalidprovider:localhost",
 			},
 		}
@@ -134,7 +133,7 @@ func TestConfig_GetRemindersProvider(t *testing.T) {
 
 	t.Run("RemindersService without provider name", func(t *testing.T) {
 		c := Config{
-			Config: config.Config{
+			Config: internal.Config{
 				RemindersService: "localhost",
 			},
 		}

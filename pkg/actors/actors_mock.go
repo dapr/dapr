@@ -27,7 +27,6 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
-	"github.com/dapr/dapr/pkg/actors/placement"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -39,19 +38,19 @@ type (
 	MockReminder = internal.Reminder
 
 	// Expose PlacementService for mocking
-	PlacementService = placement.PlacementService
+	PlacementService = internal.PlacementService
 )
 
 // MockPlacement is a mock placement service.
 type MockPlacement struct {
 	testAppID            string
-	lookupActorResponses map[string]placement.LookupActorResponse
+	lookupActorResponses map[string]internal.LookupActorResponse
 }
 
-func NewMockPlacement(testAppID string) placement.PlacementService {
+func NewMockPlacement(testAppID string) internal.PlacementService {
 	return &MockPlacement{
 		testAppID:            testAppID,
-		lookupActorResponses: make(map[string]placement.LookupActorResponse),
+		lookupActorResponses: make(map[string]internal.LookupActorResponse),
 	}
 }
 
@@ -60,18 +59,18 @@ func (*MockPlacement) AddHostedActorType(string, time.Duration) error {
 	return nil
 }
 
-func (p *MockPlacement) SetLookupActorResponse(req placement.LookupActorRequest, res placement.LookupActorResponse) {
+func (p *MockPlacement) SetLookupActorResponse(req internal.LookupActorRequest, res internal.LookupActorResponse) {
 	p.lookupActorResponses[req.ActorKey()] = res
 }
 
 // LookupActor implements internal.PlacementService
-func (p *MockPlacement) LookupActor(ctx context.Context, req placement.LookupActorRequest) (placement.LookupActorResponse, error) {
+func (p *MockPlacement) LookupActor(ctx context.Context, req internal.LookupActorRequest) (internal.LookupActorResponse, error) {
 	res, ok := p.lookupActorResponses[req.ActorKey()]
 	if ok {
 		return res, nil
 	}
 
-	return placement.LookupActorResponse{
+	return internal.LookupActorResponse{
 		Address: "localhost:5000",
 		AppID:   p.testAppID,
 	}, nil
@@ -118,7 +117,7 @@ func (*MockPlacement) ReportActorDeactivation(ctx context.Context, actorType, ac
 }
 
 // SetHaltActorFns implements implements internal.PlacementService
-func (*MockPlacement) SetHaltActorFns(haltFn placement.HaltActorFn, haltAllFn placement.HaltAllActorsFn) {
+func (*MockPlacement) SetHaltActorFns(haltFn internal.HaltActorFn, haltAllFn internal.HaltAllActorsFn) {
 	// Nop
 }
 

@@ -15,6 +15,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/apis/common"
 	httpendpoint "github.com/dapr/dapr/pkg/apis/httpEndpoint"
@@ -103,9 +104,17 @@ func (h HTTPEndpoint) HasTLSClientCert() bool {
 	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.Certificate != nil && h.Spec.ClientTLS.Certificate.Value != nil
 }
 
-// HasTLSClientKey returns a bool indicating if the HTTP endpoint contains a tls client key
+// HasTLSPrivateKey returns a bool indicating if the HTTP endpoint contains a tls client key
 func (h HTTPEndpoint) HasTLSPrivateKey() bool {
 	return h.Spec.ClientTLS != nil && h.Spec.ClientTLS.PrivateKey != nil && h.Spec.ClientTLS.PrivateKey.Value != nil
+}
+
+func (h HTTPEndpoint) ClientObject() client.Object {
+	return &h
+}
+
+func (h HTTPEndpoint) GetScopes() []string {
+	return h.Scopes
 }
 
 // EmptyMetaDeepCopy returns a new instance of the component type with the

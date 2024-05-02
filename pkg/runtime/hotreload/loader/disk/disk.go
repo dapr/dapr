@@ -19,12 +19,14 @@ import (
 	"strings"
 	"time"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
 	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/events/batcher"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
@@ -38,9 +40,10 @@ type Options struct {
 }
 
 type disk struct {
-	component *resource[componentsapi.Component]
-	fs        *fswatcher.FSWatcher
-	updateCh  chan<- struct{}
+	components    *resource[compapi.Component]
+	subscriptions *resource[subapi.Subscription]
+	fs            *fswatcher.FSWatcher
+	batcher       *batcher.Batcher[int, struct{}]
 }
 
 func New(opts Options) (loader.Interface, error) {
@@ -54,28 +57,60 @@ func New(opts Options) (loader.Interface, error) {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
 
-	updateCh := make(chan struct{})
+	batcher := batcher.New[int, struct{}](0)
 
 	return &disk{
 		fs: fs,
-		component: newResource[componentsapi.Component](
-			loaderdisk.NewComponents(opts.Dirs...),
-			store.NewComponent(opts.ComponentStore),
-			updateCh,
+		components: newResource[compapi.Component](
+			resourceOptions[compapi.Component]{
+				loader:  loaderdisk.NewComponents(opts.Dirs...),
+				store:   store.NewComponents(opts.ComponentStore),
+				batcher: batcher,
+			},
 		),
-		updateCh: updateCh,
+		subscriptions: newResource[subapi.Subscription](
+			resourceOptions[subapi.Subscription]{
+				loader:  loaderdisk.NewSubscriptions(opts.Dirs...),
+				store:   store.NewSubscriptions(opts.ComponentStore),
+				batcher: batcher,
+			},
+		),
+		batcher: batcher,
 	}, nil
 }
 
 func (d *disk) Run(ctx context.Context) error {
+	eventCh := make(chan struct{})
+
 	return concurrency.NewRunnerManager(
-		d.component.start,
+		d.components.run,
+		d.subscriptions.run,
 		func(ctx context.Context) error {
-			return d.fs.Run(ctx, d.updateCh)
+			return d.fs.Run(ctx, eventCh)
+		},
+		func(ctx context.Context) error {
+			defer d.batcher.Close()
+
+			var i int
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-eventCh:
+					// Use a separate: index every batch to prevent deduplicates of separate
+					// file updates happening at the same time.
+					i++
+					d.batcher.Batch(i, struct{}{})
+				}
+			}
 		},
 	).Run(ctx)
 }
 
-func (d *disk) Components() loader.Loader[componentsapi.Component] {
-	return d.component
+func (d *disk) Components() loader.Loader[compapi.Component] {
+	return d.components
+}
+
+func (d *disk) Subscriptions() loader.Loader[subapi.Subscription] {
+	return d.subscriptions
 }

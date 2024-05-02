@@ -31,7 +31,6 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
-	actors_config "github.com/dapr/dapr/pkg/actors/config"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -62,7 +61,7 @@ type reminders struct {
 	evaluationQueue      chan struct{}
 	stateStoreProviderFn internal.StateStoreProviderFn
 	resiliency           resiliency.Provider
-	config               actors_config.Config
+	config               internal.Config
 	lookUpActorFn        internal.LookupActorFn
 	metricsCollector     remindersMetricsCollectorFn
 }
@@ -70,12 +69,12 @@ type reminders struct {
 // NewRemindersProviderOpts contains the options for the NewRemindersProvider function.
 type NewRemindersProviderOpts struct {
 	StoreName string
-	Config    actors_config.Config
+	Config    internal.Config
 	APILevel  *atomic.Uint32
 }
 
 // NewRemindersProvider returns a reminders provider.
-func NewRemindersProvider(opts actors_config.ActorsProviderOptions) internal.RemindersProvider {
+func NewRemindersProvider(opts internal.ActorsProviderOptions) internal.RemindersProvider {
 	return &reminders{
 		clock:            opts.Clock,
 		apiLevel:         opts.APILevel,
@@ -701,7 +700,7 @@ func (r *reminders) saveRemindersInPartitionRequest(stateKey string, reminders [
 
 	// If APILevelFeatureRemindersProtobuf is enabled, then serialize as protobuf which is more efficient
 	// Otherwise, fall back to sending the data as-is in the request (which will serialize it as JSON)
-	if actors_config.APILevelFeatureRemindersProtobuf.IsEnabled(r.apiLevel.Load()) {
+	if internal.APILevelFeatureRemindersProtobuf.IsEnabled(r.apiLevel.Load()) {
 		var err error
 		req.Value, err = r.serializeRemindersToProto(reminders)
 		if err != nil {
@@ -855,7 +854,7 @@ func (r *reminders) getRemindersForActorType(ctx context.Context, actorType stri
 	return reminderRefs, actorMetadata, nil
 }
 
-// getActorMetadata gets the metadata object for the given actor type.
+// getActorTypeMetadata gets the metadata object for the given actor type.
 // If "migrate" is true, it also performs migration of reminders if needed. Note that this should be set to "true" only by a caller who owns a lock via evaluationChan.
 func (r *reminders) getActorTypeMetadata(ctx context.Context, actorType string, migrate bool) (*ActorMetadata, error) {
 	storeName, store, err := r.stateStoreProviderFn()
