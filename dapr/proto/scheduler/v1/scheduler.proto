@@ -30,15 +30,18 @@ message WatchJobsRequest {
 }
 
 message WatchJobsResponse {
+	// Job name.
+	string name = 1;
+
 	// Job data.
-	google.protobuf.Any data = 1;
+	google.protobuf.Any data = 2;
 
 	// The metadata associated with the job.
 	// The sidecar will create the unique `key` for storing data in the state store and pass the generated
 	// `key` along to the scheduler service for data lookup upon ‘trigger’ time later on.
 	// The sidecar will also add metadata in order to know whether this job is registered for an actor.
 	// This is needed, as the routing mechanism for actors is different for the callback.
-	map<string,string> metadata = 2;
+	map<string,string> metadata = 3;
 }
 
 message ScheduleJobRequest {

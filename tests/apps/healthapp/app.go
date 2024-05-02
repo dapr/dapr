@@ -461,6 +461,10 @@ func (s *grpcServer) OnBindingEvent(_ context.Context, in *runtimev1pb.BindingEv
 	return nil, errors.New("unexpected binding event: " + in.GetName())
 }
 
+func (s *grpcServer) OnJobEvent(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return nil, nil
+}
+
 type healthCheck struct {
 	plan  []bool
 	count int

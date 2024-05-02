@@ -48,13 +48,13 @@ type streaming struct {
 func (s *streaming) Setup(t *testing.T) []framework.Option {
 	s.streamloglineDaprA = logline.New(t,
 		logline.WithStdoutLineContains(
-			`Received response: [type.googleapis.com/google.type.Expr]:{} map[appID:A namespace:A]`,
+			`Received job: [type.googleapis.com/google.type.Expr]:{} map[appID:A namespace:A]`,
 		),
 	)
 
 	s.streamloglineDaprB = logline.New(t,
 		logline.WithStdoutLineContains(
-			`Received response: [type.googleapis.com/google.type.Expr]:{} map[appID:B namespace:B]`,
+			`Received job: [type.googleapis.com/google.type.Expr]:{} map[appID:B namespace:B]`,
 		),
 	)
 
@@ -86,6 +86,7 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 		daprd.WithExecOptions(
 			exec.WithStdout(s.streamloglineDaprA.Stdout()),
 		),
+		daprd.WithLogLevel("debug"),
 	)
 
 	s.daprdB = daprd.New(t,
@@ -96,6 +97,7 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 		daprd.WithExecOptions(
 			exec.WithStdout(s.streamloglineDaprB.Stdout()),
 		),
+		daprd.WithLogLevel("debug"),
 	)
 
 	fp.Free(t)

@@ -105,6 +105,7 @@ func (s *Server) triggerJob(ctx context.Context, req etcdcron.TriggerRequest) (e
 	} else {
 		// Normal job type to trigger
 		triggeredJob := &schedulerv1pb.WatchJobsResponse{
+			Name:     req.JobName,
 			Data:     req.Payload,
 			Metadata: metadata,
 		}

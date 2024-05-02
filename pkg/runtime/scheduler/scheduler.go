@@ -15,13 +15,17 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"io"
+	"net/http"
 	"strings"
 	"sync/atomic"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/channel"
+	v1 "github.com/dapr/dapr/pkg/messaging/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
@@ -37,19 +41,25 @@ type Manager struct {
 	namespace   string
 	appID       string
 	lastUsedIdx int64
+	appChannel  channel.AppChannel
+	isHTTP      bool
 }
 
 type Options struct {
-	Namespace string
-	AppID     string
-	Addresses string
-	Security  security.Handler
+	Namespace  string
+	AppID      string
+	Addresses  string
+	Security   security.Handler
+	AppChannel channel.AppChannel
+	IsHTTP     bool
 }
 
 func NewManager(ctx context.Context, opts Options) *Manager {
 	manager := &Manager{
-		namespace: opts.Namespace,
-		appID:     opts.AppID,
+		namespace:  opts.Namespace,
+		appID:      opts.AppID,
+		appChannel: opts.AppChannel,
+		isHTTP:     opts.IsHTTP,
 	}
 
 	schedulerHostPorts := strings.Split(opts.Addresses, ",")
@@ -185,11 +195,89 @@ func (m *Manager) processStream(ctx context.Context, client *client.Client, stre
 						return err
 					}
 				}
-				// TODO(Cassie): rm this once it sends the triggered job back to the app
-				log.Infof("Received response: %+v %+v", resp.GetData(), resp.GetMetadata())
+
+				log.Debugf("Received job: %+v %+v", resp.GetData(), resp.GetMetadata())
+				err = m.invokeAppMethod(ctx, resp)
+				if err != nil {
+					log.Errorf("Error invoking app method: %v", err)
+				}
 			}
 		}
 	}
+}
+
+func (m *Manager) invokeAppMethod(ctx context.Context, resp *schedulerv1pb.WatchJobsResponse) error {
+	parts := strings.Split(resp.GetName(), "||")
+	jobName := parts[len(parts)-1]
+
+	switch m.isHTTP {
+	case true:
+		req := v1.NewInvokeMethodRequest("dapr/receiveJobs/"+jobName).
+			WithHTTPExtension(http.MethodPost, "").
+			WithDataObject(resp.GetData())
+		if req != nil {
+			defer req.Close()
+		}
+
+		if m.appChannel == nil {
+			// TODO(Cassie): add an orphaned job go routine to retry sending job at a later time
+			return fmt.Errorf("app channel is nil. Cannot send back triggered job: %s", jobName)
+		}
+
+		response, err := m.appChannel.TriggerJob(ctx, req)
+		if response != nil {
+			defer response.Close()
+		}
+		if err != nil {
+			// TODO(Cassie): add an orphaned job go routine to retry sending job at a later time
+			return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
+		}
+
+		statusCode := int(response.Status().GetCode())
+		switch {
+		case statusCode >= 200 && statusCode <= 299:
+			log.Debugf("Sent job: %s to app: %s", jobName, m.appID)
+		case statusCode == http.StatusNotFound:
+			body, _ := response.RawDataFull()
+			log.Errorf("non-retriable error returned from app while processing triggered job %v: %s. status code returned: %v", jobName, body, statusCode)
+			return nil
+		default:
+			log.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", jobName, statusCode)
+		}
+	default:
+		req := v1.NewInvokeMethodRequest("receiveJobs/" + jobName).
+			WithDataObject(resp.GetData())
+		if req != nil {
+			defer req.Close()
+		}
+
+		if m.appChannel == nil {
+			// TODO(Cassie): add an orphaned job go routine to retry sending job at a later time
+			return fmt.Errorf("app channel is nil. Cannot send back triggered job: %s", jobName)
+		}
+
+		response, err := m.appChannel.TriggerJob(ctx, req)
+		if response != nil {
+			defer response.Close()
+		}
+		if err != nil {
+			// TODO(Cassie): add an orphaned job go routine to retry sending job at a later time
+			return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
+		}
+
+		statusCode := response.Status().GetCode()
+		switch codes.Code(statusCode) {
+		case codes.OK:
+			log.Debugf("Sent job: %s to app: %s", jobName, m.appID)
+		case codes.NotFound:
+			body, _ := response.RawDataFull()
+			log.Errorf("non-retriable error returned from app while processing triggered job %v: %s. status code returned: %v", jobName, body, statusCode)
+			return nil
+		default:
+			log.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", jobName, statusCode)
+		}
+	}
+	return nil
 }
 
 func (m *Manager) establishSchedulerConn(ctx context.Context, client *client.Client, streamReq *schedulerv1pb.WatchJobsRequest) error {
