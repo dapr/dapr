@@ -46,6 +46,11 @@ type MockServer struct {
 	ValidateCloudEventExtension    *map[string]interface{}
 }
 
+// OnJobEvent - TODO implement
+func (m *MockServer) OnJobEvent(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return nil, nil
+}
+
 func (m *MockServer) Init() {
 	m.initialized = true
 	m.RequestsReceived = make(map[string]*runtimev1pb.TopicEventBulkRequest)

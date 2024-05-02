@@ -38,6 +38,7 @@ const (
 	AppCallback_OnTopicEvent_FullMethodName           = "/dapr.proto.runtime.v1.AppCallback/OnTopicEvent"
 	AppCallback_ListInputBindings_FullMethodName      = "/dapr.proto.runtime.v1.AppCallback/ListInputBindings"
 	AppCallback_OnBindingEvent_FullMethodName         = "/dapr.proto.runtime.v1.AppCallback/OnBindingEvent"
+	AppCallback_OnJobEvent_FullMethodName             = "/dapr.proto.runtime.v1.AppCallback/OnJobEvent"
 )
 
 // AppCallbackClient is the client API for AppCallback service.
@@ -57,6 +58,8 @@ type AppCallbackClient interface {
 	// User application can save the states or send the events to the output
 	// bindings optionally by returning BindingEventResponse.
 	OnBindingEvent(ctx context.Context, in *BindingEventRequest, opts ...grpc.CallOption) (*BindingEventResponse, error)
+	// Sends job back to the app's endpoint at trigger time.
+	OnJobEvent(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*JobEventResponse, error)
 }
 
 type appCallbackClient struct {
@@ -112,6 +115,15 @@ func (c *appCallbackClient) OnBindingEvent(ctx context.Context, in *BindingEvent
 	return out, nil
 }
 
+func (c *appCallbackClient) OnJobEvent(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*JobEventResponse, error) {
+	out := new(JobEventResponse)
+	err := c.cc.Invoke(ctx, AppCallback_OnJobEvent_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AppCallbackServer is the server API for AppCallback service.
 // All implementations should embed UnimplementedAppCallbackServer
 // for forward compatibility
@@ -129,6 +141,8 @@ type AppCallbackServer interface {
 	// User application can save the states or send the events to the output
 	// bindings optionally by returning BindingEventResponse.
 	OnBindingEvent(context.Context, *BindingEventRequest) (*BindingEventResponse, error)
+	// Sends job back to the app's endpoint at trigger time.
+	OnJobEvent(context.Context, *JobEventRequest) (*JobEventResponse, error)
 }
 
 // UnimplementedAppCallbackServer should be embedded to have forward compatible implementations.
@@ -149,6 +163,9 @@ func (UnimplementedAppCallbackServer) ListInputBindings(context.Context, *emptyp
 }
 func (UnimplementedAppCallbackServer) OnBindingEvent(context.Context, *BindingEventRequest) (*BindingEventResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnBindingEvent not implemented")
+}
+func (UnimplementedAppCallbackServer) OnJobEvent(context.Context, *JobEventRequest) (*JobEventResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OnJobEvent not implemented")
 }
 
 // UnsafeAppCallbackServer may be embedded to opt out of forward compatibility for this service.
@@ -252,6 +269,24 @@ func _AppCallback_OnBindingEvent_Handler(srv interface{}, ctx context.Context, d
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AppCallback_OnJobEvent_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JobEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AppCallbackServer).OnJobEvent(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AppCallback_OnJobEvent_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AppCallbackServer).OnJobEvent(ctx, req.(*JobEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AppCallback_ServiceDesc is the grpc.ServiceDesc for AppCallback service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -278,6 +313,10 @@ var AppCallback_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "OnBindingEvent",
 			Handler:    _AppCallback_OnBindingEvent_Handler,
+		},
+		{
+			MethodName: "OnJobEvent",
+			Handler:    _AppCallback_OnJobEvent_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

@@ -289,11 +289,16 @@ func newDaprRuntime(ctx context.Context,
 
 	var schedulerManager *runtimeScheduler.Manager
 	if runtimeConfig.SchedulerEnabled() {
+		if err = channels.Refresh(); err != nil {
+			log.Warnf("failed to open %s channel to app: %s", string(runtimeConfig.appConnectionConfig.Protocol), err)
+		}
 		schedulerManager = runtimeScheduler.NewManager(ctx, runtimeScheduler.Options{
-			Namespace: namespace,
-			AppID:     runtimeConfig.id,
-			Addresses: runtimeConfig.schedulerAddress,
-			Security:  sec,
+			Namespace:  namespace,
+			AppID:      runtimeConfig.id,
+			Addresses:  runtimeConfig.schedulerAddress,
+			Security:   sec,
+			AppChannel: channels.AppChannel(),
+			IsHTTP:     runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 		})
 		if err := rt.runnerCloser.Add(schedulerManager.Run); err != nil {
 			return nil, err

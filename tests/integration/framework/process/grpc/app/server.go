@@ -24,6 +24,7 @@ import (
 
 type server struct {
 	onInvokeFn         func(context.Context, *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)
+	onJobEventFn       func(context.Context, *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error)
 	onTopicEventFn     func(context.Context, *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error)
 	onBulkTopicEventFn func(context.Context, *rtv1.TopicEventBulkRequest) (*rtv1.TopicEventBulkResponse, error)
 	listTopicSubFn     func(context.Context, *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)
@@ -37,6 +38,13 @@ func (s *server) OnInvoke(ctx context.Context, in *commonv1.InvokeRequest) (*com
 		return new(commonv1.InvokeResponse), nil
 	}
 	return s.onInvokeFn(ctx, in)
+}
+
+func (s *server) OnJobEvent(ctx context.Context, in *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error) {
+	if s.onJobEventFn == nil {
+		return new(rtv1.JobEventResponse), nil
+	}
+	return s.onJobEventFn(ctx, in)
 }
 
 func (s *server) ListInputBindings(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error) {

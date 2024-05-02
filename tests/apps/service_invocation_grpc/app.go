@@ -184,3 +184,7 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	fmt.Println("Topic message arrived")
 	return &runtimev1pb.TopicEventResponse{}, nil
 }
+
+func (s *server) OnJobEvent(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return nil, nil
+}

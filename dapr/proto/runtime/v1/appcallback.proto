@@ -15,6 +15,7 @@ syntax = "proto3";
 
 package dapr.proto.runtime.v1;
 
+import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "dapr/proto/common/v1/common.proto";
 import "google/protobuf/struct.proto";
@@ -45,6 +46,9 @@ service AppCallback {
   // User application can save the states or send the events to the output
   // bindings optionally by returning BindingEventResponse.
   rpc OnBindingEvent(BindingEventRequest) returns (BindingEventResponse) {}
+
+  // Sends job back to the app's endpoint at trigger time.
+  rpc OnJobEvent (JobEventRequest) returns (JobEventResponse);
 }
 
 // AppCallbackHealthCheck V1 is an optional extension to AppCallback V1 to implement
@@ -59,6 +63,40 @@ service AppCallbackHealthCheck {
 service AppCallbackAlpha {
     // Subscribes bulk events from Pubsub
   rpc OnBulkTopicEventAlpha1(TopicEventBulkRequest) returns (TopicEventBulkResponse) {}
+}
+
+message JobEventRequest {
+  // Job name.
+  string name = 1;
+
+  // Job data to be sent back to app.
+  google.protobuf.Any data = 2;
+
+  // Required. method is a method name which will be invoked by caller.
+  string method = 3;
+
+  // The type of data content.
+  //
+  // This field is required if data delivers http request body
+  // Otherwise, this is optional.
+  string content_type = 4;
+
+  // HTTP specific fields if request conveys http-compatible request.
+  //
+  // This field is required for http-compatible request. Otherwise,
+  // this field is optional.
+  common.v1.HTTPExtension http_extension = 5;
+}
+
+// JobEventResponse is the response message including data and its content type
+// from app callback.
+// This message is used in JobEventResponse of Dapr gRPC Service.
+message JobEventResponse {
+  // Required in unary RPCs. The content body of Service response.
+  google.protobuf.Any data = 1;
+
+  // Required. The type of data content.
+  string content_type = 2;
 }
 
 // TopicEventRequest message is compatible with CloudEvent spec v1.0

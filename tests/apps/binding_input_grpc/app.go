@@ -195,3 +195,7 @@ func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEven
 	fmt.Printf("Invoked from binding: %s - %s\n", in.GetName(), string(in.GetData()))
 	return &runtimev1pb.BindingEventResponse{}, nil
 }
+
+func (s *server) OnJobEvent(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return nil, nil
+}
