@@ -15,4 +15,5 @@ package informer
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/informer/reconnect"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/informer/scopes"
 )

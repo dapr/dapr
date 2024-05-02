@@ -273,7 +273,7 @@ func (imr *InvokeMethodRequest) ResetMessageData() {
 	imr.r.GetMessage().GetData().Reset()
 }
 
-// ContenType returns the content type of the message.
+// ContentType returns the content type of the message.
 func (imr *InvokeMethodRequest) ContentType() string {
 	m := imr.r.GetMessage()
 	if m == nil {

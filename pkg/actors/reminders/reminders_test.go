@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
 
-	actors_config "github.com/dapr/dapr/pkg/actors/config"
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -47,15 +46,15 @@ const (
 )
 
 func newTestReminders() *reminders {
-	conf := actors_config.Config{
+	conf := internal.Config{
 		AppID:            TestAppID,
 		ActorsService:    "placement:placement:5050",
-		HostedActorTypes: actors_config.NewHostedActors([]string{"cat"}),
+		HostedActorTypes: internal.NewHostedActors([]string{"cat"}),
 	}
 	clock := clocktesting.NewFakeClock(startOfTime)
 	apiLevel := &atomic.Uint32{}
-	apiLevel.Store(actors_config.ActorAPILevel)
-	r := NewRemindersProvider(actors_config.ActorsProviderOptions{
+	apiLevel.Store(internal.ActorAPILevel)
+	r := NewRemindersProvider(internal.ActorsProviderOptions{
 		Clock:    clock,
 		Config:   conf,
 		APILevel: apiLevel,
@@ -456,18 +455,14 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 			},
 		},
 	}
-	conf := actors_config.Config{
+	conf := internal.Config{
 		AppID:                      TestAppID,
 		ActorsService:              "placement:placement:5050",
 		DrainRebalancedActors:      appConfig.DrainRebalancedActors,
-		HostedActorTypes:           actors_config.NewHostedActors(appConfig.Entities),
+		HostedActorTypes:           internal.NewHostedActors(appConfig.Entities),
 		Reentrancy:                 appConfig.Reentrancy,
 		RemindersStoragePartitions: appConfig.RemindersStoragePartitions,
-		EntityConfigs:              make(map[string]actors_config.EntityConfig),
-	}
-	scanDuration, err := time.ParseDuration(appConfig.ActorScanInterval)
-	if err == nil {
-		conf.ActorDeactivationScanInterval = scanDuration
+		EntityConfigs:              make(map[string]internal.EntityConfig),
 	}
 
 	idleDuration, err := time.ParseDuration(appConfig.ActorIdleTimeout)
@@ -503,8 +498,8 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 	}
 	clock := clocktesting.NewFakeClock(startOfTime)
 	apiLevel := &atomic.Uint32{}
-	apiLevel.Store(actors_config.ActorAPILevel)
-	r := NewRemindersProvider(actors_config.ActorsProviderOptions{
+	apiLevel.Store(internal.ActorAPILevel)
+	r := NewRemindersProvider(internal.ActorsProviderOptions{
 		Clock:    clock,
 		Config:   conf,
 		APILevel: apiLevel,
@@ -512,8 +507,8 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 	return r.(*reminders)
 }
 
-func translateEntityConfig(appConfig config.EntityConfig) actors_config.EntityConfig {
-	domainConfig := actors_config.EntityConfig{
+func translateEntityConfig(appConfig config.EntityConfig) internal.EntityConfig {
+	domainConfig := internal.EntityConfig{
 		Entities:                   appConfig.Entities,
 		ActorIdleTimeout:           time.Minute * 60,
 		DrainOngoingCallTimeout:    time.Second * 60,

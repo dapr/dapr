@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package placement
+package internal
 
 import (
 	"context"
@@ -51,6 +51,7 @@ type PlacementService interface {
 type LookupActorRequest struct {
 	ActorType string
 	ActorID   string
+	NoCache   bool
 }
 
 // ActorKey returns the key for the actor, which is "type/id".

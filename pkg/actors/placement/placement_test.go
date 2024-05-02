@@ -32,7 +32,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/dapr/dapr/pkg/actors/config"
+	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -72,14 +72,14 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 
 	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
-	testPlacement := NewActorPlacement(config.ActorsProviderOptions{
-		Config: config.Config{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
 			ActorsService:    "placement:" + strings.Join(address, ","),
 			AppID:            "testAppID",
 			HostAddress:      "127.0.0.1",
 			Port:             1000,
 			PodName:          "testPodName",
-			HostedActorTypes: config.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
@@ -135,14 +135,14 @@ func TestAppHealthyStatus(t *testing.T) {
 
 	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
-	testPlacement := NewActorPlacement(config.ActorsProviderOptions{
-		Config: config.Config{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
 			ActorsService:    "placement:" + address,
 			AppID:            "testAppID",
 			HostAddress:      "127.0.0.1",
 			Port:             1000,
 			PodName:          "testPodName",
-			HostedActorTypes: config.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return appHealthCh },
 		Security:    testSecurity(t),
@@ -172,14 +172,14 @@ func TestAppHealthyStatus(t *testing.T) {
 func TestOnPlacementOrder(t *testing.T) {
 	tableUpdateCount := atomic.Int64{}
 	tableUpdateFunc := func() { tableUpdateCount.Add(1) }
-	testPlacement := NewActorPlacement(config.ActorsProviderOptions{
-		Config: config.Config{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
 			ActorsService:    "placement:",
 			AppID:            "testAppID",
 			HostAddress:      "127.0.0.1",
 			Port:             1000,
 			PodName:          "testPodName",
-			HostedActorTypes: config.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
@@ -330,14 +330,14 @@ func TestOnPlacementOrder(t *testing.T) {
 func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
-	testPlacement := NewActorPlacement(config.ActorsProviderOptions{
-		Config: config.Config{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
 			ActorsService:    "placement:",
 			AppID:            "testAppID",
 			HostAddress:      "127.0.0.1",
 			Port:             1000,
 			PodName:          "testPodName",
-			HostedActorTypes: config.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
@@ -472,14 +472,14 @@ func TestWaitUntilPlacementTableIsReady(t *testing.T) {
 func TestLookupActor(t *testing.T) {
 	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
-	testPlacement := NewActorPlacement(config.ActorsProviderOptions{
-		Config: config.Config{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
 			ActorsService:    "placement:",
 			AppID:            "testAppID",
 			HostAddress:      "127.0.0.1",
 			Port:             1000,
 			PodName:          "testPodName",
-			HostedActorTypes: config.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
@@ -488,7 +488,7 @@ func TestLookupActor(t *testing.T) {
 	}).(*actorPlacement)
 
 	t.Run("Placement table is unset", func(t *testing.T) {
-		_, err := testPlacement.LookupActor(context.Background(), LookupActorRequest{
+		_, err := testPlacement.LookupActor(context.Background(), internal.LookupActorRequest{
 			ActorType: "actorOne",
 			ActorID:   "test",
 		})
@@ -507,7 +507,7 @@ func TestLookupActor(t *testing.T) {
 		testPlacement.placementTables.Entries["actorOne"] = actorOneHashing
 
 		// existing actor type
-		lar, err := testPlacement.LookupActor(context.Background(), LookupActorRequest{
+		lar, err := testPlacement.LookupActor(context.Background(), internal.LookupActorRequest{
 			ActorType: "actorOne",
 			ActorID:   "id0",
 		})
@@ -516,7 +516,7 @@ func TestLookupActor(t *testing.T) {
 		assert.Equal(t, testPlacement.config.AppID, lar.AppID)
 
 		// non existing actor type
-		lar, err = testPlacement.LookupActor(context.Background(), LookupActorRequest{
+		lar, err = testPlacement.LookupActor(context.Background(), internal.LookupActorRequest{
 			ActorType: "nonExistingActorType",
 			ActorID:   "id0",
 		})
@@ -530,14 +530,14 @@ func TestLookupActor(t *testing.T) {
 func TestConcurrentUnblockPlacements(t *testing.T) {
 	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
-	testPlacement := NewActorPlacement(config.ActorsProviderOptions{
-		Config: config.Config{
+	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
+		Config: internal.Config{
 			ActorsService:    "placement:",
 			AppID:            "testAppID",
 			HostAddress:      "127.0.0.1",
 			Port:             1000,
 			PodName:          "testPodName",
-			HostedActorTypes: config.NewHostedActors([]string{"actorOne", "actorTwo"}),
+			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
 		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
 		Security:    testSecurity(t),
