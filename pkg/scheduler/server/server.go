@@ -53,10 +53,14 @@ type Options struct {
 	Port             int
 	Security         security.Handler
 
-	DataDir          string
-	EtcdID           string
-	EtcdInitialPeers []string
-	EtcdClientPorts  []string
+	DataDir                 string
+	Id                      string
+	EtcdInitialPeers        []string
+	EtcdClientPorts         []string
+	EtcdClientHttpPorts     []string
+	EtcdSpaceQuota          int64
+	EtcdCompactionMode      string
+	EtcdCompactionRetention string
 }
 
 // Server is the gRPC server for the Scheduler service.
@@ -66,14 +70,18 @@ type Server struct {
 	listenAddress string
 	mode          modes.DaprMode
 
-	dataDir          string
-	etcdID           string
-	etcdInitialPeers []string
-	etcdClientPorts  map[string]string
-	cron             *etcdcron.Cron
-	readyCh          chan struct{}
-	jobTriggerChan   chan *schedulerv1pb.WatchJobsResponse // used to trigger the WatchJobs logic
-	jobWatcherWG     sync.WaitGroup
+	dataDir                 string
+	id                      string
+	etcdInitialPeers        []string
+	etcdClientPorts         map[string]string
+	etcdClientHttpPorts     map[string]string
+	etcdSpaceQuota          int64
+	etcdCompactionMode      string
+	etcdCompactionRetention string
+	cron                    *etcdcron.Cron
+	readyCh                 chan struct{}
+	jobTriggerChan          chan *schedulerv1pb.WatchJobsResponse // used to trigger the WatchJobs logic
+	jobWatcherWG            sync.WaitGroup
 
 	sidecarConnChan chan *internal.Connection
 	connectionPool  *internal.Pool // Connection pool for sidecars
@@ -84,30 +92,25 @@ type Server struct {
 }
 
 func New(opts Options) *Server {
-	clientPorts := make(map[string]string)
-	for _, input := range opts.EtcdClientPorts {
-		idAndPort := strings.Split(input, "=")
-		if len(idAndPort) != 2 {
-			log.Warnf("Incorrect format for client ports: %s. Should contain <id>=<client-port>", input)
-			continue
-		}
-		schedulerID := strings.TrimSpace(idAndPort[0])
-		port := strings.TrimSpace(idAndPort[1])
-		clientPorts[schedulerID] = port
-	}
+	clientPorts := parseClientPorts(opts.EtcdClientPorts)
+	clientHttpPorts := parseClientPorts(opts.EtcdClientHttpPorts)
 
 	s := &Server{
 		port:          opts.Port,
 		listenAddress: opts.ListenAddress,
 		mode:          opts.Mode,
 
-		etcdID:           opts.EtcdID,
-		etcdInitialPeers: opts.EtcdInitialPeers,
-		etcdClientPorts:  clientPorts,
-		dataDir:          opts.DataDir,
-		readyCh:          make(chan struct{}),
-		jobTriggerChan:   make(chan *schedulerv1pb.WatchJobsResponse),
-		jobWatcherWG:     sync.WaitGroup{},
+		id:                      opts.Id,
+		etcdInitialPeers:        opts.EtcdInitialPeers,
+		etcdClientPorts:         clientPorts,
+		etcdClientHttpPorts:     clientHttpPorts,
+		etcdSpaceQuota:          opts.EtcdSpaceQuota,
+		etcdCompactionMode:      opts.EtcdCompactionMode,
+		etcdCompactionRetention: opts.EtcdCompactionRetention,
+		dataDir:                 opts.DataDir,
+		readyCh:                 make(chan struct{}),
+		jobTriggerChan:          make(chan *schedulerv1pb.WatchJobsResponse),
+		jobWatcherWG:            sync.WaitGroup{},
 
 		sidecarConnChan: make(chan *internal.Connection),
 		connectionPool: &internal.Pool{
@@ -153,6 +156,23 @@ func New(opts Options) *Server {
 		s.actorRuntime = act
 	}
 	return s
+}
+
+func parseClientPorts(opts []string) map[string]string {
+	ports := make(map[string]string)
+
+	for _, input := range opts {
+		idAndPort := strings.Split(input, "=")
+		if len(idAndPort) != 2 {
+			log.Warnf("Incorrect format for client http ports: %s. Should contain <id>=<client-port>", input)
+			continue
+		}
+		schedulerID := strings.TrimSpace(idAndPort[0])
+		port := strings.TrimSpace(idAndPort[1])
+		ports[schedulerID] = port
+	}
+
+	return ports
 }
 
 func (s *Server) Run(ctx context.Context) error {
@@ -314,10 +334,10 @@ func (s *Server) runJobWatcher(ctx context.Context) error {
 		s.handleJobStreaming(ctx)
 	}()
 
-	 <-ctx.Done()
-		s.jobWatcherWG.Wait()
-		log.Info("JobWatcher exited")
-		return ctx.Err()
+	<-ctx.Done()
+	s.jobWatcherWG.Wait()
+	log.Info("JobWatcher exited")
+	return ctx.Err()
 }
 
 // handleJobStreaming handles the streaming of jobs to Dapr sidecars.

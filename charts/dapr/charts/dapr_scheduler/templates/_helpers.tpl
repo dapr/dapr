@@ -63,3 +63,25 @@ Create etcd client ports list dynamically based on replicaCount.
 {{- $etcdClientPorts -}}
 {{- end -}}
 
+{{/*
+Create etcd client http ports list dynamically based on replicaCount.
+*/}}
+{{- define "dapr_scheduler.etcdclienthttpports" -}}
+{{- $etcdClientHttpPorts := "" -}}
+{{- $namespace := .Release.Namespace -}}
+{{- $replicaCount := int .Values.replicaCount -}}
+{{- range $i, $e := until $replicaCount -}}
+{{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
+{{/*{{- $svcName := printf "%s.%s" $instanceName $namespace -}}*/}}
+{{- $clientPort := int $.Values.ports.etcdHttpClientPort -}}
+{{- $instancePortPair := printf "%s=%d" $instanceName $clientPort -}}
+{{- if gt $i 0 -}}
+{{- $etcdClientHttpPorts = printf "%s,%s" $etcdClientHttpPorts $instancePortPair -}}
+{{- else -}}
+{{- $etcdClientHttpPorts = $instancePortPair -}}
+{{- end -}}
+{{- end -}}
+{{- $etcdClientHttpPorts -}}
+{{- end -}}
+
+
