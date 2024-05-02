@@ -91,10 +91,14 @@ func Run() {
 				Port:             opts.Port,
 				Security:         secHandler,
 
-				DataDir:          opts.EtcdDataDir,
-				EtcdID:           opts.EtcdID,
-				EtcdInitialPeers: opts.EtcdInitialPeers,
-				EtcdClientPorts:  opts.EtcdClientPorts,
+				DataDir:                 opts.EtcdDataDir,
+				Id:                      opts.Id,
+				EtcdInitialPeers:        opts.EtcdInitialPeers,
+				EtcdClientPorts:         opts.EtcdClientPorts,
+				EtcdClientHttpPorts:     opts.EtcdClientHttpPorts,
+				EtcdSpaceQuota:          opts.EtcdSpaceQuota,
+				EtcdCompactionMode:      opts.EtcdCompactionMode,
+				EtcdCompactionRetention: opts.EtcdCompactionRetention,
 			})
 
 			return server.Run(ctx)

@@ -37,10 +37,14 @@ type Options struct {
 	PlacementAddress string
 	Mode             string
 
-	EtcdID           string
-	EtcdInitialPeers []string
-	EtcdDataDir      string
-	EtcdClientPorts  []string
+	Id                      string
+	EtcdInitialPeers        []string
+	EtcdDataDir             string
+	EtcdClientPorts         []string
+	EtcdClientHttpPorts     []string
+	EtcdSpaceQuota          int64
+	EtcdCompactionMode      string
+	EtcdCompactionRetention string
 
 	Logger  logger.Options
 	Metrics *metrics.Options
@@ -79,10 +83,14 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.PlacementAddress, "placement-address", "", "Addresses for Dapr Actor Placement service")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
 
-	fs.StringVar(&opts.EtcdID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
+	fs.StringVar(&opts.Id, "id", "dapr-scheduler-server-0", "Scheduler server ID")
 	fs.StringSliceVar(&opts.EtcdInitialPeers, "initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
+	fs.StringSliceVar(&opts.EtcdClientHttpPorts, "etcd-client-http-ports", []string{""}, "Ports for etcd client http communication")
+	fs.Int64Var(&opts.EtcdSpaceQuota, "etcd-space-quota", 2*1024*1024*1024, "Space quota for etcd")
+	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
+	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "24h", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)

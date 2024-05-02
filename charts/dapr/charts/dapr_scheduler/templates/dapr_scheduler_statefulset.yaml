@@ -88,6 +88,8 @@ spec:
             name: api
           - containerPort: {{ .Values.ports.etcdRPCClientPort }}
             name: etcd-client
+          - containerPort: {{ .Values.ports.etcdHttpClientPort }}
+            name: etcd-http-client
           - containerPort: {{ .Values.ports.etcdRPCPeerPort }}
             name: etcd-peer
 {{- if eq .Values.global.prometheus.enabled true }}
@@ -117,6 +119,8 @@ spec:
         - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
         - "--etcd-client-ports"
         - {{ include "dapr_scheduler.etcdclientports" . | toYaml | trim }}
+        - "--etcd-client-http-ports"
+        - {{ include "dapr_scheduler.etcdclienthttpports" . | toYaml | trim }}
         - "--log-level"
         - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
@@ -130,6 +134,9 @@ spec:
         - "--enable-metrics=false"
 {{- end }}
         - "--etcd-data-dir={{ if eq .Values.global.daprControlPlaneOs "windows" }}{{ .Values.cluster.EtcdDataDirWinPath }}{{- else }}{{ .Values.cluster.EtcdDataDirPath }}"
+        - "--etcd-space-quota={{ .Values.etcdSpaceQuota }}"
+        - "--etcd-compaction-mode={{ .Values.etcdCompactionMode }}"
+        - "--etcd-compaction-retention={{ .Values.etcdCompactionRetention }}"
         - "--tls-enabled"
         - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
         - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"

@@ -23,6 +23,7 @@ ports:
   protocol: TCP
   apiPort: 50006
   etcdRPCClientPort: 2379
+  etcdHttpClientPort: 2330
   etcdRPCPeerPort: 2380
 
 replicaCount: 1
@@ -30,6 +31,10 @@ replicaCount: 1
 cluster:
   EtcdDataDirPath: /var/run/data/dapr-scheduler/etcd-data-dir
   EtcdDataDirWinPath: C:\\etcd-data-dir
+
+etcdSpaceQuota: 2147483648
+etcdCompactionMode: periodic
+etcdCompactionRetention: 24h
 
 volumeclaims:
   storageSize: 1Gi
