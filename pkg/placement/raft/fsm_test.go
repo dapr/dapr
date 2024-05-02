@@ -54,9 +54,13 @@ func TestFSMApply(t *testing.T) {
 		require.True(t, updated)
 		require.Equal(t, uint64(1), fsm.state.TableGeneration())
 
+		fsm.state.Lock.RLock()
+		defer fsm.state.Lock.RUnlock()
+
 		require.Len(t, fsm.state.Namespaces(), 1)
 		require.Contains(t, fsm.state.Namespaces(), "ns1")
 		members, err := fsm.state.Members("ns1")
+
 		require.NoError(t, err)
 
 		assert.Len(t, members, 1)

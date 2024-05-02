@@ -30,6 +30,9 @@ func TestNewDaprHostMemberState(t *testing.T) {
 
 	// assert
 	assert.Equal(t, uint64(0), s.Index())
+	s.Lock.RLock()
+	defer s.Lock.RUnlock()
+
 	assert.Empty(t, s.Namespaces())
 	assert.Empty(t, s.AllMembers())
 }

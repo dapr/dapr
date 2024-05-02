@@ -129,11 +129,11 @@ type Service struct {
 	disseminateLocks *concurrency.MutexMap
 
 	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
-	disseminateNextTime *concurrency.AtomicMapInt64
+	disseminateNextTime *concurrency.AtomicMap[string, int64]
 
 	// memberUpdateCount represents how many dapr runtimes needs to change in a namespace.
 	// Only actor runtime's heartbeat will increase this.
-	memberUpdateCount *concurrency.AtomicMapUint32
+	memberUpdateCount *concurrency.AtomicMap[string, uint32]
 
 	// Maximum API level to return.
 	// If nil, there's no limit.
@@ -186,8 +186,8 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		closedCh:                 make(chan struct{}),
 		sec:                      opts.SecProvider,
 		disseminateLocks:         concurrency.NewMutexMap(),
-		memberUpdateCount:        concurrency.NewAtomicMapUint32(),
-		disseminateNextTime:      concurrency.NewAtomicMapInt64(),
+		memberUpdateCount:        concurrency.NewAtomicMapStringUint32(),
+		disseminateNextTime:      concurrency.NewAtomicMapStringInt64(),
 	}
 
 }
@@ -244,10 +244,11 @@ func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	return <-errCh
 }
 
+// serverStreamInterceptor is a WIP. It is used to detect when a client disconnects from a stream.
 func serverStreamInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
 	err := handler(srv, ss)
 	if err != nil {
-		// Perform your action upon client disconnection here
+		// Perform action upon client disconnection here
 		fmt.Printf("\n\n\n\n-----------------------\nClient disconnected: %v\n", err)
 		fmt.Printf("\nStream: %v\n", ss)
 		fmt.Printf("\nStreamServerInfo: %v\n", info)
@@ -298,6 +299,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	defer func() {
 		p.streamConnGroup.Done()
 		p.streamConnPool.delete(daprStream)
+		// TODO: @elena If this is the last stream in the namespace, we need to delete elements
+		// from service.memberUpdateCount and service.disseminateNextTime
 	}()
 
 	for p.hasLeadership.Load() {
@@ -314,7 +317,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			state := p.raftNode.FSM().State()
 
 			if registeredMemberID == "" {
-				// New connection
+				// This is a new stream connection from a Dapr runtime.
+
 				// Ensure that the reported API level is at least equal to the current one in the cluster
 				clusterAPILevel := state.APILevel()
 				if clusterAPILevel < p.minAPILevel {
@@ -330,8 +334,9 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				registeredMemberID = req.GetName()
 				p.streamConnPool.add(daprStream)
 
+				// Disseminate the tables to the new member
 				updateReq := &tablesUpdateRequest{
-					hosts: []daprdStream{daprStream},
+					hosts: []daprdStream{*daprStream},
 				}
 				if daprStream.needsVNodes {
 					updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, req.GetNamespace())
@@ -364,18 +369,11 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// state maintained by raft is valid or not. If the member is outdated based the timestamp
 			// the member will be marked as faulty node and removed.
 			p.lastHeartBeat.Store(req.GetName(), now.UnixNano())
-			fmt.Println("\n\n\n\n=====\n")
-			p.lastHeartBeat.Range(func(key, value interface{}) bool {
-				// Print key and value
-				fmt.Printf("Key: %v, Value: %v\n", key, value)
-
-				// Continue iteration (returning true continues the iteration)
-				return true
-			})
 
 			// Upsert incoming member only if it is an actor service (not actor client) and
 			// the existing member info is unmatched with the incoming member info.
 			upsertRequired := true
+			state.Lock.RLock()
 			members, err := state.Members(req.GetNamespace())
 			if err == nil {
 				if m, ok := members[req.GetName()]; ok {
@@ -384,6 +382,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 					}
 				}
 			}
+			state.Lock.RUnlock()
 
 			if upsertRequired {
 				p.membershipCh <- hostMemberChange{
@@ -426,36 +425,3 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
 }
-
-//// addStreamConn adds stream connection between runtime and placement to the dissemination pool.
-//func (p *Service) addStreamConn(s daprdStream) {
-//	//func (p *Service) addStreamConn(ns string, conn placementGRPCStream) {
-//	p.streamConnPoolLock.Lock()
-//	id := p.streamIndexCnt.Add(1)
-//	p.streamConnPool[s.namespace][id] = s
-//	p.streamConnPoolLock.Unlock()
-//}
-
-//func (p *Service) deleteStreamConn(s daprStream) {
-//	p.streamConnPoolLock.Lock()
-//
-//	for i, c := range p.streamConnPool {
-//		if c == conn {
-//			p.streamConnPool = append(p.streamConnPool[:i], p.streamConnPool[i+1:]...)
-//			break
-//		}
-//	}
-//	p.streamConnPoolLock.Unlock()
-//}
-
-//	func (p *Service) hasStreamConn(conn placementGRPCStream) bool {
-//		p.streamConnPoolLock.RLock()
-//		defer p.streamConnPoolLock.RUnlock()
-//
-//		for _, c := range p.streamConnPool {
-//			if c == conn {
-//				return true
-//			}
-//		}
-//		return false
-//	}

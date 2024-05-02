@@ -59,8 +59,9 @@ func newFSM(config DaprHostMemberStateConfig) *FSM {
 }
 
 // State is used to return a handle to the current state.
-// You need to hold a lock to call this function.
 func (c *FSM) State() *DaprHostMemberState {
+	c.stateLock.RLock()
+	defer c.stateLock.RUnlock()
 	return c.state
 }
 
@@ -84,7 +85,7 @@ func (c *FSM) PlacementState(withVirtualNodes bool, ns string) *v1pb.PlacementTa
 
 	entries, err := c.state.hashingTableMap(ns)
 	if err != nil {
-		logging.Errorf("Error getting hashing table map for namespace %s: %s", err)
+		logging.Warnf("Hashing table map for namespace %s not found: %s", ns, err)
 		return newTable
 	}
 	for k, v := range entries {

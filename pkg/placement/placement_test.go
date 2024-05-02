@@ -112,10 +112,11 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 	conn, _, stream := newTestClient(t, serverAddress)
 
 	host := &v1pb.Host{
-		Name:     "127.0.0.1:50102",
-		Entities: []string{"DogActor", "CatActor"},
-		Id:       "testAppID",
-		Load:     1, // Not used yet
+		Name:      "127.0.0.1:50102",
+		Namespace: "ns1",
+		Entities:  []string{"DogActor", "CatActor"},
+		Id:        "testAppID",
+		Load:      1, // Not used yet
 		// Port is redundant because Name should include port number
 	}
 
@@ -143,6 +144,59 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		conn, _, stream := newTestClient(t, serverAddress)
 
 		host := &v1pb.Host{
+			Name:      "127.0.0.1:50102",
+			Namespace: "ns1",
+			Entities:  []string{"DogActor", "CatActor"},
+			Id:        "testAppID",
+			Load:      1, // Not used yet
+			// Port is redundant because Name should include port number
+		}
+
+		// act
+		require.NoError(t, stream.Send(host))
+
+		// assert
+		assert.Eventually(t, func() bool {
+			clock.Step(disseminateTimerInterval)
+			select {
+			case memberChange := <-testServer.membershipCh:
+				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
+				assert.Equal(t, host.GetName(), memberChange.host.Name)
+				assert.Equal(t, host.GetNamespace(), memberChange.host.Namespace)
+				assert.Equal(t, host.GetId(), memberChange.host.AppID)
+				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
+				assert.Len(t, testServer.streamConnPool.getStreams("ns1"), 1)
+				return true
+			default:
+				return false
+			}
+		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
+
+		// act
+		// Runtime needs to close stream gracefully which will let placement remove runtime host from hashing ring
+		// in the next flush time window.
+		stream.CloseSend()
+
+		// assert
+		select {
+		case memberChange := <-testServer.membershipCh:
+			assert.Equal(t, raft.MemberRemove, memberChange.cmdType)
+			assert.Equal(t, host.GetName(), memberChange.host.Name)
+
+		case <-time.After(testStreamSendLatency):
+			require.Fail(t, "no membership change")
+		}
+
+		conn.Close()
+	})
+
+	// this test verifies that the placement service will work for pre 1.14 sidecars
+	// that do not send a namespace
+	t.Run("Connect server and disconnect it gracefully - no namespace sent", func(t *testing.T) {
+		// arrange
+		conn, _, stream := newTestClient(t, serverAddress)
+
+		host := &v1pb.Host{
 			Name:     "127.0.0.1:50102",
 			Entities: []string{"DogActor", "CatActor"},
 			Id:       "testAppID",
@@ -160,9 +214,10 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			case memberChange := <-testServer.membershipCh:
 				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
 				assert.Equal(t, host.GetName(), memberChange.host.Name)
+				assert.Equal(t, host.GetNamespace(), memberChange.host.Namespace)
 				assert.Equal(t, host.GetId(), memberChange.host.AppID)
 				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
-				assert.Len(t, testServer.streamConnPool, 1)
+				assert.Len(t, testServer.streamConnPool.getStreams(""), 1)
 				return true
 			default:
 				return false
@@ -193,10 +248,11 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 
 		// act
 		host := &v1pb.Host{
-			Name:     "127.0.0.1:50103",
-			Entities: []string{"DogActor", "CatActor"},
-			Id:       "testAppID",
-			Load:     1, // Not used yet
+			Name:      "127.0.0.1:50103",
+			Namespace: "ns1",
+			Entities:  []string{"DogActor", "CatActor"},
+			Id:        "testAppID",
+			Load:      1, // Not used yet
 			// Port is redundant because Name should include port number
 		}
 		stream.Send(host)
@@ -208,11 +264,10 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			case memberChange := <-testServer.membershipCh:
 				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
 				assert.Equal(t, host.GetName(), memberChange.host.Name)
+				assert.Equal(t, host.GetNamespace(), memberChange.host.Namespace)
 				assert.Equal(t, host.GetId(), memberChange.host.AppID)
 				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
-				testServer.streamConnPoolLock.Lock()
-				l := len(testServer.streamConnPool)
-				testServer.streamConnPoolLock.Unlock()
+				l := testServer.streamConnPool.getStreamCount("ns1")
 				assert.Equal(t, 1, l)
 			default:
 				assert.Fail(t, "No member change")
@@ -232,9 +287,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			require.Fail(t, "should not have any member change message because faulty host detector time will clean up")
 
 		case <-time.After(testStreamSendLatency):
-			testServer.streamConnPoolLock.RLock()
-			streamConnCount := len(testServer.streamConnPool)
-			testServer.streamConnPoolLock.RUnlock()
+			streamConnCount := testServer.streamConnPool.getStreamCount("ns1")
 			assert.Equal(t, 0, streamConnCount)
 		}
 	})

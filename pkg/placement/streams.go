@@ -2,12 +2,12 @@ package placement
 
 import (
 	"strings"
+	"sync"
 	"sync/atomic"
 
 	"google.golang.org/grpc/metadata"
 
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/kit/concurrency"
 )
 
 type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer //nolint:nosnakecase
@@ -19,8 +19,8 @@ type daprdStream struct {
 	stream      placementGRPCStream
 }
 
-func newDaprdStream(ns string, stream placementGRPCStream) daprdStream {
-	return daprdStream{
+func newDaprdStream(ns string, stream placementGRPCStream) *daprdStream {
+	return &daprdStream{
 		namespace:   ns,
 		stream:      stream,
 		needsVNodes: hostNeedsVNodes(stream),
@@ -31,7 +31,8 @@ func newDaprdStream(ns string, stream placementGRPCStream) daprdStream {
 // and the Dapr runtime grouped by namespace, with an assigned id for faster lookup/deletion
 // The id is a simple auto-incrementing number, for efficiency.
 type streamConnPool struct {
-	mutexMap *concurrency.MutexMap
+	lock sync.RWMutex // locks the streams map itself
+	//mutexMap *concurrency.MutexMap // manages locks on elements in the streams map
 
 	// Example representation of streams
 	//	{
@@ -46,7 +47,7 @@ type streamConnPool struct {
 	//	 	5: stream5,
 	//		},
 	//	}
-	streams map[string]map[uint32]daprdStream
+	streams map[string]map[uint32]*daprdStream
 
 	// streamIndexCnt assigns an index to streams in the streamConnPool.
 	// Its reset to zero every time a placement service loses leadership (thus clears all streams).
@@ -54,57 +55,81 @@ type streamConnPool struct {
 }
 
 // add adds stream connection between runtime and placement to the namespaced dissemination pool.
-func (s *streamConnPool) add(stream daprdStream) {
-	s.mutexMap.Lock(stream.namespace)
-	defer s.mutexMap.Unlock(stream.namespace)
-
+func (s *streamConnPool) add(stream *daprdStream) {
 	id := s.streamIndexCnt.Add(1)
 	stream.id = id
 
+	s.lock.Lock()
+	defer s.lock.Unlock()
 	if _, ok := s.streams[stream.namespace]; !ok {
-		s.streams[stream.namespace] = make(map[uint32]daprdStream)
+		s.streams[stream.namespace] = make(map[uint32]*daprdStream)
 	}
 
 	s.streams[stream.namespace][id] = stream
 }
 
 // delete removes stream connection between runtime and placement from the namespaced dissemination pool.
-func (s *streamConnPool) delete(stream daprdStream) {
-	s.mutexMap.Lock(stream.namespace)
-	defer s.mutexMap.Unlock(stream.namespace)
+func (s *streamConnPool) delete(stream *daprdStream) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
 
 	if streams, ok := s.streams[stream.namespace]; ok {
 		delete(streams, stream.id)
 		if len(streams) == 0 {
 			delete(s.streams, stream.namespace)
-			s.mutexMap.Delete(stream.namespace, false)
 		}
 	}
+
+	// TODO: @elena Return true or false if it's the last stream in the namespace. If last stream,
+	// we need to delete elements from service.memberUpdateCount and service.disseminateNextTime
 }
 
 // getStreams requires a lock (s.lock) to be held by the caller.
-func (s *streamConnPool) getStreams(namespace string) map[uint32]daprdStream {
+func (s *streamConnPool) getStreams(namespace string) map[uint32]*daprdStream {
 	return s.streams[namespace]
+}
+
+func (s *streamConnPool) getStreamCount(namespace string) int {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	streams, ok := s.streams[namespace]
+	if !ok {
+		return 0
+	}
+
+	return len(streams)
+}
+
+func (s *streamConnPool) forEachNamespace(fn func(namespace string, val map[uint32]*daprdStream)) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	for ns, val := range s.streams {
+		fn(ns, val)
+	}
+}
+
+func (s *streamConnPool) forEach(namespace string, fn func(key uint32, val *daprdStream)) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	for key, val := range s.streams[namespace] {
+		fn(key, val)
+	}
 }
 
 func newStreamConnPool() *streamConnPool {
 	return &streamConnPool{
-		mutexMap: &concurrency.MutexMap{},
-		streams:  make(map[string]map[uint32]daprdStream),
+		streams: make(map[string]map[uint32]*daprdStream),
 	}
 }
 
 func (s *streamConnPool) hasStream(id uint32) bool {
-	s.mutexMap.OuterRLock()
-	defer s.mutexMap.OuterRUnlock()
+	s.lock.RLock()
+	defer s.lock.RUnlock()
 
-	for ns, streams := range s.streams {
-		s.mutexMap.RLock(ns)
+	for _, streams := range s.streams {
 		if _, ok := streams[id]; ok {
-			s.mutexMap.RUnlock(ns)
 			return true
 		}
-		s.mutexMap.RUnlock(ns)
 	}
 	return false
 }

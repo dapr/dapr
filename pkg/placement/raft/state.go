@@ -116,10 +116,8 @@ func (s *DaprHostMemberState) APILevel() uint32 {
 	return s.data.APILevel
 }
 
+// Namespaces requires a lock to be held by the caller.
 func (s *DaprHostMemberState) Namespaces() []string {
-	s.Lock.RLock()
-	defer s.Lock.RUnlock()
-
 	namespaces := make([]string, 0, len(s.data.Namespace))
 	for ns := range s.data.Namespace {
 		namespaces = append(namespaces, ns)
@@ -129,26 +127,12 @@ func (s *DaprHostMemberState) Namespaces() []string {
 }
 
 // Members requires a lock to be held by the caller.
-// TODO: @elena - update all callers so they hold a lock
 func (s *DaprHostMemberState) Members(ns string) (map[string]*DaprHostMember, error) {
 	n, ok := s.data.Namespace[ns]
 	if !ok {
-		return nil, ErrNamespaceNotFound
+		return nil, fmt.Errorf("namespace %s not found", ns)
 	}
 	return n.Members, nil
-
-	//s.Lock.RLock()
-	//defer s.Lock.RUnlock()
-	//
-	//n, ok := s.data.Namespace[ns]
-	//if !ok {
-	//	return nil, ErrNamespaceNotFound
-	//}
-	//members := make(map[string]*DaprHostMember, len(n.Members))
-	//for k, v := range n.Members {
-	//	members[k] = v
-	//}
-	//return members, nil
 }
 
 // AllMembers requires a lock to be held by the caller.

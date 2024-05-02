@@ -35,19 +35,22 @@ func TestPlacementHA(t *testing.T) {
 	// Note that ports below are unused (i.e. no service is started on those ports), they are just used as identifiers with the IP address
 	testMembers := []*raft.DaprHostMember{
 		{
-			Name:     "127.0.0.1:3031",
-			AppID:    "testmember1",
-			Entities: []string{"red"},
+			Name:      "127.0.0.1:3031",
+			Namespace: "ns1",
+			AppID:     "testmember1",
+			Entities:  []string{"red"},
 		},
 		{
-			Name:     "127.0.0.1:3032",
-			AppID:    "testmember2",
-			Entities: []string{"blue"},
+			Name:      "127.0.0.1:3032",
+			Namespace: "ns1",
+			AppID:     "testmember2",
+			Entities:  []string{"blue"},
 		},
 		{
-			Name:     "127.0.0.1:3033",
-			AppID:    "testmember3",
-			Entities: []string{"red", "blue"},
+			Name:      "127.0.0.1:3033",
+			Namespace: "ns2",
+			AppID:     "testmember3",
+			Entities:  []string{"red", "blue"},
 		},
 	}
 
@@ -377,10 +380,14 @@ func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMem
 	assert.Eventuallyf(t, func() bool {
 		state := srv.FSM().State()
 		assert.NotNil(t, state)
-		var found bool
-		actual, found = state.Members()[expect.Name]
-		return found && expect.Name == actual.Name &&
-			expect.AppID == actual.AppID
+		var ok bool
+		state.Lock.RLock()
+		defer state.Lock.RUnlock()
+		members, err := state.Members(expect.Namespace)
+		require.NoError(t, err)
+		actual, ok = members[expect.Name]
+		return ok && expect.Name == actual.Name &&
+			expect.AppID == actual.AppID && expect.Namespace == actual.Namespace
 	}, time.Second*5, time.Millisecond*300, "%v != %v", expect, actual)
 	require.NotNil(t, actual)
 	assert.EqualValues(t, expect.Entities, actual.Entities)
