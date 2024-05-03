@@ -14,25 +14,9 @@ limitations under the License.
 package store
 
 import (
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 )
 
 type Store[T differ.Resource] interface {
 	List() []T
-}
-
-type component struct {
-	compStore *compstore.ComponentStore
-}
-
-func NewComponent(compStore *compstore.ComponentStore) Store[componentsapi.Component] {
-	return &component{
-		compStore: compStore,
-	}
-}
-
-func (c *component) List() []componentsapi.Component {
-	return c.compStore.ListComponents()
 }

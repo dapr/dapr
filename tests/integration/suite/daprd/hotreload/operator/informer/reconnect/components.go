@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package informer
+package reconnect
 
 import (
 	"context"
@@ -42,7 +42,8 @@ func init() {
 }
 
 type components struct {
-	daprd     *daprd.Daprd
+	daprd1    *daprd.Daprd
+	daprd2    *daprd.Daprd
 	store     *store.Store
 	kubeapi   *kubernetes.Kubernetes
 	operator1 *operator.Operator
@@ -83,20 +84,20 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithClusterDaprComponentListFromStore(t, c.store),
 	)
 
-	opts := []operator.Option{
+	oopts := []operator.Option{
 		operator.WithNamespace("default"),
 		operator.WithKubeconfigPath(c.kubeapi.KubeconfigPath(t)),
 		operator.WithTrustAnchorsFile(sentry.TrustAnchorsFile(t)),
 	}
-	c.operator1 = operator.New(t, opts...)
-	c.operator2 = operator.New(t, append(opts,
+	c.operator1 = operator.New(t, oopts...)
+	c.operator2 = operator.New(t, append(oopts,
 		operator.WithAPIPort(c.operator1.Port()),
 	)...)
-	c.operator3 = operator.New(t, append(opts,
+	c.operator3 = operator.New(t, append(oopts,
 		operator.WithAPIPort(c.operator1.Port()),
 	)...)
 
-	c.daprd = daprd.New(t,
+	dopts := []daprd.Option{
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("daprsystem"),
 		daprd.WithSentryAddress(sentry.Address()),
@@ -108,17 +109,20 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 		)),
-	)
+	}
+	c.daprd1 = daprd.New(t, dopts...)
+	c.daprd2 = daprd.New(t, dopts...)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, c.kubeapi, c.daprd),
+		framework.WithProcesses(sentry, c.kubeapi, c.daprd1, c.daprd2),
 	}
 }
 
 func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator1.Run(t, ctx)
 	c.operator1.WaitUntilRunning(t, ctx)
-	c.daprd.WaitUntilRunning(t, ctx)
+	c.daprd1.WaitUntilRunning(t, ctx)
+	c.daprd2.WaitUntilRunning(t, ctx)
 
 	client := util.HTTPClient(t)
 
@@ -131,7 +135,8 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.kubeapi.Informer().Add(t, &comp)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()), 1)
+		assert.Len(t, c.daprd1.GetMetaRegistedComponents(t, ctx), 1)
+		assert.Len(t, c.daprd2.GetMetaRegistedComponents(t, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	c.operator1.Cleanup(t)
@@ -141,7 +146,8 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator2.WaitUntilRunning(t, ctx)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()))
+		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd1.HTTPPort()))
+		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd2.HTTPPort()))
 	}, time.Second*10, time.Millisecond*10)
 
 	c.operator2.Cleanup(t)
@@ -150,7 +156,8 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator3.Run(t, ctx)
 	c.operator3.WaitUntilRunning(t, ctx)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd.HTTPPort()))
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd1.HTTPPort()), 1)
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd2.HTTPPort()), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	c.operator3.Cleanup(t)

@@ -117,6 +117,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 }
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
+	h.operator.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
 	meta, err := h.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
