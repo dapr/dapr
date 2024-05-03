@@ -15,6 +15,8 @@ package options
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/spf13/pflag"
 
@@ -37,7 +39,9 @@ type Options struct {
 	PlacementAddress string
 	Mode             string
 
-	Id                      string
+	ID                      string
+	ReplicaID               uint32
+	ReplicaCount            uint32
 	EtcdInitialPeers        []string
 	EtcdDataDir             string
 	EtcdClientPorts         []string
@@ -50,7 +54,7 @@ type Options struct {
 	Metrics *metrics.Options
 }
 
-func New(origArgs []string) *Options {
+func New(origArgs []string) (*Options, error) {
 	// We are using pflag to parse the CLI flags
 	// pflag is a drop-in replacement for the standard library's "flag" package, however…
 	// There's one key difference: with the stdlib's "flag" package, there are no short-hand options so options can be defined with a single slash (such as "daprd -mode").
@@ -83,11 +87,12 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.PlacementAddress, "placement-address", "", "Addresses for Dapr Actor Placement service")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
 
-	fs.StringVar(&opts.Id, "id", "dapr-scheduler-server-0", "Scheduler server ID")
+	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
+	fs.Uint32Var(&opts.ReplicaCount, "replica-count", 1, "The total number of scheduler replicas in the cluster")
 	fs.StringSliceVar(&opts.EtcdInitialPeers, "initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
-	fs.StringSliceVar(&opts.EtcdClientHttpPorts, "etcd-client-http-ports", []string{""}, "Ports for etcd client http communication")
+	fs.StringSliceVar(&opts.EtcdClientHttpPorts, "etcd-client-http-ports", nil, "Ports for etcd client http communication")
 	fs.Int64Var(&opts.EtcdSpaceQuota, "etcd-space-quota", 2*1024*1024*1024, "Space quota for etcd")
 	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
 	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "24h", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")
@@ -100,5 +105,20 @@ func New(origArgs []string) *Options {
 
 	_ = fs.Parse(args)
 
-	return &opts
+	replicaID, err := strconv.ParseUint(opts.ID, 10, 32)
+	if err != nil {
+		x := strings.LastIndex(opts.ID, "-")
+		if x == -1 {
+			return nil, fmt.Errorf("replica ID is not contained in '-id' flag: %s", err)
+		}
+		suffix := opts.ID[x+1:]
+		replicaID, err = strconv.ParseUint(suffix, 10, 32)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse '--replica-id' flag: %s", err)
+		}
+	}
+
+	opts.ReplicaID = uint32(replicaID)
+
+	return &opts, nil
 }

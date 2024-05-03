@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -83,7 +84,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 	// Covers errors returned from the scheduler server and caught in universal
 	t.Run("schedule job", func(t *testing.T) {
-		req := &rtv1.ScheduleJobRequest{Job: &rtv1.Job{Name: "test", Schedule: "@daily"}}
+		req := &rtv1.ScheduleJobRequest{Job: &rtv1.Job{Name: "test", Schedule: ptr.Of("@daily")}}
 
 		_, err := client.ScheduleJob(ctx, req)
 		require.Error(t, err)

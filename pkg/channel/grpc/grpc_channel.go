@@ -30,7 +30,6 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -101,6 +100,12 @@ func (g *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest
 		g.ch <- struct{}{}
 	}
 
+	defer func() {
+		if g.ch != nil {
+			<-g.ch
+		}
+	}()
+
 	// Read the request, including the data
 	pd, err := req.ProtoWithData()
 	if err != nil {
@@ -122,11 +127,7 @@ func (g *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest
 		HttpExtension: pd.GetMessage().GetHttpExtension(),
 	}
 
-	resp, err := g.appCallbackClient.OnJobEvent(ctx, jobReq, opts...)
-
-	if g.ch != nil {
-		<-g.ch
-	}
+	_, err = g.appCallbackClient.OnJobEvent(ctx, jobReq, opts...)
 
 	var rsp *invokev1.InvokeMethodResponse
 	if err != nil {
@@ -138,14 +139,8 @@ func (g *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest
 		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)
 	}
 
-	invokeResp := &commonv1pb.InvokeResponse{
-		Data:        resp.GetData(),
-		ContentType: resp.GetContentType(),
-	}
-
 	rsp.WithHeaders(header).
-		WithTrailers(trailer).
-		WithMessage(invokeResp)
+		WithTrailers(trailer)
 
 	return rsp, nil
 }

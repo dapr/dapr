@@ -65,57 +65,9 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 	httpClient := util.HTTPClient(t)
 
 	// Covers apierrors.Empty() job name is empty
-	t.Run("schedule job name is empty", func(t *testing.T) {
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/job/schedule/ ", e.daprd.HTTPPort())
-		payload := `{"job": {}}`
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
-		require.NoError(t, err)
-
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-
-		require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
-		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
-
-		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
-
-		var data map[string]interface{}
-		err = json.Unmarshal([]byte(string(body)), &data)
-		require.NoError(t, err)
-
-		// Confirm that the 'errorCode' field exists and contains the correct error code
-		errCode, exists := data["errorCode"]
-		require.True(t, exists)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), errCode)
-
-		// Confirm that the 'message' field exists and contains the correct error message
-		errMsg, exists := data["message"]
-		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("Name is empty"), errMsg)
-
-		// Confirm that the 'details' field exists and has one element
-		details, exists := data["details"]
-		require.True(t, exists)
-
-		detailsArray, ok := details.([]interface{})
-		require.True(t, ok)
-		require.Len(t, detailsArray, 1)
-
-		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
-		detailsObject, ok := detailsArray[0].(map[string]interface{})
-		require.True(t, ok)
-		require.Equal(t, "dapr.io", detailsObject["domain"])
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), detailsObject["reason"])
-		require.Equal(t, ErrInfoType, detailsObject["@type"])
-	})
-
-	// Covers apierrors.Empty() job schedule is empty
-	t.Run("schedule job name is empty", func(t *testing.T) {
+	t.Run("schedule is empty", func(t *testing.T) {
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/job/schedule/test", e.daprd.HTTPPort())
-		payload := `{"job": {"schedule": ""}}`
+		payload := `{"job": {}}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
 		require.NoError(t, err)
@@ -160,10 +112,10 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
-	// Covers apierrors.IncorrectNegative() job repeats negative
-	t.Run("schedule job repeats are negative", func(t *testing.T) {
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/job/schedule/test", e.daprd.HTTPPort())
-		payload := `{"job": {"schedule": "test", "repeats": -1}}`
+	// Covers apierrors.Empty() job schedule is empty
+	t.Run("schedule job name is empty", func(t *testing.T) {
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/job/schedule/ ", e.daprd.HTTPPort())
+		payload := `{"job": {"schedule": "@daily"}}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
 		require.NoError(t, err)
@@ -185,12 +137,12 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats), errCode)
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("Repeats cannot be negative"), errMsg)
+		require.Equal(t, fmt.Sprintf("Name is empty"), errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
@@ -204,14 +156,14 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		detailsObject, ok := detailsArray[0].(map[string]interface{})
 		require.True(t, ok)
 		require.Equal(t, "dapr.io", detailsObject["domain"])
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats), detailsObject["reason"])
+		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), detailsObject["reason"])
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
 	// Covers apierrors.SchedulerURLName() where a user specifies the job name in the url and body
 	t.Run("schedule two job names", func(t *testing.T) {
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/job/schedule/test", e.daprd.HTTPPort())
-		payload := `{"job": {"name": "test1", "schedule": "test", "repeats": -1}}`
+		payload := `{"job": {"name": "test1", "schedule": "test", "repeats": 1}}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
 		require.NoError(t, err)

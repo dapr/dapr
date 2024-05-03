@@ -18,18 +18,20 @@ import (
 	"fmt"
 	"strconv"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -41,21 +43,16 @@ type streaming struct {
 	daprdB     *daprd.Daprd
 	schedulers []*scheduler.Scheduler
 
-	streamloglineDaprA *logline.LogLine
-	streamloglineDaprB *logline.LogLine
+	jobChan chan *runtimev1pb.JobEventRequest
 }
 
 func (s *streaming) Setup(t *testing.T) []framework.Option {
-	s.streamloglineDaprA = logline.New(t,
-		logline.WithStdoutLineContains(
-			`Received job: [type.googleapis.com/google.type.Expr]:{} map[appID:A namespace:A]`,
-		),
-	)
-
-	s.streamloglineDaprB = logline.New(t,
-		logline.WithStdoutLineContains(
-			`Received job: [type.googleapis.com/google.type.Expr]:{} map[appID:B namespace:B]`,
-		),
+	s.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
+	srv := app.New(t,
+		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+			s.jobChan <- in
+			return new(runtimev1pb.JobEventResponse), nil
+		}),
 	)
 
 	fp := ports.Reserve(t, 6)
@@ -63,19 +60,20 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 
 	opts := []scheduler.Option{
 		// TODO(Cassie): clean up having to do the string templating here. mv it to the test framework.
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", port1, port2, port3)),
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d,scheduler-1=http://localhost:%d,scheduler-2=http://localhost:%d", port1, port2, port3)),
 		scheduler.WithInitialClusterPorts(port1, port2, port3),
+		scheduler.WithReplicaCount(3),
 	}
 
 	clientPorts := []string{
-		"scheduler0=" + strconv.Itoa(fp.Port(t)),
-		"scheduler1=" + strconv.Itoa(fp.Port(t)),
-		"scheduler2=" + strconv.Itoa(fp.Port(t)),
+		"scheduler-0=" + strconv.Itoa(fp.Port(t)),
+		"scheduler-1=" + strconv.Itoa(fp.Port(t)),
+		"scheduler-2=" + strconv.Itoa(fp.Port(t)),
 	}
 	s.schedulers = []*scheduler.Scheduler{
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler0"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler1"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler2"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...),
 	}
 
 	s.daprdA = daprd.New(t,
@@ -83,10 +81,8 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppID("A"),
 		daprd.WithNamespace("A"),
 		daprd.WithSchedulerAddresses(s.schedulers[0].Address(), s.schedulers[1].Address(), s.schedulers[2].Address()),
-		daprd.WithExecOptions(
-			exec.WithStdout(s.streamloglineDaprA.Stdout()),
-		),
-		daprd.WithLogLevel("debug"),
+		daprd.WithAppProtocol("grpc"),
+		daprd.WithAppPort(srv.Port(t)),
 	)
 
 	s.daprdB = daprd.New(t,
@@ -94,18 +90,13 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppID("B"),
 		daprd.WithNamespace("B"),
 		daprd.WithSchedulerAddresses(s.schedulers[0].Address(), s.schedulers[1].Address(), s.schedulers[2].Address()),
-		daprd.WithExecOptions(
-			exec.WithStdout(s.streamloglineDaprB.Stdout()),
-		),
-		daprd.WithLogLevel("debug"),
+		daprd.WithAppProtocol("grpc"),
+		daprd.WithAppPort(srv.Port(t)),
 	)
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(s.streamloglineDaprA, s.streamloglineDaprB,
-			s.daprdA, s.daprdB,
-			s.schedulers[0], s.schedulers[1], s.schedulers[2],
-		),
+		framework.WithProcesses(srv, s.schedulers[0], s.schedulers[1], s.schedulers[2], s.daprdA, s.daprdB),
 	}
 }
 
@@ -123,8 +114,8 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		req := &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:     "test",
-				Schedule: "@every 1s",
-				Repeats:  1,
+				Schedule: ptr.Of("@every 1s"),
+				Repeats:  ptr.Of(uint32(1)),
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.type.Expr",
 				},
@@ -134,7 +125,13 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		_, err := daprAclient.ScheduleJob(ctx, req)
 		require.NoError(t, err)
 
-		s.streamloglineDaprA.EventuallyFoundAll(t)
+		select {
+		case job := <-s.jobChan:
+			assert.NotNil(t, job)
+			assert.Equal(t, job.GetMethod(), "job/test")
+		case <-time.After(time.Second * 3):
+			assert.Fail(t, "timed out waiting for triggered job")
+		}
 	})
 
 	t.Run("daprB receive its scheduled job on stream at trigger time", func(t *testing.T) {
@@ -143,8 +140,8 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		req := &runtimev1pb.ScheduleJobRequest{
 			Job: &runtimev1pb.Job{
 				Name:     "test",
-				Schedule: "@every 1s",
-				Repeats:  1,
+				Schedule: ptr.Of("@every 1s"),
+				Repeats:  ptr.Of(uint32(1)),
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.type.Expr",
 				},
@@ -154,6 +151,12 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		_, err := daprBclient.ScheduleJob(ctx, req)
 		require.NoError(t, err)
 
-		s.streamloglineDaprB.EventuallyFoundAll(t)
+		select {
+		case job := <-s.jobChan:
+			assert.NotNil(t, job)
+			assert.Equal(t, job.GetMethod(), "job/test")
+		case <-time.After(time.Second * 3):
+			assert.Fail(t, "timed out waiting for triggered job")
+		}
 	})
 }

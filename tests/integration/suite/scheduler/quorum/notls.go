@@ -18,11 +18,9 @@ import (
 	"fmt"
 	"math/rand"
 	"strconv"
-	"strings"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.etcd.io/etcd/api/v3/mvccpb"
@@ -31,13 +29,13 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -48,30 +46,27 @@ func init() {
 type notls struct {
 	daprd      *daprd.Daprd
 	schedulers []*scheduler.Scheduler
-
-	jobName string
 }
 
 func (n *notls) Setup(t *testing.T) []framework.Option {
-	n.jobName = uuid.NewString()
-
 	fp := ports.Reserve(t, 6)
 	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 
 	opts := []scheduler.Option{
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d,scheduler1=http://localhost:%d,scheduler2=http://localhost:%d", port1, port2, port3)),
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d,scheduler-1=http://localhost:%d,scheduler-2=http://localhost:%d", port1, port2, port3)),
 		scheduler.WithInitialClusterPorts(port1, port2, port3),
+		scheduler.WithReplicaCount(3),
 	}
 
 	clientPorts := []string{
-		"scheduler0=" + strconv.Itoa(fp.Port(t)),
-		"scheduler1=" + strconv.Itoa(fp.Port(t)),
-		"scheduler2=" + strconv.Itoa(fp.Port(t)),
+		"scheduler-0=" + strconv.Itoa(fp.Port(t)),
+		"scheduler-1=" + strconv.Itoa(fp.Port(t)),
+		"scheduler-2=" + strconv.Itoa(fp.Port(t)),
 	}
 	n.schedulers = []*scheduler.Scheduler{
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler0"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler1"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler2"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...),
 	}
 
 	n.daprd = daprd.New(t,
@@ -106,23 +101,25 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 	client := schedulerv1pb.NewSchedulerClient(conn)
 
-	appID := n.daprd.AppID()
-
 	req := &schedulerv1pb.ScheduleJobRequest{
-		Job: &runtimev1pb.Job{
-			Name:     n.jobName,
-			Schedule: "@every 10s", // Set to 10 so the job doesn't get cleaned up before I check for it in etcd
-			Repeats:  1,
+		Name: "testJob",
+		Job: &schedulerv1pb.Job{
+			// Set to 10 so the job doesn't get cleaned up before I check for it in etcd
+			Schedule: ptr.Of("@every 10s"),
+			Repeats:  ptr.Of(uint32(1)),
 			Data: &anypb.Any{
 				TypeUrl: "type.googleapis.com/google.type.Expr",
 			},
 		},
-		Metadata: map[string]string{
-			"namespace": n.daprd.Namespace(),
-			"appID":     appID,
+		Metadata: &schedulerv1pb.ScheduleJobMetadata{
+			AppId:     n.daprd.AppID(),
+			Namespace: n.daprd.Namespace(),
+			Type: &schedulerv1pb.ScheduleJobMetadataType{
+				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
+					Job: new(schedulerv1pb.ScheduleTypeJob),
+				},
+			},
 		},
-		Namespace: n.daprd.Namespace(),
-		AppId:     appID,
 	}
 
 	_, err = client.ScheduleJob(ctx, req)
@@ -134,7 +131,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	// Check if the job's key exists in the etcd database
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
-		checkKeysForJobName(t, n.jobName, chosenSchedulerEtcdKeys)
+		checkKeysForJobName(t, n.daprd, "testJob", chosenSchedulerEtcdKeys)
 	}, time.Second*3, time.Millisecond*10, "failed to find job's key in etcd")
 
 	// ensure data exists on ALL schedulers
@@ -146,15 +143,17 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
-			checkKeysForJobName(t, n.jobName, diffSchedulerEtcdKeys)
+			checkKeysForJobName(t, n.daprd, "testJob", diffSchedulerEtcdKeys)
 		}, time.Second*3, time.Millisecond*10, "failed to find job's key in etcd")
 	}
 }
 
-func checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
+func checkKeysForJobName(t *testing.T, daprd *daprd.Daprd, jobName string, keys []*mvccpb.KeyValue) {
+	t.Helper()
+
 	found := false
 	for _, kv := range keys {
-		if strings.HasSuffix(string(kv.Key), "etcd_cron/partitions/0/jobs/"+jobName) {
+		if string(kv.Key) == fmt.Sprintf("dapr/jobs/app||%s||%s||%s", daprd.Namespace(), daprd.AppID(), jobName) {
 			found = true
 			break
 		}

@@ -40,10 +40,9 @@ type Scheduler struct {
 	ports   *ports.Ports
 	running atomic.Bool
 
-	port             int
-	healthzPort      int
-	metricsPort      int
-	placementAddress string
+	port        int
+	healthzPort int
+	metricsPort int
 
 	dataDir             string
 	id                  string
@@ -58,18 +57,21 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	uid, err := uuid.NewUUID()
 	require.NoError(t, err)
 
+	uids := uid.String() + "-0"
+
 	fp := ports.Reserve(t, 5)
 	port1 := fp.Port(t)
 
 	opts := options{
-		id:                  uid.String(),
 		logLevel:            "info",
+		id:                  uids,
+		replicaCount:        1,
 		port:                fp.Port(t),
 		healthzPort:         fp.Port(t),
 		metricsPort:         fp.Port(t),
-		initialCluster:      uid.String() + "=http://localhost:" + strconv.Itoa(port1),
+		initialCluster:      uids + "=http://localhost:" + strconv.Itoa(port1),
 		initialClusterPorts: []int{port1},
-		etcdClientPorts:     []string{uid.String() + "=" + strconv.Itoa(fp.Port(t))},
+		etcdClientPorts:     []string{uids + "=" + strconv.Itoa(fp.Port(t))},
 	}
 
 	for _, fopt := range fopts {
@@ -78,12 +80,12 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	tmpDir := t.TempDir()
 
-	err = os.Chmod(tmpDir, 0o700)
-	require.NoError(t, err)
+	require.NoError(t, os.Chmod(tmpDir, 0o700))
 
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--id=" + opts.id,
+		"--replica-count=" + strconv.FormatUint(uint64(opts.replicaCount), 10),
 		"--port=" + strconv.Itoa(opts.port),
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
@@ -98,9 +100,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	}
 	if opts.sentryAddress != nil {
 		args = append(args, "--sentry-address="+*opts.sentryAddress)
-	}
-	if opts.placementAddress != nil {
-		args = append(args, "--placement-address="+*opts.placementAddress)
 	}
 	if opts.trustAnchorsFile != nil {
 		args = append(args, "--trust-anchors-file="+*opts.trustAnchorsFile)
@@ -194,14 +193,6 @@ func (s *Scheduler) InitialClusterPorts() []int {
 	return s.initialClusterPorts
 }
 
-func (s *Scheduler) ListenAddress() string {
-	return "localhost"
-}
-
 func (s *Scheduler) DataDir() string {
 	return s.dataDir
-}
-
-func (s *Scheduler) PlacementAddress() string {
-	return s.placementAddress
 }

@@ -15,6 +15,7 @@ package http
 
 import (
 	"net/http"
+	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -71,20 +72,20 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 		UniversalHTTPHandlerOpts[*runtimev1pb.ScheduleJobRequest, *emptypb.Empty]{
 			InModifier: func(r *http.Request, in *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobRequest, error) {
 				// Users should set the name in the url, and not in the url and body
-				if (chi.URLParam(r, nameParam) == "") || (in.GetJob().GetName() != "") {
-					return nil, apierrors.SchedulerURLName(map[string]string{"appId": a.universal.AppID()})
+				name := strings.TrimSpace(chi.URLParam(r, nameParam))
+				if len(name) == 0 {
+					apierrors.Empty("Job", map[string]string{"appID": a.universal.AppID()}, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
+				}
+				if in.GetJob().GetName() != "" {
+					return nil, apierrors.SchedulerURLName(map[string]string{"appID": a.universal.AppID()})
 				}
 
-				job := &runtimev1pb.Job{
-					Name:     chi.URLParam(r, nameParam),
-					Schedule: in.GetJob().GetSchedule(),
-					Data:     in.GetJob().GetData(),
-					Repeats:  in.GetJob().GetRepeats(),
-					DueTime:  in.GetJob().GetDueTime(),
-					Ttl:      in.GetJob().GetTtl(),
+				if in.Job == nil {
+					in.Job = new(runtimev1pb.Job)
 				}
 
-				in.Job = job
+				in.Job.Name = name
+
 				return in, nil
 			},
 			OutModifier: func(out *emptypb.Empty) (any, error) {

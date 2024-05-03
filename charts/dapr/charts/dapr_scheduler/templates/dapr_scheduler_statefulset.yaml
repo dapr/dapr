@@ -113,8 +113,11 @@ spec:
         - "/scheduler"
         - "--"
 {{- end }}
+        - "--listen-address=0.0.0.0"
         - "--id"
         - "$(SCHEDULER_ID)"
+        - "--replica-count"
+        - "{{ .Values.replicaCount }}"
         - "--initial-cluster"
         - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
         - "--etcd-client-ports"

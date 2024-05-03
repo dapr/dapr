@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -66,14 +67,13 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			{
 				Job: &rtv1.Job{
 					Name:     "test",
-					Schedule: "",
+					Schedule: nil,
 				},
 			},
 			{
 				Job: &rtv1.Job{
-					Name:     "test",
-					Schedule: "@daily",
-					Repeats:  -1,
+					Name: "test",
+					Ttl:  ptr.Of("3h"),
 				},
 			},
 		} {
@@ -87,31 +87,30 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			{
 				Job: &rtv1.Job{
 					Name:     "test",
-					Schedule: "@daily",
-					Data:     nil,
-					Repeats:  1,
+					Schedule: ptr.Of("@daily"),
+					Repeats:  ptr.Of(uint32(1)),
 				},
 			},
 			{
 				Job: &rtv1.Job{
 					Name:     "test1",
-					Schedule: "@daily",
+					Schedule: ptr.Of("@daily"),
 					Data: &anypb.Any{
 						Value: []byte("test"),
 					},
-					Repeats: 1,
+					Repeats: ptr.Of(uint32(1)),
 				},
 			},
 			{
 				Job: &rtv1.Job{
 					Name:     "test1",
-					Schedule: "@daily",
+					Schedule: ptr.Of("@daily"),
 					Data: &anypb.Any{
 						Value: []byte("test"),
 					},
-					Repeats: 1,
-					DueTime: "0h0m9s0ms",
-					Ttl:     "20s",
+					Repeats: ptr.Of(uint32(1)),
+					DueTime: ptr.Of("0h0m9s0ms"),
+					Ttl:     ptr.Of("20s"),
 				},
 			},
 		} {

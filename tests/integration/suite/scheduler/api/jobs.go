@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -59,11 +60,11 @@ func (j *jobs) Setup(t *testing.T) []framework.Option {
 	j.clientPort = port2
 
 	clientPorts := []string{
-		"scheduler0=" + strconv.Itoa(j.clientPort),
+		"scheduler-0=" + strconv.Itoa(j.clientPort),
 	}
 	j.scheduler = scheduler.New(t,
-		scheduler.WithID("scheduler0"),
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler0=http://localhost:%d", port1)),
+		scheduler.WithID("scheduler-0"),
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d", port1)),
 		scheduler.WithInitialClusterPorts(port1),
 		scheduler.WithEtcdClientPorts(clientPorts),
 	)
@@ -91,12 +92,12 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 			req := &rtv1.ScheduleJobRequest{
 				Job: &rtv1.Job{
 					Name:     name,
-					Schedule: "@every 1s",
-					Repeats:  1,
+					Schedule: ptr.Of("@every 1s"),
+					Repeats:  ptr.Of(uint32(1)),
 					Data: &anypb.Any{
 						Value: []byte(j.idPrefix),
 					},
-					Ttl: "20s",
+					Ttl: ptr.Of("20s"),
 				},
 			}
 

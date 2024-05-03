@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,21 +11,9 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheduler
+package api
 
 import (
-	"google.golang.org/protobuf/types/known/anypb"
+	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api/grpc"
+	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api/http"
 )
-
-type Job struct {
-	Name     string
-	Schedule string
-	Data     *anypb.Any
-	Repeats  int32
-	DueTime  string
-	TTL      string
-}
-
-type ScheduleJobRequest struct {
-	Job Job
-}

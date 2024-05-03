@@ -105,7 +105,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.Empty() job schedule is empty
 	t.Run("schedule job schedule is empty", func(t *testing.T) {
-		req := &rtv1.ScheduleJobRequest{Job: &rtv1.Job{Name: "test", Schedule: ""}}
+		req := &rtv1.ScheduleJobRequest{Job: &rtv1.Job{Name: "test", Schedule: nil}}
 
 		_, err := client.ScheduleJob(ctx, req)
 
@@ -123,29 +123,6 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 
 		require.True(t, ok)
 		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty), errInfo.GetReason())
-		require.Equal(t, "dapr.io", errInfo.GetDomain())
-	})
-
-	// Covers apierrors.IncorrectNegative() job repeats negative
-	t.Run("schedule job repeats negative", func(t *testing.T) {
-		req := &rtv1.ScheduleJobRequest{Job: &rtv1.Job{Name: "test", Schedule: "@daily", Repeats: -1}}
-
-		_, err := client.ScheduleJob(ctx, req)
-
-		require.Error(t, err)
-		s, ok := status.FromError(err)
-		require.True(t, ok)
-		require.Equal(t, codes.InvalidArgument, s.Code())
-		require.Equal(t, "Repeats cannot be negative", s.Message())
-
-		// Check status details
-		require.Len(t, s.Details(), 1)
-
-		var errInfo *errdetails.ErrorInfo
-		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
-
-		require.True(t, ok)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats), errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 

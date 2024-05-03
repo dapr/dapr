@@ -23,6 +23,7 @@ type options struct {
 	execOpts []exec.Option
 
 	id                  string
+	replicaCount        uint32
 	initialCluster      string
 	initialClusterPorts []int
 	etcdClientPorts     []string
@@ -35,7 +36,6 @@ type options struct {
 	sentryAddress    *string
 	trustAnchorsFile *string
 	listenAddress    *string
-	placementAddress *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -53,6 +53,12 @@ func WithPort(port int) Option {
 func WithID(id string) Option {
 	return func(o *options) {
 		o.id = id
+	}
+}
+
+func WithReplicaCount(count uint32) Option {
+	return func(o *options) {
+		o.replicaCount = count
 	}
 }
 
@@ -108,12 +114,6 @@ func WithSentryAddress(sentryAddress string) Option {
 func WithTrustAnchorsFile(file string) Option {
 	return func(o *options) {
 		o.trustAnchorsFile = &file
-	}
-}
-
-func WithPlacementAddress(placementAddress string) Option {
-	return func(o *options) {
-		o.placementAddress = &placementAddress
 	}
 }
 

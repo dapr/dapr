@@ -1125,19 +1125,19 @@ message Job {
   string name = 1;
 
   // The schedule for the job.
-  string schedule = 2;
-
-  // Job data.
-  google.protobuf.Any data = 3;
+  optional string schedule = 2;
 
   // Optional: jobs with fixed repeat counts (accounting for Actor Reminders).
-  int32 repeats = 4;
+  optional uint32 repeats = 3;
 
   // Optional: sets time at which or time interval before the callback is invoked for the first time.
-  string due_time = 5;
+  optional string due_time = 4;
 
   // Optional: Time To Live to allow for auto deletes (accounting for Actor Reminders).
-  string ttl = 6;
+  optional string ttl = 5;
+
+  // Job data.
+  google.protobuf.Any data = 6;
 }
 
 // ScheduleJobRequest is the message to create/schedule the job.
