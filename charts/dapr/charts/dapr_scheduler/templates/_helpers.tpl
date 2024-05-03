@@ -33,7 +33,7 @@ Create initial cluster peer list dynamically based on replicaCount.
 {{- range $i, $e := until $replicaCount -}}
 {{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
 {{- $svcName := printf "%s.dapr-scheduler-server.%s.svc.cluster.local" $instanceName $namespace -}}
-{{- $peer := printf "%s=http://%s:%d" $instanceName $svcName (int $.Values.ports.etcdRPCPeerPort) -}}
+{{- $peer := printf "%s=http://%s:%d" $instanceName $svcName (int $.Values.ports.etcdGRPCPeerPort) -}}
 {{- $initialCluster = printf "%s%s" $initialCluster $peer -}}
 {{- if ne (int $i) (sub $replicaCount 1) -}}
 {{- $initialCluster = printf "%s," $initialCluster -}}
@@ -51,8 +51,7 @@ Create etcd client ports list dynamically based on replicaCount.
 {{- $replicaCount := int .Values.replicaCount -}}
 {{- range $i, $e := until $replicaCount -}}
 {{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
-{{/*{{- $svcName := printf "%s.%s" $instanceName $namespace -}}*/}}
-{{- $clientPort := int $.Values.ports.etcdRPCClientPort -}}
+{{- $clientPort := int $.Values.ports.etcdGRPCClientPort -}}
 {{- $instancePortPair := printf "%s=%d" $instanceName $clientPort -}}
 {{- if gt $i 0 -}}
 {{- $etcdClientPorts = printf "%s,%s" $etcdClientPorts $instancePortPair -}}
@@ -72,8 +71,7 @@ Create etcd client http ports list dynamically based on replicaCount.
 {{- $replicaCount := int .Values.replicaCount -}}
 {{- range $i, $e := until $replicaCount -}}
 {{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
-{{/*{{- $svcName := printf "%s.%s" $instanceName $namespace -}}*/}}
-{{- $clientPort := int $.Values.ports.etcdHttpClientPort -}}
+{{- $clientPort := int $.Values.ports.etcdHTTPClientPort -}}
 {{- $instancePortPair := printf "%s=%d" $instanceName $clientPort -}}
 {{- if gt $i 0 -}}
 {{- $etcdClientHttpPorts = printf "%s,%s" $etcdClientHttpPorts $instancePortPair -}}

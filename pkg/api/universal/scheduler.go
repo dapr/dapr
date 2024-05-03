@@ -40,6 +40,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
+	//nolint:protogetter
 	if job.Schedule == nil && job.DueTime == nil {
 		return &emptypb.Empty{}, apierrors.Empty("Schedule", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty))
 	}
@@ -56,11 +57,11 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 			},
 		},
 		Job: &schedulerv1pb.Job{
-			Schedule: job.Schedule,
-			Data:     job.Data,
-			Repeats:  job.Repeats,
-			DueTime:  job.DueTime,
-			Ttl:      job.Ttl,
+			Schedule: job.Schedule, //nolint:protogetter
+			Data:     job.GetData(),
+			Repeats:  job.Repeats, //nolint:protogetter
+			DueTime:  job.DueTime, //nolint:protogetter
+			Ttl:      job.Ttl,     //nolint:protogetter
 		},
 	}
 
@@ -139,11 +140,11 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 	return &runtimev1pb.GetJobResponse{
 		Job: &runtimev1pb.Job{
 			Name:     inReq.GetName(),
-			Schedule: resp.GetJob().Schedule,
-			Data:     resp.GetJob().Data,
-			Repeats:  resp.GetJob().Repeats,
-			DueTime:  resp.GetJob().DueTime,
-			Ttl:      resp.GetJob().Ttl,
+			Schedule: resp.GetJob().Schedule, //nolint:protogetter
+			Data:     resp.GetJob().GetData(),
+			Repeats:  resp.GetJob().Repeats, //nolint:protogetter
+			DueTime:  resp.GetJob().DueTime, //nolint:protogetter
+			Ttl:      resp.GetJob().Ttl,     //nolint:protogetter
 		},
 	}, nil
 }

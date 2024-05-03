@@ -90,7 +90,7 @@ type ActorRuntime interface {
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
 	GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime
 	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error
-	Entites() []string
+	Entities() []string
 }
 
 // Actors allow calling into virtual actors as well as actor state management.
@@ -1398,6 +1398,6 @@ func (a *actorsRuntime) stateStore() (string, internal.TransactionalStateStore, 
 	return a.storeName, store, nil
 }
 
-func (a *actorsRuntime) Entites() []string {
+func (a *actorsRuntime) Entities() []string {
 	return a.entities
 }

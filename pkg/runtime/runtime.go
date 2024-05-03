@@ -270,8 +270,8 @@ func newDaprRuntime(ctx context.Context,
 			log.Infof("%s mode configured", rt.runtimeConfig.mode)
 			log.Infof("app id: %s", rt.runtimeConfig.id)
 
-			if err := rt.initRuntime(ctx); err != nil {
-				return err
+			if rerr := rt.initRuntime(ctx); rerr != nil {
+				return rerr
 			}
 
 			d := time.Since(start).Milliseconds()

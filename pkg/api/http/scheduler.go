@@ -80,7 +80,7 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 					return nil, apierrors.SchedulerURLName(map[string]string{"appID": a.universal.AppID()})
 				}
 
-				if in.Job == nil {
+				if in.GetJob() == nil {
 					in.Job = new(runtimev1pb.Job)
 				}
 

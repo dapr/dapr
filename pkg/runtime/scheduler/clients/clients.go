@@ -45,7 +45,7 @@ func New(ctx context.Context, opts Options) (*Clients, error) {
 		log.Debugf("Attempting to connect to Scheduler at address: %s", address)
 		conn, cli, err := client.New(ctx, address, opts.Security)
 		if err != nil {
-			return nil, fmt.Errorf("Scheduler client not initialized for address %s: %s", address, err)
+			return nil, fmt.Errorf("scheduler client not initialized for address %s: %s", address, err)
 		}
 
 		log.Infof("Scheduler client initialized for address: %s", address)

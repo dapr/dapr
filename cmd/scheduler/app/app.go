@@ -42,8 +42,8 @@ func Run() {
 	}
 
 	// Apply options to all loggers.
-	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
-		log.Fatal(err)
+	if lerr := logger.ApplyOptionsToLoggers(&opts.Logger); lerr != nil {
+		log.Fatal(lerr)
 	}
 
 	log.Infof("Starting Dapr Scheduler Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
@@ -51,8 +51,8 @@ func Run() {
 
 	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
 
-	if err := monitoring.InitMetrics(); err != nil {
-		log.Fatal(err)
+	if merr := monitoring.InitMetrics(); merr != nil {
+		log.Fatal(merr)
 	}
 
 	ctx := signals.Context()
@@ -78,7 +78,7 @@ func Run() {
 				return serr
 			}
 
-			server, err := server.New(server.Options{
+			server, serr := server.New(server.Options{
 				Port:          opts.Port,
 				ListenAddress: opts.ListenAddress,
 				Mode:          modes.DaprMode(opts.Mode),
@@ -93,10 +93,10 @@ func Run() {
 				EtcdSpaceQuota:          opts.EtcdSpaceQuota,
 				EtcdCompactionMode:      opts.EtcdCompactionMode,
 				EtcdCompactionRetention: opts.EtcdCompactionRetention,
-				EtcdClientHttpPorts:     opts.EtcdClientHttpPorts,
+				EtcdClientHTTPPorts:     opts.EtcdClientHTTPPorts,
 			})
-			if err != nil {
-				return err
+			if serr != nil {
+				return serr
 			}
 
 			return server.Run(ctx)

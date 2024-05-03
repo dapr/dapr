@@ -31,23 +31,28 @@ func config(opts Options) (*embed.Config, error) {
 		return nil, err
 	}
 
-	clientHttpPorts, err := parseClientPorts(opts.EtcdClientHttpPorts)
-	if err != nil {
-		return nil, err
+	var clientHTTPPorts map[string]string
+	if len(opts.EtcdClientHTTPPorts) > 0 {
+		clientHTTPPorts, err = parseClientPorts(opts.EtcdClientHTTPPorts)
+		if err != nil {
+			return nil, err
+		}
+	} else {
+		log.Warnf("etcd client http ports not set. This is not recommended for production.")
 	}
 
 	config := embed.NewConfig()
 
+	config.Name = opts.EtcdID
+	config.InitialCluster = strings.Join(opts.EtcdInitialPeers, ",")
+
 	config.QuotaBackendBytes = opts.EtcdSpaceQuota
 	config.AutoCompactionMode = opts.EtcdCompactionMode
 	config.AutoCompactionRetention = opts.EtcdCompactionRetention
-	config.Name = opts.EtcdID
-	config.Dir = opts.DataDir + "-" + security.CurrentNamespace() + "-" + opts.EtcdID
-	config.InitialCluster = strings.Join(opts.EtcdInitialPeers, ",")
 
 	etcdURL, peerPort, err := peerHostAndPort(opts.EtcdID, opts.EtcdInitialPeers)
 	if err != nil {
-		return nil, fmt.Errorf("Invalid format for initial cluster. Make sure to include 'http://' in Scheduler URL: %s", err)
+		return nil, fmt.Errorf("invalid format for initial cluster. Make sure to include 'http://' in Scheduler URL: %s", err)
 	}
 
 	config.AdvertisePeerUrls = []url.URL{{
@@ -63,6 +68,7 @@ func config(opts Options) (*embed.Config, error) {
 	switch opts.Mode {
 	// can't use domain name for k8s for config.ListenPeerUrls && config.ListenClientUrls
 	case modes.KubernetesMode:
+		config.Dir = opts.DataDir
 		etcdIP := "0.0.0.0"
 		config.ListenPeerUrls = []url.URL{{
 			Scheme: "http",
@@ -72,13 +78,15 @@ func config(opts Options) (*embed.Config, error) {
 			Scheme: "http",
 			Host:   fmt.Sprintf("%s:%s", etcdIP, clientPorts[opts.EtcdID]),
 		}}
-		if len(opts.EtcdClientHttpPorts) > 0 {
+		if len(clientHTTPPorts) > 0 {
 			config.ListenClientHttpUrls = []url.URL{{
 				Scheme: "http",
-				Host:   fmt.Sprintf("%s:%s", etcdIP, clientHttpPorts[opts.EtcdID]),
+				Host:   fmt.Sprintf("%s:%s", etcdIP, clientHTTPPorts[opts.EtcdID]),
 			}}
 		}
 	default:
+		config.Dir = opts.DataDir + "-" + security.CurrentNamespace() + "-" + opts.EtcdID
+
 		config.ListenPeerUrls = []url.URL{{
 			Scheme: "http",
 			Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
@@ -87,10 +95,10 @@ func config(opts Options) (*embed.Config, error) {
 			Scheme: "http",
 			Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
 		}}
-		if len(clientHttpPorts) > 0 {
+		if len(clientHTTPPorts) > 0 {
 			config.ListenClientHttpUrls = []url.URL{{
 				Scheme: "http",
-				Host:   fmt.Sprintf("%s:%s", etcdURL, clientHttpPorts[opts.EtcdID]),
+				Host:   fmt.Sprintf("%s:%s", etcdURL, clientHTTPPorts[opts.EtcdID]),
 			}}
 		}
 	}
@@ -109,14 +117,14 @@ func peerHostAndPort(name string, initialCluster []string) (string, string, erro
 	for _, scheduler := range initialCluster {
 		idAndAddress := strings.SplitN(scheduler, "=", 2)
 		if len(idAndAddress) != 2 {
-			return "", "", fmt.Errorf("Incorrect format for initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
+			return "", "", fmt.Errorf("incorrect format for initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
 		}
 
 		id := strings.TrimPrefix(idAndAddress[0], "http://")
 		if id == name {
 			address, err := url.Parse(idAndAddress[1])
 			if err != nil {
-				return "", "", fmt.Errorf("Unable to parse url from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
+				return "", "", fmt.Errorf("unable to parse url from initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
 			}
 
 			host, port, err := net.SplitHostPort(address.Host)
@@ -136,7 +144,7 @@ func parseClientPorts(opts []string) (map[string]string, error) {
 	for _, input := range opts {
 		idAndPort := strings.Split(input, "=")
 		if len(idAndPort) != 2 {
-			return nil, fmt.Errorf("Incorrect format for client http ports: %s. Should contain <id>=<client-port>", input)
+			return nil, fmt.Errorf("incorrect format for client http ports: %s. Should contain <id>=<client-port>", input)
 		}
 		schedulerID := strings.TrimSpace(idAndPort[0])
 		port := strings.TrimSpace(idAndPort[1])

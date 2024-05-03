@@ -22,7 +22,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/kit/logger"
 )
@@ -67,7 +66,7 @@ func (p *Pool) Run(ctx context.Context) error {
 }
 
 // Add adds a connection to the pool for a given namespace/appID.
-func (p *Pool) Add(req *scheduler.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) {
+func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -93,7 +92,7 @@ func (p *Pool) Add(req *scheduler.WatchJobsRequestInitial, stream schedulerv1pb.
 	ok = true
 	var uuid uint64
 	for ok {
-		uuid = rand.Uint64()
+		uuid = rand.Uint64() //nolint:gosec
 		_, ok = nsPool.conns[uuid]
 	}
 
@@ -147,7 +146,7 @@ func (p *Pool) Add(req *scheduler.WatchJobsRequestInitial, stream schedulerv1pb.
 				return
 			}
 
-			conn.streamer.handleResponse(resp.GetResult().Uuid)
+			conn.streamer.handleResponse(resp.GetResult().GetUuid())
 		}
 	}()
 }
@@ -173,7 +172,7 @@ func (p *Pool) Send(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) e
 }
 
 // remove removes a connection from the pool with the given UUID.
-func (p *Pool) remove(req *scheduler.WatchJobsRequestInitial, uuid uint64) {
+func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid uint64) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 

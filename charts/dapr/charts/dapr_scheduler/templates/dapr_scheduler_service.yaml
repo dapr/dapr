@@ -22,10 +22,10 @@ spec:
   - name: api
     port: {{ .Values.ports.apiPort }}
   - name: etcd-client
-    port: {{ .Values.ports.etcdRPCClientPort }}
-  - name: etcd-http-client
-    port: {{ .Values.ports.etcdHttpClientPort }}
+    port: {{ .Values.ports.etcdGRPCClientPort }}
+  - name: etcd-httpclient
+    port: {{ .Values.ports.etcdHTTPClientPort }}
   - name: etcd-peer
-    port: {{ .Values.ports.etcdRPCPeerPort }}
+    port: {{ .Values.ports.etcdGRPCPeerPort }}
   clusterIP: None # make the service headless
 {{- end }}

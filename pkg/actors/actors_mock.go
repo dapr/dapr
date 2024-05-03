@@ -126,6 +126,10 @@ type MockActors struct {
 	mock.Mock
 }
 
+func (_m *MockActors) Entities() []string {
+	return nil
+}
+
 func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
 	return nil
 }
@@ -346,6 +350,10 @@ func (_m *MockActors) GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRu
 
 type FailingActors struct {
 	Failure daprt.Failure
+}
+
+func (f *FailingActors) Entities() []string {
+	return nil
 }
 
 func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {

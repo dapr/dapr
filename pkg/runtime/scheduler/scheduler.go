@@ -26,6 +26,8 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/golang/protobuf/ptypes/wrappers"
+
 	"github.com/dapr/dapr/pkg/actors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -36,7 +38,6 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
-	"github.com/golang/protobuf/ptypes/wrappers"
 )
 
 var log = logger.NewLogger("dapr.runtime.scheduler")
@@ -270,7 +271,7 @@ func (m *Manager) processTriggers(ctx context.Context) error {
 		case <-ctx.Done():
 			return ctx.Err()
 		case job := <-m.jobCh:
-			log.Debugf("Received scheduled job: %s", job.Name)
+			log.Debugf("Received scheduled job: %s", job.GetName())
 			m.wg.Add(1)
 			go func() {
 				defer m.wg.Done()
@@ -279,8 +280,6 @@ func (m *Manager) processTriggers(ctx context.Context) error {
 			}()
 		}
 	}
-
-	return nil
 }
 
 func (m *Manager) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) {
@@ -310,7 +309,7 @@ func (m *Manager) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRes
 
 	req := invokev1.NewInvokeMethodRequest("job/"+job.GetName()).
 		WithHTTPExtension(http.MethodPost, "").
-		WithDataObject(job.Data)
+		WithDataObject(job.GetData())
 	defer req.Close()
 
 	response, err := appChannel.TriggerJob(ctx, req)
@@ -347,14 +346,14 @@ func (m *Manager) invokeActorReminder(ctx context.Context, job *schedulerv1pb.Wa
 	actor := job.GetMetadata().GetType().GetActor()
 
 	var jspb wrappers.BytesValue
-	if job.Data != nil {
+	if job.GetData() != nil {
 		if err := job.GetData().UnmarshalTo(&jspb); err != nil {
 			return fmt.Errorf("failed to unmarshal reminder data: %s", err)
 		}
 	}
 
 	data, err := json.Marshal(&actors.ReminderResponse{
-		Data: jspb,
+		Data: jspb.GetValue(),
 	})
 	if err != nil {
 		return err
@@ -396,7 +395,7 @@ func (m *Manager) establishSchedulerConn(ctx context.Context, client *client.Cli
 func (m *Manager) watchJobs(ctx context.Context, client *client.Client) error {
 	var entities []string
 	if m.actors != nil {
-		entities = m.actors.Entites()
+		entities = m.actors.Entities()
 	}
 
 	streamReq := &schedulerv1pb.WatchJobsRequest{
