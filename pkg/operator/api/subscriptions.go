@@ -24,6 +24,7 @@ import (
 	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/operator/api/authz"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 )
 
@@ -59,7 +60,7 @@ func (a *apiServer) ListSubscriptions(ctx context.Context, in *emptypb.Empty) (*
 
 // ListSubscriptionsV2 returns a list of Dapr pub/sub subscriptions. Use ListSubscriptionsRequest to expose pod info.
 func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.ListSubscriptionsRequest) (*operatorv1pb.ListSubscriptionsResponse, error) {
-	if err := a.authzRequest(ctx, in.GetNamespace()); err != nil {
+	if _, err := authz.Request(ctx, in.GetNamespace()); err != nil {
 		return nil, err
 	}
 
@@ -91,7 +92,7 @@ func (a *apiServer) ListSubscriptionsV2(ctx context.Context, in *operatorv1pb.Li
 }
 
 func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateRequest, srv operatorv1pb.Operator_SubscriptionUpdateServer) error { //nolint:nosnakecase
-	if err := a.authzRequest(srv.Context(), in.GetNamespace()); err != nil {
+	if _, err := authz.Request(srv.Context(), in.GetNamespace()); err != nil {
 		return err
 	}
 

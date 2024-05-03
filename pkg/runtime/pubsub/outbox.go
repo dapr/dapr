@@ -163,25 +163,23 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				ceData = []byte(fmt.Sprintf("%v", sr.Value))
 			}
 
-			ce := &CloudEvent{
-				ID:         tr.GetKey(),
-				Source:     source,
-				Pubsub:     c.outboxPubsub,
-				Data:       ceData,
-				TraceID:    traceID,
-				TraceState: traceState,
-			}
-
+			var dataContentType string
 			if sr.ContentType != nil {
-				ce.DataContentType = *sr.ContentType
+				dataContentType = *sr.ContentType
 			}
 
-			msg, err := NewCloudEvent(ce, nil)
-			if err != nil {
-				return nil, err
+			ce := contribPubsub.NewCloudEventsEnvelope(tr.GetKey(), source, "", "", "", c.outboxPubsub, dataContentType, ceData, "", traceState)
+			ce[contribPubsub.TraceIDField] = traceID
+
+			for k, v := range op.GetMetadata() {
+				if k == contribPubsub.DataField || k == contribPubsub.IDField {
+					continue
+				}
+
+				ce[k] = v
 			}
 
-			data, err := json.Marshal(msg)
+			data, err := json.Marshal(ce)
 			if err != nil {
 				return nil, err
 			}
@@ -228,10 +226,6 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			}
 
 			stateKey := o.cloudEventExtractorFn(cloudEvent, contribPubsub.IDField)
-			data := []byte(o.cloudEventExtractorFn(cloudEvent, contribPubsub.DataField))
-			contentType := o.cloudEventExtractorFn(cloudEvent, contribPubsub.DataContentTypeField)
-			traceID := o.cloudEventExtractorFn(cloudEvent, contribPubsub.TraceIDField)
-			traceState := o.cloudEventExtractorFn(cloudEvent, contribPubsub.TraceStateField)
 
 			store, ok := o.getStateFn(stateStore)
 			if !ok {
@@ -274,23 +268,15 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				return err
 			}
 
-			ce, err := NewCloudEvent(&CloudEvent{
-				Data:            data,
-				DataContentType: contentType,
-				Pubsub:          c.publishPubSub,
-				Source:          appID,
-				Topic:           c.publishTopic,
-				TraceID:         traceID,
-				TraceState:      traceState,
-			}, nil)
+			cloudEvent[contribPubsub.TopicField] = c.publishTopic
+			cloudEvent[contribPubsub.PubsubField] = c.publishPubSub
+
+			b, err := json.Marshal(cloudEvent)
 			if err != nil {
 				return err
 			}
 
-			b, err := json.Marshal(ce)
-			if err != nil {
-				return err
-			}
+			contentType := cloudEvent[contribPubsub.DataContentTypeField].(string)
 
 			err = o.publishFn(ctx, &contribPubsub.PublishRequest{
 				PubsubName:  c.publishPubSub,

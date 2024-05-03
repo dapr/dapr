@@ -11,12 +11,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package api
+package componentupdate
 
 import (
 	"context"
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -36,50 +37,50 @@ import (
 )
 
 func init() {
-	suite.Register(new(componentupdate))
+	suite.Register(new(basic))
 }
 
-// componentupdate tests the operator's ComponentUpdate API.
-type componentupdate struct {
+// basic tests the operator's ComponentUpdate API.
+type basic struct {
 	sentry   *sentry.Sentry
 	store    *store.Store
 	kubeapi  *kubernetes.Kubernetes
 	operator *operator.Operator
 }
 
-func (c *componentupdate) Setup(t *testing.T) []framework.Option {
-	c.sentry = sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
+func (b *basic) Setup(t *testing.T) []framework.Option {
+	b.sentry = sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
-	c.store = store.New(metav1.GroupVersionKind{
+	b.store = store.New(metav1.GroupVersionKind{
 		Group:   "dapr.io",
 		Version: "v1alpha1",
 		Kind:    "Component",
 	})
-	c.kubeapi = kubernetes.New(t,
+	b.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
 			"default",
-			c.sentry.Port(),
+			b.sentry.Port(),
 		),
-		kubernetes.WithClusterDaprComponentListFromStore(t, c.store),
+		kubernetes.WithClusterDaprComponentListFromStore(t, b.store),
 	)
 
-	c.operator = operator.New(t,
+	b.operator = operator.New(t,
 		operator.WithNamespace("default"),
-		operator.WithKubeconfigPath(c.kubeapi.KubeconfigPath(t)),
-		operator.WithTrustAnchorsFile(c.sentry.TrustAnchorsFile(t)),
+		operator.WithKubeconfigPath(b.kubeapi.KubeconfigPath(t)),
+		operator.WithTrustAnchorsFile(b.sentry.TrustAnchorsFile(t)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(c.kubeapi, c.sentry, c.operator),
+		framework.WithProcesses(b.kubeapi, b.sentry, b.operator),
 	}
 }
 
-func (c *componentupdate) Run(t *testing.T, ctx context.Context) {
-	c.sentry.WaitUntilRunning(t, ctx)
-	c.operator.WaitUntilRunning(t, ctx)
+func (b *basic) Run(t *testing.T, ctx context.Context) {
+	b.sentry.WaitUntilRunning(t, ctx)
+	b.operator.WaitUntilRunning(t, ctx)
 
-	client := c.operator.Dial(t, ctx, "default", c.sentry)
+	client := b.operator.Dial(t, ctx, b.sentry, "myapp")
 
 	stream, err := client.ComponentUpdate(ctx, &operatorv1.ComponentUpdateRequest{Namespace: "default"})
 	require.NoError(t, err)
@@ -101,18 +102,15 @@ func (c *componentupdate) Run(t *testing.T, ctx context.Context) {
 	}
 
 	t.Run("CREATE", func(t *testing.T) {
-		c.store.Add(comp)
-		c.kubeapi.Informer().Add(t, comp)
+		b.store.Add(comp)
+		b.kubeapi.Informer().Add(t, comp)
 
 		event, err := stream.Recv()
 		require.NoError(t, err)
-		assert.JSONEq(t, `{
-"metadata": { "name": "mycomponent", "namespace": "default", "creationTimestamp": null },
-"spec": {
-"ignoreErrors": false, "initTimeout": "", "type": "state.redis", "version": "v1", "metadata":
-[ { "name": "connectionString", "secretKeyRef": { "key": "", "name": "" }, "value": "foobar" } ] },
-"auth": { "secretStore": "" }
-}`, string(event.GetComponent()))
+
+		var gotComp compapi.Component
+		require.NoError(t, json.Unmarshal(event.GetComponent(), &gotComp))
+		assert.Equal(t, comp, &gotComp)
 		assert.Equal(t, operatorv1.ResourceEventType_CREATED, event.GetType())
 		assert.Equal(t, "CREATED", event.GetType().String())
 	})
@@ -120,39 +118,46 @@ func (c *componentupdate) Run(t *testing.T, ctx context.Context) {
 	t.Run("UPDATE", func(t *testing.T) {
 		comp.Spec.Type = "state.inmemory"
 		comp.Spec.Metadata = nil
-		c.store.Set(comp)
+		b.store.Set(comp)
+		b.kubeapi.Informer().Modify(t, comp)
 
 		b, err := json.Marshal(comp)
 		require.NoError(t, err)
 
-		event, err := stream.Recv()
-		require.NoError(t, err)
-		assert.JSONEq(t, `{
-"metadata": { "name": "mycomponent", "namespace": "default", "creationTimestamp": null },
-"spec":{"ignoreErrors": false, "initTimeout": "", "type": "state.inmemory", "version": "v1", "metadata": null},
-"auth": { "secretStore": "" }
-}`, string(event.GetComponent()))
-		assert.JSONEq(t, string(b), string(event.GetComponent()))
-		assert.Equal(t, operatorv1.ResourceEventType_UPDATED, event.GetType())
-		assert.Equal(t, "UPDATED", event.GetType().String())
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			event, err := stream.Recv()
+			//nolint:testifylint
+			if !assert.NoError(c, err) {
+				return
+			}
+			var gotComp compapi.Component
+			require.NoError(t, json.Unmarshal(event.GetComponent(), &gotComp))
+			assert.Equal(c, comp, &gotComp)
+			assert.JSONEq(c, string(b), string(event.GetComponent()))
+			assert.Equal(c, operatorv1.ResourceEventType_UPDATED, event.GetType())
+			assert.Equal(c, "UPDATED", event.GetType().String())
+		}, time.Second*10, time.Millisecond*10)
 	})
 
 	t.Run("DELETE", func(t *testing.T) {
-		c.store.Set()
-		c.kubeapi.Informer().Delete(t, comp)
+		b.store.Set()
+		b.kubeapi.Informer().Delete(t, comp)
 
 		b, err := json.Marshal(comp)
 		require.NoError(t, err)
 
-		event, err := stream.Recv()
-		require.NoError(t, err)
-		assert.JSONEq(t, `{
-"metadata": { "name": "mycomponent", "namespace": "default", "creationTimestamp": null },
-"spec":{"ignoreErrors": false, "initTimeout": "", "type": "state.inmemory", "version": "v1", "metadata": null},
-"auth": { "secretStore": "" }
-}`, string(event.GetComponent()))
-		assert.JSONEq(t, string(b), string(event.GetComponent()))
-		assert.Equal(t, operatorv1.ResourceEventType_DELETED, event.GetType())
-		assert.Equal(t, "DELETED", event.GetType().String())
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			event, err := stream.Recv()
+			//nolint:testifylint
+			if !assert.NoError(c, err) {
+				return
+			}
+			var gotComp compapi.Component
+			require.NoError(t, json.Unmarshal(event.GetComponent(), &gotComp))
+			assert.Equal(t, comp, &gotComp)
+			assert.JSONEq(c, string(b), string(event.GetComponent()))
+			assert.Equal(c, operatorv1.ResourceEventType_DELETED, event.GetType())
+			assert.Equal(c, "DELETED", event.GetType().String())
+		}, time.Second*10, time.Millisecond*10)
 	})
 }

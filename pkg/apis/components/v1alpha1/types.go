@@ -15,6 +15,7 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apis/components"
@@ -74,6 +75,14 @@ func (c Component) GetSecretStore() string {
 // NameValuePairs returns the component's metadata as name/value pairs
 func (c Component) NameValuePairs() []common.NameValuePair {
 	return c.Spec.Metadata
+}
+
+func (c Component) ClientObject() client.Object {
+	return &c
+}
+
+func (c Component) GetScopes() []string {
+	return c.Scopes
 }
 
 // EmptyMetaDeepCopy returns a new instance of the component type with the
