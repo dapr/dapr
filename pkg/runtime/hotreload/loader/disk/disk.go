@@ -43,7 +43,7 @@ type disk struct {
 	components    *resource[compapi.Component]
 	subscriptions *resource[subapi.Subscription]
 	fs            *fswatcher.FSWatcher
-	batcher       *batcher.Batcher[int, struct{}]
+	batcher       *batcher.Batcher[int]
 }
 
 func New(opts Options) (loader.Interface, error) {

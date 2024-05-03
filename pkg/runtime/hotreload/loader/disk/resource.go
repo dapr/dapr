@@ -30,8 +30,8 @@ import (
 // resource is a generic implementation of a disk resource loader. resource
 // will watch and load resources from disk.
 type resource[T differ.Resource] struct {
-	sourceBatcher *batcher.Batcher[int, struct{}]
-	streamBatcher *batcher.Batcher[int, struct{}]
+	sourceBatcher *batcher.Batcher[int]
+	streamBatcher *batcher.Batcher[int]
 	store         store.Store[T]
 	diskLoader    internalloader.Loader[T]
 
@@ -47,7 +47,7 @@ type resource[T differ.Resource] struct {
 type resourceOptions[T differ.Resource] struct {
 	loader  internalloader.Loader[T]
 	store   store.Store[T]
-	batcher *batcher.Batcher[int, struct{}]
+	batcher *batcher.Batcher[int]
 }
 
 func newResource[T differ.Resource](opts resourceOptions[T]) *resource[T] {
