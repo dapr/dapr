@@ -15,6 +15,7 @@ package universal
 
 import (
 	"context"
+	"strings"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -29,39 +30,41 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 		"namespace": a.Namespace(),
 	}
 
-	if inReq.GetJob() == nil {
+	job := inReq.GetJob()
+
+	if job == nil {
 		return &emptypb.Empty{}, apierrors.Empty("Job", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
 	}
 
-	if inReq.GetJob().GetName() == "" || inReq.GetJob().GetName() == " " {
+	if job.GetName() == "" || strings.Contains(job.GetName(), "|") {
 		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
-	if inReq.GetJob().GetSchedule() == "" {
+	if job.Schedule == nil && job.DueTime == nil {
 		return &emptypb.Empty{}, apierrors.Empty("Schedule", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty))
 	}
 
-	if inReq.GetJob().GetRepeats() < 0 {
-		return &emptypb.Empty{}, apierrors.IncorrectNegative("Repeats", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixNegative, apierrors.PostFixRepeats))
-	}
-
-	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetJob().GetName()
-
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
-		Job: &runtimev1pb.Job{
-			Name:     jobName,
-			Schedule: inReq.GetJob().GetSchedule(),
-			Data:     inReq.GetJob().GetData(),
-			Repeats:  inReq.GetJob().GetRepeats(),
-			DueTime:  inReq.GetJob().GetDueTime(),
-			Ttl:      inReq.GetJob().GetTtl(),
+		Name: job.GetName(),
+		Metadata: &schedulerv1pb.ScheduleJobMetadata{
+			AppId:     a.appID,
+			Namespace: a.Namespace(),
+			Type: &schedulerv1pb.ScheduleJobMetadataType{
+				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
+					Job: new(schedulerv1pb.ScheduleTypeJob),
+				},
+			},
 		},
-		// TODO: add Metadata for lookup if using state store: this should generate key if jobStateStore is configured
-		Namespace: a.Namespace(),
-		AppId:     a.appID,
+		Job: &schedulerv1pb.Job{
+			Schedule: job.Schedule,
+			Data:     job.Data,
+			Repeats:  job.Repeats,
+			DueTime:  job.DueTime,
+			Ttl:      job.Ttl,
+		},
 	}
 
-	_, err := a.schedulerManager.NextClient().ScheduleJob(ctx, internalScheduleJobReq)
+	_, err := a.schedulerClients.Next().ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
 		a.logger.Errorf("Error scheduling job %s", inReq.GetJob().GetName())
 		return &emptypb.Empty{}, apierrors.SchedulerScheduleJob(errMetadata, err)
@@ -81,15 +84,20 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
-	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetName()
 	internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
-		JobName: jobName,
-		// TODO: add Metadata for lookup if using state store
-		Namespace: a.Namespace(),
-		AppId:     a.appID,
+		Name: inReq.GetName(),
+		Metadata: &schedulerv1pb.ScheduleJobMetadata{
+			AppId:     a.appID,
+			Namespace: a.Namespace(),
+			Type: &schedulerv1pb.ScheduleJobMetadataType{
+				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
+					Job: new(schedulerv1pb.ScheduleTypeJob),
+				},
+			},
+		},
 	}
 
-	_, err := a.schedulerManager.NextClient().DeleteJob(ctx, internalDeleteJobReq)
+	_, err := a.schedulerClients.Next().DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
 		a.logger.Errorf("Error deleting job: %s", inReq.GetName())
 		return &emptypb.Empty{}, apierrors.SchedulerDeleteJob(errMetadata, err)
@@ -104,32 +112,38 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 		"namespace": a.Namespace(),
 	}
 
-	response := &runtimev1pb.GetJobResponse{}
-	var internalResp *schedulerv1pb.GetJobResponse
-
 	if inReq.GetName() == "" {
 		a.logger.Error("Job name is empty.")
-		return response, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
+		return new(runtimev1pb.GetJobResponse), apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
-	jobName := a.Namespace() + "||job||" + a.AppID() + "||" + inReq.GetName()
 	internalGetJobReq := &schedulerv1pb.GetJobRequest{
-		JobName: jobName,
-		// TODO: add Metadata for lookup if using state store
-		Namespace: a.Namespace(),
-		AppId:     a.appID,
+		Name: inReq.GetName(),
+		Metadata: &schedulerv1pb.ScheduleJobMetadata{
+			AppId:     a.appID,
+			Namespace: a.Namespace(),
+			Type: &schedulerv1pb.ScheduleJobMetadataType{
+				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
+					Job: new(schedulerv1pb.ScheduleTypeJob),
+				},
+			},
+		},
 	}
 
-	internalResp, err := a.schedulerManager.NextClient().GetJob(ctx, internalGetJobReq)
+	resp, err := a.schedulerClients.Next().GetJob(ctx, internalGetJobReq)
 	if err != nil {
 		a.logger.Errorf("Error getting job %s", inReq.GetName())
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 
-	response.Job = internalResp.GetJob()
-
-	// Sets the job name back to remove any prefixing done by ourselves in this layer.
-	response.Job.Name = inReq.GetName()
-
-	return response, nil
+	return &runtimev1pb.GetJobResponse{
+		Job: &runtimev1pb.Job{
+			Name:     inReq.GetName(),
+			Schedule: resp.GetJob().Schedule,
+			Data:     resp.GetJob().Data,
+			Repeats:  resp.GetJob().Repeats,
+			DueTime:  resp.GetJob().DueTime,
+			Ttl:      resp.GetJob().Ttl,
+		},
+	}, nil
 }

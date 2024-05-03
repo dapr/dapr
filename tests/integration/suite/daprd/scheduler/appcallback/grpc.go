@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -55,12 +56,7 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 	srv := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
 			g.jobChan <- in
-			return &runtimev1pb.JobEventResponse{
-				Data: &anypb.Any{
-					TypeUrl: "type.googleapis.com/google.type.Expr",
-					Value:   []byte(`{"expression": "val"}`),
-				},
-			}, nil
+			return new(runtimev1pb.JobEventResponse), nil
 		}),
 	)
 
@@ -82,45 +78,38 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	client := g.daprd.GRPCClient(t, ctx)
 
 	t.Run("app receives triggered job", func(t *testing.T) {
-		g.receiveJob(t, ctx, client)
-	})
-}
-
-func (g *grpc) receiveJob(t *testing.T, ctx context.Context, client runtimev1pb.DaprClient) {
-	t.Helper()
-
-	req := &runtimev1pb.ScheduleJobRequest{
-		Job: &runtimev1pb.Job{
-			Name:     "test",
-			Schedule: "@every 1s",
-			Repeats:  1,
-			Data: &anypb.Any{
-				TypeUrl: "type.googleapis.com/google.type.Expr",
-				Value:   []byte(`{"expression": "val"}`),
+		req := &runtimev1pb.ScheduleJobRequest{
+			Job: &runtimev1pb.Job{
+				Name:     "test",
+				Schedule: ptr.Of("@every 1s"), Repeats: ptr.Of(uint32(1)),
+				Data: &anypb.Any{
+					TypeUrl: "type.googleapis.com/google.type.Expr",
+					Value:   []byte(`{"expression": "val"}`),
+				},
 			},
-		},
-	}
-	_, err := client.ScheduleJob(ctx, req)
-	require.NoError(t, err)
-
-	select {
-	case job := <-g.jobChan:
-		assert.NotNil(t, job)
-		assert.Equal(t, job.GetMethod(), "receiveJobs/test")
-
-		var data jobData
-		dataBytes := job.GetData().GetValue()
-
-		err := json.Unmarshal(dataBytes, &data)
+		}
+		_, err := client.ScheduleJob(ctx, req)
 		require.NoError(t, err)
 
-		decodedValue, err := base64.StdEncoding.DecodeString(data.Value)
-		require.NoError(t, err)
+		select {
+		case job := <-g.jobChan:
+			assert.NotNil(t, job)
+			assert.Equal(t, job.GetMethod(), "job/test")
 
-		actualVal := strings.TrimSpace(string(decodedValue))
-		assert.Equal(t, `{"expression": "val"}`, actualVal)
+			var data jobData
+			dataBytes := job.GetData().GetValue()
 
-	case <-time.After(time.Second * 3):
-		assert.Fail(t, "timed out waiting for triggered job")
-	}
+			err := json.Unmarshal(dataBytes, &data)
+			require.NoError(t, err)
+
+			decodedValue, err := base64.StdEncoding.DecodeString(data.Value)
+			require.NoError(t, err)
+
+			actualVal := strings.TrimSpace(string(decodedValue))
+			assert.Equal(t, `{"expression": "val"}`, actualVal)
+
+		case <-time.After(time.Second * 3):
+			assert.Fail(t, "timed out waiting for triggered job")
+		}
+	})
 }

@@ -76,7 +76,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
-	runtimeScheduler "github.com/dapr/dapr/pkg/runtime/scheduler"
+	"github.com/dapr/dapr/pkg/runtime/scheduler"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
@@ -106,7 +107,8 @@ type DaprRuntime struct {
 	daprHTTPAPI         http.API
 	daprGRPCAPI         grpc.API
 	operatorClient      operatorv1pb.OperatorClient
-	schedulerManager    *runtimeScheduler.Manager
+	schedulerManager    *scheduler.Manager
+	schedulerClients    *clients.Clients
 	isAppHealthy        chan struct{}
 	appHealth           *apphealth.AppHealth
 	appHealthReady      func(context.Context) error // Invoked the first time the app health becomes ready
@@ -184,22 +186,22 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:             runtimeConfig.id,
-		Namespace:      namespace,
-		IsHTTP:         runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:  len(runtimeConfig.actorsService) > 0,
-		SchedulerEnabled: runtimeConfig.schedulerAddress != "",
-		Registry:       runtimeConfig.registry,
-		ComponentStore: compStore,
-		Meta:           meta,
-		GlobalConfig:   globalConfig,
-		Resiliency:     resiliencyProvider,
-		Mode:           runtimeConfig.mode,
-		PodName:        podName,
-		OperatorClient: operatorClient,
-		GRPC:           grpc,
-		Channels:       channels,
-		MiddlewareHTTP: httpMiddleware,
+		ID:               runtimeConfig.id,
+		Namespace:        namespace,
+		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
+		SchedulerEnabled: len(runtimeConfig.schedulerAddress) > 0,
+		Registry:         runtimeConfig.registry,
+		ComponentStore:   compStore,
+		Meta:             meta,
+		GlobalConfig:     globalConfig,
+		Resiliency:       resiliencyProvider,
+		Mode:             runtimeConfig.mode,
+		PodName:          podName,
+		OperatorClient:   operatorClient,
+		GRPC:             grpc,
+		Channels:         channels,
+		MiddlewareHTTP:   httpMiddleware,
 	})
 
 	var reloader *hotreload.Reloader
@@ -287,24 +289,27 @@ func newDaprRuntime(ctx context.Context,
 		},
 	)
 
-	var schedulerManager *runtimeScheduler.Manager
 	if runtimeConfig.SchedulerEnabled() {
-		if err = channels.Refresh(); err != nil {
-			log.Warnf("failed to open %s channel to app: %s", string(runtimeConfig.appConnectionConfig.Protocol), err)
-		}
-		schedulerManager = runtimeScheduler.NewManager(ctx, runtimeScheduler.Options{
-			Namespace:  namespace,
-			AppID:      runtimeConfig.id,
-			Addresses:  runtimeConfig.schedulerAddress,
-			Security:   sec,
-			AppChannel: channels.AppChannel(),
-			IsHTTP:     runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		rt.schedulerClients, err = clients.New(ctx, clients.Options{
+			Addresses: runtimeConfig.schedulerAddress,
+			Security:  sec,
 		})
-		if err := rt.runnerCloser.Add(schedulerManager.Run); err != nil {
+		if err != nil {
 			return nil, err
 		}
-		if schedulerManager != nil {
-			rt.schedulerManager = schedulerManager
+
+		rt.schedulerManager, err = scheduler.New(scheduler.Options{
+			Namespace:  namespace,
+			AppID:      runtimeConfig.id,
+			Clients:    rt.schedulerClients,
+			Resiliency: resiliencyProvider,
+			Channels:   channels,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := rt.runnerCloser.Add(rt.schedulerManager.Run); err != nil {
+			return nil, err
 		}
 	}
 
@@ -538,7 +543,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
-		SchedulerManager:            a.schedulerManager,
+		SchedulerClients:            a.schedulerClients,
 		WorkflowEngine:              wfe,
 	})
 
@@ -657,6 +662,10 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 		}); err != nil {
 			return fmt.Errorf("failed to register components with callback: %w", err)
 		}
+	}
+
+	if a.runtimeConfig.SchedulerEnabled() {
+		a.schedulerManager.Start(a.actor)
 	}
 
 	return nil
@@ -989,7 +998,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
 		RemindersService:  a.runtimeConfig.remindersService,
-		SchedulerManager:  a.schedulerManager,
+		SchedulerClients:  a.schedulerClients,
 		Port:              a.runtimeConfig.internalGRPCPort,
 		Namespace:         a.namespace,
 		AppConfig:         a.appConfig,
@@ -1008,8 +1017,9 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		StateStoreName:   actorStateStoreName,
 		CompStore:        a.compStore,
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
-		StateTTLEnabled: a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
-		Security:        a.sec,
+		StateTTLEnabled:  a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
+		Security:         a.sec,
+		SchedulerClients: a.schedulerClients,
 	})
 	if err != nil {
 		return rterrors.NewInit(rterrors.InitFailure, "actors", err)

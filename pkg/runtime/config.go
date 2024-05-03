@@ -95,7 +95,7 @@ type Config struct {
 	DaprBlockShutdownDuration    *time.Duration
 	ActorsService                string
 	RemindersService             string
-	SchedulerAddress             string
+	SchedulerAddress             []string
 	DaprAPIListenAddresses       string
 	AppHealthProbeInterval       int
 	AppHealthProbeTimeout        int
@@ -126,7 +126,7 @@ type internalConfig struct {
 	mode                         modes.DaprMode
 	actorsService                string
 	remindersService             string
-	schedulerAddress             string
+	schedulerAddress             []string
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
 	kubernetes                   configmodes.KubernetesConfig
@@ -149,7 +149,7 @@ func (i internalConfig) ActorsEnabled() bool {
 }
 
 func (i internalConfig) SchedulerEnabled() bool {
-	return i.schedulerAddress != ""
+	return len(i.schedulerAddress) > 0
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.

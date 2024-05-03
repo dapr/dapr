@@ -23,7 +23,7 @@ import (
 	"golang.org/x/exp/maps"
 
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/runtime/scheduler"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
 )
 
 // Config is the actor runtime configuration.
@@ -32,7 +32,7 @@ type Config struct {
 	AppID                      string
 	ActorsService              string
 	RemindersService           string
-	SchedulerManager           *scheduler.Manager
+	SchedulerClients           *clients.Clients
 	HostedActorTypes           *hostedActors
 	Port                       int
 	HeartbeatInterval          time.Duration

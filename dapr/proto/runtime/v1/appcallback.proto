@@ -88,16 +88,8 @@ message JobEventRequest {
   common.v1.HTTPExtension http_extension = 5;
 }
 
-// JobEventResponse is the response message including data and its content type
-// from app callback.
-// This message is used in JobEventResponse of Dapr gRPC Service.
-message JobEventResponse {
-  // Required in unary RPCs. The content body of Service response.
-  google.protobuf.Any data = 1;
-
-  // Required. The type of data content.
-  string content_type = 2;
-}
+// JobEventResponse is the response from the app when a job is triggered.
+message JobEventResponse {}
 
 // TopicEventRequest message is compatible with CloudEvent spec v1.0
 // https://github.com/cloudevents/spec/blob/v1.0/spec.md

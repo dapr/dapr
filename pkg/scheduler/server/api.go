@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -15,105 +15,79 @@ package server
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"math/rand"
+	"strings"
 	"time"
 
-	etcdcron "github.com/diagridio/go-etcd-cron"
-	"google.golang.org/grpc/codes"
+	"github.com/diagridio/go-etcd-cron/api"
+	"google.golang.org/protobuf/types/known/anypb"
 
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/scheduler/server/internal"
-	timeutils "github.com/dapr/kit/time"
 )
 
 func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
-	// TODO(artursouza): Add authorization check between caller and request.
+	// TODO: @joshvanl do mTLS and request validation <<
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-s.readyCh:
 	}
 
-	startTime, err := parseStartTime(req.GetJob().GetDueTime())
+	jobName, err := buildJobName(req.GetName(), req.GetMetadata())
 	if err != nil {
-		return nil, fmt.Errorf("error parsing due time: %w", err)
-	}
-	// TODO: ONLY add expiration if ttl is parsed
-
-	// ttl, err := parseTTL(req.GetJob().GetTtl())
-	// if err != nil {
-	//	return nil, fmt.Errorf("error parsing TTL: %w", err)
-	// }
-
-	metadata := req.GetMetadata()
-	if metadata == nil {
-		metadata = map[string]string{}
-	}
-	metadata["namespace"] = req.GetNamespace()
-	metadata["appID"] = req.GetAppId()
-
-	job := etcdcron.Job{
-		Name:      req.GetJob().GetName(),
-		Rhythm:    req.GetJob().GetSchedule(),
-		Repeats:   req.GetJob().GetRepeats(),
-		StartTime: startTime,
-		// Expiration:       ttl, // TODO: add this back in once artur opens his PR
-		Payload:  req.GetJob().GetData(),
-		Metadata: metadata,
+		return nil, err
 	}
 
-	err = s.cron.AddJob(ctx, job)
+	meta, err := anypb.New(req.Metadata)
 	if err != nil {
-		log.Errorf("error scheduling job %s: %s", req.GetJob().GetName(), err)
+		return nil, err
+	}
+
+	job := &api.Job{
+		Schedule: req.Job.Schedule,
+		DueTime:  req.Job.DueTime,
+		Ttl:      req.Job.Ttl,
+		Repeats:  req.Job.Repeats,
+		Metadata: meta,
+		Payload:  req.Job.Data,
+	}
+
+	err = s.cron.Add(ctx, jobName, job)
+	if err != nil {
+		log.Errorf("error scheduling job %s: %s", req.GetName(), err)
 		return nil, err
 	}
 
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
 }
 
-// TODO: triggerJob should send along ns, appID, scope here so dont need to do lookup from metadata
-func (s *Server) triggerJob(ctx context.Context, req etcdcron.TriggerRequest) (etcdcron.TriggerResult, error) {
-	log.Debugf("Triggering job: %s", req.JobName)
-	metadata := req.Metadata
-	actorType := metadata["actorType"]
-	actorID := metadata["actorId"]
-	reminderName := metadata["reminder"]
-	if actorType != "" && actorID != "" && reminderName != "" {
-		if s.actorRuntime == nil {
-			return etcdcron.Failure, fmt.Errorf("actor runtime is not configured")
-		}
+func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
+	log.Debugf("Triggering job")
 
-		invokeMethod := "remind/" + reminderName
-		contentType := metadata["content-type"]
-		invokeReq := internalv1pb.NewInternalInvokeRequest(invokeMethod).
-			WithActor(actorType, actorID).
-			WithData(req.Payload.GetValue()).
-			WithContentType(contentType)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*45)
+	defer cancel()
 
-		res, err := s.actorRuntime.Call(ctx, invokeReq)
-		if err != nil {
-			return etcdcron.Failure, err
-		}
-
-		if res.GetStatus().GetCode() != int32(codes.OK) {
-			return etcdcron.Failure, nil
-		}
-
-		return etcdcron.OK, err
-	} else {
-		// Normal job type to trigger
-		triggeredJob := &schedulerv1pb.WatchJobsResponse{
-			Name:     req.JobName,
-			Data:     req.Payload,
-			Metadata: metadata,
-		}
-
-		s.jobTriggerChan <- triggeredJob // send job to be consumed and sent to sidecar from WatchJobs()
-
-		return etcdcron.OK, nil
+	var meta schedulerv1pb.ScheduleJobMetadata
+	if err := req.Metadata.UnmarshalTo(&meta); err != nil {
+		log.Errorf("Error unmarshalling metadata: %s", err)
+		return true
 	}
+
+	if err := s.connectionPool.Send(ctx, &schedulerv1pb.WatchJobsResponse{
+		// TODO: @joshvanl fix possible panic
+		Name:     req.GetName()[strings.LastIndex(req.GetName(), "||")+2:],
+		Data:     req.Payload,
+		Metadata: &meta,
+		Uuid:     rand.Uint32(),
+	}); err != nil {
+		// TODO: add job to a queue or something to try later this should be
+		// another long running go routine that accepts this job on a channel
+		log.Errorf("Error sending job to connection stream: %s", err)
+	}
+
+	return true
 }
 
 func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
@@ -124,8 +98,12 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequ
 	case <-s.readyCh:
 	}
 
-	jobName := req.GetJobName()
-	err := s.cron.DeleteJob(ctx, jobName)
+	jobName, err := buildJobName(req.GetName(), req.GetMetadata())
+	if err != nil {
+		return nil, err
+	}
+
+	err = s.cron.Delete(ctx, jobName)
 	if err != nil {
 		log.Errorf("error deleting job %s: %s", jobName, err)
 		return nil, err
@@ -142,78 +120,67 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 	case <-s.readyCh:
 	}
 
-	jobName := req.GetJobName()
-	// TODO(artursouza): Use "FetchJob()" instead to read from db instead of running jobs only - once method exists.
-	job := s.cron.GetJob(jobName)
+	jobName, err := buildJobName(req.GetName(), req.GetMetadata())
+	if err != nil {
+		return nil, err
+	}
+
+	job, err := s.cron.Get(ctx, jobName)
+	if err != nil {
+		log.Errorf("error getting job %s: %s", jobName, err)
+		return nil, err
+	}
+
 	if job == nil {
 		return nil, fmt.Errorf("job not found: %s", jobName)
 	}
 
-	//ttl := ""
-	//if job.TTL > 0 {
-	//	ttl = job.TTL.String()
-	//}
-
 	return &schedulerv1pb.GetJobResponse{
-		Job: &runtime.Job{
-			Name:     jobName,
-			Schedule: job.Rhythm,
+		Job: &schedulerv1pb.Job{
+			Schedule: job.Schedule,
+			DueTime:  job.DueTime,
+			Ttl:      job.Ttl,
 			Repeats:  job.Repeats,
-			// Ttl:      ttl,
-			DueTime: job.StartTime.Format(time.RFC3339),
-			Data:    job.Payload,
+			Data:     job.Payload,
 		},
 	}, nil
 }
 
-// parseStartTime is a wrapper around timeutils.ParseTime that truncates the time to seconds.
-func parseStartTime(dueTime string) (time.Time, error) {
-	if dueTime == "" {
-		return time.Time{}, nil
-	}
-
-	now := time.Now()
-	t, err := timeutils.ParseTime(dueTime, &now)
-	if err != nil {
-		return t, err
-	}
-	t = t.Truncate(time.Second)
-	return t, nil
-}
-
-func parseTTL(ttl string) (time.Duration, error) {
-	if ttl == "" {
-		return time.Duration(0), nil
-	}
-
-	years, months, days, period, _, err := timeutils.ParseDuration(ttl)
-	if err != nil {
-		return time.Duration(0), fmt.Errorf("parse error: %w", err)
-	}
-	if (years == 0) && (months == 0) && (days == 0) {
-		// Optimization to avoid the complex calculation below
-		return period, nil
-	}
-
-	return time.Until(time.Now().AddDate(years, months, days).Add(period)), nil
-}
-
 // WatchJobs sends jobs to Dapr sidecars upon component changes.
-func (s *Server) WatchJobs(req *schedulerv1pb.WatchJobsRequest, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
-	conn := &internal.Connection{
-		Namespace: req.GetNamespace(),
-		AppID:     req.GetAppId(),
-		Stream:    stream,
+func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error {
+	// TODO: @joshvanl mTLS authz request
+
+	req, err := stream.Recv()
+	if err != nil {
+		return err
 	}
 
-	s.sidecarConnChan <- conn
+	if req.GetInitial() == nil {
+		return errors.New("initial request is required on stream connection")
+	}
+
+	s.connectionPool.Add(req.GetInitial(), stream)
 
 	select {
 	case <-s.closeCh:
+		return errors.New("server is closing")
 	case <-stream.Context().Done():
+		return stream.Context().Err()
+	}
+}
+
+func buildJobName(name string, meta *schedulerv1pb.ScheduleJobMetadata) (string, error) {
+	joinStrings := func(ss ...string) string {
+		return strings.Join(ss, "||")
 	}
 
-	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s.", req.GetAppId())
-	s.connectionPool.Remove(req.GetNamespace(), req.GetAppId(), conn)
-	return nil
+	switch t := meta.GetType(); t.GetType().(type) {
+	case *schedulerv1pb.ScheduleJobMetadataType_Actor:
+		actor := t.GetActor()
+		return joinStrings("actorreminder", meta.GetNamespace(), actor.GetType(), actor.GetId(), name), nil
+	case *schedulerv1pb.ScheduleJobMetadataType_Job:
+		return joinStrings("app", meta.GetNamespace(), meta.GetAppId(), name), nil
+	default:
+		return "", fmt.Errorf("unknown job type: %v", t)
+	}
 }

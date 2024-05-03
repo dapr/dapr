@@ -17,7 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
-	"net/http"
+	nethttp "net/http"
 	"testing"
 	"time"
 
@@ -31,39 +31,40 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
-	suite.Register(new(httpcallback))
+	suite.Register(new(http))
 }
 
-type httpcallback struct {
+type http struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
 	jobChan   chan *runtimev1pb.JobEventRequest
 }
 
-func (h *httpcallback) Setup(t *testing.T) []framework.Option {
+func (h *http) Setup(t *testing.T) []framework.Option {
 	h.scheduler = scheduler.New(t)
 
 	h.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
 	srv := app.New(t,
-		app.WithHandlerFunc("/dapr/receiveJobs/test", func(w http.ResponseWriter, r *http.Request) {
+		app.WithHandlerFunc("/job/test", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
-				http.Error(w, "Error reading request body", http.StatusInternalServerError)
+				nethttp.Error(w, "Error reading request body", nethttp.StatusInternalServerError)
 				return
 			}
 
 			var jobEventRequest runtimev1pb.JobEventRequest
 			if err := json.Unmarshal(body, &jobEventRequest.Data); err != nil {
-				http.Error(w, "Error decoding JSON", http.StatusBadRequest)
+				nethttp.Error(w, "Error decoding JSON", nethttp.StatusBadRequest)
 				return
 			}
 			jobEventRequest.Method = r.URL.String()
 			h.jobChan <- &jobEventRequest
 
-			w.WriteHeader(http.StatusOK)
+			w.WriteHeader(nethttp.StatusOK)
 		}),
 	)
 
@@ -78,7 +79,7 @@ func (h *httpcallback) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (h *httpcallback) Run(t *testing.T, ctx context.Context) {
+func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.scheduler.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
@@ -89,14 +90,14 @@ func (h *httpcallback) Run(t *testing.T, ctx context.Context) {
 	})
 }
 
-func (h *httpcallback) receiveJob(t *testing.T, ctx context.Context, client runtimev1pb.DaprClient) {
+func (h *http) receiveJob(t *testing.T, ctx context.Context, client runtimev1pb.DaprClient) {
 	t.Helper()
 
 	req := &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test",
-			Schedule: "@every 1s",
-			Repeats:  1,
+			Schedule: ptr.Of("@every 1s"),
+			Repeats:  ptr.Of(uint32(1)),
 			Data: &anypb.Any{
 				TypeUrl: "type.googleapis.com/google.type.Expr",
 				Value:   []byte(`{"expression": "val"}`),
@@ -110,7 +111,7 @@ func (h *httpcallback) receiveJob(t *testing.T, ctx context.Context, client runt
 	case job := <-h.jobChan:
 		assert.NotNil(t, job)
 		assert.NotNil(t, job.GetData())
-		assert.Equal(t, "/dapr/receiveJobs/test", job.GetMethod())
+		assert.Equal(t, "/job/test", job.GetMethod())
 		assert.Equal(t, `{"expression": "val"}`, string(job.GetData().GetValue()))
 		assert.Equal(t, "type.googleapis.com/google.type.Expr", job.GetData().GetTypeUrl())
 
