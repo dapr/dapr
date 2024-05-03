@@ -1957,7 +1957,6 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		GlobalConfig:   rt.globalConfig,
 		Resiliency:     rt.resiliency,
 		Mode:           rt.runtimeConfig.mode,
-		Standalone:     rt.runtimeConfig.standalone,
 		Channels:       rt.channels,
 		GRPC:           rt.grpc,
 	})
@@ -2145,4 +2144,30 @@ func testSecurity(t *testing.T) security.Handler {
 	require.NoError(t, err)
 
 	return sec
+}
+
+func TestGetOtelServiceName(t *testing.T) {
+	// Save the original value of the OTEL_SERVICE_NAME variable and restore at the end
+
+	tests := []struct {
+		env      string // The value of the OTEL_SERVICE_NAME variable
+		fallback string // The fallback value
+		expected string // The expected value
+	}{
+		{"", "my-app", "my-app"},                 // Case 1: No environment variable, use fallback
+		{"service-abc", "my-app", "service-abc"}, // Case 2: Environment variable set, use it
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.env, func(t *testing.T) {
+			// Set the environment variable to the test case value
+			t.Setenv("OTEL_SERVICE_NAME", tc.env)
+			// Call the function and check the result
+			got := getOtelServiceName(tc.fallback)
+			if got != tc.expected {
+				// Report an error if the result doesn't match
+				t.Errorf("getOtelServiceName(%q) = %q; expected %q", tc.fallback, got, tc.expected)
+			}
+		})
+	}
 }

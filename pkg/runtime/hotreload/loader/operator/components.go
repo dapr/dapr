@@ -23,7 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 )
 
-type component struct {
+type components struct {
 	operatorpb.Operator_ComponentUpdateClient
 }
 
@@ -31,7 +31,7 @@ type component struct {
 // the generic operator.
 //
 //nolint:unused
-func (c *component) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
+func (c *components) list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error) {
 	resp, err := opclient.ListComponents(ctx, &operatorpb.ListComponentsRequest{
 		Namespace: ns,
 		PodName:   podName,
@@ -44,7 +44,7 @@ func (c *component) list(ctx context.Context, opclient operatorpb.OperatorClient
 }
 
 //nolint:unused
-func (c *component) close() error {
+func (c *components) close() error {
 	if c.Operator_ComponentUpdateClient != nil {
 		return c.Operator_ComponentUpdateClient.CloseSend()
 	}
@@ -52,7 +52,7 @@ func (c *component) close() error {
 }
 
 //nolint:unused
-func (c *component) recv() (*loader.Event[componentsapi.Component], error) {
+func (c *components) recv() (*loader.Event[componentsapi.Component], error) {
 	event, err := c.Operator_ComponentUpdateClient.Recv()
 	if err != nil {
 		return nil, err
@@ -70,7 +70,7 @@ func (c *component) recv() (*loader.Event[componentsapi.Component], error) {
 }
 
 //nolint:unused
-func (c *component) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
+func (c *components) establish(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) error {
 	stream, err := opclient.ComponentUpdate(ctx, &operatorpb.ComponentUpdateRequest{
 		Namespace: ns,
 		PodName:   podName,

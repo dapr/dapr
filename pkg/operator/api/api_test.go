@@ -39,6 +39,8 @@ import (
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/scheme"
+	"github.com/dapr/dapr/pkg/operator/api/informer"
+	informerfake "github.com/dapr/dapr/pkg/operator/api/informer/fake"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/tests/util"
 )
@@ -233,6 +235,19 @@ func TestComponentUpdate(t *testing.T) {
 			Spec: componentsapi.ComponentSpec{},
 		}
 
+		fakeInformer := informerfake.New[componentsapi.Component]().
+			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[componentsapi.Component], error) {
+				ch := make(chan *informer.Event[componentsapi.Component])
+				go func() {
+					ch <- &informer.Event[componentsapi.Component]{
+						Manifest: c,
+						Type:     operatorv1pb.ResourceEventType_CREATED,
+					}
+					close(ch)
+				}()
+				return ch, nil
+			})
+
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		require.NoError(t, err)
@@ -245,23 +260,7 @@ func TestComponentUpdate(t *testing.T) {
 
 		mockSidecar := &mockComponentUpdateServer{ctx: pki.ClientGRPCCtx(t)}
 		api := NewAPIServer(Options{Client: client}).(*apiServer)
-
-		go func() {
-			assert.Eventually(t, func() bool {
-				api.connLock.Lock()
-				defer api.connLock.Unlock()
-				return len(api.allConnUpdateChan) == 1
-			}, time.Second, 10*time.Millisecond)
-
-			api.connLock.Lock()
-			defer api.connLock.Unlock()
-			for key := range api.allConnUpdateChan {
-				api.allConnUpdateChan[key] <- &ComponentUpdateEvent{
-					Component: &c,
-				}
-				close(api.allConnUpdateChan[key])
-			}
-		}()
+		api.compInformer = fakeInformer
 
 		// Start sidecar update loop
 		require.NoError(t, api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
@@ -279,6 +278,19 @@ func TestComponentUpdate(t *testing.T) {
 			Spec: componentsapi.ComponentSpec{},
 		}
 
+		fakeInformer := informerfake.New[componentsapi.Component]().
+			WithWatchUpdates(func(context.Context, string) (<-chan *informer.Event[componentsapi.Component], error) {
+				ch := make(chan *informer.Event[componentsapi.Component])
+				go func() {
+					ch <- &informer.Event[componentsapi.Component]{
+						Manifest: c,
+						Type:     operatorv1pb.ResourceEventType_CREATED,
+					}
+					close(ch)
+				}()
+				return ch, nil
+			})
+
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
 		require.NoError(t, err)
@@ -291,21 +303,7 @@ func TestComponentUpdate(t *testing.T) {
 
 		mockSidecar := &mockComponentUpdateServer{ctx: pki.ClientGRPCCtx(t)}
 		api := NewAPIServer(Options{Client: client}).(*apiServer)
-
-		go func() {
-			assert.Eventually(t, func() bool {
-				api.connLock.Lock()
-				defer api.connLock.Unlock()
-				return len(api.allConnUpdateChan) == 1
-			}, time.Second, 10*time.Millisecond)
-
-			api.connLock.Lock()
-			defer api.connLock.Unlock()
-			for key := range api.allConnUpdateChan {
-				api.allConnUpdateChan[key] <- &ComponentUpdateEvent{Component: &c}
-				close(api.allConnUpdateChan[key])
-			}
-		}()
+		api.compInformer = fakeInformer
 
 		// Start sidecar update loop
 		api.ComponentUpdate(&operatorv1pb.ComponentUpdateRequest{
@@ -410,6 +408,77 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 	})
 }
 
+func TestListScopes(t *testing.T) {
+	appID := spiffeid.RequireFromString("spiffe://example.org/ns/namespace-a/app1")
+	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
+	pki := util.GenPKI(t, util.PKIOptions{
+		LeafID:   serverID,
+		ClientID: appID,
+	})
+
+	t.Run("list components scoping", func(t *testing.T) {
+		av, kind := componentsapi.SchemeGroupVersion.WithKind("Component").ToAPIVersionAndKind()
+		typeMeta := metav1.TypeMeta{
+			Kind:       kind,
+			APIVersion: av,
+		}
+		comp1 := &componentsapi.Component{
+			TypeMeta: typeMeta,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "obj1",
+				Namespace: "namespace-a",
+			},
+		}
+		comp2 := &componentsapi.Component{
+			TypeMeta: typeMeta,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "obj2",
+				Namespace: "namespace-a",
+			},
+			Scoped: commonapi.Scoped{Scopes: []string{"app1", "app2"}},
+		}
+		comp3 := &componentsapi.Component{
+			TypeMeta: typeMeta,
+			ObjectMeta: metav1.ObjectMeta{
+				Name:      "obj3",
+				Namespace: "namespace-a",
+			},
+			Scoped: commonapi.Scoped{Scopes: []string{"notapp1", "app2"}},
+		}
+
+		s := runtime.NewScheme()
+		err := scheme.AddToScheme(s)
+		require.NoError(t, err)
+
+		err = componentsapi.AddToScheme(s)
+		require.NoError(t, err)
+
+		cl := fake.NewClientBuilder().
+			WithScheme(s).
+			WithObjects(comp1, comp2, comp3).
+			Build()
+
+		api := NewAPIServer(Options{Client: cl}).(*apiServer)
+
+		res, err := api.ListComponents(pki.ClientGRPCCtx(t), &operatorv1pb.ListComponentsRequest{
+			PodName:   "foo",
+			Namespace: "namespace-a",
+		})
+		require.NoError(t, err)
+		require.Len(t, res.GetComponents(), 2)
+		var exp [][]byte
+		var b []byte
+		b, err = json.Marshal(comp1)
+		require.NoError(t, err)
+		exp = append(exp, b)
+		b, err = json.Marshal(comp2)
+		require.NoError(t, err)
+		exp = append(exp, b)
+
+		assert.ElementsMatch(t, exp, res.GetComponents())
+	})
+}
+
 func TestListsNamespaced(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/namespace-a/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
@@ -470,6 +539,7 @@ func TestListsNamespaced(t *testing.T) {
 		require.Error(t, err)
 		assert.Empty(t, res.GetComponents())
 	})
+
 	t.Run("list subscriptions namespace scoping", func(t *testing.T) {
 		s := runtime.NewScheme()
 		err := scheme.AddToScheme(s)
