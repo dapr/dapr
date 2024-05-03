@@ -47,7 +47,7 @@ type Options struct {
 	EtcdID                  string
 	EtcdInitialPeers        []string
 	EtcdClientPorts         []string
-	EtcdClientHttpPorts     []string
+	EtcdClientHTTPPorts     []string
 	EtcdSpaceQuota          int64
 	EtcdCompactionMode      string
 	EtcdCompactionRetention string
@@ -112,7 +112,6 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) runServer(ctx context.Context) error {
-
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.listenAddress, s.port))
 	if err != nil {
 		return fmt.Errorf("could not listen on port %d: %w", s.port, err)
@@ -158,7 +157,7 @@ func (s *Server) runEtcdCron(ctx context.Context) error {
 
 	log.Info("Starting EtcdCron")
 
-	var endpoints []string
+	endpoints := make([]string, 0, len(etcd.Clients))
 	for _, peer := range etcd.Clients {
 		endpoints = append(endpoints, peer.Addr().String())
 	}

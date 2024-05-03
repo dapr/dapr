@@ -22,9 +22,9 @@ service:
 ports:
   protocol: TCP
   apiPort: 50006
-  etcdRPCClientPort: 2379
-  etcdHttpClientPort: 2330
-  etcdRPCPeerPort: 2380
+  etcdGRPCClientPort: 2379
+  etcdHTTPClientPort: 2330
+  etcdGRPCPeerPort: 2380
 
 replicaCount: 1
 

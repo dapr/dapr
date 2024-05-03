@@ -40,18 +40,18 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		return nil, err
 	}
 
-	meta, err := anypb.New(req.Metadata)
+	meta, err := anypb.New(req.GetMetadata())
 	if err != nil {
 		return nil, err
 	}
 
 	job := &api.Job{
-		Schedule: req.Job.Schedule,
-		DueTime:  req.Job.DueTime,
-		Ttl:      req.Job.Ttl,
-		Repeats:  req.Job.Repeats,
+		Schedule: req.GetJob().Schedule, //nolint:protogetter
+		DueTime:  req.GetJob().DueTime,  //nolint:protogetter
+		Ttl:      req.GetJob().Ttl,      //nolint:protogetter
+		Repeats:  req.GetJob().Repeats,  //nolint:protogetter
 		Metadata: meta,
-		Payload:  req.Job.Data,
+		Payload:  req.GetJob().GetData(),
 	}
 
 	err = s.cron.Add(ctx, jobName, job)
@@ -70,7 +70,7 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 	defer cancel()
 
 	var meta schedulerv1pb.ScheduleJobMetadata
-	if err := req.Metadata.UnmarshalTo(&meta); err != nil {
+	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
 		log.Errorf("Error unmarshalling metadata: %s", err)
 		return true
 	}
@@ -78,9 +78,9 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 	if err := s.connectionPool.Send(ctx, &schedulerv1pb.WatchJobsResponse{
 		// TODO: @joshvanl fix possible panic
 		Name:     req.GetName()[strings.LastIndex(req.GetName(), "||")+2:],
-		Data:     req.Payload,
+		Data:     req.GetPayload(),
 		Metadata: &meta,
-		Uuid:     rand.Uint32(),
+		Uuid:     rand.Uint32(), //nolint:gosec
 	}); err != nil {
 		// TODO: add job to a queue or something to try later this should be
 		// another long running go routine that accepts this job on a channel
@@ -137,11 +137,11 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 
 	return &schedulerv1pb.GetJobResponse{
 		Job: &schedulerv1pb.Job{
-			Schedule: job.Schedule,
-			DueTime:  job.DueTime,
-			Ttl:      job.Ttl,
-			Repeats:  job.Repeats,
-			Data:     job.Payload,
+			Schedule: job.Schedule, //nolint:protogetter
+			DueTime:  job.DueTime,  //nolint:protogetter
+			Ttl:      job.Ttl,      //nolint:protogetter
+			Repeats:  job.Repeats,  //nolint:protogetter
+			Data:     job.GetPayload(),
 		},
 	}, nil
 }

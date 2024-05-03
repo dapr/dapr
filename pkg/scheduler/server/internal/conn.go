@@ -51,8 +51,8 @@ func (s *streamer) handleResponse(id uint32) {
 
 func (p *Pool) sendWaitForResponse(ctx context.Context, conn *conn, job *schedulerv1pb.WatchJobsResponse) {
 	// TODO: @joshvanl
-	//ack := conn.streamer.add(job.Uuid)
-	_ = conn.streamer.add(job.Uuid)
+	// ack := conn.streamer.add(job.Uuid)
+	_ = conn.streamer.add(job.GetUuid())
 
 	select {
 	case conn.ch <- job:
@@ -62,10 +62,10 @@ func (p *Pool) sendWaitForResponse(ctx context.Context, conn *conn, job *schedul
 	}
 
 	// TODO: @joshvanl
-	//select {
-	//case <-ack:
-	//case <-p.closeCh:
-	//case <-conn.closeCh:
-	//case <-ctx.Done():
-	//}
+	// select {
+	// case <-ack:
+	// case <-p.closeCh:
+	// case <-conn.closeCh:
+	// case <-ctx.Done():
+	// }
 }

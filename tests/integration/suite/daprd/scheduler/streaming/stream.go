@@ -128,7 +128,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		select {
 		case job := <-s.jobChan:
 			assert.NotNil(t, job)
-			assert.Equal(t, job.GetMethod(), "job/test")
+			assert.Equal(t, "job/test", job.GetMethod())
 		case <-time.After(time.Second * 3):
 			assert.Fail(t, "timed out waiting for triggered job")
 		}
@@ -154,7 +154,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 		select {
 		case job := <-s.jobChan:
 			assert.NotNil(t, job)
-			assert.Equal(t, job.GetMethod(), "job/test")
+			assert.Equal(t, "job/test", job.GetMethod())
 		case <-time.After(time.Second * 3):
 			assert.Fail(t, "timed out waiting for triggered job")
 		}
