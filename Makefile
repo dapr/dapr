@@ -302,7 +302,6 @@ release-flavor: build archive-flavor
 ################################################################################
 .PHONY: test
 test: test-deps
-	go install gotest.tools/gotestsum@latest
 	CGO_ENABLED=$(CGO) \
 		gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
@@ -366,7 +365,6 @@ test-race:
 ################################################################################
 .PHONY: test-integration
 test-integration: test-deps
-		go install gotest.tools/gotestsum@latest
 		CGO_ENABLED=1 gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
@@ -375,7 +373,6 @@ test-integration: test-deps
 
 .PHONY: test-integration-parallel
 test-integration-parallel: test-deps
-		go install gotest.tools/gotestsum@latest
 		CGO_ENABLED=1 gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
