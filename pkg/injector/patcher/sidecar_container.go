@@ -165,8 +165,16 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--dapr-http-max-request-size", strconv.Itoa(*c.HTTPMaxRequestSize))
 	}
 
+	if c.MaxBodySize != "" {
+		args = append(args, "--max-body-size", c.MaxBodySize)
+	}
+
 	if c.HTTPReadBufferSize != nil {
 		args = append(args, "--dapr-http-read-buffer-size", strconv.Itoa(*c.HTTPReadBufferSize))
+	}
+
+	if c.ReadBufferSize != "" {
+		args = append(args, "--read-buffer-size", c.ReadBufferSize)
 	}
 
 	if c.UnixDomainSocketPath != "" {
@@ -219,6 +227,45 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 
 	// Create the container object
 	probeHTTPHandler := getProbeHTTPHandler(c.SidecarPublicPort, injectorConsts.APIVersionV1, injectorConsts.SidecarHealthzPath)
+	env := []corev1.EnvVar{
+		{
+			Name:  "NAMESPACE",
+			Value: c.Namespace,
+		},
+		{
+			Name:  securityConsts.TrustAnchorsEnvVar,
+			Value: string(c.CurrentTrustAnchors),
+		},
+		{
+			Name: "POD_NAME",
+			ValueFrom: &corev1.EnvVarSource{
+				FieldRef: &corev1.ObjectFieldSelector{
+					FieldPath: "metadata.name",
+				},
+			},
+		},
+		// TODO: @joshvanl: In v1.14, these two env vars should be moved to flags.
+		{
+			Name:  securityConsts.ControlPlaneNamespaceEnvVar,
+			Value: c.ControlPlaneNamespace,
+		},
+		{
+			Name:  securityConsts.ControlPlaneTrustDomainEnvVar,
+			Value: c.ControlPlaneTrustDomain,
+		},
+	}
+	if c.EnableK8sDownwardAPIs {
+		env = append(env,
+			corev1.EnvVar{
+				Name: injectorConsts.DaprContainerHostIP,
+				ValueFrom: &corev1.EnvVarSource{
+					FieldRef: &corev1.ObjectFieldSelector{
+						FieldPath: "status.podIP",
+					},
+				},
+			},
+		)
+	}
 	container := &corev1.Container{
 		Name:            injectorConsts.SidecarContainerName,
 		Image:           c.SidecarImage,
@@ -226,34 +273,8 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		SecurityContext: securityContext,
 		Ports:           ports,
 		Args:            append(cmd, args...),
-		Env: []corev1.EnvVar{
-			{
-				Name:  "NAMESPACE",
-				Value: c.Namespace,
-			},
-			{
-				Name: "POD_NAME",
-				ValueFrom: &corev1.EnvVarSource{
-					FieldRef: &corev1.ObjectFieldSelector{
-						FieldPath: "metadata.name",
-					},
-				},
-			},
-			{
-				Name:  securityConsts.TrustAnchorsEnvVar,
-				Value: string(c.CurrentTrustAnchors),
-			},
-			// TODO: @joshvanl: In v1.14, this two env vars should be moved to flags.
-			{
-				Name:  securityConsts.ControlPlaneNamespaceEnvVar,
-				Value: c.ControlPlaneNamespace,
-			},
-			{
-				Name:  securityConsts.ControlPlaneTrustDomainEnvVar,
-				Value: c.ControlPlaneTrustDomain,
-			},
-		},
-		VolumeMounts: opts.VolumeMounts,
+		Env:             env,
+		VolumeMounts:    opts.VolumeMounts,
 		ReadinessProbe: &corev1.Probe{
 			ProbeHandler:        probeHTTPHandler,
 			InitialDelaySeconds: c.SidecarReadinessProbeDelaySeconds,
@@ -269,24 +290,6 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			FailureThreshold:    c.SidecarLivenessProbeThreshold,
 		},
 	}
-
-	// TODO: @joshvanl: included for backwards compatibility with v1.11 daprd's
-	// which request these environment variables to be present when running in
-	// Kubernetes. Should be removed in v1.13.
-	container.Env = append(container.Env,
-		corev1.EnvVar{
-			Name:  securityConsts.CertChainEnvVar,
-			Value: c.CertChain,
-		},
-		corev1.EnvVar{
-			Name:  securityConsts.CertKeyEnvVar,
-			Value: c.CertKey,
-		},
-		corev1.EnvVar{
-			Name:  "SENTRY_LOCAL_IDENTITY",
-			Value: c.Identity,
-		},
-	)
 
 	// If the pod contains any of the tolerations specified by the configuration,
 	// the Command and Args are passed as is. Otherwise, the Command is passed as a part of Args.

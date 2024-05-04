@@ -596,20 +596,20 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 	log := logger.NewLogger("test")
 	log.SetOutput(io.Discard)
 
-	t.Run("no http configuration, returns true", func(t *testing.T) {
+	t.Run("no http configuration, returns false", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: nil,
 		}
-		assert.True(t, m.GetHTTPIncreasedCardinality(log))
+		assert.False(t, m.GetHTTPIncreasedCardinality(log))
 	})
 
-	t.Run("nil value, returns true", func(t *testing.T) {
+	t.Run("nil value, returns false", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
 				IncreasedCardinality: nil,
 			},
 		}
-		assert.True(t, m.GetHTTPIncreasedCardinality(log))
+		assert.False(t, m.GetHTTPIncreasedCardinality(log))
 	})
 
 	t.Run("value is set to true", func(t *testing.T) {

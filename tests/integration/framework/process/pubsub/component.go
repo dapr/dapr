@@ -26,12 +26,14 @@ import (
 // component is an implementation of the pubsub pluggable component
 // interface.
 type component struct {
-	impl pubsub.PubSub
+	impl  pubsub.PubSub
+	pmrCh <-chan *compv1pb.PullMessagesResponse
 }
 
 func newComponent(t *testing.T, opts options) *component {
 	return &component{
-		impl: opts.pubsub,
+		impl:  opts.pubsub,
+		pmrCh: opts.pmrCh,
 	}
 }
 
@@ -75,19 +77,22 @@ func (c *component) Publish(ctx context.Context, req *compv1pb.PublishRequest) (
 	return new(compv1pb.PublishResponse), nil
 }
 
-func (c *component) Subscribe(ctx context.Context, req pubsub.SubscribeRequest, handler pubsub.Handler) error {
-	// TODO:
-	return nil
-}
-
 func (c *component) BulkPublish(ctx context.Context, req *compv1pb.BulkPublishRequest) (*compv1pb.BulkPublishResponse, error) {
 	// TODO:
 	return new(compv1pb.BulkPublishResponse), nil
 }
 
 func (c *component) PullMessages(req compv1pb.PubSub_PullMessagesServer) error {
-	// TODO:
-	return nil
+	for {
+		select {
+		case pmr := <-c.pmrCh:
+			if err := req.Send(pmr); err != nil {
+				return err
+			}
+		case <-req.Context().Done():
+			return nil
+		}
+	}
 }
 
 func (c *component) Ping(ctx context.Context, req *compv1pb.PingRequest) (*compv1pb.PingResponse, error) {

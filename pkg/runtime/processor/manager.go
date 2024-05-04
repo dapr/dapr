@@ -48,6 +48,7 @@ type PubsubManager interface {
 
 	StartSubscriptions(context.Context) error
 	StopSubscriptions(forever bool)
+	ReloadSubscriptions(context.Context) error
 	Outbox() outbox.Outbox
 	manager
 }
@@ -74,31 +75,21 @@ func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, erro
 }
 
 func (p *Processor) State() StateManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.state
 }
 
 func (p *Processor) Secret() SecretManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.secret
 }
 
 func (p *Processor) PubSub() PubsubManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.pubsub
 }
 
 func (p *Processor) Binding() BindingManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.binding
 }
 
 func (p *Processor) WorkflowBackend() WorkflowBackendManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.workflowBackend
 }

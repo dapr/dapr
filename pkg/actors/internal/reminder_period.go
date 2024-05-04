@@ -58,7 +58,7 @@ func (p ReminderPeriod) HasRepeats() bool {
 		(p.years != 0 || p.months != 0 || p.days != 0 || p.period != 0)
 }
 
-// GetNext returns the next time the periodic reminder should fire after a given time.
+// GetFollowing returns the next time the periodic reminder should fire after a given time.
 func (p ReminderPeriod) GetFollowing(t time.Time) time.Time {
 	return t.AddDate(p.years, p.months, p.days).Add(p.period)
 }

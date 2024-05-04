@@ -101,7 +101,7 @@ func (l *LogLine) Cleanup(t *testing.T) {
 	close(l.closeCh)
 	for i := 0; i < 2; i++ {
 		for expLine := range <-l.outCheck {
-			assert.Fail(t, "expected to log line: "+expLine)
+			assert.Fail(t, "expected to log line", expLine)
 		}
 	}
 }
@@ -155,5 +155,5 @@ func (l *LogLine) Stderr() io.WriteCloser {
 }
 
 func (l *LogLine) EventuallyFoundAll(t *testing.T) {
-	assert.Eventually(t, l.FoundAll, time.Second*20, time.Millisecond*100)
+	assert.Eventually(t, l.FoundAll, time.Second*7, time.Millisecond*10)
 }

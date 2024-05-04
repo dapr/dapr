@@ -16,37 +16,59 @@ package fake
 import (
 	"context"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
 )
 
 type FakeT struct {
-	component *Fake[componentsapi.Component]
+	runFn         func(context.Context) error
+	components    *Fake[compapi.Component]
+	subscriptions *Fake[subapi.Subscription]
+	startFn       func(context.Context) error
 }
 
 func New() *FakeT {
 	return &FakeT{
-		component: NewFake[componentsapi.Component](),
+		runFn: func(ctx context.Context) error {
+			<-ctx.Done()
+			return nil
+		},
+		components:    NewFake[compapi.Component](),
+		subscriptions: NewFake[subapi.Subscription](),
+		startFn: func(ctx context.Context) error {
+			<-ctx.Done()
+			return nil
+		},
 	}
 }
 
-func (f *FakeT) Close() error {
-	return nil
+func (f *FakeT) Run(ctx context.Context) error {
+	return f.runFn(ctx)
 }
 
-func (f *FakeT) Components() loader.Loader[componentsapi.Component] {
-	return f.component
+func (f *FakeT) Components() loader.Loader[compapi.Component] {
+	return f.components
 }
 
-func (f *FakeT) WithComponent(fake *Fake[componentsapi.Component]) *FakeT {
-	f.component = fake
+func (f *FakeT) Subscriptions() loader.Loader[subapi.Subscription] {
+	return f.subscriptions
+}
+
+func (f *FakeT) WithComponents(fake *Fake[compapi.Component]) *FakeT {
+	f.components = fake
+	return f
+}
+
+func (f *FakeT) WithRun(fn func(context.Context) error) *FakeT {
+	f.runFn = fn
 	return f
 }
 
 type Fake[T differ.Resource] struct {
 	listFn   func(context.Context) (*differ.LocalRemoteResources[T], error)
-	streamFn func(context.Context) (<-chan *loader.Event[T], error)
+	streamFn func(context.Context) (*loader.StreamConn[T], error)
 }
 
 func NewFake[T differ.Resource]() *Fake[T] {
@@ -54,8 +76,11 @@ func NewFake[T differ.Resource]() *Fake[T] {
 		listFn: func(context.Context) (*differ.LocalRemoteResources[T], error) {
 			return nil, nil
 		},
-		streamFn: func(context.Context) (<-chan *loader.Event[T], error) {
-			return nil, nil
+		streamFn: func(context.Context) (*loader.StreamConn[T], error) {
+			return &loader.StreamConn[T]{
+				EventCh:     make(chan *loader.Event[T]),
+				ReconcileCh: make(chan struct{}),
+			}, nil
 		},
 	}
 }
@@ -65,7 +90,7 @@ func (f *Fake[T]) WithList(fn func(context.Context) (*differ.LocalRemoteResource
 	return f
 }
 
-func (f *Fake[T]) WithStream(fn func(context.Context) (<-chan *loader.Event[T], error)) *Fake[T] {
+func (f *Fake[T]) WithStream(fn func(context.Context) (*loader.StreamConn[T], error)) *Fake[T] {
 	f.streamFn = fn
 	return f
 }
@@ -74,6 +99,6 @@ func (f *Fake[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T], er
 	return f.listFn(ctx)
 }
 
-func (f *Fake[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], error) {
+func (f *Fake[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error) {
 	return f.streamFn(ctx)
 }

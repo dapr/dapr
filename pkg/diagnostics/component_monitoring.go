@@ -167,13 +167,15 @@ func (c *componentMetrics) Init(appID, namespace string) error {
 	c.namespace = namespace
 
 	return view.Register(
-		diagUtils.NewMeasureView(c.pubsubIngressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, defaultLatencyDistribution),
-		diagUtils.NewMeasureView(c.pubsubIngressCount, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, view.Count()),
+		diagUtils.NewMeasureView(c.pubsubIngressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey, statusKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(c.pubsubIngressCount, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(c.bulkPubsubIngressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(c.bulkPubsubIngressCount, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, view.Count()),
 		diagUtils.NewMeasureView(c.bulkPubsubEventIngressCount, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey}, view.Count()),
 		diagUtils.NewMeasureView(c.pubsubEgressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, topicKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(c.pubsubEgressCount, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, topicKey}, view.Count()),
+		diagUtils.NewMeasureView(c.bulkPubsubEgressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, topicKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(c.bulkPubsubEgressCount, []tag.Key{appIDKey, componentKey, namespaceKey, successKey, topicKey}, view.Count()),
 		diagUtils.NewMeasureView(c.inputBindingLatency, []tag.Key{appIDKey, componentKey, namespaceKey, successKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(c.inputBindingCount, []tag.Key{appIDKey, componentKey, namespaceKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(c.outputBindingLatency, []tag.Key{appIDKey, componentKey, namespaceKey, operationKey, successKey}, defaultLatencyDistribution),
@@ -190,17 +192,20 @@ func (c *componentMetrics) Init(appID, namespace string) error {
 }
 
 // PubsubIngressEvent records the metrics for a pub/sub ingress event.
-func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, processStatus, topic string, elapsed float64) {
+func (c *componentMetrics) PubsubIngressEvent(ctx context.Context, component, processStatus, status, topic string, elapsed float64) {
 	if c.enabled {
+		if status == "" {
+			status = processStatus
+		}
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(c.pubsubIngressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
+			diagUtils.WithTags(c.pubsubIngressCount.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, statusKey, status, topicKey, topic),
 			c.pubsubIngressCount.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(c.pubsubIngressLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, topicKey, topic),
+				diagUtils.WithTags(c.pubsubIngressLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, processStatusKey, processStatus, statusKey, status, topicKey, topic),
 				c.pubsubIngressLatency.M(elapsed))
 		}
 	}
