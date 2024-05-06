@@ -35,6 +35,7 @@ import (
 var log = logger.NewLogger("dapr.runtime.hotreload.loader.disk")
 
 type Options struct {
+	AppID          string
 	Dirs           []string
 	ComponentStore *compstore.ComponentStore
 }
@@ -63,14 +64,20 @@ func New(opts Options) (loader.Interface, error) {
 		fs: fs,
 		components: newResource[compapi.Component](
 			resourceOptions[compapi.Component]{
-				loader:  loaderdisk.NewComponents(opts.Dirs...),
+				loader: loaderdisk.NewComponents(loaderdisk.Options{
+					AppID: opts.AppID,
+					Paths: opts.Dirs,
+				}),
 				store:   store.NewComponents(opts.ComponentStore),
 				batcher: batcher,
 			},
 		),
 		subscriptions: newResource[subapi.Subscription](
 			resourceOptions[subapi.Subscription]{
-				loader:  loaderdisk.NewSubscriptions(opts.Dirs...),
+				loader: loaderdisk.NewSubscriptions(loaderdisk.Options{
+					AppID: opts.AppID,
+					Paths: opts.Dirs,
+				}),
 				store:   store.NewSubscriptions(opts.ComponentStore),
 				batcher: batcher,
 			},
