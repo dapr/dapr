@@ -192,7 +192,7 @@ func (o *projection) Run(t *testing.T, ctx context.Context) {
 		val, err := strconv.Unquote(string(body))
 		require.NoError(c, err)
 
-		assert.NoError(c, err)
+		require.NoError(c, err)
 		assert.Equal(c, "2", val)
 	}, time.Second*10, time.Millisecond*10)
 }

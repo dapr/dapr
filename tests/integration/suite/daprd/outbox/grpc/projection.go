@@ -141,7 +141,6 @@ func (o *projection) Run(t *testing.T, ctx context.Context) {
 			StoreName: "mystore",
 		})
 		require.NoError(t, err)
-		return string(resp.Data) == "2"
-
+		return string(resp.GetData()) == "2"
 	}, time.Second*5, time.Millisecond*10, "failed to receive message in time")
 }

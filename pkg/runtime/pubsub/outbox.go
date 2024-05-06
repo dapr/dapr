@@ -171,7 +171,6 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				if proj.ContentType != nil {
 					contentType = *proj.ContentType
 				}
-
 			} else {
 				payload = sr.Value
 
