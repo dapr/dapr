@@ -46,6 +46,10 @@ type DaprHostMember struct {
 	APILevel uint32
 }
 
+func (d *DaprHostMember) NameAndNamespace() string {
+	return d.Namespace + "-" + d.Name
+}
+
 type DaprNamespace struct {
 	// Members includes Dapr runtime hosts.
 	Members map[string]*DaprHostMember
@@ -161,15 +165,14 @@ func (s *DaprHostMemberState) updateAPILevel() {
 	var observedMinLevel uint32
 
 	// Loop through all namespaces and members to find the minimum API level
-	for _, ns := range s.data.Namespace {
-		for k := range ns.Members {
-			apiLevel := ns.Members[k].APILevel
-			if apiLevel <= 0 {
-				apiLevel = 0
-			}
-			if observedMinLevel == 0 || observedMinLevel > apiLevel {
-				observedMinLevel = apiLevel
-			}
+	for _, m := range s.AllMembers() {
+		apiLevel := m.APILevel
+
+		if apiLevel <= 0 {
+			apiLevel = 0
+		}
+		if observedMinLevel == 0 || observedMinLevel > apiLevel {
+			observedMinLevel = apiLevel
 		}
 	}
 
@@ -183,7 +186,7 @@ func (s *DaprHostMemberState) updateAPILevel() {
 	// Only enforce maxAPILevel if value > 0
 	// 0 is the default value of the struct.
 	// -1 is the default value of the CLI flag.
-	if s.config.maxAPILevel >= uint32(0) && observedMinLevel > s.config.maxAPILevel {
+	if s.config.maxAPILevel > uint32(0) && observedMinLevel > s.config.maxAPILevel {
 		observedMinLevel = s.config.maxAPILevel
 	}
 
@@ -385,6 +388,7 @@ func (s *DaprHostMemberState) restore(r io.Reader) error {
 	s.data = data
 
 	s.restoreHashingTables()
+	fmt.Println("--------------------------- restore is being called")
 	s.updateAPILevel()
 	return nil
 }

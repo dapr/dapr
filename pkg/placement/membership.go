@@ -69,7 +69,8 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 
 			// check if there are actor runtime member changes per namespace.
 			p.memberUpdateCount.ForEach(func(ns string, cnt *concurrency.AtomicValue[uint32]) {
-				if p.disseminateNextTime.GetOrCreate(ns, 0).Load() <= t.UnixNano() && len(p.membershipCh) == 0 { //TODO: @elena - should we use getOrCreate everywhere?
+				if p.disseminateNextTime.GetOrCreate(ns, 0).Load() <= t.UnixNano() && len(p.membershipCh) == 0 {
+					//TODO: @elena - should we use getOrCreate everywhere?
 					if cnt := cnt.Load(); cnt > 0 {
 						log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCountTotal count for namespace %s: %d", ns, cnt)
 						p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate, host: raft.DaprHostMember{Namespace: ns}}
@@ -107,9 +108,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 					// runtime (pod) is terminated while there is also a leadership change in placement, meaning the host entry
 					// in placement table will never have a heartbeat. With this new behavior, it will eventually expire and be
 					// removed.
-					//TODO @elena - would it be possible for sidecars in different namespaces to have a same host.Name??
-					// if yes, we might get a clash here
-					heartbeat, loaded := p.lastHeartBeat.LoadOrStore(host.Name, baselineHeartbeatTimestamp)
+					heartbeat, loaded := p.lastHeartBeat.LoadOrStore(host.NameAndNamespace(), baselineHeartbeatTimestamp)
 
 					if !loaded {
 						log.Warnf("Heartbeat not found for host: %s", host.Name)
@@ -153,6 +152,7 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 				// MemberRemove will be queued by faultHostDetectTimer.
 				// Even if ApplyCommand is failed, both commands will retry
 				// until the state is consistent.
+
 				logApplyConcurrency <- struct{}{}
 				p.wg.Add(1)
 				go func() {
@@ -161,13 +161,12 @@ func (p *Service) processRaftStateCommand(ctx context.Context) {
 					// We lock dissemination to ensure the updates can complete before the table is disseminated.
 					p.disseminateLocks.Lock(op.host.Namespace)
 					defer p.disseminateLocks.Unlock(op.host.Namespace)
-
 					updated, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
 					if raftErr != nil {
 						log.Errorf("fail to apply command: %v", raftErr)
 					} else {
 						if op.cmdType == raft.MemberRemove {
-							p.lastHeartBeat.Delete(op.host.Name)
+							p.lastHeartBeat.Delete(op.host.NameAndNamespace())
 						}
 
 						// ApplyCommand returns true only if the command changes the hashing table.
@@ -221,7 +220,7 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 	defer p.disseminateLocks.Unlock(ns)
 
 	streams := make([]daprdStream, 0, p.streamConnPool.getStreamCount(ns))
-	p.streamConnPool.forEach(ns, func(_ uint32, stream *daprdStream) {
+	p.streamConnPool.forEachInNamespace(ns, func(_ uint32, stream *daprdStream) {
 		streams = append(streams, *stream)
 	})
 
@@ -267,7 +266,7 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
 func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequest) error {
-	// TODO: error from disseminationOperation needs to be handle properly.
+	// TODO: error from disseminationOperation needs to be handled properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
 
@@ -334,7 +333,8 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 	backoff := config.NewBackOffWithContext(ctx)
 	return retry.NotifyRecover(func() error {
 		// Check stream in stream pool, if stream is not available, skip to next.
-		if !p.streamConnPool.hasStream(target.id) {
+
+		if _, ok := p.streamConnPool.getStream(target.stream); !ok {
 			remoteAddr := "n/a"
 			if p, ok := peer.FromContext(target.stream.Context()); ok {
 				remoteAddr = p.Addr.String()

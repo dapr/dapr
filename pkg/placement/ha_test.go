@@ -215,6 +215,7 @@ func TestPlacementHA(t *testing.T) {
 	t.Run("state is preserved", func(t *testing.T) {
 		for _, srv := range raftServers {
 			if srv != nil {
+				retrieveValidState(t, srv, testMembers[0])
 				retrieveValidState(t, srv, testMembers[1])
 			}
 		}

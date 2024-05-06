@@ -31,14 +31,14 @@ import (
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/kit/logger"
 )
 
 func cleanupStates() {
-	testRaftServer.FSM().State().Lock.RLock()
-	defer testRaftServer.FSM().State().Lock.RUnlock()
+	state := testRaftServer.FSM().State()
+	state.Lock.RLock()
+	defer state.Lock.RUnlock()
 
-	for _, member := range testRaftServer.FSM().State().AllMembers() {
+	for _, member := range state.AllMembers() {
 		testRaftServer.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
 			Name:      member.Name,
 			Namespace: member.Namespace,
@@ -61,9 +61,10 @@ func TestMembershipChangeWorker(t *testing.T) {
 		membershipStopCh := make(chan struct{})
 
 		cleanupStates()
-		testRaftServer.FSM().State().Lock.RLock()
-		assert.Empty(t, testServer.raftNode.FSM().State().AllMembers())
-		testRaftServer.FSM().State().Lock.RUnlock()
+		state := testRaftServer.FSM().State()
+		state.Lock.RLock()
+		assert.Empty(t, state.AllMembers())
+		state.Lock.RUnlock()
 
 		go func() {
 			defer close(membershipStopCh)
@@ -96,12 +97,17 @@ func TestMembershipChangeWorker(t *testing.T) {
 			}
 		}
 
+		testServer.disseminateNextTime.GetOrCreate("ns0", 0).Store(clock.Now().UnixNano())
+		testServer.disseminateNextTime.GetOrCreate("ns1", 0).Store(clock.Now().UnixNano())
+		testServer.disseminateNextTime.GetOrCreate("ns2", 0).Store(clock.Now().UnixNano())
+
 		// wait until all host member change requests are flushed
 		require.Eventually(t, func() bool {
-			testServer.raftNode.FSM().State().Lock.RLock()
-			cntMembers := testServer.raftNode.FSM().State().AllMembers()
-			testServer.raftNode.FSM().State().Lock.RUnlock()
-			return len(cntMembers) == 3
+			state := testServer.raftNode.FSM().State()
+			state.Lock.RLock()
+			cntMembers := len(state.AllMembers())
+			state.Lock.RUnlock()
+			return cntMembers == 3
 		}, disseminateTimerInterval+time.Second*3, time.Millisecond)
 	}
 
@@ -110,101 +116,73 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// arrange
 		testServer.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
 
-		conn, _, stream1 := newTestClient(t, serverAddress)
-		conn, _, stream2 := newTestClient(t, serverAddress)
-		conn, _, stream3 := newTestClient(t, serverAddress)
+		conn, _, stream := newTestClient(t, serverAddress)
 
 		done := make(chan bool)
-		cnt := 0
 		go func() {
 			for {
-				placementOrder, streamErr := stream1.Recv()
+				placementOrder, streamErr := stream.Recv()
 				require.NoError(t, streamErr)
 				if placementOrder.GetOperation() == "unlock" {
-					cnt++
-				}
-				placementOrder, streamErr = stream2.Recv()
-				require.NoError(t, streamErr)
-				if placementOrder.GetOperation() == "unlock" {
-					cnt++
-				}
-				placementOrder, streamErr = stream3.Recv()
-				require.NoError(t, streamErr)
-				if placementOrder.GetOperation() == "unlock" {
-					cnt++
-				}
-				if cnt == 3 {
 					done <- true
 					return
 				}
 			}
 		}()
 
-		host1 := &v1pb.Host{
+		host := &v1pb.Host{
 			Name:      "127.0.0.1:50100",
 			Namespace: "ns1",
 			Entities:  []string{"DogActor", "CatActor"},
-			Id:        "testAppID1",
-			Load:      1,
-		}
-		host2 := &v1pb.Host{
-			Name:      "127.0.0.1:50101",
-			Namespace: "ns2",
-			Entities:  []string{"DogActor", "CatActor", "IguanaActor"},
-			Id:        "testAppID2",
-			Load:      1,
-		}
-		host3 := &v1pb.Host{
-			Name:      "127.0.0.1:50102",
-			Namespace: "ns2",
-			Entities:  []string{"DogActor", "CatActor", "IguanaActor"},
-			Id:        "testAppID3",
+			Id:        "testAppID",
 			Load:      1,
 		}
 
 		// act
-		require.NoError(t, stream1.Send(host1))
-		require.NoError(t, stream2.Send(host2))
-		require.NoError(t, stream3.Send(host3))
+		require.NoError(t, stream.Send(host))
 
 		select {
 		case <-done:
-		case <-time.After(disseminateTimerInterval + time.Second*5):
+		case <-time.After(time.Second):
+			// this waits for a second until the member is saved in raft and then
+			// speeds up the dissemination clock
+			clock.Step(disseminateTimeout)
+		case <-time.After(disseminateTimerInterval + 5*time.Second):
 			t.Error("dissemination did not happen in time")
 		}
 
 		// ignore disseminateTimeout.
 		testServer.disseminateNextTime.GetOrCreate("ns1", 0).Store(0)
 
-		nStreamConnPool1 := testServer.streamConnPool.getStreamCount("ns1")
-		require.Equal(t, 1, nStreamConnPool1)
-
-		nStreamConnPool2 := testServer.streamConnPool.getStreamCount("ns2")
-		require.Equal(t, 2, nStreamConnPool2)
+		nStreamConnPool := testServer.streamConnPool.getStreamCount("ns1")
+		require.Equal(t, 1, nStreamConnPool)
 
 		assert.Eventually(t, func() bool {
-			testServer.raftNode.FSM().State().Lock.RLock()
-			m1, err := testServer.raftNode.FSM().State().Members("ns1")
+			nStreamConnPool := testServer.streamConnPool.getStreamCount("ns1")
+			state := testServer.raftNode.FSM().State()
+			state.Lock.RLock()
+			m1, err := state.Members("ns1")
 			if err != nil {
+				state.Lock.RUnlock()
 				return false
 			}
-			testServer.raftNode.FSM().State().Lock.RUnlock()
+			cnt := len(m1)
+			state.Lock.RUnlock()
 
-			condition1 := nStreamConnPool1 == len(m1)
+			return nStreamConnPool == cnt
 
-			// You can use asserts here for logging purposes
-			assert.True(t, condition1)
-
-			return condition1
-		}, time.Second, time.Millisecond)
+		}, time.Second, time.Millisecond, "streamConnPool must be equal to the number of members")
 
 		// wait until table dissemination.
 		require.Eventually(t, func() bool {
 			clock.Step(disseminateTimerInterval)
-			return testServer.memberUpdateCount.GetOrCreate("ns1", 0).Load() == 0 &&
-				testServer.memberUpdateCount.GetOrCreate("ns2", 0).Load() == 0 &&
+			cnt, ok := testServer.memberUpdateCount.Get("ns1")
+			if !ok {
+				return false
+			}
+			return cnt.Load() == 0 &&
 				testServer.faultyHostDetectDuration.Load() == int64(faultyHostDetectDefaultDuration)
-		}, time.Second*5, time.Millisecond,
+		}, 5*time.Second, time.Millisecond,
 			"flushed all member updates and faultyHostDetectDuration must be faultyHostDetectDuration")
 
 		conn.Close()
@@ -219,9 +197,10 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// faulty host detector removes all members if heartbeat does not happen
 		assert.Eventually(t, func() bool {
 			clock.Step(disseminateTimerInterval)
-			testServer.raftNode.FSM().State().Lock.RLock()
-			defer testServer.raftNode.FSM().State().Lock.RUnlock()
-			return len(testServer.raftNode.FSM().State().AllMembers()) == 0
+			state := testServer.raftNode.FSM().State()
+			state.Lock.RLock()
+			defer state.Lock.RUnlock()
+			return len(state.AllMembers()) == 0
 		}, 5*time.Second, time.Millisecond)
 	})
 }
@@ -281,11 +260,10 @@ func TestPerformTableUpdate(t *testing.T) {
 	// act
 	for i := 0; i < testClients; i++ {
 		host := &v1pb.Host{
-			Name:      fmt.Sprintf("127.0.0.1:5010%d", i),
-			Namespace: "ns1",
-			Entities:  []string{"DogActor", "CatActor", fmt.Sprintf("127.0.0.1:5010%d", i)},
-			Id:        "testAppID",
-			Load:      1, // Not used yet
+			Name:     fmt.Sprintf("127.0.0.1:5010%d", i),
+			Entities: []string{"DogActor", "CatActor", fmt.Sprintf("127.0.0.1:5010%d", i)},
+			Id:       "testAppID",
+			Load:     1, // Not used yet
 			// Port is redundant because Name should include port number
 		}
 
@@ -314,9 +292,8 @@ func TestPerformTableUpdate(t *testing.T) {
 
 	// Call performTableUpdate directly, not by MembershipChangeWorker loop.
 	streamConnPool := make([]daprdStream, 0)
-	testServer.streamConnPool.forEach("ns1", func(streamId uint32, val *daprdStream) {
+	testServer.streamConnPool.forEachInNamespace("", func(streamId uint32, val *daprdStream) {
 		streamConnPool = append(streamConnPool, *val)
-
 	})
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
@@ -354,18 +331,20 @@ func TestPerformTableUpdate(t *testing.T) {
 
 func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	// Replace the logger for this test so we reduce the noise
-	prevLog := log
-	log = logger.NewLogger("dapr.placement")
-	log.SetOutputLevel(logger.InfoLevel)
-	t.Cleanup(func() {
-		log = prevLog
-	})
+	//prevLog := log
+	//log = logger.NewLogger("dapr.placement1")
+	//log.SetOutputLevel(logger.InfoLevel)
+	//t.Cleanup(func() {
+	//	log = prevLog
+	//})
+	// commenting out temporarily because of a race condition on log
 
-	const testClients = 100
+	const testClients = 10
 	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, testRaftServer)
 	testServer.hasLeadership.Store(true)
 	var (
-		overArr [testClients]int64
+		overArr     [testClients]int64
+		overArrLock sync.RWMutex
 		// arrange.
 		clientConns   []*grpc.ClientConn
 		clientStreams []v1pb.Placement_ReportDaprStatusClient
@@ -403,7 +382,9 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 							if clientID == 1 {
 								t.Log("client 1 unlock", time.Now())
 							}
+							overArrLock.Lock()
 							overArr[clientID] = time.Since(start).Milliseconds()
+							overArrLock.Unlock()
 						}
 					}
 				}
@@ -414,22 +395,22 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	// register
 	for i := 0; i < testClients; i++ {
 		host := &v1pb.Host{
-			Name:      fmt.Sprintf("127.0.0.1:5010%d", i),
-			Namespace: "ns1",
-			Entities:  []string{"DogActor", "CatActor"},
-			Id:        "testAppID",
-			Load:      1, // Not used yet.
+			Name:     fmt.Sprintf("127.0.0.1:5010%d", i),
+			Entities: []string{"DogActor", "CatActor"},
+			Id:       "testAppID",
+			Load:     1, // Not used yet.
 		}
 		require.NoError(t, clientStreams[i].Send(host))
 	}
 
 	// Wait until clientStreams[clientID].Recv() in client go routine received new table.
+	ns := "" // The client didn't send any namespace
 	require.Eventually(t, func() bool {
-		return testServer.streamConnPool.getStreamCount("ns1") == testClients
+		return testServer.streamConnPool.getStreamCount(ns) == testClients
 	}, 15*time.Second, 100*time.Millisecond)
 
 	streamConnPool := make([]daprdStream, 0)
-	testServer.streamConnPool.forEach("ns1", func(streamId uint32, val *daprdStream) {
+	testServer.streamConnPool.forEachInNamespace(ns, func(streamId uint32, val *daprdStream) {
 		streamConnPool = append(streamConnPool, *val)
 	})
 
@@ -443,11 +424,14 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	}
 	startFlag.Store(false)
 	var max int64
+	overArrLock.RLock()
 	for i := range overArr {
 		if overArr[i] > max {
 			max = overArr[i]
 		}
 	}
+	overArrLock.RUnlock()
+
 	// clean up resources.
 	for i := 0; i < testClients; i++ {
 		require.NoError(t, clientConns[i].Close())

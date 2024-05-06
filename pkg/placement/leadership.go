@@ -137,7 +137,7 @@ func (p *Service) revokeLeadership() {
 	p.streamConnGroup.Wait()
 	log.Info("Connections are drained")
 
-	p.streamIndexCnt.Store(0)
+	p.streamConnPool.streamIndexCnt.Store(0)
 	p.cleanupHeartbeats()
 }
 

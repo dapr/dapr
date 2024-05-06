@@ -13,17 +13,21 @@ import (
 type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer //nolint:nosnakecase
 
 type daprdStream struct {
-	id          uint32
-	namespace   string
-	needsVNodes bool
-	stream      placementGRPCStream
+	id            uint32
+	hostName      string
+	hostID        string
+	hostNamespace string
+	needsVNodes   bool
+	stream        placementGRPCStream
 }
 
-func newDaprdStream(ns string, stream placementGRPCStream) *daprdStream {
+func newDaprdStream(host *placementv1pb.Host, stream placementGRPCStream) *daprdStream {
 	return &daprdStream{
-		namespace:   ns,
-		stream:      stream,
-		needsVNodes: hostNeedsVNodes(stream),
+		hostID:        host.GetId(),
+		hostName:      host.GetName(),
+		hostNamespace: host.GetNamespace(),
+		stream:        stream,
+		needsVNodes:   hostNeedsVNodes(stream),
 	}
 }
 
@@ -52,6 +56,17 @@ type streamConnPool struct {
 	// streamIndexCnt assigns an index to streams in the streamConnPool.
 	// Its reset to zero every time a placement service loses leadership (thus clears all streams).
 	streamIndexCnt atomic.Uint32
+
+	// reverseLookup is a reverse index of streams to their daprdStream object.
+	// (so we don't have to loop through all streams to find a specific one)
+	reverseLookup map[placementGRPCStream]*daprdStream
+}
+
+func newStreamConnPool() *streamConnPool {
+	return &streamConnPool{
+		streams:       make(map[string]map[uint32]*daprdStream),
+		reverseLookup: make(map[placementGRPCStream]*daprdStream),
+	}
 }
 
 // add adds stream connection between runtime and placement to the namespaced dissemination pool.
@@ -61,11 +76,12 @@ func (s *streamConnPool) add(stream *daprdStream) {
 
 	s.lock.Lock()
 	defer s.lock.Unlock()
-	if _, ok := s.streams[stream.namespace]; !ok {
-		s.streams[stream.namespace] = make(map[uint32]*daprdStream)
+	if _, ok := s.streams[stream.hostNamespace]; !ok {
+		s.streams[stream.hostNamespace] = make(map[uint32]*daprdStream)
 	}
 
-	s.streams[stream.namespace][id] = stream
+	s.streams[stream.hostNamespace][id] = stream
+	s.reverseLookup[stream.stream] = stream
 }
 
 // delete removes stream connection between runtime and placement from the namespaced dissemination pool.
@@ -73,10 +89,11 @@ func (s *streamConnPool) delete(stream *daprdStream) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if streams, ok := s.streams[stream.namespace]; ok {
+	if streams, ok := s.streams[stream.hostNamespace]; ok {
 		delete(streams, stream.id)
 		if len(streams) == 0 {
-			delete(s.streams, stream.namespace)
+			delete(s.streams, stream.hostNamespace)
+			delete(s.reverseLookup, stream.stream)
 		}
 	}
 
@@ -108,7 +125,7 @@ func (s *streamConnPool) forEachNamespace(fn func(namespace string, val map[uint
 	}
 }
 
-func (s *streamConnPool) forEach(namespace string, fn func(key uint32, val *daprdStream)) {
+func (s *streamConnPool) forEachInNamespace(namespace string, fn func(key uint32, val *daprdStream)) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 	for key, val := range s.streams[namespace] {
@@ -116,22 +133,22 @@ func (s *streamConnPool) forEach(namespace string, fn func(key uint32, val *dapr
 	}
 }
 
-func newStreamConnPool() *streamConnPool {
-	return &streamConnPool{
-		streams: make(map[string]map[uint32]*daprdStream),
+func (s *streamConnPool) forEach(fn func(key uint32, val *daprdStream)) {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+	for _, streams := range s.streams {
+		for key, val := range streams {
+			fn(key, val)
+		}
 	}
 }
 
-func (s *streamConnPool) hasStream(id uint32) bool {
+func (s *streamConnPool) getStream(stream placementGRPCStream) (*daprdStream, bool) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	for _, streams := range s.streams {
-		if _, ok := streams[id]; ok {
-			return true
-		}
-	}
-	return false
+	daprdStream, ok := s.reverseLookup[stream]
+	return daprdStream, ok
 }
 
 func hostNeedsVNodes(stream placementGRPCStream) bool {

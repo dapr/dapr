@@ -16,6 +16,7 @@ package placement
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/placement/apilevel"
 	_ "github.com/dapr/dapr/tests/integration/suite/placement/authz"
+	_ "github.com/dapr/dapr/tests/integration/suite/placement/dissemination"
 	_ "github.com/dapr/dapr/tests/integration/suite/placement/quorum"
 	_ "github.com/dapr/dapr/tests/integration/suite/placement/vnodes"
 )

@@ -115,8 +115,6 @@ func (r *tablesUpdateRequest) SetAPILevel(minAPILevel uint32, maxAPILevel *uint3
 type Service struct {
 	streamConnPool *streamConnPool
 
-	streamIndexCnt atomic.Uint32
-
 	// raftNode is the raft server instance.
 	raftNode *raft.Server
 
@@ -261,41 +259,24 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	registeredMemberID := ""
 	isActorRuntime := false
 
-	sec, err := p.sec.Handler(stream.Context())
+	clientID, err := p.validateClient(stream)
 	if err != nil {
-		return status.Errorf(codes.Internal, "")
+		return err
 	}
 
-	var clientID *spiffe.Parsed
-	if sec.MTLSEnabled() {
-		id, ok, err := spiffe.FromGRPCContext(stream.Context())
-		if err != nil || !ok {
-			log.Debugf("failed to get client ID from context: err=%v, ok=%t", err, ok)
-			return status.Errorf(codes.Unauthenticated, "failed to get client ID from context")
-		}
-		clientID = id
-	}
-
-	firstMessage, err := stream.Recv()
+	firstMessage, err := p.receiveAndValidateFirstMessage(stream, clientID)
 	if err != nil {
-		return status.Errorf(codes.Internal, "failed to receive the first message: %v", err)
-	}
-	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
-		return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", firstMessage.GetId())
+		return err
 	}
 
-	if clientID != nil && firstMessage.GetNamespace() != clientID.Namespace() {
-		return status.Errorf(codes.PermissionDenied, "client namespace %s is not allowed", firstMessage.GetNamespace())
-	}
+	// Older versions won't be sending the namespace in subsequent messages either,
+	// so we'll save this one in a separate variable
+	namespace := firstMessage.GetNamespace()
 
-	// For older versions that are not sending their namespace as part of the message
-	// we will use the namespace from the Spiffe clientID
-	if clientID != nil && firstMessage.GetNamespace() == "" {
-		firstMessage.Namespace = clientID.Namespace()
-	}
-
-	daprStream := newDaprdStream(firstMessage.GetNamespace(), stream)
+	daprStream := newDaprdStream(firstMessage, stream)
 	p.streamConnGroup.Add(1)
+	p.streamConnPool.add(daprStream)
+
 	defer func() {
 		p.streamConnGroup.Done()
 		p.streamConnPool.delete(daprStream)
@@ -314,48 +295,22 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 		switch err {
 		case nil:
-			state := p.raftNode.FSM().State()
+			if clientID != nil && req.GetId() != clientID.AppID() {
+				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
+			}
 
 			if registeredMemberID == "" {
-				// This is a new stream connection from a Dapr runtime.
-
-				// Ensure that the reported API level is at least equal to the current one in the cluster
-				clusterAPILevel := state.APILevel()
-				if clusterAPILevel < p.minAPILevel {
-					clusterAPILevel = p.minAPILevel
-				}
-				if p.maxAPILevel != nil && clusterAPILevel > *p.maxAPILevel {
-					clusterAPILevel = *p.maxAPILevel
-				}
-				if req.GetApiLevel() < clusterAPILevel {
-					return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.GetApiLevel())
-				}
-
-				registeredMemberID = req.GetName()
-				p.streamConnPool.add(daprStream)
-
-				// Disseminate the tables to the new member
-				updateReq := &tablesUpdateRequest{
-					hosts: []daprdStream{*daprStream},
-				}
-				if daprStream.needsVNodes {
-					updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, req.GetNamespace())
-				} else {
-					updateReq.tables = p.raftNode.FSM().PlacementState(true, req.GetNamespace())
-				}
-
-				// We need to use a background context here so dissemination isn't tied to the context of this stream
-				err = p.performTablesUpdate(context.Background(), updateReq)
+				registeredMemberID, err = p.handleNewConnection(req, daprStream, namespace)
 				if err != nil {
 					return err
 				}
-				log.Debugf("Stream connection is established from %s", registeredMemberID)
 			}
 
 			// Ensure that the incoming runtime is actor instance.
-			isActorRuntime = len(req.GetEntities()) > 0
-			if !isActorRuntime {
-				// ignore if this runtime is non-actor.
+			//isActorRuntime = len(req.GetEntities()) > 0
+			if len(req.GetEntities()) == 0 {
+				// we already disseminated the existing tables to this member,
+				// so we can ignore the rest if it's a non-actor.
 				continue
 			}
 
@@ -368,13 +323,14 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// Record the heartbeat timestamp. This timestamp will be used to check if the member
 			// state maintained by raft is valid or not. If the member is outdated based the timestamp
 			// the member will be marked as faulty node and removed.
-			p.lastHeartBeat.Store(req.GetName(), now.UnixNano())
+			p.lastHeartBeat.Store(req.GetNamespace()+"-"+req.GetName(), now.UnixNano())
 
-			// Upsert incoming member only if it is an actor service (not actor client) and
-			// the existing member info is unmatched with the incoming member info.
+			// Upsert incoming member only if the existing member info
+			// doesn't match with the incoming member info.
 			upsertRequired := true
+			state := p.raftNode.FSM().State()
 			state.Lock.RLock()
-			members, err := state.Members(req.GetNamespace())
+			members, err := state.Members(namespace)
 			if err == nil {
 				if m, ok := members[req.GetName()]; ok {
 					if m.AppID == req.GetId() && m.Name == req.GetName() && cmp.Equal(m.Entities, req.GetEntities()) {
@@ -390,13 +346,13 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 					host: raft.DaprHostMember{
 						Name:      req.GetName(),
 						AppID:     req.GetId(),
-						Namespace: req.GetNamespace(),
+						Namespace: namespace,
 						Entities:  req.GetEntities(),
 						UpdatedAt: now.UnixNano(),
 						APILevel:  req.GetApiLevel(),
 					},
 				}
-				log.Debugf("Member changed; upserting appid %s in namespace %s with entities %v", req.GetId(), req.GetNamespace(), req.GetEntities())
+				log.Debugf("Member changed; upserting appid %s in namespace %s with entities %v", req.GetId(), namespace, req.GetEntities())
 			}
 
 		default:
@@ -410,7 +366,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				if isActorRuntime {
 					p.membershipCh <- hostMemberChange{
 						cmdType: raft.MemberRemove,
-						host:    raft.DaprHostMember{Name: registeredMemberID, Namespace: req.GetNamespace()},
+						host:    raft.DaprHostMember{Name: registeredMemberID, Namespace: namespace},
 					}
 				}
 			} else {
@@ -424,4 +380,92 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	}
 
 	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
+}
+
+func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatusServer) (*spiffe.Parsed, error) {
+	sec, err := p.sec.Handler(stream.Context())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "")
+	}
+
+	if !sec.MTLSEnabled() {
+		return nil, nil
+	}
+
+	clientID, ok, err := spiffe.FromGRPCContext(stream.Context())
+	if err != nil || !ok {
+		log.Debugf("failed to get client ID from context: err=%v, ok=%t", err, ok)
+		return nil, status.Errorf(codes.Unauthenticated, "failed to get client ID from context")
+	}
+
+	return clientID, nil
+}
+
+func (p *Service) receiveAndValidateFirstMessage(stream placementv1pb.Placement_ReportDaprStatusServer, clientID *spiffe.Parsed) (*placementv1pb.Host, error) {
+	firstMessage, err := stream.Recv()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to receive the first message: %v", err)
+	}
+
+	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
+		return nil, status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", firstMessage.GetId())
+	}
+
+	// For older versions that are not sending their namespace as part of the message
+	// we will use the namespace from the Spiffe clientID
+	if clientID != nil && firstMessage.GetNamespace() == "" {
+		firstMessage.Namespace = clientID.Namespace()
+	}
+
+	if clientID != nil && firstMessage.GetNamespace() != clientID.Namespace() {
+		return nil, status.Errorf(codes.PermissionDenied, "client namespace %s is not allowed", firstMessage.GetNamespace())
+	}
+
+	return firstMessage, nil
+}
+
+func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprdStream, namespace string) (string, error) {
+	err := p.checkAPILevel(req)
+	if err != nil {
+		return "", err
+	}
+
+	registeredMemberID := req.GetName()
+
+	// If the member is not an actor runtime (len(req.GetEntities()) == 0) we disseminate the tables
+	// If it is actor, we'll disseminate later, after we update the member in the raft state
+	if len(req.GetEntities()) == 0 {
+		updateReq := &tablesUpdateRequest{
+			hosts: []daprdStream{*daprStream},
+		}
+		if daprStream.needsVNodes {
+			updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, namespace)
+		} else {
+			updateReq.tables = p.raftNode.FSM().PlacementState(true, namespace)
+		}
+		err = p.performTablesUpdate(context.Background(), updateReq)
+		if err != nil {
+			return registeredMemberID, err
+		}
+	}
+
+	return registeredMemberID, nil
+}
+
+func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
+	state := p.raftNode.FSM().State()
+	state.Lock.RLock()
+	clusterAPILevel := max(p.minAPILevel, state.APILevel())
+	state.Lock.RUnlock()
+
+	if p.maxAPILevel != nil && clusterAPILevel > *p.maxAPILevel {
+		clusterAPILevel = *p.maxAPILevel
+	}
+
+	// Ensure that the reported API level is at least equal to the current one in the cluster
+	if req.GetApiLevel() < clusterAPILevel {
+		return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.GetApiLevel())
+	}
+
+	return nil
 }

@@ -13,7 +13,7 @@ func TestCleanupHeartBeats(t *testing.T) {
 	maxClients := 3
 
 	for i := 0; i < maxClients; i++ {
-		testServer.lastHeartBeat.Store(fmt.Sprintf("10.0.0.%d:1001", i), clock.Now().UnixNano())
+		testServer.lastHeartBeat.Store(fmt.Sprintf("ns-10.0.0.%d:1001", i), clock.Now().UnixNano())
 	}
 
 	getCount := func() int {

@@ -308,8 +308,6 @@ func TestUpdateAPILevel(t *testing.T) {
 	t.Run("no min nor max api levels arguments", func(t *testing.T) {
 		s := newDaprHostMemberState(DaprHostMemberStateConfig{
 			replicationFactor: 10,
-			minAPILevel:       0,
-			maxAPILevel:       100,
 		})
 		m1 := &DaprHostMember{
 			Name:      "127.0.0.1:8080",
@@ -337,9 +335,12 @@ func TestUpdateAPILevel(t *testing.T) {
 		}
 
 		s.upsertMember(m1)
-		s.upsertMember(m2)
-		s.upsertMember(m3)
+		assert.Equal(t, uint32(10), s.data.APILevel)
 
+		s.upsertMember(m2)
+		assert.Equal(t, uint32(10), s.data.APILevel)
+
+		s.upsertMember(m3)
 		assert.Equal(t, uint32(10), s.data.APILevel)
 
 		s.removeMember(m1)
@@ -348,6 +349,8 @@ func TestUpdateAPILevel(t *testing.T) {
 		s.removeMember(m2)
 		assert.Equal(t, uint32(30), s.data.APILevel)
 
+		// TODO @elena - do we want to keep the cluster's last known api level, when all members are removed?
+		// That's what we do currently, but I wonder why it's the case
 		s.removeMember(m3)
 		assert.Equal(t, uint32(30), s.data.APILevel)
 	})
