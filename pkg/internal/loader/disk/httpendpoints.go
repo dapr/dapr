@@ -18,6 +18,6 @@ import (
 	"github.com/dapr/dapr/pkg/internal/loader"
 )
 
-func NewHTTPEndpoints(paths ...string) loader.Loader[endpointapi.HTTPEndpoint] {
-	return new[endpointapi.HTTPEndpoint](paths...)
+func NewHTTPEndpoints(opts Options) loader.Loader[endpointapi.HTTPEndpoint] {
+	return new[endpointapi.HTTPEndpoint](opts)
 }

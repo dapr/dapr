@@ -223,6 +223,7 @@ func newDaprRuntime(ctx context.Context,
 			ComponentStore: compStore,
 			Authorizer:     authz,
 			Processor:      processor,
+			AppID:          runtimeConfig.id,
 		})
 		if err != nil {
 			return nil, err
@@ -1044,7 +1045,10 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.NewComponents(a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewComponents(disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
 	default:
 		return nil
 	}
@@ -1091,7 +1095,10 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.NewSubscriptions(a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewSubscriptions(disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
 	default:
 		return nil
 	}
@@ -1170,7 +1177,10 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.NewHTTPEndpoints(a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewHTTPEndpoints(disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
 	default:
 		return nil
 	}
