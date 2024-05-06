@@ -27,10 +27,10 @@ type subscriptions struct {
 	v2 *disk[v2alpha1.Subscription]
 }
 
-func NewSubscriptions(paths ...string) loader.Loader[v2alpha1.Subscription] {
+func NewSubscriptions(opts Options) loader.Loader[v2alpha1.Subscription] {
 	return &subscriptions{
-		v1: new[v1alpha1.Subscription](paths...),
-		v2: new[v2alpha1.Subscription](paths...),
+		v1: new[v1alpha1.Subscription](opts),
+		v2: new[v2alpha1.Subscription](opts),
 	}
 }
 
