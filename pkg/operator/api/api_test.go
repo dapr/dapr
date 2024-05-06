@@ -411,7 +411,7 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 func TestListScopes(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/namespace-a/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-	pki := util.GenPKI(t, util.PKIOptions{
+	pki := test.GenPKI(t, test.PKIOptions{
 		LeafID:   serverID,
 		ClientID: appID,
 	})
