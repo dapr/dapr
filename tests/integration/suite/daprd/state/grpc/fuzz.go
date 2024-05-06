@@ -99,10 +99,7 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 		},
 	}
 
-	for f.storeName == "" ||
-		len(path.IsValidPathSegmentName(f.storeName)) > 0 {
-		fuzz.New().Fuzz(&f.storeName)
-	}
+	f.storeName = util.RandomString(t, 10)
 
 	f.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
