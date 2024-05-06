@@ -148,7 +148,9 @@ func Test_Stream(t *testing.T) {
 		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
 			store:   loadercompstore.NewComponents(store),
 			batcher: batcher,
-			loader:  loaderdisk.NewComponents(dir),
+			loader: loaderdisk.NewComponents(loaderdisk.Options{
+				Paths: []string{dir},
+			}),
 		})
 
 		errCh := make(chan error)
@@ -229,7 +231,9 @@ func Test_Stream(t *testing.T) {
 		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
 			store:   loadercompstore.NewComponents(store),
 			batcher: batcher,
-			loader:  loaderdisk.NewComponents(dir),
+			loader: loaderdisk.NewComponents(loaderdisk.Options{
+				Paths: []string{dir},
+			}),
 		})
 
 		errCh := make(chan error)
@@ -311,7 +315,9 @@ func Test_Stream(t *testing.T) {
 		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
 			store:   loadercompstore.NewComponents(store),
 			batcher: batcher,
-			loader:  loaderdisk.NewComponents(dir),
+			loader: loaderdisk.NewComponents(loaderdisk.Options{
+				Paths: []string{dir},
+			}),
 		})
 
 		errCh := make(chan error)
