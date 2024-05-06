@@ -124,21 +124,21 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.kubeapi.Informer().Add(t, &comp)
 
 	require.EventuallyWithT(t, func(ct *assert.CollectT) {
-		assert.Len(t, c.daprd.GetMetaRegisteredComponents(ct, ctx), 1)
+		assert.Len(ct, c.daprd.GetMetaRegisteredComponents(ct, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	comp.Scopes = []string{"foo"}
 	c.store.Set(&comp)
 	c.kubeapi.Informer().Modify(t, &comp)
 	require.EventuallyWithT(t, func(ct *assert.CollectT) {
-		assert.Empty(t, c.daprd.GetMetaRegisteredComponents(ct, ctx))
+		assert.Empty(ct, c.daprd.GetMetaRegisteredComponents(ct, ctx))
 	}, time.Second*10, time.Millisecond*10)
 
 	comp.Scopes = []string{"foo", c.daprd.AppID()}
 	c.store.Set(&comp)
 	c.kubeapi.Informer().Modify(t, &comp)
 	require.EventuallyWithT(t, func(ct *assert.CollectT) {
-		assert.Len(t, c.daprd.GetMetaRegisteredComponents(ct, ctx), 1)
+		assert.Len(ct, c.daprd.GetMetaRegisteredComponents(ct, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	comp.Scopes = []string{"foo"}
@@ -150,14 +150,14 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.store.Set(&comp)
 	c.kubeapi.Informer().Modify(t, &comp)
 	require.EventuallyWithT(t, func(ct *assert.CollectT) {
-		assert.Empty(t, c.daprd.GetMetaRegisteredComponents(ct, ctx))
+		assert.Empty(ct, c.daprd.GetMetaRegisteredComponents(ct, ctx))
 	}, time.Second*10, time.Millisecond*10)
 
 	comp.Scopes = []string{}
 	c.store.Set(&comp)
 	c.kubeapi.Informer().Modify(t, &comp)
 	require.EventuallyWithT(t, func(ct *assert.CollectT) {
-		assert.Len(t, c.daprd.GetMetaRegisteredComponents(ct, ctx), 1)
+		assert.Len(ct, c.daprd.GetMetaRegisteredComponents(ct, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	comp2 := comp.DeepCopy()
@@ -166,6 +166,6 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.store.Set(&comp, comp2)
 	c.kubeapi.Informer().Modify(t, comp2)
 	require.EventuallyWithT(t, func(ct *assert.CollectT) {
-		assert.Len(t, c.daprd.GetMetaRegisteredComponents(ct, ctx), 2)
+		assert.Len(ct, c.daprd.GetMetaRegisteredComponents(ct, ctx), 2)
 	}, time.Second*10, time.Millisecond*10)
 }

@@ -133,7 +133,7 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.Len(t, c.daprd1.GetMetaRegisteredComponents(t, ctx), 1)
-		assert.Len(t, c.daprd2.GetMetaRegisteredComponents(t, ctx), 2)
+		assert.Len(t, c.daprd2.GetMetaRegisteredComponents(t, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	c.operator1.Cleanup(t)
