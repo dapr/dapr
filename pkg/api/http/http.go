@@ -1578,7 +1578,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	if outboxEnabled {
 		span := diagUtils.SpanFromContext(reqCtx)
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
-		trs, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID(), corID, traceState)
+		ops, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID(), corID, traceState)
 		if err != nil {
 			nerr := apierrors.PubSubOutbox(a.universal.AppID(), err)
 			universalFastHTTPErrorResponder(reqCtx, nerr)
@@ -1586,7 +1586,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			return
 		}
 
-		operations = append(operations, trs...)
+		operations = ops
 	}
 
 	start := time.Now()
