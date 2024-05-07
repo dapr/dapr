@@ -53,7 +53,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 	p.wg.Add(1)
 	go func() {
 		defer p.wg.Done()
-		p.processRaftStateCommand(ctx)
+		p.processMembershipCommands(ctx)
 	}()
 
 	for {
@@ -87,6 +87,8 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 			// Each dapr runtime sends the heartbeat every one second and placement will update UpdatedAt timestamp.
 			// If UpdatedAt is outdated, we can mark the host as faulty node.
 			// This faulty host will be removed from membership in the next dissemination period.
+			//
+			// Only run the check if there is no pending membership change
 			if len(p.membershipCh) == 0 {
 				// Loop through all members
 				state := p.raftNode.FSM().State()
@@ -132,9 +134,10 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 	}
 }
 
-// processRaftStateCommand is the worker loop to apply membership change command to raft state
-// and will disseminate the latest hashing table to the connected dapr runtime.
-func (p *Service) processRaftStateCommand(ctx context.Context) {
+// processMembershipCommands is the worker loop that
+// - applies membership change commands to the raft state
+// - disseminates the latest hashing table to the connected dapr runtimes
+func (p *Service) processMembershipCommands(ctx context.Context) {
 	// logApplyConcurrency is the buffered channel to limit the concurrency
 	// of raft apply command.
 	logApplyConcurrency := make(chan struct{}, raftApplyCommandMaxConcurrency)

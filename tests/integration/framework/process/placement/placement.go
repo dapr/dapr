@@ -237,7 +237,7 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 			case <-ctx.Done():
 				doneCh <- stream.CloseSend()
 				return
-			case <-time.After(time.Second):
+			case <-time.After(500 * time.Millisecond):
 				if err := stream.Send(msg); err != nil {
 					doneCh <- err
 					return

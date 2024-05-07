@@ -124,7 +124,7 @@ type Service struct {
 	membershipCh chan hostMemberChange
 
 	// disseminateLocks is a map of lock per namespace for disseminating the hashing tables
-	disseminateLocks *concurrency.MutexMap
+	disseminateLocks *concurrency.MutexMap[string]
 
 	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
 	disseminateNextTime *concurrency.AtomicMap[string, int64]
@@ -183,7 +183,7 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
 		sec:                      opts.SecProvider,
-		disseminateLocks:         concurrency.NewMutexMap(),
+		disseminateLocks:         concurrency.NewMutexMapString(),
 		memberUpdateCount:        concurrency.NewAtomicMapStringUint32(),
 		disseminateNextTime:      concurrency.NewAtomicMapStringInt64(),
 	}
@@ -327,20 +327,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 			// Upsert incoming member only if the existing member info
 			// doesn't match with the incoming member info.
-			upsertRequired := true
-			state := p.raftNode.FSM().State()
-			state.Lock.RLock()
-			members, err := state.Members(namespace)
-			if err == nil {
-				if m, ok := members[req.GetName()]; ok {
-					if m.AppID == req.GetId() && m.Name == req.GetName() && cmp.Equal(m.Entities, req.GetEntities()) {
-						upsertRequired = false
-					}
-				}
-			}
-			state.Lock.RUnlock()
-
-			if upsertRequired {
+			if p.upsertRequired(namespace, req) {
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberUpsert,
 					host: raft.DaprHostMember{
@@ -380,6 +367,25 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	}
 
 	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
+}
+
+func (p *Service) upsertRequired(namespace string, req *placementv1pb.Host) bool {
+	state := p.raftNode.FSM().State()
+	state.Lock.RLock()
+	defer state.Lock.RUnlock()
+
+	members, err := state.Members(namespace)
+	if err != nil {
+		// Couldn't find the namespace, so we need to upsert
+		return true
+	}
+
+	if m, ok := members[req.GetName()]; ok {
+		// If all attributes match, no upsert is required
+		return !(m.AppID == req.GetId() && m.Name == req.GetName() && cmp.Equal(m.Entities, req.GetEntities()))
+	}
+
+	return true
 }
 
 func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatusServer) (*spiffe.Parsed, error) {
@@ -433,7 +439,7 @@ func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprd
 	registeredMemberID := req.GetName()
 
 	// If the member is not an actor runtime (len(req.GetEntities()) == 0) we disseminate the tables
-	// If it is actor, we'll disseminate later, after we update the member in the raft state
+	// If it is, we'll disseminate in the next disseminate interval
 	if len(req.GetEntities()) == 0 {
 		updateReq := &tablesUpdateRequest{
 			hosts: []daprdStream{*daprStream},

@@ -377,6 +377,8 @@ func findLeader(t *testing.T, raftServers []*raft.Server) int {
 }
 
 func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMember) {
+	t.Helper()
+
 	var actual *raft.DaprHostMember
 	assert.Eventuallyf(t, func() bool {
 		state := srv.FSM().State()
@@ -385,7 +387,9 @@ func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMem
 		state.Lock.RLock()
 		defer state.Lock.RUnlock()
 		members, err := state.Members(expect.Namespace)
-		require.NoError(t, err)
+		if err != nil {
+			return false
+		}
 		actual, ok = members[expect.Name]
 		return ok && expect.Name == actual.Name &&
 			expect.AppID == actual.AppID && expect.Namespace == actual.Namespace
