@@ -271,6 +271,24 @@ func TestPerformTableUpdate(t *testing.T) {
 		require.NoError(t, clientStreams[i].Send(host))
 	}
 
+	for {
+		if testServer.streamConnPool.getStreamCount("") == testClients {
+			break
+		}
+		time.Sleep(time.Millisecond * 100)
+	}
+
+	// Call performTableUpdate directly, not by MembershipChangeWorker loop.
+	streamConnPool := make([]daprdStream, 0)
+	testServer.streamConnPool.forEachInNamespace("", func(streamId uint32, val *daprdStream) {
+		streamConnPool = append(streamConnPool, *val)
+	})
+
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+	defer cancel()
+	req := &tablesUpdateRequest{hosts: streamConnPool}
+	require.NoError(t, testServer.performTablesUpdate(ctx, req))
+
 	// Wait until clientStreams[clientID].Recv() in client go routine received new table
 	waitCnt := testClients
 	timeoutC := time.After(time.Second * 10)
@@ -289,17 +307,6 @@ func TestPerformTableUpdate(t *testing.T) {
 			break
 		}
 	}
-
-	// Call performTableUpdate directly, not by MembershipChangeWorker loop.
-	streamConnPool := make([]daprdStream, 0)
-	testServer.streamConnPool.forEachInNamespace("", func(streamId uint32, val *daprdStream) {
-		streamConnPool = append(streamConnPool, *val)
-	})
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	req := &tablesUpdateRequest{hosts: streamConnPool}
-	require.NoError(t, testServer.performTablesUpdate(ctx, req))
 
 	// assert
 	for i := 0; i < testClients; i++ {

@@ -307,8 +307,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			}
 
 			// Ensure that the incoming runtime is actor instance.
-			//isActorRuntime = len(req.GetEntities()) > 0
-			if len(req.GetEntities()) == 0 {
+			isActorRuntime = len(req.GetEntities()) > 0
+			if !isActorRuntime {
 				// we already disseminated the existing tables to this member,
 				// so we can ignore the rest if it's a non-actor.
 				continue

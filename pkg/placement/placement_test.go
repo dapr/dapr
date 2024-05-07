@@ -165,7 +165,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 				assert.Equal(t, host.GetNamespace(), memberChange.host.Namespace)
 				assert.Equal(t, host.GetId(), memberChange.host.AppID)
 				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
-				assert.Len(t, testServer.streamConnPool.getStreams("ns1"), 1)
+				assert.Equal(t, testServer.streamConnPool.getStreamCount("ns1"), 1)
 				return true
 			default:
 				return false
@@ -177,6 +177,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// in the next flush time window.
 		stream.CloseSend()
 
+		clock.Step(disseminateTimerInterval)
 		// assert
 		select {
 		case memberChange := <-testServer.membershipCh:
@@ -217,7 +218,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 				assert.Equal(t, host.GetNamespace(), memberChange.host.Namespace)
 				assert.Equal(t, host.GetId(), memberChange.host.AppID)
 				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
-				assert.Len(t, testServer.streamConnPool.getStreams(""), 1)
+				assert.Equal(t, testServer.streamConnPool.getStreamCount(""), 1)
 				return true
 			default:
 				return false
