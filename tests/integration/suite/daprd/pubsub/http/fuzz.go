@@ -127,11 +127,8 @@ func (f *fuzzpubsub) Setup(t *testing.T) []framework.Option {
 		takenNames[*s] = true
 	})
 	psRouteFz := fuzz.New().Funcs(func(s *string, c fuzz.Continue) {
-		for *s == "" || *s == "/" || takenNames[*s] || strings.HasPrefix(*s, "//") ||
-			strings.HasPrefix(*s, ".") || strings.Contains(*s, "?") ||
-			strings.Contains(*s, "#") || strings.Contains(*s, "%") ||
-			strings.Contains(*s, " ") || strings.Contains(*s, "\t") ||
-			strings.Contains(*s, "\n") || strings.Contains(*s, "\r") {
+		for *s == "" || *s == "/" || takenNames[*s] || strings.HasSuffix(*s, "/") ||
+			strings.ContainsAny(*s, ".:=?#*% \t{}\n\r") {
 			*s = "/" + c.RandString()
 		}
 		takenNames[*s] = true
