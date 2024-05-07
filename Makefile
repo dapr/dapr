@@ -84,6 +84,7 @@ ifeq ($(LOCAL_OS),Linux)
    TARGET_OS_LOCAL = linux
 else ifeq ($(LOCAL_OS),Darwin)
    TARGET_OS_LOCAL = darwin
+   PATH := $(PATH):$(HOME)/go/bin/darwin_$(GOARCH)
 else
    TARGET_OS_LOCAL = windows
    PROTOC_GEN_GO_NAME := "protoc-gen-go.exe"
@@ -407,7 +408,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.21; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.22; cd -
 endef
 
 # Generate modtidy target action for each go.mod file
