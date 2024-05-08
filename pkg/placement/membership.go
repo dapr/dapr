@@ -126,6 +126,10 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 						cmdType: raft.MemberRemove,
 						host:    raft.DaprHostMember{Name: host.Name, Namespace: host.Namespace},
 					}
+
+					// TODO: @elena - if the host is the last one in a namespace, we should
+					// remove the namespace-specific data structures (memberUpdateCount, disseminateNextTime)
+					// to prevent memory-leaks
 				}
 
 				state.Lock.RUnlock()

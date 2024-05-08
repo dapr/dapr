@@ -36,7 +36,7 @@ func newDaprdStream(host *placementv1pb.Host, stream placementGRPCStream) *daprd
 // The id is a simple auto-incrementing number, for efficiency.
 type streamConnPool struct {
 	lock sync.RWMutex // locks the streams map itself
-	//mutexMap *concurrency.MutexMap // manages locks on elements in the streams map
+	// mutexMap *concurrency.MutexMap // manages locks on elements in the streams map
 
 	// Example representation of streams
 	//	{
@@ -85,7 +85,8 @@ func (s *streamConnPool) add(stream *daprdStream) {
 }
 
 // delete removes stream connection between runtime and placement from the namespaced dissemination pool.
-func (s *streamConnPool) delete(stream *daprdStream) {
+func (s *streamConnPool) delete(stream *daprdStream) bool {
+	lastInNamespace := false
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -94,11 +95,13 @@ func (s *streamConnPool) delete(stream *daprdStream) {
 		if len(streams) == 0 {
 			delete(s.streams, stream.hostNamespace)
 			delete(s.reverseLookup, stream.stream)
+			lastInNamespace = true
 		}
 	}
 
 	// TODO: @elena Return true or false if it's the last stream in the namespace. If last stream,
 	// we need to delete elements from service.memberUpdateCount and service.disseminateNextTime
+	return lastInNamespace
 }
 
 // getStreams requires a lock (s.lock) to be held by the caller.

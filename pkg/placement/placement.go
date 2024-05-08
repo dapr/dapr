@@ -26,7 +26,6 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/clock"
 
@@ -210,15 +209,7 @@ func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
-	//grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS())
-	grpcServer := grpc.NewServer(
-		sec.GRPCServerOptionMTLS(),
-		grpc.KeepaliveParams(keepalive.ServerParameters{
-			Time:    5 * time.Second, // Server pings the client if it hasn't received any requests for 5 seconds
-			Timeout: 3 * time.Second, // If a client has not responded to 3 pings, it is considered disconnected
-		}),
-		grpc.StreamInterceptor(serverStreamInterceptor),
-	)
+	grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS())
 
 	placementv1pb.RegisterPlacementServer(grpcServer, p)
 
@@ -240,18 +231,6 @@ func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	p.wg.Wait()
 
 	return <-errCh
-}
-
-// serverStreamInterceptor is a WIP. It is used to detect when a client disconnects from a stream.
-func serverStreamInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
-	err := handler(srv, ss)
-	if err != nil {
-		// Perform action upon client disconnection here
-		fmt.Printf("\n\n\n\n-----------------------\nClient disconnected: %v\n", err)
-		fmt.Printf("\nStream: %v\n", ss)
-		fmt.Printf("\nStreamServerInfo: %v\n", info)
-	}
-	return err
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
@@ -279,9 +258,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 	defer func() {
 		p.streamConnGroup.Done()
-		p.streamConnPool.delete(daprStream)
-		// TODO: @elena If this is the last stream in the namespace, we need to delete elements
-		// from service.memberUpdateCount and service.disseminateNextTime
+		// Delete the stream from the pool
+		if p.streamConnPool.delete(daprStream) {
+			p.disseminateLocks.Delete(namespace)
+			p.disseminateNextTime.Delete(namespace)
+			p.memberUpdateCount.Delete(namespace)
+		}
 	}()
 
 	for p.hasLeadership.Load() {

@@ -224,7 +224,7 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 	for nsName, nsData := range s.data.Namespace {
 		newMembers.data.Namespace[nsName] = &DaprNamespace{
 			Members: make(map[string]*DaprHostMember, len(nsData.Members)),
-			//hashingTableMap: make(map[string]*hashing.Consistent, len(nsData.hashingTableMap)),
+			// hashingTableMap: make(map[string]*hashing.Consistent, len(nsData.hashingTableMap)),
 		}
 		for k, v := range nsData.Members {
 			m := &DaprHostMember{
@@ -388,7 +388,6 @@ func (s *DaprHostMemberState) restore(r io.Reader) error {
 	s.data = data
 
 	s.restoreHashingTables()
-	fmt.Println("--------------------------- restore is being called")
 	s.updateAPILevel()
 	return nil
 }
