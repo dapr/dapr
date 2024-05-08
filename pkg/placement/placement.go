@@ -186,7 +186,6 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		memberUpdateCount:        concurrency.NewAtomicMapStringUint32(),
 		disseminateNextTime:      concurrency.NewAtomicMapStringInt64(),
 	}
-
 }
 
 // Run starts the placement service gRPC server.
@@ -257,13 +256,11 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	p.streamConnPool.add(daprStream)
 
 	defer func() {
+		// Runs when a stream is disconnected or when the placement service loses leadership
 		p.streamConnGroup.Done()
-		// Delete the stream from the pool
-		if p.streamConnPool.delete(daprStream) {
-			p.disseminateLocks.Delete(namespace)
-			p.disseminateNextTime.Delete(namespace)
-			p.memberUpdateCount.Delete(namespace)
-		}
+		// Delete the stream from the pool. If it's the last stream in the namespace,
+		// delete the namespace from the maps.
+		p.streamConnPool.delete(daprStream)
 	}()
 
 	for p.hasLeadership.Load() {
@@ -275,8 +272,21 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			req, err = stream.Recv()
 		}
 
+		// fmt.Println("--------------------------------")
+		// fmt.Println("--------Report Dapr Status------")
+		// state := p.raftNode.FSM().State()
+		// state.Lock.RLock()
+		// vd, _ := json.MarshalIndent(state.AllMembers(), "", "  ")
+		// state.Lock.RUnlock()
+		// fmt.Println(string(vd))
+		// fmt.Println("---------------------------")
+		// fmt.Printf("\n host: %v \n", req)
+		// fmt.Printf("\n err: %v \n", err)
+		// fmt.Println("---------------------------")
+
 		switch err {
 		case nil:
+
 			if clientID != nil && req.GetId() != clientID.AppID() {
 				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
 			}
@@ -422,19 +432,17 @@ func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprd
 
 	// If the member is not an actor runtime (len(req.GetEntities()) == 0) we disseminate the tables
 	// If it is, we'll disseminate in the next disseminate interval
-	if len(req.GetEntities()) == 0 {
-		updateReq := &tablesUpdateRequest{
-			hosts: []daprdStream{*daprStream},
-		}
-		if daprStream.needsVNodes {
-			updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, namespace)
-		} else {
-			updateReq.tables = p.raftNode.FSM().PlacementState(true, namespace)
-		}
-		err = p.performTablesUpdate(context.Background(), updateReq)
-		if err != nil {
-			return registeredMemberID, err
-		}
+	updateReq := &tablesUpdateRequest{
+		hosts: []daprdStream{*daprStream},
+	}
+	if daprStream.needsVNodes {
+		updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, namespace)
+	} else {
+		updateReq.tables = p.raftNode.FSM().PlacementState(true, namespace)
+	}
+	err = p.performTablesUpdate(context.Background(), updateReq)
+	if err != nil {
+		return registeredMemberID, err
 	}
 
 	return registeredMemberID, nil

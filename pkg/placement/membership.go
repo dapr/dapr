@@ -69,8 +69,11 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 
 			// check if there are actor runtime member changes per namespace.
 			p.memberUpdateCount.ForEach(func(ns string, cnt *concurrency.AtomicValue[uint32]) {
-				if p.disseminateNextTime.GetOrCreate(ns, 0).Load() <= t.UnixNano() && len(p.membershipCh) == 0 {
-					//TODO: @elena - should we use getOrCreate everywhere?
+				disseminateTime, ok := p.disseminateNextTime.Get(ns)
+				if !ok {
+					return
+				}
+				if disseminateTime.Load() <= t.UnixNano() && len(p.membershipCh) == 0 {
 					if cnt := cnt.Load(); cnt > 0 {
 						log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCountTotal count for namespace %s: %d", ns, cnt)
 						p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate, host: raft.DaprHostMember{Namespace: ns}}
@@ -173,7 +176,7 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 						log.Errorf("fail to apply command: %v", raftErr)
 					} else {
 						if op.cmdType == raft.MemberRemove {
-							p.lastHeartBeat.Delete(op.host.NameAndNamespace())
+							updated = p.handleDisconnectedMember(op, updated)
 						}
 
 						// ApplyCommand returns true only if the command changes the hashing table.
@@ -196,6 +199,26 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 			}
 		}
 	}
+}
+
+func (p *Service) handleDisconnectedMember(op hostMemberChange, updated bool) bool {
+	p.lastHeartBeat.Delete(op.host.NameAndNamespace())
+
+	// If this is the last host in the namespace, we should:
+	// - remove namespace-specific data structures to prevent memory-leaks
+	// - prevent next dissemination, because there are no more hosts in the namespace
+	state := p.raftNode.FSM().State()
+	state.Lock.RLock()
+	members, err := state.Members(op.host.Namespace)
+
+	if err == nil && len(members) == 0 {
+		p.disseminateLocks.Delete(op.host.Namespace)
+		p.disseminateNextTime.Delete(op.host.Namespace)
+		p.memberUpdateCount.Delete(op.host.Namespace)
+		updated = false
+	}
+	state.Lock.RUnlock()
+	return updated
 }
 
 func (p *Service) performTableDissemination(ctx context.Context, ns string) error {
@@ -340,7 +363,6 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 	backoff := config.NewBackOffWithContext(ctx)
 	return retry.NotifyRecover(func() error {
 		// Check stream in stream pool, if stream is not available, skip to next.
-
 		if _, ok := p.streamConnPool.getStream(target.stream); !ok {
 			remoteAddr := "n/a"
 			if p, ok := peer.FromContext(target.stream.Context()); ok {
