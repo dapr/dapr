@@ -627,6 +627,8 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				},
 			}, appID, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01")
 
+			trs = append(trs[:0], trs[0+1:]...)
+
 			if pErr != nil {
 				errCh <- pErr
 				return
@@ -781,6 +783,8 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				},
 			}, appID, "", "")
 
+			trs = append(trs[:0], trs[0+1:]...)
+
 			if pErr != nil {
 				errCh <- pErr
 				return
@@ -905,6 +909,8 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 					Value: "hello",
 				},
 			}, appID, "", "")
+
+			trs = append(trs[:0], trs[0+1:]...)
 
 			if pErr != nil {
 				errCh <- pErr

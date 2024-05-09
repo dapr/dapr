@@ -961,14 +961,14 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	if outboxEnabled {
 		span := diagUtils.SpanFromContext(ctx)
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
-		trs, err := a.pubsubAdapter.Outbox().PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), corID, traceState)
+		ops, err := a.pubsubAdapter.Outbox().PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), corID, traceState)
 		if err != nil {
 			nerr := apierrors.PubSubOutbox(a.AppID(), err)
 			apiServerLogger.Debug(nerr)
 			return &emptypb.Empty{}, nerr
 		}
 
-		operations = append(operations, trs...)
+		operations = ops
 	}
 
 	start := time.Now()

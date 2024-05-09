@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/kit/ptr"
 )
@@ -33,7 +34,9 @@ import (
 func TestLoad(t *testing.T) {
 	t.Run("valid yaml content", func(t *testing.T) {
 		tmp := t.TempDir()
-		request := NewComponents(tmp)
+		request := NewComponents(Options{
+			Paths: []string{tmp},
+		})
 		filename := "test-component-valid.yaml"
 		yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -56,7 +59,9 @@ spec:
 
 	t.Run("invalid yaml head", func(t *testing.T) {
 		tmp := t.TempDir()
-		request := NewComponents(tmp)
+		request := NewComponents(Options{
+			Paths: []string{tmp},
+		})
 
 		filename := "test-component-invalid.yaml"
 		yaml := `
@@ -72,7 +77,9 @@ name: statestore`
 	})
 
 	t.Run("load components file not exist", func(t *testing.T) {
-		request := NewComponents("test-path-no-exists")
+		request := NewComponents(Options{
+			Paths: []string{"test-path-no-exists"},
+		})
 
 		components, err := request.Load(context.Background())
 		require.Error(t, err)
@@ -80,15 +87,19 @@ name: statestore`
 	})
 
 	t.Run("error and namespace", func(t *testing.T) {
-		buildComp := func(name string, namespace *string) string {
+		buildComp := func(name string, namespace *string, scopes ...string) string {
 			var ns string
 			if namespace != nil {
 				ns = fmt.Sprintf("\n namespace: %s\n", *namespace)
 			}
+			var scopeS string
+			if len(scopes) > 0 {
+				scopeS = fmt.Sprintf("\nscopes:\n- %s", strings.Join(scopes, "\n- "))
+			}
 			return fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
- name: %s%s`, name, ns)
+ name: %s%s%s`, name, ns, scopeS)
 		}
 
 		tests := map[string]struct {
@@ -183,6 +194,26 @@ metadata:
 				},
 				expErr: false,
 			},
+			"only return manifests in scope": {
+				comps: []string{
+					buildComp("comp1", nil, "myappid"),
+					buildComp("comp2", nil, "myappid", "anotherappid"),
+					buildComp("comp3", nil, "anotherappid"),
+				},
+				namespace: ptr.Of("foo"),
+				expComps: []compapi.Component{
+					{
+						TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
+						ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: ""},
+						Scoped:     common.Scoped{Scopes: []string{"myappid"}},
+					},
+					{
+						TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
+						ObjectMeta: metav1.ObjectMeta{Name: "comp2", Namespace: ""},
+						Scoped:     common.Scoped{Scopes: []string{"myappid", "anotherappid"}},
+					},
+				},
+			},
 		}
 
 		for name, test := range tests {
@@ -195,7 +226,10 @@ metadata:
 				if test.namespace != nil {
 					t.Setenv("NAMESPACE", *test.namespace)
 				}
-				loader := NewComponents(tmp)
+				loader := NewComponents(Options{
+					Paths: []string{tmp},
+					AppID: "myappid",
+				})
 				components, err := loader.Load(context.Background())
 				assert.Equal(t, test.expErr, err != nil, "%v", err)
 				assert.Equal(t, test.expComps, components)
@@ -207,7 +241,7 @@ metadata:
 func Test_loadWithOrder(t *testing.T) {
 	t.Run("no file should return empty set", func(t *testing.T) {
 		tmp := t.TempDir()
-		d := NewComponents(tmp).(*disk[compapi.Component])
+		d := NewComponents(Options{Paths: []string{tmp}}).(*disk[compapi.Component])
 		set, err := d.loadWithOrder()
 		require.NoError(t, err)
 		assert.Empty(t, set.order)
@@ -225,7 +259,7 @@ spec:
   type: state.couchbase
 `), fs.FileMode(0o600)))
 
-		d := NewComponents(tmp).(*disk[compapi.Component])
+		d := NewComponents(Options{Paths: []string{tmp}}).(*disk[compapi.Component])
 		set, err := d.loadWithOrder()
 		require.NoError(t, err)
 		assert.Equal(t, []manifestOrder{
@@ -259,7 +293,7 @@ spec:
   type: state.couchbase
 `), fs.FileMode(0o600)))
 
-		d := NewComponents(tmp).(*disk[compapi.Component])
+		d := NewComponents(Options{Paths: []string{tmp}}).(*disk[compapi.Component])
 		set, err := d.loadWithOrder()
 		require.NoError(t, err)
 		assert.Equal(t, []manifestOrder{
@@ -300,7 +334,9 @@ spec:
 			}
 		}
 
-		d := NewComponents(tmp1, tmp2, tmp3).(*disk[compapi.Component])
+		d := NewComponents(Options{
+			Paths: []string{tmp1, tmp2, tmp3},
+		}).(*disk[compapi.Component])
 		set, err := d.loadWithOrder()
 		require.NoError(t, err)
 		assert.Equal(t, []manifestOrder{
