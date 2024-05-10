@@ -197,6 +197,7 @@ func newDaprRuntime(ctx context.Context,
 		GRPC:           grpc,
 		Channels:       channels,
 		MiddlewareHTTP: httpMiddleware,
+		Security:       sec,
 	})
 
 	var reloader *hotreload.Reloader

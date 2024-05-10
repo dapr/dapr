@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/security/fake"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -47,6 +48,7 @@ func TestInitBindings(t *testing.T) {
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
 			GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: 0}),
+			Security:       fake.New(),
 		})
 
 		c := compapi.Component{}
@@ -69,6 +71,7 @@ func TestInitBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
+			Security:       fake.New(),
 		})
 
 		c := compapi.Component{}
@@ -99,6 +102,7 @@ func TestInitBindings(t *testing.T) {
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
 			GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: 0}),
+			Security:       fake.New(),
 		})
 
 		input := compapi.Component{}
@@ -124,6 +128,7 @@ func TestInitBindings(t *testing.T) {
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
 			GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: 0}),
+			Security:       fake.New(),
 		})
 
 		c := compapi.Component{}

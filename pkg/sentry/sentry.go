@@ -84,7 +84,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 		TrustAnchors:            camngr.TrustAnchors(),
 		MTLSEnabled:             true,
 		// Override the request source to our in memory CA since _we_ are sentry!
-		OverrideCertRequestSource: func(ctx context.Context, csrDER []byte) ([]*x509.Certificate, error) {
+		OverrideCertRequestFn: func(ctx context.Context, csrDER []byte) ([]*x509.Certificate, error) {
 			csr, csrErr := x509.ParseCertificateRequest(csrDER)
 			if csrErr != nil {
 				monitoring.ServerCertIssueFailed("invalid_csr")
