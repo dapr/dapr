@@ -1959,6 +1959,7 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		Mode:           rt.runtimeConfig.mode,
 		Channels:       rt.channels,
 		GRPC:           rt.grpc,
+		Security:       rt.sec,
 	})
 
 	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))
@@ -2134,7 +2135,7 @@ func testSecurity(t *testing.T) security.Handler {
 		ControlPlaneTrustDomain: "test.example.com",
 		ControlPlaneNamespace:   "default",
 		MTLSEnabled:             false,
-		OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
+		OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
 			return []*x509.Certificate{nil}, nil
 		},
 	})
