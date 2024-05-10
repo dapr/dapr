@@ -40,7 +40,7 @@ func (p *Processor) Init(ctx context.Context, comp componentsapi.Component) erro
 		return err
 	}
 
-	if err := m.Init(ctx, comp); err != nil {
+	if err := m.Init(p.security.WithSVIDContext(ctx), comp); err != nil {
 		return errors.Join(err, p.compStore.DropPendingComponent())
 	}
 

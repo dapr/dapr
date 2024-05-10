@@ -32,7 +32,7 @@ import (
 type Fake struct {
 	controlPlaneTrustDomainFn func() spiffeid.TrustDomain
 	controlPlaneNamespaceFn   func() string
-	currentTrustAnchorsFn     func() ([]byte, error)
+	currentTrustAnchorsFn     func(context.Context) ([]byte, error)
 	watchTrustAnchorsFn       func(context.Context, chan<- []byte)
 	mtls                      bool
 
@@ -75,7 +75,7 @@ func New() *Fake {
 		grpcServerOptionNoClientAuthFn: func() grpc.ServerOption {
 			return grpc.Creds(nil)
 		},
-		currentTrustAnchorsFn: func() ([]byte, error) {
+		currentTrustAnchorsFn: func(context.Context) ([]byte, error) {
 			return []byte{}, nil
 		},
 		watchTrustAnchorsFn: func(context.Context, chan<- []byte) {
@@ -173,7 +173,7 @@ func (f *Fake) GRPCServerOptionMTLS() grpc.ServerOption {
 	return f.grpcServerOptionMTLSFn()
 }
 
-func (f *Fake) WithCurrentTrustAnchorsFn(fn func() ([]byte, error)) *Fake {
+func (f *Fake) WithCurrentTrustAnchorsFn(fn func(context.Context) ([]byte, error)) *Fake {
 	f.currentTrustAnchorsFn = fn
 	return f
 }
@@ -202,12 +202,16 @@ func (f *Fake) GRPCServerOptionNoClientAuth() grpc.ServerOption {
 	return f.grpcServerOptionNoClientAuthFn()
 }
 
-func (f *Fake) CurrentTrustAnchors() ([]byte, error) {
-	return f.currentTrustAnchorsFn()
+func (f *Fake) CurrentTrustAnchors(ctx context.Context) ([]byte, error) {
+	return f.currentTrustAnchorsFn(ctx)
 }
 
 func (f *Fake) WatchTrustAnchors(ctx context.Context, ch chan<- []byte) {
 	f.watchTrustAnchorsFn(ctx, ch)
+}
+
+func (f *Fake) WithSVIDContext(ctx context.Context) context.Context {
+	return ctx
 }
 
 func (f *Fake) GRPCDialOption(id spiffeid.ID) grpc.DialOption {
