@@ -27,10 +27,10 @@ import (
 
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
-	secpem "github.com/dapr/dapr/pkg/security/pem"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
+	secpem "github.com/dapr/kit/crypto/pem"
 	"github.com/dapr/kit/logger"
 )
 

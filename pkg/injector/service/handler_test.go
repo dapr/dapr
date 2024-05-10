@@ -15,6 +15,7 @@ package service
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"io"
 	"net/http"
@@ -52,7 +53,7 @@ func TestHandleRequest(t *testing.T) {
 
 	require.NoError(t, err)
 	injector := i.(*injector)
-	injector.currentTrustAnchors = func() ([]byte, error) {
+	injector.currentTrustAnchors = func(context.Context) ([]byte, error) {
 		return nil, nil
 	}
 

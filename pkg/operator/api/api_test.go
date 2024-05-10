@@ -42,7 +42,7 @@ import (
 	"github.com/dapr/dapr/pkg/operator/api/informer"
 	informerfake "github.com/dapr/dapr/pkg/operator/api/informer/fake"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	"github.com/dapr/dapr/tests/util"
+	"github.com/dapr/kit/crypto/test"
 )
 
 type mockComponentUpdateServer struct {
@@ -196,7 +196,7 @@ func TestProcessComponentSecrets(t *testing.T) {
 func TestComponentUpdate(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-	pki := util.GenPKI(t, util.PKIOptions{
+	pki := test.GenPKI(t, test.PKIOptions{
 		LeafID:   serverID,
 		ClientID: appID,
 	})
@@ -317,7 +317,7 @@ func TestComponentUpdate(t *testing.T) {
 func TestHTTPEndpointUpdate(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-	pki := util.GenPKI(t, util.PKIOptions{
+	pki := test.GenPKI(t, test.PKIOptions{
 		LeafID:   serverID,
 		ClientID: appID,
 	})
@@ -411,7 +411,7 @@ func TestHTTPEndpointUpdate(t *testing.T) {
 func TestListScopes(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/namespace-a/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-	pki := util.GenPKI(t, util.PKIOptions{
+	pki := test.GenPKI(t, test.PKIOptions{
 		LeafID:   serverID,
 		ClientID: appID,
 	})
@@ -482,7 +482,7 @@ func TestListScopes(t *testing.T) {
 func TestListsNamespaced(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/namespace-a/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-	pki := util.GenPKI(t, util.PKIOptions{
+	pki := test.GenPKI(t, test.PKIOptions{
 		LeafID:   serverID,
 		ClientID: appID,
 	})

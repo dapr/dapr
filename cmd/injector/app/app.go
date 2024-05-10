@@ -91,7 +91,7 @@ func Run() {
 		SentryAddress:           cfg.SentryAddress,
 		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
 		ControlPlaneNamespace:   namespace,
-		TrustAnchorsFile:        cfg.TrustAnchorsFile,
+		TrustAnchorsFile:        &cfg.TrustAnchorsFile,
 		AppID:                   "dapr-injector",
 		MTLSEnabled:             true,
 		Mode:                    modes.KubernetesMode,
@@ -166,7 +166,7 @@ func Run() {
 				return rerr
 			}
 
-			caBundle, rErr := sec.CurrentTrustAnchors()
+			caBundle, rErr := sec.CurrentTrustAnchors(ctx)
 			if rErr != nil {
 				return rErr
 			}

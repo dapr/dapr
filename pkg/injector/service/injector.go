@@ -56,7 +56,7 @@ var AllowedServiceAccountInfos = []string{
 }
 
 type (
-	currentTrustAnchorsFn func() (ca []byte, err error)
+	currentTrustAnchorsFn func(context.Context) (ca []byte, err error)
 )
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
