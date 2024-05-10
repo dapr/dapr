@@ -24,13 +24,13 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/security/spiffe"
-	"github.com/dapr/dapr/tests/util"
+	"github.com/dapr/kit/crypto/test"
 )
 
 func Test_Request(t *testing.T) {
 	appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
 	serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-	pki := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
+	pki := test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: appID})
 
 	t.Run("no auth context should error", func(t *testing.T) {
 		id, err := Request(context.Background(), "ns1")
@@ -55,7 +55,7 @@ func Test_Request(t *testing.T) {
 
 	t.Run("invalid SPIFFE path should error", func(t *testing.T) {
 		appID := spiffeid.RequireFromString("spiffe://example.org/foo/bar")
-		pki2 := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
+		pki2 := test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: appID})
 		id, err := Request(pki2.ClientGRPCCtx(t), "ns1")
 		require.Error(t, err)
 		assert.Equal(t, codes.PermissionDenied, status.Code(err))

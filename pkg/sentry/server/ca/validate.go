@@ -18,7 +18,7 @@ import (
 	"errors"
 	"fmt"
 
-	"github.com/dapr/dapr/pkg/security/pem"
+	"github.com/dapr/kit/crypto/pem"
 )
 
 // verifyBundle verifies issuer certificate key pair, and trust anchor set.
