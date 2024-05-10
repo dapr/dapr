@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/kit/ptr"
 )
 
 type Operator struct {
@@ -147,7 +148,7 @@ func (o *Operator) Dial(t *testing.T, ctx context.Context, sentry *sentry.Sentry
 		SentryAddress:           "localhost:" + strconv.Itoa(sentry.Port()),
 		ControlPlaneTrustDomain: "integration.test.dapr.io",
 		ControlPlaneNamespace:   o.namespace,
-		TrustAnchorsFile:        sentry.TrustAnchorsFile(t),
+		TrustAnchorsFile:        ptr.Of(sentry.TrustAnchorsFile(t)),
 		AppID:                   appID,
 		Mode:                    modes.StandaloneMode,
 		MTLSEnabled:             true,

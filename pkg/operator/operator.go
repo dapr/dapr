@@ -105,7 +105,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		SentryAddress:           config.SentryAddress,
 		ControlPlaneTrustDomain: config.ControlPlaneTrustDomain,
 		ControlPlaneNamespace:   security.CurrentNamespace(),
-		TrustAnchorsFile:        opts.TrustAnchorsFile,
+		TrustAnchorsFile:        &opts.TrustAnchorsFile,
 		AppID:                   "dapr-operator",
 		// mTLS is always enabled for the operator.
 		MTLSEnabled: true,
@@ -299,7 +299,7 @@ func (o *operator) Run(ctx context.Context) error {
 				return rErr
 			}
 
-			caBundle, rErr := sec.CurrentTrustAnchors()
+			caBundle, rErr := sec.CurrentTrustAnchors(ctx)
 			if rErr != nil {
 				return rErr
 			}
