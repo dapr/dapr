@@ -34,7 +34,7 @@ type Options struct {
 	ListenAddress    string
 	TLSEnabled       bool
 	TrustDomain      string
-	TrustAnchorsFile string
+	TrustAnchorsFile *string
 	SentryAddress    string
 	PlacementAddress string
 	Mode             string
@@ -52,6 +52,8 @@ type Options struct {
 
 	Logger  logger.Options
 	Metrics *metrics.Options
+
+	taFile string
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -82,7 +84,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.ListenAddress, "listen-address", "127.0.0.1", "The address for the Scheduler to listen on")
 	fs.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the scheduler gRPC server")
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
-	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
+	fs.StringVar(&opts.taFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
 	fs.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
 	fs.StringVar(&opts.PlacementAddress, "placement-address", "", "Addresses for Dapr Actor Placement service")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
@@ -119,6 +121,10 @@ func New(origArgs []string) (*Options, error) {
 	}
 
 	opts.ReplicaID = uint32(replicaID)
+
+	if fs.Changed("trust-anchors-file") {
+		opts.TrustAnchorsFile = &opts.taFile
+	}
 
 	return &opts, nil
 }

@@ -94,7 +94,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		select {
 		case job := <-g.jobChan:
 			assert.NotNil(t, job)
-			assert.Equal(t, job.GetMethod(), "job/test")
+			assert.Equal(t, "job/test", job.GetMethod())
 
 			var data jobData
 			dataBytes := job.GetData().GetValue()

@@ -14,6 +14,7 @@ limitations under the License.
 package internal
 
 import (
+	"bytes"
 	"encoding/json"
 	"fmt"
 	"reflect"
@@ -28,15 +29,15 @@ const daprSeparator = "||"
 
 // Reminder represents a reminder or timer for a unique actor.
 type Reminder struct {
-	ActorID        string         `json:"actorID,omitempty"`
-	ActorType      string         `json:"actorType,omitempty"`
-	Name           string         `json:"name,omitempty"`
-	Data           []byte         `json:"data,omitempty"`
-	Period         ReminderPeriod `json:"period,omitempty"`
-	RegisteredTime time.Time      `json:"registeredTime,omitempty"`
-	DueTime        string         `json:"dueTime,omitempty"` // Exact input value from user
-	ExpirationTime time.Time      `json:"expirationTime,omitempty"`
-	Callback       string         `json:"callback,omitempty"` // Used by timers only
+	ActorID        string          `json:"actorID,omitempty"`
+	ActorType      string          `json:"actorType,omitempty"`
+	Name           string          `json:"name,omitempty"`
+	Data           json.RawMessage `json:"data,omitempty"`
+	Period         ReminderPeriod  `json:"period,omitempty"`
+	RegisteredTime time.Time       `json:"registeredTime,omitempty"`
+	DueTime        string          `json:"dueTime,omitempty"` // Exact input value from user
+	ExpirationTime time.Time       `json:"expirationTime,omitempty"`
+	Callback       string          `json:"callback,omitempty"` // Used by timers only
 }
 
 // ActorKey returns the key of the actor for this reminder.
@@ -107,10 +108,10 @@ func (r *Reminder) MarshalJSON() ([]byte, error) {
 	// Also adds a custom serializer for Period to omit empty strings.
 	// This is for backwards-compatibility and also because we don't need to store precision with less than seconds
 	m := struct {
-		RegisteredTime string `json:"registeredTime,omitempty"`
-		ExpirationTime string `json:"expirationTime,omitempty"`
-		Period         string `json:"period,omitempty"`
-		Data           []byte `json:"data,omitempty"`
+		RegisteredTime string           `json:"registeredTime,omitempty"`
+		ExpirationTime string           `json:"expirationTime,omitempty"`
+		Period         string           `json:"period,omitempty"`
+		Data           *json.RawMessage `json:"data,omitempty"`
 		*reminderAlias
 	}{
 		reminderAlias: (*reminderAlias)(r),
@@ -124,6 +125,10 @@ func (r *Reminder) MarshalJSON() ([]byte, error) {
 	}
 
 	m.Period = r.Period.String()
+	if len(r.Data) > 0 && !bytes.Equal(r.Data, []byte("null")) {
+		m.Data = &r.Data
+	}
+
 	return json.Marshal(m)
 }
 

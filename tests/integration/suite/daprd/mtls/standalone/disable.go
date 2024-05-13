@@ -20,8 +20,6 @@ import (
 	"testing"
 	"time"
 
-	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -31,9 +29,10 @@ import (
 
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	procplacement "github.com/dapr/dapr/tests/integration/framework/process/placement"
-	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -43,36 +42,33 @@ func init() {
 
 // disable tests standalone with mTLS disabled.
 type disable struct {
-	daprd        *procdaprd.Daprd
-	sentry       *procsentry.Sentry
-	placement    *procplacement.Placement
-	scheduler    *procscheduler.Scheduler
+	daprd        *daprd.Daprd
+	sentry       *sentry.Sentry
+	placement    *placement.Placement
+	scheduler    *scheduler.Scheduler
 	trustAnchors []byte
 }
 
 func (e *disable) Setup(t *testing.T) []framework.Option {
-	e.sentry = procsentry.New(t)
+	e.sentry = sentry.New(t)
 	e.trustAnchors = e.sentry.CABundle().TrustAnchors
 
-	e.placement = procplacement.New(t,
-		procplacement.WithEnableTLS(false),
-		procplacement.WithSentryAddress(e.sentry.Address()),
+	e.placement = placement.New(t,
+		placement.WithEnableTLS(false),
+		placement.WithSentryAddress(e.sentry.Address()),
 	)
 
-	e.scheduler = procscheduler.New(t,
-		procscheduler.WithEnableTLS(false),
-		procscheduler.WithSentryAddress(e.sentry.Address()),
-	)
+	e.scheduler = scheduler.New(t)
 
-	e.daprd = procdaprd.New(t,
-		procdaprd.WithAppID("my-app"),
-		procdaprd.WithMode("standalone"),
-		procdaprd.WithSentryAddress(e.sentry.Address()),
-		procdaprd.WithPlacementAddresses(e.placement.Address()),
-		procdaprd.WithSchedulerAddresses(e.scheduler.Address()),
+	e.daprd = daprd.New(t,
+		daprd.WithAppID("my-app"),
+		daprd.WithMode("standalone"),
+		daprd.WithSentryAddress(e.sentry.Address()),
+		daprd.WithPlacementAddresses(e.placement.Address()),
+		daprd.WithSchedulerAddresses(e.scheduler.Address()),
 
 		// Disable mTLS
-		procdaprd.WithEnableMTLS(false),
+		daprd.WithEnableMTLS(false),
 	)
 
 	return []framework.Option{

@@ -186,23 +186,23 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:             runtimeConfig.id,
-		Namespace:      namespace,
-		IsHTTP:         runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:  len(runtimeConfig.actorsService) > 0,
+		ID:               runtimeConfig.id,
+		Namespace:        namespace,
+		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
 		SchedulerEnabled: len(runtimeConfig.schedulerAddress) > 0,
-		Registry:       runtimeConfig.registry,
-		ComponentStore: compStore,
-		Meta:           meta,
-		GlobalConfig:   globalConfig,
-		Resiliency:     resiliencyProvider,
-		Mode:           runtimeConfig.mode,
-		PodName:        podName,
-		OperatorClient: operatorClient,
-		GRPC:           grpc,
-		Channels:       channels,
-		MiddlewareHTTP: httpMiddleware,
-		Security:       sec,
+		Registry:         runtimeConfig.registry,
+		ComponentStore:   compStore,
+		Meta:             meta,
+		GlobalConfig:     globalConfig,
+		Resiliency:       resiliencyProvider,
+		Mode:             runtimeConfig.mode,
+		PodName:          podName,
+		OperatorClient:   operatorClient,
+		GRPC:             grpc,
+		Channels:         channels,
+		MiddlewareHTTP:   httpMiddleware,
+		Security:         sec,
 	})
 
 	var reloader *hotreload.Reloader
@@ -301,11 +301,10 @@ func newDaprRuntime(ctx context.Context,
 		}
 
 		rt.schedulerManager, err = scheduler.New(scheduler.Options{
-			Namespace:  namespace,
-			AppID:      runtimeConfig.id,
-			Clients:    rt.schedulerClients,
-			Resiliency: resiliencyProvider,
-			Channels:   channels,
+			Namespace: namespace,
+			AppID:     runtimeConfig.id,
+			Clients:   rt.schedulerClients,
+			Channels:  channels,
 		})
 		if err != nil {
 			return nil, err
@@ -666,10 +665,6 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 		}
 	}
 
-	if a.runtimeConfig.SchedulerEnabled() {
-		a.schedulerManager.Start(a.actor)
-	}
-
 	return nil
 }
 
@@ -758,6 +753,11 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		if err := a.processor.PubSub().Outbox().SubscribeToInternalTopics(ctx, a.runtimeConfig.id); err != nil {
 			log.Warnf("failed to subscribe to outbox topics: %s", err)
 		}
+
+		if a.runtimeConfig.SchedulerEnabled() {
+			a.schedulerManager.Start(a.actor)
+		}
+
 	case apphealth.AppStatusUnhealthy:
 		select {
 		case <-a.isAppHealthy:
@@ -768,6 +768,10 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		// Stop topic subscriptions and input bindings
 		a.processor.PubSub().StopSubscriptions(false)
 		a.processor.Binding().StopReadingFromBindings(false)
+
+		if a.runtimeConfig.SchedulerEnabled() {
+			a.schedulerManager.Stop()
+		}
 	}
 }
 

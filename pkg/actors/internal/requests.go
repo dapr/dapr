@@ -32,10 +32,10 @@ type CreateReminderRequest struct {
 	Name      string
 	ActorType string
 	ActorID   string
-	Data      []byte `json:"data"`
-	DueTime   string `json:"dueTime"`
-	Period    string `json:"period"`
-	TTL       string `json:"ttl"`
+	Data      json.RawMessage `json:"data"`
+	DueTime   string          `json:"dueTime"`
+	Period    string          `json:"period"`
+	TTL       string          `json:"ttl"`
 }
 
 // ActorKey returns the key of the actor for this reminder.

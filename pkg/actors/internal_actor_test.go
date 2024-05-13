@@ -219,7 +219,7 @@ func TestInternalActorReminder(t *testing.T) {
 	require.NoError(t, err)
 	enc, err := json.Marshal(actualData)
 	require.NoError(t, err)
-	assert.Equal(t, testReminder.Data, enc)
+	assert.Equal(t, []byte(testReminder.Data), enc)
 }
 
 func TestInternalActorDeactivation(t *testing.T) {

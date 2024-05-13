@@ -59,6 +59,7 @@ import (
 	eventqueue "github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
+	kittime "github.com/dapr/kit/time"
 	"github.com/dapr/kit/utils"
 )
 
@@ -1160,6 +1161,28 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 	return nil
 }
 
+func scheduleFromPeriod(period string) (*string, *uint32, error) {
+	if len(period) == 0 {
+		return nil, nil, nil
+	}
+
+	years, months, days, duration, repetition, err := kittime.ParseDuration(period)
+	if err != nil {
+		return nil, nil, fmt.Errorf("unsupported period format: %s", period)
+	}
+
+	if years > 0 || months > 0 || days > 0 {
+		return nil, nil, fmt.Errorf("unsupported period format: %s", period)
+	}
+
+	var repeats *uint32
+	if repetition > 0 {
+		repeats = ptr.Of(uint32(repetition))
+	}
+
+	return ptr.Of("@every " + duration.String()), repeats, nil
+}
+
 func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderRequest) error {
 	if a.schedulerClients != nil {
 		var dueTime *string
@@ -1171,14 +1194,13 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			ttl = ptr.Of(req.TTL)
 		}
 
-		var schedule *string
-		if len(req.Period) > 0 {
-			schedule = ptr.Of("@every " + req.Period)
+		schedule, repeats, err := scheduleFromPeriod(req.Period)
+		if err != nil {
+			return err
 		}
 
 		var dataAny *anypb.Any
 		if len(req.Data) > 0 {
-			var err error
 			dataAny, err = anypb.New(wrapperspb.Bytes(req.Data))
 			if err != nil {
 				return err
@@ -1189,6 +1211,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			Name: req.Name,
 			Job: &schedulerv1pb.Job{
 				Schedule: schedule,
+				Repeats:  repeats,
 				DueTime:  dueTime,
 				Ttl:      ttl,
 				Data:     dataAny,
@@ -1207,7 +1230,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 			},
 		}
 
-		_, err := a.schedulerClients.Next().ScheduleJob(ctx, internalScheduleJobReq)
+		_, err = a.schedulerClients.Next().ScheduleJob(ctx, internalScheduleJobReq)
 		return err
 	}
 
