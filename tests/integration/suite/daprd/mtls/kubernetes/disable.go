@@ -71,11 +71,7 @@ func (e *disable) Setup(t *testing.T) []framework.Option {
 		placement.WithSentryAddress(e.sentry.Address()),
 	)
 
-	e.scheduler = scheduler.New(t,
-		scheduler.WithEnableTLS(true),
-		scheduler.WithTrustAnchorsFile(taFile),
-		scheduler.WithSentryAddress(e.sentry.Address()),
-	)
+	e.scheduler = scheduler.New(t, scheduler.WithSentry(e.sentry))
 
 	e.operator = operator.New(t, operator.WithSentry(e.sentry))
 

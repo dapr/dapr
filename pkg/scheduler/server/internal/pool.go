@@ -17,10 +17,11 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"math/rand"
 	"sync"
 	"sync/atomic"
+
+	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/kit/logger"
@@ -45,6 +46,13 @@ type namespacedPool struct {
 	conns     map[uint64]*conn
 }
 
+// JobEvent is a triggered job event.
+type JobEvent struct {
+	Name     string
+	Data     *anypb.Any
+	Metadata *schedulerv1pb.ScheduleJobMetadata
+}
+
 func NewPool() *Pool {
 	return &Pool{
 		nsPool:  make(map[string]*namespacedPool),
@@ -60,7 +68,6 @@ func (p *Pool) Run(ctx context.Context) error {
 	<-ctx.Done()
 	close(p.closeCh)
 	p.wg.Wait()
-	p.nsPool = nil
 
 	return nil
 }
@@ -81,22 +88,12 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 		p.nsPool[req.GetNamespace()] = nsPool
 	}
 
-	conn := &conn{
-		ch:      make(chan *schedulerv1pb.WatchJobsResponse, 10),
-		closeCh: make(chan struct{}),
-		streamer: &streamer{
-			subs: make(map[uint32]chan struct{}),
-		},
-	}
-
 	ok = true
 	var uuid uint64
 	for ok {
 		uuid = rand.Uint64() //nolint:gosec
 		_, ok = nsPool.conns[uuid]
 	}
-
-	nsPool.conns[uuid] = conn
 
 	log.Debugf("Adding a Sidecar connection to Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
 	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], uuid)
@@ -106,67 +103,18 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 		nsPool.actorType[actorType] = append(nsPool.actorType[actorType], uuid)
 	}
 
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		defer conn.wg.Wait()
-		for {
-			select {
-			case job := <-conn.ch:
-				if err := stream.Send(job); err != nil {
-					log.Warnf("Error sending job to connection: %v", err)
-				}
-			case <-p.closeCh:
-				close(conn.closeCh)
-				p.remove(req, uuid)
-				return
-			case <-stream.Context().Done():
-				close(conn.closeCh)
-				p.remove(req, uuid)
-				return
-			case <-conn.closeCh:
-				p.remove(req, uuid)
-				return
-			}
-		}
-	}()
-
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		defer conn.wg.Wait()
-
-		for {
-			resp, err := stream.Recv()
-			if errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) {
-				return
-			}
-			if err != nil {
-				log.Warnf("Error receiving from connection: %v", err)
-				return
-			}
-
-			conn.streamer.handleResponse(resp.GetResult().GetUuid())
-		}
-	}()
+	nsPool.conns[uuid] = p.newConn(req, stream, uuid)
 }
 
 // Send is a blocking function that sends a job trigger to a correct job
 // recipient.
-func (p *Pool) Send(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) error {
-	p.lock.RLock()
-
-	conn, err := p.getConn(job.GetMetadata())
+func (p *Pool) Send(ctx context.Context, job *JobEvent) error {
+	conn, err := p.getConn(job.Metadata)
 	if err != nil {
-		p.lock.RUnlock()
 		return err
 	}
 
-	conn.wg.Add(1)
-	p.lock.RUnlock()
-	defer conn.wg.Done()
-
-	p.sendWaitForResponse(ctx, conn, job)
+	conn.sendWaitForResponse(ctx, job)
 
 	return nil
 }
@@ -181,7 +129,6 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid uint64) {
 		return
 	}
 
-	// TODO: test
 	appIDConns, ok := nsPool.appID[req.GetAppId()]
 	if !ok {
 		return
@@ -213,7 +160,6 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid uint64) {
 			}
 		}
 
-		// TODO: maybe remove
 		nsPool.actorType[actorType] = actorTypeConns
 
 		if len(nsPool.actorType[actorType]) == 0 {
@@ -232,16 +178,15 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid uint64) {
 
 // getConn returns a connection from the pool based on the metadata.
 func (p *Pool) getConn(meta *schedulerv1pb.ScheduleJobMetadata) (*conn, error) {
+	p.lock.RLock()
+	defer p.lock.RUnlock()
+
 	nsPool, ok := p.nsPool[meta.GetNamespace()]
 	if !ok {
 		return nil, fmt.Errorf("no connections available for namespace: %s", meta.GetNamespace())
 	}
 
 	idx := nsPool.idx.Add(1)
-	if idx >= ^uint64(0)-1000 {
-		idx = 0
-		nsPool.idx.Store(0)
-	}
 
 	switch t := meta.GetType(); t.GetType().(type) {
 	case *schedulerv1pb.ScheduleJobMetadataType_Job:

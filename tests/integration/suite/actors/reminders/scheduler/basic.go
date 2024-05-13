@@ -11,12 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package scheduler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
-	"strconv"
 	"strings"
 	"sync/atomic"
 	"testing"
@@ -24,8 +24,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -38,10 +36,10 @@ import (
 )
 
 func init() {
-	suite.Register(new(scheduler))
+	suite.Register(new(basic))
 }
 
-type scheduler struct {
+type basic struct {
 	daprd     *daprd.Daprd
 	place     *placement.Placement
 	scheduler *procscheduler.Scheduler
@@ -49,7 +47,7 @@ type scheduler struct {
 	methodcalled atomic.Int64
 }
 
-func (s *scheduler) Setup(t *testing.T) []framework.Option {
+func (b *basic) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
@@ -58,33 +56,33 @@ func (s *scheduler) Setup(t *testing.T) []framework.Option {
 		w.WriteHeader(http.StatusOK)
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/remind/remindermethod", func(w http.ResponseWriter, r *http.Request) {
-		s.methodcalled.Add(1)
+		b.methodcalled.Add(1)
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/foo", func(w http.ResponseWriter, r *http.Request) {})
 
-	s.scheduler = procscheduler.New(t)
+	b.scheduler = procscheduler.New(t)
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
-	s.place = placement.New(t)
-	s.daprd = daprd.New(t,
+	b.place = placement.New(t)
+	b.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(s.place.Address()),
-		daprd.WithSchedulerAddresses(s.scheduler.Address()),
+		daprd.WithPlacementAddresses(b.place.Address()),
+		daprd.WithSchedulerAddresses(b.scheduler.Address()),
 		daprd.WithAppPort(srv.Port()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.scheduler, s.place, srv, s.daprd),
+		framework.WithProcesses(b.scheduler, b.place, srv, b.daprd),
 	}
 }
 
-func (s *scheduler) Run(t *testing.T, ctx context.Context) {
-	s.scheduler.WaitUntilRunning(t, ctx)
-	s.place.WaitUntilRunning(t, ctx)
-	s.daprd.WaitUntilRunning(t, ctx)
+func (b *basic) Run(t *testing.T, ctx context.Context) {
+	b.scheduler.WaitUntilRunning(t, ctx)
+	b.place.WaitUntilRunning(t, ctx)
+	b.daprd.WaitUntilRunning(t, ctx)
 
 	client := util.HTTPClient(t)
 
-	daprdURL := "http://localhost:" + strconv.Itoa(s.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid"
+	daprdURL := fmt.Sprintf("http://%s/v1.0/actors/myactortype/myactorid", b.daprd.HTTPAddress())
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/method/foo", nil)
 	require.NoError(t, err)
@@ -108,16 +106,10 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 
 	assert.Eventually(t, func() bool {
-		return s.methodcalled.Load() == 1
+		return b.methodcalled.Load() == 1
 	}, time.Second*3, time.Millisecond*10)
 
-	conn, err := grpc.DialContext(ctx, s.daprd.GRPCAddress(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	gclient := rtv1.NewDaprClient(conn)
-
+	gclient := b.daprd.GRPCClient(t, ctx)
 	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "myactortype",
 		ActorId:   "myactorid",
@@ -128,6 +120,6 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.Eventually(t, func() bool {
-		return s.methodcalled.Load() == 2
+		return b.methodcalled.Load() == 2
 	}, time.Second*3, time.Millisecond*10)
 }

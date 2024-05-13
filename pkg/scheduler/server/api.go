@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"strings"
 	"time"
 
@@ -25,14 +24,18 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal"
 )
 
 func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
-	// TODO: @joshvanl do mTLS and request validation <<
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-s.readyCh:
+	}
+
+	if err := s.authz.Metadata(ctx, req.GetMetadata()); err != nil {
+		return nil, err
 	}
 
 	jobName, err := buildJobName(req.GetName(), req.GetMetadata())
@@ -63,39 +66,15 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
 }
 
-func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
-	log.Debugf("Triggering job")
-
-	ctx, cancel := context.WithTimeout(ctx, time.Second*45)
-	defer cancel()
-
-	var meta schedulerv1pb.ScheduleJobMetadata
-	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
-		log.Errorf("Error unmarshalling metadata: %s", err)
-		return true
-	}
-
-	if err := s.connectionPool.Send(ctx, &schedulerv1pb.WatchJobsResponse{
-		// TODO: @joshvanl fix possible panic
-		Name:     req.GetName()[strings.LastIndex(req.GetName(), "||")+2:],
-		Data:     req.GetPayload(),
-		Metadata: &meta,
-		Uuid:     rand.Uint32(), //nolint:gosec
-	}); err != nil {
-		// TODO: add job to a queue or something to try later this should be
-		// another long running go routine that accepts this job on a channel
-		log.Errorf("Error sending job to connection stream: %s", err)
-	}
-
-	return true
-}
-
 func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
-	// TODO(artursouza): Add authorization check between caller and request.
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-s.readyCh:
+	}
+
+	if err := s.authz.Metadata(ctx, req.GetMetadata()); err != nil {
+		return nil, err
 	}
 
 	jobName, err := buildJobName(req.GetName(), req.GetMetadata())
@@ -113,11 +92,14 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequ
 }
 
 func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error) {
-	// TODO(artursouza): Add authorization check between caller and request.
 	select {
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	case <-s.readyCh:
+	}
+
+	if err := s.authz.Metadata(ctx, req.GetMetadata()); err != nil {
+		return nil, err
 	}
 
 	jobName, err := buildJobName(req.GetName(), req.GetMetadata())
@@ -136,11 +118,12 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 	}
 
 	return &schedulerv1pb.GetJobResponse{
+		//nolint:protogetter
 		Job: &schedulerv1pb.Job{
-			Schedule: job.Schedule, //nolint:protogetter
-			DueTime:  job.DueTime,  //nolint:protogetter
-			Ttl:      job.Ttl,      //nolint:protogetter
-			Repeats:  job.Repeats,  //nolint:protogetter
+			Schedule: job.Schedule,
+			DueTime:  job.DueTime,
+			Ttl:      job.Ttl,
+			Repeats:  job.Repeats,
 			Data:     job.GetPayload(),
 		},
 	}, nil
@@ -148,8 +131,6 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 
 // WatchJobs sends jobs to Dapr sidecars upon component changes.
 func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error {
-	// TODO: @joshvanl mTLS authz request
-
 	req, err := stream.Recv()
 	if err != nil {
 		return err
@@ -157,6 +138,10 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 
 	if req.GetInitial() == nil {
 		return errors.New("initial request is required on stream connection")
+	}
+
+	if err := s.authz.Initial(stream.Context(), req.GetInitial()); err != nil {
+		return err
 	}
 
 	s.connectionPool.Add(req.GetInitial(), stream)
@@ -167,6 +152,37 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 	case <-stream.Context().Done():
 		return stream.Context().Err()
 	}
+}
+
+func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
+	log.Debugf("Triggering job: %s", req.GetName())
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second*45)
+	defer cancel()
+
+	var meta schedulerv1pb.ScheduleJobMetadata
+	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
+		log.Errorf("Error unmarshalling metadata: %s", err)
+		return true
+	}
+
+	idx := strings.LastIndex(req.GetName(), "||")
+	if idx == -1 || len(req.GetName()) <= idx+2 {
+		log.Errorf("Job name is malformed: %s", req.GetName())
+		return true
+	}
+
+	if err := s.connectionPool.Send(ctx, &internal.JobEvent{
+		Name:     req.GetName()[idx+2:],
+		Data:     req.GetPayload(),
+		Metadata: &meta,
+	}); err != nil {
+		// TODO: add job to a queue or something to try later this should be
+		// another long running go routine that accepts this job on a channel
+		log.Errorf("Error sending job to connection stream: %s", err)
+	}
+
+	return true
 }
 
 func buildJobName(name string, meta *schedulerv1pb.ScheduleJobMetadata) (string, error) {

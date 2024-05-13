@@ -118,7 +118,6 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/ScheduleJob",
 		daprRuntimePrefix + "v1.Dapr/DeleteJob",
 		daprRuntimePrefix + "v1.Dapr/GetJob",
-		daprRuntimePrefix + "v1.Dapr/ListJobs",
 	},
 	"shutdown.v1": {
 		daprRuntimePrefix + "v1.Dapr/Shutdown",

@@ -15,16 +15,14 @@ package authz
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
@@ -44,15 +42,7 @@ type mtls struct {
 
 func (m *mtls) Setup(t *testing.T) []framework.Option {
 	m.sentry = sentry.New(t)
-
-	taFile := filepath.Join(t.TempDir(), "ca.pem")
-	require.NoError(t, os.WriteFile(taFile, m.sentry.CABundle().TrustAnchors, 0o600))
-
-	m.scheduler = scheduler.New(t,
-		scheduler.WithEnableTLS(true),
-		scheduler.WithSentryAddress(m.sentry.Address()),
-		scheduler.WithTrustAnchorsFile(taFile),
-	)
+	m.scheduler = scheduler.New(t, scheduler.WithSentry(m.sentry))
 
 	return []framework.Option{
 		framework.WithProcesses(m.sentry, m.scheduler),
@@ -63,37 +53,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	m.sentry.WaitUntilRunning(t, ctx)
 	m.scheduler.WaitUntilRunning(t, ctx)
 
-	secProv, err := security.New(ctx, security.Options{
-		SentryAddress:           m.sentry.Address(),
-		ControlPlaneTrustDomain: "localhost",
-		ControlPlaneNamespace:   "default",
-		TrustAnchors:            m.sentry.CABundle().TrustAnchors,
-		AppID:                   "app-1",
-		MTLSEnabled:             true,
-	})
-	require.NoError(t, err)
-
-	ctx, cancel := context.WithCancel(ctx)
-
-	errCh := make(chan error, 1)
-	go func() {
-		errCh <- secProv.Run(ctx)
-	}()
-	t.Cleanup(func() { cancel(); require.NoError(t, <-errCh) })
-
-	sec, err := secProv.Handler(ctx)
-	require.NoError(t, err)
-
-	schedulerID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", "default", "dapr-scheduler")
-	require.NoError(t, err)
-
-	host := m.scheduler.Address()
-
-	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), sec.GRPCDialOptionMTLS(schedulerID))
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-
-	client := schedulerv1pb.NewSchedulerClient(conn)
+	client := m.scheduler.ClientMTLS(t, ctx, "foo")
 
 	req := &schedulerv1pb.ScheduleJobRequest{
 		Name: "testJob",
@@ -101,7 +61,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 			Schedule: ptr.Of("@daily"),
 		},
 		Metadata: &schedulerv1pb.ScheduleJobMetadata{
-			AppId:     "test",
+			AppId:     "foo",
 			Namespace: "default",
 			Type: &schedulerv1pb.ScheduleJobMetadataType{
 				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
@@ -111,6 +71,131 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
-	_, err = client.ScheduleJob(ctx, req)
+	_, err := client.ScheduleJob(ctx, req)
 	require.NoError(t, err)
+
+	type tcase struct {
+		funcGoodAppID func() error
+		funcBadAppID  func() error
+	}
+	tests := map[string]tcase{
+		"ScheduleJob": {
+			funcGoodAppID: func() error {
+				_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
+					Name: "testJob",
+					Job:  &schedulerv1pb.Job{Schedule: ptr.Of("@daily")},
+					Metadata: &schedulerv1pb.ScheduleJobMetadata{
+						AppId:     "foo",
+						Namespace: "default",
+						Type: &schedulerv1pb.ScheduleJobMetadataType{
+							Type: &schedulerv1pb.ScheduleJobMetadataType_Job{Job: new(schedulerv1pb.ScheduleTypeJob)},
+						},
+					},
+				})
+				return err
+			},
+			funcBadAppID: func() error {
+				_, err := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
+					Name: "testJob",
+					Job:  &schedulerv1pb.Job{Schedule: ptr.Of("@daily")},
+					Metadata: &schedulerv1pb.ScheduleJobMetadata{
+						AppId:     "not-foo",
+						Namespace: "default",
+						Type: &schedulerv1pb.ScheduleJobMetadataType{
+							Type: &schedulerv1pb.ScheduleJobMetadataType_Job{Job: new(schedulerv1pb.ScheduleTypeJob)},
+						},
+					},
+				})
+				return err
+			},
+		},
+		"GetJob": {
+			funcGoodAppID: func() error {
+				_, err := client.GetJob(ctx, &schedulerv1pb.GetJobRequest{
+					Name: "testJob",
+					Metadata: &schedulerv1pb.ScheduleJobMetadata{
+						AppId:     "foo",
+						Namespace: "default",
+						Type: &schedulerv1pb.ScheduleJobMetadataType{
+							Type: &schedulerv1pb.ScheduleJobMetadataType_Job{Job: new(schedulerv1pb.ScheduleTypeJob)},
+						},
+					},
+				})
+				return err
+			},
+			funcBadAppID: func() error {
+				_, err := client.GetJob(ctx, &schedulerv1pb.GetJobRequest{
+					Name: "testJob",
+					Metadata: &schedulerv1pb.ScheduleJobMetadata{
+						AppId:     "not-foo",
+						Namespace: "default",
+						Type: &schedulerv1pb.ScheduleJobMetadataType{
+							Type: &schedulerv1pb.ScheduleJobMetadataType_Job{Job: new(schedulerv1pb.ScheduleTypeJob)},
+						},
+					},
+				})
+				return err
+			},
+		},
+		"DeleteJob": {
+			funcGoodAppID: func() error {
+				_, err := client.DeleteJob(ctx, &schedulerv1pb.DeleteJobRequest{
+					Name: "testJob",
+					Metadata: &schedulerv1pb.ScheduleJobMetadata{
+						AppId:     "foo",
+						Namespace: "default",
+						Type: &schedulerv1pb.ScheduleJobMetadataType{
+							Type: &schedulerv1pb.ScheduleJobMetadataType_Job{Job: new(schedulerv1pb.ScheduleTypeJob)},
+						},
+					},
+				})
+				return err
+			},
+			funcBadAppID: func() error {
+				_, err := client.DeleteJob(ctx, &schedulerv1pb.DeleteJobRequest{
+					Name: "testJob",
+					Metadata: &schedulerv1pb.ScheduleJobMetadata{
+						AppId:     "not-foo",
+						Namespace: "default",
+						Type: &schedulerv1pb.ScheduleJobMetadataType{
+							Type: &schedulerv1pb.ScheduleJobMetadataType_Job{Job: new(schedulerv1pb.ScheduleTypeJob)},
+						},
+					},
+				})
+				return err
+			},
+		},
+		"WatchJobs": {
+			funcGoodAppID: func() error {
+				return nil
+			},
+			funcBadAppID: func() error {
+				stream, err := client.WatchJobs(ctx)
+				require.NoError(t, err)
+				require.NoError(t, stream.Send(&schedulerv1pb.WatchJobsRequest{
+					WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Initial{
+						Initial: &schedulerv1pb.WatchJobsRequestInitial{
+							AppId:     "not-foo",
+							Namespace: "default",
+						},
+					},
+				}))
+				_, err = stream.Recv()
+				return err
+			},
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			err := test.funcBadAppID()
+			s, ok := status.FromError(err)
+			require.True(t, ok)
+			assert.Equal(t, codes.PermissionDenied, s.Code())
+			assert.Contains(t, s.Message(), "identity does not match request")
+
+			err = test.funcGoodAppID()
+			require.NoError(t, err)
+		})
+	}
 }

@@ -24,15 +24,14 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
 )
@@ -46,21 +45,23 @@ type jobs struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
 
-	clientPort int
+	etcdPort   int
+	etcdClient *clientv3.Client
 	idPrefix   string
 }
 
 func (j *jobs) Setup(t *testing.T) []framework.Option {
 	j.idPrefix = uuid.NewString()
 
-	fp := util.ReservePorts(t, 2)
+	fp := ports.Reserve(t, 2)
+	port1 := fp.Port(t)
+	port2 := fp.Port(t)
 
-	j.clientPort = fp.Port(t, 1)
+	j.etcdPort = port2
 
 	clientPorts := []string{
-		"scheduler-0=" + strconv.Itoa(j.clientPort),
+		"scheduler-0=" + strconv.Itoa(j.etcdPort),
 	}
-
 	j.scheduler = scheduler.New(t,
 		scheduler.WithID("scheduler-0"),
 		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d", port1)),
@@ -74,13 +75,23 @@ func (j *jobs) Setup(t *testing.T) []framework.Option {
 
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(j.daprd, j.scheduler),
+		framework.WithProcesses(fp, j.scheduler, j.daprd),
 	}
 }
 
 func (j *jobs) Run(t *testing.T, ctx context.Context) {
 	j.scheduler.WaitUntilRunning(t, ctx)
 	j.daprd.WaitUntilRunning(t, ctx)
+
+	var err error
+	j.etcdClient, err = clientv3.New(clientv3.Config{
+		Endpoints:   []string{fmt.Sprintf("localhost:%d", j.etcdPort)},
+		DialTimeout: 5 * time.Second,
+	})
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, j.etcdClient.Close())
+	})
 
 	client := j.daprd.GRPCClient(t, ctx)
 
@@ -103,8 +114,7 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
 
-			chosenSchedulerEtcdKeys := getEtcdKeys(t, ctx, j.clientPort)
-			assert.True(t, checkKeysForAppID(name, chosenSchedulerEtcdKeys))
+			assert.True(t, j.etcdHasJob(t, ctx, name))
 
 			resp, err := client.GetJob(ctx, &rtv1.GetJobRequest{Name: name})
 			require.NotNil(t, resp)
@@ -118,29 +128,19 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 			_, err := client.DeleteJob(ctx, &rtv1.DeleteJobRequest{Name: name})
 			require.NoError(t, err)
 
-			chosenSchedulerEtcdKeys := getEtcdKeys(t, ctx, j.clientPort)
-			assert.False(t, checkKeysForAppID(name, chosenSchedulerEtcdKeys))
+			assert.False(t, j.etcdHasJob(t, ctx, name))
 		}
 	})
 }
 
-func getEtcdKeys(t *testing.T, ctx context.Context, port int) []*mvccpb.KeyValue {
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{fmt.Sprintf("localhost:%d", port)},
-		DialTimeout: 5 * time.Second,
-	})
-	require.NoError(t, err)
-	defer client.Close()
+func (j *jobs) etcdHasJob(t *testing.T, ctx context.Context, key string) bool {
+	t.Helper()
 
 	// Get keys with prefix
-	resp, err := client.Get(ctx, "", clientv3.WithPrefix())
+	resp, err := j.etcdClient.Get(ctx, "", clientv3.WithPrefix())
 	require.NoError(t, err)
 
-	return resp.Kvs
-}
-
-func checkKeysForAppID(key string, keys []*mvccpb.KeyValue) bool {
-	for _, kv := range keys {
+	for _, kv := range resp.Kvs {
 		if strings.HasSuffix(string(kv.Key), "||"+key) {
 			return true
 		}

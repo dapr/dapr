@@ -28,6 +28,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/server/authz"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
@@ -61,6 +62,7 @@ type Server struct {
 	replicaID     uint32
 
 	sec            security.Handler
+	authz          *authz.Authz
 	config         *embed.Config
 	cron           etcdcron.Interface
 	connectionPool *internal.Pool // Connection pool for sidecars
@@ -79,11 +81,14 @@ func New(opts Options) (*Server, error) {
 	}
 
 	return &Server{
-		port:           opts.Port,
-		listenAddress:  opts.ListenAddress,
-		replicaCount:   opts.ReplicaCount,
-		replicaID:      opts.ReplicaID,
-		sec:            opts.Security,
+		port:          opts.Port,
+		listenAddress: opts.ListenAddress,
+		replicaCount:  opts.ReplicaCount,
+		replicaID:     opts.ReplicaID,
+		sec:           opts.Security,
+		authz: authz.New(authz.Options{
+			Security: opts.Security,
+		}),
 		config:         config,
 		connectionPool: internal.NewPool(),
 		readyCh:        make(chan struct{}),
@@ -184,7 +189,6 @@ func (s *Server) runEtcdCron(ctx context.Context) error {
 
 	return concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
-			// TODO: @joshvanl: remove once trigger responses have been implemented
 			if err := s.cron.Run(ctx); !errors.Is(err, context.DeadlineExceeded) {
 				return err
 			}

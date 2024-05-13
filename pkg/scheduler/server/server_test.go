@@ -33,7 +33,7 @@ func TestParseClientPorts(t *testing.T) {
 
 		clientPorts, err := parseClientPorts(ports)
 		require.NoError(t, err)
-		assert.Len(t, 3, len(clientPorts))
+		assert.Len(t, clientPorts, 3)
 		assert.Equal(t, "5000", clientPorts["scheduler0"])
 		assert.Equal(t, "5001", clientPorts["scheduler1"])
 		assert.Equal(t, "5002", clientPorts["scheduler2"])
@@ -58,7 +58,7 @@ func TestParseClientPorts(t *testing.T) {
 
 		clientPorts, err := parseClientPorts(ports)
 		require.NoError(t, err)
-		assert.Len(t, 2, len(clientPorts))
+		assert.Len(t, clientPorts, 2)
 		assert.Equal(t, "5000", clientPorts["scheduler0"])
 		assert.Equal(t, "5001", clientPorts["scheduler1"])
 	})

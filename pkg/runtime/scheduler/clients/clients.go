@@ -35,27 +35,24 @@ type Options struct {
 // Clients builds Scheduler clients and provides those clients in a round-robin
 // fashion.
 type Clients struct {
-	clients     []*client.Client
+	clients     []schedulerv1pb.SchedulerClient
 	lastUsedIdx atomic.Uint64
 }
 
 func New(ctx context.Context, opts Options) (*Clients, error) {
-	clients := make([]*client.Client, len(opts.Addresses))
+	if len(opts.Addresses) == 0 {
+		return nil, fmt.Errorf("no addresses provided")
+	}
+
+	clients := make([]schedulerv1pb.SchedulerClient, len(opts.Addresses))
 	for i, address := range opts.Addresses {
 		log.Debugf("Attempting to connect to Scheduler at address: %s", address)
-		conn, cli, err := client.New(ctx, address, opts.Security)
+		client, err := client.New(ctx, address, opts.Security)
 		if err != nil {
 			return nil, fmt.Errorf("scheduler client not initialized for address %s: %s", address, err)
 		}
-
 		log.Infof("Scheduler client initialized for address: %s", address)
-
-		clients[i] = &client.Client{
-			Conn:      conn,
-			Scheduler: cli,
-			Address:   address,
-			Security:  opts.Security,
-		}
+		clients[i] = client
 	}
 
 	return &Clients{
@@ -65,14 +62,14 @@ func New(ctx context.Context, opts Options) (*Clients, error) {
 
 // Next returns the next client in a round-robin manner.
 func (c *Clients) Next() schedulerv1pb.SchedulerClient {
-	// Check if there is only one client available
 	if len(c.clients) == 1 {
-		return c.clients[0].Scheduler
+		return c.clients[0]
 	}
 
-	return c.clients[int(c.lastUsedIdx.Add(1))%len(c.clients)].Scheduler
+	return c.clients[int(c.lastUsedIdx.Add(1))%len(c.clients)]
 }
 
-func (c *Clients) All() []*client.Client {
+// All returns all scheduler clients.
+func (c *Clients) All() []schedulerv1pb.SchedulerClient {
 	return c.clients
 }
