@@ -129,10 +129,6 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 						cmdType: raft.MemberRemove,
 						host:    raft.DaprHostMember{Name: host.Name, Namespace: host.Namespace},
 					}
-
-					// TODO: @elena - if the host is the last one in a namespace, we should
-					// remove the namespace-specific data structures (memberUpdateCount, disseminateNextTime)
-					// to prevent memory-leaks
 				}
 
 				state.Lock.RUnlock()
@@ -355,7 +351,9 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, req *tablesUp
 func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, operation string, tables *v1pb.PlacementTables) error {
 	o := &v1pb.PlacementOrder{
 		Operation: operation,
-		Tables:    tables,
+	}
+	if operation == "update" {
+		o.Tables = tables
 	}
 
 	config := retry.DefaultConfig()

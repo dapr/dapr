@@ -5,9 +5,12 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/placement/tests"
 )
 
 func TestCleanupHeartBeats(t *testing.T) {
+	testRaftServer := tests.Raft(t)
 	_, testServer, clock, cleanup := newTestPlacementServer(t, testRaftServer)
 	testServer.hasLeadership.Store(true)
 	maxClients := 3

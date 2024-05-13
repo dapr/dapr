@@ -31,6 +31,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
+	"github.com/dapr/dapr/pkg/placement/tests"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	securityfake "github.com/dapr/dapr/pkg/security/fake"
 )
@@ -104,7 +105,8 @@ func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.T
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
 	// set up
-	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, testRaftServer)
+
+	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, tests.Raft(t))
 	t.Cleanup(cleanup)
 	testServer.hasLeadership.Store(false)
 
@@ -135,7 +137,7 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 }
 
 func TestMemberRegistration_Leadership(t *testing.T) {
-	serverAddress, testServer, clock, cleanup := newTestPlacementServer(t, testRaftServer)
+	serverAddress, testServer, clock, cleanup := newTestPlacementServer(t, tests.Raft(t))
 	t.Cleanup(cleanup)
 	testServer.hasLeadership.Store(true)
 
