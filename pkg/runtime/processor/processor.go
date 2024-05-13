@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
@@ -97,6 +98,8 @@ type Options struct {
 	OperatorClient operatorv1.OperatorClient
 
 	MiddlewareHTTP *http.HTTP
+
+	Security security.Handler
 }
 
 // Processor manages the lifecycle of all components categories.
@@ -109,6 +112,7 @@ type Processor struct {
 	pubsub          PubsubManager
 	binding         BindingManager
 	workflowBackend WorkflowBackendManager
+	security        security.Handler
 
 	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
 	pendingComponents          chan componentsapi.Component
@@ -186,6 +190,7 @@ func New(opts Options) *Processor {
 		binding:                    binding,
 		secret:                     secret,
 		workflowBackend:            wfbe,
+		security:                   opts.Security,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{
