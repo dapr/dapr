@@ -148,6 +148,15 @@ func (*StartWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string
 func (*SubscribeConfigurationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+func (*SubscribeTopicEventsInitialRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+func (*SubscribeTopicEventsRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+func (*SubscribeTopicEventsRequest_InitialRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
 func (*SubtleDecryptRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }

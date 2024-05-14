@@ -43,6 +43,7 @@ const (
 	Dapr_ExecuteStateTransaction_FullMethodName        = "/dapr.proto.runtime.v1.Dapr/ExecuteStateTransaction"
 	Dapr_PublishEvent_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/PublishEvent"
 	Dapr_BulkPublishEventAlpha1_FullMethodName         = "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1"
+	Dapr_SubscribeTopicEvents_FullMethodName           = "/dapr.proto.runtime.v1.Dapr/SubscribeTopicEvents"
 	Dapr_InvokeBinding_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/InvokeBinding"
 	Dapr_GetSecret_FullMethodName                      = "/dapr.proto.runtime.v1.Dapr/GetSecret"
 	Dapr_GetBulkSecret_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/GetBulkSecret"
@@ -114,6 +115,9 @@ type DaprClient interface {
 	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEventAlpha1(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error)
+	// SubscribeTopicEvents subscribes to a PubSub topic and receives topic events
+	// from it.
+	SubscribeTopicEvents(ctx context.Context, opts ...grpc.CallOption) (Dapr_SubscribeTopicEventsClient, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -302,6 +306,37 @@ func (c *daprClient) BulkPublishEventAlpha1(ctx context.Context, in *BulkPublish
 	return out, nil
 }
 
+func (c *daprClient) SubscribeTopicEvents(ctx context.Context, opts ...grpc.CallOption) (Dapr_SubscribeTopicEventsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[0], Dapr_SubscribeTopicEvents_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprSubscribeTopicEventsClient{stream}
+	return x, nil
+}
+
+type Dapr_SubscribeTopicEventsClient interface {
+	Send(*SubscribeTopicEventsRequest) error
+	Recv() (*TopicEventRequest, error)
+	grpc.ClientStream
+}
+
+type daprSubscribeTopicEventsClient struct {
+	grpc.ClientStream
+}
+
+func (x *daprSubscribeTopicEventsClient) Send(m *SubscribeTopicEventsRequest) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *daprSubscribeTopicEventsClient) Recv() (*TopicEventRequest, error) {
+	m := new(TopicEventRequest)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 func (c *daprClient) InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error) {
 	out := new(InvokeBindingResponse)
 	err := c.cc.Invoke(ctx, Dapr_InvokeBinding_FullMethodName, in, out, opts...)
@@ -411,7 +446,7 @@ func (c *daprClient) GetConfiguration(ctx context.Context, in *GetConfigurationR
 }
 
 func (c *daprClient) SubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationAlpha1Client, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[0], Dapr_SubscribeConfigurationAlpha1_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[1], Dapr_SubscribeConfigurationAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +478,7 @@ func (x *daprSubscribeConfigurationAlpha1Client) Recv() (*SubscribeConfiguration
 }
 
 func (c *daprClient) SubscribeConfiguration(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[1], Dapr_SubscribeConfiguration_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[2], Dapr_SubscribeConfiguration_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +546,7 @@ func (c *daprClient) UnlockAlpha1(ctx context.Context, in *UnlockRequest, opts .
 }
 
 func (c *daprClient) EncryptAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_EncryptAlpha1Client, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[2], Dapr_EncryptAlpha1_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[3], Dapr_EncryptAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -542,7 +577,7 @@ func (x *daprEncryptAlpha1Client) Recv() (*EncryptResponse, error) {
 }
 
 func (c *daprClient) DecryptAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_DecryptAlpha1Client, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[3], Dapr_DecryptAlpha1_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[4], Dapr_DecryptAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -813,6 +848,9 @@ type DaprServer interface {
 	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
 	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error)
+	// SubscribeTopicEvents subscribes to a PubSub topic and receives topic events
+	// from it.
+	SubscribeTopicEvents(Dapr_SubscribeTopicEventsServer) error
 	// Invokes binding data to specific output bindings
 	InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -936,6 +974,9 @@ func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventReques
 }
 func (UnimplementedDaprServer) BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BulkPublishEventAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) SubscribeTopicEvents(Dapr_SubscribeTopicEventsServer) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeTopicEvents not implemented")
 }
 func (UnimplementedDaprServer) InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeBinding not implemented")
@@ -1259,6 +1300,32 @@ func _Dapr_BulkPublishEventAlpha1_Handler(srv interface{}, ctx context.Context, 
 		return srv.(DaprServer).BulkPublishEventAlpha1(ctx, req.(*BulkPublishRequest))
 	}
 	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SubscribeTopicEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaprServer).SubscribeTopicEvents(&daprSubscribeTopicEventsServer{stream})
+}
+
+type Dapr_SubscribeTopicEventsServer interface {
+	Send(*TopicEventRequest) error
+	Recv() (*SubscribeTopicEventsRequest, error)
+	grpc.ServerStream
+}
+
+type daprSubscribeTopicEventsServer struct {
+	grpc.ServerStream
+}
+
+func (x *daprSubscribeTopicEventsServer) Send(m *TopicEventRequest) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *daprSubscribeTopicEventsServer) Recv() (*SubscribeTopicEventsRequest, error) {
+	m := new(SubscribeTopicEventsRequest)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func _Dapr_InvokeBinding_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -2284,6 +2351,12 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "SubscribeTopicEvents",
+			Handler:       _Dapr_SubscribeTopicEvents_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
 		{
 			StreamName:    "SubscribeConfigurationAlpha1",
 			Handler:       _Dapr_SubscribeConfigurationAlpha1_Handler,
