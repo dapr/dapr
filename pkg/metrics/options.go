@@ -19,6 +19,7 @@ import (
 
 const (
 	defaultMetricsPort    = "9090"
+	defaultMetricsAddress = "0.0.0.0"
 	defaultMetricsEnabled = true
 )
 
@@ -28,12 +29,15 @@ type Options struct {
 	MetricsEnabled bool
 	// Port to start metrics server on.
 	Port string
+	// ListenAddress is the address that the metrics server listens on.
+	ListenAddress string
 }
 
 func DefaultMetricOptions() *Options {
 	return &Options{
 		Port:           defaultMetricsPort,
 		MetricsEnabled: defaultMetricsEnabled,
+		ListenAddress:  defaultMetricsAddress,
 	}
 }
 
@@ -48,6 +52,11 @@ func (o *Options) MetricsPort() uint64 {
 	return port
 }
 
+// MetricsListenAddress gets metrics listen address.
+func (o *Options) MetricsListenAddress() string {
+	return o.ListenAddress
+}
+
 // AttachCmdFlags attaches metrics options to command flags.
 func (o *Options) AttachCmdFlags(
 	stringVar func(p *string, name string, value string, usage string),
@@ -58,6 +67,11 @@ func (o *Options) AttachCmdFlags(
 		"metrics-port",
 		defaultMetricsPort,
 		"The port for the metrics server")
+	stringVar(
+		&o.ListenAddress,
+		"metrics-listen-address",
+		defaultMetricsAddress,
+		"The address for the metrics server")
 	boolVar(
 		&o.MetricsEnabled,
 		"enable-metrics",
@@ -74,4 +88,9 @@ func (o *Options) AttachCmdFlag(
 		"metrics-port",
 		defaultMetricsPort,
 		"The port for the metrics server")
+	stringVar(
+		&o.ListenAddress,
+		"metrics-listen-address",
+		defaultMetricsAddress,
+		"The address for the metrics server")
 }
