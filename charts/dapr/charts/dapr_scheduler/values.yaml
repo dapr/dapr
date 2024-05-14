@@ -29,16 +29,14 @@ ports:
 replicaCount: 1
 
 cluster:
-  EtcdDataDirPath: /var/run/data/dapr-scheduler/etcd-data-dir
-  EtcdDataDirWinPath: C:\\etcd-data-dir
+  etcdDataDirPath: /var/run/data/dapr-scheduler
+  etcdDataDirWinPath: C:\\dapr-scheduler
+  storageClassName: ""
+  storageSize: 10Gi
 
 etcdSpaceQuota: 2147483648
 etcdCompactionMode: periodic
 etcdCompactionRetention: 24h
-
-volumeclaims:
-  storageSize: 1Gi
-  storageClassName:
 
 livenessProbe:
   initialDelaySeconds: 10

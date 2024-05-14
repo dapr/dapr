@@ -16,6 +16,17 @@ spec:
   selector:
     matchLabels:
       app: dapr-scheduler-server
+  {{- if .Values.cluster.storageClassName }}
+  volumeClaimTemplates:
+  - metadata:
+      name: dapr-scheduler-data-dir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.cluster.storageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.cluster.storageSize }}
+  {{- end }}
   template:
     metadata:
       labels:
@@ -70,11 +81,11 @@ spec:
         resources:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
-          - name: data-dir
+          - name: dapr-scheduler-data-dir
           {{- if eq .Values.global.daprControlPlaneOs "windows" }}
-            mountPath: {{ .Values.cluster.EtcdDataDirWinPath }}-{{ .Release.Namespace }}-$(SCHEDULER_ID)
+            mountPath: {{ .Values.cluster.etcdDataDirWinPath }}/
           {{- else }}
-            mountPath: {{ .Values.cluster.EtcdDataDirPath }}-{{ .Release.Namespace }}-$(SCHEDULER_ID)
+            mountPath: {{ .Values.cluster.etcdDataDirPath }}/
           {{- end }}
             readOnly: false
           - name: dapr-trust-bundle
@@ -142,7 +153,7 @@ spec:
 {{- else }}
         - "--enable-metrics=false"
 {{- end }}
-        - "--etcd-data-dir={{ if eq .Values.global.daprControlPlaneOs "windows" }}{{ .Values.cluster.EtcdDataDirWinPath }}-{{ .Release.Namespace }}-$(SCHEDULER_ID){{- else }}{{ .Values.cluster.EtcdDataDirPath }}-{{ .Release.Namespace }}-$(SCHEDULER_ID)"
+        - "--etcd-data-dir={{ if eq .Values.global.daprControlPlaneOs "windows" }}{{ .Values.cluster.etcdDataDirWinPath }}{{- else }}{{ .Values.cluster.etcdDataDirPath }}{{- end }}/{{ .Release.Namespace }}/$(SCHEDULER_ID)"
         - "--etcd-space-quota={{ int .Values.etcdSpaceQuota }}"
         - "--etcd-compaction-mode={{ .Values.etcdCompactionMode }}"
         - "--etcd-compaction-retention={{ .Values.etcdCompactionRetention }}"
@@ -187,9 +198,11 @@ spec:
         {{- end }}
       serviceAccountName: dapr-scheduler
       volumes:
-      - name: data-dir
+      {{- if not .Values.cluster.storageClassName }}
+      - name: dapr-scheduler-data-dir
         emptyDir:
           medium: Memory
+      {{- end }}
       - name: dapr-trust-bundle
         configMap:
           name: dapr-trust-bundle
@@ -248,5 +261,4 @@ spec:
 {{- if .Values.global.priorityClassName }}
       priorityClassName:
 {{ toYaml .Values.global.priorityClassName | indent 8 }}
-{{- end }}
 {{- end }}
