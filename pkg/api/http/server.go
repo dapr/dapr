@@ -174,7 +174,7 @@ func (s *server) StartNonBlocking() error {
 		s.setupRoutes(publicR, s.api.PublicEndpoints())
 
 		healthServer := &http.Server{
-			Addr:              fmt.Sprintf(":%d", *s.config.PublicPort),
+			Addr:              fmt.Sprintf("%s:%d", s.config.PublicListenAddress, *s.config.PublicPort),
 			Handler:           publicR,
 			ReadHeaderTimeout: 10 * time.Second,
 			MaxHeaderBytes:    s.config.ReadBufferSize,

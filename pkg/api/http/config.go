@@ -20,6 +20,7 @@ type ServerConfig struct {
 	Port                    int
 	APIListenAddresses      []string
 	PublicPort              *int
+	PublicListenAddress     string
 	ProfilePort             int
 	AllowedOrigins          string
 	EnableProfiling         bool

@@ -90,7 +90,10 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		"-issuer-certificate-filename=issuer.crt",
 		"-issuer-key-filename=issuer.key",
 		"-metrics-port=" + strconv.Itoa(opts.metricsPort),
+		"-metrics-listen-address=127.0.0.1",
 		"-healthz-port=" + strconv.Itoa(opts.healthzPort),
+		"-healthz-listen-address=127.0.0.1",
+		"-listen-address=127.0.0.1",
 	}
 
 	if opts.writeBundle {
