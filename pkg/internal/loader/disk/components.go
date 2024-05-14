@@ -18,6 +18,6 @@ import (
 	"github.com/dapr/dapr/pkg/internal/loader"
 )
 
-func NewComponents(paths ...string) loader.Loader[compapi.Component] {
-	return new[compapi.Component](paths...)
+func NewComponents(opts Options) loader.Loader[compapi.Component] {
+	return new[compapi.Component](opts)
 }

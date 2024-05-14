@@ -54,7 +54,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer close(serverStopped)
-		err := testServer.Run(ctx, strconv.Itoa(port))
+		err := testServer.Run(ctx, "127.0.0.1", strconv.Itoa(port))
 		if !errors.Is(err, grpc.ErrServerStopped) {
 			require.NoError(t, err)
 		}

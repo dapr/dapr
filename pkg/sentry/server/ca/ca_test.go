@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/security/pem"
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/dapr/kit/crypto/pem"
 )
 
 func TestNew(t *testing.T) {
