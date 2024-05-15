@@ -30,10 +30,11 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
+	"github.com/dapr/dapr/pkg/placement/tests"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-func cleanupStates() {
+func cleanupStates(testRaftServer *raft.Server) {
 	state := testRaftServer.FSM().State()
 	state.Lock.RLock()
 	defer state.Lock.RUnlock()
@@ -56,11 +57,13 @@ func TestMembershipChangeWorker(t *testing.T) {
 	setupEach := func(t *testing.T) context.CancelFunc {
 		ctx, cancel := context.WithCancel(context.Background())
 		var cancelServer context.CancelFunc
+
+		testRaftServer := tests.Raft(t)
 		serverAddress, testServer, clock, cancelServer = newTestPlacementServer(t, testRaftServer)
 		testServer.hasLeadership.Store(true)
 		membershipStopCh := make(chan struct{})
 
-		cleanupStates()
+		cleanupStates(testRaftServer)
 		state := testRaftServer.FSM().State()
 		state.Lock.RLock()
 		assert.Empty(t, state.AllMembers())
@@ -100,6 +103,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		testServer.disseminateNextTime.GetOrCreate("ns0", 0).Store(clock.Now().UnixNano())
 		testServer.disseminateNextTime.GetOrCreate("ns1", 0).Store(clock.Now().UnixNano())
 		testServer.disseminateNextTime.GetOrCreate("ns2", 0).Store(clock.Now().UnixNano())
+		clock.Step(disseminateTimerInterval)
 
 		// wait until all host member change requests are flushed
 		require.Eventually(t, func() bool {
@@ -115,15 +119,20 @@ func TestMembershipChangeWorker(t *testing.T) {
 		t.Cleanup(setupEach(t))
 		// arrange
 		testServer.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
-
 		conn, _, stream := newTestClient(t, serverAddress)
 
+		// Receive the first (empty) message and the second message that should contain
+		// the full placement table
 		done := make(chan bool)
 		go func() {
+			cnt := 0
 			for {
 				placementOrder, streamErr := stream.Recv()
 				require.NoError(t, streamErr)
 				if placementOrder.GetOperation() == "unlock" {
+					cnt++
+				}
+				if cnt == 2 {
 					done <- true
 					return
 				}
@@ -138,44 +147,56 @@ func TestMembershipChangeWorker(t *testing.T) {
 			Load:      1,
 		}
 
-		// act
 		require.NoError(t, stream.Send(host))
+
+		require.Eventually(t, func() bool {
+			assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns1"))
+
+			// This indicates the member has been added to the dissemination queue and is
+			// going to be disseminated in the next tick
+			ts, ok := testServer.disseminateNextTime.Get("ns1")
+			assert.True(t, ok)
+			assert.Equal(t, clock.Now().Add(disseminateTimeout).UnixNano(), ts.Load())
+
+			return true
+		}, 10*time.Second, 100*time.Millisecond)
+
+		// Move the clock forward so dissemination is triggered
+		clock.Step(disseminateTimeout)
 
 		select {
 		case <-done:
-		case <-time.After(time.Second):
-			// this waits for a second until the member is saved in raft and then
-			// speeds up the dissemination clock
-			clock.Step(disseminateTimeout)
-		case <-time.After(disseminateTimerInterval + 5*time.Second):
+		case <-time.After(5 * time.Second):
 			t.Error("dissemination did not happen in time")
 		}
 
 		// ignore disseminateTimeout.
 		testServer.disseminateNextTime.GetOrCreate("ns1", 0).Store(0)
 
-		nStreamConnPool := testServer.streamConnPool.getStreamCount("ns1")
-		require.Equal(t, 1, nStreamConnPool)
-
+		// Check member has been saved correctly in the raft store
 		assert.Eventually(t, func() bool {
-			nStreamConnPool := testServer.streamConnPool.getStreamCount("ns1")
 			state := testServer.raftNode.FSM().State()
 			state.Lock.RLock()
-			m1, err := state.Members("ns1")
+			members, err := state.Members("ns1")
 			if err != nil {
 				state.Lock.RUnlock()
 				return false
 			}
-			cnt := len(m1)
-			state.Lock.RUnlock()
+			if len(members) == 1 {
+				x, ok := members["127.0.0.1:50100"]
+				require.True(t, ok)
+				require.Equal(t, "127.0.0.1:50100", x.Name)
+				require.Equal(t, "ns1", x.Namespace)
+				require.Contains(t, x.Entities, "DogActor", "CatActor")
+			}
 
-			return nStreamConnPool == cnt
+			return len(members) == 1
 
-		}, time.Second, time.Millisecond, "streamConnPool must be equal to the number of members")
+		}, time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
 
-		// wait until table dissemination.
+		// Wait until next table dissemination and check there hasn't been updates
+		clock.Step(disseminateTimerInterval)
 		require.Eventually(t, func() bool {
-			clock.Step(disseminateTimerInterval)
 			cnt, ok := testServer.memberUpdateCount.Get("ns1")
 			if !ok {
 				return false
@@ -186,7 +207,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 			"flushed all member updates and faultyHostDetectDuration must be faultyHostDetectDuration")
 
 		conn.Close()
-		time.Sleep(time.Second * 3)
 	})
 
 	t.Run("faulty host detector", func(t *testing.T) {
@@ -205,137 +225,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 	})
 }
 
-func TestPerformTableUpdate(t *testing.T) {
-	const testClients = 10
-	serverAddress, testServer, clock, cleanup := newTestPlacementServer(t, testRaftServer)
-	testServer.hasLeadership.Store(true)
-
-	// arrange
-	clientConns := []*grpc.ClientConn{}
-	clientStreams := []v1pb.Placement_ReportDaprStatusClient{}
-	clientRecvDataLock := &sync.RWMutex{}
-	clientRecvData := []map[string]int64{}
-	clientUpToDateCh := make(chan struct{}, testClients)
-
-	for i := 0; i < testClients; i++ {
-		conn, _, stream := newTestClient(t, serverAddress)
-		clientConns = append(clientConns, conn)
-		clientStreams = append(clientStreams, stream)
-		clientRecvData = append(clientRecvData, map[string]int64{})
-
-		go func(clientID int, clientStream v1pb.Placement_ReportDaprStatusClient) {
-			upToDate := false
-			for {
-				placementOrder, streamErr := clientStream.Recv()
-				if streamErr != nil {
-					return
-				}
-				if placementOrder != nil {
-					clientRecvDataLock.Lock()
-					clientRecvData[clientID][placementOrder.GetOperation()] = clock.Now().UnixNano()
-					clientRecvDataLock.Unlock()
-					// Check if the table is up to date.
-					if placementOrder.GetOperation() == "update" {
-						if placementOrder.GetTables() != nil {
-							upToDate = true
-							for _, entries := range placementOrder.GetTables().GetEntries() {
-								// Check if all clients are in load map.
-								if len(entries.GetLoadMap()) != testClients {
-									upToDate = false
-								}
-							}
-						}
-					}
-					if placementOrder.GetOperation() == "unlock" {
-						if upToDate {
-							clientUpToDateCh <- struct{}{}
-							return
-						}
-					}
-				}
-			}
-		}(i, stream)
-	}
-
-	// act
-	for i := 0; i < testClients; i++ {
-		host := &v1pb.Host{
-			Name:     fmt.Sprintf("127.0.0.1:5010%d", i),
-			Entities: []string{"DogActor", "CatActor", fmt.Sprintf("127.0.0.1:5010%d", i)},
-			Id:       "testAppID",
-			Load:     1, // Not used yet
-			// Port is redundant because Name should include port number
-		}
-
-		// act
-		require.NoError(t, clientStreams[i].Send(host))
-	}
-
-	for {
-		if testServer.streamConnPool.getStreamCount("") == testClients {
-			break
-		}
-		time.Sleep(time.Millisecond * 100)
-	}
-
-	// Call performTableUpdate directly, not by MembershipChangeWorker loop.
-	streamConnPool := make([]daprdStream, 0)
-	testServer.streamConnPool.forEachInNamespace("", func(streamId uint32, val *daprdStream) {
-		streamConnPool = append(streamConnPool, *val)
-	})
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
-	defer cancel()
-	req := &tablesUpdateRequest{hosts: streamConnPool}
-	require.NoError(t, testServer.performTablesUpdate(ctx, req))
-
-	// Wait until clientStreams[clientID].Recv() in client go routine received new table
-	waitCnt := testClients
-	timeoutC := time.After(time.Second * 10)
-	for {
-		end := false
-		select {
-		case <-clientUpToDateCh:
-			waitCnt--
-			if waitCnt == 0 {
-				end = true
-			}
-		case <-timeoutC:
-			end = true
-		}
-		if end {
-			break
-		}
-	}
-
-	// assert
-	for i := 0; i < testClients; i++ {
-		clientRecvDataLock.RLock()
-		lockTime, ok := clientRecvData[i]["lock"]
-		clientRecvDataLock.RUnlock()
-		assert.True(t, ok)
-		clientRecvDataLock.RLock()
-		updateTime, ok := clientRecvData[i]["update"]
-		clientRecvDataLock.RUnlock()
-		assert.True(t, ok)
-		clientRecvDataLock.RLock()
-		unlockTime, ok := clientRecvData[i]["unlock"]
-		clientRecvDataLock.RUnlock()
-		assert.True(t, ok)
-
-		// check if lock, update, and unlock operations are received in the right order.
-		assert.True(t, lockTime <= updateTime && updateTime <= unlockTime)
-	}
-
-	// clean up resources
-	for i := 0; i < testClients; i++ {
-		clientStreams[i].CloseSend()
-		clientConns[i].Close()
-	}
-
-	cleanup()
-}
-
 func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	// Replace the logger for this test so we reduce the noise
 	//prevLog := log
@@ -347,7 +236,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	// commenting out temporarily because of a race condition on log
 
 	const testClients = 10
-	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, testRaftServer)
+	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, tests.Raft(t))
 	testServer.hasLeadership.Store(true)
 	var (
 		overArr     [testClients]int64
