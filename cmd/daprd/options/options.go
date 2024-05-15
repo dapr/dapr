@@ -35,50 +35,52 @@ import (
 )
 
 type Options struct {
-	AppID                        string
-	ComponentsPath               string
-	ControlPlaneAddress          string
-	ControlPlaneTrustDomain      string
-	ControlPlaneNamespace        string
-	SentryAddress                string
-	TrustAnchors                 []byte
-	AllowedOrigins               string
-	EnableProfiling              bool
-	AppMaxConcurrency            int
-	EnableMTLS                   bool
-	AppSSL                       bool
-	MaxRequestSize               int // In bytes
-	ResourcesPath                []string
-	AppProtocol                  string
-	EnableAPILogging             *bool
-	RuntimeVersion               bool
-	BuildInfo                    bool
-	WaitCommand                  bool
-	DaprHTTPPort                 string
-	DaprAPIGRPCPort              string
-	ProfilePort                  string
-	DaprInternalGRPCPort         string
-	DaprPublicPort               string
-	AppPort                      string
-	DaprGracefulShutdownSeconds  int
-	DaprBlockShutdownDuration    *time.Duration
-	ActorsService                string
-	RemindersService             string
+	AppID                         string
+	ComponentsPath                string
+	ControlPlaneAddress           string
+	ControlPlaneTrustDomain       string
+	ControlPlaneNamespace         string
+	SentryAddress                 string
+	TrustAnchors                  []byte
+	AllowedOrigins                string
+	EnableProfiling               bool
+	AppMaxConcurrency             int
+	EnableMTLS                    bool
+	AppSSL                        bool
+	MaxRequestSize                int // In bytes
+	ResourcesPath                 []string
+	AppProtocol                   string
+	EnableAPILogging              *bool
+	RuntimeVersion                bool
+	BuildInfo                     bool
+	WaitCommand                   bool
+	DaprHTTPPort                  string
+	DaprAPIGRPCPort               string
+	ProfilePort                   string
+	DaprInternalGRPCPort          string
+	DaprInternalGRPCListenAddress string
+	DaprPublicPort                string
+	DaprPublicListenAddress       string
+	AppPort                       string
+	DaprGracefulShutdownSeconds   int
+	DaprBlockShutdownDuration     *time.Duration
+	ActorsService                 string
+	RemindersService              string
 	SchedulerAddress             []string
-	DaprAPIListenAddresses       string
-	AppHealthProbeInterval       int
-	AppHealthProbeTimeout        int
-	AppHealthThreshold           int
-	EnableAppHealthCheck         bool
-	Mode                         string
-	Config                       []string
-	UnixDomainSocket             string
-	ReadBufferSize               int // In bytes
-	DisableBuiltinK8sSecretStore bool
-	AppHealthCheckPath           string
-	AppChannelAddress            string
-	Logger                       logger.Options
-	Metrics                      *metrics.Options
+	DaprAPIListenAddresses        string
+	AppHealthProbeInterval        int
+	AppHealthProbeTimeout         int
+	AppHealthThreshold            int
+	EnableAppHealthCheck          bool
+	Mode                          string
+	Config                        []string
+	UnixDomainSocket              string
+	ReadBufferSize                int // In bytes
+	DisableBuiltinK8sSecretStore  bool
+	AppHealthCheckPath            string
+	AppChannelAddress             string
+	Logger                        logger.Options
+	Metrics                       *metrics.Options
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -118,8 +120,10 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.DaprHTTPPort, "dapr-http-port", strconv.Itoa(runtime.DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
 	fs.StringVar(&opts.DaprAPIListenAddresses, "dapr-listen-addresses", runtime.DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
 	fs.StringVar(&opts.DaprPublicPort, "dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
+	fs.StringVar(&opts.DaprPublicListenAddress, "dapr-public-listen-address", "", "Public listen address for Dapr Health and Metadata")
 	fs.StringVar(&opts.DaprAPIGRPCPort, "dapr-grpc-port", strconv.Itoa(runtime.DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	fs.StringVar(&opts.DaprInternalGRPCPort, "dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
+	fs.StringVar(&opts.DaprInternalGRPCListenAddress, "dapr-internal-grpc-listen-address", "", "gRPC listen address for the Dapr Internal API")
 	fs.StringVar(&opts.AppPort, "app-port", "", "The port the application is listening on")
 	fs.StringVar(&opts.ProfilePort, "profile-port", strconv.Itoa(runtime.DefaultProfilePort), "The port for the profile server")
 	fs.StringVar(&opts.AppProtocol, "app-protocol", string(protocol.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")

@@ -28,7 +28,7 @@ import (
 
 // Server is the interface for the healthz server.
 type Server interface {
-	Run(context.Context, int) error
+	Run(context.Context, string, int) error
 	Ready()
 }
 
@@ -107,10 +107,10 @@ func (s *server) Ready() {
 }
 
 // Run starts a net/http server with a healthz endpoint.
-func (s *server) Run(ctx context.Context, port int) error {
+func (s *server) Run(ctx context.Context, listenAddress string, port int) error {
 	//nolint:gosec
 	srv := &http.Server{
-		Addr:        fmt.Sprintf(":%d", port),
+		Addr:        fmt.Sprintf("%s:%d", listenAddress, port),
 		Handler:     s.router,
 		BaseContext: func(_ net.Listener) context.Context { return ctx },
 	}

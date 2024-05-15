@@ -83,7 +83,10 @@ func New(t *testing.T, fopts ...Option) *Injector {
 		"-log-level=" + opts.logLevel,
 		"-port=" + strconv.Itoa(opts.port),
 		"-metrics-port=" + strconv.Itoa(opts.metricsPort),
+		"-metrics-listen-address=127.0.0.1",
 		"-healthz-port=" + strconv.Itoa(opts.healthzPort),
+		"-healthz-listen-address=127.0.0.1",
+		"-listen-address=127.0.0.1",
 		"-kubeconfig=" + kubeapi.KubeconfigPath(t),
 	}
 
