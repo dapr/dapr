@@ -19,7 +19,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -111,9 +110,17 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 	srv2 := prochttp.New(t, prochttp.WithHandler(handler2))
 	srv3 := prochttp.New(t, prochttp.WithHandler(handler3))
 	srv1.Run(t, ctx)
+	t.Cleanup(func() {
+		srv1.Cleanup(t)
+	})
 	srv2.Run(t, ctx)
+	t.Cleanup(func() {
+		srv2.Cleanup(t)
+	})
 	srv3.Run(t, ctx)
-	time.Sleep(2 * time.Second)
+	t.Cleanup(func() {
+		srv3.Cleanup(t)
+	})
 
 	n.daprd1 = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore1"),
@@ -122,10 +129,7 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 		daprd.WithMode("standalone"),
 		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(n.sentry.CABundle().TrustAnchors))),
 		daprd.WithSentryAddress(n.sentry.Address()),
-		// daprd.WithPlacementAddresses(n.place.Address()),
-		daprd.WithPlacementAddresses(
-			"localhost:"+strconv.Itoa(n.place.Port()),
-		),
+		daprd.WithPlacementAddresses(n.place.Address()),
 		daprd.WithEnableMTLS(true),
 		daprd.WithAppPort(srv1.Port()),
 	)
@@ -155,14 +159,24 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 	)
 
 	n.daprd1.Run(t, ctx)
+	t.Cleanup(func() {
+		n.daprd1.Cleanup(t)
+	})
 	n.daprd1.WaitUntilRunning(t, ctx)
 	n.daprd1.WaitUntilAppHealth(t, ctx)
 
 	n.daprd2.Run(t, ctx)
+	t.Cleanup(func() {
+		n.daprd2.Cleanup(t)
+	})
 	n.daprd2.WaitUntilRunning(t, ctx)
 	n.daprd2.WaitUntilAppHealth(t, ctx)
 
 	n.daprd3.Run(t, ctx)
+	t.Cleanup(func() {
+		n.daprd3.Cleanup(t)
+	})
+
 	n.daprd3.WaitUntilRunning(t, ctx)
 	n.daprd3.WaitUntilAppHealth(t, ctx)
 
