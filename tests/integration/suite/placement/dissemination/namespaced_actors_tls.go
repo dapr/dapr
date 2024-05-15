@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package namespacedActors
+package namespacedactors
 
 import (
 	"context"
@@ -40,16 +40,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(namespacedAActorsTLS))
+	suite.Register(new(namespacedActorsTLS))
 }
 
-type namespacedAActorsTLS struct {
+type namespacedActorsTLS struct {
 	sentry                 *sentry.Sentry
 	place                  *placement.Placement
 	daprd1, daprd2, daprd3 *daprd.Daprd
 }
 
-func (n *namespacedAActorsTLS) Setup(t *testing.T) []framework.Option {
+func (n *namespacedActorsTLS) Setup(t *testing.T) []framework.Option {
 	n.sentry = sentry.New(t)
 
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
@@ -66,7 +66,7 @@ func (n *namespacedAActorsTLS) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (n *namespacedAActorsTLS) Run(t *testing.T, ctx context.Context) {
+func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 	n.sentry.WaitUntilRunning(t, ctx)
 	n.place.WaitUntilRunning(t, ctx)
 
