@@ -470,8 +470,7 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
-//replace github.com/dapr/kit => github.com/elena-kolevska/kit v0.0.0-4a3a510011a28dcc8a7cf2ba4bb2c40304341a7a
-replace github.com/dapr/kit => github.com/elena-kolevska/kit v0.0.0-20240514004012-4a3a510011a2
+replace github.com/dapr/kit => github.com/elena-kolevska/kit v0.0.0-20240514184500-1715b0a0ec63
 
 //
 // Then, run `make modtidy-all` in this repository.

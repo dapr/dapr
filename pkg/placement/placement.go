@@ -123,14 +123,14 @@ type Service struct {
 	membershipCh chan hostMemberChange
 
 	// disseminateLocks is a map of lock per namespace for disseminating the hashing tables
-	disseminateLocks *concurrency.MutexMap[string]
+	disseminateLocks concurrency.MutexMap[string]
 
 	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
-	disseminateNextTime *concurrency.AtomicMap[string, int64]
+	disseminateNextTime concurrency.AtomicMap[string, int64]
 
 	// memberUpdateCount represents how many dapr runtimes needs to change in a namespace.
 	// Only actor runtime's heartbeat will increase this.
-	memberUpdateCount *concurrency.AtomicMap[string, uint32]
+	memberUpdateCount concurrency.AtomicMap[string, uint32]
 
 	// Maximum API level to return.
 	// If nil, there's no limit.
@@ -182,9 +182,9 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		clock:                    &clock.RealClock{},
 		closedCh:                 make(chan struct{}),
 		sec:                      opts.SecProvider,
-		disseminateLocks:         concurrency.NewMutexMapString(),
-		memberUpdateCount:        concurrency.NewAtomicMapStringUint32(),
-		disseminateNextTime:      concurrency.NewAtomicMapStringInt64(),
+		disseminateLocks:         concurrency.NewMutexMap[string](),
+		memberUpdateCount:        concurrency.NewAtomicMap[string, uint32](),
+		disseminateNextTime:      concurrency.NewAtomicMap[string, int64](),
 	}
 }
 
