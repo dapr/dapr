@@ -17,12 +17,71 @@ import (
 	"context"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/dapr/pkg/outbox"
+	rtv1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
+
+// PubsubItem is a pubsub component with its scoped subscriptions and
+// publishings.
+type PubsubItem struct {
+	Component           contribPubsub.PubSub
+	ScopedSubscriptions []string
+	ScopedPublishings   []string
+	AllowedTopics       []string
+	ProtectedTopics     []string
+	NamespaceScoped     bool
+}
 
 // Adapter is the interface for message buses.
 type Adapter interface {
 	Publish(context.Context, *contribPubsub.PublishRequest) error
 	BulkPublish(context.Context, *contribPubsub.BulkPublishRequest) (contribPubsub.BulkPublishResponse, error)
-	Outbox() outbox.Outbox
+}
+
+type AdapterStreamer interface {
+	Subscribe(rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, *rtv1pb.SubscribeTopicEventsInitialRequestAlpha1) error
+	Publish(context.Context, *SubscribedMessage) error
+	StreamerKey(pubsub, topic string) string
+}
+
+func IsOperationAllowed(topic string, pubsub *PubsubItem) bool {
+	var inAllowedTopics, inProtectedTopics bool
+
+	// first check if allowedTopics contain it
+	if len(pubsub.AllowedTopics) > 0 {
+		for _, t := range pubsub.AllowedTopics {
+			if t == topic {
+				inAllowedTopics = true
+				break
+			}
+		}
+		if !inAllowedTopics {
+			return false
+		}
+	}
+
+	// check if topic is protected
+	if len(pubsub.ProtectedTopics) > 0 {
+		for _, t := range pubsub.ProtectedTopics {
+			if t == topic {
+				inProtectedTopics = true
+				break
+			}
+		}
+	}
+
+	// if topic is protected then a scope must be applied
+	if !inProtectedTopics && len(pubsub.ScopedPublishings) == 0 {
+		return true
+	}
+
+	// check if a granular scope has been applied
+	allowedScope := false
+	for _, t := range pubsub.ScopedPublishings {
+		if t == topic {
+			allowedScope = true
+			break
+		}
+	}
+
+	return allowedScope
 }

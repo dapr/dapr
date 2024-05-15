@@ -41,17 +41,15 @@ func TestGetMetadata(t *testing.T) {
 	compStore := compstore.New()
 	require.NoError(t, compStore.AddPendingComponentForCommit(fakeComponent))
 	require.NoError(t, compStore.CommitPendingComponent())
-	compStore.SetSubscriptions([]runtimePubsub.Subscription{
-		{
-			PubsubName:      "test",
-			Topic:           "topic",
-			DeadLetterTopic: "dead",
-			Metadata:        map[string]string{},
-			Rules: []*runtimePubsub.Rule{
-				{
-					Match: &expr.Expr{},
-					Path:  "path",
-				},
+	compStore.SetProgramaticSubscriptions(runtimePubsub.Subscription{
+		PubsubName:      "test",
+		Topic:           "topic",
+		DeadLetterTopic: "dead",
+		Metadata:        map[string]string{},
+		Rules: []*runtimePubsub.Rule{
+			{
+				Match: &expr.Expr{},
+				Path:  "path",
 			},
 		},
 	})

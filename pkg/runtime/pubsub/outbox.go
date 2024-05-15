@@ -54,22 +54,29 @@ type outboxImpl struct {
 	cloudEventExtractorFn func(map[string]any, string) string
 	getPubsubFn           func(string) (contribPubsub.PubSub, bool)
 	getStateFn            func(string) (state.Store, bool)
-	publishFn             func(context.Context, *contribPubsub.PublishRequest) error
+	publisher             Adapter
 	outboxStores          map[string]outboxConfig
 	lock                  sync.RWMutex
 	namespace             string
 }
 
+type OptionsOutbox struct {
+	Publisher             Adapter
+	GetPubsubFn           func(string) (contribPubsub.PubSub, bool)
+	GetStateFn            func(string) (state.Store, bool)
+	CloudEventExtractorFn func(map[string]any, string) string
+	Namespace             string
+}
+
 // NewOutbox returns an instance of an Outbox.
-func NewOutbox(publishFn func(context.Context, *contribPubsub.PublishRequest) error, getPubsubFn func(string) (contribPubsub.PubSub, bool), getStateFn func(string) (state.Store, bool), cloudEventExtractorFn func(map[string]any, string) string, namespace string) outbox.Outbox {
+func NewOutbox(opts OptionsOutbox) outbox.Outbox {
 	return &outboxImpl{
-		cloudEventExtractorFn: cloudEventExtractorFn,
-		getPubsubFn:           getPubsubFn,
-		getStateFn:            getStateFn,
-		publishFn:             publishFn,
-		lock:                  sync.RWMutex{},
-		outboxStores:          map[string]outboxConfig{},
-		namespace:             namespace,
+		cloudEventExtractorFn: opts.CloudEventExtractorFn,
+		getPubsubFn:           opts.GetPubsubFn,
+		getStateFn:            opts.GetStateFn,
+		publisher:             opts.Publisher,
+		outboxStores:          make(map[string]outboxConfig),
+		namespace:             opts.Namespace,
 	}
 }
 
@@ -215,7 +222,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				return nil, err
 			}
 
-			err = o.publishFn(ctx, &contribPubsub.PublishRequest{
+			err = o.publisher.Publish(ctx, &contribPubsub.PublishRequest{
 				PubsubName: c.outboxPubsub,
 				Data:       data,
 				Topic:      outboxTopic(source, c.publishTopic, o.namespace),
@@ -309,7 +316,7 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 
 			contentType := cloudEvent[contribPubsub.DataContentTypeField].(string)
 
-			err = o.publishFn(ctx, &contribPubsub.PublishRequest{
+			err = o.publisher.Publish(ctx, &contribPubsub.PublishRequest{
 				PubsubName:  c.publishPubSub,
 				Data:        b,
 				Topic:       c.publishTopic,

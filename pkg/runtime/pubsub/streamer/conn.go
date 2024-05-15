@@ -11,26 +11,26 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub
+package streamer
 
 import (
 	"context"
 	"sync"
 
 	rtv1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"google.golang.org/appengine/log"
 )
 
-type streamconn struct {
+type conn struct {
 	lock             sync.RWMutex
-	s                *streamer
-	publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsResponseAlpha1
-	stream           rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
+	stream           rtv1pb.Dapr_SubscribeTopicEventsServer
+	publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsResponse
 }
 
-func (s *streamconn) notifyPublishResponse(ctx context.Context, resp *rtv1pb.SubscribeTopicEventsResponseAlpha1) {
-	s.lock.RLock()
-	ch, ok := s.publishResponses[resp.GetId()]
-	s.lock.RUnlock()
+func (c *conn) notifyPublishResponse(ctx context.Context, resp *rtv1pb.SubscribeTopicEventsResponse) {
+	c.lock.RLock()
+	ch, ok := c.publishResponses[resp.GetId()]
+	c.lock.RUnlock()
 
 	if !ok {
 		log.Errorf("no client stream expecting publish response for id %q", resp.GetId())
@@ -43,14 +43,14 @@ func (s *streamconn) notifyPublishResponse(ctx context.Context, resp *rtv1pb.Sub
 	}
 }
 
-func (s *streamconn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsResponseAlpha1, func()) {
-	ch := make(chan *rtv1pb.SubscribeTopicEventsResponseAlpha1)
-	s.lock.Lock()
-	s.publishResponses[id] = ch
-	s.lock.Unlock()
+func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsResponse, func()) {
+	ch := make(chan *rtv1pb.SubscribeTopicEventsResponse)
+	c.lock.Lock()
+	c.publishResponses[id] = ch
+	c.lock.Unlock()
 	return ch, func() {
-		s.lock.Lock()
-		delete(s.publishResponses, id)
-		s.lock.Unlock()
+		c.lock.Lock()
+		delete(c.publishResponses, id)
+		c.lock.Unlock()
 	}
 }
