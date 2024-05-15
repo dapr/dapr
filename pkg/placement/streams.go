@@ -104,11 +104,6 @@ func (s *streamConnPool) delete(stream *daprdStream) bool {
 	return lastInNamespace
 }
 
-// getStreams requires a lock (s.lock) to be held by the caller.
-func (s *streamConnPool) getStreams(namespace string) map[uint32]*daprdStream {
-	return s.streams[namespace]
-}
-
 func (s *streamConnPool) getStreamCount(namespace string) int {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
@@ -133,16 +128,6 @@ func (s *streamConnPool) forEachInNamespace(namespace string, fn func(key uint32
 	defer s.lock.RUnlock()
 	for key, val := range s.streams[namespace] {
 		fn(key, val)
-	}
-}
-
-func (s *streamConnPool) forEach(fn func(key uint32, val *daprdStream)) {
-	s.lock.RLock()
-	defer s.lock.RUnlock()
-	for _, streams := range s.streams {
-		for key, val := range streams {
-			fn(key, val)
-		}
 	}
 }
 

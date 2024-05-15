@@ -167,7 +167,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 				assert.Equal(t, host.GetNamespace(), memberChange.host.Namespace)
 				assert.Equal(t, host.GetId(), memberChange.host.AppID)
 				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
-				assert.Equal(t, testServer.streamConnPool.getStreamCount("ns1"), 1)
+				assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns1"))
 				return true
 			default:
 				return false
@@ -220,7 +220,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 				assert.Equal(t, host.GetNamespace(), memberChange.host.Namespace)
 				assert.Equal(t, host.GetId(), memberChange.host.AppID)
 				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
-				assert.Equal(t, testServer.streamConnPool.getStreamCount(""), 1)
+				assert.Equal(t, 1, testServer.streamConnPool.getStreamCount(""))
 				return true
 			default:
 				return false

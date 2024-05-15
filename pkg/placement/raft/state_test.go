@@ -301,7 +301,6 @@ func TestRestoreHashingTables(t *testing.T) {
 
 	ht, err = s.hashingTableMap("ns1")
 	require.Len(t, ht, 2)
-
 }
 
 func TestUpdateAPILevel(t *testing.T) {

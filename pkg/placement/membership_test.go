@@ -191,7 +191,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 			}
 
 			return len(members) == 1
-
 		}, time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
 
 		// Wait until next table dissemination and check there hasn't been updates
@@ -227,12 +226,12 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	// Replace the logger for this test so we reduce the noise
-	//prevLog := log
-	//log = logger.NewLogger("dapr.placement1")
-	//log.SetOutputLevel(logger.InfoLevel)
-	//t.Cleanup(func() {
-	//	log = prevLog
-	//})
+	// prevLog := log
+	// log = logger.NewLogger("dapr.placement1")
+	// log.SetOutputLevel(logger.InfoLevel)
+	// t.Cleanup(func() {
+	// 	log = prevLog
+	// } )
 	// commenting out temporarily because of a race condition on log
 
 	const testClients = 10

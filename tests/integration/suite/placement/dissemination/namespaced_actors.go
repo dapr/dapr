@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package namespacedActors
+package namespacedactors
 
 import (
 	"context"
@@ -89,7 +89,7 @@ func (n *namespacedActors) Run(t *testing.T, ctx context.Context) {
 				}
 				msgNumber++
 				if msgNumber == 1 {
-					require.Len(t, placementTables.GetEntries(), 0)
+					require.Empty(t, placementTables.GetEntries())
 				}
 				if msgNumber == 2 {
 					require.Len(t, placementTables.GetEntries(), 2)
@@ -98,8 +98,7 @@ func (n *namespacedActors) Run(t *testing.T, ctx context.Context) {
 
 					loadMap := placementTables.GetEntries()["actor10"].GetLoadMap()
 					require.Len(t, loadMap, 1)
-					require.Contains(t, loadMap, host1.Name)
-
+					require.Contains(t, loadMap, host1.GetName())
 				}
 			}
 
@@ -118,7 +117,7 @@ func (n *namespacedActors) Run(t *testing.T, ctx context.Context) {
 				}
 				msgNumber++
 				if msgNumber == 1 {
-					assert.Len(t, placementTables.GetEntries(), 0)
+					assert.Empty(t, placementTables.GetEntries())
 				}
 				if msgNumber == 2 {
 					require.Len(t, placementTables.GetEntries(), 6)
@@ -131,7 +130,7 @@ func (n *namespacedActors) Run(t *testing.T, ctx context.Context) {
 
 					loadMap := placementTables.GetEntries()["actor10"].GetLoadMap()
 					require.Len(t, loadMap, 1)
-					require.Contains(t, loadMap, host3.Name)
+					require.Contains(t, loadMap, host3.GetName())
 				}
 			}
 			assert.Equal(t, 2, msgNumber)
@@ -163,7 +162,7 @@ func (n *namespacedActors) Run(t *testing.T, ctx context.Context) {
 
 					loadMap := placementTables.GetEntries()["actor10"].GetLoadMap()
 					require.Len(t, loadMap, 1)
-					require.Contains(t, loadMap, host3.Name)
+					require.Contains(t, loadMap, host3.GetName())
 				}
 			}
 			assert.Equal(t, 2, msgNumber)
@@ -230,7 +229,7 @@ func (n *namespacedActors) Run(t *testing.T, ctx context.Context) {
 				}
 				msgNumber++
 				if msgNumber == 1 {
-					assert.Len(t, placementTables.GetEntries(), 0)
+					assert.Empty(t, placementTables.GetEntries())
 				}
 				if msgNumber == 2 {
 					require.Len(t, placementTables.GetEntries(), 1)
@@ -252,7 +251,7 @@ func (n *namespacedActors) Run(t *testing.T, ctx context.Context) {
 				}
 				msgNumber++
 				if msgNumber == 1 {
-					assert.Len(t, placementTables.GetEntries(), 0)
+					assert.Empty(t, placementTables.GetEntries())
 				}
 				if msgNumber == 2 {
 					require.Len(t, placementTables.GetEntries(), 5)

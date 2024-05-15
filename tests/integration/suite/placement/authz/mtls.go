@@ -107,33 +107,22 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	_, err = establishStream(t, ctx, client, &v1pb.Host{
 		Id: "app-2",
 	})
-	assert.Error(t, err)
-	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 
 	// The namespace id in the message and SPIFFE ID should match
 	_, err = establishStream(t, ctx, client, &v1pb.Host{
 		Id:        "app-1",
 		Namespace: "default",
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	_, err = establishStream(t, ctx, client, &v1pb.Host{
 		Id:        "app-1",
 		Namespace: "foo",
 	})
-	assert.Error(t, err)
-	assert.Equal(t, codes.PermissionDenied, status.Code(err))
-}
-
-func waitForUnlock(t *testing.T, stream v1pb.Placement_ReportDaprStatusClient) {
-	t.Helper()
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := stream.Recv()
-		//nolint:testifylint
-		if assert.NoError(c, err) {
-			assert.Equal(c, "unlock", resp.GetOperation())
-		}
-	}, time.Second*5, time.Millisecond*10)
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
 func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementClient, firstMessage *v1pb.Host) (v1pb.Placement_ReportDaprStatusClient, error) {
@@ -152,7 +141,6 @@ func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementCli
 			return
 		}
 		_, err = stream.Recv()
-
 	}, time.Second*5, time.Millisecond*10)
 	return stream, err
 }

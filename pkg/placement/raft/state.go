@@ -61,10 +61,6 @@ type DaprNamespace struct {
 	hashingTableMap map[string]*hashing.Consistent
 }
 
-func (n *DaprNamespace) addMember(m *DaprHostMember) {
-	n.Members[m.Name] = m
-}
-
 type DaprHostMemberStateData struct {
 	// Index is the index number of raft log.
 	Index uint64
