@@ -65,7 +65,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		cleanupStates(testRaftServer)
 		state := testRaftServer.FSM().State()
 		state.Lock.RLock()
-		assert.Empty(t, state.AllMembers())
+		require.Empty(t, state.AllMembers())
 		state.Lock.RUnlock()
 
 		go func() {
@@ -165,11 +165,10 @@ func TestMembershipChangeWorker(t *testing.T) {
 		testServer.disseminateNextTime.GetOrCreate("ns1", 0).Store(0)
 
 		// Check member has been saved correctly in the raft store
-		assert.Eventually(t, func() bool {
+		require.Eventually(t, func() bool {
 			state := testServer.raftNode.FSM().State()
 			state.Lock.RLock()
 			members1, err := state.Members("ns1")
-
 			if err != nil {
 				state.Lock.RUnlock()
 				return false
@@ -183,7 +182,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 			}
 
 			members2, err := state.Members("ns2")
-
 			if err != nil {
 				state.Lock.RUnlock()
 				return false
@@ -243,7 +241,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 			return true
 		}, 5*time.Second, 100*time.Millisecond)
-
 	})
 }
 

@@ -72,7 +72,7 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 	handler1 := http.NewServeMux()
 	handler1.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		types := []string{"actor1"}
-		w.Write([]byte(fmt.Sprintf(`{"entities": ["%s"]}`, strings.Join(types, `","`))))
+		fmt.Fprintf(w, `{"entities": ["%s"]}`, strings.Join(types, `","`))
 	})
 	handler1.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -84,7 +84,7 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 	handler2 := http.NewServeMux()
 	handler2.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		types := []string{"actor2"}
-		w.Write([]byte(fmt.Sprintf(`{"entities": ["%s"]}`, strings.Join(types, `","`))))
+		fmt.Fprintf(w, `{"entities": ["%s"]}`, strings.Join(types, `","`))
 	})
 	handler2.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -97,7 +97,7 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 	handler3.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		types := []string{"actor1", "actor3"}
 		// "actor1" exists in both app 1 and app3, but the apps are in a different namespace
-		w.Write([]byte(fmt.Sprintf(`{"entities": ["%s"]}`, strings.Join(types, `","`))))
+		fmt.Fprintf(w, `{"entities": ["%s"]}`, strings.Join(types, `","`))
 	})
 	handler3.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -189,7 +189,6 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			require.NoError(c, err)
 			require.Equal(t, "OK1", string(val1.GetData()))
 
@@ -198,7 +197,6 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			require.Error(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -206,7 +204,6 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			require.Error(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -228,7 +225,6 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			require.NoError(c, err)
 			require.Equal(t, "OK3", string(val2.GetData()))
 
@@ -237,7 +233,6 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			require.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -245,7 +240,6 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			require.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -267,7 +261,6 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			require.NoError(c, err)
 			require.Equal(t, "OK3", string(val3.GetData()))
 
@@ -276,7 +269,6 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			require.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -284,7 +276,6 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			require.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -296,7 +287,6 @@ func (n *namespacedActorsTLS) Run(t *testing.T, ctx context.Context) {
 			require.Error(c, err, err)
 		}, time.Second*20, time.Millisecond*10, "actors not ready")
 	})
-
 }
 
 func getClient(t *testing.T, ctx context.Context, addr string) rtv1.DaprClient {

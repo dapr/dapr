@@ -61,7 +61,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 		}
 	}()
 
-	assert.Eventually(t, func() bool {
+	require.Eventually(t, func() bool {
 		conn, err := net.Dial("tcp", ":"+strconv.Itoa(port))
 		if err == nil {
 			conn.Close()
@@ -83,6 +83,8 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 }
 
 func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.TCPConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
+	t.Helper()
+
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
 	tcpConn, err := net.Dial("tcp", serverAddress)
@@ -127,9 +129,8 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 	_, err := stream.Recv()
 	s, ok := status.FromError(err)
 
-	// assert
-	assert.True(t, ok)
-	assert.Equal(t, codes.FailedPrecondition, s.Code())
+	require.True(t, ok)
+	require.Equal(t, codes.FailedPrecondition, s.Code())
 	stream.CloseSend()
 
 	// tear down
@@ -157,8 +158,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// act
 		require.NoError(t, stream.Send(host))
 
-		// assert
-		assert.Eventually(t, func() bool {
+		require.Eventually(t, func() bool {
 			clock.Step(disseminateTimerInterval)
 			select {
 			case memberChange := <-testServer.membershipCh:
@@ -180,12 +180,10 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		stream.CloseSend()
 
 		clock.Step(disseminateTimerInterval)
-		// assert
 		select {
 		case memberChange := <-testServer.membershipCh:
-			assert.Equal(t, raft.MemberRemove, memberChange.cmdType)
-			assert.Equal(t, host.GetName(), memberChange.host.Name)
-
+			require.Equal(t, raft.MemberRemove, memberChange.cmdType)
+			require.Equal(t, host.GetName(), memberChange.host.Name)
 		case <-time.After(testStreamSendLatency):
 			require.Fail(t, "no membership change")
 		}
@@ -210,8 +208,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// act
 		require.NoError(t, stream.Send(host))
 
-		// assert
-		assert.Eventually(t, func() bool {
+		require.Eventually(t, func() bool {
 			clock.Step(disseminateTimerInterval)
 			select {
 			case memberChange := <-testServer.membershipCh:
@@ -232,12 +229,10 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// in the next flush time window.
 		stream.CloseSend()
 
-		// assert
 		select {
 		case memberChange := <-testServer.membershipCh:
-			assert.Equal(t, raft.MemberRemove, memberChange.cmdType)
-			assert.Equal(t, host.GetName(), memberChange.host.Name)
-
+			require.Equal(t, raft.MemberRemove, memberChange.cmdType)
+			require.Equal(t, host.GetName(), memberChange.host.Name)
 		case <-time.After(testStreamSendLatency):
 			require.Fail(t, "no membership change")
 		}
@@ -261,7 +256,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		stream.Send(host)
 
 		// assert
-		assert.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			clock.Step(disseminateTimerInterval)
 			select {
 			case memberChange := <-testServer.membershipCh:
@@ -277,29 +272,24 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			}
 		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
 
-		// act
 		// Close tcp connection before closing stream, which simulates the scenario
 		// where dapr runtime disconnects the connection from placement service unexpectedly.
 		// Use SetLinger to forcefully close the TCP connection.
 		tcpConn.SetLinger(0)
 		tcpConn.Close()
 
-		// assert
 		select {
-		case <-testServer.membershipCh:
-			require.Fail(t, "should not have any member change message because faulty host detector time will clean up")
-
+		case memberChange := <-testServer.membershipCh:
+			require.Equal(t, raft.MemberRemove, memberChange.cmdType)
+			require.Equal(t, host.GetName(), memberChange.host.Name)
 		case <-time.After(testStreamSendLatency):
-			streamConnCount := testServer.streamConnPool.getStreamCount("ns1")
-			assert.Equal(t, 0, streamConnCount)
+			require.Fail(t, "no membership change")
 		}
 	})
 
 	t.Run("non actor host", func(t *testing.T) {
-		// arrange
 		conn, _, stream := newTestClient(t, serverAddress)
 
-		// act
 		host := &v1pb.Host{
 			Name:     "127.0.0.1:50104",
 			Entities: []string{},
@@ -309,7 +299,6 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		}
 		stream.Send(host)
 
-		// assert
 		select {
 		case <-testServer.membershipCh:
 			require.Fail(t, "should not have any membership change")
@@ -318,7 +307,6 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			// All good
 		}
 
-		// act
 		// Close tcp connection before closing stream, which simulates the scenario
 		// where dapr runtime disconnects the connection from placement service unexpectedly.
 		require.NoError(t, conn.Close())

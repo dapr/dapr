@@ -16,7 +16,6 @@ package raft
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -28,13 +27,12 @@ func TestNewDaprHostMemberState(t *testing.T) {
 		maxAPILevel:       100,
 	})
 
-	// assert
-	assert.Equal(t, uint64(0), s.Index())
+	require.Equal(t, uint64(0), s.Index())
 	s.Lock.RLock()
 	defer s.Lock.RUnlock()
 
-	assert.Empty(t, s.Namespaces())
-	assert.Empty(t, s.AllMembers())
+	require.Empty(t, s.Namespaces())
+	require.Empty(t, s.AllMembers())
 }
 
 func TestClone(t *testing.T) {
@@ -54,8 +52,7 @@ func TestClone(t *testing.T) {
 	// act
 	newState := s.clone()
 
-	// assert
-	assert.NotSame(t, s, newState)
+	require.NotSame(t, s, newState)
 	table, err := newState.hashingTableMap("ns1")
 	require.NoError(t, err)
 	require.Nil(t, table)
@@ -64,6 +61,7 @@ func TestClone(t *testing.T) {
 	members, err := s.Members("ns1")
 	require.NoError(t, err)
 	clonedMembers, err := newState.Members("ns1")
+	require.NoError(t, err)
 	require.EqualValues(t, members, clonedMembers)
 }
 
@@ -87,40 +85,41 @@ func TestUpsertRemoveMembers(t *testing.T) {
 	require.NoError(t, err)
 	ht, err := s.hashingTableMap("ns1")
 	require.NoError(t, err)
-	assert.Len(t, m, 1)
-	assert.Len(t, m["127.0.0.1:8080"].Entities, 2)
-	assert.Len(t, ht, 2)
-	assert.True(t, updated)
+	require.Len(t, m, 1)
+	require.Len(t, m["127.0.0.1:8080"].Entities, 2)
+	require.Len(t, ht, 2)
+	require.True(t, updated)
 
 	// An existing host starts serving new actor types
 	hostMember.Entities = []string{"actorTypeThree"}
 	updated = s.upsertMember(hostMember)
 
-	assert.True(t, updated)
+	require.True(t, updated)
 
 	m, err = s.Members("ns1")
 	require.NoError(t, err)
-	assert.Len(t, m, 1)
-	assert.Len(t, m["127.0.0.1:8080"].Entities, 1)
+	require.Len(t, m, 1)
+	require.Len(t, m["127.0.0.1:8080"].Entities, 1)
 
 	ht, err = s.hashingTableMap("ns1")
-	assert.Len(t, ht, 1)
+	require.NoError(t, err)
+	require.Len(t, ht, 1)
 
 	updated = s.removeMember(hostMember)
 
 	m, err = s.Members("ns1")
 	require.NoError(t, err)
-	assert.Empty(t, m)
-	assert.True(t, updated)
+	require.Empty(t, m)
+	require.True(t, updated)
 
 	ht, err = s.hashingTableMap("ns1")
 	require.NoError(t, err)
-	assert.Empty(t, ht)
+	require.Empty(t, ht)
 
 	updated = s.removeMember(&DaprHostMember{
 		Name: "127.0.0.1:8080",
 	})
-	assert.False(t, updated)
+	require.False(t, updated)
 }
 
 func TestUpsertMemberNoHashingTable(t *testing.T) {
@@ -138,16 +137,14 @@ func TestUpsertMemberNoHashingTable(t *testing.T) {
 		UpdatedAt: 1,
 	})
 
-	// assert
 	m, err := s.Members("ns1")
 	require.NoError(t, err)
 	ht, err := s.hashingTableMap("ns1")
 	require.NoError(t, err)
-	assert.Len(t, m, 1)
-	assert.Len(t, ht, 3)
-	assert.True(t, updated)
+	require.Len(t, m, 1)
+	require.Len(t, ht, 3)
+	require.True(t, updated)
 
-	// act
 	updated = s.upsertMember(&DaprHostMember{
 		Name:      "127.0.0.1:8081",
 		Namespace: "ns1",
@@ -156,8 +153,7 @@ func TestUpsertMemberNoHashingTable(t *testing.T) {
 		UpdatedAt: 2,
 	})
 
-	// assert
-	assert.False(t, updated)
+	require.False(t, updated)
 }
 
 func TestUpsertMemberNonActorHost(t *testing.T) {
@@ -177,8 +173,7 @@ func TestUpsertMemberNonActorHost(t *testing.T) {
 
 	// act
 	updated := s.upsertMember(testMember)
-	// assert
-	assert.False(t, updated)
+	require.False(t, updated)
 }
 
 func TestUpdateHashingTable(t *testing.T) {
@@ -204,9 +199,9 @@ func TestUpdateHashingTable(t *testing.T) {
 
 		ht, err := s.hashingTableMap("ns1")
 		require.NoError(t, err)
-		assert.Len(t, ht, 2)
-		assert.NotNil(t, ht["actorTypeOne"])
-		assert.NotNil(t, ht["actorTypeTwo"])
+		require.Len(t, ht, 2)
+		require.NotNil(t, ht["actorTypeOne"])
+		require.NotNil(t, ht["actorTypeTwo"])
 	})
 
 	t.Run("update new hashing table per actor types", func(t *testing.T) {
@@ -221,10 +216,10 @@ func TestUpdateHashingTable(t *testing.T) {
 
 		ht, err := s.hashingTableMap("ns1")
 		require.NoError(t, err)
-		assert.Len(t, ht, 3)
-		assert.NotNil(t, ht["actorTypeOne"])
-		assert.NotNil(t, ht["actorTypeTwo"])
-		assert.NotNil(t, ht["actorTypeThree"])
+		require.Len(t, ht, 3)
+		require.NotNil(t, ht["actorTypeOne"])
+		require.NotNil(t, ht["actorTypeTwo"])
+		require.NotNil(t, ht["actorTypeThree"])
 	})
 }
 
@@ -334,24 +329,24 @@ func TestUpdateAPILevel(t *testing.T) {
 		}
 
 		s.upsertMember(m1)
-		assert.Equal(t, uint32(10), s.data.APILevel)
+		require.Equal(t, uint32(10), s.data.APILevel)
 
 		s.upsertMember(m2)
-		assert.Equal(t, uint32(10), s.data.APILevel)
+		require.Equal(t, uint32(10), s.data.APILevel)
 
 		s.upsertMember(m3)
-		assert.Equal(t, uint32(10), s.data.APILevel)
+		require.Equal(t, uint32(10), s.data.APILevel)
 
 		s.removeMember(m1)
-		assert.Equal(t, uint32(20), s.data.APILevel)
+		require.Equal(t, uint32(20), s.data.APILevel)
 
 		s.removeMember(m2)
-		assert.Equal(t, uint32(30), s.data.APILevel)
+		require.Equal(t, uint32(30), s.data.APILevel)
 
 		// TODO @elena - do we want to keep the cluster's last known api level, when all members are removed?
 		// That's what we do currently, but I wonder why it's the case
 		s.removeMember(m3)
-		assert.Equal(t, uint32(30), s.data.APILevel)
+		require.Equal(t, uint32(30), s.data.APILevel)
 	})
 
 	t.Run("min api levels set", func(t *testing.T) {
@@ -378,13 +373,13 @@ func TestUpdateAPILevel(t *testing.T) {
 		}
 
 		s.upsertMember(m1)
-		assert.Equal(t, uint32(20), s.data.APILevel)
+		require.Equal(t, uint32(20), s.data.APILevel)
 
 		s.upsertMember(m2)
-		assert.Equal(t, uint32(20), s.data.APILevel)
+		require.Equal(t, uint32(20), s.data.APILevel)
 
 		s.removeMember(m1)
-		assert.Equal(t, uint32(30), s.data.APILevel)
+		require.Equal(t, uint32(30), s.data.APILevel)
 	})
 
 	t.Run("max api levels set", func(t *testing.T) {
@@ -402,6 +397,6 @@ func TestUpdateAPILevel(t *testing.T) {
 			APILevel:  30,
 		})
 
-		assert.Equal(t, uint32(20), s.data.APILevel)
+		require.Equal(t, uint32(20), s.data.APILevel)
 	})
 }

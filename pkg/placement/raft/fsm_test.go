@@ -122,6 +122,7 @@ func TestRestore(t *testing.T) {
 	// assert
 	require.NoError(t, err)
 	members, err := fsm.State().Members("ns1")
+	require.NoError(t, err)
 	require.Len(t, members, 1)
 
 	hashingTable, err := fsm.State().hashingTableMap("ns1")

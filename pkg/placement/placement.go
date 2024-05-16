@@ -46,21 +46,6 @@ const (
 	// MembershipChangeWorker will process actor host member change request.
 	membershipChangeChSize = 100
 
-	// faultyHostDetectDuration is the maximum duration when existing host is marked as faulty.
-	// Dapr runtime sends heartbeat every 1 second. Whenever placement server gets the heartbeat,
-	// it updates the last heartbeat time in UpdateAt of the FSM state. If Now - UpdatedAt exceeds
-	// faultyHostDetectDuration, membershipChangeWorker() tries to remove faulty Dapr runtim/ from
-	// membership.
-	// When placement gets the leadership, faultyHostDetectionDuration will be faultyHostDetectInitialDuration.
-	// This duration will give more time to let each runtime find the leader of placement nodes.
-	// Once the first dissemination happens after getting leadership, membershipChangeWorker will
-	// use faultyHostDetectDefaultDuration.
-	faultyHostDetectInitialDuration = 6 * time.Second
-	faultyHostDetectDefaultDuration = 3 * time.Second
-
-	// faultyHostDetectInterval is the interval to check the faulty member.
-	faultyHostDetectInterval = 500 * time.Millisecond
-
 	// disseminateTimerInterval is the interval to disseminate the latest consistent hashing table.
 	disseminateTimerInterval = 500 * time.Millisecond
 	// disseminateTimeout is the timeout to disseminate hashing tables after the membership change.
@@ -204,7 +189,7 @@ func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	}
 
 	keepaliveParams := keepalive.ServerParameters{
-		Time:    1500 * time.Millisecond,
+		Time:    1 * time.Second,
 		Timeout: 2 * time.Second,
 	}
 	grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS(), grpc.KeepaliveParams(keepaliveParams))
@@ -296,12 +281,10 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			now := p.clock.Now()
 
 			for _, entity := range req.GetEntities() {
-				monitoring.RecordActorHeartbeat(req.GetId(), entity, req.GetName(), req.GetPod(), now)
+				monitoring.RecordActorHeartbeat(req.GetId(), entity, req.GetName(), req.GetNamespace(), req.GetPod(), now)
 			}
 
-			// Record the heartbeat timestamp. This timestamp will be used to check if the member
-			// state maintained by raft is valid or not. If the member is outdated based the timestamp
-			// the member will be marked as faulty node and removed.
+			// Record the heartbeat timestamp. This timestamp is only used for metrics.
 			p.lastHeartBeat.Store(req.GetNamespace()+"-"+req.GetName(), now.UnixNano())
 
 			// Upsert incoming member only if the existing member info
@@ -329,7 +312,6 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 				log.Debugf("Stream connection is disconnected gracefully: %s", registeredMemberID)
-
 			} else {
 				log.Debugf("Stream connection is disconnected with the error: %v", err)
 			}

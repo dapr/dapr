@@ -43,6 +43,7 @@ var (
 	appIDKey     = tag.MustNewKey("app_id")
 	actorTypeKey = tag.MustNewKey("actor_type")
 	hostNameKey  = tag.MustNewKey("host_name")
+	namespaceKey = tag.MustNewKey("host_namespace")
 	podNameKey   = tag.MustNewKey("pod_name")
 
 	noKeys = []tag.Key{}
@@ -59,10 +60,10 @@ func RecordActorRuntimesCount(count int) {
 }
 
 // RecordActorHeartbeat records the actor heartbeat, in seconds since epoch, with actor type, host and pod name.
-func RecordActorHeartbeat(appID, actorType, host, pod string, heartbeatTime time.Time) {
+func RecordActorHeartbeat(appID, actorType, namespace, host, pod string, heartbeatTime time.Time) {
 	stats.RecordWithTags(
 		context.Background(),
-		diagUtils.WithTags(actorHeartbeatTimestamp.Name(), appIDKey, appID, actorTypeKey, actorType, hostNameKey, host, podNameKey, pod),
+		diagUtils.WithTags(actorHeartbeatTimestamp.Name(), appIDKey, appID, actorTypeKey, actorType, hostNameKey, host, namespaceKey, namespace, podNameKey, pod),
 		actorHeartbeatTimestamp.M(heartbeatTime.Unix()))
 }
 

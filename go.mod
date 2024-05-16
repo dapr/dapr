@@ -476,4 +476,4 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
 
-replace github.com/dapr/kit => github.com/elena-kolevska/kit v0.0.0-20240514184500-1715b0a0ec63
+replace github.com/dapr/kit => github.com/elena-kolevska/kit v0.0.0-20240516210614-f73cbfbd897c

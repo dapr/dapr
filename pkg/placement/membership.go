@@ -40,8 +40,6 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 	baselineHeartbeatTimestamp := p.clock.Now().UnixNano()
 	log.Infof("Baseline membership heartbeat timestamp: %v", baselineHeartbeatTimestamp)
 
-	//faultyHostDetectTimer := p.clock.NewTicker(faultyHostDetectInterval)
-	//defer faultyHostDetectTimer.Stop()
 	disseminateTimer := p.clock.NewTicker(disseminateTimerInterval)
 	defer disseminateTimer.Stop()
 
