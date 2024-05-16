@@ -26,6 +26,7 @@ import (
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/clock"
 
@@ -138,9 +139,6 @@ type Service struct {
 	// Minimum API level to return
 	minAPILevel uint32
 
-	// faultyHostDetectDuration
-	faultyHostDetectDuration *atomic.Int64
-
 	// hasLeadership indicates the state for leadership.
 	hasLeadership atomic.Bool
 
@@ -169,22 +167,18 @@ type PlacementServiceOpts struct {
 
 // NewPlacementService returns a new placement service.
 func NewPlacementService(opts PlacementServiceOpts) *Service {
-	fhdd := &atomic.Int64{}
-	fhdd.Store(int64(faultyHostDetectInitialDuration))
-
 	return &Service{
-		streamConnPool:           newStreamConnPool(),
-		membershipCh:             make(chan hostMemberChange, membershipChangeChSize),
-		faultyHostDetectDuration: fhdd,
-		raftNode:                 opts.RaftNode,
-		maxAPILevel:              opts.MaxAPILevel,
-		minAPILevel:              opts.MinAPILevel,
-		clock:                    &clock.RealClock{},
-		closedCh:                 make(chan struct{}),
-		sec:                      opts.SecProvider,
-		disseminateLocks:         concurrency.NewMutexMap[string](),
-		memberUpdateCount:        concurrency.NewAtomicMap[string, uint32](),
-		disseminateNextTime:      concurrency.NewAtomicMap[string, int64](),
+		streamConnPool:      newStreamConnPool(),
+		membershipCh:        make(chan hostMemberChange, membershipChangeChSize),
+		raftNode:            opts.RaftNode,
+		maxAPILevel:         opts.MaxAPILevel,
+		minAPILevel:         opts.MinAPILevel,
+		clock:               &clock.RealClock{},
+		closedCh:            make(chan struct{}),
+		sec:                 opts.SecProvider,
+		disseminateLocks:    concurrency.NewMutexMap[string](),
+		memberUpdateCount:   concurrency.NewAtomicMap[string, uint32](),
+		disseminateNextTime: concurrency.NewAtomicMap[string, int64](),
 	}
 }
 
@@ -208,7 +202,12 @@ func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
-	grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS())
+
+	keepaliveParams := keepalive.ServerParameters{
+		Time:    1500 * time.Millisecond,
+		Timeout: 2 * time.Second,
+	}
+	grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS(), grpc.KeepaliveParams(keepaliveParams))
 
 	placementv1pb.RegisterPlacementServer(grpcServer, p)
 
@@ -272,18 +271,6 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			req, err = stream.Recv()
 		}
 
-		// fmt.Println("--------------------------------")
-		// fmt.Println("--------Report Dapr Status------")
-		// state := p.raftNode.FSM().State()
-		// state.Lock.RLock()
-		// vd, _ := json.MarshalIndent(state.AllMembers(), "", "  ")
-		// state.Lock.RUnlock()
-		// fmt.Println(string(vd))
-		// fmt.Println("---------------------------")
-		// fmt.Printf("\n host: %v \n", req)
-		// fmt.Printf("\n err: %v \n", err)
-		// fmt.Println("---------------------------")
-
 		switch err {
 		case nil:
 
@@ -342,16 +329,16 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 				log.Debugf("Stream connection is disconnected gracefully: %s", registeredMemberID)
-				if isActorRuntime {
-					p.membershipCh <- hostMemberChange{
-						cmdType: raft.MemberRemove,
-						host:    raft.DaprHostMember{Name: registeredMemberID, Namespace: namespace},
-					}
-				}
+
 			} else {
-				// no actions for hashing table. Instead, MembershipChangeWorker will check
-				// host updatedAt and if now - updatedAt > p.faultyHostDetectDuration, remove hosts.
 				log.Debugf("Stream connection is disconnected with the error: %v", err)
+			}
+
+			if isActorRuntime {
+				p.membershipCh <- hostMemberChange{
+					cmdType: raft.MemberRemove,
+					host:    raft.DaprHostMember{Name: registeredMemberID, Namespace: namespace},
+				}
 			}
 
 			return nil

@@ -124,8 +124,6 @@ func (p *Service) leaderLoop(ctx context.Context) error {
 
 func (p *Service) establishLeadership() {
 	// Give more time to let each runtime to find the leader and connect to the leader.
-	p.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
-
 	p.membershipCh = make(chan hostMemberChange, membershipChangeChSize)
 	p.hasLeadership.Store(true)
 }

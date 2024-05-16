@@ -17,7 +17,6 @@ package placement
 import (
 	"context"
 	"fmt"
-	"strconv"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -87,39 +86,11 @@ func TestMembershipChangeWorker(t *testing.T) {
 		}
 	}
 
-	arrangeFakeMembers := func(t *testing.T) {
-		for i := 0; i < 3; i++ {
-			testServer.membershipCh <- hostMemberChange{
-				cmdType: raft.MemberUpsert,
-				host: raft.DaprHostMember{
-					Name:      fmt.Sprintf("127.0.0.1:%d", 50000+i),
-					Namespace: "ns" + strconv.Itoa(i),
-					AppID:     fmt.Sprintf("TestAPPID%d", 50000+i),
-					Entities:  []string{"actorTypeOne", "actorTypeTwo"},
-				},
-			}
-		}
-
-		testServer.disseminateNextTime.GetOrCreate("ns0", 0).Store(clock.Now().UnixNano())
-		testServer.disseminateNextTime.GetOrCreate("ns1", 0).Store(clock.Now().UnixNano())
-		testServer.disseminateNextTime.GetOrCreate("ns2", 0).Store(clock.Now().UnixNano())
-		clock.Step(disseminateTimerInterval)
-
-		// wait until all host member change requests are flushed
-		require.Eventually(t, func() bool {
-			state := testServer.raftNode.FSM().State()
-			state.Lock.RLock()
-			cntMembers := len(state.AllMembers())
-			state.Lock.RUnlock()
-			return cntMembers == 3
-		}, disseminateTimerInterval+time.Second*3, time.Millisecond)
-	}
-
 	t.Run("successful dissemination", func(t *testing.T) {
 		t.Cleanup(setupEach(t))
-		// arrange
-		testServer.faultyHostDetectDuration.Store(int64(faultyHostDetectInitialDuration))
-		conn, _, stream := newTestClient(t, serverAddress)
+		conn1, _, stream1 := newTestClient(t, serverAddress)
+		conn2, _, stream2 := newTestClient(t, serverAddress)
+		conn3, _, stream3 := newTestClient(t, serverAddress)
 
 		// Receive the first (empty) message and the second message that should contain
 		// the full placement table
@@ -127,7 +98,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		go func() {
 			cnt := 0
 			for {
-				placementOrder, streamErr := stream.Recv()
+				placementOrder, streamErr := stream1.Recv()
 				require.NoError(t, streamErr)
 				if placementOrder.GetOperation() == "unlock" {
 					cnt++
@@ -139,25 +110,45 @@ func TestMembershipChangeWorker(t *testing.T) {
 			}
 		}()
 
-		host := &v1pb.Host{
+		host1 := &v1pb.Host{
 			Name:      "127.0.0.1:50100",
 			Namespace: "ns1",
-			Entities:  []string{"DogActor", "CatActor"},
+			Entities:  []string{"actor1", "actor2"},
 			Id:        "testAppID",
 			Load:      1,
 		}
+		host2 := &v1pb.Host{
+			Name:      "127.0.0.1:50101",
+			Namespace: "ns2",
+			Entities:  []string{"actor3"},
+			Id:        "testAppID2",
+			Load:      1,
+		}
+		host3 := &v1pb.Host{
+			Name:      "127.0.0.1:50102",
+			Namespace: "ns2",
+			Entities:  []string{"actor4"},
+			Id:        "testAppID3",
+			Load:      1,
+		}
 
-		require.NoError(t, stream.Send(host))
+		require.NoError(t, stream1.Send(host1))
+		require.NoError(t, stream2.Send(host2))
+		require.NoError(t, stream3.Send(host3))
 
 		require.Eventually(t, func() bool {
 			assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(t, 2, testServer.streamConnPool.getStreamCount("ns2"))
 
 			// This indicates the member has been added to the dissemination queue and is
 			// going to be disseminated in the next tick
-			ts, ok := testServer.disseminateNextTime.Get("ns1")
+			ts1, ok := testServer.disseminateNextTime.Get("ns1")
 			assert.True(t, ok)
-			assert.Equal(t, clock.Now().Add(disseminateTimeout).UnixNano(), ts.Load())
+			assert.Equal(t, clock.Now().Add(disseminateTimeout).UnixNano(), ts1.Load())
 
+			ts2, ok := testServer.disseminateNextTime.Get("ns2")
+			assert.True(t, ok)
+			assert.Equal(t, clock.Now().Add(disseminateTimeout).UnixNano(), ts2.Load())
 			return true
 		}, 10*time.Second, 100*time.Millisecond)
 
@@ -177,20 +168,42 @@ func TestMembershipChangeWorker(t *testing.T) {
 		assert.Eventually(t, func() bool {
 			state := testServer.raftNode.FSM().State()
 			state.Lock.RLock()
-			members, err := state.Members("ns1")
+			members1, err := state.Members("ns1")
+
 			if err != nil {
 				state.Lock.RUnlock()
 				return false
 			}
-			if len(members) == 1 {
-				x, ok := members["127.0.0.1:50100"]
+			if len(members1) == 1 {
+				m, ok := members1["127.0.0.1:50100"]
 				require.True(t, ok)
-				require.Equal(t, "127.0.0.1:50100", x.Name)
-				require.Equal(t, "ns1", x.Namespace)
-				require.Contains(t, x.Entities, "DogActor", "CatActor")
+				require.Equal(t, "127.0.0.1:50100", m.Name)
+				require.Equal(t, "ns1", m.Namespace)
+				require.Contains(t, m.Entities, "actor1", "actor2")
 			}
 
-			return len(members) == 1
+			members2, err := state.Members("ns2")
+
+			if err != nil {
+				state.Lock.RUnlock()
+				return false
+			}
+			if len(members2) == 2 {
+				m1, ok := members2["127.0.0.1:50101"]
+				require.True(t, ok)
+				require.Equal(t, "127.0.0.1:50101", m1.Name)
+				require.Equal(t, "ns2", m1.Namespace)
+				require.Contains(t, m1.Entities, "actor3")
+
+				m2, ok := members2["127.0.0.1:50102"]
+				require.True(t, ok)
+				require.Equal(t, "127.0.0.1:50102", m2.Name)
+				require.Equal(t, "ns2", m2.Namespace)
+				require.Contains(t, m2.Entities, "actor4")
+			}
+			state.Lock.RUnlock()
+
+			return true
 		}, time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
 
 		// Wait until next table dissemination and check there hasn't been updates
@@ -200,27 +213,37 @@ func TestMembershipChangeWorker(t *testing.T) {
 			if !ok {
 				return false
 			}
-			return cnt.Load() == 0 &&
-				testServer.faultyHostDetectDuration.Load() == int64(faultyHostDetectDefaultDuration)
-		}, 5*time.Second, time.Millisecond,
-			"flushed all member updates and faultyHostDetectDuration must be faultyHostDetectDuration")
+			return cnt.Load() == 0
+		}, 5*time.Second, time.Millisecond, "flushed all member updates")
 
-		conn.Close()
-	})
+		conn1.Close()
+		conn2.Close()
+		conn3.Close()
 
-	t.Run("faulty host detector", func(t *testing.T) {
-		// arrange
-		t.Cleanup(setupEach(t))
-		arrangeFakeMembers(t)
-
-		// faulty host detector removes all members if heartbeat does not happen
-		assert.Eventually(t, func() bool {
-			clock.Step(disseminateTimerInterval)
+		require.Eventually(t, func() bool {
 			state := testServer.raftNode.FSM().State()
 			state.Lock.RLock()
 			defer state.Lock.RUnlock()
-			return len(state.AllMembers()) == 0
-		}, 5*time.Second, time.Millisecond)
+			require.Empty(t, state.AllMembers())
+
+			// Disseminate locks have been deleted
+			require.Equal(t, 0, testServer.disseminateLocks.ItemCount())
+
+			// Disseminate timers have been deleted
+			_, ok := testServer.disseminateNextTime.Get("ns1")
+			require.False(t, ok)
+			_, ok = testServer.disseminateNextTime.Get("ns2")
+			require.False(t, ok)
+
+			// Member update counts have been deleted
+			_, ok = testServer.memberUpdateCount.Get("ns1")
+			require.False(t, ok)
+			_, ok = testServer.memberUpdateCount.Get("ns2")
+			require.False(t, ok)
+
+			return true
+		}, 5*time.Second, 100*time.Millisecond)
+
 	})
 }
 

@@ -40,8 +40,8 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 	baselineHeartbeatTimestamp := p.clock.Now().UnixNano()
 	log.Infof("Baseline membership heartbeat timestamp: %v", baselineHeartbeatTimestamp)
 
-	faultyHostDetectTimer := p.clock.NewTicker(faultyHostDetectInterval)
-	defer faultyHostDetectTimer.Stop()
+	//faultyHostDetectTimer := p.clock.NewTicker(faultyHostDetectInterval)
+	//defer faultyHostDetectTimer.Stop()
 	disseminateTimer := p.clock.NewTicker(disseminateTimerInterval)
 	defer disseminateTimer.Stop()
 
@@ -80,59 +80,6 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 					}
 				}
 			})
-
-		case t := <-faultyHostDetectTimer.C():
-			// Earlier stop when leadership is lost.
-			if !p.hasLeadership.Load() {
-				continue
-			}
-
-			// Each dapr runtime sends the heartbeat every one second and placement will update UpdatedAt timestamp.
-			// If UpdatedAt is outdated, we can mark the host as faulty node.
-			// This faulty host will be removed from membership in the next dissemination period.
-			//
-			// Only run the check if there is no pending membership change
-			if len(p.membershipCh) == 0 {
-				// Loop through all members
-				state := p.raftNode.FSM().State()
-				state.Lock.RLock()
-
-				for _, host := range state.AllMembers() {
-					// Earlier stop when leadership is lost.
-					if !p.hasLeadership.Load() {
-						break
-					}
-
-					// When leader is changed and current placement node become new leader, there are no stream
-					// connections from each runtime so that lastHeartBeat have no heartbeat timestamp record
-					// from each runtime. Eventually, all runtime will find the leader and connect to the leader
-					// of placement servers.
-					// Before all runtimes connect to the leader of placements, it will record the leadership change
-					// timestamp as the latest leadership change.
-					// artursouza: The default heartbeat used to be now() but it is not correct and can lead to scenarios where a
-					// runtime (pod) is terminated while there is also a leadership change in placement, meaning the host entry
-					// in placement table will never have a heartbeat. With this new behavior, it will eventually expire and be
-					// removed.
-					heartbeat, loaded := p.lastHeartBeat.LoadOrStore(host.NameAndNamespace(), baselineHeartbeatTimestamp)
-
-					if !loaded {
-						log.Warnf("Heartbeat not found for host: %s", host.Name)
-					}
-
-					elapsed := t.UnixNano() - heartbeat.(int64)
-					if elapsed < p.faultyHostDetectDuration.Load() {
-						continue
-					}
-					log.Debugf("Try to remove outdated host in namespace %s: %s, elapsed: %d ns", host.Namespace, host.Name, elapsed)
-
-					p.membershipCh <- hostMemberChange{
-						cmdType: raft.MemberRemove,
-						host:    raft.DaprHostMember{Name: host.Name, Namespace: host.Namespace},
-					}
-				}
-
-				state.Lock.RUnlock()
-			}
 		}
 	}
 }
@@ -167,6 +114,7 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 					// We lock dissemination to ensure the updates can complete before the table is disseminated.
 					p.disseminateLocks.Lock(op.host.Namespace)
 					defer p.disseminateLocks.Unlock(op.host.Namespace)
+
 					updated, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
 					if raftErr != nil {
 						log.Errorf("fail to apply command: %v", raftErr)
@@ -280,9 +228,6 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 		"Completed dissemination for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
 		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion())
 	p.memberUpdateCount.GetOrCreate(ns, 0).Store(0)
-
-	// set faultyHostDetectDuration to the default duration.
-	p.faultyHostDetectDuration.Store(int64(faultyHostDetectDefaultDuration))
 
 	return nil
 }
