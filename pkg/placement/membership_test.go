@@ -282,7 +282,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 				}
 				if placementOrder != nil {
 					if placementOrder.GetOperation() == "lock" {
-						if startFlag.Load() && placementOrder.GetTables() != nil && placementOrder.GetTables().GetVersion() == "demo" {
+						if startFlag.Load() {
 							start = time.Now()
 							if clientID == 1 {
 								t.Log("client 1 lock", start)
@@ -293,12 +293,12 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 						continue
 					}
 					if placementOrder.GetOperation() == "unlock" {
-						if startFlag.Load() && placementOrder.GetTables() != nil && placementOrder.GetTables().GetVersion() == "demo" {
+						if startFlag.Load() {
 							if clientID == 1 {
 								t.Log("client 1 unlock", time.Now())
 							}
 							overArrLock.Lock()
-							overArr[clientID] = time.Since(start).Milliseconds()
+							overArr[clientID] = time.Since(start).Nanoseconds()
 							overArrLock.Unlock()
 						}
 					}
@@ -357,7 +357,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 
 func TestPerformTableUpdatePerf(t *testing.T) {
 	for i := 0; i < 3; i++ {
-		fmt.Println("max cost time(ms)", PerformTableUpdateCostTime(t))
+		fmt.Println("max cost time(ns)", PerformTableUpdateCostTime(t))
 	}
 }
 
