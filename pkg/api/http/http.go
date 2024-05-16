@@ -266,7 +266,6 @@ func (a *api) constructStateEndpoints() []endpoints.Endpoint {
 func appendPubSubSpanAttributes(r *nethttp.Request, m map[string]string) {
 	m[diagConsts.MessagingSystemSpanAttributeKey] = "pubsub"
 	m[diagConsts.MessagingDestinationSpanAttributeKey] = chi.URLParam(r, "topic")
-	m[diagConsts.MessagingDestinationKindSpanAttributeKey] = diagConsts.MessagingDestinationTopicKind
 }
 
 func (a *api) constructPubSubEndpoints() []endpoints.Endpoint {

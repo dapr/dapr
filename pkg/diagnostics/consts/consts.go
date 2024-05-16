@@ -14,7 +14,7 @@ limitations under the License.
 package consts
 
 import (
-	semconv "go.opentelemetry.io/otel/semconv/v1.10.0"
+	semconv "go.opentelemetry.io/otel/semconv/v1.25.0"
 )
 
 const (
@@ -26,15 +26,14 @@ const (
 
 	// Span attribute keys
 	// Reference trace semantics https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
-	DBSystemSpanAttributeKey                 = string(semconv.DBSystemKey)
-	DBNameSpanAttributeKey                   = string(semconv.DBNameKey)
-	DBStatementSpanAttributeKey              = string(semconv.DBStatementKey)
-	DBConnectionStringSpanAttributeKey       = string(semconv.DBConnectionStringKey)
-	MessagingSystemSpanAttributeKey          = string(semconv.MessagingSystemKey)
-	MessagingDestinationSpanAttributeKey     = string(semconv.MessagingDestinationKey)
-	MessagingDestinationKindSpanAttributeKey = string(semconv.MessagingDestinationKindKey)
-	GrpcServiceSpanAttributeKey              = string(semconv.RPCServiceKey)
-	NetPeerNameSpanAttributeKey              = string(semconv.NetPeerNameKey)
+	DBSystemSpanAttributeKey             = string(semconv.DBSystemKey)
+	DBNameSpanAttributeKey               = string(semconv.DBNameKey)
+	DBStatementSpanAttributeKey          = string(semconv.DBStatementKey)
+	DBConnectionStringSpanAttributeKey   = string(semconv.DBConnectionStringKey)
+	MessagingSystemSpanAttributeKey      = string(semconv.MessagingSystemKey)
+	MessagingDestinationSpanAttributeKey = string(semconv.MessagingDestinationNameKey)
+	GrpcServiceSpanAttributeKey          = string(semconv.RPCServiceKey)
+	NetPeerNameSpanAttributeKey          = string(semconv.NetPeerNameKey)
 
 	DaprAPISpanAttributeKey           = "dapr.api"
 	DaprAPIStatusCodeSpanAttributeKey = "dapr.status_code"
@@ -57,9 +56,6 @@ const (
 	// Note: these keys must always be all-lowercase
 	DaprCallLocalStreamMethodKey = "__dapr_calllocalstream_method"
 )
-
-// MessagingDestinationTopicKind is effectively const, but isn't a const from upstream.
-var MessagingDestinationTopicKind = semconv.MessagingDestinationKindTopic.Value.AsString()
 
 // GrpcAppendSpanAttributesFn is the interface that applies to gRPC requests that add span attributes.
 type GrpcAppendSpanAttributesFn interface {
