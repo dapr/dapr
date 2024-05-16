@@ -20,6 +20,7 @@ type PlacementTables struct {
 }
 type HostInfo struct {
 	Name       string   `json:"name,omitempty"`
+	Namespace  string   `json:"namespace,omitempty"`
 	AppID      string   `json:"appId,omitempty"`
 	ActorTypes []string `json:"actorTypes,omitempty"`
 	UpdatedAt  int64    `json:"updatedAt,omitempty"`
@@ -49,6 +50,7 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 	for _, v := range m {
 		members[i] = HostInfo{
 			Name:       v.Name,
+			Namespace:  v.Namespace,
 			AppID:      v.AppID,
 			ActorTypes: v.Entities,
 			UpdatedAt:  v.UpdatedAt,
