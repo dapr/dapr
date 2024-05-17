@@ -60,7 +60,7 @@ func RecordActorRuntimesCount(count int) {
 }
 
 // RecordActorHeartbeat records the actor heartbeat, in seconds since epoch, with actor type, host and pod name.
-func RecordActorHeartbeat(appID, actorType, namespace, host, pod string, heartbeatTime time.Time) {
+func RecordActorHeartbeat(appID, actorType, host, namespace, pod string, heartbeatTime time.Time) {
 	stats.RecordWithTags(
 		context.Background(),
 		diagUtils.WithTags(actorHeartbeatTimestamp.Name(), appIDKey, appID, actorTypeKey, actorType, hostNameKey, host, namespaceKey, namespace, podNameKey, pod),
@@ -72,7 +72,7 @@ func InitMetrics() error {
 	err := view.Register(
 		diagUtils.NewMeasureView(runtimesTotal, noKeys, view.LastValue()),
 		diagUtils.NewMeasureView(actorRuntimesTotal, noKeys, view.LastValue()),
-		diagUtils.NewMeasureView(actorHeartbeatTimestamp, []tag.Key{appIDKey, actorTypeKey, hostNameKey, podNameKey}, view.LastValue()),
+		diagUtils.NewMeasureView(actorHeartbeatTimestamp, []tag.Key{appIDKey, actorTypeKey, hostNameKey, namespaceKey, podNameKey}, view.LastValue()),
 	)
 
 	return err
