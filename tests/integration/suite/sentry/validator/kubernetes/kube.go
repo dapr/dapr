@@ -27,12 +27,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	sentrypbv1 "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	secpem "github.com/dapr/dapr/pkg/security/pem"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
+	secpem "github.com/dapr/kit/crypto/pem"
 )
 
 func init() {

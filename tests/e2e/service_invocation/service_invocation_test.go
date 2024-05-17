@@ -35,7 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/dapr/dapr/tests/util"
+	cryptotest "github.com/dapr/kit/crypto/test"
 	kitUtils "github.com/dapr/kit/utils"
 	apiv1 "k8s.io/api/core/v1"
 )
@@ -81,7 +81,7 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("service_invocation")
 	utils.InitHTTPClient(false)
 
-	pki, err := util.GenPKIError(util.PKIOptions{
+	pki, err := cryptotest.GenPKIError(cryptotest.PKIOptions{
 		LeafDNS: "service-invocation-external",
 	})
 	if err != nil {

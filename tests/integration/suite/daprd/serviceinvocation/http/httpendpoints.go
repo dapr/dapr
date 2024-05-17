@@ -32,7 +32,7 @@ import (
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	testsutil "github.com/dapr/dapr/tests/util"
+	cryptotest "github.com/dapr/kit/crypto/test"
 )
 
 func init() {
@@ -46,8 +46,8 @@ type httpendpoints struct {
 }
 
 func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
-	pki1 := testsutil.GenPKI(t, testsutil.PKIOptions{LeafDNS: "localhost"})
-	pki2 := testsutil.GenPKI(t, testsutil.PKIOptions{LeafDNS: "localhost"})
+	pki1 := cryptotest.GenPKI(t, cryptotest.PKIOptions{LeafDNS: "localhost"})
+	pki2 := cryptotest.GenPKI(t, cryptotest.PKIOptions{LeafDNS: "localhost"})
 
 	newHTTPServer := func() *prochttp.HTTP {
 		handler := http.NewServeMux()

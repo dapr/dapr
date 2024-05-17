@@ -74,7 +74,7 @@ func Run() {
 		SentryAddress:           opts.SentryAddress,
 		ControlPlaneTrustDomain: opts.TrustDomain,
 		ControlPlaneNamespace:   security.CurrentNamespace(),
-		TrustAnchorsFile:        opts.TrustAnchorsFile,
+		TrustAnchorsFile:        &opts.TrustAnchorsFile,
 		AppID:                   "dapr-placement",
 		MTLSEnabled:             opts.TLSEnabled,
 		Mode:                    modes.DaprMode(opts.Mode),
@@ -116,13 +116,13 @@ func Run() {
 				RouterOptions: metadataOptions,
 			})
 			healthzServer.Ready()
-			if healthzErr := healthzServer.Run(ctx, opts.HealthzPort); healthzErr != nil {
+			if healthzErr := healthzServer.Run(ctx, opts.HealthzListenAddress, opts.HealthzPort); healthzErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", healthzErr)
 			}
 			return nil
 		},
 		func(ctx context.Context) error {
-			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort))
+			return apiServer.Run(ctx, opts.PlacementListenAddress, strconv.Itoa(opts.PlacementPort))
 		},
 	).Run(ctx)
 	if err != nil {
