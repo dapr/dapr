@@ -230,8 +230,8 @@ func (in *Retry) DeepCopyInto(out *Retry) {
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
-	if in.IgnoreOnCodes != nil {
-		in, out := &in.IgnoreOnCodes, &out.IgnoreOnCodes
+	if in.NoRetryOnCodes != nil {
+		in, out := &in.NoRetryOnCodes, &out.NoRetryOnCodes
 		*out = make([]string, len(*in))
 		copy(*out, *in)
 	}
