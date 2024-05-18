@@ -320,7 +320,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 			}
 
 			filter, err := ParseStatusCodeFilter(test.retryOn, test.ignoreOn)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			policy := NewRunner[struct{}](context.Background(), &PolicyDefinition{
 				log:  testLog,
 				name: "retry",

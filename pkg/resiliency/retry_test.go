@@ -4,6 +4,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestResiliencyFunctions(t *testing.T) {
@@ -65,10 +66,10 @@ func TestResiliencyFunctions(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			filter, err := ParseStatusCodeFilter(tc.retryOn, tc.ignoreOn)
 			if tc.expectError {
-				assert.Error(t, err)
+				require.Error(t, err)
 				return
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 
 			for i, code := range tc.testCodes {
