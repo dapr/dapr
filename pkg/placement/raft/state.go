@@ -64,11 +64,19 @@ type DaprHostMemberStateData struct {
 type DaprHostMemberState struct {
 	lock sync.RWMutex
 
-	data DaprHostMemberStateData
+	config DaprHostMemberStateConfig
+	data   DaprHostMemberStateData
 }
 
-func newDaprHostMemberState() *DaprHostMemberState {
+type DaprHostMemberStateConfig struct {
+	replicationFactor int64
+	minAPILevel       uint32
+	maxAPILevel       uint32
+}
+
+func newDaprHostMemberState(config DaprHostMemberStateConfig) *DaprHostMemberState {
 	return &DaprHostMemberState{
+		config: config,
 		data: DaprHostMemberStateData{
 			Members:         map[string]*DaprHostMember{},
 			hashingTableMap: map[string]*hashing.Consistent{},
@@ -124,6 +132,20 @@ func (s *DaprHostMemberState) updateAPILevel() {
 		}
 	}
 
+	// Only enforce minAPILevel if value > 0
+	// 0 is the default value of the struct.
+	// -1 is the default value of the CLI flag.
+	if s.config.minAPILevel >= uint32(0) && observedMinLevel < s.config.minAPILevel {
+		observedMinLevel = s.config.minAPILevel
+	}
+
+	// Only enforce maxAPILevel if value > 0
+	// 0 is the default value of the struct.
+	// -1 is the default value of the CLI flag.
+	if s.config.maxAPILevel >= uint32(0) && observedMinLevel > s.config.maxAPILevel {
+		observedMinLevel = s.config.maxAPILevel
+	}
+
 	if observedMinLevel > s.data.APILevel {
 		s.data.APILevel = observedMinLevel
 	}
@@ -141,6 +163,7 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 	defer s.lock.RUnlock()
 
 	newMembers := &DaprHostMemberState{
+		config: s.config,
 		data: DaprHostMemberStateData{
 			Index:           s.data.Index,
 			TableGeneration: s.data.TableGeneration,
@@ -166,7 +189,7 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
 	for _, e := range host.Entities {
 		if _, ok := s.data.hashingTableMap[e]; !ok {
-			s.data.hashingTableMap[e] = hashing.NewConsistentHash()
+			s.data.hashingTableMap[e] = hashing.NewConsistentHash(s.config.replicationFactor)
 		}
 
 		s.data.hashingTableMap[e].Add(host.Name, host.AppID, 0)

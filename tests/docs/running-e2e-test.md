@@ -299,8 +299,8 @@ export DAPR_NAMESPACE=dapr-tests
 make create-test-namespace
 
 # Create the Kubernetes secrets in the Dapr test namespaces to allow connecting to Cosmos DB and Service Bus
-# Syntax: ./tests/test-infra/setup_azure.sh <ENABLE_COSMOSDB> <ENABLE_SERVICEBUS>
-./tests/test-infra/setup_azure.sh true true
+# Syntax: ./tests/test-infra/setup_azure.sh <ENABLE_COSMOSDB> <ENABLE_SERVICEBUS> <ENABLE_KEY_VAULT>
+./tests/test-infra/setup_azure.sh true true false
 ```
 
 After this, run the E2E tests as per instructions above, making sure to use the newly-created Azure Container Registry as Docker registry (make sure you maintain the environmental variables set in the steps above).

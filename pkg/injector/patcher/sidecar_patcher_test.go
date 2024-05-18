@@ -148,7 +148,7 @@ func TestAddDaprEnvVarsToContainers(t *testing.T) {
 		t.Run(tc.testName, func(t *testing.T) {
 			c := NewSidecarConfig(&corev1.Pod{})
 			patchEnv := c.addDaprEnvVarsToContainers(map[int]corev1.Container{0: tc.mockContainer}, tc.appProtocol)
-			assert.Equal(t, tc.expOpsLen, len(patchEnv))
+			assert.Len(t, patchEnv, tc.expOpsLen)
 			assert.Equal(t, tc.expOps, patchEnv)
 		})
 	}
@@ -267,8 +267,7 @@ func TestPatching(t *testing.T) {
 			c := NewSidecarConfig(pod)
 			c.Namespace = "testns"
 			c.Identity = "pod:identity"
-			c.CertChain = "certchain"
-			c.CertKey = "certkey"
+			c.SentrySPIFFEID = "spiffe://foo.bar/ns/example/dapr-sentry"
 
 			if tc.sidecarConfigModifierFn != nil {
 				tc.sidecarConfigModifierFn(c)
@@ -301,12 +300,11 @@ func TestPatching(t *testing.T) {
 					daprdEnvVars[env.Name] = env.Value
 				}
 				assert.Equal(t, "testns", daprdEnvVars["NAMESPACE"])
-				assert.Equal(t, "pod:identity", daprdEnvVars["SENTRY_LOCAL_IDENTITY"])
 
 				assert.Len(t, daprdContainer.VolumeMounts, 1)
 				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[0].Name)
 				assert.Equal(t, "/var/run/secrets/dapr.io/sentrytoken", daprdContainer.VolumeMounts[0].MountPath)
-				assert.Equal(t, true, daprdContainer.VolumeMounts[0].ReadOnly)
+				assert.True(t, daprdContainer.VolumeMounts[0].ReadOnly)
 
 				assert.NotNil(t, daprdContainer.LivenessProbe)
 				assert.Equal(t, "/v1.0/healthz", daprdContainer.LivenessProbe.HTTPGet.Path)
@@ -317,6 +315,9 @@ func TestPatching(t *testing.T) {
 				tokenVolume := pod.Spec.Volumes[0]
 				assert.Equal(t, "dapr-identity-token", tokenVolume.Name)
 				assert.NotNil(t, tokenVolume.Projected)
+				require.Len(t, tokenVolume.Projected.Sources, 1)
+				require.NotNil(t, tokenVolume.Projected.Sources[0].ServiceAccountToken)
+				assert.Equal(t, "spiffe://foo.bar/ns/example/dapr-sentry", tokenVolume.Projected.Sources[0].ServiceAccountToken.Audience)
 
 				// Assertions on added labels
 				assert.Equal(t, "true", pod.Labels[injectorConsts.SidecarInjectedLabel])
@@ -351,6 +352,9 @@ func TestPatching(t *testing.T) {
 				tokenVolume := pod.Spec.Volumes[1]
 				assert.Equal(t, "dapr-identity-token", tokenVolume.Name)
 				assert.NotNil(t, tokenVolume.Projected)
+				require.Len(t, tokenVolume.Projected.Sources, 1)
+				require.NotNil(t, tokenVolume.Projected.Sources[0].ServiceAccountToken)
+				assert.Equal(t, "spiffe://foo.bar/ns/example/dapr-sentry", tokenVolume.Projected.Sources[0].ServiceAccountToken.Audience)
 
 				// Check the presence of the volume mount in the app container
 				appContainer := pod.Spec.Containers[0]

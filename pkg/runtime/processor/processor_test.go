@@ -22,6 +22,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -29,13 +30,16 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/security/fake"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -58,8 +62,9 @@ func newTestProcWithID(id string) (*Processor, *registry.Registry) {
 		PodName:        "testPodName",
 		OperatorClient: nil,
 		GRPC:           nil,
-		Channels:       nil,
+		Channels:       new(channels.Channels),
 		GlobalConfig:   new(config.Configuration),
+		Security:       fake.New(),
 	}), reg
 }
 
@@ -82,7 +87,7 @@ func TestProcessComponentsAndDependents(t *testing.T) {
 
 	t.Run("test incorrect type", func(t *testing.T) {
 		err := proc.processComponentAndDependents(context.Background(), incorrectComponentType)
-		assert.Error(t, err, "expected an error")
+		require.Error(t, err, "expected an error")
 		assert.Equal(t, "incorrect type pubsubs.mockPubSub", err.Error(), "expected error strings to match")
 	})
 }
@@ -107,7 +112,7 @@ func TestInitSecretStores(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("secret store is registered", func(t *testing.T) {
@@ -129,7 +134,7 @@ func TestInitSecretStores(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		store, ok := proc.compStore.GetSecretStore("kubernetesMock")
 		assert.True(t, ok)
 		assert.NotNil(t, store)
@@ -239,15 +244,15 @@ func TestMetadataUUID(t *testing.T) {
 		consumerID := metadata.Properties["consumerID"]
 		var uuid0, uuid1, uuid2 uuid.UUID
 		uuid0, err := uuid.Parse(consumerID)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		twoUUIDs := metadata.Properties["twoUUIDs"]
 		uuids := strings.Split(twoUUIDs, " ")
-		assert.Equal(t, 2, len(uuids))
+		assert.Len(t, uuids, 2)
 		uuid1, err = uuid.Parse(uuids[0])
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		uuid2, err = uuid.Parse(uuids[1])
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		assert.NotEqual(t, uuid0, uuid1)
 		assert.NotEqual(t, uuid0, uuid2)
@@ -255,7 +260,7 @@ func TestMetadataUUID(t *testing.T) {
 	})
 
 	err := proc.processComponentAndDependents(context.Background(), pubsubComponent)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestMetadataPodName(t *testing.T) {
@@ -300,7 +305,7 @@ func TestMetadataPodName(t *testing.T) {
 	})
 
 	err := proc.processComponentAndDependents(context.Background(), pubsubComponent)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestMetadataNamespace(t *testing.T) {
@@ -346,7 +351,7 @@ func TestMetadataNamespace(t *testing.T) {
 	})
 
 	err := proc.processComponentAndDependents(context.Background(), pubsubComponent)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 func TestMetadataClientID(t *testing.T) {
@@ -394,7 +399,7 @@ func TestMetadataClientID(t *testing.T) {
 		})
 
 		err := proc.processComponentAndDependents(context.Background(), pubsubComponent)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		select {
 		case clientID := <-clientIDChan:
@@ -436,9 +441,9 @@ func TestMetadataClientID(t *testing.T) {
 		})
 
 		err := proc.processComponentAndDependents(context.Background(), pubsubComponent)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		appIds := strings.Split(standAloneClientID, " ")
-		assert.Equal(t, 2, len(appIds))
+		assert.Len(t, appIds, 2)
 		for _, appID := range appIds {
 			assert.Equal(t, daprt.TestRuntimeConfigID, appID)
 		}
@@ -450,4 +455,10 @@ func TestMetadataClientID(t *testing.T) {
 			t.Error("Timed out waiting for clientID for Standalone Mode test")
 		}
 	})
+}
+
+func TestProcessNoWorkflow(t *testing.T) {
+	proc, _ := newTestProc()
+	_, ok := proc.managers[components.CategoryWorkflow]
+	require.False(t, ok, "workflow cannot be registered as user facing component")
 }

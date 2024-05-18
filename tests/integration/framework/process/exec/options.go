@@ -16,6 +16,8 @@ package exec
 import (
 	"io"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 type options struct {
@@ -53,11 +55,9 @@ func WithExitCode(code int) Option {
 
 // WithEnvVars sets the environment variables for the command. Expects a list
 // of key value pairs.
-func WithEnvVars(envs ...string) Option {
+func WithEnvVars(t *testing.T, envs ...string) Option {
 	return func(o *options) {
-		if len(envs)%2 != 0 {
-			panic("envs must be a list of key value pairs")
-		}
+		require.Equal(t, 0, len(envs)%2, "envs must be a list of key value pairs")
 		if o.envs == nil {
 			o.envs = make(map[string]string)
 		}

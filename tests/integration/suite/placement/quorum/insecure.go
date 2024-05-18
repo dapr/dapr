@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -31,8 +30,8 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -53,13 +52,14 @@ func (i *insecure) Setup(t *testing.T) []framework.Option {
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
 
-	fp := util.ReservePorts(t, 3)
+	fp := ports.Reserve(t, 3)
+	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 	opts := []placement.Option{
-		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
-		placement.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
+		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", port1, port2, port3)),
+		placement.WithInitialClusterPorts(port1, port2, port3),
 		placement.WithEnableTLS(true),
 		placement.WithTrustAnchorsFile(taFile),
-		placement.WithSentryAddress("localhost:" + strconv.Itoa(i.sentry.Port())),
+		placement.WithSentryAddress(i.sentry.Address()),
 	}
 	i.places = []*placement.Placement{
 		placement.New(t, append(opts, placement.WithID("p1"))...),
@@ -67,9 +67,8 @@ func (i *insecure) Setup(t *testing.T) []framework.Option {
 		placement.New(t, append(opts, placement.WithID("p3"))...),
 	}
 
-	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(i.sentry, i.places[0], i.places[1], i.places[2]),
+		framework.WithProcesses(i.sentry, fp, i.places[0], i.places[1], i.places[2]),
 	}
 }
 
@@ -80,7 +79,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 	i.places[2].WaitUntilRunning(t, ctx)
 
 	secProv, err := security.New(ctx, security.Options{
-		SentryAddress:           "localhost:" + strconv.Itoa(i.sentry.Port()),
+		SentryAddress:           i.sentry.Address(),
 		ControlPlaneTrustDomain: "localhost",
 		ControlPlaneNamespace:   "default",
 		TrustAnchors:            i.sentry.CABundle().TrustAnchors,
@@ -111,7 +110,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		if j >= 3 {
 			j = 0
 		}
-		host := "localhost:" + strconv.Itoa(i.places[j].Port())
+		host := i.places[j].Address()
 		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(),
 			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID),
 		)
@@ -120,6 +119,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		}
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 		client := v1pb.NewPlacementClient(conn)
+
 		stream, err = client.ReportDaprStatus(ctx)
 		if err != nil {
 			return false
@@ -133,7 +133,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 			return false
 		}
 		return true
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*10, time.Millisecond*10)
 
 	err = stream.Send(&v1pb.Host{
 		Name:     "app-1",
@@ -148,11 +148,11 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		o, err := stream.Recv()
 		require.NoError(t, err)
-		assert.Equal(c, "update", o.Operation)
+		assert.Equal(c, "update", o.GetOperation())
 		if assert.NotNil(c, o.GetTables()) {
-			assert.Len(c, o.GetTables().Entries, 2)
-			assert.Contains(c, o.GetTables().Entries, "entity-1")
-			assert.Contains(c, o.GetTables().Entries, "entity-2")
+			assert.Len(c, o.GetTables().GetEntries(), 2)
+			assert.Contains(c, o.GetTables().GetEntries(), "entity-1")
+			assert.Contains(c, o.GetTables().GetEntries(), "entity-2")
 		}
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 }

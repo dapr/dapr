@@ -4,7 +4,9 @@
 const owners = [
     'addjuarez',
     'artursouza',
+    'ashiquemd',
     'berndverst',
+    'cicoyle',
     'daixiang0',
     'deepanshua',
     'halspang',
@@ -13,10 +15,12 @@ const owners = [
     'joshvanl',
     'kaibocai',
     'mcandeia',
+    'mikeee',
     'msfussell',
     'mukundansundar',
     'pkedy',
     'pruthvidhodda',
+    'rabollin',
     'robertojrojas',
     'ryanlettieri',
     'shivamkm07',
@@ -24,8 +28,7 @@ const owners = [
     'skyao',
     'taction',
     'tanvigour',
-    'yaron2',
-    'rabollin',
+    'yaron2'
 ]
 
 const SDKs = [

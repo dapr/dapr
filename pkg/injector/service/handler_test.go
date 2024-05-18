@@ -24,6 +24,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	admissionv1 "k8s.io/api/admission/v1"
 	authenticationv1 "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -50,13 +51,10 @@ func TestHandleRequest(t *testing.T) {
 		KubeClient: kubernetesfake.NewSimpleClientset(),
 	})
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	injector := i.(*injector)
-	injector.currentTrustAnchors = func() ([]byte, error) {
+	injector.currentTrustAnchors = func(context.Context) ([]byte, error) {
 		return nil, nil
-	}
-	injector.signDaprdCertificate = func(context.Context, string) ([]byte, []byte, error) {
-		return []byte("test-cert"), []byte("test-key"), nil
 	}
 
 	podBytes, _ := json.Marshal(corev1.Pod{
@@ -281,21 +279,21 @@ func TestHandleRequest(t *testing.T) {
 		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			requestBytes, err := json.Marshal(tc.request)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			resp, err := http.Post(ts.URL, tc.contentType, bytes.NewBuffer(requestBytes))
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			defer resp.Body.Close()
 
 			assert.Equal(t, tc.expectStatusCode, resp.StatusCode)
 
 			if resp.StatusCode == http.StatusOK {
 				body, err := io.ReadAll(resp.Body)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				var ar admissionv1.AdmissionReview
 				err = json.Unmarshal(body, &ar)
-				assert.NoError(t, err)
+				require.NoError(t, err)
 
 				assert.Equal(t, tc.expectPatched, len(ar.Response.Patch) > 0)
 			}

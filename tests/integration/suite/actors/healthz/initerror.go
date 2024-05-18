@@ -15,15 +15,16 @@ package healthz
 
 import (
 	"context"
-	"net"
 	"net/http"
 	"strconv"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
@@ -51,6 +52,8 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 	i.blockConfig = make(chan struct{})
 	i.healthzCalled = make(chan struct{})
 
+	var once sync.Once
+
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		close(i.configCalled)
@@ -59,7 +62,9 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 	})
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
-		close(i.healthzCalled)
+		once.Do(func() {
+			close(i.healthzCalled)
+		})
 	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`OK`))
@@ -67,22 +72,10 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	i.place = placement.New(t)
-	i.daprd = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-  metadata:
-  - name: actorStateStore
-    value: true
-`),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(i.place.Port())),
+	i.daprd = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithPlacementAddresses(i.place.Address()),
 		daprd.WithAppPort(srv.Port()),
-		// Daprd is super noisy in debug mode when connecting to placement.
-		daprd.WithLogLevel("info"),
 	)
 
 	return []framework.Option{
@@ -92,16 +85,7 @@ spec:
 
 func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	i.place.WaitUntilRunning(t, ctx)
-
-	assert.Eventually(t, func() bool {
-		dialer := net.Dialer{Timeout: time.Second}
-		net, err := dialer.DialContext(ctx, "tcp", "localhost:"+strconv.Itoa(i.daprd.HTTPPort()))
-		if err != nil {
-			return false
-		}
-		net.Close()
-		return true
-	}, time.Second*5, time.Millisecond*100)
+	i.daprd.WaitUntilTCPReady(t, ctx)
 
 	client := util.HTTPClient(t)
 
@@ -113,22 +97,27 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 
 	rctx, cancel := context.WithTimeout(ctx, time.Second*2)
 	t.Cleanup(cancel)
-	daprdURL := "http://localhost:" + strconv.Itoa(i.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid/method/foo"
+	daprdURL := "http://127.0.0.1:" + strconv.Itoa(i.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid/method/foo"
 
 	req, err := http.NewRequestWithContext(rctx, http.MethodPost, daprdURL, nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
-	assert.ErrorIs(t, err, context.DeadlineExceeded)
+	require.ErrorIs(t, err, context.DeadlineExceeded)
 	if resp != nil && resp.Body != nil {
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 	}
+
+	meta, err := i.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	require.NoError(t, err)
+	assert.Empty(t, meta.GetActorRuntime().GetActiveActors())
+	assert.Equal(t, rtv1.ActorRuntime_INITIALIZING, meta.GetActorRuntime().GetRuntimeStatus())
 
 	close(i.blockConfig)
 
 	select {
 	case <-i.healthzCalled:
 	case <-time.After(time.Second * 15):
-		t.Fatal("timed out waiting for healthz call")
+		assert.Fail(t, "timed out waiting for healthz call")
 	}
 
 	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL, nil)
@@ -136,5 +125,12 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.NoError(t, resp.Body.Close())
+	require.NoError(t, resp.Body.Close())
+
+	meta, err = i.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	require.NoError(t, err)
+	if assert.Len(t, meta.GetActorRuntime().GetActiveActors(), 1) {
+		assert.Equal(t, "myactortype", meta.GetActorRuntime().GetActiveActors()[0].GetType())
+	}
+	assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 }

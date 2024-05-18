@@ -20,6 +20,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/metadata"
@@ -28,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 func connectionFn(ctx context.Context, address, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(bool), error) {
@@ -62,7 +64,7 @@ func TestNewProxy(t *testing.T) {
 
 	assert.Equal(t, "a", proxy.appID)
 	assert.NotNil(t, proxy.connectionFactory)
-	assert.True(t, reflect.ValueOf(connectionFn).Pointer() == reflect.ValueOf(proxy.connectionFactory).Pointer())
+	assert.Equal(t, reflect.ValueOf(connectionFn).Pointer(), reflect.ValueOf(proxy.connectionFactory).Pointer())
 }
 
 func TestSetRemoteAppFn(t *testing.T) {
@@ -82,7 +84,7 @@ func TestSetRemoteAppFn(t *testing.T) {
 	proxy := p.(*proxy)
 	app, err := proxy.remoteAppFn("a")
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, "a", app.id)
 }
 
@@ -141,7 +143,7 @@ func TestIntercept(t *testing.T) {
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, conn)
 	})
 
@@ -166,7 +168,7 @@ func TestIntercept(t *testing.T) {
 		proxy := p.(*proxy)
 		_, _, _, _, err := proxy.intercept(ctx, "/test")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("proxy to the app", func(t *testing.T) {
@@ -191,7 +193,7 @@ func TestIntercept(t *testing.T) {
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, conn)
 		assert.Equal(t, "a", conn.Target())
 	})
@@ -214,12 +216,14 @@ func TestIntercept(t *testing.T) {
 			}, nil
 		})
 
+		t.Setenv(securityConsts.AppAPITokenEnvVar, "token1")
+
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
 		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.NotNil(t, conn)
 		assert.Equal(t, "b", conn.Target())
 
@@ -227,6 +231,7 @@ func TestIntercept(t *testing.T) {
 		assert.Equal(t, "b", md["a"][0])
 		assert.Equal(t, "a", md[invokev1.CallerIDHeader][0])
 		assert.Equal(t, "b", md[invokev1.CalleeIDHeader][0])
+		assert.Equal(t, "token1", md[securityConsts.APITokenHeader][0])
 	})
 
 	t.Run("access policies applied", func(t *testing.T) {
@@ -259,7 +264,7 @@ func TestIntercept(t *testing.T) {
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, conn)
 	})
 
@@ -279,7 +284,7 @@ func TestIntercept(t *testing.T) {
 		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Nil(t, conn)
 	})
 }

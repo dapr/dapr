@@ -19,14 +19,14 @@ type options struct {
 	stderrContains []string
 }
 
-func WithStdoutLineContains(line string) func(*options) {
+func WithStdoutLineContains(lines ...string) func(*options) {
 	return func(o *options) {
-		o.stdoutContains = append(o.stdoutContains, line)
+		o.stdoutContains = append(o.stdoutContains, lines...)
 	}
 }
 
-func WithStderrLineContains(line string) func(*options) {
+func WithStderrLineContains(lines ...string) func(*options) {
 	return func(o *options) {
-		o.stderrContains = append(o.stderrContains, line)
+		o.stderrContains = append(o.stderrContains, lines...)
 	}
 }

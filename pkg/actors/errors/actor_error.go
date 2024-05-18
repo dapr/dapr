@@ -20,36 +20,33 @@ import (
 	"google.golang.org/grpc/codes"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 // ActorError is an error returned by an Actor via a header + body in the method's response.
 type ActorError struct {
 	body        []byte
-	headers     invokev1.DaprInternalMetadata
+	headers     map[string]*internalv1pb.ListStringValue
 	contentType string
 	statusCode  int
 	message     string
 }
 
-func NewActorError(invokeResponse *invokev1.InvokeMethodResponse) error {
-	if invokeResponse == nil {
+func NewActorError(res *internalv1pb.InternalInvokeResponse) error {
+	if res == nil {
 		return fmt.Errorf("could not parse actor error: no response object")
 	}
 
-	body, err := invokeResponse.RawDataFull()
-	if err != nil {
-		return fmt.Errorf("could not read actor error: %s", err)
-	}
-
-	statusCode := int(invokeResponse.Status().Code)
-	if !invokeResponse.IsHTTPResponse() {
+	statusCode := int(res.GetStatus().GetCode())
+	if !res.IsHTTPResponse() {
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
 
+	msg := res.GetMessage()
 	return &ActorError{
-		body:        body,
-		headers:     invokeResponse.Headers(),
-		contentType: invokeResponse.ContentType(),
+		body:        msg.GetData().GetValue(),
+		headers:     res.GetHeaders(),
+		contentType: msg.GetContentType(),
 		statusCode:  statusCode,
 		message:     "actor error with details in body",
 	}

@@ -17,9 +17,7 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"fmt"
 	"io"
-	"os"
 	"reflect"
 	"sort"
 	"strings"
@@ -33,13 +31,12 @@ import (
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
 
 	"github.com/dapr/components-contrib/metadata"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
+	subscriptionsapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -57,7 +54,6 @@ import (
 const (
 	TestPubsubName       = "testpubsub"
 	TestSecondPubsubName = "testpubsub2"
-	resourcesDir         = "./components"
 )
 
 func TestInitPubSub(t *testing.T) {
@@ -133,7 +129,7 @@ func TestInitPubSub(t *testing.T) {
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
-		ps.StopSubscriptions()
+		ps.StopSubscriptions(false)
 		ps.compStore.SetTopicRoutes(nil)
 		ps.compStore.SetSubscriptions(nil)
 		for name := range ps.compStore.ListPubSubs() {
@@ -163,10 +159,211 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
-		assert.NoError(t, ps.StartSubscriptions(context.Background()))
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("if not subscribing yet should not call Subscribe", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		// User App subscribes 2 topics via http app channel
+		subs := getSubscriptionsJSONString(
+			[]string{"topic0", "topic1"}, // first pubsub
+			[]string{"topic0"},           // second pubsub
+		)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := ps.Init(context.Background(), comp)
+			require.NoError(t, err)
+		}
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 0)
+	})
+
+	t.Run("if start subscribing then not subscribing should not call Subscribe", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		// User App subscribes 2 topics via http app channel
+		subs := getSubscriptionsJSONString(
+			[]string{"topic0", "topic1"}, // first pubsub
+			[]string{"topic0"},           // second pubsub
+		)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
+		ps.StopSubscriptions(false)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := ps.Init(context.Background(), comp)
+			require.NoError(t, err)
+		}
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 0)
+	})
+
+	t.Run("if start subscription then init, expect Subscribe", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		// User App subscribes 2 topics via http app channel
+		subs := getSubscriptionsJSONString(
+			[]string{"topic0", "topic1"}, // first pubsub
+			[]string{"topic0"},           // second pubsub
+		)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := ps.Init(context.Background(), comp)
+			require.NoError(t, err)
+		}
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 2)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 1)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+	})
+
+	t.Run("if not subscribing yet should not call Subscribe", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		// User App subscribes 2 topics via http app channel
+		subs := getSubscriptionsJSONString(
+			[]string{"topic0", "topic1"}, // first pubsub
+			[]string{"topic0"},           // second pubsub
+		)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		// act
+		for _, comp := range pubsubComponents {
+			require.NoError(t, ps.Init(context.Background(), comp))
+		}
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 0)
+	})
+
+	t.Run("if start subscribing then not subscribing should not call Subscribe", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		// User App subscribes 2 topics via http app channel
+		subs := getSubscriptionsJSONString(
+			[]string{"topic0", "topic1"}, // first pubsub
+			[]string{"topic0"},           // second pubsub
+		)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
+		ps.StopSubscriptions(false)
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := ps.Init(context.Background(), comp)
+			require.NoError(t, err)
+		}
+
+		// assert
+		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
+		mockPubSub2.AssertNumberOfCalls(t, "Init", 1)
+
+		mockPubSub.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockPubSub2.AssertNumberOfCalls(t, "Subscribe", 0)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 0)
+	})
+
+	t.Run("if start subscription then init, expect Subscribe", func(t *testing.T) {
+		mockPubSub, mockPubSub2 := initMockPubSubForRuntime(ps)
+
+		mockAppChannel := new(channelt.MockAppChannel)
+		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		// User App subscribes 2 topics via http app channel
+		subs := getSubscriptionsJSONString(
+			[]string{"topic0", "topic1"}, // first pubsub
+			[]string{"topic0"},           // second pubsub
+		)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataString(subs).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
+
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
+
+		// act
+		for _, comp := range pubsubComponents {
+			err := ps.Init(context.Background(), comp)
+			require.NoError(t, err)
+		}
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -195,10 +392,10 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
-		assert.NoError(t, ps.StartSubscriptions(context.Background()))
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -221,10 +418,10 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
-		assert.NoError(t, ps.StartSubscriptions(context.Background()))
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -246,33 +443,26 @@ func TestInitPubSub(t *testing.T) {
 			Channels:       new(channels.Channels),
 		})
 		routes, err := pst.topicRoutes(context.Background())
-		assert.NoError(t, err)
-		assert.Equal(t, 0, len(routes))
+		require.NoError(t, err)
+		assert.Empty(t, routes)
 	})
 
 	t.Run("load declarative subscription, no scopes", func(t *testing.T) {
 		reg := registry.New(registry.NewOptions())
 		pst := New(Options{
-			Registry:   reg.PubSubs(),
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Mode:       modes.StandaloneMode,
-			Namespace:  "ns1",
-			ID:         TestRuntimeConfigID,
-			Channels:   new(channels.Channels),
+			Registry:       reg.PubSubs(),
+			IsHTTP:         true,
+			Resiliency:     resiliency.New(logger.NewLogger("test")),
+			Mode:           modes.StandaloneMode,
+			Namespace:      "ns1",
+			ID:             TestRuntimeConfigID,
+			Channels:       new(channels.Channels),
+			ComponentStore: compstore.New(),
 		})
 
-		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
-		defer os.RemoveAll(resourcesDir)
-
-		s := testDeclarativeSubscription()
-
-		cleanup, err := writeComponentToDisk(s, "sub.yaml")
-		assert.NoError(t, err)
-		defer cleanup()
-
-		pst.resourcesPath = []string{resourcesDir}
-		subs := pst.declarativeSubscriptions(context.Background())
+		pst.compStore.AddDeclarativeSubscription(testDeclarativeSubscription())
+		subs, err := pst.declarativeSubscriptions(context.Background())
+		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 1) {
@@ -285,27 +475,23 @@ func TestInitPubSub(t *testing.T) {
 	t.Run("load declarative subscription, in scopes", func(t *testing.T) {
 		reg := registry.New(registry.NewOptions())
 		pst := New(Options{
-			Registry:   reg.PubSubs(),
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Mode:       modes.StandaloneMode,
-			Namespace:  "ns1",
-			ID:         TestRuntimeConfigID,
-			Channels:   new(channels.Channels),
+			Registry:       reg.PubSubs(),
+			IsHTTP:         true,
+			Resiliency:     resiliency.New(logger.NewLogger("test")),
+			Mode:           modes.StandaloneMode,
+			Namespace:      "ns1",
+			ID:             TestRuntimeConfigID,
+			Channels:       new(channels.Channels),
+			ComponentStore: compstore.New(),
 		})
-
-		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
-		defer os.RemoveAll(resourcesDir)
 
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{TestRuntimeConfigID}
 
-		cleanup, err := writeComponentToDisk(s, "sub.yaml")
-		assert.NoError(t, err)
-		defer cleanup()
+		pst.compStore.AddDeclarativeSubscription(s)
 
-		pst.resourcesPath = []string{resourcesDir}
-		subs := pst.declarativeSubscriptions(context.Background())
+		subs, err := pst.declarativeSubscriptions(context.Background())
+		require.NoError(t, err)
 		if assert.Len(t, subs, 1) {
 			assert.Equal(t, "topic1", subs[0].Topic)
 			if assert.Len(t, subs[0].Rules, 1) {
@@ -317,29 +503,24 @@ func TestInitPubSub(t *testing.T) {
 	})
 
 	t.Run("load declarative subscription, not in scopes", func(t *testing.T) {
+		t.Skip("TODO: @joshvanl unskip after PR merged: https://github.com/dapr/dapr/pull/7616")
 		reg := registry.New(registry.NewOptions())
 		pst := New(Options{
-			Registry:   reg.PubSubs(),
-			IsHTTP:     true,
-			Resiliency: resiliency.New(logger.NewLogger("test")),
-			Namespace:  "ns1",
-			ID:         TestRuntimeConfigID,
-			Channels:   new(channels.Channels),
+			Registry:       reg.PubSubs(),
+			IsHTTP:         true,
+			Resiliency:     resiliency.New(logger.NewLogger("test")),
+			Namespace:      "ns1",
+			ID:             TestRuntimeConfigID,
+			Channels:       new(channels.Channels),
+			ComponentStore: compstore.New(),
 		})
-
-		require.NoError(t, os.Mkdir(resourcesDir, 0o777))
-		defer os.RemoveAll(resourcesDir)
 
 		s := testDeclarativeSubscription()
 		s.Scopes = []string{"scope1"}
-
-		cleanup, err := writeComponentToDisk(s, "sub.yaml")
-		assert.NoError(t, err)
-		defer cleanup()
-
-		pst.resourcesPath = []string{resourcesDir}
-		subs := pst.declarativeSubscriptions(context.Background())
-		assert.Len(t, subs, 0)
+		pst.compStore.AddDeclarativeSubscription(s)
+		subs, err := pst.declarativeSubscriptions(context.Background())
+		require.NoError(t, err)
+		assert.Empty(t, subs)
 	})
 
 	t.Run("test subscribe, app allowed 1 topic", func(t *testing.T) {
@@ -359,10 +540,10 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
-		assert.NoError(t, ps.StartSubscriptions(context.Background()))
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -389,10 +570,10 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
-		assert.NoError(t, ps.StartSubscriptions(context.Background()))
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -419,10 +600,10 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
-		assert.NoError(t, ps.StartSubscriptions(context.Background()))
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -449,10 +630,10 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
-		assert.NoError(t, ps.StartSubscriptions(context.Background()))
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -479,7 +660,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
 		// assert
@@ -507,7 +688,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
 		// assert
@@ -536,10 +717,10 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
-		assert.Error(t, ps.StartSubscriptions(context.Background()))
+		require.Error(t, ps.StartSubscriptions(context.Background()))
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -567,10 +748,10 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
-		assert.Error(t, ps.StartSubscriptions(context.Background()))
+		require.Error(t, ps.StartSubscriptions(context.Background()))
 
 		// assert
 		mockPubSub.AssertNumberOfCalls(t, "Init", 1)
@@ -586,7 +767,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
 		ps.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{Component: &mockPublishPubSub{}})
@@ -606,7 +787,7 @@ func TestInitPubSub(t *testing.T) {
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 
 		ps.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{Component: &mockPublishPubSub{}})
@@ -627,7 +808,7 @@ func TestInitPubSub(t *testing.T) {
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 	})
 
@@ -637,7 +818,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
 		ps.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
@@ -661,7 +842,7 @@ func TestInitPubSub(t *testing.T) {
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 
 		ps.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
@@ -686,7 +867,7 @@ func TestInitPubSub(t *testing.T) {
 			},
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Empty(t, res.FailedEntries)
 	})
 
@@ -696,7 +877,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			require.Nil(t, err)
+			require.NoError(t, err)
 		}
 
 		ps.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
@@ -719,7 +900,7 @@ func TestInitPubSub(t *testing.T) {
 				},
 			},
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Empty(t, res)
 
 		ps.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
@@ -739,7 +920,7 @@ func TestInitPubSub(t *testing.T) {
 				},
 			},
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Empty(t, res)
 	})
 
@@ -749,7 +930,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			require.Nil(t, err)
+			require.NoError(t, err)
 		}
 
 		ps.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
@@ -772,7 +953,7 @@ func TestInitPubSub(t *testing.T) {
 				},
 			},
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Empty(t, res)
 
 		ps.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
@@ -792,7 +973,7 @@ func TestInitPubSub(t *testing.T) {
 				},
 			},
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Empty(t, res)
 	})
 
@@ -813,7 +994,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
 		ps.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
@@ -827,7 +1008,7 @@ func TestInitPubSub(t *testing.T) {
 			Metadata:   md,
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		ps.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
 			Component: &mockPublishPubSub{},
@@ -837,7 +1018,7 @@ func TestInitPubSub(t *testing.T) {
 			Topic:      "topic1",
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("test publish, topic protected, with scopes, publish succeeds", func(t *testing.T) {
@@ -857,7 +1038,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
 		ps.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
@@ -873,7 +1054,7 @@ func TestInitPubSub(t *testing.T) {
 			Metadata:   md,
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		ps.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
 			Component:         &mockPublishPubSub{},
@@ -885,7 +1066,7 @@ func TestInitPubSub(t *testing.T) {
 			Topic:      "topic1",
 		})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("test publish, topic not allowed", func(t *testing.T) {
@@ -905,7 +1086,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			require.Nil(t, err)
+			require.NoError(t, err)
 		}
 
 		ps.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
@@ -916,7 +1097,7 @@ func TestInitPubSub(t *testing.T) {
 			PubsubName: TestPubsubName,
 			Topic:      "topic5",
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 
 		ps.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
 			Component:     &mockPublishPubSub{},
@@ -926,7 +1107,7 @@ func TestInitPubSub(t *testing.T) {
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic5",
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("test publish, topic protected, no scopes, publish fails", func(t *testing.T) {
@@ -946,7 +1127,7 @@ func TestInitPubSub(t *testing.T) {
 		// act
 		for _, comp := range pubsubComponents {
 			err := ps.Init(context.Background(), comp)
-			require.Nil(t, err)
+			require.NoError(t, err)
 		}
 
 		ps.compStore.AddPubSub(TestPubsubName, compstore.PubsubItem{
@@ -957,7 +1138,7 @@ func TestInitPubSub(t *testing.T) {
 			PubsubName: TestPubsubName,
 			Topic:      "topic1",
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 
 		ps.compStore.AddPubSub(TestSecondPubsubName, compstore.PubsubItem{
 			Component:       &mockPublishPubSub{},
@@ -967,7 +1148,7 @@ func TestInitPubSub(t *testing.T) {
 			PubsubName: TestSecondPubsubName,
 			Topic:      "topic1",
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("test protected topics, no scopes, operation not allowed", func(t *testing.T) {
@@ -1163,7 +1344,7 @@ func TestConsumerID(t *testing.T) {
 	})
 
 	err := ps.Init(context.Background(), pubsubComponent)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 }
 
 // helper to populate subscription array for 2 pubsubs.
@@ -1213,26 +1394,16 @@ func testDeclarativeSubscription() subscriptionsapi.Subscription {
 	return subscriptionsapi.Subscription{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Subscription",
-			APIVersion: "v1alpha1",
+			APIVersion: "dapr.io/v1alpha1",
 		},
 		Spec: subscriptionsapi.SubscriptionSpec{
-			Topic:      "topic1",
-			Route:      "myroute",
+			Topic: "topic1",
+			Routes: subscriptionsapi.Routes{
+				Default: "myroute",
+			},
 			Pubsubname: "pubsub",
 		},
 	}
-}
-
-// writeComponentToDisk the given content into a file inside components directory.
-func writeComponentToDisk(content any, fileName string) (cleanup func(), error error) {
-	filePath := fmt.Sprintf("%s/%s", resourcesDir, fileName)
-	b, err := yaml.Marshal(content)
-	if err != nil {
-		return nil, err
-	}
-	return func() {
-		os.Remove(filePath)
-	}, os.WriteFile(filePath, b, 0o600)
 }
 
 func TestNamespacedPublisher(t *testing.T) {
@@ -1351,7 +1522,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 	component.Spec.Type = "pubsub.failingPubsub"
 
 	err := ps.Init(context.TODO(), component)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	t.Run("pubsub publish retries with resiliency", func(t *testing.T) {
 		req := &contribpubsub.PublishRequest{
@@ -1360,7 +1531,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		}
 		err := ps.Publish(context.Background(), req)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingPubsub.Failure.CallCount("failingTopic"))
 	})
 
@@ -1374,7 +1545,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		err := ps.Publish(context.Background(), req)
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingPubsub.Failure.CallCount("timeoutTopic"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
@@ -1408,7 +1579,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		defer cancel()
 		err := ps.beginPubSub(ctx, "failPubsub")
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingAppChannel.Failure.CallCount("failingSubTopic"))
 	})
 
@@ -1440,7 +1611,7 @@ func TestPubsubWithResiliency(t *testing.T) {
 		err := ps.beginPubSub(ctx, "failPubsub")
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingAppChannel.Failure.CallCount("timeoutSubTopic"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
@@ -1501,11 +1672,11 @@ func TestPubsubLifecycle(t *testing.T) {
 	}, "mockPubSubBeta")
 
 	err := ps.Init(context.Background(), comp1)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = ps.Init(context.Background(), comp2)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	err = ps.Init(context.Background(), comp3)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	forEachPubSub := func(f func(name string, comp *daprt.InMemoryPubsub)) int {
 		i := 0
@@ -1595,7 +1766,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		setTopicRoutes()
 
 		subscriptionsCh = make(chan struct{}, 5)
-		assert.NoError(t, ps.StartSubscriptions(context.Background()))
+		require.NoError(t, ps.StartSubscriptions(context.Background()))
 
 		done := forEachPubSub(func(name string, comp *daprt.InMemoryPubsub) {
 			switch name {
@@ -1619,7 +1790,7 @@ func TestPubsubLifecycle(t *testing.T) {
 			"expected %v to equal %v", subscriptions["mockPubSub1"], []string{"topic1"})
 		assert.True(t, reflect.DeepEqual(subscriptions["mockPubSub2"], []string{"topic2", "topic3"}),
 			"expected %v to equal %v", subscriptions["mockPubSub2"], []string{"topic2", "topic3"})
-		assert.Len(t, subscriptions["mockPubSub3"], 0)
+		assert.Empty(t, subscriptions["mockPubSub3"])
 	}
 
 	t.Run("subscribe to 3 topics on 2 components", subscribePredefined)
@@ -1641,7 +1812,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		for _, m := range send {
 			//nolint:gosec
 			err = ps.Publish(context.Background(), &m)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		}
 
 		for i := 0; i < expect; i++ {
@@ -1650,7 +1821,7 @@ func TestPubsubLifecycle(t *testing.T) {
 
 		// Sleep to ensure no new messages have come in
 		time.Sleep(10 * time.Millisecond)
-		assert.Len(t, messagesCh, 0)
+		assert.Empty(t, messagesCh)
 
 		msgMux.Lock()
 		close(messagesCh)
@@ -1706,7 +1877,7 @@ func TestPubsubLifecycle(t *testing.T) {
 	t.Run("subscribe to mockPubSub3/topic4", func(t *testing.T) {
 		resetState()
 
-		err = ps.subscribeTopic(context.Background(), "mockPubSub3", "topic4", compstore.TopicRouteElem{})
+		err = ps.subscribeTopic("mockPubSub3", "topic4", compstore.TopicRouteElem{})
 		require.NoError(t, err)
 
 		sendMessages(t, 2)
@@ -1726,11 +1897,11 @@ func TestPubsubLifecycle(t *testing.T) {
 		comp3 := getPubSub("mockPubSub3")
 		comp3.On("unsubscribed", "topic4").Return(nil).Once()
 
-		ps.StopSubscriptions()
+		ps.StopSubscriptions(false)
 
 		sendMessages(t, 0)
 
-		require.Len(t, messages, 0)
+		require.Empty(t, messages)
 		comp2.AssertCalled(t, "unsubscribed", "topic3")
 		comp3.AssertCalled(t, "unsubscribed", "topic4")
 	})
@@ -1746,7 +1917,7 @@ func TestPubsubLifecycle(t *testing.T) {
 		comp2.On("unsubscribed", "topic2").Return(nil).Once()
 		comp2.On("unsubscribed", "topic3").Return(nil).Once()
 
-		ps.StopSubscriptions()
+		ps.StopSubscriptions(false)
 		time.Sleep(time.Second / 2)
 
 		comp1.AssertCalled(t, "unsubscribed", "topic1")

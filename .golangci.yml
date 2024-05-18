@@ -121,34 +121,58 @@ linters-settings:
     # minimal occurrences count to trigger, 3 by default
     min-occurrences: 5
   depguard:
-    list-type: denylist
-    include-go-root: false
-    packages-with-error-message:
-      - "github.com/Sirupsen/logrus": "must use github.com/dapr/kit/logger"
-      - "github.com/agrea/ptr": "must use github.com/dapr/kit/ptr"
-      - "go.uber.org/atomic": "must use sync/atomic"
-      - "golang.org/x/net/context": "must use context"
-      - "github.com/pkg/errors": "must use standard library (errors package and/or fmt.Errorf)"
-      - "github.com/go-chi/chi$": "must use github.com/go-chi/chi/v5"
-      - "github.com/cenkalti/backoff$": "must use github.com/cenkalti/backoff/v4"
-      - "github.com/cenkalti/backoff/v2": "must use github.com/cenkalti/backoff/v4"
-      - "github.com/cenkalti/backoff/v3": "must use github.com/cenkalti/backoff/v4"
-      - "github.com/benbjohnson/clock": "must use k8s.io/utils/clock"
-      - "github.com/ghodss/yaml": "must use sigs.k8s.io/yaml"
-      - "gopkg.in/yaml.v2": "must use gopkg.in/yaml.v3"
-      - "github.com/golang-jwt/jwt": "must use github.com/lestrrat-go/jwx/v2"
-      - "github.com/golang-jwt/jwt/v2": "must use github.com/lestrrat-go/jwx/v2"
-      - "github.com/golang-jwt/jwt/v3": "must use github.com/lestrrat-go/jwx/v2"
-      - "github.com/golang-jwt/jwt/v4": "must use github.com/lestrrat-go/jwx/v2"
-      # Commonly auto-completed by gopls
-      - "github.com/gogo/status": "must use google.golang.org/grpc/status"
-      - "github.com/gogo/protobuf": "must use google.golang.org/protobuf"
-      - "github.com/lestrrat-go/jwx/jwa": "must use github.com/lestrrat-go/jwx/v2"
-      - "github.com/lestrrat-go/jwx/jwt": "must use github.com/lestrrat-go/jwx/v2"
-      - "github.com/labstack/gommon/log": "must use github.com/dapr/kit/logger"
-      - "github.com/gobuffalo/logger": "must use github.com/dapr/kit/logger"
-      - "k8s.io/utils/pointer": "must use github.com/dapr/kit/ptr"
-      - "k8s.io/utils/ptr": "must use github.com/dapr/kit/ptr"
+    rules:
+      master:
+        deny:
+        - pkg: "github.com/Sirupsen/logrus"
+          desc: "must use github.com/dapr/kit/logger"
+        - pkg: "github.com/agrea/ptr"
+          desc: "must use github.com/dapr/kit/ptr"
+        - pkg: "go.uber.org/atomic"
+          desc: "must use sync/atomic"
+        - pkg: "golang.org/x/net/context"
+          desc: "must use context"
+        - pkg: "github.com/pkg/errors"
+          desc: "must use standard library (errors package and/or fmt.Errorf)"
+        - pkg: "github.com/go-chi/chi$"
+          desc: "must use github.com/go-chi/chi/v5"
+        - pkg: "github.com/cenkalti/backoff$"
+          desc: "must use github.com/cenkalti/backoff/v4"
+        - pkg: "github.com/cenkalti/backoff/v2"
+          desc: "must use github.com/cenkalti/backoff/v4"
+        - pkg: "github.com/cenkalti/backoff/v3"
+          desc: "must use github.com/cenkalti/backoff/v4"
+        - pkg: "github.com/benbjohnson/clock"
+          desc: "must use k8s.io/utils/clock"
+        - pkg: "github.com/ghodss/yaml"
+          desc: "must use sigs.k8s.io/yaml"
+        - pkg: "gopkg.in/yaml.v2"
+          desc: "must use gopkg.in/yaml.v3"
+        - pkg: "github.com/golang-jwt/jwt"
+          desc: "must use github.com/lestrrat-go/jwx/v2"
+        - pkg: "github.com/golang-jwt/jwt/v2"
+          desc: "must use github.com/lestrrat-go/jwx/v2"
+        - pkg: "github.com/golang-jwt/jwt/v3"
+          desc: "must use github.com/lestrrat-go/jwx/v2"
+        - pkg: "github.com/golang-jwt/jwt/v4"
+          desc: "must use github.com/lestrrat-go/jwx/v2"
+        # pkg: Commonly auto-completed by gopls
+        - pkg: "github.com/gogo/status"
+          desc: "must use google.golang.org/grpc/status"
+        - pkg: "github.com/gogo/protobuf"
+          desc: "must use google.golang.org/protobuf"
+        - pkg: "github.com/lestrrat-go/jwx/jwa"
+          desc: "must use github.com/lestrrat-go/jwx/v2"
+        - pkg: "github.com/lestrrat-go/jwx/jwt"
+          desc: "must use github.com/lestrrat-go/jwx/v2"
+        - pkg: "github.com/labstack/gommon/log"
+          desc: "must use github.com/dapr/kit/logger"
+        - pkg: "github.com/gobuffalo/logger"
+          desc: "must use github.com/dapr/kit/logger"
+        - pkg: "k8s.io/utils/pointer"
+          desc: "must use github.com/dapr/kit/ptr"
+        - pkg: "k8s.io/utils/ptr"
+          desc: "must use github.com/dapr/kit/ptr"
   misspell:
     # Correct spellings using locale preferences for US or UK.
     # Default is to use a neutral variety of English.
@@ -305,3 +329,5 @@ linters:
     - structcheck
     - varcheck
     - deadcode
+    - inamedparam
+    - tagalign

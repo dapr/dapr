@@ -33,6 +33,7 @@ message PlacementTables {
   string version = 2;
   // Minimum observed version of the Actor APIs supported by connected runtimes
   uint32 api_level = 3;
+  int64 replication_factor = 4;
 }
 
 message PlacementTable {

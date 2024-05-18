@@ -31,7 +31,6 @@ const (
 	ErrStateDeleteBulk = "failed deleting state in state store %s: %s"
 
 	// StateTransaction.
-	ErrStateStoreNotSupported     = "state store %s doesn't support transaction"
 	ErrNotSupportedStateOperation = "operation type %s not supported"
 	ErrStateTransaction           = "error while executing state transaction: %s"
 
@@ -39,18 +38,7 @@ const (
 	ErrInvokeOutputBinding = "error invoking output binding %s: %s"
 
 	// PubSub.
-	ErrPubsubNotConfigured      = "no pubsub is configured"
-	ErrPubsubEmpty              = "pubsub name is empty"
-	ErrPubsubNotFound           = "pubsub %s not found"
-	ErrTopicEmpty               = "topic is empty in pubsub %s"
-	ErrPubsubCloudEventsSer     = "error when marshalling cloud event envelope for topic %s pubsub %s: %s"
-	ErrPubsubPublishMessage     = "error when publish to topic %s in pubsub %s: %s"
-	ErrPubsubForbidden          = "topic %s is not allowed for app id %s"
-	ErrPubsubCloudEventCreation = "cannot create cloudevent: %s"
-	ErrPubsubUnmarshal          = "error when unmarshaling the request for topic %s pubsub %s: %s"
-	ErrPubsubMarshal            = "error marshaling events to bytes for topic %s pubsub %s: %s"
-	ErrPubsubGetSubscriptions   = "unable to get app subscriptions %s"
-	ErrPublishOutbox            = "error while publishing outbox message: %s"
+	ErrPubsubForbidden = "topic %s is not allowed for app id %s"
 
 	// AppChannel.
 	ErrChannelNotFound       = "app channel is not initialized"
@@ -59,17 +47,6 @@ const (
 
 	// AppHealth.
 	ErrAppUnhealthy = "app is not in a healthy state"
-
-	// Actor.
-	ErrActorInstanceMissing      = "actor instance is missing"
-	ErrActorInvoke               = "error invoke actor method: %s"
-	ErrActorReminderCreate       = "error creating actor reminder: %s"
-	ErrActorReminderGet          = "error getting actor reminder: %s"
-	ErrActorReminderDelete       = "error deleting actor reminder: %s"
-	ErrActorTimerCreate          = "error creating actor timer: %s"
-	ErrActorTimerDelete          = "error deleting actor timer: %s"
-	ErrActorStateGet             = "error getting actor state: %s"
-	ErrActorStateTransactionSave = "error saving actor transaction state: %s"
 
 	// Configuration.
 	ErrConfigurationStoresNotConfigured = "configuration stores not configured"
@@ -98,16 +75,6 @@ var (
 	ErrOutboundHealthNotReady = APIError{"dapr outbound is not ready", "ERR_OUTBOUND_HEALTH_NOT_READY", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrHealthAppIDNotMatch    = APIError{"dapr app-id does not match", "ERR_HEALTH_APPID_NOT_MATCH", http.StatusInternalServerError, grpcCodes.Internal}
 
-	// State.
-	ErrStateStoresNotConfigured    = APIError{"state store is not configured", "ERR_STATE_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
-	ErrStateStoreNotFound          = APIError{"state store %s is not found", "ERR_STATE_STORE_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrStateQueryFailed            = APIError{"failed query in state store %s: %s", "ERR_STATE_QUERY", http.StatusInternalServerError, grpcCodes.Internal}
-	ErrStateQueryUnsupported       = APIError{"state store does not support querying", "ERR_STATE_STORE_NOT_SUPPORTED", http.StatusInternalServerError, grpcCodes.Internal}
-	ErrStateTooManyTransactionalOp = APIError{"the transaction contains %d operations, which is more than what the state store supports: %d", "ERR_STATE_STORE_TOO_MANY_TRANSACTIONS", http.StatusBadRequest, grpcCodes.InvalidArgument}
-
-	// PubSub.
-	ErrPubSubMetadataDeserialize = APIError{"failed deserializing metadata: %v", "ERR_PUBSUB_REQUEST_METADATA", http.StatusBadRequest, grpcCodes.InvalidArgument}
-
 	// Secrets.
 	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", "ERR_SECRET_STORES_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
 	ErrSecretStoreNotFound      = APIError{"failed finding secret store with key %s", "ERR_SECRET_STORE_NOT_FOUND", http.StatusUnauthorized, grpcCodes.InvalidArgument}
@@ -124,6 +91,15 @@ var (
 	// Actor.
 	ErrActorReminderOpActorNotHosted = APIError{"operations on actor reminders are only possible on hosted actor types", "ERR_ACTOR_REMINDER_NON_HOSTED", http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrActorRuntimeNotFound          = APIError{`the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: "true" in your state store component file?`, "ERR_ACTOR_RUNTIME_NOT_FOUND", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorInstanceMissing          = APIError{"actor instance is missing", "ERR_ACTOR_INSTANCE_MISSING", http.StatusBadRequest, grpcCodes.Internal}
+	ErrActorInvoke                   = APIError{"error invoke actor method: %s", "ERR_ACTOR_INVOKE_METHOD", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorStateGet                 = APIError{"error getting actor state: %s", "ERR_ACTOR_STATE_GET", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorStateTransactionSave     = APIError{"error saving actor transaction state: %s", "ERR_ACTOR_STATE_TRANSACTION_SAVE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorReminderCreate           = APIError{"error creating actor reminder: %s", "ERR_ACTOR_REMINDER_CREATE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorReminderGet              = APIError{"error getting actor reminder: %s", "ERR_ACTOR_REMINDER_GET", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorReminderDelete           = APIError{"error deleting actor reminder: %s", "ERR_ACTOR_REMINDER_DELETE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorTimerCreate              = APIError{"error creating actor timer: %s", "ERR_ACTOR_TIMER_CREATE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorTimerDelete              = APIError{"error deleting actor timer: %s", "ERR_ACTOR_TIMER_DELETE", http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", "ERR_LOCK_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}

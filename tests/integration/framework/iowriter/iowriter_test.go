@@ -72,19 +72,19 @@ func TestWrite(t *testing.T) {
 
 		assert.Equal(t, 5, writer.buf.Len())
 
-		assert.Len(t, logger.msgs, 0)
+		assert.Empty(t, logger.msgs)
 
-		assert.NoError(t, writer.Close())
+		require.NoError(t, writer.Close())
 
 		_ = assert.Len(t, logger.msgs, 1) && assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
 	})
 
 	t.Run("should not return error on write when closed", func(t *testing.T) {
 		writer := New(&mockLogger{t: t}, "proc").(*stdwriter)
-		assert.NoError(t, writer.Close())
+		require.NoError(t, writer.Close())
 
 		_, err := writer.Write([]byte("test\n"))
-		assert.NoError(t, err, io.ErrClosedPipe)
+		require.NotErrorIs(t, err, io.ErrClosedPipe)
 		assert.Equal(t, "test\n", writer.buf.String())
 	})
 }
@@ -97,7 +97,7 @@ func TestClose(t *testing.T) {
 		writer.Close()
 
 		assert.Equal(t, 0, writer.buf.Len())
-		_ = assert.Equal(t, 1, len(logger.msgs)) &&
+		_ = assert.Len(t, logger.msgs, 1) &&
 			assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
 	})
 }
@@ -110,7 +110,7 @@ func TestNotFailed(t *testing.T) {
 		writer.Close()
 
 		assert.Equal(t, 0, writer.buf.Len())
-		assert.Equal(t, 0, len(logger.msgs))
+		assert.Empty(t, logger.msgs)
 	})
 
 	t.Run("if test has not failed but `DAPR_INTEGRATION_LOGS=true`, print output", func(t *testing.T) {
@@ -121,7 +121,7 @@ func TestNotFailed(t *testing.T) {
 		writer.Close()
 
 		assert.Equal(t, 0, writer.buf.Len())
-		_ = assert.Equal(t, 1, len(logger.msgs)) &&
+		_ = assert.Len(t, logger.msgs, 1) &&
 			assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
 	})
 
@@ -133,7 +133,7 @@ func TestNotFailed(t *testing.T) {
 		writer.Close()
 
 		assert.Equal(t, 0, writer.buf.Len())
-		_ = assert.Equal(t, 1, len(logger.msgs)) &&
+		_ = assert.Len(t, logger.msgs, 1) &&
 			assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
 	})
 }
@@ -161,7 +161,7 @@ func TestConcurrency(t *testing.T) {
 
 		wg.Wait()
 
-		assert.NoError(t, writer.Close())
+		require.NoError(t, writer.Close())
 
 		assert.Equal(t, 0, writer.buf.Len())
 		assert.Len(t, logger.msgs, 2000)

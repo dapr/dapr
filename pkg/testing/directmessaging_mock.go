@@ -77,7 +77,7 @@ func (_m *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string
 	if err != nil {
 		return &invokev1.InvokeMethodResponse{}, err
 	}
-	err = _m.Failure.PerformFailure(string(r.Message.Data.Value))
+	err = _m.Failure.PerformFailure(string(r.GetMessage().GetData().GetValue()))
 	if err != nil {
 		return &invokev1.InvokeMethodResponse{}, err
 	}
@@ -91,10 +91,10 @@ func (_m *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string
 	for k, v := range md {
 		headers[k] = v.GetValues()
 	}
-	contentType := r.Message.GetContentType()
+	contentType := r.GetMessage().GetContentType()
 	resp := invokev1.
 		NewInvokeMethodResponse(int32(statusCode), http.StatusText(statusCode), nil).
-		WithRawDataBytes(r.Message.Data.Value).
+		WithRawDataBytes(r.GetMessage().GetData().GetValue()).
 		WithHTTPHeaders(headers).
 		WithContentType(contentType)
 	return resp, nil

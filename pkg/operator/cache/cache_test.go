@@ -9,7 +9,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
 	"k8s.io/client-go/kubernetes/scheme"
-	cache2 "k8s.io/client-go/tools/cache"
+	kcache "k8s.io/client-go/tools/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
 	"sigs.k8s.io/controller-runtime/pkg/client/apiutil"
 
@@ -31,8 +31,8 @@ func convertToByGVK[T any](byObject map[client.Object]T) (map[schema.GroupVersio
 	return byGVK, nil
 }
 
-func getObjectTransformer(t *testing.T, o client.Object) cache2.TransformFunc {
-	transformers := getTransformerFunctions()
+func getObjectTransformer(t *testing.T, o client.Object) kcache.TransformFunc {
+	transformers := getTransformerFunctions(nil)
 	transformerByGVK, err := convertToByGVK(transformers)
 	require.NoError(t, err)
 
@@ -41,11 +41,11 @@ func getObjectTransformer(t *testing.T, o client.Object) cache2.TransformFunc {
 
 	podTransformer, ok := transformerByGVK[gvk]
 	require.True(t, ok)
-	return podTransformer
+	return podTransformer.Transform
 }
 
-func getNewTestStore() cache2.Store {
-	return cache2.NewStore(func(obj any) (string, error) {
+func getNewTestStore() kcache.Store {
+	return kcache.NewStore(func(obj any) (string, error) {
 		o := obj.(client.Object)
 		return o.GetNamespace() + "/" + o.GetName(), nil
 	})

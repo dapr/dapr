@@ -25,6 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
@@ -55,7 +56,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		membershipStopCh := make(chan struct{})
 
 		cleanupStates()
-		assert.Equal(t, 0, len(testServer.raftNode.FSM().State().Members()))
+		assert.Empty(t, testServer.raftNode.FSM().State().Members())
 
 		go func() {
 			defer close(membershipStopCh)
@@ -105,7 +106,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			for {
 				placementOrder, streamErr := stream.Recv()
 				require.NoError(t, streamErr)
-				if placementOrder.Operation == "unlock" {
+				if placementOrder.GetOperation() == "unlock" {
 					done <- true
 					return
 				}
@@ -121,7 +122,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		}
 
 		// act
-		assert.NoError(t, stream.Send(host))
+		require.NoError(t, stream.Send(host))
 
 		select {
 		case <-done:
@@ -217,21 +218,21 @@ func TestPerformTableUpdate(t *testing.T) {
 				}
 				if placementOrder != nil {
 					clientRecvDataLock.Lock()
-					clientRecvData[clientID][placementOrder.Operation] = clock.Now().UnixNano()
+					clientRecvData[clientID][placementOrder.GetOperation()] = clock.Now().UnixNano()
 					clientRecvDataLock.Unlock()
 					// Check if the table is up to date.
-					if placementOrder.Operation == "update" {
-						if placementOrder.Tables != nil {
+					if placementOrder.GetOperation() == "update" {
+						if placementOrder.GetTables() != nil {
 							upToDate = true
-							for _, entries := range placementOrder.Tables.Entries {
+							for _, entries := range placementOrder.GetTables().GetEntries() {
 								// Check if all clients are in load map.
-								if len(entries.LoadMap) != testClients {
+								if len(entries.GetLoadMap()) != testClients {
 									upToDate = false
 								}
 							}
 						}
 					}
-					if placementOrder.Operation == "unlock" {
+					if placementOrder.GetOperation() == "unlock" {
 						if upToDate {
 							clientUpToDateCh <- struct{}{}
 							return
@@ -253,7 +254,7 @@ func TestPerformTableUpdate(t *testing.T) {
 		}
 
 		// act
-		assert.NoError(t, clientStreams[i].Send(host))
+		require.NoError(t, clientStreams[i].Send(host))
 	}
 
 	// Wait until clientStreams[clientID].Recv() in client go routine received new table
@@ -282,7 +283,8 @@ func TestPerformTableUpdate(t *testing.T) {
 	testServer.streamConnPoolLock.RUnlock()
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 	defer cancel()
-	assert.NoError(t, testServer.performTablesUpdate(ctx, streamConnPool, nil))
+	req := &tablesUpdateRequest{hosts: streamConnPool}
+	require.NoError(t, testServer.performTablesUpdate(ctx, req))
 
 	// assert
 	for i := 0; i < testClients; i++ {
@@ -347,19 +349,19 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 					return
 				}
 				if placementOrder != nil {
-					if placementOrder.Operation == "lock" {
-						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
+					if placementOrder.GetOperation() == "lock" {
+						if startFlag.Load() && placementOrder.GetTables() != nil && placementOrder.GetTables().GetVersion() == "demo" {
 							start = time.Now()
 							if clientID == 1 {
 								t.Log("client 1 lock", start)
 							}
 						}
 					}
-					if placementOrder.Operation == "update" {
+					if placementOrder.GetOperation() == "update" {
 						continue
 					}
-					if placementOrder.Operation == "unlock" {
-						if startFlag.Load() && placementOrder.Tables != nil && placementOrder.Tables.Version == "demo" {
+					if placementOrder.GetOperation() == "unlock" {
+						if startFlag.Load() && placementOrder.GetTables() != nil && placementOrder.GetTables().GetVersion() == "demo" {
 							if clientID == 1 {
 								t.Log("client 1 unlock", time.Now())
 							}
@@ -419,5 +421,60 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 func TestPerformTableUpdatePerf(t *testing.T) {
 	for i := 0; i < 3; i++ {
 		fmt.Println("max cost time(ms)", PerformTableUpdateCostTime(t))
+	}
+}
+
+// MockPlacementGRPCStream simulates the behavior of placementv1pb.Placement_ReportDaprStatusServer
+type MockPlacementGRPCStream struct {
+	v1pb.Placement_ReportDaprStatusServer
+	ctx context.Context
+}
+
+func (m MockPlacementGRPCStream) Context() context.Context {
+	return m.ctx
+}
+
+// Utility function to create metadata and context for testing
+func createContextWithMetadata(key, value string) context.Context {
+	md := metadata.Pairs(key, value)
+	return metadata.NewIncomingContext(context.Background(), md)
+}
+
+func TestExpectsVNodes(t *testing.T) {
+	tests := []struct {
+		name     string
+		ctx      context.Context
+		expected bool
+	}{
+		{
+			name:     "Without metadata",
+			ctx:      context.Background(),
+			expected: true,
+		},
+		{
+			name:     "With metadata expectsVNodes true",
+			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "true"),
+			expected: true,
+		},
+		{
+			name:     "With metadata expectsVNodes false",
+			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "false"),
+			expected: false,
+		},
+		{
+			name:     "With invalid metadata value",
+			ctx:      createContextWithMetadata(GRPCContextKeyAcceptVNodes, "invalid"),
+			expected: true,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			stream := MockPlacementGRPCStream{ctx: tt.ctx}
+			result := hostAcceptsVNodes(stream)
+			if result != tt.expected {
+				t.Errorf("expectsVNodes() for %s: expected %v, got %v", tt.name, tt.expected, result)
+			}
+		})
 	}
 }

@@ -33,7 +33,7 @@ const (
 	metadataKeyPubSub = "pubsubName"
 )
 
-func (p *pubsub) subscribeTopic(ctx context.Context, name, topic string, route compstore.TopicRouteElem) error {
+func (p *pubsub) subscribeTopic(name, topic string, route compstore.TopicRouteElem) error {
 	subKey := topicKey(name, topic)
 
 	pubSub, ok := p.compStore.GetPubSub(name)
@@ -52,7 +52,7 @@ func (p *pubsub) subscribeTopic(ctx context.Context, name, topic string, route c
 		return fmt.Errorf("cannot subscribe to topic '%s' on pubsub '%s': the subscription already exists", topic, name)
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
+	ctx, cancel := context.WithCancel(context.Background())
 	policyDef := p.resiliency.ComponentInboundPolicy(name, resiliency.Pubsub)
 	routeMetadata := route.Metadata
 
@@ -94,11 +94,11 @@ func (p *pubsub) subscribeTopic(ctx context.Context, name, topic string, route c
 			if route.DeadLetterTopic != "" {
 				if dlqErr := p.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), msgTopic, 0)
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 					return nil
 				}
 			}
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), msgTopic, 0)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
 			return err
 		}
 
@@ -112,11 +112,11 @@ func (p *pubsub) subscribeTopic(ctx context.Context, name, topic string, route c
 				if route.DeadLetterTopic != "" {
 					if dlqErr := p.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
-						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), msgTopic, 0)
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 						return nil
 					}
 				}
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), msgTopic, 0)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
 				return err
 			}
 		} else {
@@ -126,18 +126,18 @@ func (p *pubsub) subscribeTopic(ctx context.Context, name, topic string, route c
 				if route.DeadLetterTopic != "" {
 					if dlqErr := p.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
 						// dlq has been configured and message is successfully sent to dlq.
-						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), msgTopic, 0)
+						diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 						return nil
 					}
 				}
-				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), msgTopic, 0)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
 				return err
 			}
 		}
 
 		if contribpubsub.HasExpired(cloudEvent) {
 			log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[contribpubsub.IDField], cloudEvent[contribpubsub.ExpirationField])
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), msgTopic, 0)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 
 			if route.DeadLetterTopic != "" {
 				_ = p.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
@@ -151,17 +151,17 @@ func (p *pubsub) subscribeTopic(ctx context.Context, name, topic string, route c
 			if route.DeadLetterTopic != "" {
 				if dlqErr := p.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
 					// dlq has been configured and message is successfully sent to dlq.
-					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), msgTopic, 0)
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
 					return nil
 				}
 			}
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), msgTopic, 0)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
 			return err
 		}
 		if !shouldProcess {
 			// The event does not match any route specified so ignore it.
 			log.Debugf("no matching route for event %v in pubsub %s and topic %s; skipping", cloudEvent[contribpubsub.IDField], name, msgTopic)
-			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), msgTopic, 0)
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), strings.ToLower(string(contribpubsub.Success)), msgTopic, 0)
 			if route.DeadLetterTopic != "" {
 				_ = p.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
 			}
@@ -176,7 +176,7 @@ func (p *pubsub) subscribeTopic(ctx context.Context, name, topic string, route c
 			path:       routePath,
 			pubsub:     name,
 		}
-		policyRunner := resiliency.NewRunner[any](ctx, policyDef)
+		policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 		_, err = policyRunner(func(ctx context.Context) (any, error) {
 			var pErr error
 			if p.isHTTP {

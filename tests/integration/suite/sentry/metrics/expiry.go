@@ -76,7 +76,7 @@ func (e *expiry) Run(t *testing.T, ctx context.Context) {
 
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 
 		for _, line := range bytes.Split(respBody, []byte("\n")) {
 			if len(line) == 0 || line[0] == '#' {

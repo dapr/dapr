@@ -28,15 +28,22 @@ import (
 
 // Server is the interface for the healthz server.
 type Server interface {
-	Run(context.Context, int) error
+	Run(context.Context, string, int) error
 	Ready()
-	NotReady()
 }
 
 type server struct {
-	ready  *atomic.Bool
-	router http.Handler
-	log    logger.Logger
+	ready        atomic.Bool
+	targetsReady atomic.Int64
+	targets      int64
+	router       http.Handler
+	log          logger.Logger
+}
+
+type Options struct {
+	RouterOptions []RouterOptions
+	Targets       *int
+	Log           logger.Logger
 }
 
 type RouterOptions func(log logger.Logger) (string, http.Handler)
@@ -69,16 +76,22 @@ func NewJSONDataRouterOptions[T any](path string, getter func() (T, error)) Rout
 }
 
 // NewServer returns a new healthz server.
-func NewServer(log logger.Logger, options ...RouterOptions) Server {
-	s := &server{
-		log:   log,
-		ready: &atomic.Bool{},
+func NewServer(opts Options) Server {
+	targets := 1
+	if opts.Targets != nil {
+		targets = *opts.Targets
 	}
+
+	s := &server{
+		log:     opts.Log,
+		targets: int64(targets),
+	}
+
 	router := http.NewServeMux()
 	router.Handle("/healthz", s.healthz())
 	// add public handlers to the router
-	for _, option := range options {
-		path, handler := option(log)
+	for _, option := range opts.RouterOptions {
+		path, handler := option(s.log)
 		router.Handle(path, handler)
 	}
 	s.router = router
@@ -87,19 +100,17 @@ func NewServer(log logger.Logger, options ...RouterOptions) Server {
 
 // Ready sets a ready state for the endpoint handlers.
 func (s *server) Ready() {
-	s.ready.Store(true)
-}
-
-// NotReady sets a not ready state for the endpoint handlers.
-func (s *server) NotReady() {
-	s.ready.Store(false)
+	s.targetsReady.Add(1)
+	if s.targetsReady.Load() >= s.targets {
+		s.ready.Store(true)
+	}
 }
 
 // Run starts a net/http server with a healthz endpoint.
-func (s *server) Run(ctx context.Context, port int) error {
+func (s *server) Run(ctx context.Context, listenAddress string, port int) error {
 	//nolint:gosec
 	srv := &http.Server{
-		Addr:        fmt.Sprintf(":%d", port),
+		Addr:        fmt.Sprintf("%s:%d", listenAddress, port),
 		Handler:     s.router,
 		BaseContext: func(_ net.Listener) context.Context { return ctx },
 	}

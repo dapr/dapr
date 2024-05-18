@@ -25,10 +25,10 @@ import (
 	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/config"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/grpc/metadata"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
@@ -304,11 +304,11 @@ func spanAttributesMapFromGRPC(appID string, req any, rpcMethod string) map[stri
 
 		// Rename spanname
 		if s.GetActor() == nil {
-			m[diagConsts.DaprAPISpanNameInternal] = "CallLocal/" + appID + "/" + s.Message.Method
-			m[diagConsts.DaprAPIInvokeMethod] = s.Message.Method
+			m[diagConsts.DaprAPISpanNameInternal] = "CallLocal/" + appID + "/" + s.GetMessage().GetMethod()
+			m[diagConsts.DaprAPIInvokeMethod] = s.GetMessage().GetMethod()
 		} else {
-			m[diagConsts.DaprAPISpanNameInternal] = "CallActor/" + s.Actor.ActorType + "/" + s.Message.Method
-			m[diagConsts.DaprAPIActorTypeID] = s.Actor.ActorType + "." + s.Actor.ActorId
+			m[diagConsts.DaprAPISpanNameInternal] = "CallActor/" + s.GetActor().GetActorType() + "/" + s.GetMessage().GetMethod()
+			m[diagConsts.DaprAPIActorTypeID] = s.GetActor().GetActorType() + "." + s.GetActor().GetActorId()
 		}
 
 	// Dapr APIs

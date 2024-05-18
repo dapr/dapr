@@ -12,7 +12,7 @@
 
 ## Proto client generation
 
-1. Install protoc version: [v3.21.12](https://github.com/protocolbuffers/protobuf/releases/tag/v21.12) (from protobuf release 21.12)
+1. Install protoc version: [v4.24.4](https://github.com/protocolbuffers/protobuf/releases/tag/v4.24.4)
 
 2. Install protoc-gen-go and protoc-gen-go-grpc
 

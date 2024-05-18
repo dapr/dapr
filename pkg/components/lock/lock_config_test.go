@@ -56,9 +56,9 @@ func TestGetModifiedLockKey(t *testing.T) {
 		err := SaveLockConfiguration(item.storename, map[string]string{
 			strategyKey: item.prefix,
 		})
-		require.Nil(t, err)
+		require.NoError(t, err)
 		_, err = GetModifiedLockKey(item.key, item.storename, "")
-		require.NotNil(t, err)
+		require.Error(t, err)
 	}
 }
 

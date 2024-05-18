@@ -25,12 +25,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -100,10 +99,7 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 		},
 	}
 
-	for f.storeName == "" ||
-		len(path.IsValidPathSegmentName(f.storeName)) > 0 {
-		fuzz.New().Fuzz(&f.storeName)
-	}
+	f.storeName = util.RandomString(t, 10)
 
 	f.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
@@ -169,10 +165,11 @@ spec:
 func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", f.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, util.GetMetaComponents(c, ctx, util.HTTPClient(t), f.daprd.HTTPPort()), 1)
+	}, time.Second*20, time.Millisecond*10)
+
+	client := f.daprd.GRPCClient(t, ctx)
 
 	t.Run("get", func(t *testing.T) {
 		pt := util.NewParallel(t)
@@ -184,7 +181,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 					Key:       f.getFuzzKeys[i],
 				})
 				require.NoError(t, err)
-				assert.Empty(t, resp.Data, "key: %s", f.getFuzzKeys[i])
+				assert.Empty(t, resp.GetData(), "key: %s", f.getFuzzKeys[i])
 			})
 		}
 	})
@@ -219,22 +216,22 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 			for _, s := range append(f.saveReqStrings[i], f.saveReqBinaries[i]...) {
 				resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
 					StoreName: f.storeName,
-					Key:       s.Key,
+					Key:       s.GetKey(),
 				})
 				require.NoError(t, err)
-				assert.Equalf(t, s.Value, resp.Data, "orig=%s got=%s", s.Value, resp.Data)
+				assert.Equalf(t, s.GetValue(), resp.GetData(), "orig=%s got=%s", s.GetValue(), resp.GetData())
 			}
 
 			for _, s := range f.saveReqBinariesHTTP[i] {
 				resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
 					StoreName: f.storeName,
-					Key:       s.Key,
+					Key:       s.GetKey(),
 				})
 				require.NoError(t, err)
 				// TODO: Even though we are getting gRPC, the binary data was stored
 				// with HTTP, so it was base64 encoded.
-				val := `"` + base64.StdEncoding.EncodeToString(s.Value) + `"`
-				assert.Equalf(t, val, string(resp.Data), "orig=%s got=%s", val, resp.Data)
+				val := `"` + base64.StdEncoding.EncodeToString(s.GetValue()) + `"`
+				assert.Equalf(t, val, string(resp.GetData()), "orig=%s got=%s", val, resp.GetData())
 			}
 		})
 

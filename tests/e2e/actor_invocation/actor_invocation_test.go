@@ -120,7 +120,7 @@ func TestActorInvocation(t *testing.T) {
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, firstActorURL), body)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, 200, status)
 		}, 15*time.Second, 200*time.Millisecond)
 
@@ -132,12 +132,12 @@ func TestActorInvocation(t *testing.T) {
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, secondActorURL), body)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.Equal(t, 200, status)
 		}, 15*time.Second, 200*time.Millisecond)
 	})
 
-	// Validates special error handling for actors is working in runtime (.Net SDK case).
+	// Validates special error handling for actors is working in runtime (.NET SDK case).
 	t.Run("Actor local invocation with X-DaprErrorResponseHeader + Resiliency", func(t *testing.T) {
 		request := actorCallRequest{
 			ActorType: "resiliencyInvokeActor",
@@ -149,13 +149,13 @@ func TestActorInvocation(t *testing.T) {
 
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, firstActorURL), body)
 		require.NoError(t, err)
-		require.Equal(t, 200, status)
-		require.Equal(t,
+		assert.Equal(t, 200, status)
+		assert.Equal(t,
 			"x-DaprErrorResponseHeader call with - actorType: resiliencyInvokeActor, actorId: 981",
 			string(resp))
 	})
 
-	// Validates special error handling for actors is working in runtime (.Net SDK case).
+	// Validates special error handling for actors is working in runtime (.NET SDK case).
 	t.Run("Actor remote invocation with X-DaprErrorResponseHeader + Resiliency", func(t *testing.T) {
 		request := actorCallRequest{
 			ActorType: "resiliencyInvokeActor",
@@ -167,8 +167,8 @@ func TestActorInvocation(t *testing.T) {
 
 		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, secondActorURL), body)
 		require.NoError(t, err)
-		require.Equal(t, 200, status)
-		require.Equal(t,
+		assert.Equal(t, 200, status)
+		assert.Equal(t,
 			"x-DaprErrorResponseHeader call with - actorType: resiliencyInvokeActor, actorId: 789",
 			string(resp))
 	})

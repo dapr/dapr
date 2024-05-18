@@ -18,6 +18,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/secretstores"
@@ -76,7 +77,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 		)
 
 		// add Kubernetes component manually
-		assert.NoError(t, sec.Init(context.Background(), componentsapi.Component{
+		require.NoError(t, sec.Init(context.Background(), componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: compsecret.BuiltinKubernetesSecretStore,
 			},
@@ -128,7 +129,7 @@ func TestProcessResourceSecrets(t *testing.T) {
 				Version: "v1",
 			},
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		updated, unready := sec.ProcessResource(context.Background(), mockBinding)
 		assert.True(t, updated)
@@ -205,6 +206,8 @@ func TestIsEnvVarAllowed(t *testing.T) {
 			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
 			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
 			{name: "keys with a space are denied", key: "FOO BAR", want: false},
+			{name: "case insensitive app_api_token", key: "app_api_token", want: false},
+			{name: "case insensitive dapr_foo", key: "dapr_foo", want: false},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {
@@ -233,6 +236,7 @@ func TestIsEnvVarAllowed(t *testing.T) {
 			{name: "keys starting with DAPR_ are denied", key: "DAPR_TEST", want: false},
 			{name: "APP_API_TOKEN is denied", key: "APP_API_TOKEN", want: false},
 			{name: "keys with a space are denied", key: "FOO BAR", want: false},
+			{name: "case insensitive allowlist", key: "foo", want: true},
 		}
 		for _, tt := range tests {
 			t.Run(tt.name, func(t *testing.T) {

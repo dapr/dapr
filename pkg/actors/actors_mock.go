@@ -24,9 +24,11 @@ import (
 	"time"
 
 	mock "github.com/stretchr/testify/mock"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	daprt "github.com/dapr/dapr/pkg/testing"
 )
@@ -69,7 +71,7 @@ func (p *MockPlacement) LookupActor(ctx context.Context, req internal.LookupActo
 	}
 
 	return internal.LookupActorResponse{
-		Address: "localhost",
+		Address: "localhost:5000",
 		AppID:   p.testAppID,
 	}, nil
 }
@@ -84,7 +86,12 @@ func (*MockPlacement) Close() error {
 	return nil
 }
 
-// Stop implements internal.PlacementService
+// SetOnTableUpdateFn implements internal.PlacementService
+func (*MockPlacement) SetOnTableUpdateFn(fn func()) {
+	// No-op
+}
+
+// SetOnAPILevelUpdate implements internal.PlacementService
 func (*MockPlacement) SetOnAPILevelUpdate(fn func(apiLevel uint32)) {
 	// No-op
 }
@@ -92,6 +99,16 @@ func (*MockPlacement) SetOnAPILevelUpdate(fn func(apiLevel uint32)) {
 // WaitUntilReady implements internal.PlacementService
 func (*MockPlacement) WaitUntilReady(ctx context.Context) error {
 	return nil
+}
+
+// PlacementHealthy implements internal.PlacementService
+func (*MockPlacement) PlacementHealthy() bool {
+	return true
+}
+
+// StatusMessage implements internal.PlacementService
+func (*MockPlacement) StatusMessage() string {
+	return ""
 }
 
 // ReportActorDeactivation implements implements internal.PlacementService
@@ -109,27 +126,25 @@ type MockActors struct {
 	mock.Mock
 }
 
-func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
-	actorIdleTimeout time.Duration,
-) error {
+func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
 	return nil
 }
 
 // Call provides a mock function with given fields: req
-func (_m *MockActors) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (_m *MockActors) Call(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 	ret := _m.Called(req)
 
-	var r0 *invokev1.InvokeMethodResponse
-	if rf, ok := ret.Get(0).(func(*invokev1.InvokeMethodRequest) *invokev1.InvokeMethodResponse); ok {
+	var r0 *internalsv1pb.InternalInvokeResponse
+	if rf, ok := ret.Get(0).(func(*internalsv1pb.InternalInvokeRequest) *internalsv1pb.InternalInvokeResponse); ok {
 		r0 = rf(req)
 	} else {
 		if ret.Get(0) != nil {
-			r0 = ret.Get(0).(*invokev1.InvokeMethodResponse)
+			r0 = ret.Get(0).(*internalsv1pb.InternalInvokeResponse)
 		}
 	}
 
 	var r1 error
-	if rf, ok := ret.Get(1).(func(*invokev1.InvokeMethodRequest) error); ok {
+	if rf, ok := ret.Get(1).(func(*internalsv1pb.InternalInvokeRequest) error); ok {
 		r1 = rf(req)
 	} else {
 		r1 = ret.Error(1)
@@ -311,17 +326,20 @@ func (_m *MockActors) GetReminder(ctx context.Context, req *GetReminderRequest) 
 	return r0, r1
 }
 
-// GetActiveActorsCount provides a mock function
-func (_m *MockActors) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
+// GetRuntimeStatus provides a mock function
+func (_m *MockActors) GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime {
 	_m.Called()
-	return []*runtimev1pb.ActiveActorsCount{
-		{
-			Type:  "abcd",
-			Count: 10,
-		},
-		{
-			Type:  "xyz",
-			Count: 5,
+	return &runtimev1pb.ActorRuntime{
+		HostReady: true,
+		ActiveActors: []*runtimev1pb.ActiveActorsCount{
+			{
+				Type:  "abcd",
+				Count: 10,
+			},
+			{
+				Type:  "xyz",
+				Count: 5,
+			},
 		},
 	}
 }
@@ -330,30 +348,33 @@ type FailingActors struct {
 	Failure daprt.Failure
 }
 
-func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActor,
-	actorIdleTimeout time.Duration,
-) error {
+func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
 	return nil
 }
 
-func (f *FailingActors) Call(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	proto, err := req.ProtoWithData()
-	if err != nil {
-		return nil, err
+func (f *FailingActors) Call(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	if req == nil || req.Actor == nil {
+		return nil, errors.New("req.Actor is nil")
 	}
-	if proto == nil || proto.Actor == nil {
-		return nil, errors.New("proto.Actor is nil")
-	}
-	if err := f.Failure.PerformFailure(proto.Actor.ActorId); err != nil {
+	if err := f.Failure.PerformFailure(req.Actor.ActorId); err != nil {
 		return nil, err
 	}
 	var data []byte
-	if proto.Message != nil && proto.Message.Data != nil {
-		data = proto.Message.Data.Value
+	if req.Message != nil && req.Message.Data != nil {
+		data = req.Message.Data.Value
 	}
-	resp := invokev1.NewInvokeMethodResponse(200, "Success", nil).
-		WithRawDataBytes(data)
-	return resp, nil
+	res := &internalsv1pb.InternalInvokeResponse{
+		Status: &internalsv1pb.Status{
+			Code:    200,
+			Message: "Success",
+		},
+		Message: &commonv1pb.InvokeResponse{
+			Data: &anypb.Any{
+				Value: data,
+			},
+		},
+	}
+	return res, nil
 }
 
 func (f *FailingActors) Init(_ context.Context) error {
@@ -400,6 +421,8 @@ func (f *FailingActors) IsActorHosted(ctx context.Context, req *ActorHostedReque
 	return true
 }
 
-func (f *FailingActors) GetActiveActorsCount(ctx context.Context) []*runtimev1pb.ActiveActorsCount {
-	return []*runtimev1pb.ActiveActorsCount{}
+func (f *FailingActors) GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime {
+	return &runtimev1pb.ActorRuntime{
+		ActiveActors: []*runtimev1pb.ActiveActorsCount{},
+	}
 }

@@ -32,7 +32,7 @@ import (
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	testsutil "github.com/dapr/dapr/tests/util"
+	cryptotest "github.com/dapr/kit/crypto/test"
 )
 
 func init() {
@@ -46,8 +46,8 @@ type httpendpoints struct {
 }
 
 func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
-	pki1 := testsutil.GenPKIT(t, "localhost")
-	pki2 := testsutil.GenPKIT(t, "localhost")
+	pki1 := cryptotest.GenPKI(t, cryptotest.PKIOptions{LeafDNS: "localhost"})
+	pki2 := cryptotest.GenPKI(t, cryptotest.PKIOptions{LeafDNS: "localhost"})
 
 	newHTTPServer := func() *prochttp.HTTP {
 		handler := http.NewServeMux()
@@ -68,7 +68,7 @@ func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
 			w.Write([]byte("ok-TLS"))
 		})
 
-		return prochttp.New(t, prochttp.WithHandler(handler), prochttp.WithTLS(t, pki1.RootCertPEM, pki1.LeafCertPEM, pki1.LeafPKPEM))
+		return prochttp.New(t, prochttp.WithHandler(handler), prochttp.WithMTLS(t, pki1.RootCertPEM, pki1.LeafCertPEM, pki1.LeafPKPEM))
 	}
 
 	srv1 := newHTTPServer()
@@ -160,7 +160,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 				require.NoError(t, resp.Body.Close())
 				endpoints, ok := body["httpEndpoints"]
 				_ = assert.True(t, ok) && assert.Len(t, endpoints.([]any), 2)
-			}, time.Second*5, time.Millisecond*100)
+			}, time.Second*5, time.Millisecond*10)
 		}
 
 		t.Run("invoke http endpoint", func(t *testing.T) {
@@ -219,7 +219,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 						status, body := doReq(http.MethodGet, ts.url, ts.headers)
 						assert.Equal(t, expTLSCode, status)
 						if runtime.GOOS == "windows" &&
-							strings.Contains(body, "wsasenv: An existing connection was forcibly closed by the remote host.") {
+							strings.Contains(body, "An existing connection was forcibly closed by the remote host.") {
 							t.Logf("retrying due to: %s", body)
 							select {
 							case <-ctx.Done():
@@ -245,7 +245,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 	t.Run("bad PKI", func(t *testing.T) {
 		invokeTests(t, http.StatusInternalServerError, func(t *testing.T, body string) {
 			assert.Contains(t, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
-			assert.Contains(t, body, "tls: bad certificate")
+			assert.Contains(t, body, "tls: unknown certificate authority")
 		}, h.daprd2)
 	})
 }

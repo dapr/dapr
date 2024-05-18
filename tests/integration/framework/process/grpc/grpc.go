@@ -18,10 +18,13 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
 // Option is a function that configures the process.
@@ -46,11 +49,10 @@ func New(t *testing.T, fopts ...Option) *GRPC {
 
 	ln := opts.listener
 	if ln == nil {
-		// Start the listener in New so we can squat on the port immediately, and
-		// keep it for the entire test case.
-		listener, err := net.Listen("tcp", "127.0.0.1:0")
-		require.NoError(t, err)
-		ln = func() (net.Listener, error) { return listener, nil }
+		fpln := ports.Reserve(t, 1).Listener(t)
+		ln = func() (net.Listener, error) {
+			return fpln, nil
+		}
 	}
 
 	return &GRPC{
@@ -66,6 +68,10 @@ func (g *GRPC) Port(t *testing.T) int {
 	ln, err := g.listener()
 	require.NoError(t, err)
 	return ln.Addr().(*net.TCPAddr).Port
+}
+
+func (g *GRPC) Address(t *testing.T) string {
+	return "localhost:" + strconv.Itoa(g.Port(t))
 }
 
 func (g *GRPC) Run(t *testing.T, ctx context.Context) {

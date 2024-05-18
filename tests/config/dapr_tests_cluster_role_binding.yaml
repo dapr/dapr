@@ -3,7 +3,6 @@ apiVersion: rbac.authorization.k8s.io/v1
 kind: RoleBinding
 metadata:
   name: dapr-secret-reader
-  namespace: dapr-tests
 roleRef:
   apiGroup: rbac.authorization.k8s.io
   kind: Role
@@ -11,14 +10,12 @@ roleRef:
 subjects:
   - kind: ServiceAccount
     name: default
-    namespace: dapr-tests
 
 ---
 apiVersion: rbac.authorization.k8s.io/v1
 kind: Role
 metadata:
   name: secret-reader
-  namespace: dapr-tests
 rules:
 - apiGroups: [""]
   resources: ["secrets"]

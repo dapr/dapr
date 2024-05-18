@@ -21,6 +21,7 @@ global:
   #   - pullSecret2
   imagePullSecrets: ""
 
+  priorityClassName: ""
   nodeSelector: {}
   tolerations: []
   rbac:
@@ -57,8 +58,18 @@ global:
   #  placement:
   #  operator:
   #  injector:
+
   actors:
+    # Enables actor functionality in the cluster
     enabled: true
+    # Name of the service that provides actor placement services
+    serviceName: "placement"
+
+  reminders:
+    # Name of the service that provides reminders
+    # If empty, uses the built-in reminders capabilities in Dapr sidecars
+    serviceName: ""
+
   daprControlPlaneOs: linux
   labels: {}
   seccompProfile: ""

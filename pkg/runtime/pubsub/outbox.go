@@ -129,7 +129,7 @@ func transaction() (state.TransactionalStateOperation, error) {
 	}, nil
 }
 
-// PublishInternal publishes the state to an internal topic for outbox processing
+// PublishInternal publishes the state to an internal topic for outbox processing and returns the updated list of transactions
 func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, operations []state.TransactionalStateOperation, source, traceID, traceState string) ([]state.TransactionalStateOperation, error) {
 	o.lock.RLock()
 	c, ok := o.outboxStores[stateStore]
@@ -139,7 +139,21 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 		return nil, fmt.Errorf("error publishing internal outbox message: could not find outbox configuration on state store %s", stateStore)
 	}
 
-	trs := make([]state.TransactionalStateOperation, 0, len(operations))
+	projections := map[string]state.SetRequest{}
+
+	for i, op := range operations {
+		sr, ok := op.(state.SetRequest)
+
+		if ok {
+			for k, v := range sr.Metadata {
+				if k == "outbox.projection" && utils.IsTruthy(v) {
+					projections[sr.Key] = sr
+					operations = append(operations[:i], operations[i+1:]...)
+				}
+			}
+		}
+	}
+
 	for _, op := range operations {
 		sr, ok := op.(state.SetRequest)
 		if ok {
@@ -148,40 +162,55 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				return nil, err
 			}
 
+			var payload any
+			var contentType string
+
+			if proj, ok := projections[sr.Key]; ok {
+				payload = proj.Value
+
+				if proj.ContentType != nil {
+					contentType = *proj.ContentType
+				}
+			} else {
+				payload = sr.Value
+
+				if sr.ContentType != nil {
+					contentType = *sr.ContentType
+				}
+			}
+
 			var ceData []byte
-			bt, ok := sr.Value.([]byte)
+			bt, ok := payload.([]byte)
 			if ok {
 				ceData = bt
-			} else if sr.ContentType != nil && strings.EqualFold(*sr.ContentType, "application/json") {
-				b, sErr := json.Marshal(sr.Value)
+			} else if contentType != "" && strings.EqualFold(contentType, "application/json") {
+				b, sErr := json.Marshal(payload)
 				if sErr != nil {
 					return nil, sErr
 				}
 
 				ceData = b
 			} else {
-				ceData = []byte(fmt.Sprintf("%v", sr.Value))
+				ceData = []byte(fmt.Sprintf("%v", payload))
 			}
 
-			ce := &CloudEvent{
-				ID:         tr.GetKey(),
-				Source:     source,
-				Pubsub:     c.outboxPubsub,
-				Data:       ceData,
-				TraceID:    traceID,
-				TraceState: traceState,
+			var dataContentType string
+			if contentType != "" {
+				dataContentType = contentType
 			}
 
-			if sr.ContentType != nil {
-				ce.DataContentType = *sr.ContentType
+			ce := contribPubsub.NewCloudEventsEnvelope(tr.GetKey(), source, "", "", "", c.outboxPubsub, dataContentType, ceData, "", traceState)
+			ce[contribPubsub.TraceIDField] = traceID
+
+			for k, v := range op.GetMetadata() {
+				if k == contribPubsub.DataField || k == contribPubsub.IDField {
+					continue
+				}
+
+				ce[k] = v
 			}
 
-			msg, err := NewCloudEvent(ce, nil)
-			if err != nil {
-				return nil, err
-			}
-
-			data, err := json.Marshal(msg)
+			data, err := json.Marshal(ce)
 			if err != nil {
 				return nil, err
 			}
@@ -195,11 +224,11 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 				return nil, err
 			}
 
-			trs = append(trs, tr)
+			operations = append(operations, tr)
 		}
 	}
 
-	return trs, nil
+	return operations, nil
 }
 
 func outboxTopic(appID, topic, namespace string) string {
@@ -228,10 +257,6 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			}
 
 			stateKey := o.cloudEventExtractorFn(cloudEvent, contribPubsub.IDField)
-			data := []byte(o.cloudEventExtractorFn(cloudEvent, contribPubsub.DataField))
-			contentType := o.cloudEventExtractorFn(cloudEvent, contribPubsub.DataContentTypeField)
-			traceID := o.cloudEventExtractorFn(cloudEvent, contribPubsub.TraceIDField)
-			traceState := o.cloudEventExtractorFn(cloudEvent, contribPubsub.TraceStateField)
 
 			store, ok := o.getStateFn(stateStore)
 			if !ok {
@@ -274,23 +299,15 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				return err
 			}
 
-			ce, err := NewCloudEvent(&CloudEvent{
-				Data:            data,
-				DataContentType: contentType,
-				Pubsub:          c.publishPubSub,
-				Source:          appID,
-				Topic:           c.publishTopic,
-				TraceID:         traceID,
-				TraceState:      traceState,
-			}, nil)
+			cloudEvent[contribPubsub.TopicField] = c.publishTopic
+			cloudEvent[contribPubsub.PubsubField] = c.publishPubSub
+
+			b, err := json.Marshal(cloudEvent)
 			if err != nil {
 				return err
 			}
 
-			b, err := json.Marshal(ce)
-			if err != nil {
-				return err
-			}
+			contentType := cloudEvent[contribPubsub.DataContentTypeField].(string)
 
 			err = o.publishFn(ctx, &contribPubsub.PublishRequest{
 				PubsubName:  c.publishPubSub,

@@ -17,15 +17,18 @@ import (
 	"context"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/security/fake"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -44,13 +47,15 @@ func TestInitBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
+			GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: 0}),
+			Security:       fake.New(),
 		})
 
 		c := compapi.Component{}
 		c.ObjectMeta.Name = "testInputBinding"
 		c.Spec.Type = "bindings.testInputBinding"
 		err := proc.Init(context.TODO(), c)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("single output binding", func(t *testing.T) {
@@ -66,13 +71,14 @@ func TestInitBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
+			Security:       fake.New(),
 		})
 
 		c := compapi.Component{}
 		c.ObjectMeta.Name = "testOutputBinding"
 		c.Spec.Type = "bindings.testOutputBinding"
 		err := proc.Init(context.TODO(), c)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("one input binding, one output binding", func(t *testing.T) {
@@ -95,19 +101,21 @@ func TestInitBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
+			GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: 0}),
+			Security:       fake.New(),
 		})
 
 		input := compapi.Component{}
 		input.ObjectMeta.Name = "testinput"
 		input.Spec.Type = "bindings.testinput"
 		err := proc.Init(context.TODO(), input)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		output := compapi.Component{}
 		output.ObjectMeta.Name = "testoutput"
 		output.Spec.Type = "bindings.testoutput"
 		err = proc.Init(context.TODO(), output)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("one not exist binding", func(t *testing.T) {
@@ -119,12 +127,14 @@ func TestInitBindings(t *testing.T) {
 			ComponentStore: compstore.New(),
 			GlobalConfig:   new(config.Configuration),
 			Meta:           meta.New(meta.Options{}),
+			GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: 0}),
+			Security:       fake.New(),
 		})
 
 		c := compapi.Component{}
 		c.ObjectMeta.Name = "testNotExistBinding"
 		c.Spec.Type = "bindings.testNotExistBinding"
 		err := proc.Init(context.TODO(), c)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }

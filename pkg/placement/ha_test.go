@@ -132,7 +132,7 @@ func TestPlacementHA(t *testing.T) {
 				// If leadership is lost, we should retry
 				return false
 			}
-			assert.NoError(t, err)
+			require.NoError(t, err)
 
 			retrieveValidState(t, raftServers[findLeader(t, raftServers)], testMembers[1])
 			return true
@@ -368,7 +368,7 @@ func findLeader(t *testing.T, raftServers []*raft.Server) int {
 		}
 
 		return true
-	}, time.Second*10, time.Second, "no leader elected")
+	}, time.Second*30, time.Second, "no leader elected")
 	return n
 }
 

@@ -17,9 +17,10 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
-func TestGetServiceAddress(t *testing.T) {
+func TestServiceAddress(t *testing.T) {
 	testCases := []struct {
 		svc           Service
 		namespace     string
@@ -46,7 +47,51 @@ func TestGetServiceAddress(t *testing.T) {
 		},
 	}
 	for _, tc := range testCases {
-		dns := ServiceAddress(tc.svc, tc.namespace, tc.clusterDomain)
+		dns := tc.svc.Address(tc.namespace, tc.clusterDomain)
 		assert.Equal(t, tc.expect, dns)
+	}
+}
+
+func TestNewService(t *testing.T) {
+	testCases := []struct {
+		input    string
+		expected Service
+		err      bool
+	}{
+		{
+			input:    "a:80",
+			expected: Service{"a", 80},
+			err:      false,
+		},
+		{
+			input:    "app:50001",
+			expected: Service{"app", 50001},
+			err:      false,
+		},
+		{
+			input:    "invalid",
+			expected: Service{},
+			err:      true,
+		},
+		{
+			input:    "name:",
+			expected: Service{},
+			err:      true,
+		},
+		{
+			input:    ":80",
+			expected: Service{},
+			err:      true,
+		},
+	}
+
+	for _, tc := range testCases {
+		srv, err := NewService(tc.input)
+		if tc.err {
+			require.Error(t, err)
+		} else {
+			require.NoError(t, err)
+			assert.Equal(t, tc.expected, srv)
+		}
 	}
 }

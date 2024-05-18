@@ -27,11 +27,7 @@ type options struct {
 // Option is a function that configures the Framework's options.
 type Option func(*options)
 
-type Framework struct {
-	procs []process.Interface
-}
-
-func Run(t *testing.T, ctx context.Context, opts ...Option) *Framework {
+func Run(t *testing.T, ctx context.Context, opts ...Option) {
 	t.Helper()
 
 	o := options{}
@@ -41,21 +37,9 @@ func Run(t *testing.T, ctx context.Context, opts ...Option) *Framework {
 
 	t.Logf("starting %d processes", len(o.procs))
 
-	for _, proc := range o.procs {
+	for i, proc := range o.procs {
+		i := i
 		proc.Run(t, ctx)
-	}
-
-	return &Framework{
-		procs: o.procs,
-	}
-}
-
-func (f *Framework) Cleanup(t *testing.T) {
-	t.Helper()
-
-	t.Logf("stopping %d processes", len(f.procs))
-
-	for _, proc := range f.procs {
-		proc.Cleanup(t)
+		t.Cleanup(func() { o.procs[i].Cleanup(t) })
 	}
 }

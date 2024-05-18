@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 var baseID = "test"
@@ -30,7 +31,7 @@ func TestLockBaseCase(t *testing.T) {
 
 		err := lock.Lock(requestID)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		if requestID == nil {
 			assert.Nil(t, lock.activeRequest)
 		} else {
@@ -52,7 +53,7 @@ func TestLockBypassWithMatchingID(t *testing.T) {
 	for i := 1; i < 5; i++ {
 		err := lock.Lock(requestID)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, *requestID, *lock.activeRequest)
 		assert.Equal(t, int32(i), lock.stackDepth.Load())
 	}
@@ -85,13 +86,13 @@ func TestStackDepthLimit(t *testing.T) {
 
 	err := lock.Lock(requestID)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, *requestID, *lock.activeRequest)
 	assert.Equal(t, int32(1), lock.stackDepth.Load())
 
 	err = lock.Lock(requestID)
 
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.Equal(t, "maximum stack depth exceeded", err.Error())
 }
 

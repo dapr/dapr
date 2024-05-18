@@ -17,7 +17,6 @@ import (
 	"context"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
 
@@ -32,9 +31,9 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
-	procplacement "github.com/dapr/dapr/tests/integration/framework/process/placement"
-	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -45,14 +44,14 @@ func init() {
 // enable tests Kubernetes daprd with mTLS enabled.
 type enable struct {
 	daprd        *procdaprd.Daprd
-	sentry       *procsentry.Sentry
-	placement    *procplacement.Placement
-	operator     *procgrpc.GRPC
+	sentry       *sentry.Sentry
+	placement    *placement.Placement
+	operator     *operator.Operator
 	trustAnchors []byte
 }
 
 func (e *enable) Setup(t *testing.T) []framework.Option {
-	e.sentry = procsentry.New(t)
+	e.sentry = sentry.New(t)
 
 	bundle := e.sentry.CABundle()
 	e.trustAnchors = bundle.TrustAnchors
@@ -60,22 +59,22 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
-	e.placement = procplacement.New(t,
-		procplacement.WithEnableTLS(true),
-		procplacement.WithTrustAnchorsFile(taFile),
-		procplacement.WithSentryAddress("localhost:"+strconv.Itoa(e.sentry.Port())),
+	e.placement = placement.New(t,
+		placement.WithEnableTLS(true),
+		placement.WithTrustAnchorsFile(taFile),
+		placement.WithSentryAddress(e.sentry.Address()),
 	)
 
-	e.operator = newOperator(t, bundle.TrustAnchors, "localhost:"+strconv.Itoa(e.sentry.Port()))
+	e.operator = operator.New(t, operator.WithSentry(e.sentry))
 
 	e.daprd = procdaprd.New(t,
 		procdaprd.WithAppID("my-app"),
 		procdaprd.WithMode("kubernetes"),
-		procdaprd.WithExecOptions(exec.WithEnvVars("DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
-		procdaprd.WithSentryAddress("localhost:"+strconv.Itoa(e.sentry.Port())),
-		procdaprd.WithControlPlaneAddress("localhost:"+strconv.Itoa(e.operator.Port(t))),
+		procdaprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
+		procdaprd.WithSentryAddress(e.sentry.Address()),
+		procdaprd.WithControlPlaneAddress(e.operator.Address(t)),
 		procdaprd.WithDisableK8sSecretStore(true),
-		procdaprd.WithPlacementAddresses("localhost:"+strconv.Itoa(e.placement.Port())),
+		procdaprd.WithPlacementAddresses(e.placement.Address()),
 
 		// Enable mTLS
 		procdaprd.WithEnableMTLS(true),
@@ -94,7 +93,7 @@ func (e *enable) Run(t *testing.T, ctx context.Context) {
 	t.Run("trying plain text connection to Dapr API should fail", func(t *testing.T) {
 		gctx, gcancel := context.WithTimeout(ctx, time.Second)
 		t.Cleanup(gcancel)
-		_, err := grpc.DialContext(gctx, "localhost:"+strconv.Itoa(e.daprd.InternalGRPCPort()),
+		_, err := grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(),
 			grpc.WithReturnConnectionError(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
@@ -105,7 +104,7 @@ func (e *enable) Run(t *testing.T, ctx context.Context) {
 		sctx, cancel := context.WithCancel(ctx)
 
 		secProv, err := security.New(sctx, security.Options{
-			SentryAddress:           "localhost:" + strconv.Itoa(e.sentry.Port()),
+			SentryAddress:           e.sentry.Address(),
 			ControlPlaneTrustDomain: "localhost",
 			ControlPlaneNamespace:   "default",
 			TrustAnchors:            e.trustAnchors,
@@ -125,7 +124,7 @@ func (e *enable) Run(t *testing.T, ctx context.Context) {
 			case <-time.After(5 * time.Second):
 				t.Fatal("timed out waiting for security provider to stop")
 			case err = <-secProvErr:
-				assert.NoError(t, err)
+				require.NoError(t, err)
 			}
 		})
 
@@ -135,11 +134,11 @@ func (e *enable) Run(t *testing.T, ctx context.Context) {
 		myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "my-app")
 		require.NoError(t, err)
 
-		conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(e.daprd.InternalGRPCPort()), sec.GRPCDialOptionMTLS(myAppID),
+		conn, err := grpc.DialContext(ctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID),
 			grpc.WithReturnConnectionError())
 		require.NoError(t, err)
 		conn.Connect()
 		assert.Equal(t, connectivity.Ready, conn.GetState())
-		assert.NoError(t, conn.Close())
+		require.NoError(t, conn.Close())
 	})
 }

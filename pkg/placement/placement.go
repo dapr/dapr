@@ -77,6 +77,40 @@ type hostMemberChange struct {
 	host    raft.DaprHostMember
 }
 
+type tablesUpdateRequest struct {
+	hosts            []placementGRPCStream
+	tables           *placementv1pb.PlacementTables
+	tablesWithVNodes *placementv1pb.PlacementTables // Temporary. Will be removed in 1.15
+}
+
+// GetVersion is used only for logs in membership.go
+func (r *tablesUpdateRequest) GetVersion() string {
+	if r.tables != nil {
+		return r.tables.GetVersion()
+	}
+	if r.tablesWithVNodes != nil {
+		return r.tablesWithVNodes.GetVersion()
+	}
+
+	return ""
+}
+
+func (r *tablesUpdateRequest) SetAPILevel(minAPILevel uint32, maxAPILevel *uint32) {
+	setAPILevel := func(tables *placementv1pb.PlacementTables) {
+		if tables != nil {
+			if tables.GetApiLevel() < minAPILevel {
+				tables.ApiLevel = minAPILevel
+			}
+			if maxAPILevel != nil && tables.GetApiLevel() > *maxAPILevel {
+				tables.ApiLevel = *maxAPILevel
+			}
+		}
+	}
+
+	setAPILevel(r.tablesWithVNodes)
+	setAPILevel(r.tables)
+}
+
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
 	// streamConnPool has the stream connections established between placement gRPC server and Dapr runtime.
@@ -155,7 +189,7 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 
 // Run starts the placement service gRPC server.
 // Blocks until the service is closed and all connections are drained.
-func (p *Service) Run(ctx context.Context, port string) error {
+func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	if p.closed.Load() {
 		return errors.New("placement service is closed")
 	}
@@ -169,7 +203,7 @@ func (p *Service) Run(ctx context.Context, port string) error {
 		return err
 	}
 
-	serverListener, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+	serverListener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", listenAddress, port))
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
@@ -227,8 +261,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		req, err := stream.Recv()
 		switch err {
 		case nil:
-			if clientID != nil && req.Id != clientID.AppID() {
-				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.Id)
+			if clientID != nil && req.GetId() != clientID.AppID() {
+				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
 			}
 
 			state := p.raftNode.FSM().State()
@@ -243,16 +277,24 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				if p.maxAPILevel != nil && clusterAPILevel > *p.maxAPILevel {
 					clusterAPILevel = *p.maxAPILevel
 				}
-				if req.ApiLevel < clusterAPILevel {
-					return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.ApiLevel)
+				if req.GetApiLevel() < clusterAPILevel {
+					return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.GetApiLevel())
 				}
 
-				registeredMemberID = req.Name
+				registeredMemberID = req.GetName()
 				p.addStreamConn(stream)
+
+				updateReq := &tablesUpdateRequest{
+					hosts: []placementGRPCStream{stream},
+				}
+				if hostAcceptsVNodes(stream) {
+					updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false)
+				} else {
+					updateReq.tables = p.raftNode.FSM().PlacementState(true)
+				}
+
 				// We need to use a background context here so dissemination isn't tied to the context of this stream
-				// TODO: If each sidecar can report table version, then placement
-				// doesn't need to disseminate tables to each sidecar.
-				err = p.performTablesUpdate(context.Background(), []placementGRPCStream{stream}, p.raftNode.FSM().PlacementState())
+				err = p.performTablesUpdate(context.Background(), updateReq)
 				if err != nil {
 					return err
 				}
@@ -260,7 +302,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			}
 
 			// Ensure that the incoming runtime is actor instance.
-			isActorRuntime = len(req.Entities) > 0
+			isActorRuntime = len(req.GetEntities()) > 0
 			if !isActorRuntime {
 				// ignore if this runtime is non-actor.
 				continue
@@ -268,22 +310,22 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 			now := p.clock.Now()
 
-			for _, entity := range req.Entities {
-				monitoring.RecordActorHeartbeat(req.Id, entity, req.Name, req.Pod, now)
+			for _, entity := range req.GetEntities() {
+				monitoring.RecordActorHeartbeat(req.GetId(), entity, req.GetName(), req.GetPod(), now)
 			}
 
 			// Record the heartbeat timestamp. This timestamp will be used to check if the member
 			// state maintained by raft is valid or not. If the member is outdated based the timestamp
 			// the member will be marked as faulty node and removed.
-			p.lastHeartBeat.Store(req.Name, now.UnixNano())
+			p.lastHeartBeat.Store(req.GetName(), now.UnixNano())
 
 			members := state.Members()
 
 			// Upsert incoming member only if it is an actor service (not actor client) and
 			// the existing member info is unmatched with the incoming member info.
 			upsertRequired := true
-			if m, ok := members[req.Name]; ok {
-				if m.AppID == req.Id && m.Name == req.Name && cmp.Equal(m.Entities, req.Entities) {
+			if m, ok := members[req.GetName()]; ok {
+				if m.AppID == req.GetId() && m.Name == req.GetName() && cmp.Equal(m.Entities, req.GetEntities()) {
 					upsertRequired = false
 				}
 			}
@@ -292,14 +334,14 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberUpsert,
 					host: raft.DaprHostMember{
-						Name:      req.Name,
-						AppID:     req.Id,
-						Entities:  req.Entities,
+						Name:      req.GetName(),
+						AppID:     req.GetId(),
+						Entities:  req.GetEntities(),
 						UpdatedAt: now.UnixNano(),
-						APILevel:  req.ApiLevel,
+						APILevel:  req.GetApiLevel(),
 					},
 				}
-				log.Debugf("Member changed upserting appid %s with entities %v", req.Id, req.Entities)
+				log.Debugf("Member changed upserting appid %s with entities %v", req.GetId(), req.GetEntities())
 			}
 
 		default:

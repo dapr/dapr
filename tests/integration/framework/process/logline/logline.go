@@ -19,7 +19,10 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -39,6 +42,10 @@ type LogLine struct {
 	stderr            io.Reader
 	stderrExp         io.WriteCloser
 	stderrLinContains map[string]bool
+
+	outCheck chan map[string]bool
+	closeCh  chan struct{}
+	done     atomic.Int32
 }
 
 func New(t *testing.T, fopts ...Option) *LogLine {
@@ -70,47 +77,57 @@ func New(t *testing.T, fopts ...Option) *LogLine {
 		stderr:             io.TeeReader(stderrReader, iowriter.New(t, "logline:stderr")),
 		stderrExp:          stderrWriter,
 		stderrLinContains:  stderrLineContains,
+		outCheck:           make(chan map[string]bool),
+		closeCh:            make(chan struct{}),
 	}
 }
 
 func (l *LogLine) Run(t *testing.T, ctx context.Context) {
-	outCheck := make(chan map[string]bool)
 	go func() {
-		outCheck <- l.checkOut(t, ctx, l.stdoutLineContains, l.stdoutExp, l.stdout)
+		res := l.checkOut(t, ctx, l.stdoutLineContains, l.stdoutExp, l.stdout)
+		l.outCheck <- res
 	}()
 	go func() {
-		outCheck <- l.checkOut(t, ctx, l.stderrLinContains, l.stderrExp, l.stderr)
+		res := l.checkOut(t, ctx, l.stderrLinContains, l.stderrExp, l.stderr)
+		l.outCheck <- res
 	}()
+}
 
-	for i := 0; i < 2; i++ {
-		for expLine := range <-outCheck {
-			assert.Fail(t, "expected to log line: %s", expLine)
-		}
-	}
+func (l *LogLine) FoundAll() bool {
+	return l.done.Load() == 2
 }
 
 func (l *LogLine) Cleanup(t *testing.T) {
-	l.stdoutExp.Close()
-	l.stderrExp.Close()
+	close(l.closeCh)
+	for i := 0; i < 2; i++ {
+		for expLine := range <-l.outCheck {
+			assert.Fail(t, "expected to log line", expLine)
+		}
+	}
 }
 
 func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[string]bool, closer io.WriteCloser, reader io.Reader) map[string]bool {
 	t.Helper()
 
-	closeCh := make(chan struct{})
+	if len(expLines) == 0 {
+		l.done.Add(1)
+		return expLines
+	}
 
 	go func() {
 		select {
 		case <-ctx.Done():
-		case <-closeCh:
+			closer.Close()
+		case <-l.closeCh:
 		}
-		closer.Close()
 	}()
+
+	var once sync.Once
 
 	breader := bufio.NewReader(reader)
 	for {
 		if len(expLines) == 0 {
-			break
+			once.Do(func() { l.done.Add(1) })
 		}
 
 		line, _, err := breader.ReadLine()
@@ -126,8 +143,6 @@ func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[strin
 		}
 	}
 
-	close(closeCh)
-
 	return expLines
 }
 
@@ -137,4 +152,8 @@ func (l *LogLine) Stdout() io.WriteCloser {
 
 func (l *LogLine) Stderr() io.WriteCloser {
 	return l.stderrExp
+}
+
+func (l *LogLine) EventuallyFoundAll(t *testing.T) {
+	assert.Eventually(t, l.FoundAll, time.Second*7, time.Millisecond*10)
 }

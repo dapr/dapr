@@ -21,6 +21,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
@@ -235,7 +236,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"InvokeMethod",
 			mock.MatchedBy(matchContextInterface),
 			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-				return req.Message().Method == orders1
+				return req.Message().GetMethod() == orders1
 			}),
 		)
 		// After(3 * time.Second)
@@ -251,7 +252,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -279,7 +280,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"9999999i":  1,
 			"10101010j": 2,
 		}, ts.entryIdRetryTimes)
-		assert.NotNil(t, e)
+		require.Error(t, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
 
@@ -304,7 +305,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"InvokeMethod",
 			mock.MatchedBy(matchContextInterface),
 			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-				return req.Message().Method == orders1
+				return req.Message().GetMethod() == orders1
 			}),
 		)
 		// After(3 * time.Second)
@@ -320,7 +321,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -348,7 +349,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"9999999i":  3,
 			"10101010j": 3,
 		}, ts.entryIdRetryTimes)
-		assert.NotNil(t, e)
+		require.Error(t, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
 
@@ -373,7 +374,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"InvokeMethod",
 			mock.MatchedBy(matchContextInterface),
 			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-				return req.Message().Method == orders1
+				return req.Message().GetMethod() == orders1
 			}),
 		)
 		// After(3 * time.Second)
@@ -389,7 +390,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -417,7 +418,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"9999999i":  2,
 			"10101010j": 2,
 		}, ts.entryIdRetryTimes)
-		assert.Nil(t, e)
+		require.NoError(t, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
 
@@ -442,7 +443,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"InvokeMethod",
 			mock.MatchedBy(matchContextInterface),
 			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-				return req.Message().Method == orders1
+				return req.Message().GetMethod() == orders1
 			}),
 		)
 		// After(3 * time.Second)
@@ -458,7 +459,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -486,7 +487,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"9999999i":  1,
 			"10101010j": 1,
 		}, ts.entryIdRetryTimes)
-		assert.Nil(t, e)
+		require.NoError(t, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
 
@@ -512,7 +513,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 				"InvokeMethod",
 				mock.MatchedBy(matchContextInterface),
 				mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-					return req.Message().Method == orders1
+					return req.Message().GetMethod() == orders1
 				}),
 			).
 			After(3 * time.Second)
@@ -527,7 +528,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 		in := getInput()
 		b, e := ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -543,8 +544,8 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 				{EntryId: "10101010j", IsError: true},
 			},
 		}
-		assert.NotNil(t, e)
-		assert.ErrorIs(t, e, context.DeadlineExceeded)
+		require.Error(t, e)
+		require.ErrorIs(t, e, context.DeadlineExceeded)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
 
@@ -569,7 +570,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"InvokeMethod",
 			mock.MatchedBy(matchContextInterface),
 			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-				return req.Message().Method == orders1
+				return req.Message().GetMethod() == orders1
 			}),
 		)
 		mockee.RunFn = func(args mock.Arguments) {
@@ -617,18 +618,18 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"10101010j": 2,
 		}
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
-		assert.NotNil(t, e)
+		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
 		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
-		assert.NotNil(t, e)
+		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
@@ -654,7 +655,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"InvokeMethod",
 			mock.MatchedBy(matchContextInterface),
 			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-				return req.Message().Method == orders1
+				return req.Message().GetMethod() == orders1
 			}),
 		)
 		mockee.RunFn = func(args mock.Arguments) {
@@ -702,18 +703,18 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"10101010j": 2,
 		}
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
-		assert.NotNil(t, e)
+		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
 		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
-		assert.NotNil(t, e)
+		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
@@ -739,7 +740,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"InvokeMethod",
 			mock.MatchedBy(matchContextInterface),
 			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-				return req.Message().Method == orders1
+				return req.Message().GetMethod() == orders1
 			}),
 		)
 		mockee.RunFn = func(args mock.Arguments) {
@@ -787,9 +788,9 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"10101010j": 2,
 		}
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
-		assert.Nil(t, e)
+		require.NoError(t, e)
 		// assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
@@ -815,7 +816,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"InvokeMethod",
 			mock.MatchedBy(matchContextInterface),
 			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-				return req.Message().Method == orders1
+				return req.Message().GetMethod() == orders1
 			}),
 		)
 		mockee.RunFn = func(args mock.Arguments) {
@@ -863,9 +864,9 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"10101010j": 2,
 		}
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
-		assert.NotNil(t, e)
+		require.Error(t, e)
 		// assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
@@ -900,9 +901,9 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 			"10101010j": 3,
 		}
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
-		assert.Nil(t, e)
+		require.NoError(t, e)
 		// assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
@@ -929,7 +930,7 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 				"InvokeMethod",
 				mock.MatchedBy(matchContextInterface),
 				mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-					return req.Message().Method == orders1
+					return req.Message().GetMethod() == orders1
 				}),
 			).
 			After(3 * time.Second)
@@ -965,15 +966,15 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 				{EntryId: "10101010j", IsError: true},
 			},
 		}
-		assert.Equal(t, 10, len(*b))
-		assert.NotNil(t, e)
+		assert.Len(t, *b, 10)
+		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
 		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
-		assert.Equal(t, 10, len(*b))
-		assert.NotNil(t, e)
+		assert.Len(t, *b, 10)
+		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
@@ -1001,7 +1002,7 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 			"InvokeMethod",
 			mock.MatchedBy(matchContextInterface),
 			mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-				return req.Message().Method == orders1
+				return req.Message().GetMethod() == orders1
 			}),
 		)
 		mockee.RunFn = func(args mock.Arguments) {
@@ -1051,9 +1052,9 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		}
 		// 2 invoke calls should be made here, as the circuit breaker becomes open
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
-		assert.NotNil(t, e)
+		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
@@ -1090,9 +1091,9 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		// as this operation is partial failure case and circuit breaker is half-open, this failure
 		// would mark state as open
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
-		assert.NotNil(t, e)
+		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
@@ -1100,9 +1101,9 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
-		assert.NotNil(t, e)
+		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
@@ -1139,9 +1140,9 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 		// As this operation succeeds with all entries passed, circuit breaker should be closed
 		// as successCount becomes equal or greater than maxRequests
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 4)
-		assert.Equal(t, 10, len(*b))
+		assert.Len(t, *b, 10)
 		assertRetryCount(t, expectedCBRetryCount, ts.entryIdRetryTimes)
-		assert.Nil(t, e)
+		require.NoError(t, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})
 }
@@ -1169,7 +1170,7 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 				"InvokeMethod",
 				mock.MatchedBy(matchContextInterface),
 				mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-					return req.Message().Method == orders1
+					return req.Message().GetMethod() == orders1
 				}),
 			).
 			After(3 * time.Second)
@@ -1205,15 +1206,15 @@ func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 				{EntryId: "10101010j", IsError: true},
 			},
 		}
-		assert.Equal(t, 10, len(*b))
-		assert.NotNil(t, e)
+		assert.Len(t, *b, 10)
+		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 
 		b, e = ps.applyBulkSubscribeResiliency(context.TODO(), &in.bscData, in.pbsm, "dlq", orders1, policyDef, true, in.envelope)
 
-		assert.Equal(t, 10, len(*b))
-		assert.NotNil(t, e)
+		assert.Len(t, *b, 10)
+		require.Error(t, e)
 		assert.Equal(t, breaker.ErrOpenState, e)
 		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, *b))
 	})

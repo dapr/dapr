@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 
+	"github.com/microsoft/durabletask-go/backend"
+
 	"github.com/dapr/components-contrib/bindings"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -45,7 +47,8 @@ type PubsubManager interface {
 	BulkPublish(context.Context, *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error)
 
 	StartSubscriptions(context.Context) error
-	StopSubscriptions()
+	StopSubscriptions(forever bool)
+	ReloadSubscriptions(context.Context) error
 	Outbox() outbox.Outbox
 	manager
 }
@@ -54,8 +57,12 @@ type BindingManager interface {
 	SendToOutputBinding(context.Context, string, *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 
 	StartReadingFromBindings(context.Context) error
-	StopReadingFromBindings()
+	StopReadingFromBindings(forever bool)
 	manager
+}
+
+type WorkflowBackendManager interface {
+	Backend() (backend.Backend, bool)
 }
 
 func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, error) {
@@ -68,25 +75,21 @@ func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, erro
 }
 
 func (p *Processor) State() StateManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.state
 }
 
 func (p *Processor) Secret() SecretManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.secret
 }
 
 func (p *Processor) PubSub() PubsubManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.pubsub
 }
 
 func (p *Processor) Binding() BindingManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.binding
+}
+
+func (p *Processor) WorkflowBackend() WorkflowBackendManager {
+	return p.workflowBackend
 }

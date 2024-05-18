@@ -19,6 +19,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -47,7 +48,7 @@ func (u *uniquename) Setup(t *testing.T) []framework.Option {
 
 	u.logline = logline.New(t,
 		logline.WithStdoutLineContains(
-			"Fatal error from runtime: process component foo error: [INIT_COMPONENT_FAILURE]: initialization error occurred for foo (state.in-memory/v1): component foo already exists",
+			"Fatal error from runtime: failed to load components: duplicate definition of Component name foo (state.in-memory/v1) with existing foo (secretstores.local.file/v1)",
 		),
 	)
 
@@ -75,16 +76,16 @@ spec:
 		daprd.WithExecOptions(
 			exec.WithExitCode(1),
 			exec.WithRunError(func(t *testing.T, err error) {
-				assert.ErrorContains(t, err, "exit status 1")
+				require.ErrorContains(t, err, "exit status 1")
 			}),
 			exec.WithStdout(u.logline.Stdout()),
 		),
 	)
 	return []framework.Option{
-		framework.WithProcesses(u.daprd, u.logline),
+		framework.WithProcesses(u.logline, u.daprd),
 	}
 }
 
 func (u *uniquename) Run(t *testing.T, ctx context.Context) {
-	// Assertions done in logline process
+	assert.Eventually(t, u.logline.FoundAll, time.Second*5, time.Millisecond*10)
 }

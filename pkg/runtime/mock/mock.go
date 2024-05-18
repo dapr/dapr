@@ -66,17 +66,22 @@ func (b *Binding) Read(ctx context.Context, handler bindings.Handler) error {
 		metadata = b.Metadata
 	}
 
-	go func() {
-		_, err := handler(context.Background(), &bindings.ReadResponse{
-			Metadata: metadata,
-			Data:     []byte(b.Data),
-		})
-		if b.ReadErrorCh != nil {
-			b.ReadErrorCh <- (err != nil)
-		}
-	}()
+	resp := &bindings.ReadResponse{
+		Metadata: metadata,
+		Data:     []byte(b.Data),
+	}
 
-	return nil
+	if b.ReadErrorCh != nil {
+		go func() {
+			_, err := handler(ctx, resp)
+			b.ReadErrorCh <- (err != nil)
+		}()
+
+		return nil
+	}
+
+	_, err := handler(ctx, resp)
+	return err
 }
 
 func (b *Binding) Operations() []bindings.OperationKind {

@@ -52,6 +52,24 @@ namespace DaprDemoActor
       return getResponse.InstanceId;
     }
 
+    [HttpPost("StartMonitorWorkflow/{workflowComponent}/{watchInstanceID}/{instanceID}")]
+    public async Task<ActionResult<string>> StartMonitorWorkflow([FromRoute] string watchInstanceID, string instanceID,  string workflowComponent)
+    {
+      await daprClient.WaitForSidecarAsync();
+      var inputItem = watchInstanceID;
+      var workflowOptions = new Dictionary<string, string>();
+      var startResponse = await daprClient.StartWorkflowAsync(
+              instanceId: instanceID, 
+              workflowComponent: workflowComponent,
+              workflowName: "Monitor",
+              input: inputItem,
+              workflowOptions: workflowOptions);
+
+      var getResponse = await daprClient.GetWorkflowAsync(instanceID, workflowComponent);
+
+      return getResponse.InstanceId;
+    }
+
     [HttpPost("PurgeWorkflow/{workflowComponent}/{instanceID}")]
     public async Task<ActionResult<bool>> PurgeWorkflow([FromRoute] string instanceID, string workflowComponent)
     {

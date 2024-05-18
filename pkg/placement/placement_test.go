@@ -15,6 +15,7 @@ package placement
 
 import (
 	"context"
+	"errors"
 	"net"
 	"strconv"
 	"testing"
@@ -53,7 +54,10 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer close(serverStopped)
-		require.NoError(t, testServer.Run(ctx, strconv.Itoa(port)))
+		err := testServer.Run(ctx, "127.0.0.1", strconv.Itoa(port))
+		if !errors.Is(err, grpc.ErrServerStopped) {
+			require.NoError(t, err)
+		}
 	}()
 
 	assert.Eventually(t, func() bool {
@@ -155,10 +159,10 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			select {
 			case memberChange := <-testServer.membershipCh:
 				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
-				assert.Equal(t, host.Name, memberChange.host.Name)
-				assert.Equal(t, host.Id, memberChange.host.AppID)
-				assert.EqualValues(t, host.Entities, memberChange.host.Entities)
-				assert.Equal(t, 1, len(testServer.streamConnPool))
+				assert.Equal(t, host.GetName(), memberChange.host.Name)
+				assert.Equal(t, host.GetId(), memberChange.host.AppID)
+				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
+				assert.Len(t, testServer.streamConnPool, 1)
 				return true
 			default:
 				return false
@@ -174,7 +178,7 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		select {
 		case memberChange := <-testServer.membershipCh:
 			assert.Equal(t, raft.MemberRemove, memberChange.cmdType)
-			assert.Equal(t, host.Name, memberChange.host.Name)
+			assert.Equal(t, host.GetName(), memberChange.host.Name)
 
 		case <-time.After(testStreamSendLatency):
 			require.Fail(t, "no membership change")
@@ -203,9 +207,9 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			select {
 			case memberChange := <-testServer.membershipCh:
 				assert.Equal(t, raft.MemberUpsert, memberChange.cmdType)
-				assert.Equal(t, host.Name, memberChange.host.Name)
-				assert.Equal(t, host.Id, memberChange.host.AppID)
-				assert.EqualValues(t, host.Entities, memberChange.host.Entities)
+				assert.Equal(t, host.GetName(), memberChange.host.Name)
+				assert.Equal(t, host.GetId(), memberChange.host.AppID)
+				assert.EqualValues(t, host.GetEntities(), memberChange.host.Entities)
 				testServer.streamConnPoolLock.Lock()
 				l := len(testServer.streamConnPool)
 				testServer.streamConnPoolLock.Unlock()
@@ -261,6 +265,6 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// act
 		// Close tcp connection before closing stream, which simulates the scenario
 		// where dapr runtime disconnects the connection from placement service unexpectedly.
-		assert.NoError(t, conn.Close())
+		require.NoError(t, conn.Close())
 	})
 }

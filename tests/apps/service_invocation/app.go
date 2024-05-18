@@ -17,7 +17,9 @@ package main
 import (
 	"bytes"
 	"context"
+	"crypto/rand"
 	"encoding/base64"
+	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -49,6 +51,7 @@ var (
 	daprClient runtimev1pb.DaprClient
 
 	httpMethods []string
+	pid         string
 )
 
 const (
@@ -169,6 +172,13 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(http.StatusOK)
 	json.NewEncoder(w).Encode(appResponse{Message: "OK"})
+}
+
+func pidHandler(w http.ResponseWriter, r *http.Request) {
+	log.Println("pidHandler is called")
+
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(appResponse{Message: pid})
 }
 
 func singlehopHandler(w http.ResponseWriter, r *http.Request) {
@@ -298,7 +308,7 @@ func invokeServiceWithBody(remoteApp, method string, data []byte) (appResponse, 
 
 func invokeServiceWithBodyHeader(remoteApp, method string, data []byte, headers http.Header) (*http.Response, error) {
 	url := fmt.Sprintf("http://localhost:%s/v1.0/invoke/%s/method/%s", strconv.Itoa(daprHTTPPort), remoteApp, method)
-	fmt.Printf("invoke url is %s\n", url)
+	log.Printf("invoke url is %s", url)
 
 	var t io.Reader
 	if data != nil {
@@ -359,6 +369,7 @@ func appRouter() http.Handler {
 	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
+	router.HandleFunc("/pid", pidHandler).Methods("POST")
 	router.HandleFunc("/singlehop", singlehopHandler).Methods("POST")
 	router.HandleFunc("/multihop", multihopHandler).Methods("POST")
 
@@ -405,6 +416,9 @@ func appRouter() http.Handler {
 	router.HandleFunc("/tests/v1_grpctogrpctest", testV1RequestGRPCToGRPC).Methods("POST")
 	router.HandleFunc("/tests/v1_grpctohttptest", testV1RequestGRPCToHTTP).Methods("POST")
 	router.HandleFunc("/retrieve_request_object", retrieveRequestObject).Methods("POST")
+
+	// Load balancing test
+	router.HandleFunc("/tests/loadbalancing", testLoadBalancing).Methods("POST")
 
 	// test path for Dapr method invocation decode
 	router.PathPrefix("/path/").HandlerFunc(testPathHTTPCall)
@@ -505,7 +519,7 @@ func requestHTTPToHTTP(w http.ResponseWriter, r *http.Request, send func(remoteA
 		return
 	}
 
-	log.Printf("response was %s\n", respBody)
+	log.Printf("response was %s", respBody)
 
 	logAndSetResponse(w, http.StatusOK, string(respBody))
 }
@@ -585,6 +599,21 @@ func requestHTTPToHTTPExternal(w http.ResponseWriter, r *http.Request, send func
 	log.Printf("response was %s\n", respBody)
 
 	logAndSetResponse(w, http.StatusOK, string(respBody))
+}
+
+func testLoadBalancing(w http.ResponseWriter, r *http.Request) {
+	log.Println("Enter load balancing test")
+	res, err := invokeServiceWithBodyHeader("serviceinvocation-callee-2", "pid", nil, nil)
+	if err != nil {
+		onBadRequest(w, err)
+		return
+	}
+	defer res.Body.Close()
+
+	w.WriteHeader(res.StatusCode)
+
+	log.Print("Response: ")
+	io.Copy(io.MultiWriter(w, os.Stdout), res.Body)
 }
 
 // testDaprIDRequestHTTPToHTTP calls from http caller to http callee without requiring the caller to use Dapr style URL.
@@ -723,7 +752,7 @@ func testV1RequestGRPCToGRPC(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqHeadersString := resp.GetData().Value
+	reqHeadersString := resp.GetData().GetValue()
 
 	respHeaders := map[string][]string{}
 	for k, vals := range header {
@@ -813,7 +842,7 @@ func testV1RequestGRPCToHTTP(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	reqHeadersString := resp.GetData().Value
+	reqHeadersString := resp.GetData().GetValue()
 
 	respHeaders := map[string][]string{}
 	for k, vals := range header {
@@ -876,7 +905,7 @@ func grpcToGrpcTest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	body := resp.Data.GetValue()
+	body := resp.GetData().GetValue()
 	log.Printf("resp was %s\n", string(body))
 
 	var responseMessage appResponse
@@ -1175,7 +1204,7 @@ func grpcToHTTPTest(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		body := resp.Data.GetValue()
+		body := resp.GetData().GetValue()
 
 		fmt.Printf("resp was %s\n", string(body))
 		// var responseMessage string
@@ -1318,8 +1347,8 @@ func badServiceCallTestGrpc(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 	}
 
-	if resp != nil && resp.Data != nil {
-		rawBody := resp.Data.GetValue()
+	if resp != nil && resp.GetData() != nil {
+		rawBody := resp.GetData().GetValue()
 		testResponse.RawBody = rawBody
 		json.NewDecoder(strings.NewReader(string(rawBody))).Decode(&testResponse.Results)
 	}
@@ -1429,7 +1458,13 @@ func main() {
 
 	httpMethods = []string{"POST", "GET", "PUT", "DELETE"}
 
+	// Generate a random "process ID" of 48 bits
+	pidBytes := make([]byte, 6)
+	io.ReadFull(rand.Reader, pidBytes)
+	pid = hex.EncodeToString(pidBytes)
+
 	log.Printf("Dapr service_invocation - listening on http://localhost:%d", appPort)
+	log.Printf("PID: %s", pid)
 	utils.StartServer(appPort, appRouter, true, false)
 }
 

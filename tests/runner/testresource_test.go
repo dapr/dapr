@@ -20,6 +20,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 )
 
@@ -71,7 +72,7 @@ func TestSetup(t *testing.T) {
 		}
 
 		err := resource.setup()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		found := []string{}
 		for i := 2; i >= 0; i-- {
@@ -101,7 +102,7 @@ func TestSetup(t *testing.T) {
 		}
 
 		err := resource.setup()
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		found := []string{}
 		for i := 2; i >= 0; i-- {
@@ -132,11 +133,11 @@ func TestTearDown(t *testing.T) {
 
 		// setup resources
 		err := resource.setup()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// tear down all resources
 		err = resource.tearDown()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		r := resource.popActiveResource()
 		assert.Nil(t, r)
@@ -159,11 +160,11 @@ func TestTearDown(t *testing.T) {
 
 		// setup resources
 		err := resource.setup()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// tear down all resources
 		err = resource.tearDown()
-		assert.Error(t, err)
+		require.Error(t, err)
 
 		r := resource.popActiveResource()
 		assert.Nil(t, r)

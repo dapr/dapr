@@ -27,7 +27,10 @@ import (
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
-var focusF = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
+var (
+	focusF       = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
+	parallelFlag = flag.Bool("integration-parallel", true, "Disable running integration tests in parallel")
+)
 
 func RunIntegrationTests(t *testing.T) {
 	flag.Parse()
@@ -45,36 +48,41 @@ func RunIntegrationTests(t *testing.T) {
 	})
 	require.False(t, binFailed, "building binaries must succeed")
 
-	focusedTests := make(map[string]suite.Case)
-	for name, tcase := range suite.All(t) {
+	focusedTests := make([]suite.NamedCase, 0)
+	for _, tcase := range suite.All(t) {
 		// Continue rather than using `t.Skip` to reduce the noise in the test
 		// output.
-		if !focus.MatchString(name) {
-			t.Logf("skipping test case due to focus %s", name)
+		if !focus.MatchString(tcase.Name()) {
+			t.Logf("skipping test case due to focus %s", tcase.Name())
 			continue
 		}
-		focusedTests[name] = tcase
+		focusedTests = append(focusedTests, tcase)
 	}
 
-	for name, tcase := range focusedTests {
-		t.Run(name, func(t *testing.T) {
-			t.Logf("setting up test case")
+	startTime := time.Now()
+	t.Cleanup(func() {
+		t.Logf("Total integration test execution time: [%d] %s", len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100))
+	})
+
+	for _, tcase := range focusedTests {
+		tcase := tcase
+		t.Run(tcase.Name(), func(t *testing.T) {
+			if *parallelFlag {
+				t.Parallel()
+			}
+
 			options := tcase.Setup(t)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+			t.Logf("setting up test case")
+			ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 			t.Cleanup(cancel)
 
-			f := framework.Run(t, ctx, options...)
+			framework.Run(t, ctx, options...)
 
 			t.Run("run", func(t *testing.T) {
 				t.Log("running test case")
 				tcase.Run(t, ctx)
 			})
-
-			t.Log("cleaning up framework")
-			f.Cleanup(t)
-
-			t.Log("done")
 		})
 	}
 }

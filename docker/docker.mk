@@ -114,7 +114,7 @@ endif
 docker-build: SHELL := $(shell which bash)
 docker-build: check-docker-env check-arch
 	$(info Building $(DOCKER_IMAGE):$(DAPR_TAG) docker images ...)
-ifeq ($(TARGET_ARCH),amd64)
+ifeq ($(TARGET_ARCH),$(TARGET_ARCH_LOCAL))
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) build --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
 else
@@ -164,7 +164,7 @@ endif
 docker-push: SHELL := $(shell which bash)
 docker-push: docker-build
 	$(info Pushing $(DOCKER_IMAGE):$(DAPR_TAG) docker images ...)
-ifeq ($(TARGET_ARCH),amd64)
+ifeq ($(TARGET_ARCH),$(TARGET_ARCH_LOCAL))
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) push $(DOCKER_IMAGE):$(BUILD_TAG)
 else

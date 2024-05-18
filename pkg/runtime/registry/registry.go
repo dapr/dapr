@@ -23,6 +23,7 @@ import (
 	"github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/components/state"
+	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/components/workflows"
 	messagingv1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -37,32 +38,34 @@ type ComponentRegistry struct {
 
 // Registry is a collection of component registries.
 type Registry struct {
-	secret         *secretstores.Registry
-	state          *state.Registry
-	config         *configuration.Registry
-	lock           *lock.Registry
-	pubsub         *pubsub.Registry
-	nameResolution *nameresolution.Registry
-	binding        *bindings.Registry
-	httpMiddleware *http.Registry
-	workflow       *workflows.Registry
-	crypto         *crypto.Registry
-	componentCb    ComponentsCallback
+	secret          *secretstores.Registry
+	state           *state.Registry
+	config          *configuration.Registry
+	lock            *lock.Registry
+	pubsub          *pubsub.Registry
+	nameResolution  *nameresolution.Registry
+	binding         *bindings.Registry
+	httpMiddleware  *http.Registry
+	workflow        *workflows.Registry
+	workflowBackend *wfbe.Registry
+	crypto          *crypto.Registry
+	componentCb     ComponentsCallback
 }
 
 func New(opts *Options) *Registry {
 	return &Registry{
-		secret:         opts.secret,
-		state:          opts.state,
-		config:         opts.config,
-		lock:           opts.lock,
-		pubsub:         opts.pubsub,
-		nameResolution: opts.nameResolution,
-		binding:        opts.binding,
-		httpMiddleware: opts.httpMiddleware,
-		workflow:       opts.workflow,
-		crypto:         opts.crypto,
-		componentCb:    opts.componentsCallback,
+		secret:          opts.secret,
+		state:           opts.state,
+		config:          opts.config,
+		lock:            opts.lock,
+		pubsub:          opts.pubsub,
+		nameResolution:  opts.nameResolution,
+		binding:         opts.binding,
+		httpMiddleware:  opts.httpMiddleware,
+		workflow:        opts.workflow,
+		workflowBackend: opts.workflowBackend,
+		crypto:          opts.crypto,
+		componentCb:     opts.componentsCallback,
 	}
 }
 
@@ -100,6 +103,10 @@ func (r *Registry) HTTPMiddlewares() *http.Registry {
 
 func (r *Registry) Workflows() *workflows.Registry {
 	return r.workflow
+}
+
+func (r *Registry) WorkflowBackends() *wfbe.Registry {
+	return r.workflowBackend
 }
 
 func (r *Registry) Crypto() *crypto.Registry {
