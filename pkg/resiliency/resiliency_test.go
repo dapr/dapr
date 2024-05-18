@@ -329,7 +329,7 @@ func TestParseRetryWithFilter(t *testing.T) {
 	require.NotNil(t, configs[0])
 
 	r := FromConfigurations(log, configs[0])
-	require.True(t, len(r.retries) > 0)
+	require.NotEmpty(t, r.retries)
 	require.NotNil(t, r.retries["noRetry"])
 	require.NotNil(t, r.retries["retryForever"])
 	require.NotNil(t, r.retries["missingMaxRetries"])
@@ -337,12 +337,12 @@ func TestParseRetryWithFilter(t *testing.T) {
 	require.NotNil(t, r.retries["withFilter"])
 
 	// important does not have a filter, so should default to true
-	assert.Equal(t, true, r.retries["important"].StatusCodeNeedRetry(500))
-	assert.Equal(t, true, r.retries["important"].StatusCodeNeedRetry(400))
+	assert.True(t, r.retries["important"].StatusCodeNeedRetry(500))
+	assert.True(t, r.retries["important"].StatusCodeNeedRetry(400))
 	// withFilter has a filter, should return true for 500 and false for anything else
-	assert.Equal(t, true, r.retries["withFilter"].StatusCodeNeedRetry(500))
-	assert.Equal(t, false, r.retries["withFilter"].StatusCodeNeedRetry(501))
-	assert.Equal(t, false, r.retries["withFilter"].StatusCodeNeedRetry(400))
+	assert.True(t, r.retries["withFilter"].StatusCodeNeedRetry(500))
+	assert.False(t, r.retries["withFilter"].StatusCodeNeedRetry(501))
+	assert.False(t, r.retries["withFilter"].StatusCodeNeedRetry(400))
 }
 
 func TestResiliencyScopeIsRespected(t *testing.T) {
