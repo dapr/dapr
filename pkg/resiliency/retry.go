@@ -55,9 +55,9 @@ func NewRetry(retryConfig retry.Config, statusCodeFilter StatusCodeFilter) *Retr
 }
 
 type StatusCodeFilter struct {
-	retryOnPatterns  []codeRange
-	ignoreOnPatterns []codeRange
-	defaultRetry     bool
+	retryOnPatterns   []codeRange
+	noRetryOnPatterns []codeRange
+	defaultRetry      bool
 }
 
 // codeRange represents a range of status codes from start to end.
@@ -74,10 +74,10 @@ func NewStatusCodeFilter() StatusCodeFilter {
 	return StatusCodeFilter{defaultRetry: true}
 }
 
-func ParseStatusCodeFilter(retryOnPatterns []string, ignoreOnPatterns []string) (StatusCodeFilter, error) {
+func ParseStatusCodeFilter(retryOnPatterns []string, noRetryOnPatterns []string) (StatusCodeFilter, error) {
 	filter := NewStatusCodeFilter()
-	if len(retryOnPatterns) != 0 && len(ignoreOnPatterns) != 0 {
-		return filter, errors.New("retryOnCodes and ignoreOnCodes cannot be used together")
+	if len(retryOnPatterns) != 0 && len(noRetryOnPatterns) != 0 {
+		return filter, errors.New("retryOnCodes and noRetryOnCodes cannot be used together")
 	}
 	// if retryOn is set, parse retry on patterns and set default retry to false
 	if len(retryOnPatterns) != 0 {
@@ -88,13 +88,13 @@ func ParseStatusCodeFilter(retryOnPatterns []string, ignoreOnPatterns []string) 
 		filter.retryOnPatterns = parsedPatterns
 		filter.defaultRetry = false
 	}
-	// if ignoreOn is set, parse ignore on patterns and set default retry to true
-	if len(ignoreOnPatterns) != 0 {
-		parsedPatterns, err := filter.parsePatterns(ignoreOnPatterns)
+	// if noRetryOn is set, parse no retry on patterns and set default retry to true
+	if len(noRetryOnPatterns) != 0 {
+		parsedPatterns, err := filter.parsePatterns(noRetryOnPatterns)
 		if err != nil {
 			return filter, err
 		}
-		filter.ignoreOnPatterns = parsedPatterns
+		filter.noRetryOnPatterns = parsedPatterns
 		filter.defaultRetry = true
 	}
 	return filter, nil
@@ -128,8 +128,8 @@ func (f StatusCodeFilter) StatusCodeNeedRetry(statusCode int32) bool {
 		}
 	}
 
-	// Check ignored codes (denylist)
-	for _, pattern := range f.ignoreOnPatterns {
+	// Check none retriable codes (denylist)
+	for _, pattern := range f.noRetryOnPatterns {
 		if pattern.MatchCode(statusCode) {
 			return false
 		}

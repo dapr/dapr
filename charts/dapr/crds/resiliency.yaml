@@ -68,7 +68,7 @@ spec:
                           type: array
                           items:
                             type: string
-                        ignoreOnCodes:
+                        noRetryOnCodes:
                           type: array
                           items:
                             type: string
