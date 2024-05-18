@@ -197,12 +197,13 @@ func TestInputBindingResiliency(t *testing.T) {
 
 func TestPubsubSubscriptionResiliency(t *testing.T) {
 	testCases := []struct {
-		Name         string
-		FailureCount *int
-		Timeout      *time.Duration
-		shouldFail   bool
-		pubsub       string
-		topic        string
+		Name               string
+		FailureCount       *int
+		Timeout            *time.Duration
+		shouldFail         bool
+		pubsub             string
+		topic              string
+		responseStatusCode *int
 	}{
 		{
 			Name:         "Test sending event to app recovers from failure",
@@ -225,6 +226,21 @@ func TestPubsubSubscriptionResiliency(t *testing.T) {
 			shouldFail:   true,
 			pubsub:       "dapr-resiliency-pubsub",
 			topic:        "resiliency-topic-http",
+		},
+		{
+			Name:               "Test resiliency with filter consider non-500 as success",
+			FailureCount:       ptr.Of(0), // since responseStatusCode is set, constantly fails with 400, this is the expected failure count
+			shouldFail:         false,
+			responseStatusCode: ptr.Of(400),
+			pubsub:             "dapr-resiliency-pubsub",
+			topic:              "resiliency-topic-http",
+		},
+		{
+			Name:               "Test resiliency with filter retry on 500",
+			shouldFail:         true,
+			responseStatusCode: ptr.Of(500),
+			pubsub:             "dapr-resiliency-pubsub",
+			topic:              "resiliency-topic-http",
 		},
 		{
 			Name:         "Test sending event to grpc app recovers from failure",
@@ -262,7 +278,7 @@ func TestPubsubSubscriptionResiliency(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.Name, func(t *testing.T) {
-			message := createFailureMessage(tc.FailureCount, tc.Timeout, nil)
+			message := createFailureMessage(tc.FailureCount, tc.Timeout, tc.responseStatusCode)
 			b, _ := json.Marshal(message)
 			_, code, err := utils.HTTPPostWithStatus(fmt.Sprintf("%s/tests/publishMessage/%s/%s", externalURL, tc.pubsub, tc.topic), b)
 			require.NoError(t, err)
@@ -287,8 +303,8 @@ func TestPubsubSubscriptionResiliency(t *testing.T) {
 				// First call + 5 retries and no more.
 				require.Equal(t, 6, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
 			} else {
-				// First call + 3 retries and recovery.
-				require.Equal(t, 4, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
+				// First call + FailureCount retries including recovery.
+				require.Equal(t, 1+*tc.FailureCount, len(callCount[message.ID]), fmt.Sprintf("Call count mismatch for message %s", message.ID))
 			}
 		})
 	}

@@ -68,7 +68,7 @@ spec:
       dapr-resiliency-pubsub:
         inbound:
           timeout: fast
-          retry: fiveRetries
+          retry: fiveRetriesWithFilter
         outbound:
           timeout: fast
-          retry: fiveRetries
+          retry: fiveRetriesWithFilter
