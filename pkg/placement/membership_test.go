@@ -162,7 +162,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 		}
 
 		// ignore disseminateTimeout.
-		testServer.disseminateNextTime.GetOrCreate("ns1", 0).Store(0)
+		val, _ := testServer.disseminateNextTime.GetOrSet("ns1", &atomic.Int64{})
+		val.Store(0)
 
 		// Check member has been saved correctly in the raft store
 		require.Eventually(t, func() bool {

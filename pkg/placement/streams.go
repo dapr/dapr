@@ -84,7 +84,9 @@ func (s *streamConnPool) add(stream *daprdStream) {
 	s.reverseLookup[stream.stream] = stream
 }
 
-// delete removes stream connection between runtime and placement from the namespaced dissemination pool.
+// delete removes a stream connection between runtime and placement
+// from the namespaced dissemination pool.
+// Returns true if the stream is the last one in a namespace
 func (s *streamConnPool) delete(stream *daprdStream) bool {
 	lastInNamespace := false
 	s.lock.Lock()
@@ -99,8 +101,6 @@ func (s *streamConnPool) delete(stream *daprdStream) bool {
 		}
 	}
 
-	// TODO: @elena Return true or false if it's the last stream in the namespace. If last stream,
-	// we need to delete elements from service.memberUpdateCount and service.disseminateNextTime
 	return lastInNamespace
 }
 

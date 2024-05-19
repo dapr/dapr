@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"sync/atomic"
 	"time"
 
 	"google.golang.org/grpc/peer"
@@ -24,7 +25,6 @@ import (
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
-	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/retry"
 )
 
@@ -45,7 +45,8 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 
 	// Reset memberUpdateCount to zero for every namespace when leadership is acquired.
 	p.streamConnPool.forEachNamespace(func(ns string, _ map[uint32]*daprdStream) {
-		p.memberUpdateCount.GetOrCreate(ns, 0).Store(0)
+		val, _ := p.memberUpdateCount.GetOrSet(ns, &atomic.Uint32{})
+		val.Store(0)
 	})
 
 	p.wg.Add(1)
@@ -66,17 +67,18 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 			}
 
 			// check if there are actor runtime member changes per namespace.
-			p.memberUpdateCount.ForEach(func(ns string, cnt *concurrency.AtomicValue[uint32]) {
+			p.memberUpdateCount.ForEach(func(ns string, cnt *atomic.Uint32) bool {
 				disseminateTime, ok := p.disseminateNextTime.Get(ns)
 				if !ok {
-					return
+					return true
 				}
 				if disseminateTime.Load() <= t.UnixNano() && len(p.membershipCh) == 0 {
-					if cnt := cnt.Load(); cnt > 0 {
-						log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCountTotal count for namespace %s: %d", ns, cnt)
+					if c := cnt.Load(); c > 0 {
+						log.Debugf("Add raft.TableDisseminate to membershipCh. memberUpdateCountTotal count for namespace %s: %d", ns, c)
 						p.membershipCh <- hostMemberChange{cmdType: raft.TableDisseminate, host: raft.DaprHostMember{Namespace: ns}}
 					}
 				}
+				return true
 			})
 		}
 	}
@@ -123,12 +125,14 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 
 						// ApplyCommand returns true only if the command changes the hashing table.
 						if updated {
-							p.memberUpdateCount.GetOrCreate(op.host.Namespace, 0).Add(1)
+							c, _ := p.memberUpdateCount.GetOrSet(op.host.Namespace, &atomic.Uint32{})
+							c.Add(1)
 
 							// disseminateNextTime will be updated whenever apply is done, so that
 							// it will keep moving the time to disseminate the table, which will
 							// reduce the unnecessary table dissemination.
-							p.disseminateNextTime.GetOrCreate(op.host.Namespace, 0).Store(p.clock.Now().Add(disseminateTimeout).UnixNano())
+							val, _ := p.disseminateNextTime.GetOrSet(op.host.Namespace, &atomic.Int64{})
+							val.Store(p.clock.Now().Add(disseminateTimeout).UnixNano())
 						}
 					}
 					<-logApplyConcurrency
@@ -155,8 +159,8 @@ func (p *Service) handleDisconnectedMember(op hostMemberChange, updated bool) bo
 
 	if err == nil && len(members) == 0 {
 		p.disseminateLocks.Delete(op.host.Namespace)
-		p.disseminateNextTime.Delete(op.host.Namespace)
-		p.memberUpdateCount.Delete(op.host.Namespace)
+		p.disseminateNextTime.Del(op.host.Namespace)
+		p.memberUpdateCount.Del(op.host.Namespace)
 		updated = false
 	}
 	state.Lock.RUnlock()
@@ -183,7 +187,8 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 	monitoring.RecordActorRuntimesCount(nTargetConns)
 
 	// Ignore dissemination if there is no member update
-	cnt := p.memberUpdateCount.GetOrCreate(ns, 0).Load()
+	ac, _ := p.memberUpdateCount.GetOrSet(ns, &atomic.Uint32{})
+	cnt := ac.Load()
 	if cnt == 0 {
 		return nil
 	}
@@ -225,7 +230,9 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 	log.Infof(
 		"Completed dissemination for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
 		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion())
-	p.memberUpdateCount.GetOrCreate(ns, 0).Store(0)
+	//p.memberUpdateCount.GetOrCreate(ns, 0).Store(0)
+	val, _ := p.memberUpdateCount.GetOrSet(ns, &atomic.Uint32{})
+	val.Store(0)
 
 	return nil
 }

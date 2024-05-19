@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/alphadose/haxmap"
 	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -112,11 +113,11 @@ type Service struct {
 	disseminateLocks concurrency.MutexMap[string]
 
 	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
-	disseminateNextTime concurrency.AtomicMap[string, int64]
+	disseminateNextTime haxmap.Map[string, *atomic.Int64]
 
 	// memberUpdateCount represents how many dapr runtimes needs to change in a namespace.
-	// Only actor runtime's heartbeat will increase this.
-	memberUpdateCount concurrency.AtomicMap[string, uint32]
+	// Only actor runtime's heartbeat can increase this.
+	memberUpdateCount haxmap.Map[string, *atomic.Uint32]
 
 	// Maximum API level to return.
 	// If nil, there's no limit.
@@ -162,8 +163,8 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		closedCh:            make(chan struct{}),
 		sec:                 opts.SecProvider,
 		disseminateLocks:    concurrency.NewMutexMap[string](),
-		memberUpdateCount:   concurrency.NewAtomicMap[string, uint32](),
-		disseminateNextTime: concurrency.NewAtomicMap[string, int64](),
+		memberUpdateCount:   *haxmap.New[string, *atomic.Uint32](),
+		disseminateNextTime: *haxmap.New[string, *atomic.Int64](),
 	}
 }
 
