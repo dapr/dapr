@@ -50,7 +50,8 @@ func (d *DaprHostMember) NameAndNamespace() string {
 	return d.Namespace + "-" + d.Name
 }
 
-type DaprNamespace struct {
+// daprNamespace represents Dapr runtime namespace that can contain multiple DaprHostMembers
+type daprNamespace struct {
 	// Members includes Dapr runtime hosts.
 	Members map[string]*DaprHostMember
 
@@ -61,6 +62,8 @@ type DaprNamespace struct {
 	hashingTableMap map[string]*hashing.Consistent
 }
 
+// DaprHostMemberStateData is the state that stores Dapr namespace, runtime host and
+// consistent hashing tables data
 type DaprHostMemberStateData struct {
 	// Index is the index number of raft log.
 	Index uint64
@@ -69,17 +72,17 @@ type DaprHostMemberStateData struct {
 	// TableGeneration is the generation of hashingTableMap.
 	// This is increased whenever hashingTableMap is updated.
 	TableGeneration uint64
-	Namespace       map[string]*DaprNamespace
+	Namespace       map[string]*daprNamespace
 }
 
 func newDaprHostMemberStateData() DaprHostMemberStateData {
 	return DaprHostMemberStateData{
-		Namespace: make(map[string]*DaprNamespace),
+		Namespace: make(map[string]*daprNamespace),
 	}
 }
 
-// DaprHostMemberState is the state to store Dapr runtime host and
-// consistent hashing tables.
+// DaprHostMemberState is the wrapper over DaprHostMemberStateData that includes
+// the cluster config and lock
 type DaprHostMemberState struct {
 	Lock sync.RWMutex
 
@@ -88,6 +91,8 @@ type DaprHostMemberState struct {
 	data DaprHostMemberStateData
 }
 
+// DaprHostMemberStateConfig contains the placement cluster configuration data
+// that needs to be consistent across leader changes
 type DaprHostMemberStateConfig struct {
 	replicationFactor int64
 	minAPILevel       uint32
@@ -211,14 +216,14 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 		config: s.config,
 		data: DaprHostMemberStateData{
 			Index:           s.data.Index,
-			Namespace:       make(map[string]*DaprNamespace, len(s.data.Namespace)),
+			Namespace:       make(map[string]*daprNamespace, len(s.data.Namespace)),
 			TableGeneration: s.data.TableGeneration,
 			APILevel:        s.data.APILevel,
 		},
 	}
 
 	for nsName, nsData := range s.data.Namespace {
-		newMembers.data.Namespace[nsName] = &DaprNamespace{
+		newMembers.data.Namespace[nsName] = &daprNamespace{
 			Members: make(map[string]*DaprHostMember, len(nsData.Members)),
 			// hashingTableMap: make(map[string]*hashing.Consistent, len(nsData.hashingTableMap)),
 		}
@@ -242,7 +247,7 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 // caller should hold Lock.
 func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
 	if _, ok := s.data.Namespace[host.Namespace]; !ok {
-		s.data.Namespace[host.Namespace] = &DaprNamespace{
+		s.data.Namespace[host.Namespace] = &daprNamespace{
 			Members:         make(map[string]*DaprHostMember),
 			hashingTableMap: make(map[string]*hashing.Consistent),
 		}
@@ -291,7 +296,7 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 
 	ns, ok := s.data.Namespace[host.Namespace]
 	if !ok {
-		s.data.Namespace[host.Namespace] = &DaprNamespace{
+		s.data.Namespace[host.Namespace] = &daprNamespace{
 			Members: make(map[string]*DaprHostMember),
 		}
 		ns = s.data.Namespace[host.Namespace]

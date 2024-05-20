@@ -376,7 +376,7 @@ func (p *Service) receiveAndValidateFirstMessage(stream placementv1pb.Placement_
 	}
 
 	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
-		return nil, status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", firstMessage.GetId())
+		return nil, status.Errorf(codes.PermissionDenied, "provided app ID %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetId(), clientID.AppID())
 	}
 
 	// For older versions that are not sending their namespace as part of the message
@@ -386,7 +386,7 @@ func (p *Service) receiveAndValidateFirstMessage(stream placementv1pb.Placement_
 	}
 
 	if clientID != nil && firstMessage.GetNamespace() != clientID.Namespace() {
-		return nil, status.Errorf(codes.PermissionDenied, "client namespace %s is not allowed", firstMessage.GetNamespace())
+		return nil, status.Errorf(codes.PermissionDenied, "provided client namespace %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetNamespace(), clientID.Namespace())
 	}
 
 	return firstMessage, nil

@@ -273,8 +273,8 @@ func TestRestoreHashingTables(t *testing.T) {
 		maxAPILevel:       100,
 	})
 
-	s.data.Namespace = make(map[string]*DaprNamespace)
-	s.data.Namespace["ns1"] = &DaprNamespace{
+	s.data.Namespace = make(map[string]*daprNamespace)
+	s.data.Namespace["ns1"] = &daprNamespace{
 		Members: make(map[string]*DaprHostMember),
 	}
 
