@@ -129,6 +129,12 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		if err != nil {
 			return ctx, nil, nil, nopTeardown, err
 		}
+
+		appMetadataToken := security.GetAppToken()
+		if appMetadataToken != "" {
+			outCtx = metadata.AppendToOutgoingContext(outCtx, securityConsts.APITokenHeader, appMetadataToken)
+		}
+
 		return outCtx, appClient.(*grpc.ClientConn), nil, nopTeardown, nil
 	}
 
@@ -138,11 +144,6 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	)
 	outCtx = p.telemetryFn(outCtx)
 	outCtx = metadata.AppendToOutgoingContext(outCtx, invokev1.CallerIDHeader, p.appID, invokev1.CalleeIDHeader, target.id)
-
-	appMetadataToken := security.GetAppToken()
-	if appMetadataToken != "" {
-		outCtx = metadata.AppendToOutgoingContext(outCtx, securityConsts.APITokenHeader, appMetadataToken)
-	}
 
 	pt := &grpcProxy.ProxyTarget{
 		ID:        target.id,
