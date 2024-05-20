@@ -43,6 +43,11 @@ var (
 	log = logger.NewLogger("dapr.runtime.diagnostics")
 )
 
+const (
+	Egress = iota
+	Ingress
+)
+
 var (
 	// <<10 -> KBs; <<20 -> MBs; <<30 -> GBs
 	defaultSizeDistribution    = view.Distribution(1<<10, 2<<10, 4<<10, 16<<10, 64<<10, 256<<10, 1<<20, 4<<20, 16<<20, 64<<20, 256<<20, 1<<30, 4<<30)
@@ -70,7 +75,13 @@ type httpMetrics struct {
 	// Enable legacy metrics, which includes the full path
 	legacy bool
 
-	pathNormalization *config.PathNormalization
+	pathNormalization pathNormalizationConfig
+}
+
+type pathNormalizationConfig struct {
+	enabled           bool
+	virtualIngressMux *http.ServeMux
+	virtualEgressMux  *http.ServeMux
 }
 
 func newHTTPMetrics() *httpMetrics {
@@ -133,7 +144,7 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 		return
 	}
 
-	normalizedPath, ok := h.normalizePath(path, h.pathNormalization.EgressPaths)
+	normalizedPath, ok := h.normalizePath(path, Egress)
 	if ok {
 		path = normalizedPath
 	}
@@ -154,7 +165,7 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 	} else {
 		requestCountTags := diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status)
 		serverLatencyTags := diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status)
-		if h.pathNormalization.Enabled {
+		if h.pathNormalization.enabled {
 			requestCountTags = append(requestCountTags, diagUtils.WithTags(h.serverRequestCount.Name(), httpPathKey, path, httpMethodKey, method)...)
 			serverLatencyTags = append(serverLatencyTags, diagUtils.WithTags(h.serverLatency.Name(), httpPathKey, path, httpMethodKey, method)...)
 		}
@@ -180,7 +191,7 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 		return
 	}
 
-	normalizedPath, ok := h.normalizePath(path, h.pathNormalization.IngressPaths)
+	normalizedPath, ok := h.normalizePath(path, Ingress)
 	if ok {
 		path = normalizedPath
 	}
@@ -193,7 +204,7 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 	} else {
 		tags := diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID)
 
-		if h.pathNormalization.Enabled {
+		if h.pathNormalization.enabled {
 			tags = append(tags, diagUtils.WithTags(h.clientSentBytes.Name(), httpPathKey, path, httpMethodKey, method)...)
 		}
 
@@ -209,7 +220,7 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 		return
 	}
 
-	normalizedPath, ok := h.normalizePath(path, h.pathNormalization.IngressPaths)
+	normalizedPath, ok := h.normalizePath(path, Ingress)
 	if ok {
 		path = normalizedPath
 	}
@@ -227,7 +238,7 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 		completedCountTags := diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpStatusCodeKey, status)
 		roundTripLatencyTags := diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status)
 
-		if h.pathNormalization.Enabled {
+		if h.pathNormalization.enabled {
 			completedCountTags = append(completedCountTags, diagUtils.WithTags(h.clientCompletedCount.Name(), httpPathKey, path, httpMethodKey, method)...)
 			roundTripLatencyTags = append(roundTripLatencyTags, diagUtils.WithTags(h.clientRoundtripLatency.Name(), httpPathKey, path, httpMethodKey, method)...)
 		}
@@ -269,18 +280,11 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		h.healthProbeRoundTripLatency.M(elapsed))
 }
 
-func (h *httpMetrics) Init(appID string, pathNormalization *config.PathNormalization, legacy bool) error {
+func (h *httpMetrics) Init(appID string, config *config.PathNormalization, legacy bool) error {
 	h.appID = appID
 	h.enabled = true
 	h.legacy = legacy
-
-	if pathNormalization != nil {
-		h.pathNormalization = pathNormalization
-	} else {
-		h.pathNormalization = &config.PathNormalization{
-			Enabled: false,
-		}
-	}
+	h.pathNormalization = h.initPathNormalization(config)
 
 	tags := []tag.Key{appIDKey}
 
@@ -292,7 +296,7 @@ func (h *httpMetrics) Init(appID string, pathNormalization *config.PathNormaliza
 	} else {
 		serverTags = []tag.Key{appIDKey, httpMethodKey, httpStatusCodeKey}
 		clientTags = []tag.Key{appIDKey, httpStatusCodeKey}
-		if h.pathNormalization.Enabled {
+		if h.pathNormalization.enabled {
 			serverTags = append(serverTags, httpPathKey)
 			clientTags = append(clientTags, httpPathKey, httpMethodKey)
 		}
@@ -318,44 +322,6 @@ func (h *httpMetrics) Init(appID string, pathNormalization *config.PathNormaliza
 	return view.Register(views...)
 }
 
-func (h *httpMetrics) normalizePath(path string, paths []string) (string, bool) {
-	if !h.pathNormalization.Enabled {
-		return "", false
-	}
-
-	if path == "" {
-		return "", false
-	}
-
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
-	virtualmux := http.NewServeMux()
-	virtualmux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// when we are not in increasedCardinality we fallback to a catch-all bucket
-		if !h.legacy {
-			path = "/unmatchedpath"
-		}
-	}))
-
-	for _, pattern := range paths {
-		virtualmux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			path = pattern
-		}))
-	}
-
-	req, err := http.NewRequest(http.MethodGet, path, nil)
-	if err != nil {
-		log.Errorf("Error creating request for path normalization: %s", err)
-		return "", false
-	}
-
-	virtualmux.ServeHTTP(nil, req)
-
-	return path, true
-}
-
 // HTTPMiddleware is the middleware to track HTTP server-side requests.
 func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -368,7 +334,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		}
 
 		var path string
-		if h.legacy || h.pathNormalization.Enabled {
+		if h.legacy || h.pathNormalization.enabled {
 			path = h.convertPathToMetricLabel(r.URL.Path)
 		}
 
@@ -398,4 +364,76 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		// Record the request
 		h.ServerRequestCompleted(r.Context(), method, path, status, reqContentSize, respSize, elapsed)
 	})
+}
+
+func (h *httpMetrics) initPathNormalization(config *config.PathNormalization) pathNormalizationConfig {
+	if config == nil {
+		return pathNormalizationConfig{
+			enabled: false,
+		}
+	}
+
+	pn := pathNormalizationConfig{
+		enabled: config.Enabled,
+	}
+
+	if !pn.enabled {
+		return pn
+	}
+
+	pn.virtualIngressMux = http.NewServeMux()
+	pn.virtualIngressMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !h.legacy {
+			*w.(*diagUtils.PathNormalizationRW).NormalizedPath = "/unmatchedpath"
+		}
+	}))
+	for _, pattern := range config.IngressPaths {
+		pn.virtualIngressMux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			*w.(*diagUtils.PathNormalizationRW).NormalizedPath = pattern
+		}))
+	}
+
+	pn.virtualEgressMux = http.NewServeMux()
+	pn.virtualEgressMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if !h.legacy {
+			*w.(*diagUtils.PathNormalizationRW).NormalizedPath = "/unmatchedpath"
+		}
+	}))
+	for _, pattern := range config.EgressPaths {
+		pn.virtualEgressMux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			*w.(*diagUtils.PathNormalizationRW).NormalizedPath = pattern
+		}))
+	}
+	return pn
+}
+
+func (h *httpMetrics) normalizePath(path string, direction int) (string, bool) {
+	if !h.pathNormalization.enabled {
+		return "", false
+	}
+
+	if path == "" {
+		return "", false
+	}
+
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	req, err := http.NewRequest(http.MethodGet, path, nil)
+	if err != nil {
+		log.Errorf("Error creating request for path normalization: %s", err)
+		return "", false
+	}
+
+	capturedPath := path
+	crw := &diagUtils.PathNormalizationRW{NormalizedPath: &capturedPath}
+
+	if direction == Ingress {
+		h.pathNormalization.virtualIngressMux.ServeHTTP(crw, req)
+	} else {
+		h.pathNormalization.virtualEgressMux.ServeHTTP(crw, req)
+	}
+
+	return capturedPath, true
 }

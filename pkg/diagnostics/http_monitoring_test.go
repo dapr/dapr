@@ -94,7 +94,7 @@ func TestHTTPMetricsPathNormalizationNotEnabled(t *testing.T) {
 		Enabled: false,
 	}
 	testHTTP.Init("fakeID", pathNormalization, true)
-	normalizedPath, ok := testHTTP.normalizePath("/orders", pathNormalization.IngressPaths)
+	normalizedPath, ok := testHTTP.normalizePath("/orders", Ingress)
 	require.False(t, ok)
 	require.Equal(t, normalizedPath, "")
 }
@@ -116,22 +116,22 @@ func TestHTTPMetricsPathNormalizationLegacyIncreasedCardinality(t *testing.T) {
 	testHTTP.Init("fakeID", pathNormalization, true)
 
 	tt := []struct {
-		pathsList      []string
+		direction      int
 		path           string
 		normalizedPath string
 		normalized     bool
 	}{
-		{pathNormalization.IngressPaths, "", "", false},
-		{pathNormalization.IngressPaths, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
-		{pathNormalization.EgressPaths, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
-		{pathNormalization.IngressPaths, "/items/12345", "/items/{itemID}", true},
-		{pathNormalization.EgressPaths, "/items/12345", "/items/12345", true},
-		{pathNormalization.IngressPaths, "/basket/12345", "/basket/12345", true},
-		{pathNormalization.IngressPaths, "dapr/config", "/dapr/config", true},
+		{Ingress, "", "", false},
+		{Ingress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{Egress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{Ingress, "/items/12345", "/items/{itemID}", true},
+		{Egress, "/items/12345", "/items/12345", true},
+		{Ingress, "/basket/12345", "/basket/12345", true},
+		{Ingress, "dapr/config", "/dapr/config", true},
 	}
 
 	for _, tc := range tt {
-		normalizedPath, ok := testHTTP.normalizePath(tc.path, tc.pathsList)
+		normalizedPath, ok := testHTTP.normalizePath(tc.path, tc.direction)
 		require.Equal(t, ok, tc.normalized)
 		if ok {
 			assert.Equal(t, tc.normalizedPath, normalizedPath)
@@ -156,22 +156,22 @@ func TestHTTPMetricsPathNormalizationLowCardinality(t *testing.T) {
 	testHTTP.Init("fakeID", pathNormalization, false)
 
 	tt := []struct {
-		pathsList      []string
+		direction      int
 		path           string
 		normalizedPath string
 		normalized     bool
 	}{
-		{pathNormalization.IngressPaths, "", "", false},
-		{pathNormalization.IngressPaths, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
-		{pathNormalization.EgressPaths, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
-		{pathNormalization.IngressPaths, "/items/12345", "/items/{itemID}", true},
-		{pathNormalization.EgressPaths, "/items/12345", "/unmatchedpath", true},
-		{pathNormalization.IngressPaths, "/basket/12345", "/unmatchedpath", true},
-		{pathNormalization.IngressPaths, "dapr/config", "/unmatchedpath", true},
+		{Ingress, "", "", false},
+		{Ingress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{Egress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{Ingress, "/items/12345", "/items/{itemID}", true},
+		{Egress, "/items/12345", "/unmatchedpath", true},
+		{Ingress, "/basket/12345", "/unmatchedpath", true},
+		{Ingress, "dapr/config", "/unmatchedpath", true},
 	}
 
 	for _, tc := range tt {
-		normalizedPath, ok := testHTTP.normalizePath(tc.path, tc.pathsList)
+		normalizedPath, ok := testHTTP.normalizePath(tc.path, tc.direction)
 		require.Equal(t, ok, tc.normalized)
 		if ok {
 			assert.Equal(t, tc.normalizedPath, normalizedPath)
