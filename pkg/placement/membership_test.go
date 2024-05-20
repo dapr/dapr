@@ -139,6 +139,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 		require.Eventually(t, func() bool {
 			assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns1"))
 			assert.Equal(t, 2, testServer.streamConnPool.getStreamCount("ns2"))
+			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndexCnt.Load())
+			assert.Len(t, testServer.streamConnPool.reverseLookup, 3)
 
 			// This indicates the member has been added to the dissemination queue and is
 			// going to be disseminated in the next tick
@@ -149,6 +151,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			ts2, ok := testServer.disseminateNextTime.Get("ns2")
 			assert.True(t, ok)
 			assert.Equal(t, clock.Now().Add(disseminateTimeout).UnixNano(), ts2.Load())
+
 			return true
 		}, 10*time.Second, 100*time.Millisecond)
 
@@ -215,10 +218,74 @@ func TestMembershipChangeWorker(t *testing.T) {
 			return cnt.Load() == 0
 		}, 5*time.Second, time.Millisecond, "flushed all member updates")
 
+		// Disconnect the host in ns1
 		conn1.Close()
-		conn2.Close()
-		conn3.Close()
+		require.Eventually(t, func() bool {
+			state := testServer.raftNode.FSM().State()
+			state.Lock.RLock()
+			defer state.Lock.RUnlock()
+			require.Len(t, state.AllMembers(), 2)
 
+			// Disseminate locks have been deleted for ns1, but not ns2
+			require.Equal(t, 1, testServer.disseminateLocks.ItemCount())
+
+			// Disseminate timers have been deleted for ns1, but not ns2
+			_, ok := testServer.disseminateNextTime.Get("ns1")
+			require.False(t, ok)
+			_, ok = testServer.disseminateNextTime.Get("ns2")
+			require.True(t, ok)
+
+			// Member update counts have been deleted for ns1, but not ns2
+			_, ok = testServer.memberUpdateCount.Get("ns1")
+			require.False(t, ok)
+			_, ok = testServer.memberUpdateCount.Get("ns2")
+			require.True(t, ok)
+
+			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(t, 2, testServer.streamConnPool.getStreamCount("ns2"))
+			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndexCnt.Load())
+			testServer.streamConnPool.lock.RLock()
+			assert.Len(t, testServer.streamConnPool.reverseLookup, 2)
+			testServer.streamConnPool.lock.RUnlock()
+
+			return true
+		}, 5*time.Second, 100*time.Millisecond)
+
+		// // Disconnect one host in ns2
+		conn2.Close()
+		require.Eventually(t, func() bool {
+			state := testServer.raftNode.FSM().State()
+			state.Lock.RLock()
+			defer state.Lock.RUnlock()
+			require.Len(t, state.AllMembers(), 1)
+
+			// Disseminate lock for ns2 hasn't been deleted
+			require.Equal(t, 1, testServer.disseminateLocks.ItemCount())
+
+			// Disseminate timer for ns2 hasn't been deleted,
+			// because there's still streams in the namespace
+			_, ok := testServer.disseminateNextTime.Get("ns1")
+			require.False(t, ok)
+			_, ok = testServer.disseminateNextTime.Get("ns2")
+			require.True(t, ok)
+
+			// Member update count for ns2 hasn't been deleted,
+			// because there's still streams in the namespace
+			_, ok = testServer.memberUpdateCount.Get("ns2")
+			require.True(t, ok)
+
+			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns2"))
+			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndexCnt.Load())
+			testServer.streamConnPool.lock.RLock()
+			assert.Len(t, testServer.streamConnPool.reverseLookup, 1)
+			testServer.streamConnPool.lock.RUnlock()
+
+			return true
+		}, 5*time.Second, 100*time.Millisecond)
+
+		// Last host is disconnected
+		conn3.Close()
 		require.Eventually(t, func() bool {
 			state := testServer.raftNode.FSM().State()
 			state.Lock.RLock()
@@ -239,6 +306,12 @@ func TestMembershipChangeWorker(t *testing.T) {
 			require.False(t, ok)
 			_, ok = testServer.memberUpdateCount.Get("ns2")
 			require.False(t, ok)
+
+			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns2"))
+			testServer.streamConnPool.lock.RLock()
+			assert.Len(t, testServer.streamConnPool.reverseLookup, 0)
+			testServer.streamConnPool.lock.RUnlock()
 
 			return true
 		}, 5*time.Second, 100*time.Millisecond)

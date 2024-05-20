@@ -94,9 +94,9 @@ func (s *streamConnPool) delete(stream *daprdStream) bool {
 
 	if streams, ok := s.streams[stream.hostNamespace]; ok {
 		delete(streams, stream.id)
+		delete(s.reverseLookup, stream.stream)
 		if len(streams) == 0 {
 			delete(s.streams, stream.hostNamespace)
-			delete(s.reverseLookup, stream.stream)
 			lastInNamespace = true
 		}
 	}

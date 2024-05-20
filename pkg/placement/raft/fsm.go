@@ -85,7 +85,6 @@ func (c *FSM) PlacementState(withVirtualNodes bool, ns string) *v1pb.PlacementTa
 
 	entries, err := c.state.hashingTableMap(ns)
 	if err != nil {
-		logging.Warnf("Hashing table map for namespace %s not found: %s", ns, err)
 		return newTable
 	}
 	for k, v := range entries {
