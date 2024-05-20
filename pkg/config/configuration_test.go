@@ -600,7 +600,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 		m := MetricSpec{
 			HTTP: nil,
 		}
-		assert.False(t, m.GetHTTPIncreasedCardinality(log))
+		assert.False(t, m.GetHTTPIncreasedCardinality())
 	})
 
 	t.Run("nil value, returns false", func(t *testing.T) {
@@ -609,7 +609,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 				IncreasedCardinality: nil,
 			},
 		}
-		assert.False(t, m.GetHTTPIncreasedCardinality(log))
+		assert.False(t, m.GetHTTPIncreasedCardinality())
 	})
 
 	t.Run("value is set to true", func(t *testing.T) {
@@ -618,7 +618,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 				IncreasedCardinality: ptr.Of(true),
 			},
 		}
-		assert.True(t, m.GetHTTPIncreasedCardinality(log))
+		assert.True(t, m.GetHTTPIncreasedCardinality())
 	})
 
 	t.Run("value is set to false", func(t *testing.T) {
@@ -627,6 +627,6 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 				IncreasedCardinality: ptr.Of(false),
 			},
 		}
-		assert.False(t, m.GetHTTPIncreasedCardinality(log))
+		assert.False(t, m.GetHTTPIncreasedCardinality())
 	})
 }

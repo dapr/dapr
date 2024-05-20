@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 
 	"go.opencensus.io/stats"
@@ -24,8 +25,10 @@ import (
 	"go.opencensus.io/tag"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
+	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/responsewriter"
+	"github.com/dapr/kit/logger"
 )
 
 // To track the metrics for fasthttp using opencensus, this implementation is inspired by
@@ -36,6 +39,8 @@ var (
 	httpStatusCodeKey = tag.MustNewKey("status")
 	httpPathKey       = tag.MustNewKey("path")
 	httpMethodKey     = tag.MustNewKey("method")
+
+	log = logger.NewLogger("dapr.runtime.diagnostics")
 )
 
 var (
@@ -56,14 +61,16 @@ type httpMetrics struct {
 	clientRoundtripLatency *stats.Float64Measure
 	clientCompletedCount   *stats.Int64Measure
 
-	healthProbeCompletedCount  *stats.Int64Measure
-	healthProbeRoundripLatency *stats.Float64Measure
+	healthProbeCompletedCount   *stats.Int64Measure
+	healthProbeRoundTripLatency *stats.Float64Measure
 
 	appID   string
 	enabled bool
 
 	// Enable legacy metrics, which includes the full path
 	legacy bool
+
+	pathNormalization *config.PathNormalization
 }
 
 func newHTTPMetrics() *httpMetrics {
@@ -108,7 +115,7 @@ func newHTTPMetrics() *httpMetrics {
 			"http/healthprobes/completed_count",
 			"Count of completed health probes",
 			stats.UnitDimensionless),
-		healthProbeRoundripLatency: stats.Float64(
+		healthProbeRoundTripLatency: stats.Float64(
 			"http/healthprobes/roundtrip_latency",
 			"Time between first byte of health probes headers sent to last byte of response received, or terminal error",
 			stats.UnitMilliseconds),
@@ -124,6 +131,11 @@ func (h *httpMetrics) IsEnabled() bool {
 func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, status string, reqContentSize, resContentSize int64, elapsed float64) {
 	if !h.IsEnabled() {
 		return
+	}
+
+	normalizedPath, ok := h.normalizePath(path, h.pathNormalization.EgressPaths)
+	if ok {
+		path = normalizedPath
 	}
 
 	if h.legacy {
@@ -142,11 +154,11 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 	} else {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
 			h.serverRequestCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
 			h.serverLatency.M(elapsed))
 	}
 	stats.RecordWithTags(
@@ -162,15 +174,26 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 		return
 	}
 
+	normalizedPath, ok := h.normalizePath(path, h.pathNormalization.IngressPaths)
+	if ok {
+		path = normalizedPath
+	}
+
 	if h.legacy {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method),
 			h.clientSentBytes.M(contentSize))
 	} else {
+		tags := diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID)
+
+		if h.pathNormalization.Enabled {
+			tags = append(tags, diagUtils.WithTags(h.clientSentBytes.Name(), httpPathKey, path, httpMethodKey, method)...)
+		}
+
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID),
+			tags,
 			h.clientSentBytes.M(contentSize))
 	}
 }
@@ -178,6 +201,11 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, status string, contentSize int64, elapsed float64) {
 	if !h.IsEnabled() {
 		return
+	}
+
+	normalizedPath, ok := h.normalizePath(path, h.pathNormalization.IngressPaths)
+	if ok {
+		path = normalizedPath
 	}
 
 	if h.legacy {
@@ -190,13 +218,21 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 			diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientRoundtripLatency.M(elapsed))
 	} else {
+		completedCountTags := diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpStatusCodeKey, status)
+		roundTripLatencyTags := diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status)
+
+		if h.pathNormalization.Enabled {
+			completedCountTags = append(completedCountTags, diagUtils.WithTags(h.clientCompletedCount.Name(), httpPathKey, path, httpMethodKey, method)...)
+			roundTripLatencyTags = append(roundTripLatencyTags, diagUtils.WithTags(h.clientRoundtripLatency.Name(), httpPathKey, path, httpMethodKey, method)...)
+		}
+
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
+			completedCountTags,
 			h.clientCompletedCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
+			roundTripLatencyTags,
 			h.clientRoundtripLatency.M(elapsed))
 	}
 	stats.RecordWithTags(
@@ -223,14 +259,22 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		h.healthProbeCompletedCount.M(1))
 	stats.RecordWithTags(
 		ctx,
-		diagUtils.WithTags(h.healthProbeRoundripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
-		h.healthProbeRoundripLatency.M(elapsed))
+		diagUtils.WithTags(h.healthProbeRoundTripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
+		h.healthProbeRoundTripLatency.M(elapsed))
 }
 
-func (h *httpMetrics) Init(appID string, legacy bool) error {
+func (h *httpMetrics) Init(appID string, pathNormalization *config.PathNormalization, legacy bool) error {
 	h.appID = appID
 	h.enabled = true
 	h.legacy = legacy
+
+	if pathNormalization != nil {
+		h.pathNormalization = pathNormalization
+	} else {
+		h.pathNormalization = &config.PathNormalization{
+			Enabled: false,
+		}
+	}
 
 	tags := []tag.Key{appIDKey}
 
@@ -240,8 +284,11 @@ func (h *httpMetrics) Init(appID string, legacy bool) error {
 		serverTags = []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
 		clientTags = []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
 	} else {
-		serverTags = []tag.Key{appIDKey, httpMethodKey, httpStatusCodeKey}
+		serverTags = []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
 		clientTags = []tag.Key{appIDKey, httpStatusCodeKey}
+		if h.pathNormalization.Enabled {
+			clientTags = append(clientTags, httpPathKey, httpMethodKey)
+		}
 	}
 
 	views := []*view.View{
@@ -253,7 +300,7 @@ func (h *httpMetrics) Init(appID string, legacy bool) error {
 		diagUtils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.clientRoundtripLatency, clientTags, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(h.clientCompletedCount, clientTags, view.Count()),
-		diagUtils.NewMeasureView(h.healthProbeRoundripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.healthProbeRoundTripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, defaultLatencyDistribution),
 		diagUtils.NewMeasureView(h.healthProbeCompletedCount, []tag.Key{appIDKey, httpStatusCodeKey}, view.Count()),
 	}
 
@@ -262,6 +309,44 @@ func (h *httpMetrics) Init(appID string, legacy bool) error {
 	}
 
 	return view.Register(views...)
+}
+
+func (h *httpMetrics) normalizePath(path string, paths []string) (string, bool) {
+	if !h.pathNormalization.Enabled {
+		return "", false
+	}
+
+	if path == "" {
+		return "", false
+	}
+
+	if !strings.HasPrefix(path, "/") {
+		path = "/" + path
+	}
+
+	virtualmux := http.NewServeMux()
+	virtualmux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// when we are not in increasedCardinality we use a catch-all bucket
+		if !h.legacy {
+			path = "/catch-all-bucket" // TODO: find a better name for this
+		}
+	}))
+
+	for _, pattern := range paths {
+		virtualmux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			path = pattern
+		}))
+	}
+
+	req, err := http.NewRequest(http.MethodGet, path, nil)
+	if err != nil {
+		log.Errorf("Error creating request for path normalization: %s", err)
+		return "", false
+	}
+
+	virtualmux.ServeHTTP(nil, req)
+
+	return path, true
 }
 
 // HTTPMiddleware is the middleware to track HTTP server-side requests.
@@ -276,7 +361,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		}
 
 		var path string
-		if h.legacy {
+		if h.legacy || h.pathNormalization.Enabled {
 			path = h.convertPathToMetricLabel(r.URL.Path)
 		}
 

@@ -256,6 +256,20 @@ spec:
                         description: |-
                           If false (the default), metrics for the HTTP server are collected with increased cardinality.
                         type: boolean
+                      pathNormalization:
+                        description: PathNormalization defines the path normalization configuration for HTTP server metrics.
+                        properties:
+                          enabled:
+                            type: boolean
+                          ingress:
+                            type: array
+                            items:
+                              type: string
+                          egress:
+                            type: array
+                            items:
+                              type: string
+                        type: object
                     type: object
                   rules:
                     items:
@@ -304,6 +318,20 @@ spec:
                           with increased cardinality. The default is true in Dapr 1.13,
                           but will be changed to false in 1.14+'
                         type: boolean
+                      pathNormalization:
+                        description: PathNormalization defines the path normalization configuration for HTTP server metrics.
+                        properties:
+                          enabled:
+                            type: boolean
+                          ingress:
+                            type: array
+                            items:
+                              type: string
+                          egress:
+                            type: array
+                            items:
+                              type: string
+                        type: object
                     type: object
                   rules:
                     items:

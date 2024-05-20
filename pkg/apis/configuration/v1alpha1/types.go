@@ -222,6 +222,17 @@ type MetricHTTP struct {
 	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
 	// +optional
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty"`
+	// +optional
+	PathNormalization *PathNormalization `json:"pathNormalization,omitempty"`
+}
+
+type PathNormalization struct {
+	// If enabled, the path normalization will be applied to the HTTP server metrics.
+	Enabled *bool `json:"enabled"`
+	// IngressPaths is a list of paths to match for ingress metrics.
+	IngressPaths []string `json:"ingress"`
+	// EgressPaths is a list of paths to match for egress metrics.
+	EgressPaths []string `json:"egress"`
 }
 
 // MetricsRule defines configuration options for a metric.
