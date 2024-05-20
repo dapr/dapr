@@ -312,7 +312,7 @@ func (p *actorPlacement) Close() error {
 	return nil
 }
 
-// WaitUntilReady waits until placement table is until table lock is unlocked.
+// WaitUntilReady waits until placement table is unlocked.
 func (p *actorPlacement) WaitUntilReady(ctx context.Context) error {
 	p.placementTableLock.RLock()
 	hasTablesCh := p.hasPlacementTablesCh
@@ -476,6 +476,7 @@ func (p *actorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 	case lockOperation:
 		p.blockPlacements()
 
+		// If we don't receive an unlock in 5 seconds, unlock the table
 		go func() {
 			// TODO: Use lock-free table update.
 			// current implementation is distributed two-phase locking algorithm.

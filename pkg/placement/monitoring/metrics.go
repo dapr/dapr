@@ -50,13 +50,21 @@ var (
 )
 
 // RecordRuntimesCount records the number of connected runtimes.
-func RecordRuntimesCount(count int) {
-	stats.Record(context.Background(), runtimesTotal.M(int64(count)))
+func RecordRuntimesCount(count int, ns string) {
+	stats.RecordWithTags(
+		context.Background(),
+		diagUtils.WithTags(actorHeartbeatTimestamp.Name(), namespaceKey, ns),
+		runtimesTotal.M(int64(count)),
+	)
 }
 
 // RecordActorRuntimesCount records the number of valid actor runtimes.
-func RecordActorRuntimesCount(count int) {
-	stats.Record(context.Background(), actorRuntimesTotal.M(int64(count)))
+func RecordActorRuntimesCount(count int, ns string) {
+	stats.RecordWithTags(
+		context.Background(),
+		diagUtils.WithTags(actorHeartbeatTimestamp.Name(), namespaceKey, ns),
+		actorRuntimesTotal.M(int64(count)),
+	)
 }
 
 // RecordActorHeartbeat records the actor heartbeat, in seconds since epoch, with actor type, host and pod name.
@@ -70,8 +78,8 @@ func RecordActorHeartbeat(appID, actorType, host, namespace, pod string, heartbe
 // InitMetrics initialize the placement service metrics.
 func InitMetrics() error {
 	err := view.Register(
-		diagUtils.NewMeasureView(runtimesTotal, noKeys, view.LastValue()),
-		diagUtils.NewMeasureView(actorRuntimesTotal, noKeys, view.LastValue()),
+		diagUtils.NewMeasureView(runtimesTotal, []tag.Key{namespaceKey}, view.LastValue()),
+		diagUtils.NewMeasureView(actorRuntimesTotal, []tag.Key{namespaceKey}, view.LastValue()),
 		diagUtils.NewMeasureView(actorHeartbeatTimestamp, []tag.Key{appIDKey, actorTypeKey, hostNameKey, namespaceKey, podNameKey}, view.LastValue()),
 	)
 
