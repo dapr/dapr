@@ -152,13 +152,19 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 			diagUtils.WithTags(h.serverResponseCount.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 			h.serverResponseCount.M(1))
 	} else {
+		requestCountTags := diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status)
+		serverLatencyTags := diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status)
+		if h.pathNormalization.Enabled {
+			requestCountTags = append(requestCountTags, diagUtils.WithTags(h.serverRequestCount.Name(), httpPathKey, path, httpMethodKey, method)...)
+			serverLatencyTags = append(serverLatencyTags, diagUtils.WithTags(h.serverLatency.Name(), httpPathKey, path, httpMethodKey, method)...)
+		}
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
+			requestCountTags,
 			h.serverRequestCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
+			serverLatencyTags,
 			h.serverLatency.M(elapsed))
 	}
 	stats.RecordWithTags(
@@ -284,9 +290,10 @@ func (h *httpMetrics) Init(appID string, pathNormalization *config.PathNormaliza
 		serverTags = []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
 		clientTags = []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
 	} else {
-		serverTags = []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
+		serverTags = []tag.Key{appIDKey, httpMethodKey, httpStatusCodeKey}
 		clientTags = []tag.Key{appIDKey, httpStatusCodeKey}
 		if h.pathNormalization.Enabled {
+			serverTags = append(serverTags, httpPathKey)
 			clientTags = append(clientTags, httpPathKey, httpMethodKey)
 		}
 	}
