@@ -284,7 +284,7 @@ func (m MetricSpec) GetHTTPPathNormalization() *PathNormalization {
 type MetricHTTP struct {
 	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
 	IncreasedCardinality *bool              `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
-	PathNormalization    *PathNormalization `json:"pathNormalization,omitempty"`
+	PathNormalization    *PathNormalization `json:"pathNormalization,omitempty" yaml:"pathNormalization,omitempty"`
 }
 
 // PathNormalization defines configuration options for path normalization.
