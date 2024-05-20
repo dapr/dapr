@@ -333,9 +333,9 @@ func (h *httpMetrics) normalizePath(path string, paths []string) (string, bool) 
 
 	virtualmux := http.NewServeMux()
 	virtualmux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// when we are not in increasedCardinality we use a catch-all bucket
+		// when we are not in increasedCardinality we fallback to a catch-all bucket
 		if !h.legacy {
-			path = "/catch-all-bucket" // TODO: find a better name for this
+			path = "/unmatchedpath"
 		}
 	}))
 

@@ -165,9 +165,9 @@ func TestHTTPMetricsPathNormalizationLowCardinality(t *testing.T) {
 		{pathNormalization.IngressPaths, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
 		{pathNormalization.EgressPaths, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
 		{pathNormalization.IngressPaths, "/items/12345", "/items/{itemID}", true},
-		{pathNormalization.EgressPaths, "/items/12345", "/catch-all-bucket", true},
-		{pathNormalization.IngressPaths, "/basket/12345", "/catch-all-bucket", true},
-		{pathNormalization.IngressPaths, "dapr/config", "/catch-all-bucket", true},
+		{pathNormalization.EgressPaths, "/items/12345", "/unmatchedpath", true},
+		{pathNormalization.IngressPaths, "/basket/12345", "/unmatchedpath", true},
+		{pathNormalization.IngressPaths, "dapr/config", "/unmatchedpath", true},
 	}
 
 	for _, tc := range tt {
