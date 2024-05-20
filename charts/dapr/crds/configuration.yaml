@@ -304,6 +304,13 @@ spec:
                           with increased cardinality. The default is true in Dapr 1.13,
                           but will be changed to false in 1.14+'
                         type: boolean
+                      latencyDistributionBuckets:
+                        description: 'If a list of integers is specified, use
+                          these values for latency distribution buckets instead
+                          of the default values.'
+                        items:
+                          type: integer
+                        type: array
                     type: object
                   rules:
                     items:

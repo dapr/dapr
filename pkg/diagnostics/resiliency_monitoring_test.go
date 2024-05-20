@@ -185,7 +185,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil, false))
+			require.NoError(t, diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil, false, getLatencyDistributionBuckets()))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
@@ -271,7 +271,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false))
+			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false, getLatencyDistributionBuckets()))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			require.NoError(t, err)
@@ -439,7 +439,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false))
+			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false, getLatencyDistributionBuckets()))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyActivationViewName)
 			require.NoError(t, err)
@@ -496,7 +496,7 @@ func createDefaultTestResiliency(resiliencyName string, resiliencyNamespace stri
 func TestResiliencyLoadedMonitoring(t *testing.T) {
 	t.Run(resiliencyLoadedViewName, func(t *testing.T) {
 		cleanupRegisteredViews()
-		require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false))
+		require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false, getLatencyDistributionBuckets()))
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)
@@ -603,4 +603,8 @@ func newTestResiliencyConfig(resiliencyName, resiliencyNamespace, appName, actor
 			},
 		},
 	}
+}
+
+func getLatencyDistributionBuckets() []float64 {
+	return []float64{5, 50, 500, 5_000}
 }

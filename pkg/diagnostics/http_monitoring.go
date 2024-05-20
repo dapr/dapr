@@ -38,10 +38,8 @@ var (
 	httpMethodKey     = tag.MustNewKey("method")
 )
 
-var (
-	// <<10 -> KBs; <<20 -> MBs; <<30 -> GBs
-	defaultSizeDistribution = view.Distribution(1<<10, 2<<10, 4<<10, 16<<10, 64<<10, 256<<10, 1<<20, 4<<20, 16<<20, 64<<20, 256<<20, 1<<30, 4<<30)
-)
+// <<10 -> KBs; <<20 -> MBs; <<30 -> GBs
+var defaultSizeDistribution = view.Distribution(1<<10, 2<<10, 4<<10, 16<<10, 64<<10, 256<<10, 1<<20, 4<<20, 16<<20, 64<<20, 256<<20, 1<<30, 4<<30)
 
 type httpMetrics struct {
 	serverRequestBytes  *stats.Int64Measure
