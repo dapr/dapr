@@ -8,10 +8,11 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 func TestHTTPMiddleware(t *testing.T) {
@@ -96,7 +97,7 @@ func TestHTTPMetricsPathNormalizationNotEnabled(t *testing.T) {
 	testHTTP.Init("fakeID", pathNormalization, true)
 	normalizedPath, ok := testHTTP.normalizePath("/orders", Ingress)
 	require.False(t, ok)
-	require.Equal(t, normalizedPath, "")
+	require.Equal(t, "", normalizedPath)
 }
 
 func TestHTTPMetricsPathNormalizationLegacyIncreasedCardinality(t *testing.T) {
