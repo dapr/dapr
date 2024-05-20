@@ -630,3 +630,67 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 		assert.False(t, m.GetHTTPIncreasedCardinality())
 	})
 }
+
+func TestMetricsGetHTTPPathNormalization(t *testing.T) {
+	log := logger.NewLogger("test")
+	log.SetOutput(io.Discard)
+
+	t.Run("no http configuration, returns nil", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: nil,
+		}
+		assert.Nil(t, m.GetHTTPPathNormalization())
+	})
+
+	t.Run("nil value, returns nil", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				PathNormalization: nil,
+			},
+		}
+		assert.Nil(t, m.GetHTTPPathNormalization())
+	})
+
+	t.Run("config is enabled", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				PathNormalization: &PathNormalization{
+					Enabled:      true,
+					IngressPaths: []string{"/resource/1"},
+					EgressPaths:  []string{"/resource/2"},
+				},
+			},
+		}
+		config := m.GetHTTPPathNormalization()
+		assert.True(t, config.Enabled)
+		assert.Equal(t, []string{"/resource/1"}, config.IngressPaths)
+		assert.Equal(t, []string{"/resource/2"}, config.EgressPaths)
+	})
+
+	t.Run("config is disabled", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				PathNormalization: &PathNormalization{
+					Enabled: false,
+				},
+			},
+		}
+		config := m.GetHTTPPathNormalization()
+		assert.False(t, config.Enabled)
+	})
+
+	t.Run("config is enabled with only ingress", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				PathNormalization: &PathNormalization{
+					Enabled:      true,
+					IngressPaths: []string{"/resource/1"},
+				},
+			},
+		}
+		config := m.GetHTTPPathNormalization()
+		assert.True(t, config.Enabled)
+		assert.Equal(t, []string{"/resource/1"}, config.IngressPaths)
+		assert.Nil(t, config.EgressPaths)
+	})
+}

@@ -8,6 +8,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
@@ -84,6 +85,98 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	rows, err := view.RetrieveData("http/server/request_count")
 	require.Error(t, err)
 	assert.Nil(t, rows)
+}
+
+func TestHTTPMetricsPathNormalizationNotEnabled(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	testHTTP.enabled = false
+	pathNormalization := &config.PathNormalization{
+		Enabled: false,
+	}
+	testHTTP.Init("fakeID", pathNormalization, true)
+	normalizedPath, ok := testHTTP.normalizePath("/orders", pathNormalization.IngressPaths)
+	require.False(t, ok)
+	require.Equal(t, normalizedPath, "")
+}
+
+func TestHTTPMetricsPathNormalizationLegacyIncreasedCardinality(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	testHTTP.enabled = false
+	pathNormalization := &config.PathNormalization{
+		Enabled: true,
+		IngressPaths: []string{
+			"/orders/{orderID}/items/{itemID}",
+			"/orders/{orderID}",
+			"/items/{itemID}",
+		},
+		EgressPaths: []string{
+			"/orders/{orderID}/items/{itemID}",
+		},
+	}
+	testHTTP.Init("fakeID", pathNormalization, true)
+
+	tt := []struct {
+		pathsList      []string
+		path           string
+		normalizedPath string
+		normalized     bool
+	}{
+		{pathNormalization.IngressPaths, "", "", false},
+		{pathNormalization.IngressPaths, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{pathNormalization.EgressPaths, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{pathNormalization.IngressPaths, "/items/12345", "/items/{itemID}", true},
+		{pathNormalization.EgressPaths, "/items/12345", "/items/12345", true},
+		{pathNormalization.IngressPaths, "/basket/12345", "/basket/12345", true},
+		{pathNormalization.IngressPaths, "dapr/config", "/dapr/config", true},
+	}
+
+	for _, tc := range tt {
+		normalizedPath, ok := testHTTP.normalizePath(tc.path, tc.pathsList)
+		require.Equal(t, ok, tc.normalized)
+		if ok {
+			assert.Equal(t, tc.normalizedPath, normalizedPath)
+		}
+	}
+}
+
+func TestHTTPMetricsPathNormalizationLowCardinality(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	testHTTP.enabled = false
+	pathNormalization := &config.PathNormalization{
+		Enabled: true,
+		IngressPaths: []string{
+			"/orders/{orderID}/items/{itemID}",
+			"/orders/{orderID}",
+			"/items/{itemID}",
+		},
+		EgressPaths: []string{
+			"/orders/{orderID}/items/{itemID}",
+		},
+	}
+	testHTTP.Init("fakeID", pathNormalization, false)
+
+	tt := []struct {
+		pathsList      []string
+		path           string
+		normalizedPath string
+		normalized     bool
+	}{
+		{pathNormalization.IngressPaths, "", "", false},
+		{pathNormalization.IngressPaths, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{pathNormalization.EgressPaths, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{pathNormalization.IngressPaths, "/items/12345", "/items/{itemID}", true},
+		{pathNormalization.EgressPaths, "/items/12345", "/catch-all-bucket", true},
+		{pathNormalization.IngressPaths, "/basket/12345", "/catch-all-bucket", true},
+		{pathNormalization.IngressPaths, "dapr/config", "/catch-all-bucket", true},
+	}
+
+	for _, tc := range tt {
+		normalizedPath, ok := testHTTP.normalizePath(tc.path, tc.pathsList)
+		require.Equal(t, ok, tc.normalized)
+		if ok {
+			assert.Equal(t, tc.normalizedPath, normalizedPath)
+		}
+	}
 }
 
 func fakeHTTPRequest(body string) *http.Request {
