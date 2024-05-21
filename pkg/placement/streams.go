@@ -107,12 +107,7 @@ func (s *streamConnPool) delete(stream *daprdStream) bool {
 func (s *streamConnPool) getStreamCount(namespace string) int {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
-	streams, ok := s.streams[namespace]
-	if !ok {
-		return 0
-	}
-
-	return len(streams)
+	return len(s.streams[namespace])
 }
 
 func (s *streamConnPool) forEachNamespace(fn func(namespace string, val map[uint32]*daprdStream)) {
