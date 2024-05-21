@@ -270,7 +270,7 @@ func (m MetricSpec) GetHTTPIncreasedCardinality() bool {
 
 // GetHTTPPathNormalization returns the path normalization configuration for HTTP metrics
 func (m MetricSpec) GetHTTPPathNormalization() *PathNormalization {
-	if m.HTTP == nil || m.HTTP.PathNormalization == nil {
+	if m.HTTP == nil {
 		return nil
 	}
 	return m.HTTP.PathNormalization
