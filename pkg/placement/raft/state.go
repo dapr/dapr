@@ -47,7 +47,7 @@ type DaprHostMember struct {
 }
 
 func (d *DaprHostMember) NameAndNamespace() string {
-	return d.Namespace + "-" + d.Name
+	return d.Namespace + "||" + d.Name
 }
 
 // daprNamespace represents Dapr runtime namespace that can contain multiple DaprHostMembers
