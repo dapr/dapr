@@ -152,7 +152,7 @@ func (p *Service) revokeLeadership() {
 	p.streamConnGroup.Wait()
 	log.Info("Connections are drained")
 
-	p.streamConnPool.streamIndexCnt.Store(0)
+	p.streamConnPool.streamIndex.Store(0)
 	p.disseminateLocks.Clear()
 	p.disseminateNextTime.Clear()
 	p.memberUpdateCount.Clear()

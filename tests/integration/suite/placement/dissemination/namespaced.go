@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package namespacedactors
+package dissemination
 
 import (
 	"context"
@@ -28,14 +28,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(namespacedActors))
+	suite.Register(new(namespaced))
 }
 
-type namespacedActors struct {
+type namespaced struct {
 	place *placement.Placement
 }
 
-func (n *namespacedActors) Setup(t *testing.T) []framework.Option {
+func (n *namespaced) Setup(t *testing.T) []framework.Option {
 	n.place = placement.New(t)
 
 	return []framework.Option{
@@ -43,7 +43,7 @@ func (n *namespacedActors) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (n *namespacedActors) Run(t *testing.T, ctx context.Context) {
+func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
 	t.Run("actors in different namespaces are disseminated properly", func(t *testing.T) {

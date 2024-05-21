@@ -139,7 +139,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		require.Eventually(t, func() bool {
 			assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns1"))
 			assert.Equal(t, 2, testServer.streamConnPool.getStreamCount("ns2"))
-			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndexCnt.Load())
+			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndex.Load())
 			assert.Len(t, testServer.streamConnPool.reverseLookup, 3)
 
 			// This indicates the member has been added to the dissemination queue and is
@@ -243,7 +243,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
 			assert.Equal(t, 2, testServer.streamConnPool.getStreamCount("ns2"))
-			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndexCnt.Load())
+			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndex.Load())
 			testServer.streamConnPool.lock.RLock()
 			assert.Len(t, testServer.streamConnPool.reverseLookup, 2)
 			testServer.streamConnPool.lock.RUnlock()
@@ -276,7 +276,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
 			assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns2"))
-			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndexCnt.Load())
+			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndex.Load())
 			testServer.streamConnPool.lock.RLock()
 			assert.Len(t, testServer.streamConnPool.reverseLookup, 1)
 			testServer.streamConnPool.lock.RUnlock()

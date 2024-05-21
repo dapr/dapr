@@ -62,6 +62,7 @@ const (
 type actorPlacement struct {
 	actorTypes []string
 	config     internal.Config
+	namespace  string
 
 	// client is the placement client.
 	client *placementClient
@@ -129,6 +130,7 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		closeCh:           make(chan struct{}),
 		resiliency:        opts.Resiliency,
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
+		namespace:         security.CurrentNamespace(),
 	}
 }
 
@@ -278,7 +280,7 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				// Port is redundant because Name should include port number
 				// Port: 0,
 				ApiLevel:  internal.ActorAPILevel,
-				Namespace: security.CurrentNamespace(),
+				Namespace: p.namespace,
 			}
 
 			err := p.client.send(&host)

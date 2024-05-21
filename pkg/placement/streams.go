@@ -1,3 +1,16 @@
+/*
+Copyright 2024 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package placement
 
 import (
@@ -53,9 +66,9 @@ type streamConnPool struct {
 	//	}
 	streams map[string]map[uint32]*daprdStream
 
-	// streamIndexCnt assigns an index to streams in the streamConnPool.
+	// streamIndex assigns an index to streams in the streamConnPool.
 	// Its reset to zero every time a placement service loses leadership (thus clears all streams).
-	streamIndexCnt atomic.Uint32
+	streamIndex atomic.Uint32
 
 	// reverseLookup is a reverse index of streams to their daprdStream object.
 	// (so we don't have to loop through all streams to find a specific one)
@@ -71,7 +84,7 @@ func newStreamConnPool() *streamConnPool {
 
 // add adds stream connection between runtime and placement to the namespaced dissemination pool.
 func (s *streamConnPool) add(stream *daprdStream) {
-	id := s.streamIndexCnt.Add(1)
+	id := s.streamIndex.Add(1)
 	stream.id = id
 
 	s.lock.Lock()
