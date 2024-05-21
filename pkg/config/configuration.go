@@ -273,11 +273,7 @@ func (m MetricSpec) GetHTTPPathNormalization() *PathNormalization {
 	if m.HTTP == nil || m.HTTP.PathNormalization == nil {
 		return nil
 	}
-	return &PathNormalization{
-		Enabled:      m.HTTP.PathNormalization.Enabled,
-		IngressPaths: m.HTTP.PathNormalization.IngressPaths,
-		EgressPaths:  m.HTTP.PathNormalization.EgressPaths,
-	}
+	return m.HTTP.PathNormalization
 }
 
 // MetricHTTP defines configuration for metrics for the HTTP server
