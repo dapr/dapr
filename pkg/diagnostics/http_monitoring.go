@@ -384,24 +384,44 @@ func (h *httpMetrics) initPathNormalization(config *config.PathNormalization) pa
 	pn.virtualIngressMux = http.NewServeMux()
 	pn.virtualIngressMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !h.legacy {
-			*w.(*diagUtils.PathNormalizationRW).NormalizedPath = "/unmatchedpath"
+			rw, ok := w.(*diagUtils.PathNormalizationRW)
+			if !ok {
+				log.Errorf("Failed to cast to PathNormalizationRW")
+				return
+			}
+			*rw.NormalizedPath = diagUtils.UnmatchedPath
 		}
 	}))
 	for _, pattern := range config.IngressPaths {
 		pn.virtualIngressMux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			*w.(*diagUtils.PathNormalizationRW).NormalizedPath = pattern
+			rw, ok := w.(*diagUtils.PathNormalizationRW)
+			if !ok {
+				log.Errorf("Failed to cast to PathNormalizationRW")
+				return
+			}
+			*rw.NormalizedPath = pattern
 		}))
 	}
 
 	pn.virtualEgressMux = http.NewServeMux()
 	pn.virtualEgressMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !h.legacy {
-			*w.(*diagUtils.PathNormalizationRW).NormalizedPath = "/unmatchedpath"
+			rw, ok := w.(*diagUtils.PathNormalizationRW)
+			if !ok {
+				log.Errorf("Failed to cast to PathNormalizationRW")
+				return
+			}
+			*rw.NormalizedPath = diagUtils.UnmatchedPath
 		}
 	}))
 	for _, pattern := range config.EgressPaths {
 		pn.virtualEgressMux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			*w.(*diagUtils.PathNormalizationRW).NormalizedPath = pattern
+			rw, ok := w.(*diagUtils.PathNormalizationRW)
+			if !ok {
+				log.Errorf("Failed to cast to PathNormalizationRW")
+				return
+			}
+			*rw.NormalizedPath = pattern
 		}))
 	}
 	return pn

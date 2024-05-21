@@ -180,6 +180,43 @@ func TestHTTPMetricsPathNormalizationLowCardinality(t *testing.T) {
 	}
 }
 
+func TestInitPathNormalizationNilConfig(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	var pathNormalization *config.PathNormalization
+	config := testHTTP.initPathNormalization(pathNormalization)
+	assert.NotNil(t, config)
+	assert.False(t, config.enabled)
+}
+
+func TestInitPathNormalizationNotEnabled(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	pathNormalization := &config.PathNormalization{
+		Enabled: false,
+	}
+	config := testHTTP.initPathNormalization(pathNormalization)
+	assert.NotNil(t, config)
+	assert.False(t, config.enabled)
+}
+
+func TestInitPathNormalization(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	testHTTP.enabled = false
+	pathNormalization := &config.PathNormalization{
+		Enabled: true,
+		IngressPaths: []string{
+			"/orders/{orderID}/items/{itemID}",
+		},
+		EgressPaths: []string{
+			"/orders",
+		},
+	}
+	config := testHTTP.initPathNormalization(pathNormalization)
+	assert.NotNil(t, config)
+	assert.True(t, config.enabled)
+	assert.NotNil(t, config.virtualIngressMux)
+	assert.NotNil(t, config.virtualEgressMux)
+}
+
 func fakeHTTPRequest(body string) *http.Request {
 	req, err := http.NewRequest(http.MethodPost, "http://dapr.io/invoke/method/testmethod", strings.NewReader(body))
 	if err != nil {
