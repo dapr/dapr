@@ -35,15 +35,13 @@ import (
 
 func cleanupStates(testRaftServer *raft.Server) {
 	state := testRaftServer.FSM().State()
-	state.Lock.RLock()
-	defer state.Lock.RUnlock()
 
-	for _, member := range state.AllMembers() {
+	state.ForEachHost(func(host *raft.DaprHostMember) {
 		testRaftServer.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
-			Name:      member.Name,
-			Namespace: member.Namespace,
+			Name:      host.Name,
+			Namespace: host.Namespace,
 		})
-	}
+	})
 }
 
 func TestMembershipChangeWorker(t *testing.T) {
@@ -64,9 +62,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		cleanupStates(testRaftServer)
 		state := testRaftServer.FSM().State()
-		state.Lock.RLock()
-		require.Empty(t, state.AllMembers())
-		state.Lock.RUnlock()
+		require.Equal(t, 0, state.MemberCount())
 
 		go func() {
 			defer close(membershipStopCh)
@@ -169,43 +165,34 @@ func TestMembershipChangeWorker(t *testing.T) {
 		val.Store(0)
 
 		// Check member has been saved correctly in the raft store
-		require.Eventually(t, func() bool {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			state := testServer.raftNode.FSM().State()
-			state.Lock.RLock()
-			members1, err := state.Members("ns1")
-			if err != nil {
-				state.Lock.RUnlock()
-				return false
-			}
-			if len(members1) == 1 {
-				m, ok := members1["127.0.0.1:50100"]
-				require.True(t, ok)
-				require.Equal(t, "127.0.0.1:50100", m.Name)
-				require.Equal(t, "ns1", m.Namespace)
-				require.Contains(t, m.Entities, "actor1", "actor2")
-			}
+			cnt := 0
+			state.ForEachHostInNamespace("ns1", func(host *raft.DaprHostMember) {
+				cnt++
+				assert.Equal(c, "127.0.0.1:50100", host.Name)
+				assert.Equal(c, "ns1", host.Namespace)
+				assert.Contains(c, host.Entities, "actor1", "actor2")
+			})
+			assert.Equal(t, 1, cnt)
 
-			members2, err := state.Members("ns2")
-			if err != nil {
-				state.Lock.RUnlock()
-				return false
-			}
-			if len(members2) == 2 {
-				m1, ok := members2["127.0.0.1:50101"]
-				require.True(t, ok)
-				require.Equal(t, "127.0.0.1:50101", m1.Name)
-				require.Equal(t, "ns2", m1.Namespace)
-				require.Contains(t, m1.Entities, "actor3")
+			cnt = 0
+			state.ForEachHostInNamespace("ns2", func(host *raft.DaprHostMember) {
+				if host.Name == "127.0.0.1:50101" {
+					cnt++
+					assert.Equal(c, "127.0.0.1:50101", host.Name)
+					assert.Equal(c, "ns2", host.Namespace)
+					assert.Contains(c, host.Entities, "actor3")
+				}
 
-				m2, ok := members2["127.0.0.1:50102"]
-				require.True(t, ok)
-				require.Equal(t, "127.0.0.1:50102", m2.Name)
-				require.Equal(t, "ns2", m2.Namespace)
-				require.Contains(t, m2.Entities, "actor4")
-			}
-			state.Lock.RUnlock()
-
-			return true
+				if host.Name == "127.0.0.1:50102" {
+					cnt++
+					assert.Equal(c, "127.0.0.1:50102", host.Name)
+					assert.Equal(c, "ns2", host.Namespace)
+					assert.Contains(c, host.Entities, "actor4")
+				}
+			})
+			assert.Equal(t, 2, cnt)
 		}, time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
 
 		// Wait until next table dissemination and check there hasn't been updates
@@ -221,10 +208,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// Disconnect the host in ns1
 		conn1.Close()
 		require.Eventually(t, func() bool {
-			state := testServer.raftNode.FSM().State()
-			state.Lock.RLock()
-			defer state.Lock.RUnlock()
-			require.Len(t, state.AllMembers(), 2)
+			require.Equal(t, 2, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate locks have been deleted for ns1, but not ns2
 			require.Equal(t, 1, testServer.disseminateLocks.ItemCount())
@@ -254,10 +238,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// // Disconnect one host in ns2
 		conn2.Close()
 		require.Eventually(t, func() bool {
-			state := testServer.raftNode.FSM().State()
-			state.Lock.RLock()
-			defer state.Lock.RUnlock()
-			require.Len(t, state.AllMembers(), 1)
+			require.Equal(t, 1, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate lock for ns2 hasn't been deleted
 			require.Equal(t, 1, testServer.disseminateLocks.ItemCount())
@@ -287,10 +268,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// Last host is disconnected
 		conn3.Close()
 		require.Eventually(t, func() bool {
-			state := testServer.raftNode.FSM().State()
-			state.Lock.RLock()
-			defer state.Lock.RUnlock()
-			require.Empty(t, state.AllMembers())
+			require.Equal(t, 0, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate locks have been deleted
 			require.Equal(t, 0, testServer.disseminateLocks.ItemCount())
@@ -310,7 +288,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
 			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns2"))
 			testServer.streamConnPool.lock.RLock()
-			assert.Len(t, testServer.streamConnPool.reverseLookup, 0)
+			assert.Empty(t, testServer.streamConnPool.reverseLookup)
 			testServer.streamConnPool.lock.RUnlock()
 
 			return true

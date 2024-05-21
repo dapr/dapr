@@ -45,8 +45,6 @@ var (
 	hostNameKey  = tag.MustNewKey("host_name")
 	namespaceKey = tag.MustNewKey("host_namespace")
 	podNameKey   = tag.MustNewKey("pod_name")
-
-	noKeys = []tag.Key{}
 )
 
 // RecordRuntimesCount records the number of connected runtimes.

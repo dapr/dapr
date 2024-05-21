@@ -384,13 +384,13 @@ func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMem
 		state := srv.FSM().State()
 		assert.NotNil(t, state)
 		var ok bool
-		state.Lock.RLock()
-		defer state.Lock.RUnlock()
-		members, err := state.Members(expect.Namespace)
-		if err != nil {
-			return false
-		}
-		actual, ok = members[expect.Name]
+		state.ForEachHostInNamespace(expect.Namespace, func(member *raft.DaprHostMember) {
+			if member.Name == expect.Name {
+				actual = member
+				ok = true
+			}
+		})
+
 		return ok && expect.Name == actual.Name &&
 			expect.AppID == actual.AppID && expect.Namespace == actual.Namespace
 	}, time.Second*5, time.Millisecond*300, "%v != %v", expect, actual)

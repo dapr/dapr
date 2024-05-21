@@ -28,11 +28,8 @@ func TestNewDaprHostMemberState(t *testing.T) {
 	})
 
 	require.Equal(t, uint64(0), s.Index())
-	s.Lock.RLock()
-	defer s.Lock.RUnlock()
-
-	require.Empty(t, s.Namespaces())
-	require.Empty(t, s.AllMembers())
+	require.Equal(t, 0, s.NamespaceCount())
+	require.Equal(t, 0, s.MemberCount())
 }
 
 func TestClone(t *testing.T) {
@@ -58,9 +55,9 @@ func TestClone(t *testing.T) {
 	require.Nil(t, table)
 	require.Equal(t, s.Index(), newState.Index())
 
-	members, err := s.Members("ns1")
+	members, err := s.members("ns1")
 	require.NoError(t, err)
-	clonedMembers, err := newState.Members("ns1")
+	clonedMembers, err := newState.members("ns1")
 	require.NoError(t, err)
 	require.EqualValues(t, members, clonedMembers)
 }
@@ -81,7 +78,7 @@ func TestUpsertRemoveMembers(t *testing.T) {
 
 	updated := s.upsertMember(hostMember)
 
-	m, err := s.Members("ns1")
+	m, err := s.members("ns1")
 	require.NoError(t, err)
 	ht, err := s.hashingTableMap("ns1")
 	require.NoError(t, err)
@@ -96,7 +93,7 @@ func TestUpsertRemoveMembers(t *testing.T) {
 
 	require.True(t, updated)
 
-	m, err = s.Members("ns1")
+	m, err = s.members("ns1")
 	require.NoError(t, err)
 	require.Len(t, m, 1)
 	require.Len(t, m["127.0.0.1:8080"].Entities, 1)
@@ -107,7 +104,7 @@ func TestUpsertRemoveMembers(t *testing.T) {
 
 	updated = s.removeMember(hostMember)
 
-	m, err = s.Members("ns1")
+	m, err = s.members("ns1")
 	require.NoError(t, err)
 	require.Empty(t, m)
 	require.True(t, updated)
@@ -137,7 +134,7 @@ func TestUpsertMemberNoHashingTable(t *testing.T) {
 		UpdatedAt: 1,
 	})
 
-	m, err := s.Members("ns1")
+	m, err := s.members("ns1")
 	require.NoError(t, err)
 	ht, err := s.hashingTableMap("ns1")
 	require.NoError(t, err)
@@ -279,14 +276,14 @@ func TestRestoreHashingTables(t *testing.T) {
 	}
 
 	for _, tn := range testnames {
-		s.Lock.Lock()
+		s.lock.Lock()
 		s.data.Namespace["ns1"].Members[tn] = &DaprHostMember{
 			Name:      tn,
 			Namespace: "ns1",
 			AppID:     "fakeID",
 			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
 		}
-		s.Lock.Unlock()
+		s.lock.Unlock()
 	}
 	ht, err := s.hashingTableMap("ns1")
 	require.NoError(t, err)
@@ -295,6 +292,7 @@ func TestRestoreHashingTables(t *testing.T) {
 	s.restoreHashingTables()
 
 	ht, err = s.hashingTableMap("ns1")
+	require.NoError(t, err)
 	require.Len(t, ht, 2)
 }
 

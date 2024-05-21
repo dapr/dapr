@@ -54,12 +54,18 @@ func TestFSMApply(t *testing.T) {
 		require.True(t, updated)
 		require.Equal(t, uint64(1), fsm.state.TableGeneration())
 
-		fsm.state.Lock.RLock()
-		defer fsm.state.Lock.RUnlock()
+		require.Equal(t, 1, fsm.state.NamespaceCount())
 
-		require.Len(t, fsm.state.Namespaces(), 1)
-		require.Contains(t, fsm.state.Namespaces(), "ns1")
-		members, err := fsm.state.Members("ns1")
+		var containsNamespace bool
+		fsm.state.ForEachNamespace(func(ns string, _ *daprNamespace) {
+			containsNamespace = ns == "ns1"
+		})
+		require.True(t, containsNamespace)
+
+		fsm.state.lock.RLock()
+		defer fsm.state.lock.RUnlock()
+
+		members, err := fsm.state.members("ns1")
 
 		require.NoError(t, err)
 
@@ -87,14 +93,11 @@ func TestFSMApply(t *testing.T) {
 		assert.True(t, ok)
 		assert.True(t, updated)
 		assert.Equal(t, uint64(2), fsm.state.TableGeneration())
-		members, err := fsm.state.Members("ns1")
-		require.NoError(t, err)
-		require.Empty(t, members)
+		require.Equal(t, 0, fsm.state.MemberCountInNamespace("ns1"))
 	})
 }
 
 func TestRestore(t *testing.T) {
-	// arrange
 	fsm := newFSM(DaprHostMemberStateConfig{
 		replicationFactor: 100,
 		minAPILevel:       0,
@@ -116,14 +119,10 @@ func TestRestore(t *testing.T) {
 	err := s.persist(buf)
 	require.NoError(t, err)
 
-	// act
 	err = fsm.Restore(io.NopCloser(buf))
+	require.NoError(t, err)
 
-	// assert
-	require.NoError(t, err)
-	members, err := fsm.State().Members("ns1")
-	require.NoError(t, err)
-	require.Len(t, members, 1)
+	require.Equal(t, 1, fsm.state.MemberCountInNamespace("ns1"))
 
 	hashingTable, err := fsm.State().hashingTableMap("ns1")
 	require.NoError(t, err)

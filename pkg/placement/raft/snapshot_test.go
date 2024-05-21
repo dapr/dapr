@@ -78,11 +78,11 @@ func TestPersist(t *testing.T) {
 	err = restoredState.restore(buf)
 	require.NoError(t, err)
 
-	members, err := fsm.State().Members("ns1")
+	members, err := fsm.State().members("ns1")
 	require.NoError(t, err)
 	expectedMember := members[testMember.Name]
 
-	restoredMembers, err := restoredState.Members("ns1")
+	restoredMembers, err := restoredState.members("ns1")
 	require.NoError(t, err)
 	restoredMember := restoredMembers[testMember.Name]
 	assert.Equal(t, fsm.State().Index(), restoredState.Index())

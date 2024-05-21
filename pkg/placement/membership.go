@@ -160,17 +160,12 @@ func (p *Service) handleDisconnectedMember(op hostMemberChange, updated bool) bo
 	// If this is the last host in the namespace, we should:
 	// - remove namespace-specific data structures to prevent memory-leaks
 	// - prevent next dissemination, because there are no more hosts in the namespace
-	state := p.raftNode.FSM().State()
-	state.Lock.RLock()
-	members, err := state.Members(op.host.Namespace)
-
-	if err == nil && len(members) == 0 {
+	if p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace) == 0 {
 		p.disseminateLocks.Delete(op.host.Namespace)
 		p.disseminateNextTime.Del(op.host.Namespace)
 		p.memberUpdateCount.Del(op.host.Namespace)
 		updated = false
 	}
-	state.Lock.RUnlock()
 	return updated
 }
 
@@ -180,15 +175,7 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 		return nil
 	}
 
-	state := p.raftNode.FSM().State()
-	state.Lock.RLock()
-	members, err := state.Members(ns)
-	if err != nil {
-		state.Lock.RUnlock()
-		return err
-	}
-	nTargetConns := len(members)
-	state.Lock.RUnlock()
+	nTargetConns := p.raftNode.FSM().State().MemberCountInNamespace(ns)
 
 	monitoring.RecordRuntimesCount(nStreamConnPool, ns)
 	monitoring.RecordActorRuntimesCount(nTargetConns, ns)
@@ -239,7 +226,6 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 	log.Infof(
 		"Completed dissemination for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
 		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion())
-	//p.memberUpdateCount.GetOrCreate(ns, 0).Store(0)
 	if val, ok := p.memberUpdateCount.Get(ns); ok {
 		val.Store(0)
 	}

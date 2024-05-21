@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/alphadose/haxmap"
-	"github.com/google/go-cmp/cmp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/keepalive"
@@ -290,7 +289,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 			// Upsert incoming member only if the existing member info
 			// doesn't match with the incoming member info.
-			if p.upsertRequired(namespace, req) {
+			if p.raftNode.FSM().State().UpsertRequired(namespace, req) {
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberUpsert,
 					host: raft.DaprHostMember{
@@ -329,25 +328,6 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	}
 
 	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
-}
-
-func (p *Service) upsertRequired(namespace string, req *placementv1pb.Host) bool {
-	state := p.raftNode.FSM().State()
-	state.Lock.RLock()
-	defer state.Lock.RUnlock()
-
-	members, err := state.Members(namespace)
-	if err != nil {
-		// Couldn't find the namespace, so we need to upsert
-		return true
-	}
-
-	if m, ok := members[req.GetName()]; ok {
-		// If all attributes match, no upsert is required
-		return !(m.AppID == req.GetId() && m.Name == req.GetName() && cmp.Equal(m.Entities, req.GetEntities()))
-	}
-
-	return true
 }
 
 func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatusServer) (*spiffe.Parsed, error) {
@@ -419,10 +399,7 @@ func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprd
 }
 
 func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
-	state := p.raftNode.FSM().State()
-	state.Lock.RLock()
-	clusterAPILevel := max(p.minAPILevel, state.APILevel())
-	state.Lock.RUnlock()
+	clusterAPILevel := max(p.minAPILevel, p.raftNode.FSM().State().APILevel())
 
 	if p.maxAPILevel != nil && clusterAPILevel > *p.maxAPILevel {
 		clusterAPILevel = *p.maxAPILevel

@@ -106,13 +106,10 @@ func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.T
 }
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
-	// set up
-
 	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, tests.Raft(t))
 	t.Cleanup(cleanup)
 	testServer.hasLeadership.Store(false)
 
-	// arrange
 	conn, _, stream := newTestClient(t, serverAddress)
 
 	host := &v1pb.Host{
@@ -124,7 +121,6 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 		// Port is redundant because Name should include port number
 	}
 
-	// act
 	stream.Send(host)
 	_, err := stream.Recv()
 	s, ok := status.FromError(err)
@@ -133,7 +129,6 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 	require.Equal(t, codes.FailedPrecondition, s.Code())
 	stream.CloseSend()
 
-	// tear down
 	conn.Close()
 }
 
@@ -155,7 +150,6 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			// Port is redundant because Name should include port number
 		}
 
-		// act
 		require.NoError(t, stream.Send(host))
 
 		require.Eventually(t, func() bool {
@@ -174,7 +168,6 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			}
 		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
 
-		// act
 		// Runtime needs to close stream gracefully which will let placement remove runtime host from hashing ring
 		// in the next flush time window.
 		stream.CloseSend()
@@ -205,7 +198,6 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			// Port is redundant because Name should include port number
 		}
 
-		// act
 		require.NoError(t, stream.Send(host))
 
 		require.Eventually(t, func() bool {
@@ -224,7 +216,6 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 			}
 		}, testStreamSendLatency+3*time.Second, time.Millisecond, "no membership change")
 
-		// act
 		// Runtime needs to close stream gracefully which will let placement remove runtime host from hashing ring
 		// in the next flush time window.
 		stream.CloseSend()
@@ -244,7 +235,6 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// arrange
 		_, tcpConn, stream := newTestClient(t, serverAddress)
 
-		// act
 		host := &v1pb.Host{
 			Name:      "127.0.0.1:50103",
 			Namespace: "ns1",
@@ -255,7 +245,6 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		}
 		stream.Send(host)
 
-		// assert
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			clock.Step(disseminateTimerInterval)
 			select {
