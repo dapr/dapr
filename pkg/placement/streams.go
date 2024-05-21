@@ -100,8 +100,7 @@ func (s *streamConnPool) add(stream *daprdStream) {
 // delete removes a stream connection between runtime and placement
 // from the namespaced dissemination pool.
 // Returns true if the stream is the last one in a namespace
-func (s *streamConnPool) delete(stream *daprdStream) bool {
-	lastInNamespace := false
+func (s *streamConnPool) delete(stream *daprdStream) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -110,11 +109,8 @@ func (s *streamConnPool) delete(stream *daprdStream) bool {
 		delete(s.reverseLookup, stream.stream)
 		if len(streams) == 0 {
 			delete(s.streams, stream.hostNamespace)
-			lastInNamespace = true
 		}
 	}
-
-	return lastInNamespace
 }
 
 func (s *streamConnPool) getStreamCount(namespace string) int {

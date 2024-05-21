@@ -242,8 +242,6 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	defer func() {
 		// Runs when a stream is disconnected or when the placement service loses leadership
 		p.streamConnGroup.Done()
-		// Delete the stream from the pool. If it's the last stream in the namespace,
-		// delete the namespace from the maps.
 		p.streamConnPool.delete(daprStream)
 	}()
 
