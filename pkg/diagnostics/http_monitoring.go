@@ -331,7 +331,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		respSize := int64(rw.Size())
 
 		var method string
-		if h.legacy {
+		if h.legacy || h.pathNormalization.enabled {
 			method = r.Method
 		} else {
 			// Check if the context contains a MethodName method
