@@ -84,6 +84,7 @@ ifeq ($(LOCAL_OS),Linux)
    TARGET_OS_LOCAL = linux
 else ifeq ($(LOCAL_OS),Darwin)
    TARGET_OS_LOCAL = darwin
+   PATH := $(PATH):$(HOME)/go/bin/darwin_$(GOARCH)
 else
    TARGET_OS_LOCAL = windows
    PROTOC_GEN_GO_NAME := "protoc-gen-go.exe"
