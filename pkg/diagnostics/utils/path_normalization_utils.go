@@ -19,7 +19,7 @@ const UnmatchedPath = "/unmatchedpath"
 
 type PathNormalizationRW struct {
 	http.ResponseWriter
-	NormalizedPath *string
+	NormalizedPath string
 }
 
 func (w *PathNormalizationRW) WriteHeader(statusCode int) {

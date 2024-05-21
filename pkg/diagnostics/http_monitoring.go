@@ -389,7 +389,7 @@ func (h *httpMetrics) initPathNormalization(config *config.PathNormalization) pa
 				log.Errorf("Failed to cast to PathNormalizationRW")
 				return
 			}
-			*rw.NormalizedPath = diagUtils.UnmatchedPath
+			rw.NormalizedPath = diagUtils.UnmatchedPath
 		}
 	}))
 	for _, pattern := range config.IngressPaths {
@@ -399,7 +399,7 @@ func (h *httpMetrics) initPathNormalization(config *config.PathNormalization) pa
 				log.Errorf("Failed to cast to PathNormalizationRW")
 				return
 			}
-			*rw.NormalizedPath = pattern
+			rw.NormalizedPath = pattern
 		}))
 	}
 
@@ -411,7 +411,7 @@ func (h *httpMetrics) initPathNormalization(config *config.PathNormalization) pa
 				log.Errorf("Failed to cast to PathNormalizationRW")
 				return
 			}
-			*rw.NormalizedPath = diagUtils.UnmatchedPath
+			rw.NormalizedPath = diagUtils.UnmatchedPath
 		}
 	}))
 	for _, pattern := range config.EgressPaths {
@@ -421,7 +421,7 @@ func (h *httpMetrics) initPathNormalization(config *config.PathNormalization) pa
 				log.Errorf("Failed to cast to PathNormalizationRW")
 				return
 			}
-			*rw.NormalizedPath = pattern
+			rw.NormalizedPath = pattern
 		}))
 	}
 	return pn
@@ -446,14 +446,12 @@ func (h *httpMetrics) normalizePath(path string, direction int) (string, bool) {
 		return "", false
 	}
 
-	capturedPath := path
-	crw := &diagUtils.PathNormalizationRW{NormalizedPath: &capturedPath}
-
+	crw := &diagUtils.PathNormalizationRW{NormalizedPath: path}
 	if direction == Ingress {
 		h.pathNormalization.virtualIngressMux.ServeHTTP(crw, req)
 	} else {
 		h.pathNormalization.virtualEgressMux.ServeHTTP(crw, req)
 	}
 
-	return capturedPath, true
+	return crw.NormalizedPath, true
 }
