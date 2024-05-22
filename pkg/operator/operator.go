@@ -75,8 +75,11 @@ type Options struct {
 	WatchdogCanPatchPodLabels           bool
 	TrustAnchorsFile                    string
 	APIPort                             int
+	APIListenAddress                    string
 	HealthzPort                         int
+	HealthzListenAddress                string
 	WebhookServerPort                   int
+	WebhookServerListenAddress          string
 }
 
 type operator struct {
@@ -84,9 +87,10 @@ type operator struct {
 
 	config *Config
 
-	mgr         ctrl.Manager
-	secProvider security.Provider
-	healthzPort int
+	mgr                  ctrl.Manager
+	secProvider          security.Provider
+	healthzPort          int
+	healthzListenAddress string
 }
 
 // NewOperator returns a new Dapr Operator.
@@ -126,6 +130,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		Logger: logr.Discard(),
 		Scheme: scheme,
 		WebhookServer: webhook.NewServer(webhook.Options{
+			Host: opts.WebhookServerListenAddress,
 			Port: opts.WebhookServerPort,
 			TLSOpts: []func(*tls.Config){
 				func(tlsConfig *tls.Config) {
@@ -179,10 +184,11 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}
 
 	return &operator{
-		mgr:         mgr,
-		secProvider: secProvider,
-		config:      config,
-		healthzPort: opts.HealthzPort,
+		mgr:                  mgr,
+		secProvider:          secProvider,
+		config:               config,
+		healthzPort:          opts.HealthzPort,
+		healthzListenAddress: opts.HealthzListenAddress,
 		apiServer: api.NewAPIServer(api.Options{
 			Client:   mgr.GetClient(),
 			Cache:    mgr.GetCache(),
@@ -259,7 +265,7 @@ func (o *operator) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			// start healthz server
-			if rErr := healthzServer.Run(ctx, o.healthzPort); rErr != nil {
+			if rErr := healthzServer.Run(ctx, o.healthzListenAddress, o.healthzPort); rErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", rErr)
 			}
 			return nil
