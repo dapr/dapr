@@ -16,7 +16,7 @@ package placement
 import (
 	"context"
 	"errors"
-	"sync"
+	"sync/atomic"
 	"time"
 )
 
@@ -53,7 +53,7 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 	}
 	var (
 		leaderCh                    = raft.LeaderCh()
-		oneLeaderLoopRun            sync.Once
+		leaderLoopRunning           atomic.Bool
 		loopNotRunning              = make(chan struct{})
 		leaderCtx, leaderLoopCancel = context.WithCancel(ctx)
 	)
@@ -70,17 +70,17 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 			return nil
 		case isLeader := <-leaderCh:
 			if isLeader {
-				oneLeaderLoopRun.Do(func() {
+				if leaderLoopRunning.CompareAndSwap(false, true) {
 					loopNotRunning = make(chan struct{})
 					p.wg.Add(1)
 					go func() {
 						defer p.wg.Done()
 						defer close(loopNotRunning)
+						defer leaderLoopRunning.Store(false)
 						log.Info("Cluster leadership acquired")
 						p.leaderLoop(leaderCtx)
-						oneLeaderLoopRun = sync.Once{}
 					}()
-				})
+				}
 			} else {
 				select {
 				case <-loopNotRunning:
@@ -97,8 +97,8 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 					return nil
 				}
 				log.Info("Cluster leadership lost")
-				leaderCtx, leaderLoopCancel = context.WithCancel(ctx)
-				defer leaderLoopCancel()
+				//leaderCtx, leaderLoopCancel = context.WithCancel(ctx)
+				//defer leaderLoopCancel()
 			}
 		}
 	}
