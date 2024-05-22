@@ -64,4 +64,10 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 		Name: "bar",
 	})
 	require.NoError(t, err)
+
+	_, err = establishStream(t, ctx, client, &v1pb.Host{
+		Name:      "bar",
+		Namespace: "ns1",
+	})
+	require.NoError(t, err)
 }
