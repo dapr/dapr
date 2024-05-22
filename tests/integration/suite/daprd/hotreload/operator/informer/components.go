@@ -120,6 +120,7 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator.WaitUntilRunning(t, ctx)
 	c.daprd1.WaitUntilRunning(t, ctx)
+	c.daprd2.WaitUntilRunning(t, ctx)
 
 	client := util.HTTPClient(t)
 
