@@ -23,18 +23,16 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer //nolint:nosnakecase
-
 type daprdStream struct {
 	id            uint32
 	hostName      string
 	hostID        string
 	hostNamespace string
 	needsVNodes   bool
-	stream        placementGRPCStream
+	stream        placementv1pb.Placement_ReportDaprStatusServer
 }
 
-func newDaprdStream(host *placementv1pb.Host, stream placementGRPCStream) *daprdStream {
+func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_ReportDaprStatusServer) *daprdStream {
 	return &daprdStream{
 		hostID:        host.GetId(),
 		hostName:      host.GetName(),
@@ -72,13 +70,13 @@ type streamConnPool struct {
 
 	// reverseLookup is a reverse index of streams to their daprdStream object.
 	// (so we don't have to loop through all streams to find a specific one)
-	reverseLookup map[placementGRPCStream]*daprdStream
+	reverseLookup map[placementv1pb.Placement_ReportDaprStatusServer]*daprdStream
 }
 
 func newStreamConnPool() *streamConnPool {
 	return &streamConnPool{
 		streams:       make(map[string]map[uint32]*daprdStream),
-		reverseLookup: make(map[placementGRPCStream]*daprdStream),
+		reverseLookup: make(map[placementv1pb.Placement_ReportDaprStatusServer]*daprdStream),
 	}
 }
 
@@ -135,7 +133,7 @@ func (s *streamConnPool) forEachInNamespace(namespace string, fn func(key uint32
 	}
 }
 
-func (s *streamConnPool) getStream(stream placementGRPCStream) (*daprdStream, bool) {
+func (s *streamConnPool) getStream(stream placementv1pb.Placement_ReportDaprStatusServer) (*daprdStream, bool) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -143,7 +141,7 @@ func (s *streamConnPool) getStream(stream placementGRPCStream) (*daprdStream, bo
 	return daprdStream, ok
 }
 
-func hostNeedsVNodes(stream placementGRPCStream) bool {
+func hostNeedsVNodes(stream placementv1pb.Placement_ReportDaprStatusServer) bool {
 	md, ok := metadata.FromIncomingContext(stream.Context())
 	if !ok {
 		return true // default to older versions that need vnodes

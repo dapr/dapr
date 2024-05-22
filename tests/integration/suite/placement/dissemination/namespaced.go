@@ -264,7 +264,7 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 				}
 				if msgNumber == 2 {
 					assert.Len(c, placementTables.GetEntries(), 5)
-					assert.Contains(c, placementTables.GetEntries(), "actor2-")
+					assert.Contains(c, placementTables.GetEntries(), "actor2")
 					assert.Contains(c, placementTables.GetEntries(), "actor3")
 					assert.Contains(c, placementTables.GetEntries(), "actor4")
 					assert.Contains(c, placementTables.GetEntries(), "actor5")

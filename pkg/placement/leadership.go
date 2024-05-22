@@ -97,8 +97,6 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 					return nil
 				}
 				log.Info("Cluster leadership lost")
-				//leaderCtx, leaderLoopCancel = context.WithCancel(ctx)
-				//defer leaderLoopCancel()
 			}
 		}
 	}
