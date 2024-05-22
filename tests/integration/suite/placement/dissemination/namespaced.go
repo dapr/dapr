@@ -89,18 +89,19 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 				}
 				msgNumber++
 				if msgNumber == 1 {
-					require.Empty(c, placementTables.GetEntries())
+					assert.Empty(c, placementTables.GetEntries())
 				}
 				if msgNumber == 2 {
-					require.Len(c, placementTables.GetEntries(), 2)
-					require.Contains(c, placementTables.GetEntries(), "actor1")
-					require.Contains(c, placementTables.GetEntries(), "actor10")
+					assert.Len(c, placementTables.GetEntries(), 2)
+					assert.Contains(c, placementTables.GetEntries(), "actor1")
+					assert.Contains(c, placementTables.GetEntries(), "actor10")
 
 					entry, ok := placementTables.GetEntries()["actor10"]
-					require.True(c, ok)
-					loadMap := entry.GetLoadMap()
-					require.Len(c, loadMap, 1)
-					require.Contains(c, loadMap, host1.GetName())
+					if assert.True(c, ok) {
+						loadMap := entry.GetLoadMap()
+						assert.Len(c, loadMap, 1)
+						assert.Contains(c, loadMap, host1.GetName())
+					}
 				}
 			}
 
@@ -122,19 +123,20 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 					assert.Empty(c, placementTables.GetEntries())
 				}
 				if msgNumber == 2 {
-					require.Len(c, placementTables.GetEntries(), 6)
-					require.Contains(c, placementTables.GetEntries(), "actor2")
-					require.Contains(c, placementTables.GetEntries(), "actor3")
-					require.Contains(c, placementTables.GetEntries(), "actor4")
-					require.Contains(c, placementTables.GetEntries(), "actor5")
-					require.Contains(c, placementTables.GetEntries(), "actor6")
-					require.Contains(c, placementTables.GetEntries(), "actor10")
+					assert.Len(c, placementTables.GetEntries(), 6)
+					assert.Contains(c, placementTables.GetEntries(), "actor2")
+					assert.Contains(c, placementTables.GetEntries(), "actor3")
+					assert.Contains(c, placementTables.GetEntries(), "actor4")
+					assert.Contains(c, placementTables.GetEntries(), "actor5")
+					assert.Contains(c, placementTables.GetEntries(), "actor6")
+					assert.Contains(c, placementTables.GetEntries(), "actor10")
 
 					entry, ok := placementTables.GetEntries()["actor10"]
-					require.True(c, ok)
-					loadMap := entry.GetLoadMap()
-					require.Len(c, loadMap, 1)
-					require.Contains(c, loadMap, host3.GetName())
+					if assert.True(c, ok) {
+						loadMap := entry.GetLoadMap()
+						assert.Len(c, loadMap, 1)
+						assert.Contains(c, loadMap, host3.GetName())
+					}
 				}
 			}
 			assert.Equal(c, 2, msgNumber)
@@ -156,19 +158,20 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 					// because of the dissemination interval
 				}
 				if msgNumber == 2 {
-					require.Len(c, placementTables.GetEntries(), 6)
-					require.Contains(c, placementTables.GetEntries(), "actor2")
-					require.Contains(c, placementTables.GetEntries(), "actor3")
-					require.Contains(c, placementTables.GetEntries(), "actor4")
-					require.Contains(c, placementTables.GetEntries(), "actor5")
-					require.Contains(c, placementTables.GetEntries(), "actor6")
-					require.Contains(c, placementTables.GetEntries(), "actor10")
+					assert.Len(c, placementTables.GetEntries(), 6)
+					assert.Contains(c, placementTables.GetEntries(), "actor2")
+					assert.Contains(c, placementTables.GetEntries(), "actor3")
+					assert.Contains(c, placementTables.GetEntries(), "actor4")
+					assert.Contains(c, placementTables.GetEntries(), "actor5")
+					assert.Contains(c, placementTables.GetEntries(), "actor6")
+					assert.Contains(c, placementTables.GetEntries(), "actor10")
 
 					entry, ok := placementTables.GetEntries()["actor10"]
-					require.True(c, ok)
-					loadMap := entry.GetLoadMap()
-					require.Len(c, loadMap, 1)
-					require.Contains(c, loadMap, host3.GetName())
+					if assert.True(c, ok) {
+						loadMap := entry.GetLoadMap()
+						assert.Len(c, loadMap, 1)
+						assert.Contains(c, loadMap, host3.GetName())
+					}
 				}
 			}
 			assert.Equal(c, 2, msgNumber)
@@ -238,8 +241,8 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 					assert.Empty(t, placementTables.GetEntries())
 				}
 				if msgNumber == 2 {
-					require.Len(t, placementTables.GetEntries(), 1)
-					require.Contains(t, placementTables.GetEntries(), "actor1")
+					assert.Len(t, placementTables.GetEntries(), 1)
+					assert.Contains(t, placementTables.GetEntries(), "actor1")
 				}
 			}
 			assert.Equal(t, 2, msgNumber)
@@ -260,12 +263,12 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 					assert.Empty(c, placementTables.GetEntries())
 				}
 				if msgNumber == 2 {
-					require.Len(c, placementTables.GetEntries(), 5)
-					require.Contains(c, placementTables.GetEntries(), "actor2")
-					require.Contains(c, placementTables.GetEntries(), "actor3")
-					require.Contains(c, placementTables.GetEntries(), "actor4")
-					require.Contains(c, placementTables.GetEntries(), "actor5")
-					require.Contains(c, placementTables.GetEntries(), "actor6")
+					assert.Len(c, placementTables.GetEntries(), 5)
+					assert.Contains(c, placementTables.GetEntries(), "actor2-")
+					assert.Contains(c, placementTables.GetEntries(), "actor3")
+					assert.Contains(c, placementTables.GetEntries(), "actor4")
+					assert.Contains(c, placementTables.GetEntries(), "actor5")
+					assert.Contains(c, placementTables.GetEntries(), "actor6")
 				}
 			}
 			assert.Equal(c, 2, msgNumber)
@@ -287,12 +290,12 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 					// because of the dissemination interval
 				}
 				if msgNumber == 2 {
-					require.Len(c, placementTables.GetEntries(), 5)
-					require.Contains(c, placementTables.GetEntries(), "actor2")
-					require.Contains(c, placementTables.GetEntries(), "actor3")
-					require.Contains(c, placementTables.GetEntries(), "actor4")
-					require.Contains(c, placementTables.GetEntries(), "actor5")
-					require.Contains(c, placementTables.GetEntries(), "actor6")
+					assert.Len(c, placementTables.GetEntries(), 5)
+					assert.Contains(c, placementTables.GetEntries(), "actor2")
+					assert.Contains(c, placementTables.GetEntries(), "actor3")
+					assert.Contains(c, placementTables.GetEntries(), "actor4")
+					assert.Contains(c, placementTables.GetEntries(), "actor5")
+					assert.Contains(c, placementTables.GetEntries(), "actor6")
 				}
 			}
 			assert.Equal(c, 2, msgNumber)
