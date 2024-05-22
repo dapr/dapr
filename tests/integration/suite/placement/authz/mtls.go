@@ -110,6 +110,14 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	require.Error(t, err)
 	require.Equal(t, codes.PermissionDenied, status.Code(err))
 
+	// Older sidecars (pre 1.4) will not send the namespace in the message.
+	// In this case the namespace is inferred from the SPIFFE ID.
+	_, err = establishStream(t, ctx, client, &v1pb.Host{
+		Id:        "app-1",
+		Namespace: "",
+	})
+	require.NoError(t, err)
+
 	// The namespace id in the message and SPIFFE ID should match
 	_, err = establishStream(t, ctx, client, &v1pb.Host{
 		Id:        "app-1",
