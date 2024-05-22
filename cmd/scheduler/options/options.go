@@ -28,8 +28,9 @@ import (
 )
 
 type Options struct {
-	Port        int
-	HealthzPort int
+	Port                 int
+	HealthzPort          int
+	HealthzListenAddress string
 
 	ListenAddress    string
 	TLSEnabled       bool
@@ -80,6 +81,7 @@ func New(origArgs []string) (*Options, error) {
 
 	fs.IntVar(&opts.Port, "port", 50006, "The port for the scheduler server to listen on")
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
+	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 
 	fs.StringVar(&opts.ListenAddress, "listen-address", "127.0.0.1", "The address for the Scheduler to listen on")
 	fs.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the scheduler gRPC server")

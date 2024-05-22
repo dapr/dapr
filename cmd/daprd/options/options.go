@@ -66,7 +66,7 @@ type Options struct {
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
 	RemindersService              string
-	SchedulerAddress             []string
+	SchedulerAddress              []string
 	DaprAPIListenAddresses        string
 	AppHealthProbeInterval        int
 	AppHealthProbeTimeout         int

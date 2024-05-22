@@ -104,7 +104,7 @@ func Run() {
 		func(ctx context.Context) error {
 			healthzServer := health.NewServer(health.Options{Log: log})
 			healthzServer.Ready()
-			if healthzErr := healthzServer.Run(ctx, opts.HealthzPort); healthzErr != nil {
+			if healthzErr := healthzServer.Run(ctx, opts.HealthzListenAddress, opts.HealthzPort); healthzErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", healthzErr)
 			}
 			return nil

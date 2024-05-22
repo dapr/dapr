@@ -97,7 +97,7 @@ type Config struct {
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
 	RemindersService              string
-	SchedulerAddress             []string
+	SchedulerAddress              []string
 	DaprAPIListenAddresses        string
 	AppHealthProbeInterval        int
 	AppHealthProbeTimeout         int
@@ -306,7 +306,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		blockShutdownDuration:     c.DaprBlockShutdownDuration,
 		actorsService:             c.ActorsService,
 		remindersService:          c.RemindersService,
-		schedulerAddress:      	   c.SchedulerAddress,
+		schedulerAddress:          c.SchedulerAddress,
 		publicListenAddress:       c.DaprPublicListenAddress,
 		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
 	}
