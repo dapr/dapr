@@ -189,22 +189,22 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			require.NoError(c, err)
-			require.Equal(t, "OK1", string(val1.GetData()))
+			assert.NoError(c, err)
+			assert.Equal(t, "OK1", string(val1.GetData()))
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 				ActorType: "actor2",
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			require.Error(c, err)
+			assert.Error(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 				ActorType: "actor3",
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			require.Error(c, err)
+			assert.Error(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 				ActorType: "inexistant-actor",
@@ -212,7 +212,7 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 				Method:    "foo",
 			})
 			//nolint:testifylint
-			require.Error(c, err, err)
+			assert.Error(c, err, err)
 		}, time.Second*20, time.Millisecond*10, "actor not ready")
 	})
 
@@ -225,22 +225,22 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			require.NoError(c, err)
-			require.Equal(t, "OK3", string(val2.GetData()))
+			assert.NoError(c, err)
+			assert.Equal(t, "OK3", string(val2.GetData()))
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 				ActorType: "actor2",
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			require.NoError(c, err)
+			assert.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 				ActorType: "actor3",
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			require.NoError(c, err)
+			assert.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 				ActorType: "inexistant-actor",
@@ -248,7 +248,7 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 				Method:    "foo",
 			})
 			//nolint:testifylint
-			require.Error(c, err, err)
+			assert.Error(c, err, err)
 		}, time.Second*20, time.Millisecond*10, "actors not ready")
 	})
 
@@ -261,22 +261,22 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			require.NoError(c, err)
-			require.Equal(t, "OK3", string(val3.GetData()))
+			assert.NoError(c, err)
+			assert.Equal(t, "OK3", string(val3.GetData()))
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 				ActorType: "actor2",
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			require.NoError(c, err)
+			assert.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 				ActorType: "actor3",
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			require.NoError(c, err)
+			assert.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 				ActorType: "inexistant-actor",
@@ -284,12 +284,14 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 				Method:    "foo",
 			})
 			//nolint:testifylint
-			require.Error(c, err, err)
+			assert.Error(c, err, err)
 		}, time.Second*20, time.Millisecond*10, "actors not ready")
 	})
 }
 
 func getClient(t *testing.T, ctx context.Context, addr string) rtv1.DaprClient {
+	t.Helper()
+
 	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })

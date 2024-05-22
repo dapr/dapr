@@ -79,7 +79,7 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 
 		// Host 1
 		msgNumber := 0
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			select {
 			case <-ctx.Done():
 				return
@@ -89,25 +89,27 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 				}
 				msgNumber++
 				if msgNumber == 1 {
-					require.Empty(t, placementTables.GetEntries())
+					require.Empty(c, placementTables.GetEntries())
 				}
 				if msgNumber == 2 {
-					require.Len(t, placementTables.GetEntries(), 2)
-					require.Contains(t, placementTables.GetEntries(), "actor1")
-					require.Contains(t, placementTables.GetEntries(), "actor10")
+					require.Len(c, placementTables.GetEntries(), 2)
+					require.Contains(c, placementTables.GetEntries(), "actor1")
+					require.Contains(c, placementTables.GetEntries(), "actor10")
 
-					loadMap := placementTables.GetEntries()["actor10"].GetLoadMap()
-					require.Len(t, loadMap, 1)
-					require.Contains(t, loadMap, host1.GetName())
+					entry, ok := placementTables.GetEntries()["actor10"]
+					require.True(c, ok)
+					loadMap := entry.GetLoadMap()
+					require.Len(c, loadMap, 1)
+					require.Contains(c, loadMap, host1.GetName())
 				}
 			}
 
-			assert.Equal(t, 2, msgNumber)
+			assert.Equal(c, 2, msgNumber)
 		}, 10*time.Second, 10*time.Millisecond)
 
 		// Host 2
 		msgNumber = 0
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			select {
 			case <-ctx.Done():
 				return
@@ -117,28 +119,30 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 				}
 				msgNumber++
 				if msgNumber == 1 {
-					assert.Empty(t, placementTables.GetEntries())
+					assert.Empty(c, placementTables.GetEntries())
 				}
 				if msgNumber == 2 {
-					require.Len(t, placementTables.GetEntries(), 6)
-					require.Contains(t, placementTables.GetEntries(), "actor2")
-					require.Contains(t, placementTables.GetEntries(), "actor3")
-					require.Contains(t, placementTables.GetEntries(), "actor4")
-					require.Contains(t, placementTables.GetEntries(), "actor5")
-					require.Contains(t, placementTables.GetEntries(), "actor6")
-					require.Contains(t, placementTables.GetEntries(), "actor10")
+					require.Len(c, placementTables.GetEntries(), 6)
+					require.Contains(c, placementTables.GetEntries(), "actor2")
+					require.Contains(c, placementTables.GetEntries(), "actor3")
+					require.Contains(c, placementTables.GetEntries(), "actor4")
+					require.Contains(c, placementTables.GetEntries(), "actor5")
+					require.Contains(c, placementTables.GetEntries(), "actor6")
+					require.Contains(c, placementTables.GetEntries(), "actor10")
 
-					loadMap := placementTables.GetEntries()["actor10"].GetLoadMap()
-					require.Len(t, loadMap, 1)
-					require.Contains(t, loadMap, host3.GetName())
+					entry, ok := placementTables.GetEntries()["actor10"]
+					require.True(c, ok)
+					loadMap := entry.GetLoadMap()
+					require.Len(c, loadMap, 1)
+					require.Contains(c, loadMap, host3.GetName())
 				}
 			}
-			assert.Equal(t, 2, msgNumber)
+			assert.Equal(c, 2, msgNumber)
 		}, 10*time.Second, 10*time.Millisecond)
 
 		// Host 3
 		msgNumber = 0
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			select {
 			case <-ctx.Done():
 				return
@@ -152,20 +156,22 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 					// because of the dissemination interval
 				}
 				if msgNumber == 2 {
-					require.Len(t, placementTables.GetEntries(), 6)
-					require.Contains(t, placementTables.GetEntries(), "actor2")
-					require.Contains(t, placementTables.GetEntries(), "actor3")
-					require.Contains(t, placementTables.GetEntries(), "actor4")
-					require.Contains(t, placementTables.GetEntries(), "actor5")
-					require.Contains(t, placementTables.GetEntries(), "actor6")
-					require.Contains(t, placementTables.GetEntries(), "actor10")
+					require.Len(c, placementTables.GetEntries(), 6)
+					require.Contains(c, placementTables.GetEntries(), "actor2")
+					require.Contains(c, placementTables.GetEntries(), "actor3")
+					require.Contains(c, placementTables.GetEntries(), "actor4")
+					require.Contains(c, placementTables.GetEntries(), "actor5")
+					require.Contains(c, placementTables.GetEntries(), "actor6")
+					require.Contains(c, placementTables.GetEntries(), "actor10")
 
-					loadMap := placementTables.GetEntries()["actor10"].GetLoadMap()
-					require.Len(t, loadMap, 1)
-					require.Contains(t, loadMap, host3.GetName())
+					entry, ok := placementTables.GetEntries()["actor10"]
+					require.True(c, ok)
+					loadMap := entry.GetLoadMap()
+					require.Len(c, loadMap, 1)
+					require.Contains(c, loadMap, host3.GetName())
 				}
 			}
-			assert.Equal(t, 2, msgNumber)
+			assert.Equal(c, 2, msgNumber)
 		}, 10*time.Second, 10*time.Millisecond)
 
 		cancel3() // Disconnect host 3
@@ -241,7 +247,7 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 
 		// Host 2
 		msgNumber = 0
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			select {
 			case <-ctx.Done():
 				return
@@ -251,23 +257,23 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 				}
 				msgNumber++
 				if msgNumber == 1 {
-					assert.Empty(t, placementTables.GetEntries())
+					assert.Empty(c, placementTables.GetEntries())
 				}
 				if msgNumber == 2 {
-					require.Len(t, placementTables.GetEntries(), 5)
-					require.Contains(t, placementTables.GetEntries(), "actor2")
-					require.Contains(t, placementTables.GetEntries(), "actor3")
-					require.Contains(t, placementTables.GetEntries(), "actor4")
-					require.Contains(t, placementTables.GetEntries(), "actor5")
-					require.Contains(t, placementTables.GetEntries(), "actor6")
+					require.Len(c, placementTables.GetEntries(), 5)
+					require.Contains(c, placementTables.GetEntries(), "actor2")
+					require.Contains(c, placementTables.GetEntries(), "actor3")
+					require.Contains(c, placementTables.GetEntries(), "actor4")
+					require.Contains(c, placementTables.GetEntries(), "actor5")
+					require.Contains(c, placementTables.GetEntries(), "actor6")
 				}
 			}
-			assert.Equal(t, 2, msgNumber)
+			assert.Equal(c, 2, msgNumber)
 		}, 10*time.Second, 10*time.Millisecond)
 
 		// Host 3
 		msgNumber = 0
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			select {
 			case <-ctx.Done():
 				return
@@ -281,21 +287,21 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 					// because of the dissemination interval
 				}
 				if msgNumber == 2 {
-					require.Len(t, placementTables.GetEntries(), 5)
-					require.Contains(t, placementTables.GetEntries(), "actor2")
-					require.Contains(t, placementTables.GetEntries(), "actor3")
-					require.Contains(t, placementTables.GetEntries(), "actor4")
-					require.Contains(t, placementTables.GetEntries(), "actor5")
-					require.Contains(t, placementTables.GetEntries(), "actor6")
+					require.Len(c, placementTables.GetEntries(), 5)
+					require.Contains(c, placementTables.GetEntries(), "actor2")
+					require.Contains(c, placementTables.GetEntries(), "actor3")
+					require.Contains(c, placementTables.GetEntries(), "actor4")
+					require.Contains(c, placementTables.GetEntries(), "actor5")
+					require.Contains(c, placementTables.GetEntries(), "actor6")
 				}
 			}
-			assert.Equal(t, 2, msgNumber)
+			assert.Equal(c, 2, msgNumber)
 		}, 10*time.Second, 10*time.Millisecond)
 
 		cancel3() // Disconnect host 3
 
 		// Host 2
-		require.EventuallyWithT(t, func(t *assert.CollectT) {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			select {
 			case <-ctx.Done():
 				return
@@ -304,9 +310,9 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 					return
 				}
 
-				assert.Len(t, placementTables.GetEntries(), 2)
-				assert.Contains(t, placementTables.GetEntries(), "actor2")
-				assert.Contains(t, placementTables.GetEntries(), "actor3")
+				assert.Len(c, placementTables.GetEntries(), 2)
+				assert.Contains(c, placementTables.GetEntries(), "actor2")
+				assert.Contains(c, placementTables.GetEntries(), "actor3")
 			}
 		}, 10*time.Second, 10*time.Millisecond)
 	})
