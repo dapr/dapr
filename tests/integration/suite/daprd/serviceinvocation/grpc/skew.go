@@ -25,7 +25,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/suite"
 	testpb "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc/proto"
 )
@@ -61,7 +60,7 @@ func (s *skew) Setup(t *testing.T) []framework.Option {
 	s.daprd2 = daprd.New(t,
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srv2.Port(t)),
-		daprd.WithExecOptions(exec.WithVersion(t, "v1.13")),
+		daprd.WithVersion(t, "v1.13"),
 	)
 
 	return []framework.Option{

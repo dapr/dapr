@@ -61,11 +61,20 @@ type options struct {
 	blockShutdownDuration   *string
 	controlPlaneTrustDomain *string
 	schedulerAddresses      []string
+	version                 *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
 		o.execOpts = append(o.execOpts, execOptions...)
+	}
+}
+
+func WithVersion(t *testing.T, version string) Option {
+	return func(o *options) {
+		require.Nil(t, o.version)
+		o.version = &version
+		WithExecOptions(exec.WithVersion(t, "v1.13"))(o)
 	}
 }
 

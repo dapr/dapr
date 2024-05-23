@@ -24,7 +24,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -50,7 +49,7 @@ func (s *skew) Setup(t *testing.T) []framework.Option {
 	s.daprd1 = daprd.New(t, daprd.WithAppPort(srv.Port()))
 	s.daprd2 = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
-		daprd.WithExecOptions(exec.WithVersion(t, "v1.13")),
+		daprd.WithVersion(t, "v1.13"),
 	)
 
 	return []framework.Option{

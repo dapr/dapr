@@ -31,6 +31,7 @@ import (
 	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/mod/semver"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -102,18 +103,20 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--dapr-grpc-port=" + strconv.Itoa(opts.grpcPort),
 		"--dapr-http-port=" + strconv.Itoa(opts.httpPort),
 		"--dapr-internal-grpc-port=" + strconv.Itoa(opts.internalGRPCPort),
-		"--dapr-internal-grpc-listen-address=127.0.0.1",
-		"--dapr-listen-addresses=127.0.0.1",
 		"--dapr-public-port=" + strconv.Itoa(opts.publicPort),
-		"--dapr-public-listen-address=127.0.0.1",
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
-		"--metrics-listen-address=127.0.0.1",
 		"--profile-port=" + strconv.Itoa(opts.profilePort),
 		"--enable-app-health-check=" + strconv.FormatBool(opts.appHealthCheck),
 		"--app-health-probe-interval=" + strconv.Itoa(opts.appHealthProbeInterval),
 		"--app-health-threshold=" + strconv.Itoa(opts.appHealthProbeThreshold),
 		"--mode=" + opts.mode,
 		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
+	}
+	if opts.version == nil || semver.Compare(*opts.version, "v1.14") >= 0 {
+		args = append(args, "--dapr-internal-grpc-listen-address=127.0.0.1")
+		args = append(args, "--dapr-public-listen-address=127.0.0.1")
+		args = append(args, "--metrics-listen-address=127.0.0.1")
+		args = append(args, "--dapr-listen-addresses=127.0.0.1")
 	}
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
