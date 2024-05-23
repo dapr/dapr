@@ -41,8 +41,8 @@ type Options struct {
 }
 
 type FlagOptions struct {
-	enabled bool
-	port    string
+	enabled       bool
+	port          string
 	listenAddress string
 }
 
