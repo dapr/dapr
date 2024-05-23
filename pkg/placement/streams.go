@@ -47,7 +47,6 @@ func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_Rep
 // The id is a simple auto-incrementing number, for efficiency.
 type streamConnPool struct {
 	lock sync.RWMutex // locks the streams map itself
-	// mutexMap *concurrency.MutexMap // manages locks on elements in the streams map
 
 	// Example representation of streams
 	//	{
