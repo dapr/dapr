@@ -783,6 +783,7 @@ func (a *DaprRuntime) startHTTPServer() error {
 		PubsubAdapter:         a.processor.PubSub(),
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
 		TracingSpec:           a.globalConfig.GetTracingSpec(),
+		MetricSpec:            a.globalConfig.GetMetricsSpec(),
 		MaxRequestBodySize:    int64(a.runtimeConfig.maxRequestBodySize),
 	})
 

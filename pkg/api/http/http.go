@@ -73,6 +73,7 @@ type api struct {
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	readyStatus           bool
 	outboundReadyStatus   bool
+	metricSpec            config.MetricSpec
 	tracingSpec           config.TracingSpec
 	maxRequestBodySize    int64 // In bytes
 }
@@ -114,6 +115,7 @@ type APIOpts struct {
 	PubsubAdapter         runtimePubsub.Adapter
 	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec           config.TracingSpec
+	MetricSpec            config.MetricSpec
 	MaxRequestBodySize    int64 // In bytes
 }
 
@@ -126,6 +128,7 @@ func NewAPI(opts APIOpts) API {
 		pubsubAdapter:         opts.PubsubAdapter,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
+		metricSpec:            opts.MetricSpec,
 		maxRequestBodySize:    opts.MaxRequestBodySize,
 	}
 
