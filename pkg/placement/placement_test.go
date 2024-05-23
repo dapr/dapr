@@ -58,11 +58,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer close(serverStopped)
-<<<<<<< HEAD
-		err := testServer.Run(ctx, "127.0.0.1", strconv.Itoa(port))
-=======
 		err := testServer.Start(ctx)
->>>>>>> 043345811 (Healthz overhaul)
 		if !errors.Is(err, grpc.ErrServerStopped) {
 			require.NoError(t, err)
 		}

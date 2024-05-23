@@ -97,14 +97,10 @@ func Test_Start(t *testing.T) {
 			ControlPlaneTrustDomain: "test.example.com",
 			ControlPlaneNamespace:   "default",
 			MTLSEnabled:             true,
-<<<<<<< HEAD
 			OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
-=======
-			Healthz:                 healthz.New(),
-			OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
->>>>>>> 043345811 (Healthz overhaul)
 				return []*x509.Certificate{workloadCert}, nil
 			},
+			Healthz: healthz.New(),
 		})
 		require.NoError(t, err)
 
@@ -135,7 +131,7 @@ func Test_Start(t *testing.T) {
 		watcherStopped := make(chan struct{})
 		go func() {
 			defer close(watcherStopped)
-			require.NoError(t, p.WatchTrustAnchors(ctx, caBundleCh))
+			sec.WatchTrustAnchors(ctx, caBundleCh)
 		}()
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {

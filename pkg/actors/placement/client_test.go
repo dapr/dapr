@@ -162,14 +162,10 @@ func testSecurity(t *testing.T) security.Handler {
 		ControlPlaneTrustDomain: "test.example.com",
 		ControlPlaneNamespace:   "default",
 		MTLSEnabled:             false,
-<<<<<<< HEAD
 		OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
-=======
-		Healthz:                 healthz.New(),
-		OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
->>>>>>> 043345811 (Healthz overhaul)
 			return []*x509.Certificate{nil}, nil
 		},
+		Healthz: healthz.New(),
 	})
 	require.NoError(t, err)
 	go secP.Run(context.Background())
