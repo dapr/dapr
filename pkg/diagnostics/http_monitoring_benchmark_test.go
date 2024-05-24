@@ -31,7 +31,6 @@ func BenchmarkHTTPMiddlewareLowCardinalityNoPathNormalization(b *testing.B) {
 
 	// act
 	for i := 0; i < b.N; i++ {
-		fmt.Print()
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
 		handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 	}
@@ -51,7 +50,6 @@ func BenchmarkHTTPMiddlewareHighCardinalityNoPathNormalization(b *testing.B) {
 
 	// act
 	for i := 0; i < b.N; i++ {
-		fmt.Print()
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
 		handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 	}
@@ -77,7 +75,6 @@ func BenchmarkHTTPMiddlewareLowCardinalityWithPathNormalization(b *testing.B) {
 
 	// act
 	for i := 0; i < b.N; i++ {
-		fmt.Print()
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
 		handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 	}
@@ -103,7 +100,6 @@ func BenchmarkHTTPMiddlewareHighCardinalityWithPathNormalization(b *testing.B) {
 
 	// act
 	for i := 0; i < b.N; i++ {
-		fmt.Print()
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
 		handler.ServeHTTP(httptest.NewRecorder(), testRequest)
 	}
