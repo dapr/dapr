@@ -292,10 +292,12 @@ func newDaprRuntime(ctx context.Context,
 	)
 
 	if runtimeConfig.SchedulerEnabled() {
-		rt.schedulerClients, err = clients.New(ctx, clients.Options{
+		opts := clients.Options{
 			Addresses: runtimeConfig.schedulerAddress,
 			Security:  sec,
-		})
+		}
+
+		rt.schedulerClients, err = continuouslyRetrySchedulerClient(ctx, opts)
 		if err != nil {
 			return nil, err
 		}
@@ -382,6 +384,23 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 	}
 
 	return a.runnerCloser.Run(ctx)
+}
+
+func continuouslyRetrySchedulerClient(ctx context.Context, opts clients.Options) (*clients.Clients, error) {
+	for {
+		cli, err := clients.New(ctx, opts)
+		if err == nil {
+			return cli, nil
+		}
+
+		log.Errorf("Failed to initialize scheduler clients: %s. Retrying...", err)
+		select {
+		case <-time.After(time.Second):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
+
 }
 
 func getPodName() string {
