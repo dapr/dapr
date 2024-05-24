@@ -1159,37 +1159,6 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 	return nil
 }
 
-func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
-	var loader loader.Loader[subapi.Subscription]
-
-	switch a.runtimeConfig.mode {
-	case modes.KubernetesMode:
-		loader = kubernetes.NewSubscriptions(kubernetes.Options{
-			Client:    a.operatorClient,
-			Namespace: a.namespace,
-			PodName:   a.podName,
-		})
-	case modes.StandaloneMode:
-		loader = disk.NewSubscriptions(a.runtimeConfig.standalone.ResourcesPath...)
-	default:
-		return nil
-	}
-
-	log.Info("Loading Declarative Subscriptions…")
-	subs, err := loader.Load(ctx)
-	if err != nil {
-		return err
-	}
-
-	for _, s := range subs {
-		log.Infof("Found Subscription: %s", s.Name)
-	}
-
-	a.processor.AddPendingSubscription(ctx, subs...)
-
-	return nil
-}
-
 func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
 	log.Info("Waiting for all outstanding http endpoints to be processed…")
 	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
