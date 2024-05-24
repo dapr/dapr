@@ -294,3 +294,9 @@ func WithSocket(t *testing.T, socket *socket.Socket) Option {
 		"DAPR_COMPONENTS_SOCKETS_FOLDER", socket.Directory(),
 	))
 }
+
+func WithAppAPIToken(t *testing.T, token string) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"APP_API_TOKEN", token,
+	))
+}
