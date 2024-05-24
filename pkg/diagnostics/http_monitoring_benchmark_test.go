@@ -12,11 +12,12 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 )
 
-func BenchmarkHTTPMiddlewareLowCardinalityNoPathNormalization(b *testing.B) {
-	requestBody := "fake_requestDaprBody"
-	responseBody := "fake_responseDaprBody"
+const (
+	requestBody  = "fake_requestDaprBody"
+	responseBody = "fake_responseDaprBody"
+)
 
-	// create test httpMetrics
+func BenchmarkHTTPMiddlewareLowCardinalityNoPathNormalization(b *testing.B) {
 	testHTTP := newHTTPMetrics()
 	pathNormalization := &config.PathNormalization{
 		Enabled: false,
@@ -28,7 +29,7 @@ func BenchmarkHTTPMiddlewareLowCardinalityNoPathNormalization(b *testing.B) {
 		w.Write([]byte(responseBody))
 	}))
 
-	// act && assert
+	// act
 	for i := 0; i < b.N; i++ {
 		fmt.Print()
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
@@ -37,10 +38,6 @@ func BenchmarkHTTPMiddlewareLowCardinalityNoPathNormalization(b *testing.B) {
 }
 
 func BenchmarkHTTPMiddlewareHighCardinalityNoPathNormalization(b *testing.B) {
-	requestBody := "fake_requestDaprBody"
-	responseBody := "fake_responseDaprBody"
-
-	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
 	pathNormalization := &config.PathNormalization{
 		Enabled: false,
@@ -52,7 +49,7 @@ func BenchmarkHTTPMiddlewareHighCardinalityNoPathNormalization(b *testing.B) {
 		w.Write([]byte(responseBody))
 	}))
 
-	// act && assert
+	// act
 	for i := 0; i < b.N; i++ {
 		fmt.Print()
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
@@ -61,10 +58,6 @@ func BenchmarkHTTPMiddlewareHighCardinalityNoPathNormalization(b *testing.B) {
 }
 
 func BenchmarkHTTPMiddlewareLowCardinalityWithPathNormalization(b *testing.B) {
-	requestBody := "fake_requestDaprBody"
-	responseBody := "fake_responseDaprBody"
-
-	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
 	pathNormalization := &config.PathNormalization{
 		Enabled: true,
@@ -82,7 +75,7 @@ func BenchmarkHTTPMiddlewareLowCardinalityWithPathNormalization(b *testing.B) {
 		w.Write([]byte(responseBody))
 	}))
 
-	// act && assert
+	// act
 	for i := 0; i < b.N; i++ {
 		fmt.Print()
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
@@ -91,10 +84,6 @@ func BenchmarkHTTPMiddlewareLowCardinalityWithPathNormalization(b *testing.B) {
 }
 
 func BenchmarkHTTPMiddlewareHighCardinalityWithPathNormalization(b *testing.B) {
-	requestBody := "fake_requestDaprBody"
-	responseBody := "fake_responseDaprBody"
-
-	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
 	pathNormalization := &config.PathNormalization{
 		Enabled: true,
@@ -112,7 +101,7 @@ func BenchmarkHTTPMiddlewareHighCardinalityWithPathNormalization(b *testing.B) {
 		w.Write([]byte(responseBody))
 	}))
 
-	// act && assert
+	// act
 	for i := 0; i < b.N; i++ {
 		fmt.Print()
 		testRequest := fakeOrdersHTTPRequest(requestBody, i)
