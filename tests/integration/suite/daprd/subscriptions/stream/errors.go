@@ -61,11 +61,11 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 	client := e.daprd.GRPCClient(t, ctx)
 
-	stream, err := client.SubscribeTopicEvents(ctx)
+	stream, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
-	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequest{
+	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
 				PubsubName: "", Topic: "a",
 			},
 		},
@@ -76,11 +76,11 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	assert.Contains(t, s.Message(), "pubsubName name is required")
 	require.NoError(t, stream.CloseSend())
 
-	stream, err = client.SubscribeTopicEvents(ctx)
+	stream, err = client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
-	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequest{
+	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
 				PubsubName: "mypub", Topic: "",
 			},
 		},
@@ -91,11 +91,11 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	assert.Contains(t, s.Message(), "topic is required")
 	require.NoError(t, stream.CloseSend())
 
-	stream, err = client.SubscribeTopicEvents(ctx)
+	stream, err = client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
-	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequest{
+	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
@@ -105,11 +105,11 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, e.daprd.GetMetaSubscriptions(c, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
-	streamDupe, err := client.SubscribeTopicEvents(ctx)
+	streamDupe, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
-	require.NoError(t, streamDupe.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequest{
+	require.NoError(t, streamDupe.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
@@ -120,19 +120,19 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	require.True(t, ok)
 	assert.Contains(t, s.Message(), `already subscribed to pubsub "mypub" topic "a"`)
 
-	streamDoubleInit, err := client.SubscribeTopicEvents(ctx)
+	streamDoubleInit, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, streamDoubleInit.CloseSend()) })
-	require.NoError(t, streamDoubleInit.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequest{
+	require.NoError(t, streamDoubleInit.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
 				PubsubName: "mypub", Topic: "b",
 			},
 		},
 	}))
-	require.NoError(t, streamDoubleInit.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequest{
+	require.NoError(t, streamDoubleInit.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
 				PubsubName: "mypub", Topic: "b",
 			},
 		},

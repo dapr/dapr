@@ -60,29 +60,29 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 
 	client := m.daprd.GRPCClient(t, ctx)
 
-	stream1, err := client.SubscribeTopicEvents(ctx)
+	stream1, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
-	require.NoError(t, stream1.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequest{
+	require.NoError(t, stream1.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
 	}))
-	stream2, err := client.SubscribeTopicEvents(ctx)
+	stream2, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
-	require.NoError(t, stream2.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequest{
+	require.NoError(t, stream2.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
 				PubsubName: "mypub", Topic: "b",
 			},
 		},
 	}))
-	stream3, err := client.SubscribeTopicEvents(ctx)
+	stream3, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
-	require.NoError(t, stream3.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequest{
+	require.NoError(t, stream3.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
 				PubsubName: "mypub", Topic: "c",
 			},
 		},
@@ -106,7 +106,7 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	for stream, topic := range map[rtv1.Dapr_SubscribeTopicEventsClient]string{
+	for stream, topic := range map[rtv1.Dapr_SubscribeTopicEventsAlpha1Client]string{
 		stream1: "a",
 		stream2: "b",
 		stream3: "c",

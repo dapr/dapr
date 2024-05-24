@@ -43,7 +43,7 @@ const (
 	Dapr_ExecuteStateTransaction_FullMethodName        = "/dapr.proto.runtime.v1.Dapr/ExecuteStateTransaction"
 	Dapr_PublishEvent_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/PublishEvent"
 	Dapr_BulkPublishEventAlpha1_FullMethodName         = "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1"
-	Dapr_SubscribeTopicEvents_FullMethodName           = "/dapr.proto.runtime.v1.Dapr/SubscribeTopicEvents"
+	Dapr_SubscribeTopicEventsAlpha1_FullMethodName     = "/dapr.proto.runtime.v1.Dapr/SubscribeTopicEventsAlpha1"
 	Dapr_InvokeBinding_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/InvokeBinding"
 	Dapr_GetSecret_FullMethodName                      = "/dapr.proto.runtime.v1.Dapr/GetSecret"
 	Dapr_GetBulkSecret_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/GetBulkSecret"
@@ -115,9 +115,9 @@ type DaprClient interface {
 	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEventAlpha1(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error)
-	// SubscribeTopicEvents subscribes to a PubSub topic and receives topic events
-	// from it.
-	SubscribeTopicEvents(ctx context.Context, opts ...grpc.CallOption) (Dapr_SubscribeTopicEventsClient, error)
+	// SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
+	// events from it.
+	SubscribeTopicEventsAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_SubscribeTopicEventsAlpha1Client, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -306,30 +306,30 @@ func (c *daprClient) BulkPublishEventAlpha1(ctx context.Context, in *BulkPublish
 	return out, nil
 }
 
-func (c *daprClient) SubscribeTopicEvents(ctx context.Context, opts ...grpc.CallOption) (Dapr_SubscribeTopicEventsClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[0], Dapr_SubscribeTopicEvents_FullMethodName, opts...)
+func (c *daprClient) SubscribeTopicEventsAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_SubscribeTopicEventsAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[0], Dapr_SubscribeTopicEventsAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
-	x := &daprSubscribeTopicEventsClient{stream}
+	x := &daprSubscribeTopicEventsAlpha1Client{stream}
 	return x, nil
 }
 
-type Dapr_SubscribeTopicEventsClient interface {
-	Send(*SubscribeTopicEventsRequest) error
+type Dapr_SubscribeTopicEventsAlpha1Client interface {
+	Send(*SubscribeTopicEventsRequestAlpha1) error
 	Recv() (*TopicEventRequest, error)
 	grpc.ClientStream
 }
 
-type daprSubscribeTopicEventsClient struct {
+type daprSubscribeTopicEventsAlpha1Client struct {
 	grpc.ClientStream
 }
 
-func (x *daprSubscribeTopicEventsClient) Send(m *SubscribeTopicEventsRequest) error {
+func (x *daprSubscribeTopicEventsAlpha1Client) Send(m *SubscribeTopicEventsRequestAlpha1) error {
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *daprSubscribeTopicEventsClient) Recv() (*TopicEventRequest, error) {
+func (x *daprSubscribeTopicEventsAlpha1Client) Recv() (*TopicEventRequest, error) {
 	m := new(TopicEventRequest)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
@@ -848,9 +848,9 @@ type DaprServer interface {
 	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
 	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error)
-	// SubscribeTopicEvents subscribes to a PubSub topic and receives topic events
-	// from it.
-	SubscribeTopicEvents(Dapr_SubscribeTopicEventsServer) error
+	// SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
+	// events from it.
+	SubscribeTopicEventsAlpha1(Dapr_SubscribeTopicEventsAlpha1Server) error
 	// Invokes binding data to specific output bindings
 	InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -975,8 +975,8 @@ func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventReques
 func (UnimplementedDaprServer) BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BulkPublishEventAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) SubscribeTopicEvents(Dapr_SubscribeTopicEventsServer) error {
-	return status.Errorf(codes.Unimplemented, "method SubscribeTopicEvents not implemented")
+func (UnimplementedDaprServer) SubscribeTopicEventsAlpha1(Dapr_SubscribeTopicEventsAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeTopicEventsAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeBinding not implemented")
@@ -1302,26 +1302,26 @@ func _Dapr_BulkPublishEventAlpha1_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
-func _Dapr_SubscribeTopicEvents_Handler(srv interface{}, stream grpc.ServerStream) error {
-	return srv.(DaprServer).SubscribeTopicEvents(&daprSubscribeTopicEventsServer{stream})
+func _Dapr_SubscribeTopicEventsAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaprServer).SubscribeTopicEventsAlpha1(&daprSubscribeTopicEventsAlpha1Server{stream})
 }
 
-type Dapr_SubscribeTopicEventsServer interface {
+type Dapr_SubscribeTopicEventsAlpha1Server interface {
 	Send(*TopicEventRequest) error
-	Recv() (*SubscribeTopicEventsRequest, error)
+	Recv() (*SubscribeTopicEventsRequestAlpha1, error)
 	grpc.ServerStream
 }
 
-type daprSubscribeTopicEventsServer struct {
+type daprSubscribeTopicEventsAlpha1Server struct {
 	grpc.ServerStream
 }
 
-func (x *daprSubscribeTopicEventsServer) Send(m *TopicEventRequest) error {
+func (x *daprSubscribeTopicEventsAlpha1Server) Send(m *TopicEventRequest) error {
 	return x.ServerStream.SendMsg(m)
 }
 
-func (x *daprSubscribeTopicEventsServer) Recv() (*SubscribeTopicEventsRequest, error) {
-	m := new(SubscribeTopicEventsRequest)
+func (x *daprSubscribeTopicEventsAlpha1Server) Recv() (*SubscribeTopicEventsRequestAlpha1, error) {
+	m := new(SubscribeTopicEventsRequestAlpha1)
 	if err := x.ServerStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -2352,8 +2352,8 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 	},
 	Streams: []grpc.StreamDesc{
 		{
-			StreamName:    "SubscribeTopicEvents",
-			Handler:       _Dapr_SubscribeTopicEvents_Handler,
+			StreamName:    "SubscribeTopicEventsAlpha1",
+			Handler:       _Dapr_SubscribeTopicEventsAlpha1_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
 		},

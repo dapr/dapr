@@ -20,7 +20,7 @@ import (
 // SubscribeTopicEvents is called by the Dapr runtime to ad hoc stream
 // subscribe to topics. If gRPC API server closes, returns func early with nil
 // to close stream.
-func (a *api) SubscribeTopicEvents(stream runtimev1pb.Dapr_SubscribeTopicEventsServer) error {
+func (a *api) SubscribeTopicEventsAlpha1(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1Server) error {
 	errCh := make(chan error, 2)
 	subDone := make(chan struct{})
 	a.wg.Add(2)

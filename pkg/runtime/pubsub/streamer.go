@@ -18,5 +18,5 @@ import (
 )
 
 type Streamer interface {
-	Subscribe(rtv1pb.Dapr_SubscribeTopicEventsServer) error
+	Subscribe(rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server) error
 }

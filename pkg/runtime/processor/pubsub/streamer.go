@@ -39,7 +39,7 @@ type streamer struct {
 	lock sync.RWMutex
 }
 
-func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsServer) error {
+func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server) error {
 	ireq, err := stream.Recv()
 	if err != nil {
 		return err
@@ -68,7 +68,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsServer) erro
 
 	conn := &streamconn{
 		stream:           stream,
-		publishResponses: make(map[string]chan *rtv1pb.SubscribeTopicEventsResponse),
+		publishResponses: make(map[string]chan *rtv1pb.SubscribeTopicEventsResponseAlpha1),
 		s:                s,
 	}
 	s.subscribers[key] = conn
@@ -174,7 +174,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 		return true, err
 	}
 
-	var resp *rtv1pb.SubscribeTopicEventsResponse
+	var resp *rtv1pb.SubscribeTopicEventsResponseAlpha1
 	select {
 	case <-ctx.Done():
 		return true, ctx.Err()

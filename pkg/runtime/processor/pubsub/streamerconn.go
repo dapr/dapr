@@ -23,11 +23,11 @@ import (
 type streamconn struct {
 	lock             sync.RWMutex
 	s                *streamer
-	publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsResponse
-	stream           rtv1pb.Dapr_SubscribeTopicEventsServer
+	publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsResponseAlpha1
+	stream           rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 }
 
-func (s *streamconn) notifyPublishResponse(ctx context.Context, resp *rtv1pb.SubscribeTopicEventsResponse) {
+func (s *streamconn) notifyPublishResponse(ctx context.Context, resp *rtv1pb.SubscribeTopicEventsResponseAlpha1) {
 	s.lock.RLock()
 	ch, ok := s.publishResponses[resp.GetId()]
 	s.lock.RUnlock()
@@ -43,8 +43,8 @@ func (s *streamconn) notifyPublishResponse(ctx context.Context, resp *rtv1pb.Sub
 	}
 }
 
-func (s *streamconn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsResponse, func()) {
-	ch := make(chan *rtv1pb.SubscribeTopicEventsResponse)
+func (s *streamconn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsResponseAlpha1, func()) {
+	ch := make(chan *rtv1pb.SubscribeTopicEventsResponseAlpha1)
 	s.lock.Lock()
 	s.publishResponses[id] = ch
 	s.lock.Unlock()

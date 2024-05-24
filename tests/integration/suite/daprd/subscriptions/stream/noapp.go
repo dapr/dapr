@@ -56,11 +56,11 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 
 	client := n.daprd.GRPCClient(t, ctx)
 
-	stream, err := client.SubscribeTopicEvents(ctx)
+	stream, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
-	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequest{
+	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
@@ -83,9 +83,9 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "mypub", event.GetPubsubName())
 	assert.JSONEq(t, `{"status": "completed"}`, string(event.GetData()))
 
-	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponse{
+	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
+			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
 				Id:     event.GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
 			},

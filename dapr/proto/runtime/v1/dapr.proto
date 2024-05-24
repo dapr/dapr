@@ -59,9 +59,9 @@ service Dapr {
   // Bulk Publishes multiple events to the specified topic.
   rpc BulkPublishEventAlpha1(BulkPublishRequest) returns (BulkPublishResponse) {}
 
-  // SubscribeTopicEvents subscribes to a PubSub topic and receives topic events
-  // from it.
-  rpc SubscribeTopicEvents(stream SubscribeTopicEventsRequest) returns (stream TopicEventRequest) {}
+  // SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
+  // events from it.
+  rpc SubscribeTopicEventsAlpha1(stream SubscribeTopicEventsRequestAlpha1) returns (stream TopicEventRequest) {}
 
   // Invokes binding data to specific output bindings
   rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
@@ -416,20 +416,20 @@ message BulkPublishResponseFailedEntry {
   string error = 2;
 }
 
-// SubscribeTopicEventsRequest is a message containing the details for
+// SubscribeTopicEventsRequestAlpha1 is a message containing the details for
 // subscribing to a topic via streaming.
 // The first message must always be the initial request. All subsequent
 // messages must be event responses.
-message SubscribeTopicEventsRequest {
+message SubscribeTopicEventsRequestAlpha1 {
   oneof subscribe_topic_events_request_type {
-    SubscribeTopicEventsInitialRequest initial_request = 1;
-    SubscribeTopicEventsResponse event_response = 2;
+    SubscribeTopicEventsInitialRequestAlpha1 initial_request = 1;
+    SubscribeTopicEventsResponseAlpha1 event_response = 2;
   }
 }
 
-// SubscribeTopicEventsInitialRequest is the initial message containing the
+// SubscribeTopicEventsInitialRequestAlpha1 is the initial message containing the
 // details for subscribing to a topic via streaming.
-message SubscribeTopicEventsInitialRequest {
+message SubscribeTopicEventsInitialRequestAlpha1 {
   // The name of the pubsub component
   string pubsub_name = 1;
 
@@ -447,9 +447,9 @@ message SubscribeTopicEventsInitialRequest {
   optional string dead_letter_topic = 4;
 }
 
-// SubscribeTopicEventsResponse is a message containing the result of a
+// SubscribeTopicEventsResponseAlpha1 is a message containing the result of a
 // subscription to a topic.
-message SubscribeTopicEventsResponse {
+message SubscribeTopicEventsResponseAlpha1 {
   // id is the unique identifier for the subscription request.
   string id = 1;
 
