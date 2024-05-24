@@ -27,6 +27,7 @@ type connector struct {
 	client   schedulerv1pb.SchedulerClient
 	channels *channels.Channels
 	actors   actors.ActorRuntime
+	isHTTP   bool
 }
 
 // run starts the scheduler connector. Attempts to re-connect to the Scheduler
@@ -55,6 +56,7 @@ func (c *connector) run(ctx context.Context) error {
 		}
 
 		err = (&streamer{
+			isHTTP:   c.isHTTP,
 			stream:   stream,
 			resultCh: make(chan *schedulerv1pb.WatchJobsRequest),
 			actors:   c.actors,

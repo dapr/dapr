@@ -34,6 +34,7 @@ import (
 )
 
 type streamer struct {
+	isHTTP   bool
 	stream   schedulerv1pb.Scheduler_WatchJobsClient
 	resultCh chan *schedulerv1pb.WatchJobsRequest
 
@@ -144,14 +145,30 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
 	}
 
-	statusCode := response.Status().GetCode()
-	switch codes.Code(statusCode) {
-	case codes.OK:
-		log.Debugf("Sent job: %s to app", job.GetName())
-	case codes.NotFound:
-		log.Errorf("non-retriable error returned from app while processing triggered job %v: %s. status code returned: %v", job.GetName(), statusCode)
-	default:
-		log.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
+	// TODO: standardize on the error code returned by both protocol channels,
+	// converting HTTP status codes to gRPC codes
+	if s.isHTTP == true {
+		statusCode := int(response.Status().GetCode())
+		switch {
+		case statusCode >= 200 && statusCode <= 299:
+			log.Debugf("Sent job %s to app", job.GetName())
+		case statusCode == http.StatusNotFound:
+			body, _ := response.RawDataFull()
+			log.Errorf("non-retriable error returned from app while processing triggered job %v: %s. status code returned: %v", job.GetName(), body, statusCode)
+			return nil
+		default:
+			log.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
+		}
+	} else {
+		statusCode := response.Status().GetCode()
+		switch codes.Code(statusCode) {
+		case codes.OK:
+			log.Debugf("Sent job %s to app", job.GetName())
+		case codes.NotFound:
+			log.Errorf("non-retriable error returned from app while processing triggered job %v: %s. status code returned: %v", job.GetName(), statusCode)
+		default:
+			log.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
+		}
 	}
 
 	return nil

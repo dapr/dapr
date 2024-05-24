@@ -305,6 +305,7 @@ func newDaprRuntime(ctx context.Context,
 			AppID:     runtimeConfig.id,
 			Clients:   rt.schedulerClients,
 			Channels:  channels,
+			IsHTTP:    runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
 		})
 		if err != nil {
 			return nil, err
