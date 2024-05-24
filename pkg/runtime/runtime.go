@@ -400,7 +400,6 @@ func continuouslyRetrySchedulerClient(ctx context.Context, opts clients.Options)
 			return nil, ctx.Err()
 		}
 	}
-
 }
 
 func getPodName() string {
