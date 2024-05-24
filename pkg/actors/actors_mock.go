@@ -126,11 +126,11 @@ type MockActors struct {
 	mock.Mock
 }
 
-func (_m *MockActors) Entities() []string {
+func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
 	return nil
 }
 
-func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
+func (_m *MockActors) Entities() []string {
 	return nil
 }
 
@@ -352,11 +352,11 @@ type FailingActors struct {
 	Failure daprt.Failure
 }
 
-func (f *FailingActors) Entities() []string {
+func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
 	return nil
 }
 
-func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
+func (f *FailingActors) Entities() []string {
 	return nil
 }
 

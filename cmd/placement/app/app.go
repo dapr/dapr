@@ -74,7 +74,7 @@ func Run() {
 		SentryAddress:           opts.SentryAddress,
 		ControlPlaneTrustDomain: opts.TrustDomain,
 		ControlPlaneNamespace:   security.CurrentNamespace(),
-		TrustAnchorsFile:        opts.TrustAnchorsFile,
+		TrustAnchorsFile:        &opts.TrustAnchorsFile,
 		AppID:                   "dapr-placement",
 		MTLSEnabled:             opts.TLSEnabled,
 		Mode:                    modes.DaprMode(opts.Mode),

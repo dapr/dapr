@@ -20,8 +20,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -35,6 +33,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -62,7 +61,6 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
-
 	e.placement = placement.New(t,
 		placement.WithEnableTLS(true),
 		placement.WithTrustAnchorsFile(taFile),

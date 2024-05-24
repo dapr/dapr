@@ -75,6 +75,8 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 		daprd.WithSentryAddress(e.sentry.Address()),
 		daprd.WithPlacementAddresses(e.placement.Address()),
 		daprd.WithSchedulerAddresses(e.scheduler.Address()),
+
+		// Enable mTLS
 		daprd.WithEnableMTLS(true),
 	)
 

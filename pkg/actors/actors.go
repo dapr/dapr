@@ -124,8 +124,8 @@ type actorsRuntime struct {
 
 	appChannel         channel.AppChannel
 	placement          internal.PlacementService
-	schedulerClients   *clients.Clients
 	placementEnabled   bool
+	schedulerClients   *clients.Clients
 	grpcConnectionFn   GRPCConnectionFn
 	actorsConfig       Config
 	timers             internal.TimersProvider

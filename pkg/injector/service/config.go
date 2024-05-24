@@ -49,10 +49,10 @@ type Config struct {
 	ControlPlaneTrustDomain string `envconfig:"DAPR_CONTROL_PLANE_TRUST_DOMAIN"`
 	SentryAddress           string `envconfig:"DAPR_SENTRY_ADDRESS"`
 
-	parsedSchedulerEnabled           bool
 	parsedActorsEnabled              bool
 	parsedActorsService              patcher.Service
 	parsedRemindersService           patcher.Service
+	parsedSchedulerEnabled           bool
 	parsedRunAsNonRoot               bool
 	parsedReadOnlyRootFilesystem     bool
 	parsedEnableK8sDownwardAPIs      bool
