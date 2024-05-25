@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"io"
 	"net/http"
-	"runtime"
 	"strings"
 	"testing"
 	"time"
@@ -142,7 +141,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 
 	httpClient := util.HTTPClient(t)
 
-	invokeTests := func(t *testing.T, expTLSCode int, assertBody func(t *testing.T, body string), daprd *procdaprd.Daprd) {
+	invokeTests := func(t *testing.T, expTLSCode int, assertBody func(c *assert.CollectT, body string), daprd *procdaprd.Daprd) {
 		for _, port := range []int{
 			h.daprd1.HTTPPort(),
 			h.daprd2.HTTPPort(),
@@ -215,37 +214,26 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 				{url: fmt.Sprintf("http://localhost:%d/v1.0/invoke/mywebsitetls/method/hello", daprd.HTTPPort())},
 			} {
 				t.Run(fmt.Sprintf("url %d", i), func(t *testing.T) {
-					for {
+					assert.EventuallyWithT(t, func(c *assert.CollectT) {
 						status, body := doReq(http.MethodGet, ts.url, ts.headers)
 						assert.Equal(t, expTLSCode, status)
-						if runtime.GOOS == "windows" &&
-							strings.Contains(body, "An existing connection was forcibly closed by the remote host.") {
-							t.Logf("retrying due to: %s", body)
-							select {
-							case <-ctx.Done():
-								assert.Fail(t, "context done")
-							case <-time.After(time.Millisecond * 100):
-								continue
-							}
-						}
-						assertBody(t, body)
-						break
-					}
+						assertBody(c, body)
+					}, time.Second*5, time.Millisecond*10)
 				})
 			}
 		})
 	}
 
 	t.Run("good PKI", func(t *testing.T) {
-		invokeTests(t, http.StatusOK, func(t *testing.T, body string) {
-			assert.Equal(t, "ok-TLS", body)
+		invokeTests(t, http.StatusOK, func(c *assert.CollectT, body string) {
+			assert.Equal(c, "ok-TLS", body)
 		}, h.daprd1)
 	})
 
 	t.Run("bad PKI", func(t *testing.T) {
-		invokeTests(t, http.StatusInternalServerError, func(t *testing.T, body string) {
-			assert.Contains(t, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
-			assert.Contains(t, body, "tls: unknown certificate authority")
+		invokeTests(t, http.StatusInternalServerError, func(c *assert.CollectT, body string) {
+			assert.Contains(c, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
+			assert.Contains(c, body, "tls: unknown certificate authority")
 		}, h.daprd2)
 	})
 }
