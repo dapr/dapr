@@ -15,7 +15,7 @@ package utils
 
 import "net/http"
 
-const UnmatchedPath = "/unmatchedpath"
+const UnmatchedPathPlaceholder = "_"
 
 type PathNormalizationRW struct {
 	http.ResponseWriter

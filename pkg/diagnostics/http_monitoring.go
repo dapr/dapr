@@ -370,7 +370,7 @@ func (h *httpMetrics) initPathNormalization(config *config.PathNormalization) pa
 				log.Errorf("Failed to cast to PathNormalizationRW")
 				return
 			}
-			rw.NormalizedPath = diagUtils.UnmatchedPath
+			rw.NormalizedPath = diagUtils.UnmatchedPathPlaceholder
 		}
 	}))
 	for _, pattern := range config.IngressPaths {
@@ -392,7 +392,7 @@ func (h *httpMetrics) initPathNormalization(config *config.PathNormalization) pa
 				log.Errorf("Failed to cast to PathNormalizationRW")
 				return
 			}
-			rw.NormalizedPath = diagUtils.UnmatchedPath
+			rw.NormalizedPath = diagUtils.UnmatchedPathPlaceholder
 		}
 	}))
 	for _, pattern := range config.EgressPaths {

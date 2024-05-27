@@ -162,9 +162,9 @@ func TestHTTPMetricsPathNormalizationLowCardinality(t *testing.T) {
 		{Ingress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
 		{Egress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
 		{Ingress, "/items/12345", "/items/{itemID}", true},
-		{Egress, "/items/12345", "/unmatchedpath", true},
-		{Ingress, "/basket/12345", "/unmatchedpath", true},
-		{Ingress, "dapr/config", "/unmatchedpath", true},
+		{Egress, "/items/12345", "_", true},
+		{Ingress, "/basket/12345", "_", true},
+		{Ingress, "dapr/config", "_", true},
 	}
 
 	for _, tc := range tt {
