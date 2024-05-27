@@ -227,8 +227,6 @@ type MetricHTTP struct {
 }
 
 type PathNormalization struct {
-	// If enabled, the path normalization will be applied to the HTTP server metrics.
-	Enabled bool `json:"enabled,omitempty"`
 	// IngressPaths is a list of paths to match for ingress metrics.
 	IngressPaths []string `json:"ingress,omitempty"`
 	// EgressPaths is a list of paths to match for egress metrics.

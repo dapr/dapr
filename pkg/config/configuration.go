@@ -285,7 +285,6 @@ type MetricHTTP struct {
 
 // PathNormalization defines configuration options for path normalization.
 type PathNormalization struct {
-	Enabled      bool     `json:"enabled,omitempty" yaml:"enabled,omitempty"`
 	IngressPaths []string `json:"ingress,omitempty" yaml:"ingress,omitempty"`
 	EgressPaths  []string `json:"egress,omitempty" yaml:"egress,omitempty"`
 }

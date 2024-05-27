@@ -655,41 +655,25 @@ func TestMetricsGetHTTPPathNormalization(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
 				PathNormalization: &PathNormalization{
-					Enabled:      true,
 					IngressPaths: []string{"/resource/1"},
 					EgressPaths:  []string{"/resource/2"},
 				},
 			},
 		}
 		config := m.GetHTTPPathNormalization()
-		assert.True(t, config.Enabled)
 		assert.Equal(t, []string{"/resource/1"}, config.IngressPaths)
 		assert.Equal(t, []string{"/resource/2"}, config.EgressPaths)
-	})
-
-	t.Run("config is disabled", func(t *testing.T) {
-		m := MetricSpec{
-			HTTP: &MetricHTTP{
-				PathNormalization: &PathNormalization{
-					Enabled: false,
-				},
-			},
-		}
-		config := m.GetHTTPPathNormalization()
-		assert.False(t, config.Enabled)
 	})
 
 	t.Run("config is enabled with only ingress", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
 				PathNormalization: &PathNormalization{
-					Enabled:      true,
 					IngressPaths: []string{"/resource/1"},
 				},
 			},
 		}
 		config := m.GetHTTPPathNormalization()
-		assert.True(t, config.Enabled)
 		assert.Equal(t, []string{"/resource/1"}, config.IngressPaths)
 		assert.Nil(t, config.EgressPaths)
 	})

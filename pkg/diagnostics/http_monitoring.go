@@ -355,7 +355,7 @@ func (h *httpMetrics) initPathNormalization(config *config.PathNormalization) pa
 	}
 
 	pn := pathNormalizationConfig{
-		enabled: config.Enabled,
+		enabled: len(config.EgressPaths)+len(config.IngressPaths) > 0,
 	}
 
 	if !pn.enabled {

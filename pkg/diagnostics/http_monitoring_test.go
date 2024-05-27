@@ -91,9 +91,7 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 func TestHTTPMetricsPathNormalizationNotEnabled(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	pathNormalization := &config.PathNormalization{
-		Enabled: false,
-	}
+	pathNormalization := &config.PathNormalization{}
 	testHTTP.Init("fakeID", pathNormalization, true)
 	normalizedPath, ok := testHTTP.normalizePath("/orders", Ingress)
 	require.False(t, ok)
@@ -104,7 +102,6 @@ func TestHTTPMetricsPathNormalizationLegacyIncreasedCardinality(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
 	pathNormalization := &config.PathNormalization{
-		Enabled: true,
 		IngressPaths: []string{
 			"/orders/{orderID}/items/{itemID}",
 			"/orders/{orderID}",
@@ -144,7 +141,6 @@ func TestHTTPMetricsPathNormalizationLowCardinality(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
 	pathNormalization := &config.PathNormalization{
-		Enabled: true,
 		IngressPaths: []string{
 			"/orders/{orderID}/items/{itemID}",
 			"/orders/{orderID}",
@@ -190,9 +186,7 @@ func TestInitPathNormalizationNilConfig(t *testing.T) {
 
 func TestInitPathNormalizationNotEnabled(t *testing.T) {
 	testHTTP := newHTTPMetrics()
-	pathNormalization := &config.PathNormalization{
-		Enabled: false,
-	}
+	pathNormalization := &config.PathNormalization{}
 	config := testHTTP.initPathNormalization(pathNormalization)
 	assert.NotNil(t, config)
 	assert.False(t, config.enabled)
@@ -202,7 +196,6 @@ func TestInitPathNormalization(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
 	pathNormalization := &config.PathNormalization{
-		Enabled: true,
 		IngressPaths: []string{
 			"/orders/{orderID}/items/{itemID}",
 		},

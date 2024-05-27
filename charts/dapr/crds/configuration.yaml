@@ -259,8 +259,6 @@ spec:
                       pathNormalization:
                         description: PathNormalization defines the path normalization configuration for HTTP server metrics.
                         properties:
-                          enabled:
-                            type: boolean
                           ingress:
                             type: array
                             items:
@@ -321,8 +319,6 @@ spec:
                       pathNormalization:
                         description: PathNormalization defines the path normalization configuration for HTTP server metrics.
                         properties:
-                          enabled:
-                            type: boolean
                           ingress:
                             type: array
                             items:

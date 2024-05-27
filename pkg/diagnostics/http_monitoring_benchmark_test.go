@@ -19,9 +19,7 @@ const (
 
 func BenchmarkHTTPMiddlewareLowCardinalityNoPathNormalization(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	pathNormalization := &config.PathNormalization{
-		Enabled: false,
-	}
+	pathNormalization := &config.PathNormalization{}
 	testHTTP.Init("fakeID", pathNormalization, false)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -38,9 +36,7 @@ func BenchmarkHTTPMiddlewareLowCardinalityNoPathNormalization(b *testing.B) {
 
 func BenchmarkHTTPMiddlewareHighCardinalityNoPathNormalization(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	pathNormalization := &config.PathNormalization{
-		Enabled: false,
-	}
+	pathNormalization := &config.PathNormalization{}
 	testHTTP.Init("fakeID", pathNormalization, true)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -58,7 +54,6 @@ func BenchmarkHTTPMiddlewareHighCardinalityNoPathNormalization(b *testing.B) {
 func BenchmarkHTTPMiddlewareLowCardinalityWithPathNormalization(b *testing.B) {
 	testHTTP := newHTTPMetrics()
 	pathNormalization := &config.PathNormalization{
-		Enabled: true,
 		IngressPaths: []string{
 			"/invoke/method/orders/{orderID}",
 		},
@@ -83,7 +78,6 @@ func BenchmarkHTTPMiddlewareLowCardinalityWithPathNormalization(b *testing.B) {
 func BenchmarkHTTPMiddlewareHighCardinalityWithPathNormalization(b *testing.B) {
 	testHTTP := newHTTPMetrics()
 	pathNormalization := &config.PathNormalization{
-		Enabled: true,
 		IngressPaths: []string{
 			"/invoke/method/orders/{orderID}",
 		},
