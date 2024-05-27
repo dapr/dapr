@@ -100,7 +100,7 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 				}
 			}
 
-			//There's only one host in ns1, so we'll receive only one message
+			// There's only one host in ns1, so we'll receive only one message
 			assert.Equal(c, 1, msgCnt)
 		}, 10*time.Second, 10*time.Millisecond)
 
@@ -131,7 +131,7 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 					assert.Contains(c, loadMap, host3.GetName())
 				}
 			}
-			assert.True(c, msgCnt >= 1)
+			assert.GreaterOrEqual(c, msgCnt, 1)
 		}, 10*time.Second, 10*time.Millisecond)
 
 		// Dissemination is done properly on host 3
@@ -161,7 +161,7 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 					assert.Contains(c, loadMap, host3.GetName())
 				}
 			}
-			assert.True(c, msgCnt >= 1)
+			assert.GreaterOrEqual(c, msgCnt, 1)
 		}, 10*time.Second, 10*time.Millisecond)
 
 		cancel3() // Disconnect host 3
@@ -229,7 +229,7 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 				assert.Contains(t, placementTables.GetEntries(), "actor1")
 			}
 
-			//There's only one host in ns1, so we'll receive only one message
+			// There's only one host in ns1, so we'll receive only one message
 			assert.Equal(c, 1, msgCnt)
 		}, 10*time.Second, 10*time.Millisecond)
 
@@ -252,7 +252,7 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 				assert.Contains(c, placementTables.GetEntries(), "actor5")
 				assert.Contains(c, placementTables.GetEntries(), "actor6")
 			}
-			assert.True(c, msgCnt >= 1)
+			assert.GreaterOrEqual(c, msgCnt, 1)
 		}, 10*time.Second, 10*time.Millisecond)
 
 		// Dissemination is done properly on host 3

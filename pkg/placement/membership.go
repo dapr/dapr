@@ -55,7 +55,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 		p.processMembershipCommands(ctx)
 	}()
 
-	faultyHostDetectCh := time.After(faultyHostDetectInitialDuration)
+	faultyHostDetectCh := time.After(faultyHostDetectDuration)
 
 	for {
 		select {
@@ -85,7 +85,6 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 					}
 				}
 				return true
-
 			})
 			faultyHostDetectCh = nil
 		case t := <-disseminateTimer.C():

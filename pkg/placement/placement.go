@@ -56,17 +56,12 @@ const (
 	// reduce the frequency of dissemination, but it will delay the table dissemination.
 	disseminateTimeout = 2 * time.Second
 
-	// faultyHostDetectDuration is the maximum duration when existing host is marked as faulty.
-	// Dapr runtime sends heartbeat every 1 second. Whenever placement server gets the heartbeat,
-	// it updates the last heartbeat time in UpdateAt of the FSM state.
-	//If Now - UpdatedAt exceeds
-	// faultyHostDetectDuration, membershipChangeWorker() tries to remove faulty Dapr runtim/ from
-	// membership.
-	// When placement gets the leadership, faultyHostDetectionDuration will be faultyHostDetectInitialDuration.
-	// This duration will give more time to let each runtime find the leader of placement nodes.
-	// Once the first dissemination happens after getting leadership, membershipChangeWorker will
-	// use faultyHostDetectDefaultDuration.
-	faultyHostDetectInitialDuration = 6 * time.Second
+	// faultyHostDetectDuration is the maximum duration after which a host is considered faulty.
+	// Dapr runtime sends a heartbeat (stored in lastHeartBeat) every second.
+	// When placement failover occurs, the new leader will wait for faultyHostDetectDuration, then
+	// it will loop through all the members in the state and remove the ones that
+	// have not sent a heartbeat
+	faultyHostDetectDuration = 6 * time.Second
 )
 
 type hostMemberChange struct {
