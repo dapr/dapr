@@ -36,11 +36,12 @@ import (
 func cleanupStates(testRaftServer *raft.Server) {
 	state := testRaftServer.FSM().State()
 
-	state.ForEachHost(func(host *raft.DaprHostMember) {
+	state.ForEachHost(func(host *raft.DaprHostMember) bool {
 		testRaftServer.ApplyCommand(raft.MemberRemove, raft.DaprHostMember{
 			Name:      host.Name,
 			Namespace: host.Namespace,
 		})
+		return true
 	})
 }
 
@@ -88,8 +89,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 		conn2, _, stream2 := newTestClient(t, serverAddress)
 		conn3, _, stream3 := newTestClient(t, serverAddress)
 
-		// Receive the first (empty) message and the second message that should contain
-		// the full placement table
 		done := make(chan bool)
 		go func() {
 			cnt := 0
@@ -99,7 +98,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 				if placementOrder.GetOperation() == "unlock" {
 					cnt++
 				}
-				if cnt == 2 {
+				if cnt == 1 {
 					done <- true
 					return
 				}
@@ -168,16 +167,17 @@ func TestMembershipChangeWorker(t *testing.T) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			state := testServer.raftNode.FSM().State()
 			cnt := 0
-			state.ForEachHostInNamespace("ns1", func(host *raft.DaprHostMember) {
+			state.ForEachHostInNamespace("ns1", func(host *raft.DaprHostMember) bool {
 				cnt++
 				assert.Equal(c, "127.0.0.1:50100", host.Name)
 				assert.Equal(c, "ns1", host.Namespace)
 				assert.Contains(c, host.Entities, "actor1", "actor2")
+				return true
 			})
 			assert.Equal(t, 1, cnt)
 
 			cnt = 0
-			state.ForEachHostInNamespace("ns2", func(host *raft.DaprHostMember) {
+			state.ForEachHostInNamespace("ns2", func(host *raft.DaprHostMember) bool {
 				if host.Name == "127.0.0.1:50101" {
 					cnt++
 					assert.Equal(c, "127.0.0.1:50101", host.Name)
@@ -191,6 +191,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 					assert.Equal(c, "ns2", host.Namespace)
 					assert.Contains(c, host.Entities, "actor4")
 				}
+
+				return true
 			})
 			assert.Equal(t, 2, cnt)
 		}, time.Second, time.Millisecond, "the member hasn't been saved in the raft store")

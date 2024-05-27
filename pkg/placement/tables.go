@@ -44,7 +44,7 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 	}
 
 	members := make([]HostInfo, 0, state.MemberCount())
-	state.ForEachHost(func(host *raft.DaprHostMember) {
+	state.ForEachHost(func(host *raft.DaprHostMember) bool {
 		members = append(members, HostInfo{
 			Name:       host.Name,
 			Namespace:  host.Namespace,
@@ -53,6 +53,7 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 			UpdatedAt:  host.UpdatedAt,
 			APILevel:   host.APILevel,
 		})
+		return true
 	})
 	response.HostList = members
 

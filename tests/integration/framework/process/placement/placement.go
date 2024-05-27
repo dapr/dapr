@@ -252,7 +252,7 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 		for {
 			in, err := stream.Recv()
 			if err != nil {
-				if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {
+				if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled || status.Code(err) == codes.FailedPrecondition {
 					return
 				}
 				require.NoError(t, err)

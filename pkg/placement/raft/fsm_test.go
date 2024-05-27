@@ -57,8 +57,9 @@ func TestFSMApply(t *testing.T) {
 		require.Equal(t, 1, fsm.state.NamespaceCount())
 
 		var containsNamespace bool
-		fsm.state.ForEachNamespace(func(ns string, _ *daprNamespace) {
+		fsm.state.ForEachNamespace(func(ns string, _ *daprNamespace) bool {
 			containsNamespace = ns == "ns1"
+			return true
 		})
 		require.True(t, containsNamespace)
 

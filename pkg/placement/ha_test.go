@@ -384,11 +384,12 @@ func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMem
 		state := srv.FSM().State()
 		assert.NotNil(t, state)
 		var ok bool
-		state.ForEachHostInNamespace(expect.Namespace, func(member *raft.DaprHostMember) {
+		state.ForEachHostInNamespace(expect.Namespace, func(member *raft.DaprHostMember) bool {
 			if member.Name == expect.Name {
 				actual = member
 				ok = true
 			}
+			return true
 		})
 
 		return ok && expect.Name == actual.Name &&

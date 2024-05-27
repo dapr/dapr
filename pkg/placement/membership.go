@@ -55,11 +55,39 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 		p.processMembershipCommands(ctx)
 	}()
 
+	faultyHostDetectCh := time.After(faultyHostDetectInitialDuration)
+
 	for {
 		select {
 		case <-ctx.Done():
 			return
 
+		case <-faultyHostDetectCh:
+			// This only runs once when the placement service acquires leadership
+			// It loops through all the members in the raft store that have been connected to the
+			// previous leader and checks if they have already sent a heartbeat. If they haven't,
+			// they're removed from the raft store and the updated table is disseminated
+			p.raftNode.FSM().State().ForEachHost(func(h *raft.DaprHostMember) bool {
+				if !p.hasLeadership.Load() {
+					return false
+				}
+
+				// We only care about the hosts that haven't connected to the new leader
+				// The ones that have connected at some point, but have expired, will be handled
+				// through the disconnect mechanism in ReportDaprStatus
+				_, ok := p.lastHeartBeat.Load(h.NameAndNamespace())
+
+				if !ok {
+					log.Debugf("Try to remove outdated host: %s, no heartbeat record", h.Name)
+					p.membershipCh <- hostMemberChange{
+						cmdType: raft.MemberRemove,
+						host:    raft.DaprHostMember{Name: h.Name, Namespace: h.Namespace},
+					}
+				}
+				return true
+
+			})
+			faultyHostDetectCh = nil
 		case t := <-disseminateTimer.C():
 			// Earlier stop when leadership is lost.
 			if !p.hasLeadership.Load() {

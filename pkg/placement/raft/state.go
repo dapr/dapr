@@ -131,27 +131,36 @@ func (s *DaprHostMemberState) NamespaceCount() int {
 }
 
 // ForEachNamespace loops through all namespaces  and runs the provided function
-func (s *DaprHostMemberState) ForEachNamespace(fn func(string, *daprNamespace)) {
+// Early exit can be achieved by returning false from the provided function
+func (s *DaprHostMemberState) ForEachNamespace(fn func(string, *daprNamespace) bool) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	for namespace, namespaceData := range s.data.Namespace {
-		fn(namespace, namespaceData)
+		if !fn(namespace, namespaceData) {
+			break
+		}
 	}
 }
 
 // ForEachHost loops through hosts across all namespaces  and runs the provided function
-func (s *DaprHostMemberState) ForEachHost(fn func(*DaprHostMember)) {
+// Early exit can be achieved by returning false from the provided function
+func (s *DaprHostMemberState) ForEachHost(fn func(*DaprHostMember) bool) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
+
+outer:
 	for _, ns := range s.data.Namespace {
 		for _, host := range ns.Members {
-			fn(host)
+			if !fn(host) {
+				break outer
+			}
 		}
 	}
 }
 
 // ForEachHostInNamespace loops through all hosts in a namespace and runs the provided function
-func (s *DaprHostMemberState) ForEachHostInNamespace(ns string, fn func(*DaprHostMember)) {
+// Early exit can be achieved by returning false from the provided function
+func (s *DaprHostMemberState) ForEachHostInNamespace(ns string, fn func(*DaprHostMember) bool) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 	n, ok := s.data.Namespace[ns]
@@ -159,7 +168,9 @@ func (s *DaprHostMemberState) ForEachHostInNamespace(ns string, fn func(*DaprHos
 		return
 	}
 	for _, host := range n.Members {
-		fn(host)
+		if !fn(host) {
+			break
+		}
 	}
 }
 

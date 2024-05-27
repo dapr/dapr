@@ -55,6 +55,18 @@ const (
 	// is applied to raft state or each pod is deployed. If we increase disseminateTimeout, it will
 	// reduce the frequency of dissemination, but it will delay the table dissemination.
 	disseminateTimeout = 2 * time.Second
+
+	// faultyHostDetectDuration is the maximum duration when existing host is marked as faulty.
+	// Dapr runtime sends heartbeat every 1 second. Whenever placement server gets the heartbeat,
+	// it updates the last heartbeat time in UpdateAt of the FSM state.
+	//If Now - UpdatedAt exceeds
+	// faultyHostDetectDuration, membershipChangeWorker() tries to remove faulty Dapr runtim/ from
+	// membership.
+	// When placement gets the leadership, faultyHostDetectionDuration will be faultyHostDetectInitialDuration.
+	// This duration will give more time to let each runtime find the leader of placement nodes.
+	// Once the first dissemination happens after getting leadership, membershipChangeWorker will
+	// use faultyHostDetectDefaultDuration.
+	faultyHostDetectInitialDuration = 6 * time.Second
 )
 
 type hostMemberChange struct {
@@ -283,7 +295,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			}
 
 			// Record the heartbeat timestamp. This timestamp is only used for metrics.
-			p.lastHeartBeat.Store(req.GetNamespace()+"-"+req.GetName(), now.UnixNano())
+			p.lastHeartBeat.Store(req.GetNamespace()+"||"+req.GetName(), now.UnixNano())
 
 			// Upsert incoming member only if the existing member info
 			// doesn't match with the incoming member info.
@@ -380,17 +392,19 @@ func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprd
 
 	// If the member is not an actor runtime (len(req.GetEntities()) == 0) we disseminate the tables
 	// If it is, we'll disseminate in the next disseminate interval
-	updateReq := &tablesUpdateRequest{
-		hosts: []daprdStream{*daprStream},
-	}
-	if daprStream.needsVNodes {
-		updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, namespace)
-	} else {
-		updateReq.tables = p.raftNode.FSM().PlacementState(true, namespace)
-	}
-	err = p.performTablesUpdate(context.Background(), updateReq)
-	if err != nil {
-		return registeredMemberID, err
+	if len(req.GetEntities()) == 0 {
+		updateReq := &tablesUpdateRequest{
+			hosts: []daprdStream{*daprStream},
+		}
+		if daprStream.needsVNodes {
+			updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, namespace)
+		} else {
+			updateReq.tables = p.raftNode.FSM().PlacementState(true, namespace)
+		}
+		err = p.performTablesUpdate(context.Background(), updateReq)
+		if err != nil {
+			return registeredMemberID, err
+		}
 	}
 
 	return registeredMemberID, nil
