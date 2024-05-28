@@ -18,7 +18,6 @@ import (
 	"sync"
 
 	rtv1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"google.golang.org/appengine/log"
 )
 
 type conn struct {
