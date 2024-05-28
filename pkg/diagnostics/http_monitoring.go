@@ -76,10 +76,10 @@ type httpMetrics struct {
 	// Enable legacy metrics, which includes the full path
 	legacy bool
 
-	pathNormalization pathNormalizationConfig
+	pathMatching pathMatchingConfig
 }
 
-type pathNormalizationConfig struct {
+type pathMatchingConfig struct {
 	enabled           bool
 	virtualIngressMux *http.ServeMux
 	virtualEgressMux  *http.ServeMux
@@ -145,12 +145,12 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 		return
 	}
 
-	normalizedPath, ok := h.normalizePath(path, Egress)
+	matchedPath, ok := h.matchPath(path, Egress)
 	if ok {
-		path = normalizedPath
+		path = matchedPath
 	}
 
-	if h.legacy || h.pathNormalization.enabled {
+	if h.legacy || h.pathMatching.enabled {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
@@ -186,12 +186,12 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 		return
 	}
 
-	normalizedPath, ok := h.normalizePath(path, Ingress)
+	matchedPath, ok := h.matchPath(path, Ingress)
 	if ok {
-		path = normalizedPath
+		path = matchedPath
 	}
 
-	if h.legacy || h.pathNormalization.enabled {
+	if h.legacy || h.pathMatching.enabled {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method),
@@ -209,12 +209,12 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 		return
 	}
 
-	normalizedPath, ok := h.normalizePath(path, Ingress)
+	matchedPath, ok := h.matchPath(path, Ingress)
 	if ok {
-		path = normalizedPath
+		path = matchedPath
 	}
 
-	if h.legacy || h.pathNormalization.enabled {
+	if h.legacy || h.pathMatching.enabled {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
@@ -261,11 +261,11 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		h.healthProbeRoundTripLatency.M(elapsed))
 }
 
-func (h *httpMetrics) Init(appID string, config *config.PathNormalization, legacy bool) error {
+func (h *httpMetrics) Init(appID string, config *config.PathMatching, legacy bool) error {
 	h.appID = appID
 	h.enabled = true
 	h.legacy = legacy
-	h.pathNormalization = h.initPathNormalization(config)
+	h.pathMatching = h.initPathMatching(config)
 
 	tags := []tag.Key{appIDKey}
 
@@ -277,7 +277,7 @@ func (h *httpMetrics) Init(appID string, config *config.PathNormalization, legac
 	} else {
 		serverTags = []tag.Key{appIDKey, httpMethodKey, httpStatusCodeKey}
 		clientTags = []tag.Key{appIDKey, httpStatusCodeKey}
-		if h.pathNormalization.enabled {
+		if h.pathMatching.enabled {
 			serverTags = append(serverTags, httpPathKey)
 			clientTags = append(clientTags, httpPathKey, httpMethodKey)
 		}
@@ -315,7 +315,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		}
 
 		var path string
-		if h.legacy || h.pathNormalization.enabled {
+		if h.legacy || h.pathMatching.enabled {
 			path = h.convertPathToMetricLabel(r.URL.Path)
 		}
 
@@ -331,7 +331,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		respSize := int64(rw.Size())
 
 		var method string
-		if h.legacy || h.pathNormalization.enabled {
+		if h.legacy || h.pathMatching.enabled {
 			method = r.Method
 		} else {
 			// Check if the context contains a MethodName method
@@ -347,69 +347,69 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (h *httpMetrics) initPathNormalization(config *config.PathNormalization) pathNormalizationConfig {
+func (h *httpMetrics) initPathMatching(config *config.PathMatching) pathMatchingConfig {
 	if config == nil {
-		return pathNormalizationConfig{
+		return pathMatchingConfig{
 			enabled: false,
 		}
 	}
 
-	pn := pathNormalizationConfig{
+	pm := pathMatchingConfig{
 		enabled: len(config.EgressPaths)+len(config.IngressPaths) > 0,
 	}
 
-	if !pn.enabled {
-		return pn
+	if !pm.enabled {
+		return pm
 	}
 
-	pn.virtualIngressMux = http.NewServeMux()
-	pn.virtualIngressMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	pm.virtualIngressMux = http.NewServeMux()
+	pm.virtualIngressMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !h.legacy {
-			rw, ok := w.(*diagUtils.PathNormalizationRW)
+			rw, ok := w.(*diagUtils.PathMatchingRW)
 			if !ok {
-				log.Errorf("Failed to cast to PathNormalizationRW")
+				log.Errorf("Failed to cast to PathMatchingRW")
 				return
 			}
-			rw.NormalizedPath = diagUtils.UnmatchedPathPlaceholder
+			rw.MatchedPath = diagUtils.UnmatchedPathPlaceholder
 		}
 	}))
 	for _, pattern := range config.IngressPaths {
-		pn.virtualIngressMux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rw, ok := w.(*diagUtils.PathNormalizationRW)
+		pm.virtualIngressMux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rw, ok := w.(*diagUtils.PathMatchingRW)
 			if !ok {
-				log.Errorf("Failed to cast to PathNormalizationRW")
+				log.Errorf("Failed to cast to PathMatchingRW")
 				return
 			}
-			rw.NormalizedPath = pattern
+			rw.MatchedPath = pattern
 		}))
 	}
 
-	pn.virtualEgressMux = http.NewServeMux()
-	pn.virtualEgressMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+	pm.virtualEgressMux = http.NewServeMux()
+	pm.virtualEgressMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if !h.legacy {
-			rw, ok := w.(*diagUtils.PathNormalizationRW)
+			rw, ok := w.(*diagUtils.PathMatchingRW)
 			if !ok {
-				log.Errorf("Failed to cast to PathNormalizationRW")
+				log.Errorf("Failed to cast to PathMatchingRW")
 				return
 			}
-			rw.NormalizedPath = diagUtils.UnmatchedPathPlaceholder
+			rw.MatchedPath = diagUtils.UnmatchedPathPlaceholder
 		}
 	}))
 	for _, pattern := range config.EgressPaths {
-		pn.virtualEgressMux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rw, ok := w.(*diagUtils.PathNormalizationRW)
+		pm.virtualEgressMux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rw, ok := w.(*diagUtils.PathMatchingRW)
 			if !ok {
-				log.Errorf("Failed to cast to PathNormalizationRW")
+				log.Errorf("Failed to cast to PathMatchingRW")
 				return
 			}
-			rw.NormalizedPath = pattern
+			rw.MatchedPath = pattern
 		}))
 	}
-	return pn
+	return pm
 }
 
-func (h *httpMetrics) normalizePath(path string, direction int) (string, bool) {
-	if !h.pathNormalization.enabled {
+func (h *httpMetrics) matchPath(path string, direction int) (string, bool) {
+	if !h.pathMatching.enabled {
 		return "", false
 	}
 
@@ -428,12 +428,12 @@ func (h *httpMetrics) normalizePath(path string, direction int) (string, bool) {
 		},
 	}
 
-	crw := &diagUtils.PathNormalizationRW{NormalizedPath: path}
+	crw := &diagUtils.PathMatchingRW{MatchedPath: path}
 	if direction == Ingress {
-		h.pathNormalization.virtualIngressMux.ServeHTTP(crw, req)
+		h.pathMatching.virtualIngressMux.ServeHTTP(crw, req)
 	} else {
-		h.pathNormalization.virtualEgressMux.ServeHTTP(crw, req)
+		h.pathMatching.virtualEgressMux.ServeHTTP(crw, req)
 	}
 
-	return crw.NormalizedPath, true
+	return crw.MatchedPath, true
 }

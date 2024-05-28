@@ -17,14 +17,14 @@ import "net/http"
 
 const UnmatchedPathPlaceholder = "_"
 
-type PathNormalizationRW struct {
+type PathMatchingRW struct {
 	http.ResponseWriter
-	NormalizedPath string
+	MatchedPath string
 }
 
-func (w *PathNormalizationRW) WriteHeader(statusCode int) {
+func (w *PathMatchingRW) WriteHeader(statusCode int) {
 }
 
-func (w *PathNormalizationRW) Write(b []byte) (int, error) {
+func (w *PathMatchingRW) Write(b []byte) (int, error) {
 	return len(b), nil
 }

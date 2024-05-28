@@ -235,7 +235,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 			intc.id,
 			namespace,
 			metricsSpec.Rules,
-			metricsSpec.GetHTTPPathNormalization(),
+			metricsSpec.GetHTTPPathMatching(),
 			metricsSpec.GetHTTPIncreasedCardinality(),
 		)
 		if err != nil {

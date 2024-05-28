@@ -223,10 +223,10 @@ type MetricHTTP struct {
 	// +optional
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty"`
 	// +optional
-	PathNormalization *PathNormalization `json:"pathNormalization,omitempty"`
+	PathMatching *PathMatching `json:"pathMatching,omitempty"`
 }
 
-type PathNormalization struct {
+type PathMatching struct {
 	// IngressPaths is a list of paths to match for ingress metrics.
 	IngressPaths []string `json:"ingress,omitempty"`
 	// EgressPaths is a list of paths to match for egress metrics.

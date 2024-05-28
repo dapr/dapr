@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pathnormalization
+package pathmatching
 
 import (
 	"context"
@@ -31,7 +31,7 @@ func init() {
 	suite.Register(new(defaultCardinality))
 }
 
-// defaultCardinality tests daprd metrics for the HTTP server configured with path normalization and default cardinality.
+// defaultCardinality tests daprd metrics for the HTTP server configured with path matching and default cardinality.
 type defaultCardinality struct {
 	daprd *daprd.Daprd
 }
@@ -52,7 +52,7 @@ func (h *defaultCardinality) Setup(t *testing.T) []framework.Option {
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: pathnormalization
+  name: pathMatching
 spec:
   metrics:
     enabled: true

@@ -88,20 +88,20 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	assert.Nil(t, rows)
 }
 
-func TestHTTPMetricsPathNormalizationNotEnabled(t *testing.T) {
+func TestHTTPMetricsPathMatchingNotEnabled(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	pathNormalization := &config.PathNormalization{}
-	testHTTP.Init("fakeID", pathNormalization, true)
-	normalizedPath, ok := testHTTP.normalizePath("/orders", Ingress)
+	pathMatching := &config.PathMatching{}
+	testHTTP.Init("fakeID", pathMatching, true)
+	matchedPath, ok := testHTTP.matchPath("/orders", Ingress)
 	require.False(t, ok)
-	require.Equal(t, "", normalizedPath)
+	require.Equal(t, "", matchedPath)
 }
 
-func TestHTTPMetricsPathNormalizationLegacyIncreasedCardinality(t *testing.T) {
+func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	pathNormalization := &config.PathNormalization{
+	pathMatching := &config.PathMatching{
 		IngressPaths: []string{
 			"/orders/{orderID}/items/{itemID}",
 			"/orders/{orderID}",
@@ -111,13 +111,13 @@ func TestHTTPMetricsPathNormalizationLegacyIncreasedCardinality(t *testing.T) {
 			"/orders/{orderID}/items/{itemID}",
 		},
 	}
-	testHTTP.Init("fakeID", pathNormalization, true)
+	testHTTP.Init("fakeID", pathMatching, true)
 
 	tt := []struct {
-		direction      int
-		path           string
-		normalizedPath string
-		normalized     bool
+		direction   int
+		path        string
+		matchedPath string
+		matched     bool
 	}{
 		{Ingress, "", "", false},
 		{Ingress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
@@ -129,18 +129,18 @@ func TestHTTPMetricsPathNormalizationLegacyIncreasedCardinality(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		normalizedPath, ok := testHTTP.normalizePath(tc.path, tc.direction)
-		require.Equal(t, ok, tc.normalized)
+		path, ok := testHTTP.matchPath(tc.path, tc.direction)
+		require.Equal(t, ok, tc.matched)
 		if ok {
-			assert.Equal(t, tc.normalizedPath, normalizedPath)
+			assert.Equal(t, tc.matchedPath, path)
 		}
 	}
 }
 
-func TestHTTPMetricsPathNormalizationLowCardinality(t *testing.T) {
+func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	pathNormalization := &config.PathNormalization{
+	pathMatching := &config.PathMatching{
 		IngressPaths: []string{
 			"/orders/{orderID}/items/{itemID}",
 			"/orders/{orderID}",
@@ -150,13 +150,13 @@ func TestHTTPMetricsPathNormalizationLowCardinality(t *testing.T) {
 			"/orders/{orderID}/items/{itemID}",
 		},
 	}
-	testHTTP.Init("fakeID", pathNormalization, false)
+	testHTTP.Init("fakeID", pathMatching, false)
 
 	tt := []struct {
-		direction      int
-		path           string
-		normalizedPath string
-		normalized     bool
+		direction   int
+		path        string
+		matchedPath string
+		matched     bool
 	}{
 		{Ingress, "", "", false},
 		{Ingress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
@@ -168,34 +168,34 @@ func TestHTTPMetricsPathNormalizationLowCardinality(t *testing.T) {
 	}
 
 	for _, tc := range tt {
-		normalizedPath, ok := testHTTP.normalizePath(tc.path, tc.direction)
-		require.Equal(t, ok, tc.normalized)
+		path, ok := testHTTP.matchPath(tc.path, tc.direction)
+		require.Equal(t, ok, tc.matched)
 		if ok {
-			assert.Equal(t, tc.normalizedPath, normalizedPath)
+			assert.Equal(t, tc.matchedPath, path)
 		}
 	}
 }
 
-func TestInitPathNormalizationNilConfig(t *testing.T) {
+func TestInitPathMatchingNilConfig(t *testing.T) {
 	testHTTP := newHTTPMetrics()
-	var pathNormalization *config.PathNormalization
-	config := testHTTP.initPathNormalization(pathNormalization)
+	var pathMatching *config.PathMatching
+	config := testHTTP.initPathMatching(pathMatching)
 	assert.NotNil(t, config)
 	assert.False(t, config.enabled)
 }
 
-func TestInitPathNormalizationNotEnabled(t *testing.T) {
+func TestInitPathMatchingNotEnabled(t *testing.T) {
 	testHTTP := newHTTPMetrics()
-	pathNormalization := &config.PathNormalization{}
-	config := testHTTP.initPathNormalization(pathNormalization)
+	pathMatching := &config.PathMatching{}
+	config := testHTTP.initPathMatching(pathMatching)
 	assert.NotNil(t, config)
 	assert.False(t, config.enabled)
 }
 
-func TestInitPathNormalization(t *testing.T) {
+func TestInitPathMatching(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	pathNormalization := &config.PathNormalization{
+	pathMatching := &config.PathMatching{
 		IngressPaths: []string{
 			"/orders/{orderID}/items/{itemID}",
 		},
@@ -203,7 +203,7 @@ func TestInitPathNormalization(t *testing.T) {
 			"/orders",
 		},
 	}
-	config := testHTTP.initPathNormalization(pathNormalization)
+	config := testHTTP.initPathMatching(pathMatching)
 	assert.NotNil(t, config)
 	assert.True(t, config.enabled)
 	assert.NotNil(t, config.virtualIngressMux)
