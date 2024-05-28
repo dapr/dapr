@@ -48,7 +48,7 @@ func (a *api) SubscribeTopicEventsAlpha1(stream runtimev1pb.Dapr_SubscribeTopicE
 	return <-errCh
 }
 
-func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsServer, errCh chan error, subDone chan struct{}) error {
+func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1Server, errCh chan error, subDone chan struct{}) error {
 	defer close(subDone)
 
 	ireq, err := stream.Recv()

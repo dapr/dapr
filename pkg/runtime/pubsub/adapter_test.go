@@ -21,68 +21,68 @@ import (
 
 func TestIsOperationAllowed(t *testing.T) {
 	t.Run("test protected topics, no scopes, operation not allowed", func(t *testing.T) {
-		a := IsOperationAllowed("topic1", &PubsubItem{ProtectedTopics: []string{"topic1"}})
+		a := IsOperationAllowed("topic1", &PubsubItem{ProtectedTopics: []string{"topic1"}}, nil)
 		assert.False(t, a)
 	})
 
 	t.Run("test allowed topics, no scopes, operation allowed", func(t *testing.T) {
-		a := IsOperationAllowed("topic1", &PubsubItem{AllowedTopics: []string{"topic1"}})
+		a := IsOperationAllowed("topic1", &PubsubItem{AllowedTopics: []string{"topic1"}}, nil)
 		assert.True(t, a)
 	})
 
 	t.Run("test allowed topics, no scopes, operation not allowed", func(t *testing.T) {
-		a := IsOperationAllowed("topic2", &PubsubItem{AllowedTopics: []string{"topic1"}})
+		a := IsOperationAllowed("topic2", &PubsubItem{AllowedTopics: []string{"topic1"}}, nil)
 		assert.False(t, a)
 	})
 
 	t.Run("test other protected topics, no allowed topics, no scopes, operation allowed", func(t *testing.T) {
-		a := IsOperationAllowed("topic2", &PubsubItem{ProtectedTopics: []string{"topic1"}})
+		a := IsOperationAllowed("topic2", &PubsubItem{ProtectedTopics: []string{"topic1"}}, nil)
 		assert.True(t, a)
 	})
 
 	t.Run("test allowed topics, with scopes, operation allowed", func(t *testing.T) {
-		a := IsOperationAllowed("topic1", &PubsubItem{AllowedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic1"}})
+		a := IsOperationAllowed("topic1", &PubsubItem{AllowedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic1"}}, nil)
 		assert.True(t, a)
 	})
 
 	t.Run("test protected topics, with scopes, operation allowed", func(t *testing.T) {
-		a := IsOperationAllowed("topic1", &PubsubItem{ProtectedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic1"}})
+		a := IsOperationAllowed("topic1", &PubsubItem{ProtectedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic1"}}, []string{"topic1"})
 		assert.True(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in existing publishing scopes, operation not allowed", func(t *testing.T) {
-		a := IsOperationAllowed("topic1", &PubsubItem{AllowedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic2"}})
+		a := IsOperationAllowed("topic1", &PubsubItem{AllowedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic2"}}, []string{"topic2"})
 		assert.False(t, a)
 	})
 
 	t.Run("topic in protected topics, not in existing publishing scopes, operation not allowed", func(t *testing.T) {
-		a := IsOperationAllowed("topic1", &PubsubItem{ProtectedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic2"}})
+		a := IsOperationAllowed("topic1", &PubsubItem{ProtectedTopics: []string{"topic1"}, ScopedPublishings: []string{"topic2"}}, nil)
 		assert.False(t, a)
 	})
 
 	t.Run("topic in allowed topics, not in publishing scopes, operation allowed", func(t *testing.T) {
-		a := IsOperationAllowed("topic1", &PubsubItem{AllowedTopics: []string{"topic1"}, ScopedPublishings: []string{}})
+		a := IsOperationAllowed("topic1", &PubsubItem{AllowedTopics: []string{"topic1"}, ScopedPublishings: []string{}}, nil)
 		assert.True(t, a)
 	})
 
 	t.Run("topic in protected topics, not in publishing scopes, operation not allowed", func(t *testing.T) {
-		a := IsOperationAllowed("topic1", &PubsubItem{ProtectedTopics: []string{"topic1"}, ScopedPublishings: []string{}})
+		a := IsOperationAllowed("topic1", &PubsubItem{ProtectedTopics: []string{"topic1"}, ScopedPublishings: []string{}}, nil)
 		assert.False(t, a)
 	})
 
 	t.Run("topics A and B in allowed topics, A in publishing scopes, operation allowed for A only", func(t *testing.T) {
 		pubsub := &PubsubItem{AllowedTopics: []string{"A", "B"}, ScopedPublishings: []string{"A"}}
-		a := IsOperationAllowed("A", pubsub)
+		a := IsOperationAllowed("A", pubsub, []string{"A"})
 		assert.True(t, a)
-		b := IsOperationAllowed("B", pubsub)
+		b := IsOperationAllowed("B", pubsub, []string{"A"})
 		assert.False(t, b)
 	})
 
 	t.Run("topics A and B in protected topics, A in publishing scopes, operation allowed for A only", func(t *testing.T) {
 		pubSub := &PubsubItem{ProtectedTopics: []string{"A", "B"}, ScopedPublishings: []string{"A"}}
-		a := IsOperationAllowed("A", pubSub)
+		a := IsOperationAllowed("A", pubSub, []string{"A"})
 		assert.True(t, a)
-		b := IsOperationAllowed("B", pubSub)
+		b := IsOperationAllowed("B", pubSub, []string{"A"})
 		assert.False(t, b)
 	})
 }

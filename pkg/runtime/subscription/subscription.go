@@ -69,7 +69,7 @@ type Subscription struct {
 var log = logger.NewLogger("dapr.runtime.processor.pubsub.subscription")
 
 func New(opts Options) (*Subscription, error) {
-	allowed := rtpubsub.IsOperationAllowed(opts.Topic, opts.PubSub)
+	allowed := rtpubsub.IsOperationAllowed(opts.Topic, opts.PubSub, opts.PubSub.ScopedSubscriptions)
 	if !allowed {
 		return nil, fmt.Errorf("subscription to topic '%s' on pubsub '%s' is not allowed", opts.Topic, opts.PubSubName)
 	}

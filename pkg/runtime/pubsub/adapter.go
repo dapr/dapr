@@ -43,12 +43,12 @@ type AdapterStreamer interface {
 	StreamerKey(pubsub, topic string) string
 }
 
-func IsOperationAllowed(topic string, pubsub *PubsubItem) bool {
+func IsOperationAllowed(topic string, pubSub *PubsubItem, scopedTopics []string) bool {
 	var inAllowedTopics, inProtectedTopics bool
 
 	// first check if allowedTopics contain it
-	if len(pubsub.AllowedTopics) > 0 {
-		for _, t := range pubsub.AllowedTopics {
+	if len(pubSub.AllowedTopics) > 0 {
+		for _, t := range pubSub.AllowedTopics {
 			if t == topic {
 				inAllowedTopics = true
 				break
@@ -60,8 +60,8 @@ func IsOperationAllowed(topic string, pubsub *PubsubItem) bool {
 	}
 
 	// check if topic is protected
-	if len(pubsub.ProtectedTopics) > 0 {
-		for _, t := range pubsub.ProtectedTopics {
+	if len(pubSub.ProtectedTopics) > 0 {
+		for _, t := range pubSub.ProtectedTopics {
 			if t == topic {
 				inProtectedTopics = true
 				break
@@ -70,13 +70,13 @@ func IsOperationAllowed(topic string, pubsub *PubsubItem) bool {
 	}
 
 	// if topic is protected then a scope must be applied
-	if !inProtectedTopics && len(pubsub.ScopedPublishings) == 0 {
+	if !inProtectedTopics && len(scopedTopics) == 0 {
 		return true
 	}
 
 	// check if a granular scope has been applied
 	allowedScope := false
-	for _, t := range pubsub.ScopedPublishings {
+	for _, t := range scopedTopics {
 		if t == topic {
 			allowedScope = true
 			break

@@ -51,7 +51,7 @@ func New(opts Options) rtpubsub.AdapterStreamer {
 	}
 }
 
-func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsServer, req *rtv1pb.SubscribeTopicEventsInitialRequest) error {
+func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, req *rtv1pb.SubscribeTopicEventsInitialRequestAlpha1) error {
 	s.lock.Lock()
 	key := s.StreamerKey(req.GetPubsubName(), req.GetTopic())
 	if _, ok := s.subscribers[key]; ok {
@@ -61,7 +61,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsServer, req 
 
 	conn := &conn{
 		stream:           stream,
-		publishResponses: make(map[string]chan *rtv1pb.SubscribeTopicEventsResponse),
+		publishResponses: make(map[string]chan *rtv1pb.SubscribeTopicEventsResponseAlpha1),
 	}
 	s.subscribers[key] = conn
 

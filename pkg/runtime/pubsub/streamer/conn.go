@@ -18,16 +18,15 @@ import (
 	"sync"
 
 	rtv1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"google.golang.org/appengine/log"
 )
 
 type conn struct {
 	lock             sync.RWMutex
-	stream           rtv1pb.Dapr_SubscribeTopicEventsServer
-	publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsResponse
+	stream           rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
+	publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsResponseAlpha1
 }
 
-func (c *conn) notifyPublishResponse(ctx context.Context, resp *rtv1pb.SubscribeTopicEventsResponse) {
+func (c *conn) notifyPublishResponse(ctx context.Context, resp *rtv1pb.SubscribeTopicEventsResponseAlpha1) {
 	c.lock.RLock()
 	ch, ok := c.publishResponses[resp.GetId()]
 	c.lock.RUnlock()
@@ -43,8 +42,8 @@ func (c *conn) notifyPublishResponse(ctx context.Context, resp *rtv1pb.Subscribe
 	}
 }
 
-func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsResponse, func()) {
-	ch := make(chan *rtv1pb.SubscribeTopicEventsResponse)
+func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsResponseAlpha1, func()) {
+	ch := make(chan *rtv1pb.SubscribeTopicEventsResponseAlpha1)
 	c.lock.Lock()
 	c.publishResponses[id] = ch
 	c.lock.Unlock()

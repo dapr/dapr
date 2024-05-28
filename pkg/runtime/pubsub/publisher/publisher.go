@@ -58,7 +58,7 @@ func (p *publisher) Publish(ctx context.Context, req *contribpubsub.PublishReque
 		return rtpubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
-	if allowed := rtpubsub.IsOperationAllowed(req.Topic, pubsub); !allowed {
+	if allowed := rtpubsub.IsOperationAllowed(req.Topic, pubsub, pubsub.ScopedPublishings); !allowed {
 		return rtpubsub.NotAllowedError{Topic: req.Topic, ID: p.appID}
 	}
 
@@ -81,7 +81,7 @@ func (p *publisher) BulkPublish(ctx context.Context, req *contribpubsub.BulkPubl
 		return contribpubsub.BulkPublishResponse{}, rtpubsub.NotFoundError{PubsubName: req.PubsubName}
 	}
 
-	if allowed := rtpubsub.IsOperationAllowed(req.Topic, pubsub); !allowed {
+	if allowed := rtpubsub.IsOperationAllowed(req.Topic, pubsub, pubsub.ScopedPublishings); !allowed {
 		return contribpubsub.BulkPublishResponse{}, rtpubsub.NotAllowedError{Topic: req.Topic, ID: p.appID}
 	}
 

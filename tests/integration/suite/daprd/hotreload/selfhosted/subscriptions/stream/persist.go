@@ -100,23 +100,17 @@ spec:
 		assert.Len(c, p.daprd.GetMetaSubscriptions(t, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)
 
-	client := p.daprd.GRPCClient(t, ctx)
-	_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-		PubsubName: "mypub",
-		Topic:      "a",
-		Data:       []byte(`{"status":"completed"}`),
-	})
-	require.NoError(t, err)
 	newReq := func(pubsub, topic string) *rtv1.PublishEventRequest {
 		return &rtv1.PublishEventRequest{PubsubName: pubsub, Topic: topic, Data: []byte(`{"status": "completed"}`)}
 	}
 	p.sub.ExpectPublishReceive(t, ctx, p.daprd, newReq("mypub", "a"))
 
-	stream, err := client.SubscribeTopicEvents(ctx)
+	client := p.daprd.GRPCClient(t, ctx)
+	stream, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
-	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequest{
+	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
 				PubsubName: "mypub", Topic: "b",
 			},
 		},
@@ -131,9 +125,9 @@ spec:
 	event, err := stream.Recv()
 	require.NoError(t, err)
 	assert.Equal(t, "b", event.GetTopic())
-	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequest{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequest_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponse{
+	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
+			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
 				Id:     event.GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
 			},
@@ -164,6 +158,4 @@ spec:
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, p.daprd.GetMetaSubscriptions(t, ctx), 2)
 	}, time.Second*5, time.Millisecond*10)
-
-	// TODO: @joshvanl
 }
