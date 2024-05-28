@@ -122,6 +122,9 @@ var endpoints = map[string][]string{
 	"shutdown.v1": {
 		daprRuntimePrefix + "v1.Dapr/Shutdown",
 	},
+	"subscribe.v1alpha1": {
+		daprRuntimePrefix + "v1.Dapr/SubscribeTopicEventsAlpha1",
+	},
 }
 
 // Returns the middlewares (unary and stream) for supporting API allowlist

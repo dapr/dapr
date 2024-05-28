@@ -577,6 +577,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
 		TracingSpec:           a.globalConfig.GetTracingSpec(),
 		AccessControlList:     a.accessControlList,
+		Processor:             a.processor,
 	})
 
 	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {

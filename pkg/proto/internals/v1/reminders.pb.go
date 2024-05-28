@@ -185,6 +185,70 @@ func (x *Reminders) GetReminders() []*Reminder {
 	return nil
 }
 
+// TimerFiredEvent is the event that is sent to the actor when a timer fires.
+type TimerFiredEvent struct {
+	state         protoimpl.MessageState
+	sizeCache     protoimpl.SizeCache
+	unknownFields protoimpl.UnknownFields
+
+	FireAt     *timestamppb.Timestamp `protobuf:"bytes,1,opt,name=fireAt,proto3" json:"fireAt,omitempty"`
+	TimerId    int32                  `protobuf:"varint,2,opt,name=timerId,proto3" json:"timerId,omitempty"`
+	Generation uint64                 `protobuf:"varint,3,opt,name=generation,proto3" json:"generation,omitempty"`
+}
+
+func (x *TimerFiredEvent) Reset() {
+	*x = TimerFiredEvent{}
+	if protoimpl.UnsafeEnabled {
+		mi := &file_dapr_proto_internals_v1_reminders_proto_msgTypes[2]
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		ms.StoreMessageInfo(mi)
+	}
+}
+
+func (x *TimerFiredEvent) String() string {
+	return protoimpl.X.MessageStringOf(x)
+}
+
+func (*TimerFiredEvent) ProtoMessage() {}
+
+func (x *TimerFiredEvent) ProtoReflect() protoreflect.Message {
+	mi := &file_dapr_proto_internals_v1_reminders_proto_msgTypes[2]
+	if protoimpl.UnsafeEnabled && x != nil {
+		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
+		if ms.LoadMessageInfo() == nil {
+			ms.StoreMessageInfo(mi)
+		}
+		return ms
+	}
+	return mi.MessageOf(x)
+}
+
+// Deprecated: Use TimerFiredEvent.ProtoReflect.Descriptor instead.
+func (*TimerFiredEvent) Descriptor() ([]byte, []int) {
+	return file_dapr_proto_internals_v1_reminders_proto_rawDescGZIP(), []int{2}
+}
+
+func (x *TimerFiredEvent) GetFireAt() *timestamppb.Timestamp {
+	if x != nil {
+		return x.FireAt
+	}
+	return nil
+}
+
+func (x *TimerFiredEvent) GetTimerId() int32 {
+	if x != nil {
+		return x.TimerId
+	}
+	return 0
+}
+
+func (x *TimerFiredEvent) GetGeneration() uint64 {
+	if x != nil {
+		return x.Generation
+	}
+	return 0
+}
+
 var File_dapr_proto_internals_v1_reminders_proto protoreflect.FileDescriptor
 
 var file_dapr_proto_internals_v1_reminders_proto_rawDesc = []byte{
@@ -217,11 +281,19 @@ var file_dapr_proto_internals_v1_reminders_proto_rawDesc = []byte{
 	0x72, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x73, 0x18, 0x01, 0x20, 0x03, 0x28, 0x0b, 0x32,
 	0x21, 0x2e, 0x64, 0x61, 0x70, 0x72, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2e, 0x69, 0x6e, 0x74,
 	0x65, 0x72, 0x6e, 0x61, 0x6c, 0x73, 0x2e, 0x76, 0x31, 0x2e, 0x52, 0x65, 0x6d, 0x69, 0x6e, 0x64,
-	0x65, 0x72, 0x52, 0x09, 0x72, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x73, 0x42, 0x37, 0x5a,
-	0x35, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70, 0x72,
-	0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x2f,
-	0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x73, 0x2f, 0x76, 0x31, 0x3b, 0x69, 0x6e, 0x74,
-	0x65, 0x72, 0x6e, 0x61, 0x6c, 0x73, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
+	0x65, 0x72, 0x52, 0x09, 0x72, 0x65, 0x6d, 0x69, 0x6e, 0x64, 0x65, 0x72, 0x73, 0x22, 0x7f, 0x0a,
+	0x0f, 0x54, 0x69, 0x6d, 0x65, 0x72, 0x46, 0x69, 0x72, 0x65, 0x64, 0x45, 0x76, 0x65, 0x6e, 0x74,
+	0x12, 0x32, 0x0a, 0x06, 0x66, 0x69, 0x72, 0x65, 0x41, 0x74, 0x18, 0x01, 0x20, 0x01, 0x28, 0x0b,
+	0x32, 0x1a, 0x2e, 0x67, 0x6f, 0x6f, 0x67, 0x6c, 0x65, 0x2e, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x62,
+	0x75, 0x66, 0x2e, 0x54, 0x69, 0x6d, 0x65, 0x73, 0x74, 0x61, 0x6d, 0x70, 0x52, 0x06, 0x66, 0x69,
+	0x72, 0x65, 0x41, 0x74, 0x12, 0x18, 0x0a, 0x07, 0x74, 0x69, 0x6d, 0x65, 0x72, 0x49, 0x64, 0x18,
+	0x02, 0x20, 0x01, 0x28, 0x05, 0x52, 0x07, 0x74, 0x69, 0x6d, 0x65, 0x72, 0x49, 0x64, 0x12, 0x1e,
+	0x0a, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x18, 0x03, 0x20, 0x01,
+	0x28, 0x04, 0x52, 0x0a, 0x67, 0x65, 0x6e, 0x65, 0x72, 0x61, 0x74, 0x69, 0x6f, 0x6e, 0x42, 0x37,
+	0x5a, 0x35, 0x67, 0x69, 0x74, 0x68, 0x75, 0x62, 0x2e, 0x63, 0x6f, 0x6d, 0x2f, 0x64, 0x61, 0x70,
+	0x72, 0x2f, 0x64, 0x61, 0x70, 0x72, 0x2f, 0x70, 0x6b, 0x67, 0x2f, 0x70, 0x72, 0x6f, 0x74, 0x6f,
+	0x2f, 0x69, 0x6e, 0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x73, 0x2f, 0x76, 0x31, 0x3b, 0x69, 0x6e,
+	0x74, 0x65, 0x72, 0x6e, 0x61, 0x6c, 0x73, 0x62, 0x06, 0x70, 0x72, 0x6f, 0x74, 0x6f, 0x33,
 }
 
 var (
@@ -236,21 +308,23 @@ func file_dapr_proto_internals_v1_reminders_proto_rawDescGZIP() []byte {
 	return file_dapr_proto_internals_v1_reminders_proto_rawDescData
 }
 
-var file_dapr_proto_internals_v1_reminders_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+var file_dapr_proto_internals_v1_reminders_proto_msgTypes = make([]protoimpl.MessageInfo, 3)
 var file_dapr_proto_internals_v1_reminders_proto_goTypes = []interface{}{
 	(*Reminder)(nil),              // 0: dapr.proto.internals.v1.Reminder
 	(*Reminders)(nil),             // 1: dapr.proto.internals.v1.Reminders
-	(*timestamppb.Timestamp)(nil), // 2: google.protobuf.Timestamp
+	(*TimerFiredEvent)(nil),       // 2: dapr.proto.internals.v1.TimerFiredEvent
+	(*timestamppb.Timestamp)(nil), // 3: google.protobuf.Timestamp
 }
 var file_dapr_proto_internals_v1_reminders_proto_depIdxs = []int32{
-	2, // 0: dapr.proto.internals.v1.Reminder.registered_time:type_name -> google.protobuf.Timestamp
-	2, // 1: dapr.proto.internals.v1.Reminder.expiration_time:type_name -> google.protobuf.Timestamp
+	3, // 0: dapr.proto.internals.v1.Reminder.registered_time:type_name -> google.protobuf.Timestamp
+	3, // 1: dapr.proto.internals.v1.Reminder.expiration_time:type_name -> google.protobuf.Timestamp
 	0, // 2: dapr.proto.internals.v1.Reminders.reminders:type_name -> dapr.proto.internals.v1.Reminder
-	3, // [3:3] is the sub-list for method output_type
-	3, // [3:3] is the sub-list for method input_type
-	3, // [3:3] is the sub-list for extension type_name
-	3, // [3:3] is the sub-list for extension extendee
-	0, // [0:3] is the sub-list for field type_name
+	3, // 3: dapr.proto.internals.v1.TimerFiredEvent.fireAt:type_name -> google.protobuf.Timestamp
+	4, // [4:4] is the sub-list for method output_type
+	4, // [4:4] is the sub-list for method input_type
+	4, // [4:4] is the sub-list for extension type_name
+	4, // [4:4] is the sub-list for extension extendee
+	0, // [0:4] is the sub-list for field type_name
 }
 
 func init() { file_dapr_proto_internals_v1_reminders_proto_init() }
@@ -283,6 +357,18 @@ func file_dapr_proto_internals_v1_reminders_proto_init() {
 				return nil
 			}
 		}
+		file_dapr_proto_internals_v1_reminders_proto_msgTypes[2].Exporter = func(v interface{}, i int) interface{} {
+			switch v := v.(*TimerFiredEvent); i {
+			case 0:
+				return &v.state
+			case 1:
+				return &v.sizeCache
+			case 2:
+				return &v.unknownFields
+			default:
+				return nil
+			}
+		}
 	}
 	type x struct{}
 	out := protoimpl.TypeBuilder{
@@ -290,7 +376,7 @@ func file_dapr_proto_internals_v1_reminders_proto_init() {
 			GoPackagePath: reflect.TypeOf(x{}).PkgPath(),
 			RawDescriptor: file_dapr_proto_internals_v1_reminders_proto_rawDesc,
 			NumEnums:      0,
-			NumMessages:   2,
+			NumMessages:   3,
 			NumExtensions: 0,
 			NumServices:   0,
 		},

@@ -19,6 +19,7 @@ import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "dapr/proto/common/v1/common.proto";
+import "dapr/proto/runtime/v1/appcallback.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -57,6 +58,10 @@ service Dapr {
 
   // Bulk Publishes multiple events to the specified topic.
   rpc BulkPublishEventAlpha1(BulkPublishRequest) returns (BulkPublishResponse) {}
+
+  // SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
+  // events from it.
+  rpc SubscribeTopicEventsAlpha1(stream SubscribeTopicEventsRequestAlpha1) returns (stream TopicEventRequest) {}
 
   // Invokes binding data to specific output bindings
   rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
@@ -418,6 +423,47 @@ message BulkPublishResponseFailedEntry {
 
   // The error message if any on failure
   string error = 2;
+}
+
+// SubscribeTopicEventsRequestAlpha1 is a message containing the details for
+// subscribing to a topic via streaming.
+// The first message must always be the initial request. All subsequent
+// messages must be event responses.
+message SubscribeTopicEventsRequestAlpha1 {
+  oneof subscribe_topic_events_request_type {
+    SubscribeTopicEventsInitialRequestAlpha1 initial_request = 1;
+    SubscribeTopicEventsResponseAlpha1 event_response = 2;
+  }
+}
+
+// SubscribeTopicEventsInitialRequestAlpha1 is the initial message containing the
+// details for subscribing to a topic via streaming.
+message SubscribeTopicEventsInitialRequestAlpha1 {
+  // The name of the pubsub component
+  string pubsub_name = 1;
+
+  // The pubsub topic
+  string topic = 2;
+
+  // The metadata passing to pub components
+  //
+  // metadata property:
+  // - key : the key of the message.
+  map<string, string> metadata = 3;
+
+  // dead_letter_topic is the topic to which messages that fail to be processed
+  // are sent.
+  optional string dead_letter_topic = 4;
+}
+
+// SubscribeTopicEventsResponseAlpha1 is a message containing the result of a
+// subscription to a topic.
+message SubscribeTopicEventsResponseAlpha1 {
+  // id is the unique identifier for the subscription request.
+  string id = 1;
+
+  // status is the result of the subscription request.
+  TopicEventResponse status = 2;
 }
 
 // InvokeBindingRequest is the message to send data to output bindings
