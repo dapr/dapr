@@ -299,15 +299,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 }
 
 func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
-	// Replace the logger for this test so we reduce the noise
-	// prevLog := log
-	// log = logger.NewLogger("dapr.placement1")
-	// log.SetOutputLevel(logger.InfoLevel)
-	// t.Cleanup(func() {
-	// 	log = prevLog
-	// } )
-	// commenting out temporarily because of a race condition on log
-
 	const testClients = 10
 	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, tests.Raft(t))
 	testServer.hasLeadership.Store(true)

@@ -274,7 +274,7 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 				assert.Contains(c, placementTables.GetEntries(), "actor5")
 				assert.Contains(c, placementTables.GetEntries(), "actor6")
 			}
-			assert.True(c, msgCnt >= 1)
+			assert.GreaterOrEqual(c, msgCnt, 1)
 		}, 10*time.Second, 10*time.Millisecond)
 
 		cancel3() // Disconnect host 3

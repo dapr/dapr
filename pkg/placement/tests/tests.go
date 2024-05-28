@@ -62,6 +62,7 @@ func Raft(t *testing.T) *raft.Server {
 	t.Cleanup(cancel)
 
 	// Wait until test raft node become a leader.
+	//nolint:staticcheck
 	for range time.Tick(time.Microsecond) {
 		clock.Step(time.Second * 2)
 		if testRaftServer.IsLeader() {

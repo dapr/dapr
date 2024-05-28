@@ -196,8 +196,8 @@ func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	}
 
 	keepaliveParams := keepalive.ServerParameters{
-		Time:    1 * time.Second,
-		Timeout: 2 * time.Second,
+		Time:    2 * time.Second,
+		Timeout: 3 * time.Second,
 	}
 	grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS(), grpc.KeepaliveParams(keepaliveParams))
 
