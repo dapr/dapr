@@ -23,7 +23,6 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/responsewriter"
 )
@@ -126,6 +125,7 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 		return
 	}
 
+	// TODO: why this legacy mode does not call the convertPathToMetricLabel?
 	if h.legacy {
 		stats.RecordWithTags(
 			ctx,
@@ -142,11 +142,11 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 	} else {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, "", httpStatusCodeKey, status),
 			h.serverRequestCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, "", httpStatusCodeKey, status),
 			h.serverLatency.M(elapsed))
 	}
 	stats.RecordWithTags(
@@ -170,7 +170,7 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 	} else {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID),
+			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, "", httpMethodKey, method),
 			h.clientSentBytes.M(contentSize))
 	}
 }
@@ -192,11 +192,11 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 	} else {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpPathKey, "", httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientCompletedCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpPathKey, "", httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientRoundtripLatency.M(elapsed))
 	}
 	stats.RecordWithTags(
@@ -234,15 +234,8 @@ func (h *httpMetrics) Init(appID string, legacy bool) error {
 
 	tags := []tag.Key{appIDKey}
 
-	// In legacy mode, we are aggregating based on the path too
-	var serverTags, clientTags []tag.Key
-	if h.legacy {
-		serverTags = []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
-		clientTags = []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
-	} else {
-		serverTags = []tag.Key{appIDKey, httpMethodKey, httpStatusCodeKey}
-		clientTags = []tag.Key{appIDKey, httpStatusCodeKey}
-	}
+	serverTags := []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
+	clientTags := []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
 
 	views := []*view.View{
 		diagUtils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
@@ -291,19 +284,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		status := strconv.Itoa(rw.Status())
 		respSize := int64(rw.Size())
 
-		var method string
-		if h.legacy {
-			method = r.Method
-		} else {
-			// Check if the context contains a MethodName method
-			endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
-			method = endpointData.GetEndpointName()
-			if endpointData != nil && endpointData.Group != nil && endpointData.Group.MethodName != nil {
-				method = endpointData.Group.MethodName(r)
-			}
-		}
-
 		// Record the request
-		h.ServerRequestCompleted(r.Context(), method, path, status, reqContentSize, respSize, elapsed)
+		h.ServerRequestCompleted(r.Context(), r.Method, path, status, reqContentSize, respSize, elapsed)
 	})
 }
