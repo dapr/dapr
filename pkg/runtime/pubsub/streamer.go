@@ -11,11 +11,12 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package subscriptions
+package pubsub
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/mixed"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/programmatic"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/stream"
+	rtv1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
+
+type Streamer interface {
+	Subscribe(rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server) error
+}
