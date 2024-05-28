@@ -160,7 +160,7 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 	ctx, cancel := context.WithTimeout(ctx, time.Second*45)
 	defer cancel()
 
-	var meta schedulerv1pb.ScheduleJobMetadata
+	var meta schedulerv1pb.JobMetadata
 	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
 		log.Errorf("Error unmarshalling metadata: %s", err)
 		return true
@@ -185,16 +185,16 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 	return true
 }
 
-func buildJobName(name string, meta *schedulerv1pb.ScheduleJobMetadata) (string, error) {
+func buildJobName(name string, meta *schedulerv1pb.JobMetadata) (string, error) {
 	joinStrings := func(ss ...string) string {
 		return strings.Join(ss, "||")
 	}
 
 	switch t := meta.GetType(); t.GetType().(type) {
-	case *schedulerv1pb.ScheduleJobMetadataType_Actor:
+	case *schedulerv1pb.JobMetadataType_Actor:
 		actor := t.GetActor()
 		return joinStrings("actorreminder", meta.GetNamespace(), actor.GetType(), actor.GetId(), name), nil
-	case *schedulerv1pb.ScheduleJobMetadataType_Job:
+	case *schedulerv1pb.JobMetadataType_Job:
 		return joinStrings("app", meta.GetNamespace(), meta.GetAppId(), name), nil
 	default:
 		return "", fmt.Errorf("unknown job type: %v", t)

@@ -47,12 +47,12 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Name: job.GetName(),
-		Metadata: &schedulerv1pb.ScheduleJobMetadata{
+		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     a.appID,
 			Namespace: a.Namespace(),
-			Type: &schedulerv1pb.ScheduleJobMetadataType{
-				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
-					Job: new(schedulerv1pb.ScheduleTypeJob),
+			Type: &schedulerv1pb.JobMetadataType{
+				Type: &schedulerv1pb.JobMetadataType_Job{
+					Job: new(schedulerv1pb.TypeJob),
 				},
 			},
 		},
@@ -87,12 +87,12 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 
 	internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
 		Name: inReq.GetName(),
-		Metadata: &schedulerv1pb.ScheduleJobMetadata{
+		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     a.appID,
 			Namespace: a.Namespace(),
-			Type: &schedulerv1pb.ScheduleJobMetadataType{
-				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
-					Job: new(schedulerv1pb.ScheduleTypeJob),
+			Type: &schedulerv1pb.JobMetadataType{
+				Type: &schedulerv1pb.JobMetadataType_Job{
+					Job: new(schedulerv1pb.TypeJob),
 				},
 			},
 		},
@@ -120,12 +120,12 @@ func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest
 
 	internalGetJobReq := &schedulerv1pb.GetJobRequest{
 		Name: inReq.GetName(),
-		Metadata: &schedulerv1pb.ScheduleJobMetadata{
+		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     a.appID,
 			Namespace: a.Namespace(),
-			Type: &schedulerv1pb.ScheduleJobMetadataType{
-				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
-					Job: new(schedulerv1pb.ScheduleTypeJob),
+			Type: &schedulerv1pb.JobMetadataType{
+				Type: &schedulerv1pb.JobMetadataType_Job{
+					Job: new(schedulerv1pb.TypeJob),
 				},
 			},
 		},

@@ -1060,9 +1060,10 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		StateStoreName:   actorStateStoreName,
 		CompStore:        a.compStore,
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
-		StateTTLEnabled:  a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
-		Security:         a.sec,
-		SchedulerClients: a.schedulerClients,
+		StateTTLEnabled:    a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
+		Security:           a.sec,
+		SchedulerClients:   a.schedulerClients,
+		SchedulerReminders: a.globalConfig.IsFeatureEnabled(config.SchedulerReminders),
 	})
 	if err != nil {
 		return rterrors.NewInit(rterrors.InitFailure, "actors", err)

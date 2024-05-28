@@ -35,13 +35,13 @@ message Job {
   google.protobuf.Any data = 5;
 }
 
-// ScheduleTypeJob is the message used by the daprd sidecar to schedule a job
+// TypeJob is the message used by the daprd sidecar to schedule a job
 // from an App.
-message ScheduleTypeJob {}
+message TypeJob {}
 
-// ScheduleTypeActorReminder is the message used by the daprd sidecar to
+// TypeActorReminder is the message used by the daprd sidecar to
 // schedule a job from an Actor Reminder.
-message ScheduleTypeActorReminder {
+message TypeActorReminder {
   // id is the actor ID.
 	string id = 1;
 
@@ -49,18 +49,18 @@ message ScheduleTypeActorReminder {
 	string type = 2;
 }
 
-// ScheduleJobMetadataType holds the typed metadata associated with the job for
+// JobMetadataType holds the typed metadata associated with the job for
 // different origins.
-message ScheduleJobMetadataType {
+message JobMetadataType {
   oneof type {
-    ScheduleTypeJob job = 1;
-    ScheduleTypeActorReminder actor = 2;
+    TypeJob job = 1;
+    TypeActorReminder actor = 2;
   }
 }
 
-// ScheduleJobMetadata is the message used by the daprd sidecar to schedule a
+// JobMetadata is the message used by the daprd sidecar to schedule/get/delete a
 // job.
-message ScheduleJobMetadata {
+message JobMetadata {
   // app_id is the App ID of the requester.
 	string app_id = 1;
 
@@ -68,7 +68,7 @@ message ScheduleJobMetadata {
   string namespace = 2;
 
   // type is the type of the job.
-	ScheduleJobMetadataType type = 3;
+	JobMetadataType type = 3;
 }
 
 // WatchJobsRequest is the message used by the daprd sidecar to connect to the
@@ -112,7 +112,7 @@ message WatchJobsResponse {
 	google.protobuf.Any data = 3;
 
 	// The metadata associated with the job.
-	ScheduleJobMetadata metadata = 4;
+	JobMetadata metadata = 4;
 }
 
 message ScheduleJobRequest {
@@ -123,7 +123,7 @@ message ScheduleJobRequest {
 	Job job = 2;
 
 	// The metadata associated with the job.
-	ScheduleJobMetadata metadata = 3;
+	JobMetadata metadata = 3;
 }
 
 message ScheduleJobResponse {
@@ -136,7 +136,7 @@ message GetJobRequest {
 	string name = 1;
 
 	// The metadata associated with the job.
-	ScheduleJobMetadata metadata = 2;
+	JobMetadata metadata = 2;
 }
 
 // GetJobResponse is the response message to convey the details of a job.
@@ -150,7 +150,7 @@ message DeleteJobRequest {
 	string name = 1;
 
 	// The metadata associated with the job.
-	ScheduleJobMetadata metadata = 2;
+	JobMetadata metadata = 2;
 }
 
 message DeleteJobResponse {

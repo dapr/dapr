@@ -35,13 +35,13 @@ func Test_Metadata(t *testing.T) {
 
 	tests := map[string]struct {
 		ctx         context.Context
-		meta        *schedulerv1pb.ScheduleJobMetadata
+		meta        *schedulerv1pb.JobMetadata
 		expCode     *codes.Code
 		nonMTlSCode *codes.Code
 	}{
 		"empty ns should error": {
 			ctx: pki.ClientGRPCCtx(t),
-			meta: &schedulerv1pb.ScheduleJobMetadata{
+			meta: &schedulerv1pb.JobMetadata{
 				AppId:     "app1",
 				Namespace: "",
 			},
@@ -50,7 +50,7 @@ func Test_Metadata(t *testing.T) {
 		},
 		"empty appID should error": {
 			ctx: pki.ClientGRPCCtx(t),
-			meta: &schedulerv1pb.ScheduleJobMetadata{
+			meta: &schedulerv1pb.JobMetadata{
 				AppId:     "",
 				Namespace: "ns1",
 			},
@@ -59,7 +59,7 @@ func Test_Metadata(t *testing.T) {
 		},
 		"no auth context should error": {
 			ctx: context.Background(),
-			meta: &schedulerv1pb.ScheduleJobMetadata{
+			meta: &schedulerv1pb.JobMetadata{
 				AppId:     "app1",
 				Namespace: "ns1",
 			},
@@ -68,7 +68,7 @@ func Test_Metadata(t *testing.T) {
 		},
 		"different namespace should error": {
 			ctx: pki.ClientGRPCCtx(t),
-			meta: &schedulerv1pb.ScheduleJobMetadata{
+			meta: &schedulerv1pb.JobMetadata{
 				AppId:     "app1",
 				Namespace: "ns2",
 			},
@@ -77,7 +77,7 @@ func Test_Metadata(t *testing.T) {
 		},
 		"different appID should error": {
 			ctx: pki.ClientGRPCCtx(t),
-			meta: &schedulerv1pb.ScheduleJobMetadata{
+			meta: &schedulerv1pb.JobMetadata{
 				AppId:     "app2",
 				Namespace: "ns1",
 			},
@@ -86,7 +86,7 @@ func Test_Metadata(t *testing.T) {
 		},
 		"valid request should pass": {
 			ctx: pki.ClientGRPCCtx(t),
-			meta: &schedulerv1pb.ScheduleJobMetadata{
+			meta: &schedulerv1pb.JobMetadata{
 				AppId:     "app1",
 				Namespace: "ns1",
 			},

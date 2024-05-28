@@ -62,12 +62,12 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 		Job: &schedulerv1pb.Job{
 			Schedule: ptr.Of("@daily"),
 		},
-		Metadata: &schedulerv1pb.ScheduleJobMetadata{
+		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     "test",
 			Namespace: "default",
-			Type: &schedulerv1pb.ScheduleJobMetadataType{
-				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
-					Job: new(schedulerv1pb.ScheduleTypeJob),
+			Type: &schedulerv1pb.JobMetadataType{
+				Type: &schedulerv1pb.JobMetadataType_Job{
+					Job: new(schedulerv1pb.TypeJob),
 				},
 			},
 		},

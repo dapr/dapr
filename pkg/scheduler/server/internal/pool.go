@@ -50,7 +50,7 @@ type namespacedPool struct {
 type JobEvent struct {
 	Name     string
 	Data     *anypb.Any
-	Metadata *schedulerv1pb.ScheduleJobMetadata
+	Metadata *schedulerv1pb.JobMetadata
 }
 
 func NewPool() *Pool {
@@ -177,7 +177,7 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid uint64) {
 }
 
 // getConn returns a connection from the pool based on the metadata.
-func (p *Pool) getConn(meta *schedulerv1pb.ScheduleJobMetadata) (*conn, error) {
+func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, error) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
@@ -189,7 +189,7 @@ func (p *Pool) getConn(meta *schedulerv1pb.ScheduleJobMetadata) (*conn, error) {
 	idx := nsPool.idx.Add(1)
 
 	switch t := meta.GetType(); t.GetType().(type) {
-	case *schedulerv1pb.ScheduleJobMetadataType_Job:
+	case *schedulerv1pb.JobMetadataType_Job:
 		appIDConns, ok := nsPool.appID[meta.GetAppId()]
 		if !ok || len(appIDConns) == 0 {
 			return nil, fmt.Errorf("no connections available for appID: %s", meta.GetAppId())
@@ -197,7 +197,7 @@ func (p *Pool) getConn(meta *schedulerv1pb.ScheduleJobMetadata) (*conn, error) {
 		conn := nsPool.conns[appIDConns[int(idx)%len(appIDConns)]]
 		return conn, nil
 
-	case *schedulerv1pb.ScheduleJobMetadataType_Actor:
+	case *schedulerv1pb.JobMetadataType_Actor:
 		actorTypeConns, ok := nsPool.actorType[t.GetActor().GetType()]
 		if !ok || len(actorTypeConns) == 0 {
 			return nil, fmt.Errorf("no connections available for actorType: %s", t.GetActor().GetType())

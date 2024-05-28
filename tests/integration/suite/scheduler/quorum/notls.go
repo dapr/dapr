@@ -111,12 +111,12 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 				TypeUrl: "type.googleapis.com/google.type.Expr",
 			},
 		},
-		Metadata: &schedulerv1pb.ScheduleJobMetadata{
+		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     n.daprd.AppID(),
 			Namespace: n.daprd.Namespace(),
-			Type: &schedulerv1pb.ScheduleJobMetadataType{
-				Type: &schedulerv1pb.ScheduleJobMetadataType_Job{
-					Job: new(schedulerv1pb.ScheduleTypeJob),
+			Type: &schedulerv1pb.JobMetadataType{
+				Type: &schedulerv1pb.JobMetadataType_Job{
+					Job: new(schedulerv1pb.TypeJob),
 				},
 			},
 		},

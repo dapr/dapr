@@ -39,7 +39,7 @@ func New(opts Options) *Authz {
 	return &Authz{sec: opts.Security}
 }
 
-func (a *Authz) Metadata(ctx context.Context, meta *schedulerv1pb.ScheduleJobMetadata) error {
+func (a *Authz) Metadata(ctx context.Context, meta *schedulerv1pb.JobMetadata) error {
 	return a.authz(ctx, meta.GetNamespace(), meta.GetAppId())
 }
 

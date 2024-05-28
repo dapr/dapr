@@ -105,12 +105,12 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	meta := job.GetMetadata()
 
 	switch t := meta.GetType(); t.GetType().(type) {
-	case *schedulerv1pb.ScheduleJobMetadataType_Job:
+	case *schedulerv1pb.JobMetadataType_Job:
 		if err := s.invokeApp(ctx, job); err != nil {
 			log.Errorf("failed to invoke schedule app job: %s", err)
 		}
 
-	case *schedulerv1pb.ScheduleJobMetadataType_Actor:
+	case *schedulerv1pb.JobMetadataType_Actor:
 		if err := s.invokeActorReminder(ctx, job); err != nil {
 			log.Errorf("failed to invoke scheduled actor reminder: %s", err)
 		}
