@@ -21,7 +21,6 @@ import (
 	"net"
 	"net/http"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -66,10 +65,7 @@ func (h *httpServer) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(h2cClient.CloseIdleConnections)
 
 	t.Run("test with HTTP1", func(t *testing.T) {
-		reqCtx, reqCancel := context.WithTimeout(ctx, 10*time.Millisecond)
-		defer reqCancel()
-
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.proc.HTTPPort()), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.proc.HTTPPort()), nil)
 		require.NoError(t, err)
 
 		// Body is closed below but the linter isn't seeing that
@@ -83,10 +79,7 @@ func (h *httpServer) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("test with HTTP2 Cleartext with prior knowledge", func(t *testing.T) {
-		reqCtx, reqCancel := context.WithTimeout(ctx, time.Second)
-		defer reqCancel()
-
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.proc.HTTPPort()), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.proc.HTTPPort()), nil)
 		require.NoError(t, err)
 
 		// Body is closed below but the linter isn't seeing that
@@ -104,10 +97,7 @@ func (h *httpServer) Run(t *testing.T, ctx context.Context) {
 		// The best we can do for now is to verify that the server responds with a 101 response when we signal that we are able to upgrade
 		// See: https://github.com/golang/go/issues/46249
 
-		reqCtx, reqCancel := context.WithTimeout(ctx, 150*time.Millisecond)
-		defer reqCancel()
-
-		req, err := http.NewRequestWithContext(reqCtx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.proc.HTTPPort()), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/v1.0/healthz", h.proc.HTTPPort()), nil)
 		require.NoError(t, err)
 
 		req.Header.Set("Connection", "Upgrade, HTTP2-Settings")
