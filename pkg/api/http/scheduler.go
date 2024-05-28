@@ -36,7 +36,7 @@ func (a *api) constructSchedulerEndpoints() []endpoints.Endpoint {
 		{
 			Methods: []string{http.MethodPost},
 			Route:   "job/schedule/{name}",
-			Version: apiVersionV1,
+			Version: apiVersionV1alpha1,
 			Group:   endpointGroupSchedulerV1Alpha1,
 			Handler: a.onCreateScheduleHandler(),
 			Settings: endpoints.EndpointSettings{
@@ -46,7 +46,7 @@ func (a *api) constructSchedulerEndpoints() []endpoints.Endpoint {
 		{
 			Methods: []string{http.MethodDelete},
 			Route:   "job/{name}",
-			Version: apiVersionV1,
+			Version: apiVersionV1alpha1,
 			Group:   endpointGroupSchedulerV1Alpha1,
 			Handler: a.onDeleteJobHandler(),
 			Settings: endpoints.EndpointSettings{
@@ -56,7 +56,7 @@ func (a *api) constructSchedulerEndpoints() []endpoints.Endpoint {
 		{
 			Methods: []string{http.MethodGet},
 			Route:   "job/{name}",
-			Version: apiVersionV1,
+			Version: apiVersionV1alpha1,
 			Group:   endpointGroupSchedulerV1Alpha1,
 			Handler: a.onGetJobHandler(),
 			Settings: endpoints.EndpointSettings{

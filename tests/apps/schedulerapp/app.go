@@ -66,7 +66,7 @@ var (
 func scheduleJobHTTP(name string, jsonValue []byte) (int, error) {
 	log.Printf("Scheduling job named: %s", name)
 
-	url := fmt.Sprintf("http://localhost:%d/v1.0/job/schedule/%s", daprPortHTTP, name)
+	url := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/job/schedule/%s", daprPortHTTP, name)
 
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()

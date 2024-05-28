@@ -56,7 +56,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.scheduler.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
 
-	postURL := fmt.Sprintf("http://localhost:%d/v1.0/job/schedule/test", b.daprd.HTTPPort())
+	postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/job/schedule/test", b.daprd.HTTPPort())
 
 	httpClient := util.HTTPClient(t)
 
