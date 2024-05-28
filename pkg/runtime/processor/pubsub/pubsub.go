@@ -15,15 +15,10 @@ package pubsub
 
 import (
 	"context"
-	"encoding/json"
-	"errors"
 	"fmt"
 	"strings"
 	"sync"
 
-	"k8s.io/apimachinery/pkg/util/sets"
-
-	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -33,7 +28,6 @@ import (
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/outbox"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -44,23 +38,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var (
-	log = logger.NewLogger("dapr.runtime.processor.pubsub")
-
-	// errUnexpectedEnvelopeData denotes that an unexpected data type was
-	// encountered when processing a cloud event's data property.
-	errUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
-
-	cloudEventDuplicateKeys = sets.NewString(
-		contribpubsub.IDField,
-		contribpubsub.SourceField,
-		contribpubsub.DataContentTypeField,
-		contribpubsub.TypeField,
-		contribpubsub.SpecVersionField,
-		contribpubsub.DataField,
-		contribpubsub.DataBase64Field,
-	)
-)
+var log = logger.NewLogger("dapr.runtime.processor.pubsub")
 
 type Options struct {
 	ID        string
@@ -94,6 +72,7 @@ type pubsub struct {
 	grpc           *manager.Manager
 	channels       *channels.Channels
 	operatorClient operatorv1.OperatorClient
+	streamer       *streamer
 
 	lock        sync.RWMutex
 	subscribing bool
@@ -101,15 +80,6 @@ type pubsub struct {
 
 	topicCancels map[string]context.CancelFunc
 	outbox       outbox.Outbox
-}
-
-type subscribedMessage struct {
-	cloudEvent map[string]interface{}
-	data       []byte
-	topic      string
-	metadata   map[string]string
-	path       string
-	pubsub     string
 }
 
 func New(opts Options) *pubsub {
@@ -130,7 +100,11 @@ func New(opts Options) *pubsub {
 		topicCancels:   make(map[string]context.CancelFunc),
 	}
 
-	ps.outbox = rtpubsub.NewOutbox(ps.Publish, opts.ComponentStore.GetPubSubComponent, opts.ComponentStore.GetStateStore, ExtractCloudEventProperty, opts.Namespace)
+	ps.streamer = &streamer{
+		pubsub:      ps,
+		subscribers: make(map[string]*streamconn),
+	}
+	ps.outbox = rtpubsub.NewOutbox(ps.Publish, opts.ComponentStore.GetPubSubComponent, opts.ComponentStore.GetStateStore, rtpubsub.ExtractCloudEventProperty, opts.Namespace)
 	return ps
 }
 
@@ -211,6 +185,10 @@ func (p *pubsub) Outbox() outbox.Outbox {
 	return p.outbox
 }
 
+func (p *pubsub) Streamer() rtpubsub.Streamer {
+	return p.streamer
+}
+
 // findMatchingRoute selects the path based on routing rules. If there are
 // no matching rules, the route-level path is used.
 func findMatchingRoute(rules []*rtpubsub.Rule, cloudEvent interface{}) (path string, shouldProcess bool, err error) {
@@ -251,73 +229,4 @@ func matchRoutingRule(rules []*rtpubsub.Rule, data map[string]interface{}) (*rtp
 	}
 
 	return nil, nil
-}
-
-func ExtractCloudEventProperty(cloudEvent map[string]any, property string) string {
-	if cloudEvent == nil {
-		return ""
-	}
-	iValue, ok := cloudEvent[property]
-	if ok {
-		if value, ok := iValue.(string); ok {
-			return value
-		}
-	}
-
-	return ""
-}
-
-func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
-	envelope := &runtimev1pb.TopicEventCERequest{
-		Id:              ExtractCloudEventProperty(event, contribpubsub.IDField),
-		Source:          ExtractCloudEventProperty(event, contribpubsub.SourceField),
-		DataContentType: ExtractCloudEventProperty(event, contribpubsub.DataContentTypeField),
-		Type:            ExtractCloudEventProperty(event, contribpubsub.TypeField),
-		SpecVersion:     ExtractCloudEventProperty(event, contribpubsub.SpecVersionField),
-	}
-
-	if data, ok := event[contribpubsub.DataField]; ok && data != nil {
-		envelope.Data = nil
-
-		if contenttype.IsStringContentType(envelope.GetDataContentType()) {
-			switch v := data.(type) {
-			case string:
-				envelope.Data = []byte(v)
-			case []byte:
-				envelope.Data = v
-			default:
-				return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, errUnexpectedEnvelopeData //nolint:nosnakecase
-			}
-		} else if contenttype.IsJSONContentType(envelope.GetDataContentType()) || contenttype.IsCloudEventContentType(envelope.GetDataContentType()) {
-			envelope.Data, _ = json.Marshal(data)
-		}
-	}
-	extensions, extensionsErr := extractCloudEventExtensions(event)
-	if extensionsErr != nil {
-		return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, extensionsErr
-	}
-	envelope.Extensions = extensions
-	return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{CloudEvent: envelope}, nil //nolint:nosnakecase
-}
-
-func fetchEntry(rawPayload bool, entry *contribpubsub.BulkMessageEntry, cloudEvent map[string]interface{}) (*runtimev1pb.TopicEventBulkRequestEntry, error) {
-	if rawPayload {
-		return &runtimev1pb.TopicEventBulkRequestEntry{
-			EntryId:     entry.EntryId,
-			Event:       &runtimev1pb.TopicEventBulkRequestEntry_Bytes{Bytes: entry.Event}, //nolint:nosnakecase
-			ContentType: entry.ContentType,
-			Metadata:    entry.Metadata,
-		}, nil
-	} else {
-		eventLocal, err := extractCloudEvent(cloudEvent)
-		if err != nil {
-			return nil, err
-		}
-		return &runtimev1pb.TopicEventBulkRequestEntry{
-			EntryId:     entry.EntryId,
-			Event:       &eventLocal,
-			ContentType: entry.ContentType,
-			Metadata:    entry.Metadata,
-		}, nil
-	}
 }
