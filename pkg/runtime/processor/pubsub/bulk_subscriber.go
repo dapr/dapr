@@ -36,7 +36,7 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 // message contains all the essential information related to a particular entry.
@@ -44,7 +44,7 @@ import (
 // their related info doing retries of resiliency support.
 type message struct {
 	cloudEvent map[string]interface{}
-	rawData    *runtimePubsub.BulkSubscribeMessageItem
+	rawData    *rtpubsub.BulkSubscribeMessageItem
 	entry      *contribpubsub.BulkMessageEntry
 }
 
@@ -104,7 +104,7 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 ) error {
 	ps, ok := p.compStore.GetPubSub(psName)
 	if !ok {
-		return runtimePubsub.NotFoundError{PubsubName: psName}
+		return rtpubsub.NotFoundError{PubsubName: psName}
 	}
 
 	subscribeTopic := topic
@@ -126,7 +126,7 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 			msg.Metadata = make(map[string]string, 1)
 		}
 
-		msg.Metadata[metadataKeyPubSub] = psName
+		msg.Metadata[rtpubsub.MetadataKeyPubSub] = psName
 		bulkSubDiag := newBulkSubIngressDiagnostics()
 		bulkResponses := make([]contribpubsub.BulkSubscribeResponseEntry, len(msg.Entries))
 		routePathBulkMessageMap := make(map[string]bulkSubscribedMessage)
@@ -244,7 +244,7 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 		return bulkSubscriber.BulkSubscribe(ctx, req, bulkHandler)
 	}
 
-	return runtimePubsub.NewDefaultBulkSubscriber(ps.Component).BulkSubscribe(ctx, req, bulkHandler)
+	return rtpubsub.NewDefaultBulkSubscriber(ps.Component).BulkSubscribe(ctx, req, bulkHandler)
 }
 
 // sendBulkToDLQIfConfigured sends the message to the dead letter queue if configured.
@@ -306,7 +306,7 @@ func (p *pubsub) createEnvelopeAndInvokeSubscriber(ctx context.Context, bulkSubC
 	}
 	psm.pubSubMessages = psm.pubSubMessages[:psm.length]
 	psm.path = path
-	envelope := runtimePubsub.NewBulkSubscribeEnvelope(&runtimePubsub.BulkSubscribeEnvelope{
+	envelope := rtpubsub.NewBulkSubscribeEnvelope(&rtpubsub.BulkSubscribeEnvelope{
 		ID:       id,
 		Topic:    bscData.topic,
 		Pubsub:   bscData.psName,
@@ -322,13 +322,13 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 	bsrr *bulkSubscribeResiliencyRes, deadLetterTopic string,
 ) error {
 	bscData := *bulkSubCallData
-	rawMsgEntries := make([]*runtimePubsub.BulkSubscribeMessageItem, len(psm.pubSubMessages))
+	rawMsgEntries := make([]*rtpubsub.BulkSubscribeMessageItem, len(psm.pubSubMessages))
 	entryRespReceived := make(map[string]bool, len(psm.pubSubMessages))
 	for i, pubSubMsg := range psm.pubSubMessages {
 		rawMsgEntries[i] = pubSubMsg.rawData
 	}
 
-	bsrr.envelope[runtimePubsub.Entries] = rawMsgEntries
+	bsrr.envelope[rtpubsub.Entries] = rawMsgEntries
 	da, marshalErr := json.Marshal(&bsrr.envelope)
 
 	if marshalErr != nil {
@@ -510,7 +510,7 @@ func (p *pubsub) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bu
 	entryRespReceived := make(map[string]bool, len(psm.pubSubMessages))
 	for i, pubSubMsg := range psm.pubSubMessages {
 		entry := pubSubMsg.entry
-		item, err := fetchEntry(rawPayload, entry, psm.pubSubMessages[i].cloudEvent)
+		item, err := rtpubsub.FetchEntry(rawPayload, entry, psm.pubSubMessages[i].cloudEvent)
 		if err != nil {
 			bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)]++
 			addBulkResponseEntry(bulkResponses, entry.EntryId, err)
@@ -721,7 +721,7 @@ func populateBulkSubcribedMessage(msgE *contribpubsub.BulkMessageEntry, event in
 	routePathBulkMessageMap *map[string]bulkSubscribedMessage,
 	rPath string, i int, msg *contribpubsub.BulkMessage, isCloudEvent bool, psName string, contentType string, namespacedConsumer bool, namespace string,
 ) {
-	childMessage := runtimePubsub.BulkSubscribeMessageItem{
+	childMessage := rtpubsub.BulkSubscribeMessageItem{
 		Event:       event,
 		Metadata:    msgE.Metadata,
 		EntryId:     msgE.EntryId,
@@ -812,8 +812,8 @@ func reportBulkSubDiagnostics(ctx context.Context, topic string, bulkSubDiag *bu
 	if bulkSubDiag == nil {
 		return
 	}
-	diag.DefaultComponentMonitoring.BulkPubsubIngressEvent(ctx, metadataKeyPubSub, topic, bulkSubDiag.elapsed)
+	diag.DefaultComponentMonitoring.BulkPubsubIngressEvent(ctx, rtpubsub.MetadataKeyPubSub, topic, bulkSubDiag.elapsed)
 	for status, count := range bulkSubDiag.statusWiseDiag {
-		diag.DefaultComponentMonitoring.BulkPubsubIngressEventEntries(ctx, metadataKeyPubSub, topic, status, count)
+		diag.DefaultComponentMonitoring.BulkPubsubIngressEventEntries(ctx, rtpubsub.MetadataKeyPubSub, topic, status, count)
 	}
 }

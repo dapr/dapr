@@ -24,6 +24,7 @@ import (
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 // manager implements the life cycle events of a component category.
@@ -50,6 +51,7 @@ type PubsubManager interface {
 	StopSubscriptions(forever bool)
 	ReloadSubscriptions(context.Context) error
 	Outbox() outbox.Outbox
+	Streamer() rtpubsub.Streamer
 	manager
 }
 
