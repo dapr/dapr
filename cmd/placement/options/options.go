@@ -57,7 +57,7 @@ type Options struct {
 
 	TLSEnabled       bool
 	TrustDomain      string
-	TrustAnchorsFile *string
+	TrustAnchorsFile string
 	SentryAddress    string
 	Mode             string
 
@@ -66,8 +66,6 @@ type Options struct {
 	// Log and metrics configurations
 	Logger  logger.Options
 	Metrics *metrics.Options
-
-	taFile string
 }
 
 func New(origArgs []string) *Options {
@@ -110,7 +108,7 @@ func New(origArgs []string) *Options {
 	fs.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
 
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
-	fs.StringVar(&opts.taFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
+	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
 	fs.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Placement")
 
@@ -126,10 +124,6 @@ func New(origArgs []string) *Options {
 	opts.RaftPeers = parsePeersFromFlag(opts.raftPeerFlag)
 	if opts.RaftLogStorePath != "" {
 		opts.RaftInMemEnabled = false
-	}
-
-	if fs.Changed("trust-anchors-file") {
-		opts.TrustAnchorsFile = &opts.taFile
 	}
 
 	return &opts

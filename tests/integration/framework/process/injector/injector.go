@@ -69,7 +69,7 @@ func New(t *testing.T, fopts ...Option) *Injector {
 	mobj, err := json.Marshal(new(admissionregistrationv1.MutatingWebhookConfiguration))
 	require.NoError(t, err)
 	kubeapi := kubernetes.New(t, kubernetes.WithBaseOperatorAPI(t,
-		spiffeid.RequireTrustDomainFromString(opts.sentry.TrustDomain()),
+		spiffeid.RequireTrustDomainFromString(opts.sentry.TrustDomain(t)),
 		*opts.namespace,
 		opts.sentry.Port(),
 	),
@@ -101,7 +101,7 @@ func New(t *testing.T, fopts ...Option) *Injector {
 					"NAMESPACE", *opts.namespace,
 					"SIDECAR_IMAGE", opts.sidecarImage,
 					"DAPR_TRUST_ANCHORS_FILE", opts.sentry.TrustAnchorsFile(t),
-					"DAPR_CONTROL_PLANE_TRUST_DOMAIN", opts.sentry.TrustDomain(),
+					"DAPR_CONTROL_PLANE_TRUST_DOMAIN", opts.sentry.TrustDomain(t),
 					"DAPR_SENTRY_ADDRESS", opts.sentry.Address(),
 				),
 			)...,
