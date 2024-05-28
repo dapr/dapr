@@ -358,6 +358,14 @@ func (s *Subscriber) initProgramaticSubscriptions(ctx context.Context) error {
 		return err
 	}
 
+	subbedTopics := make(map[string][]string)
+	for _, sub := range subscriptions {
+		subbedTopics[sub.PubsubName] = append(subbedTopics[sub.PubsubName], sub.Topic)
+	}
+	for pubsubName, topics := range subbedTopics {
+		log.Infof("app is subscribed to the following topics: [%s] through pubsub=%s", topics, pubsubName)
+	}
+
 	s.compStore.SetProgramaticSubscriptions(subscriptions...)
 
 	return nil
