@@ -89,20 +89,103 @@ func TestMembershipChangeWorker(t *testing.T) {
 		conn2, _, stream2 := newTestClient(t, serverAddress)
 		conn3, _, stream3 := newTestClient(t, serverAddress)
 
-		done := make(chan bool)
+		ch := make(chan struct{}, 3)
+
+		var operations1 []string
 		go func() {
-			cnt := 0
-			for {
+			require.EventuallyWithT(t, func(c *assert.CollectT) {
 				placementOrder, streamErr := stream1.Recv()
-				require.NoError(t, streamErr)
+				assert.NoError(c, streamErr)
+				if placementOrder.GetOperation() == "lock" {
+					operations1 = append(operations1, "lock")
+				}
+				if placementOrder.GetOperation() == "update" {
+					tables := placementOrder.GetTables()
+					assert.Len(c, tables.GetEntries(), 2)
+					assert.Contains(c, tables.GetEntries(), "actor1")
+					assert.Contains(c, tables.GetEntries(), "actor2")
+					operations1 = append(operations1, "update")
+				}
 				if placementOrder.GetOperation() == "unlock" {
-					cnt++
+					operations1 = append(operations1, "unlock")
 				}
-				if cnt == 1 {
-					done <- true
-					return
+
+				if assert.Len(c, operations1, 3) {
+					require.Equal(c, "lock", operations1[0])
+					require.Equal(c, "update", operations1[1])
+					require.Equal(c, "unlock", operations1[2])
 				}
-			}
+			}, 10*time.Second, 100*time.Millisecond)
+			ch <- struct{}{}
+		}()
+
+		var operations2 []string
+		go func() {
+			require.EventuallyWithT(t, func(c *assert.CollectT) {
+				placementOrder, streamErr := stream2.Recv()
+				fmt.Println("stream2", placementOrder.GetOperation(), placementOrder.GetTables().GetEntries())
+				assert.NoError(c, streamErr)
+				if placementOrder.GetOperation() == "lock" {
+					operations2 = append(operations2, "lock")
+				}
+				if placementOrder.GetOperation() == "update" {
+					entries := placementOrder.GetTables().GetEntries()
+					if !assert.Len(c, entries, 2) {
+						return
+					}
+					if !assert.Contains(c, entries, "actor3") {
+						return
+					}
+					if !assert.Contains(c, entries, "actor4") {
+						return
+					}
+					operations2 = append(operations2, "update")
+				}
+				if placementOrder.GetOperation() == "unlock" {
+					operations2 = append(operations2, "unlock")
+				}
+
+				// Depending on the timing of the host 3 registration
+				// we may receive one or two update messages
+				assert.GreaterOrEqual(c, len(operations2), 3)
+			}, 10*time.Second, 100*time.Millisecond)
+			ch <- struct{}{}
+		}()
+
+		var operations3 []string
+		go func() {
+			require.EventuallyWithT(t, func(c *assert.CollectT) {
+				placementOrder, streamErr := stream3.Recv()
+				assert.NoError(c, streamErr)
+				if placementOrder.GetOperation() == "lock" {
+					operations3 = append(operations3, "lock")
+				}
+				if placementOrder.GetOperation() == "update" {
+					entries := placementOrder.GetTables().GetEntries()
+					if !assert.Len(c, entries, 2) {
+						return
+					}
+					if !assert.Contains(c, entries, "actor3") {
+						return
+					}
+					if !assert.Contains(c, entries, "actor4") {
+						return
+					}
+					operations3 = append(operations3, "update")
+				}
+				if placementOrder.GetOperation() == "unlock" {
+					operations3 = append(operations3, "unlock")
+				}
+
+				// Depending on the timing of the host 3 registration
+				// we may receive one or two update messages
+				if assert.GreaterOrEqual(c, len(operations3), 3) {
+					require.Equal(c, "lock", operations3[0])
+					require.Equal(c, "update", operations3[1])
+					require.Equal(c, "unlock", operations3[2])
+				}
+			}, 10*time.Second, 100*time.Millisecond)
+			ch <- struct{}{}
 		}()
 
 		host1 := &v1pb.Host{
@@ -153,25 +236,29 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// Move the clock forward so dissemination is triggered
 		clock.Step(disseminateTimeout)
 
-		select {
-		case <-done:
-		case <-time.After(5 * time.Second):
-			t.Error("dissemination did not happen in time")
-		}
+		// Wait for all three hosts to receive the updates
+		updateMsgCnt := 0
+		require.Eventually(t, func() bool {
+			select {
+			case <-ch:
+				updateMsgCnt++
+			}
+			return updateMsgCnt == 3
+		}, 10*time.Second, 100*time.Millisecond)
 
-		// ignore disseminateTimeout.
+		// Ignore the next disseminateTimeout.
 		val, _ := testServer.disseminateNextTime.GetOrSet("ns1", &atomic.Int64{})
 		val.Store(0)
 
-		// Check member has been saved correctly in the raft store
+		// Check members has been saved correctly in the raft store
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			state := testServer.raftNode.FSM().State()
 			cnt := 0
 			state.ForEachHostInNamespace("ns1", func(host *raft.DaprHostMember) bool {
-				cnt++
 				assert.Equal(c, "127.0.0.1:50100", host.Name)
 				assert.Equal(c, "ns1", host.Namespace)
 				assert.Contains(c, host.Entities, "actor1", "actor2")
+				cnt++
 				return true
 			})
 			assert.Equal(t, 1, cnt)
@@ -179,17 +266,17 @@ func TestMembershipChangeWorker(t *testing.T) {
 			cnt = 0
 			state.ForEachHostInNamespace("ns2", func(host *raft.DaprHostMember) bool {
 				if host.Name == "127.0.0.1:50101" {
-					cnt++
 					assert.Equal(c, "127.0.0.1:50101", host.Name)
 					assert.Equal(c, "ns2", host.Namespace)
 					assert.Contains(c, host.Entities, "actor3")
+					cnt++
 				}
 
 				if host.Name == "127.0.0.1:50102" {
-					cnt++
 					assert.Equal(c, "127.0.0.1:50102", host.Name)
 					assert.Equal(c, "ns2", host.Namespace)
 					assert.Contains(c, host.Entities, "actor4")
+					cnt++
 				}
 
 				return true
@@ -210,22 +297,22 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// Disconnect the host in ns1
 		conn1.Close()
 		require.Eventually(t, func() bool {
-			require.Equal(t, 2, testServer.raftNode.FSM().State().MemberCount())
+			assert.Equal(t, 2, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate locks have been deleted for ns1, but not ns2
-			require.Equal(t, 1, testServer.disseminateLocks.ItemCount())
+			assert.Equal(t, 1, testServer.disseminateLocks.ItemCount())
 
 			// Disseminate timers have been deleted for ns1, but not ns2
 			_, ok := testServer.disseminateNextTime.Get("ns1")
-			require.False(t, ok)
+			assert.False(t, ok)
 			_, ok = testServer.disseminateNextTime.Get("ns2")
-			require.True(t, ok)
+			assert.True(t, ok)
 
 			// Member update counts have been deleted for ns1, but not ns2
 			_, ok = testServer.memberUpdateCount.Get("ns1")
-			require.False(t, ok)
+			assert.False(t, ok)
 			_, ok = testServer.memberUpdateCount.Get("ns2")
-			require.True(t, ok)
+			assert.True(t, ok)
 
 			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
 			assert.Equal(t, 2, testServer.streamConnPool.getStreamCount("ns2"))
@@ -240,22 +327,22 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// // Disconnect one host in ns2
 		conn2.Close()
 		require.Eventually(t, func() bool {
-			require.Equal(t, 1, testServer.raftNode.FSM().State().MemberCount())
+			assert.Equal(t, 1, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate lock for ns2 hasn't been deleted
-			require.Equal(t, 1, testServer.disseminateLocks.ItemCount())
+			assert.Equal(t, 1, testServer.disseminateLocks.ItemCount())
 
 			// Disseminate timer for ns2 hasn't been deleted,
 			// because there's still streams in the namespace
 			_, ok := testServer.disseminateNextTime.Get("ns1")
-			require.False(t, ok)
+			assert.False(t, ok)
 			_, ok = testServer.disseminateNextTime.Get("ns2")
-			require.True(t, ok)
+			assert.True(t, ok)
 
 			// Member update count for ns2 hasn't been deleted,
 			// because there's still streams in the namespace
 			_, ok = testServer.memberUpdateCount.Get("ns2")
-			require.True(t, ok)
+			assert.True(t, ok)
 
 			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
 			assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns2"))
