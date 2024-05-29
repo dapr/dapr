@@ -118,11 +118,6 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--reminders-service", c.RemindersService)
 	}
 
-	// Scheduler address could be empty if scheduler service is disabled
-	if c.SchedulerAddress != "" {
-		args = append(args, "--scheduler-host-address", c.SchedulerAddress)
-	}
-
 	// --enable-api-logging is set if and only if there's an explicit value (true or false) for that
 	// This is set explicitly even if "false"
 	// This is because if this CLI flag is missing, the default specified in the Config CRD is used
@@ -271,6 +266,17 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			},
 		)
 	}
+
+	// Scheduler address could be empty if scheduler service is disabled
+	if c.SchedulerAddress != "" {
+		env = append(env,
+			corev1.EnvVar{
+				Name:  injectorConsts.SchedulerHostAddressEnvVar,
+				Value: c.SchedulerAddress,
+			},
+		)
+	}
+
 	container := &corev1.Container{
 		Name:            injectorConsts.SidecarContainerName,
 		Image:           c.SidecarImage,

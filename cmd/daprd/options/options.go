@@ -18,6 +18,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -248,6 +249,13 @@ func New(origArgs []string) (*Options, error) {
 
 	if !fs.Changed("dapr-block-shutdown-duration") {
 		opts.DaprBlockShutdownDuration = nil
+	}
+
+	if !fs.Changed("scheduler-host-address") {
+		addr, ok := os.LookupEnv(consts.SchedulerHostAddressEnvVar)
+		if ok {
+			opts.SchedulerAddress = strings.Split(addr, ",")
+		}
 	}
 
 	return &opts, nil
