@@ -95,6 +95,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		go func() {
 			require.EventuallyWithT(t, func(c *assert.CollectT) {
 				placementOrder, streamErr := stream1.Recv()
+				//nolint:testifylint
 				assert.NoError(c, streamErr)
 				if placementOrder.GetOperation() == "lock" {
 					operations1 = append(operations1, "lock")
@@ -123,7 +124,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		go func() {
 			require.EventuallyWithT(t, func(c *assert.CollectT) {
 				placementOrder, streamErr := stream2.Recv()
-				fmt.Println("stream2", placementOrder.GetOperation(), placementOrder.GetTables().GetEntries())
+				//nolint:testifylint
 				assert.NoError(c, streamErr)
 				if placementOrder.GetOperation() == "lock" {
 					operations2 = append(operations2, "lock")
@@ -156,6 +157,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		go func() {
 			require.EventuallyWithT(t, func(c *assert.CollectT) {
 				placementOrder, streamErr := stream3.Recv()
+				//nolint:testifylint
 				assert.NoError(c, streamErr)
 				if placementOrder.GetOperation() == "lock" {
 					operations3 = append(operations3, "lock")
