@@ -92,6 +92,7 @@ spec:
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
+		daprd.WithLogLevel("debug"),
 		daprd.WithExecOptions(
 			exec.WithStdout(r.loglineSchedulerReminders.Stdout()),
 		))
