@@ -93,7 +93,7 @@ func TestHTTPMetricsPathMatchingNotEnabled(t *testing.T) {
 	testHTTP.enabled = false
 	pathMatching := &config.PathMatching{}
 	testHTTP.Init("fakeID", pathMatching, true)
-	matchedPath, ok := testHTTP.matchPath("/orders", Ingress)
+	matchedPath, ok := testHTTP.ingress.matchPath("/orders")
 	require.False(t, ok)
 	require.Equal(t, "", matchedPath)
 }
@@ -101,7 +101,7 @@ func TestHTTPMetricsPathMatchingNotEnabled(t *testing.T) {
 func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	pathMatching := &config.PathMatching{
+	config := &config.PathMatching{
 		IngressPaths: []string{
 			"/orders/{orderID}/items/{itemID}",
 			"/orders/{orderID}",
@@ -111,25 +111,25 @@ func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
 			"/orders/{orderID}/items/{itemID}",
 		},
 	}
-	testHTTP.Init("fakeID", pathMatching, true)
+	testHTTP.Init("fakeID", config, true)
 
 	tt := []struct {
-		direction   int
+		pathMatcher *pathMatching
 		path        string
 		matchedPath string
 		matched     bool
 	}{
-		{Ingress, "", "", false},
-		{Ingress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
-		{Egress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
-		{Ingress, "/items/12345", "/items/{itemID}", true},
-		{Egress, "/items/12345", "/items/12345", true},
-		{Ingress, "/basket/12345", "/basket/12345", true},
-		{Ingress, "dapr/config", "/dapr/config", true},
+		{testHTTP.ingress, "", "", false},
+		{testHTTP.ingress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{testHTTP.egress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{testHTTP.ingress, "/items/12345", "/items/{itemID}", true},
+		{testHTTP.egress, "/items/12345", "/items/12345", true},
+		{testHTTP.ingress, "/basket/12345", "/basket/12345", true},
+		{testHTTP.ingress, "dapr/config", "/dapr/config", true},
 	}
 
 	for _, tc := range tt {
-		path, ok := testHTTP.matchPath(tc.path, tc.direction)
+		path, ok := tc.pathMatcher.matchPath(tc.path)
 		require.Equal(t, ok, tc.matched)
 		if ok {
 			assert.Equal(t, tc.matchedPath, path)
@@ -140,7 +140,7 @@ func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
 func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	pathMatching := &config.PathMatching{
+	config := &config.PathMatching{
 		IngressPaths: []string{
 			"/orders/{orderID}/items/{itemID}",
 			"/orders/{orderID}",
@@ -150,64 +150,30 @@ func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 			"/orders/{orderID}/items/{itemID}",
 		},
 	}
-	testHTTP.Init("fakeID", pathMatching, false)
+	testHTTP.Init("fakeID", config, false)
 
 	tt := []struct {
-		direction   int
+		pathMatcher *pathMatching
 		path        string
 		matchedPath string
 		matched     bool
 	}{
-		{Ingress, "", "", false},
-		{Ingress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
-		{Egress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
-		{Ingress, "/items/12345", "/items/{itemID}", true},
-		{Egress, "/items/12345", "_", true},
-		{Ingress, "/basket/12345", "_", true},
-		{Ingress, "dapr/config", "_", true},
+		{testHTTP.ingress, "", "", false},
+		{testHTTP.ingress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{testHTTP.egress, "/orders/12345/items/12345", "/orders/{orderID}/items/{itemID}", true},
+		{testHTTP.ingress, "/items/12345", "/items/{itemID}", true},
+		{testHTTP.egress, "/items/12345", "_", true},
+		{testHTTP.ingress, "/basket/12345", "_", true},
+		{testHTTP.ingress, "dapr/config", "_", true},
 	}
 
 	for _, tc := range tt {
-		path, ok := testHTTP.matchPath(tc.path, tc.direction)
+		path, ok := tc.pathMatcher.matchPath(tc.path)
 		require.Equal(t, ok, tc.matched)
 		if ok {
 			assert.Equal(t, tc.matchedPath, path)
 		}
 	}
-}
-
-func TestInitPathMatchingNilConfig(t *testing.T) {
-	testHTTP := newHTTPMetrics()
-	var pathMatching *config.PathMatching
-	config := testHTTP.initPathMatching(pathMatching)
-	assert.NotNil(t, config)
-	assert.False(t, config.enabled)
-}
-
-func TestInitPathMatchingNotEnabled(t *testing.T) {
-	testHTTP := newHTTPMetrics()
-	pathMatching := &config.PathMatching{}
-	config := testHTTP.initPathMatching(pathMatching)
-	assert.NotNil(t, config)
-	assert.False(t, config.enabled)
-}
-
-func TestInitPathMatching(t *testing.T) {
-	testHTTP := newHTTPMetrics()
-	testHTTP.enabled = false
-	pathMatching := &config.PathMatching{
-		IngressPaths: []string{
-			"/orders/{orderID}/items/{itemID}",
-		},
-		EgressPaths: []string{
-			"/orders",
-		},
-	}
-	config := testHTTP.initPathMatching(pathMatching)
-	assert.NotNil(t, config)
-	assert.True(t, config.enabled)
-	assert.NotNil(t, config.virtualIngressMux)
-	assert.NotNil(t, config.virtualEgressMux)
 }
 
 func fakeHTTPRequest(body string) *http.Request {

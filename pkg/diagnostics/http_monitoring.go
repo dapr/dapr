@@ -16,9 +16,7 @@ package diagnostics
 import (
 	"context"
 	"net/http"
-	"net/url"
 	"strconv"
-	"strings"
 	"time"
 
 	"go.opencensus.io/stats"
@@ -42,11 +40,6 @@ var (
 	httpMethodKey     = tag.MustNewKey("method")
 
 	log = logger.NewLogger("dapr.runtime.diagnostics")
-)
-
-const (
-	Egress = iota
-	Ingress
 )
 
 var (
@@ -76,13 +69,8 @@ type httpMetrics struct {
 	// Enable legacy metrics, which includes the full path
 	legacy bool
 
-	pathMatching pathMatchingConfig
-}
-
-type pathMatchingConfig struct {
-	enabled           bool
-	virtualIngressMux *http.ServeMux
-	virtualEgressMux  *http.ServeMux
+	ingress *pathMatching
+	egress  *pathMatching
 }
 
 func newHTTPMetrics() *httpMetrics {
@@ -140,17 +128,21 @@ func (h *httpMetrics) IsEnabled() bool {
 	return h != nil && h.enabled
 }
 
+func (h *httpMetrics) pathMatchingEnabled() bool {
+	return h.ingress.enabled() || h.egress.enabled()
+}
+
 func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, status string, reqContentSize, resContentSize int64, elapsed float64) {
 	if !h.IsEnabled() {
 		return
 	}
 
-	matchedPath, ok := h.matchPath(path, Egress)
+	matchedPath, ok := h.egress.matchPath(path)
 	if ok {
 		path = matchedPath
 	}
 
-	if h.legacy || h.pathMatching.enabled {
+	if h.legacy || h.egress.enabled() {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
@@ -186,12 +178,12 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 		return
 	}
 
-	matchedPath, ok := h.matchPath(path, Ingress)
+	matchedPath, ok := h.ingress.matchPath(path)
 	if ok {
 		path = matchedPath
 	}
 
-	if h.legacy || h.pathMatching.enabled {
+	if h.legacy || h.ingress.enabled() {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method),
@@ -209,12 +201,12 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 		return
 	}
 
-	matchedPath, ok := h.matchPath(path, Ingress)
+	matchedPath, ok := h.ingress.matchPath(path)
 	if ok {
 		path = matchedPath
 	}
 
-	if h.legacy || h.pathMatching.enabled {
+	if h.legacy || h.ingress.enabled() {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
@@ -265,7 +257,11 @@ func (h *httpMetrics) Init(appID string, config *config.PathMatching, legacy boo
 	h.appID = appID
 	h.enabled = true
 	h.legacy = legacy
-	h.pathMatching = h.initPathMatching(config)
+
+	if config != nil {
+		h.ingress = newPathMatching(config.IngressPaths, legacy)
+		h.egress = newPathMatching(config.EgressPaths, legacy)
+	}
 
 	tags := []tag.Key{appIDKey}
 
@@ -277,7 +273,7 @@ func (h *httpMetrics) Init(appID string, config *config.PathMatching, legacy boo
 	} else {
 		serverTags = []tag.Key{appIDKey, httpMethodKey, httpStatusCodeKey}
 		clientTags = []tag.Key{appIDKey, httpStatusCodeKey}
-		if h.pathMatching.enabled {
+		if h.pathMatchingEnabled() {
 			serverTags = append(serverTags, httpPathKey)
 			clientTags = append(clientTags, httpPathKey, httpMethodKey)
 		}
@@ -315,7 +311,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		}
 
 		var path string
-		if h.legacy || h.pathMatching.enabled {
+		if h.legacy || h.egress.enabled() {
 			path = h.convertPathToMetricLabel(r.URL.Path)
 		}
 
@@ -331,7 +327,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		respSize := int64(rw.Size())
 
 		var method string
-		if h.legacy || h.pathMatching.enabled {
+		if h.legacy || h.egress.enabled() {
 			method = r.Method
 		} else {
 			// Check if the context contains a MethodName method
@@ -345,95 +341,4 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		// Record the request
 		h.ServerRequestCompleted(r.Context(), method, path, status, reqContentSize, respSize, elapsed)
 	})
-}
-
-func (h *httpMetrics) initPathMatching(config *config.PathMatching) pathMatchingConfig {
-	if config == nil {
-		return pathMatchingConfig{
-			enabled: false,
-		}
-	}
-
-	pm := pathMatchingConfig{
-		enabled: len(config.EgressPaths)+len(config.IngressPaths) > 0,
-	}
-
-	if !pm.enabled {
-		return pm
-	}
-
-	pm.virtualIngressMux = http.NewServeMux()
-	pm.virtualIngressMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !h.legacy {
-			rw, ok := w.(*diagUtils.PathMatchingRW)
-			if !ok {
-				log.Errorf("Failed to cast to PathMatchingRW")
-				return
-			}
-			rw.MatchedPath = diagUtils.UnmatchedPathPlaceholder
-		}
-	}))
-	for _, pattern := range config.IngressPaths {
-		pm.virtualIngressMux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rw, ok := w.(*diagUtils.PathMatchingRW)
-			if !ok {
-				log.Errorf("Failed to cast to PathMatchingRW")
-				return
-			}
-			rw.MatchedPath = pattern
-		}))
-	}
-
-	pm.virtualEgressMux = http.NewServeMux()
-	pm.virtualEgressMux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !h.legacy {
-			rw, ok := w.(*diagUtils.PathMatchingRW)
-			if !ok {
-				log.Errorf("Failed to cast to PathMatchingRW")
-				return
-			}
-			rw.MatchedPath = diagUtils.UnmatchedPathPlaceholder
-		}
-	}))
-	for _, pattern := range config.EgressPaths {
-		pm.virtualEgressMux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rw, ok := w.(*diagUtils.PathMatchingRW)
-			if !ok {
-				log.Errorf("Failed to cast to PathMatchingRW")
-				return
-			}
-			rw.MatchedPath = pattern
-		}))
-	}
-	return pm
-}
-
-func (h *httpMetrics) matchPath(path string, direction int) (string, bool) {
-	if !h.pathMatching.enabled {
-		return "", false
-	}
-
-	if path == "" {
-		return "", false
-	}
-
-	if !strings.HasPrefix(path, "/") {
-		path = "/" + path
-	}
-
-	req := &http.Request{
-		Method: http.MethodGet,
-		URL: &url.URL{
-			Path: path,
-		},
-	}
-
-	crw := &diagUtils.PathMatchingRW{MatchedPath: path}
-	if direction == Ingress {
-		h.pathMatching.virtualIngressMux.ServeHTTP(crw, req)
-	} else {
-		h.pathMatching.virtualEgressMux.ServeHTTP(crw, req)
-	}
-
-	return crw.MatchedPath, true
 }

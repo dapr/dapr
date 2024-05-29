@@ -15,7 +15,6 @@ package config
 
 import (
 	"bytes"
-	"io"
 	"os"
 	"reflect"
 	"sort"
@@ -26,7 +25,6 @@ import (
 	"golang.org/x/exp/maps"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
-	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -593,9 +591,6 @@ func TestSortMetrics(t *testing.T) {
 }
 
 func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
-	log := logger.NewLogger("test")
-	log.SetOutput(io.Discard)
-
 	t.Run("no http configuration, returns false", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: nil,
@@ -632,8 +627,6 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 }
 
 func TestMetricsGetHTTPPathMatching(t *testing.T) {
-	log := logger.NewLogger("test")
-	log.SetOutput(io.Discard)
 
 	t.Run("no http configuration, returns nil", func(t *testing.T) {
 		m := MetricSpec{
