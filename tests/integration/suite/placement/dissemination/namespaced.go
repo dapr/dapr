@@ -79,12 +79,9 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 
 		select {
 		case <-ctx.Done():
+			cancel3()
 			return
 		case placementTables := <-placementMessageCh1:
-			if ctx.Err() != nil {
-				return
-			}
-
 			require.Len(t, placementTables.GetEntries(), 2)
 			require.Contains(t, placementTables.GetEntries(), "actor1")
 			require.Contains(t, placementTables.GetEntries(), "actor10")

@@ -28,7 +28,6 @@ import (
 
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
@@ -40,10 +39,9 @@ func init() {
 }
 
 type placementfailover struct {
-	fp                     *ports.Ports
-	placements             []*placement.Placement
-	daprd1, daprd2, daprd3 *daprd.Daprd
-	srv                    *prochttp.HTTP
+	fp         *ports.Ports
+	placements []*placement.Placement
+	srv        *prochttp.HTTP
 }
 
 func (n *placementfailover) Setup(t *testing.T) []framework.Option {
@@ -115,10 +113,9 @@ func (n *placementfailover) Run(t *testing.T, ctx context.Context) {
 	leaderIndex := n.getLeader(t, ctx, -1)
 	require.NotEqualf(t, -1, leaderIndex, "no leader elected")
 
-	streamCtx, _ := context.WithCancel(ctx)
-	placementMessageCh1 := n.placements[leaderIndex].RegisterHost(t, streamCtx, host1)
-	placementMessageCh2 := n.placements[leaderIndex].RegisterHost(t, streamCtx, host2)
-	placementMessageCh3 := n.placements[leaderIndex].RegisterHost(t, streamCtx, host3)
+	placementMessageCh1 := n.placements[leaderIndex].RegisterHost(t, ctx, host1)
+	placementMessageCh2 := n.placements[leaderIndex].RegisterHost(t, ctx, host2)
+	placementMessageCh3 := n.placements[leaderIndex].RegisterHost(t, ctx, host3)
 
 	// Dissemination is done properly on host 1
 	select {
@@ -168,7 +165,7 @@ func (n *placementfailover) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 
-		assert.True(c, msgCnt >= 1)
+		assert.GreaterOrEqual(c, msgCnt, 1)
 	}, 10*time.Second, 10*time.Millisecond)
 
 	// Dissemination is done properly on host 3
@@ -198,7 +195,7 @@ func (n *placementfailover) Run(t *testing.T, ctx context.Context) {
 				assert.Contains(c, loadMap, host3.GetName())
 			}
 		}
-		assert.True(c, msgCnt >= 1)
+		assert.GreaterOrEqual(c, msgCnt, 1)
 	}, 10*time.Second, 10*time.Millisecond)
 
 	// Stop the placement leader and don't reconnect one fo the hosts in ns2. Check that:
@@ -212,7 +209,7 @@ func (n *placementfailover) Run(t *testing.T, ctx context.Context) {
 	require.NotEqualf(t, -1, leaderIndex, "no leader elected")
 
 	placementMessageCh2 = n.placements[leaderIndex].RegisterHost(t, ctx, host2)
-	placementMessageCh1 = n.placements[leaderIndex].RegisterHost(t, ctx, host1)
+	n.placements[leaderIndex].RegisterHost(t, ctx, host1)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		select {
@@ -228,7 +225,7 @@ func (n *placementfailover) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(t, placementTables.GetEntries(), "actor2")
 			assert.Contains(t, placementTables.GetEntries(), "actor3")
 		}
-		assert.True(c, msgCnt >= 1)
+		assert.GreaterOrEqual(c, msgCnt, 1)
 	}, 10*time.Second, 500*time.Millisecond)
 }
 
