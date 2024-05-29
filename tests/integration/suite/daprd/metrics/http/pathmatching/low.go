@@ -41,7 +41,13 @@ func (h *lowCardinality) Setup(t *testing.T) []framework.Option {
 		app.WithHandlerFunc("/orders/{orderID}", func(w http.ResponseWriter, _ *http.Request) {
 			fmt.Fprint(w, "OK")
 		}),
+		app.WithHandlerFunc("/orders", func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprint(w, "OK")
+		}),
 		app.WithHandlerFunc("/items/{itemID}", func(w http.ResponseWriter, _ *http.Request) {
+			fmt.Fprint(w, "OK")
+		}),
+		app.WithHandlerFunc("/basket", func(w http.ResponseWriter, _ *http.Request) {
 			fmt.Fprint(w, "OK")
 		}),
 	)
@@ -63,8 +69,12 @@ spec:
       pathMatching:
         ingress:
         - /v1.0/invoke/myapp/method/orders/{orderID}
+        - /v1.0/invoke/myapp/method/basket
         egress:
+        - /v1.0/invoke/myapp/method/orders/1234
         - /v1.0/invoke/myapp/method/orders/{orderID}
+        - /v1.0/invoke/myapp/method/orders
+        - /v1.0/invoke/myapp/method/basket
 `),
 	)
 
@@ -77,9 +87,15 @@ func (h *lowCardinality) Run(t *testing.T, ctx context.Context) {
 	h.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("service invocation - matches ingres/egress", func(t *testing.T) {
-		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/orders/123")
+		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/orders/1111")
+		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/orders/1234")
+		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/orders")
+		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/basket")
 		metrics := h.daprd.Metrics(t, ctx)
 		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/orders/{orderID}|status:200"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/orders/1234|status:200"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/orders|status:200"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/basket|status:200"]))
 	})
 
 	t.Run("service invocation - no match - catch all bucket", func(t *testing.T) {

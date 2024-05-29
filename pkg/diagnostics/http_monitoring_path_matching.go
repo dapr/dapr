@@ -17,8 +17,6 @@ import (
 	"net/http"
 	"net/url"
 	"strings"
-
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
 type pathMatching struct {
@@ -34,20 +32,15 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 		return &pathMatching{}
 	}
 
+	catchAllRegistered := false
+
 	mux := http.NewServeMux()
-	mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if !legacy {
-			rw, ok := w.(*diagUtils.PathMatchingRW)
-			if !ok {
-				log.Errorf("Failed to cast to PathMatchingRW")
-				return
-			}
-			rw.MatchedPath = diagUtils.UnmatchedPathPlaceholder
-		}
-	}))
 	for _, pattern := range paths {
+		if pattern == "/" {
+			catchAllRegistered = true
+		}
 		mux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			rw, ok := w.(*diagUtils.PathMatchingRW)
+			rw, ok := w.(*pathMatchingRW)
 			if !ok {
 				log.Errorf("Failed to cast to PathMatchingRW")
 				return
@@ -55,6 +48,21 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 			rw.MatchedPath = pattern
 		}))
 	}
+
+	// We can't register a catch-all handler if it was already registered
+	if !catchAllRegistered {
+		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			if !legacy {
+				rw, ok := w.(*pathMatchingRW)
+				if !ok {
+					log.Errorf("Failed to cast to PathMatchingRW")
+					return
+				}
+				rw.MatchedPath = unmatchedPathPlaceholder
+			}
+		}))
+	}
+
 	return &pathMatching{
 		mux: mux,
 	}
@@ -84,8 +92,22 @@ func (pm *pathMatching) matchPath(path string) (string, bool) {
 		},
 	}
 
-	crw := &diagUtils.PathMatchingRW{MatchedPath: path}
+	crw := &pathMatchingRW{MatchedPath: path}
 	pm.mux.ServeHTTP(crw, req)
 
 	return crw.MatchedPath, true
+}
+
+const unmatchedPathPlaceholder = "_"
+
+type pathMatchingRW struct {
+	http.ResponseWriter
+	MatchedPath string
+}
+
+func (w *pathMatchingRW) WriteHeader(statusCode int) {
+}
+
+func (w *pathMatchingRW) Write(b []byte) (int, error) {
+	return len(b), nil
 }
