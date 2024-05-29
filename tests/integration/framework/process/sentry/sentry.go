@@ -51,7 +51,6 @@ type Sentry struct {
 	healthzPort int
 	metricsPort int
 	trustDomain *string
-	namespace   string
 }
 
 func New(t *testing.T, fopts ...Option) *Sentry {
@@ -131,10 +130,8 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		args = append(args, "-config="+configPath)
 	}
 
-	ns := "default"
 	if opts.namespace != nil {
 		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
-		ns = *opts.namespace
 	}
 
 	return &Sentry{
@@ -145,7 +142,6 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		metricsPort: opts.metricsPort,
 		healthzPort: opts.healthzPort,
 		trustDomain: opts.trustDomain,
-		namespace:   ns,
 	}
 }
 
@@ -200,14 +196,8 @@ func (s *Sentry) HealthzPort() int {
 	return s.healthzPort
 }
 
-func (s *Sentry) Namespace() string {
-	return s.namespace
-}
-
-func (s *Sentry) TrustDomain() string {
-	if s.trustDomain == nil {
-		return "localhost"
-	}
+func (s *Sentry) TrustDomain(t *testing.T) string {
+	require.NotNil(t, s.trustDomain)
 	return *s.trustDomain
 }
 

@@ -118,7 +118,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 			"--tls-enabled=true",
 			"--sentry-address="+opts.sentry.Address(),
 			"--trust-anchors-file="+taFile,
-			"--trust-domain="+opts.sentry.TrustDomain(),
+			"--trust-domain="+opts.sentry.TrustDomain(t),
 		)
 	}
 
@@ -232,8 +232,8 @@ func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) 
 
 	sec, err := security.New(ctx, security.Options{
 		SentryAddress:           "localhost:" + strconv.Itoa(s.sentry.Port()),
-		ControlPlaneTrustDomain: s.sentry.TrustDomain(),
-		ControlPlaneNamespace:   s.sentry.Namespace(),
+		ControlPlaneTrustDomain: s.sentry.TrustDomain(t),
+		ControlPlaneNamespace:   s.namespace,
 		TrustAnchorsFile:        ptr.Of(s.sentry.TrustAnchorsFile(t)),
 		AppID:                   appID,
 		Mode:                    modes.StandaloneMode,
