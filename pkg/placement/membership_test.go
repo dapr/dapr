@@ -97,24 +97,24 @@ func TestMembershipChangeWorker(t *testing.T) {
 				placementOrder, streamErr := stream1.Recv()
 				//nolint:testifylint
 				assert.NoError(c, streamErr)
-				if placementOrder.GetOperation() == "lock" {
-					operations1 = append(operations1, "lock")
+				if placementOrder.GetOperation() == lockOperation {
+					operations1 = append(operations1, lockOperation)
 				}
-				if placementOrder.GetOperation() == "update" {
+				if placementOrder.GetOperation() == updateOperation {
 					tables := placementOrder.GetTables()
 					assert.Len(c, tables.GetEntries(), 2)
 					assert.Contains(c, tables.GetEntries(), "actor1")
 					assert.Contains(c, tables.GetEntries(), "actor2")
-					operations1 = append(operations1, "update")
+					operations1 = append(operations1, updateOperation)
 				}
-				if placementOrder.GetOperation() == "unlock" {
-					operations1 = append(operations1, "unlock")
+				if placementOrder.GetOperation() == unlockOperation {
+					operations1 = append(operations1, unlockOperation)
 				}
 
 				if assert.Len(c, operations1, 3) {
-					require.Equal(c, "lock", operations1[0])
-					require.Equal(c, "update", operations1[1])
-					require.Equal(c, "unlock", operations1[2])
+					require.Equal(c, lockOperation, operations1[0])
+					require.Equal(c, updateOperation, operations1[1])
+					require.Equal(c, unlockOperation, operations1[2])
 				}
 			}, 10*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
@@ -126,10 +126,10 @@ func TestMembershipChangeWorker(t *testing.T) {
 				placementOrder, streamErr := stream2.Recv()
 				//nolint:testifylint
 				assert.NoError(c, streamErr)
-				if placementOrder.GetOperation() == "lock" {
-					operations2 = append(operations2, "lock")
+				if placementOrder.GetOperation() == lockOperation {
+					operations2 = append(operations2, lockOperation)
 				}
-				if placementOrder.GetOperation() == "update" {
+				if placementOrder.GetOperation() == updateOperation {
 					entries := placementOrder.GetTables().GetEntries()
 					if !assert.Len(c, entries, 2) {
 						return
@@ -140,10 +140,10 @@ func TestMembershipChangeWorker(t *testing.T) {
 					if !assert.Contains(c, entries, "actor4") {
 						return
 					}
-					operations2 = append(operations2, "update")
+					operations2 = append(operations2, updateOperation)
 				}
-				if placementOrder.GetOperation() == "unlock" {
-					operations2 = append(operations2, "unlock")
+				if placementOrder.GetOperation() == unlockOperation {
+					operations2 = append(operations2, unlockOperation)
 				}
 
 				// Depending on the timing of the host 3 registration
@@ -159,10 +159,10 @@ func TestMembershipChangeWorker(t *testing.T) {
 				placementOrder, streamErr := stream3.Recv()
 				//nolint:testifylint
 				assert.NoError(c, streamErr)
-				if placementOrder.GetOperation() == "lock" {
-					operations3 = append(operations3, "lock")
+				if placementOrder.GetOperation() == lockOperation {
+					operations3 = append(operations3, lockOperation)
 				}
-				if placementOrder.GetOperation() == "update" {
+				if placementOrder.GetOperation() == updateOperation {
 					entries := placementOrder.GetTables().GetEntries()
 					if !assert.Len(c, entries, 2) {
 						return
@@ -173,18 +173,18 @@ func TestMembershipChangeWorker(t *testing.T) {
 					if !assert.Contains(c, entries, "actor4") {
 						return
 					}
-					operations3 = append(operations3, "update")
+					operations3 = append(operations3, updateOperation)
 				}
-				if placementOrder.GetOperation() == "unlock" {
-					operations3 = append(operations3, "unlock")
+				if placementOrder.GetOperation() == unlockOperation {
+					operations3 = append(operations3, unlockOperation)
 				}
 
 				// Depending on the timing of the host 3 registration
 				// we may receive one or two update messages
 				if assert.GreaterOrEqual(c, len(operations3), 3) {
-					require.Equal(c, "lock", operations3[0])
-					require.Equal(c, "update", operations3[1])
-					require.Equal(c, "unlock", operations3[2])
+					require.Equal(c, lockOperation, operations3[0])
+					require.Equal(c, updateOperation, operations3[1])
+					require.Equal(c, unlockOperation, operations3[2])
 				}
 			}, 10*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
@@ -415,7 +415,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 					return
 				}
 				if placementOrder != nil {
-					if placementOrder.GetOperation() == "lock" {
+					if placementOrder.GetOperation() == lockOperation {
 						if startFlag.Load() {
 							start = time.Now()
 							if clientID == 1 {
@@ -423,10 +423,10 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 							}
 						}
 					}
-					if placementOrder.GetOperation() == "update" {
+					if placementOrder.GetOperation() == updateOperation {
 						continue
 					}
-					if placementOrder.GetOperation() == "unlock" {
+					if placementOrder.GetOperation() == unlockOperation {
 						if startFlag.Load() {
 							if clientID == 1 {
 								t.Log("client 1 unlock", time.Now())
@@ -467,9 +467,9 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	mockMessage := &v1pb.PlacementTables{Version: "demo"}
 
 	for _, host := range streamConnPool {
-		require.NoError(t, testServer.disseminateOperation(context.Background(), host, "lock", mockMessage))
-		require.NoError(t, testServer.disseminateOperation(context.Background(), host, "update", mockMessage))
-		require.NoError(t, testServer.disseminateOperation(context.Background(), host, "unlock", mockMessage))
+		require.NoError(t, testServer.disseminateOperation(context.Background(), host, lockOperation, mockMessage))
+		require.NoError(t, testServer.disseminateOperation(context.Background(), host, updateOperation, mockMessage))
+		require.NoError(t, testServer.disseminateOperation(context.Background(), host, unlockOperation, mockMessage))
 	}
 	startFlag.Store(false)
 	var max int64

@@ -62,6 +62,10 @@ const (
 	// it will loop through all the members in the state and remove the ones that
 	// have not sent a heartbeat
 	faultyHostDetectDuration = 6 * time.Second
+
+	lockOperation   = "lock"
+	unlockOperation = "unlock"
+	updateOperation = "update"
 )
 
 type hostMemberChange struct {

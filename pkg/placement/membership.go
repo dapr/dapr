@@ -278,15 +278,15 @@ func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequ
 	defer cancel()
 
 	// Perform each update on all hosts in sequence
-	err := p.disseminateOperationOnHosts(ctx, req, "lock")
+	err := p.disseminateOperationOnHosts(ctx, req, lockOperation)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'lock' failed: %v", err)
 	}
-	err = p.disseminateOperationOnHosts(ctx, req, "update")
+	err = p.disseminateOperationOnHosts(ctx, req, updateOperation)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'update' failed: %v", err)
 	}
-	err = p.disseminateOperationOnHosts(ctx, req, "unlock")
+	err = p.disseminateOperationOnHosts(ctx, req, unlockOperation)
 	if err != nil {
 		return fmt.Errorf("dissemination of 'unlock' failed: %v", err)
 	}
@@ -325,7 +325,7 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 	o := &v1pb.PlacementOrder{
 		Operation: operation,
 	}
-	if operation == "update" {
+	if operation == updateOperation {
 		o.Tables = tables
 	}
 
