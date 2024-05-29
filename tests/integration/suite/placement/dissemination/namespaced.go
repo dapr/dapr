@@ -77,35 +77,27 @@ func (n *namespaced) Run(t *testing.T, ctx context.Context) {
 		placementMessageCh2 := n.place.RegisterHost(t, ctx, host2)
 		placementMessageCh3 := n.place.RegisterHost(t, ctx3, host3)
 
-		msgCnt := 0
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			select {
-			case <-ctx.Done():
+		select {
+		case <-ctx.Done():
+			return
+		case placementTables := <-placementMessageCh1:
+			if ctx.Err() != nil {
 				return
-			case placementTables := <-placementMessageCh1:
-				if ctx.Err() != nil {
-					return
-				}
-
-				msgCnt++
-				assert.Len(c, placementTables.GetEntries(), 2)
-				assert.Contains(c, placementTables.GetEntries(), "actor1")
-				assert.Contains(c, placementTables.GetEntries(), "actor10")
-
-				entry, ok := placementTables.GetEntries()["actor10"]
-				if assert.True(c, ok) {
-					loadMap := entry.GetLoadMap()
-					assert.Len(c, loadMap, 1)
-					assert.Contains(c, loadMap, host1.GetName())
-				}
 			}
 
-			// There's only one host in ns1, so we'll receive only one message
-			assert.Equal(c, 1, msgCnt)
-		}, 10*time.Second, 10*time.Millisecond)
+			require.Len(t, placementTables.GetEntries(), 2)
+			require.Contains(t, placementTables.GetEntries(), "actor1")
+			require.Contains(t, placementTables.GetEntries(), "actor10")
+
+			entry, ok := placementTables.GetEntries()["actor10"]
+			require.True(t, ok)
+			loadMap := entry.GetLoadMap()
+			require.Len(t, loadMap, 1)
+			require.Contains(t, loadMap, host1.GetName())
+		}
 
 		// Dissemination is done properly on host 2
-		msgCnt = 0
+		msgCnt := 0
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			select {
 			case <-ctx.Done():

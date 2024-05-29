@@ -289,7 +289,8 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				monitoring.RecordActorHeartbeat(req.GetId(), entity, req.GetName(), req.GetNamespace(), req.GetPod(), now)
 			}
 
-			// Record the heartbeat timestamp. This timestamp is only used for metrics.
+			// Record the heartbeat timestamp. Used for metrics and for disconnecting faulty hosts
+			// on placement fail-over by comparing the member list in raft with the heartbeats
 			p.lastHeartBeat.Store(req.GetNamespace()+"||"+req.GetName(), now.UnixNano())
 
 			// Upsert incoming member only if the existing member info
