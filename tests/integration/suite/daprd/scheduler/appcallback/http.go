@@ -104,7 +104,7 @@ func (h *http) receiveJob(t *testing.T, ctx context.Context, client runtimev1pb.
 			},
 		},
 	}
-	_, err := client.ScheduleJob(ctx, req)
+	_, err := client.ScheduleJobAlpha1(ctx, req)
 	require.NoError(t, err)
 
 	select {

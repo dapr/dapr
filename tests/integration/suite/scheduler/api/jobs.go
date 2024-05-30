@@ -111,12 +111,12 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 				},
 			}
 
-			_, err := client.ScheduleJob(ctx, req)
+			_, err := client.ScheduleJobAlpha1(ctx, req)
 			require.NoError(t, err)
 
 			assert.True(t, j.etcdHasJob(t, ctx, name))
 
-			resp, err := client.GetJob(ctx, &rtv1.GetJobRequest{Name: name})
+			resp, err := client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{Name: name})
 			require.NotNil(t, resp)
 			require.Equal(t, name, resp.GetJob().GetName())
 			require.NoError(t, err)
@@ -125,7 +125,7 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 		for i := 1; i <= 10; i++ {
 			name := j.idPrefix + "_" + strconv.Itoa(i)
 
-			_, err := client.DeleteJob(ctx, &rtv1.DeleteJobRequest{Name: name})
+			_, err := client.DeleteJobAlpha1(ctx, &rtv1.DeleteJobRequest{Name: name})
 			require.NoError(t, err)
 
 			assert.False(t, j.etcdHasJob(t, ctx, name))

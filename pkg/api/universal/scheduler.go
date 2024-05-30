@@ -24,7 +24,7 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
+func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
@@ -74,7 +74,7 @@ func (a *Universal) ScheduleJob(ctx context.Context, inReq *runtimev1pb.Schedule
 	return &emptypb.Empty{}, nil
 }
 
-func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*emptypb.Empty, error) {
+func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*emptypb.Empty, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
@@ -107,7 +107,7 @@ func (a *Universal) DeleteJob(ctx context.Context, inReq *runtimev1pb.DeleteJobR
 	return &emptypb.Empty{}, nil
 }
 
-func (a *Universal) GetJob(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
+func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),

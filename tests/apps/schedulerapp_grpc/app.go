@@ -96,7 +96,7 @@ func scheduleJobGRPC(name string, jobWrapper JobWrapper) error {
 		},
 	}
 
-	if _, err = daprClient.ScheduleJob(context.Background(), job); err != nil {
+	if _, err = daprClient.ScheduleJobAlpha1(context.Background(), job); err != nil {
 		return err
 	}
 

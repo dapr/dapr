@@ -122,7 +122,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			},
 		}
 
-		_, err := daprAclient.ScheduleJob(ctx, req)
+		_, err := daprAclient.ScheduleJobAlpha1(ctx, req)
 		require.NoError(t, err)
 
 		select {
@@ -148,7 +148,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			},
 		}
 
-		_, err := daprBclient.ScheduleJob(ctx, req)
+		_, err := daprBclient.ScheduleJobAlpha1(ctx, req)
 		require.NoError(t, err)
 
 		select {

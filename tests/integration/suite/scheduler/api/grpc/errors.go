@@ -61,7 +61,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 	t.Run("schedule job is empty", func(t *testing.T) {
 		req := &rtv1.ScheduleJobRequest{Job: nil}
 
-		_, err := client.ScheduleJob(ctx, req)
+		_, err := client.ScheduleJobAlpha1(ctx, req)
 
 		require.Error(t, err)
 		s, ok := status.FromError(err)
@@ -84,7 +84,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 	t.Run("schedule job name is empty", func(t *testing.T) {
 		req := &rtv1.ScheduleJobRequest{Job: &rtv1.Job{Name: ""}}
 
-		_, err := client.ScheduleJob(ctx, req)
+		_, err := client.ScheduleJobAlpha1(ctx, req)
 
 		require.Error(t, err)
 		s, ok := status.FromError(err)
@@ -107,7 +107,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 	t.Run("schedule job schedule is empty", func(t *testing.T) {
 		req := &rtv1.ScheduleJobRequest{Job: &rtv1.Job{Name: "test", Schedule: nil}}
 
-		_, err := client.ScheduleJob(ctx, req)
+		_, err := client.ScheduleJobAlpha1(ctx, req)
 
 		require.Error(t, err)
 		s, ok := status.FromError(err)
@@ -130,7 +130,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 	t.Run("delete job name is empty", func(t *testing.T) {
 		req := &rtv1.DeleteJobRequest{Name: ""}
 
-		_, err := client.DeleteJob(ctx, req)
+		_, err := client.DeleteJobAlpha1(ctx, req)
 
 		require.Error(t, err)
 		s, ok := status.FromError(err)
@@ -153,7 +153,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 	t.Run("get job name is empty", func(t *testing.T) {
 		req := &rtv1.GetJobRequest{Name: ""}
 
-		_, err := client.GetJob(ctx, req)
+		_, err := client.GetJobAlpha1(ctx, req)
 
 		require.Error(t, err)
 		s, ok := status.FromError(err)

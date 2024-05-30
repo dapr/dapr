@@ -76,7 +76,7 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 	r.scheduler1.WaitUntilRunning(t, ctx)
 	r.daprd.WaitUntilRunning(t, ctx)
 
-	_, err := r.daprd.GRPCClient(t, ctx).ScheduleJob(ctx, &runtimev1pb.ScheduleJobRequest{
+	_, err := r.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
 			Name:     "test",
 			Schedule: ptr.Of("@every 1s"),

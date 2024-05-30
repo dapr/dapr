@@ -68,7 +68,7 @@ func (a *api) constructSchedulerEndpoints() []endpoints.Endpoint {
 
 func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
-		a.universal.ScheduleJob,
+		a.universal.ScheduleJobAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.ScheduleJobRequest, *emptypb.Empty]{
 			InModifier: func(r *http.Request, in *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobRequest, error) {
 				// Users should set the name in the url, and not in the url and body
@@ -98,7 +98,7 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 
 func (a *api) onDeleteJobHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
-		a.universal.DeleteJob,
+		a.universal.DeleteJobAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.DeleteJobRequest, *emptypb.Empty]{
 			SkipInputBody: true,
 			InModifier: func(r *http.Request, in *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobRequest, error) {
@@ -116,7 +116,7 @@ func (a *api) onDeleteJobHandler() http.HandlerFunc {
 
 func (a *api) onGetJobHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
-		a.universal.GetJob,
+		a.universal.GetJobAlpha1,
 		UniversalHTTPHandlerOpts[*runtimev1pb.GetJobRequest, *runtimev1pb.GetJobResponse]{
 			SkipInputBody: true,
 			InModifier: func(r *http.Request, in *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobRequest, error) {

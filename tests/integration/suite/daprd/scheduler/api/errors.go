@@ -86,7 +86,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	t.Run("schedule job", func(t *testing.T) {
 		req := &rtv1.ScheduleJobRequest{Job: &rtv1.Job{Name: "test", Schedule: ptr.Of("@daily")}}
 
-		_, err := client.ScheduleJob(ctx, req)
+		_, err := client.ScheduleJobAlpha1(ctx, req)
 		require.Error(t, err)
 		s, ok := status.FromError(err)
 		require.True(t, ok)
@@ -108,7 +108,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	t.Run("delete job", func(t *testing.T) {
 		req := &rtv1.DeleteJobRequest{Name: "test"}
 
-		_, err := client.DeleteJob(ctx, req)
+		_, err := client.DeleteJobAlpha1(ctx, req)
 		require.Error(t, err)
 		s, ok := status.FromError(err)
 		require.True(t, ok)

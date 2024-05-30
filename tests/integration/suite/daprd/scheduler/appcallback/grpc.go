@@ -88,7 +88,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 				},
 			},
 		}
-		_, err := client.ScheduleJob(ctx, req)
+		_, err := client.ScheduleJobAlpha1(ctx, req)
 		require.NoError(t, err)
 
 		select {
