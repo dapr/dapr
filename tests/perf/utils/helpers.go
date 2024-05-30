@@ -17,20 +17,10 @@ limitations under the License.
 package utils
 
 import (
-	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
-	"os"
-	"time"
 
 	guuid "github.com/google/uuid"
-
-	"github.com/dapr/components-contrib/bindings"
-	"github.com/dapr/components-contrib/bindings/azure/blobstorage"
-	"github.com/dapr/components-contrib/metadata"
-	"github.com/dapr/dapr/tests/perf"
-	"github.com/dapr/kit/logger"
 )
 
 // Max number of healthcheck calls before starting tests.
@@ -73,56 +63,6 @@ func GenerateRandomStringValues(keyValues []SimpleKeyValue) []SimpleKeyValue {
 func GenerateRandomStringKeyValues(num int) []SimpleKeyValue {
 	keys := GenerateRandomStringKeys(num)
 	return GenerateRandomStringValues(keys)
-}
-
-// UploadAzureBlob takes test output data and saves it to an Azure Blob Storage container
-func UploadAzureBlob(report *perf.TestReport) error {
-	accountName, accountKey := os.Getenv("AZURE_STORAGE_ACCOUNT"), os.Getenv("AZURE_STORAGE_ACCESS_KEY")
-	if len(accountName) == 0 || len(accountKey) == 0 {
-		return nil
-	}
-
-	now := time.Now().UTC()
-	y := now.Year()
-	m := now.Month()
-	d := now.Day()
-
-	container := fmt.Sprintf("%v-%v-%v", int(m), d, y)
-
-	b, err := json.Marshal(report)
-	if err != nil {
-		return err
-	}
-
-	l := logger.NewLogger("dapr-perf-test")
-	azblob := blobstorage.NewAzureBlobStorage(l)
-
-	err = azblob.Init(context.Background(), bindings.Metadata{
-		Base: metadata.Base{
-			Properties: map[string]string{
-				"storageAccount":    accountName,
-				"storageAccessKey":  accountKey,
-				"container":         container,
-				"publicAccessLevel": "container",
-			},
-		},
-	})
-	if err != nil {
-		return err
-	}
-
-	filename := fmt.Sprintf("%s-%v-%v-%v", report.TestName, now.Hour(), time.Hour.Minutes(), time.Hour.Seconds())
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	_, err = azblob.Invoke(ctx, &bindings.InvokeRequest{
-		Operation: bindings.CreateOperation,
-		Data:      b,
-		Metadata: map[string]string{
-			"blobName":    filename,
-			"ContentType": "application/json",
-		},
-	})
-	return err
 }
 
 // HealthCheckApps performs healthchecks for multiple apps, waiting for them to be ready.
