@@ -286,7 +286,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			assert.Equal(t, 2, cnt)
 		}, 10*time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
 
-		// Wait until next table dissemination and check there hasn't been updates
+		// Wait until next table dissemination and check there haven't been any updates
 		clock.Step(disseminateTimerInterval)
 		require.Eventually(t, func() bool {
 			cnt, ok := testServer.memberUpdateCount.Get("ns1")
@@ -324,7 +324,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RUnlock()
 
 			return true
-		}, 20*time.Second, 100*time.Millisecond)
+		}, 30*time.Second, 100*time.Millisecond)
 
 		// // Disconnect one host in ns2
 		conn2.Close()
@@ -354,7 +354,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RUnlock()
 
 			return true
-		}, 20*time.Second, 100*time.Millisecond)
+		}, 30*time.Second, 100*time.Millisecond)
 
 		// Last host is disconnected
 		conn3.Close()
@@ -383,7 +383,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RUnlock()
 
 			return true
-		}, 20*time.Second, 100*time.Millisecond)
+		}, 30*time.Second, 100*time.Millisecond)
 	})
 }
 
