@@ -48,13 +48,15 @@ else
   BIN_PATH := $(BIN_PATH)/debug
 endif
 
+DOCKER_IMAGE_ARCH:=amd64
 ifeq ($(TARGET_ARCH),arm)
-  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/arm/v7
+  DOCKER_IMAGE_ARCH:=arm/v7
 else ifeq ($(TARGET_ARCH),arm64)
-  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/arm64/v8
-else
-  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/amd64
+  DOCKER_IMAGE_ARCH:=arm64/v8
 endif
+DOCKER_IMAGE_PLATFORM=$(TARGET_OS)/$(DOCKER_IMAGE_ARCH)
+DOCKER_BUILDX_NAME=daprbuild_$(TARGET_OS)_$(TARGET_ARCH)
+DOCKER_BUILDX_PLATFORMS=$(TARGET_OS)/arm/v7,$(TARGET_OS)/arm64/v8,$(TARGET_OS)/amd64
 
 # Supported docker image architecture
 DOCKER_MULTI_ARCH?=linux-amd64 linux-arm linux-arm64 windows-1809-amd64 windows-ltsc2022-amd64
@@ -136,8 +138,10 @@ else
 	fi
 endif
 else
-	-$(DOCKER) buildx create --use --name daprbuild
-	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
+	-$(DOCKER) run --privileged --rm tonistiigi/binfmt:qemu-v7.0.0 --install all
+	-$(DOCKER) buildx rm $(DOCKER_BUILDX_NAME)
+	$(DOCKER) buildx create --use --name $(DOCKER_BUILDX_NAME) --platform $(DOCKER_BUILDX_PLATFORMS)
+	$(DOCKER) buildx inspect $(DOCKER_BUILDX_NAME) --bootstrap
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) buildx build --build-arg PKG_FILES=* $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG) --provenance=false
 else
@@ -186,8 +190,9 @@ else
 	fi
 endif
 else
-	-$(DOCKER) buildx create --use --name daprbuild
-	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
+	-$(DOCKER) run --privileged --rm tonistiigi/binfmt:qemu-v7.0.0 --install all
+	-$(DOCKER) buildx create --use --name $(DOCKER_BUILDX_NAME) --platform $(DOCKER_BUILDX_PLATFORMS)
+	$(DOCKER) buildx inspect $(DOCKER_BUILDX_NAME) --bootstrap
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG) --provenance=false --push
 else
