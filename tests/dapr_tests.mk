@@ -635,7 +635,12 @@ else
 endif
 
 setup-minikube-darwin:
+ifeq ($(TARGET_ARCH_LOCAL),amd64)
 	minikube start --memory=4g --cpus=4 --driver=hyperkit
+else
+# Install qemu and configure the dedicated network: https://minikube.sigs.k8s.io/docs/drivers/qemu/#networking
+	minikube start --memory=4g --cpus=4 --driver=qemu --network socket_vmnet
+endif
 	minikube addons enable metrics-server
 
 setup-minikube-windows:
