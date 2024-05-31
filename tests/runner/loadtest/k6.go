@@ -261,7 +261,7 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 	k6Test := k6api.K6{
 		TypeMeta: v1.TypeMeta{
 			Kind:       "K6",
-			APIVersion: "k6.io/v1alpha1",
+			APIVersion: "testruns.k6.io/v1alpha1",
 		},
 		ObjectMeta: v1.ObjectMeta{
 			Name:      k6.name,
