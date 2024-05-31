@@ -440,7 +440,7 @@ setup-test-env-k6: controller-gen
 	$(KUBECTL) apply -f ./tests/config/k6_sa.yaml -n $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/k6_rolebinding.yaml -n $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/k6_sa_secret.yaml -n $(DAPR_TEST_NAMESPACE)
-	rm -rf /tmp/.k6-operator >/dev/null && git clone --depth 1 --branch v0.0.14 https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make deploy && cd - && rm -rf /tmp/.k6-operator
+	export IMG_NAME=ghcr.io/grafana/k6-operator:controller && export IMG_TAG=v0.0.14 && rm -rf /tmp/.k6-operator >/dev/null && git clone --depth 1 --branch v0.0.14 https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make deploy && cd - && rm -rf /tmp/.k6-operator
 delete-test-env-k6: controller-gen
 	$(KUBECTL) delete -f ./tests/config/k6_sa.yaml -n $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) delete -f ./tests/config/k6_rolebinding.yaml -n $(DAPR_TEST_NAMESPACE)
