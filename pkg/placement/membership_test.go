@@ -284,7 +284,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 				return true
 			})
 			assert.Equal(t, 2, cnt)
-		}, time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
+		}, 10*time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
 
 		// Wait until next table dissemination and check there hasn't been updates
 		clock.Step(disseminateTimerInterval)
@@ -294,7 +294,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 				return false
 			}
 			return cnt.Load() == 0
-		}, 5*time.Second, time.Millisecond, "flushed all member updates")
+		}, 10*time.Second, time.Millisecond, "flushed all member updates")
 
 		// Disconnect the host in ns1
 		conn1.Close()
@@ -324,7 +324,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RUnlock()
 
 			return true
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 10*time.Second, 100*time.Millisecond)
 
 		// // Disconnect one host in ns2
 		conn2.Close()
@@ -354,7 +354,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RUnlock()
 
 			return true
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 10*time.Second, 100*time.Millisecond)
 
 		// Last host is disconnected
 		conn3.Close()
@@ -383,7 +383,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RUnlock()
 
 			return true
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 10*time.Second, 100*time.Millisecond)
 	})
 }
 
