@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"testing"
 	"time"
@@ -66,6 +68,17 @@ type idtype struct {
 }
 
 func (i *idtype) Setup(t *testing.T) []framework.Option {
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: schedulerreminders
+spec:
+  features:
+  - name: SchedulerReminders
+    enabled: true`), 0o600))
+
 	i.scheduler = scheduler.New(t)
 	i.place = placement.New(t)
 
@@ -124,6 +137,7 @@ func (i *idtype) Setup(t *testing.T) []framework.Option {
 		)...)
 
 		i.daprds[x] = daprd.New(t,
+			daprd.WithConfigs(configFile),
 			daprd.WithInMemoryActorStateStore("mystore"),
 			daprd.WithPlacementAddresses(i.place.Address()),
 			daprd.WithSchedulerAddresses(i.scheduler.Address()),
@@ -188,5 +202,8 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 		defer i.lock.Unlock()
 		return len(i.methodcalled) == i.actorIDsNum*i.actorTypesNum*i.daprdsNum
 	}, time.Second*10, time.Millisecond*10)
-	assert.ElementsMatch(t, i.expcalled, i.methodcalled)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.ElementsMatch(t, i.expcalled, i.methodcalled)
+	}, time.Second*10, time.Millisecond*10)
 }

@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"path/filepath"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -57,6 +59,17 @@ type remote struct {
 }
 
 func (r *remote) Setup(t *testing.T) []framework.Option {
+	configFile := filepath.Join(t.TempDir(), "config.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: schedulerreminders
+spec:
+  features:
+  - name: SchedulerReminders
+    enabled: true`), 0o600))
+
 	r.actorIDsNum = 500
 	r.methodcalled = make([]string, 0, r.actorIDsNum)
 	r.actorIDs = make([]string, r.actorIDsNum)
@@ -95,12 +108,14 @@ func (r *remote) Setup(t *testing.T) []framework.Option {
 	srv1 := newHTTP(&r.daprd1called)
 	srv2 := newHTTP(&r.daprd2called)
 	r.daprd1 = daprd.New(t,
+		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
 		daprd.WithAppPort(srv1.Port()),
 	)
 	r.daprd2 = daprd.New(t,
+		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithSchedulerAddresses(r.scheduler.Address()),
@@ -108,7 +123,7 @@ func (r *remote) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(r.scheduler, r.place, srv1, srv2, r.daprd1, r.daprd2),
+		framework.WithProcesses(srv1, srv2, r.scheduler, r.place, r.daprd1, r.daprd2),
 	}
 }
 
@@ -150,7 +165,10 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 		defer r.lock.Unlock()
 		return len(r.methodcalled) == r.actorIDsNum
 	}, time.Second*3, time.Millisecond*10)
-	assert.ElementsMatch(t, r.actorIDs, r.methodcalled)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.ElementsMatch(t, r.actorIDs, r.methodcalled)
+	}, time.Second*10, time.Millisecond*10)
 
 	assert.GreaterOrEqual(t, r.daprd1called.Load(), uint64(0))
 	assert.GreaterOrEqual(t, r.daprd2called.Load(), uint64(0))
