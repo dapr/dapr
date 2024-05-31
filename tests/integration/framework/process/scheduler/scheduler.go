@@ -233,7 +233,7 @@ func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) 
 	sec, err := security.New(ctx, security.Options{
 		SentryAddress:           "localhost:" + strconv.Itoa(s.sentry.Port()),
 		ControlPlaneTrustDomain: s.sentry.TrustDomain(t),
-		ControlPlaneNamespace:   s.namespace,
+		ControlPlaneNamespace:   s.sentry.Namespace(),
 		TrustAnchorsFile:        ptr.Of(s.sentry.TrustAnchorsFile(t)),
 		AppID:                   appID,
 		Mode:                    modes.StandaloneMode,

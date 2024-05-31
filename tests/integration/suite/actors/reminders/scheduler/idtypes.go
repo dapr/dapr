@@ -168,11 +168,10 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 
-	gclient := i.daprds[0].GRPCClient(t, ctx)
 	for x := 0; x < i.daprdsNum; x++ {
 		for y := 0; y < i.actorTypesNum; y++ {
 			for z := 0; z < i.actorIDsNum; z++ {
-				_, err := gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+				_, err := i.daprds[x].GRPCClient(t, ctx).RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 					ActorType: i.actorDaprds[x].actorTypes[y].typename,
 					ActorId:   i.actorDaprds[x].actorTypes[y].ids[z],
 					Name:      "remindermethod",

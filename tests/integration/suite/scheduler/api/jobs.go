@@ -102,12 +102,12 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 			req := &rtv1.ScheduleJobRequest{
 				Job: &rtv1.Job{
 					Name:     name,
-					Schedule: ptr.Of("@every 1s"),
+					Schedule: ptr.Of("@every 20s"),
 					Repeats:  ptr.Of(uint32(1)),
 					Data: &anypb.Any{
 						Value: []byte(j.idPrefix),
 					},
-					Ttl: ptr.Of("20s"),
+					Ttl: ptr.Of("30s"),
 				},
 			}
 
