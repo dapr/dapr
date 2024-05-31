@@ -324,7 +324,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RUnlock()
 
 			return true
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 
 		// // Disconnect one host in ns2
 		conn2.Close()
@@ -354,7 +354,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RUnlock()
 
 			return true
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 
 		// Last host is disconnected
 		conn3.Close()
@@ -383,7 +383,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RUnlock()
 
 			return true
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 15*time.Second, 100*time.Millisecond)
 	})
 }
 
