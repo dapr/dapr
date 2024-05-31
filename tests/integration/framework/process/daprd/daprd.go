@@ -113,10 +113,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
 	}
 	if opts.version == nil || semver.Compare(*opts.version, "v1.14") >= 0 {
-		args = append(args, "--dapr-internal-grpc-listen-address=127.0.0.1")
-		args = append(args, "--dapr-public-listen-address=127.0.0.1")
-		args = append(args, "--metrics-listen-address=127.0.0.1")
-		args = append(args, "--dapr-listen-addresses=127.0.0.1")
+		args = append(args,
+			"--dapr-internal-grpc-listen-address=127.0.0.1",
+			"--dapr-public-listen-address=127.0.0.1",
+			"--metrics-listen-address=127.0.0.1",
+			"--dapr-listen-addresses=127.0.0.1",
+		)
 	}
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
