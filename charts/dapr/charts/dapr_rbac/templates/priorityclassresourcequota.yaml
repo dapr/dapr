@@ -12,5 +12,5 @@ spec:
     matchExpressions:
       - operator : In
         scopeName: PriorityClass
-        values: [.Values.global.priorityClassName]
+        values: [{{.Values.global.priorityClassName}}]
 {{ end }}
