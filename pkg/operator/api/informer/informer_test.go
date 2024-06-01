@@ -30,14 +30,14 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/proto/operator/v1"
-	"github.com/dapr/dapr/tests/util"
+	"github.com/dapr/kit/crypto/test"
 )
 
 func Test_WatchUpdates(t *testing.T) {
 	t.Run("bad authz should error", func(t *testing.T) {
 		appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
 		serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-		pki := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
+		pki := test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: appID})
 
 		i := New[compapi.Component](Options{}).(*informer[compapi.Component])
 
@@ -55,7 +55,7 @@ func Test_WatchUpdates(t *testing.T) {
 	t.Run("should receive app events on batch events in order", func(t *testing.T) {
 		appID := spiffeid.RequireFromString("spiffe://example.org/ns/ns1/app1")
 		serverID := spiffeid.RequireFromString("spiffe://example.org/ns/dapr-system/dapr-operator")
-		pki := util.GenPKI(t, util.PKIOptions{LeafID: serverID, ClientID: appID})
+		pki := test.GenPKI(t, test.PKIOptions{LeafID: serverID, ClientID: appID})
 
 		i := New[compapi.Component](Options{}).(*informer[compapi.Component])
 		t.Cleanup(func() { close(i.closeCh) })

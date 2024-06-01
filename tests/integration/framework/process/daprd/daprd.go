@@ -102,8 +102,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--dapr-grpc-port=" + strconv.Itoa(opts.grpcPort),
 		"--dapr-http-port=" + strconv.Itoa(opts.httpPort),
 		"--dapr-internal-grpc-port=" + strconv.Itoa(opts.internalGRPCPort),
+		"--dapr-internal-grpc-listen-address=127.0.0.1",
+		"--dapr-listen-addresses=127.0.0.1",
 		"--dapr-public-port=" + strconv.Itoa(opts.publicPort),
+		"--dapr-public-listen-address=127.0.0.1",
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
+		"--metrics-listen-address=127.0.0.1",
 		"--profile-port=" + strconv.Itoa(opts.profilePort),
 		"--enable-app-health-check=" + strconv.FormatBool(opts.appHealthCheck),
 		"--app-health-probe-interval=" + strconv.Itoa(opts.appHealthProbeInterval),
@@ -205,7 +209,7 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusNoContent == resp.StatusCode
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 30*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {

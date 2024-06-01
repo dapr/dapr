@@ -54,19 +54,19 @@ import (
 func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 	topic := "topic1"
 
-	testPubSubMessage := &subscribedMessage{
-		cloudEvent: map[string]interface{}{},
-		topic:      topic,
-		data:       []byte("testing"),
-		metadata:   map[string]string{pubsubName: TestPubsubName},
-		path:       "topic1",
+	testPubSubMessage := &runtimePubsub.SubscribedMessage{
+		CloudEvent: map[string]interface{}{},
+		Topic:      topic,
+		Data:       []byte("testing"),
+		Metadata:   map[string]string{pubsubName: TestPubsubName},
+		Path:       "topic1",
 	}
 
-	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic).
+	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic).
 		WithHTTPExtension(http.MethodPost, "").
-		WithRawDataBytes(testPubSubMessage.data).
+		WithRawDataBytes(testPubSubMessage.Data).
 		WithContentType(contenttype.CloudEventContentType).
-		WithCustomHTTPMetadata(testPubSubMessage.metadata)
+		WithCustomHTTPMetadata(testPubSubMessage.Metadata)
 	defer fakeReq.Close()
 
 	ps := New(Options{
@@ -209,12 +209,12 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 	topic := "topic1"
 
-	testPubSubMessage := &subscribedMessage{
-		cloudEvent: map[string]interface{}{},
-		topic:      topic,
-		data:       []byte("testing"),
-		metadata:   map[string]string{pubsubName: TestPubsubName},
-		path:       "topic1",
+	testPubSubMessage := &runtimePubsub.SubscribedMessage{
+		CloudEvent: map[string]interface{}{},
+		Topic:      topic,
+		Data:       []byte("testing"),
+		Metadata:   map[string]string{pubsubName: TestPubsubName},
+		Path:       "topic1",
 	}
 
 	ps := New(Options{
@@ -306,19 +306,19 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	b, err := json.Marshal(envelope)
 	require.NoError(t, err)
 
-	testPubSubMessage := &subscribedMessage{
-		cloudEvent: envelope,
-		topic:      topic,
-		data:       b,
-		metadata:   map[string]string{pubsubName: TestPubsubName},
-		path:       "topic1",
+	testPubSubMessage := &runtimePubsub.SubscribedMessage{
+		CloudEvent: envelope,
+		Topic:      topic,
+		Data:       b,
+		Metadata:   map[string]string{pubsubName: TestPubsubName},
+		Path:       "topic1",
 	}
 
-	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.topic).
+	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic).
 		WithHTTPExtension(http.MethodPost, "").
-		WithRawDataBytes(testPubSubMessage.data).
+		WithRawDataBytes(testPubSubMessage.Data).
 		WithContentType(contenttype.CloudEventContentType).
-		WithCustomHTTPMetadata(testPubSubMessage.metadata)
+		WithCustomHTTPMetadata(testPubSubMessage.Metadata)
 	defer fakeReq.Close()
 
 	ps := New(Options{
@@ -379,19 +379,19 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		bNoTraceID, err := json.Marshal(envelopeNoTraceID)
 		require.NoError(t, err)
 
-		message := &subscribedMessage{
-			cloudEvent: envelopeNoTraceID,
-			topic:      topic,
-			data:       bNoTraceID,
-			metadata:   map[string]string{pubsubName: TestPubsubName},
-			path:       "topic1",
+		message := &runtimePubsub.SubscribedMessage{
+			CloudEvent: envelopeNoTraceID,
+			Topic:      topic,
+			Data:       bNoTraceID,
+			Metadata:   map[string]string{pubsubName: TestPubsubName},
+			Path:       "topic1",
 		}
 
-		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.topic).
+		fakeReqNoTraceID := invokev1.NewInvokeMethodRequest(message.Topic).
 			WithHTTPExtension(http.MethodPost, "").
-			WithRawDataBytes(message.data).
+			WithRawDataBytes(message.Data).
 			WithContentType(contenttype.CloudEventContentType).
-			WithCustomHTTPMetadata(testPubSubMessage.metadata)
+			WithCustomHTTPMetadata(testPubSubMessage.Metadata)
 		defer fakeReqNoTraceID.Close()
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), fakeReqNoTraceID).Return(fakeResp, nil)
 
@@ -460,7 +460,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		// assert
 		var cloudEvent map[string]interface{}
-		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
+		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
 		expectedClientError := fmt.Errorf("RETRY status returned from app while processing pub/sub event %v: %w", cloudEvent["id"].(string), rterrors.NewRetriable(nil))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
 		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
@@ -597,7 +597,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		// assert
 		var cloudEvent map[string]interface{}
-		json.Unmarshal(testPubSubMessage.data, &cloudEvent)
+		json.Unmarshal(testPubSubMessage.Data, &cloudEvent)
 		errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: Internal Error. status code returned: 500", cloudEvent["id"].(string), cloudEvent["topic"])
 		expectedClientError := rterrors.NewRetriable(errors.New(errMsg))
 		assert.Equal(t, expectedClientError.Error(), err.Error())
@@ -620,12 +620,12 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	b, err := json.Marshal(envelope)
 	require.NoError(t, err)
 
-	testPubSubMessage := &subscribedMessage{
-		cloudEvent: envelope,
-		topic:      topic,
-		data:       b,
-		metadata:   map[string]string{pubsubName: TestPubsubName},
-		path:       "topic1",
+	testPubSubMessage := &runtimePubsub.SubscribedMessage{
+		CloudEvent: envelope,
+		Topic:      topic,
+		Data:       b,
+		Metadata:   map[string]string{pubsubName: TestPubsubName},
+		Path:       "topic1",
 	}
 
 	envelope = contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", topic,
@@ -640,17 +640,17 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	base64, err := json.Marshal(envelope)
 	require.NoError(t, err)
 
-	testPubSubMessageBase64 := &subscribedMessage{
-		cloudEvent: envelope,
-		topic:      topic,
-		data:       base64,
-		metadata:   map[string]string{pubsubName: TestPubsubName},
-		path:       "topic1",
+	testPubSubMessageBase64 := &runtimePubsub.SubscribedMessage{
+		CloudEvent: envelope,
+		Topic:      topic,
+		Data:       base64,
+		Metadata:   map[string]string{pubsubName: TestPubsubName},
+		Path:       "topic1",
 	}
 
 	testCases := []struct {
 		name                        string
-		message                     *subscribedMessage
+		message                     *runtimePubsub.SubscribedMessage
 		responseStatus              runtimev1pb.TopicEventResponse_TopicEventResponseStatus
 		expectedError               error
 		noResponseStatus            bool
@@ -670,7 +670,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			responseError:    assert.AnError,
 			expectedError: fmt.Errorf(
 				"error returned from app while processing pub/sub event %v: %w",
-				testPubSubMessage.cloudEvent[contribpubsub.IDField],
+				testPubSubMessage.CloudEvent[contribpubsub.IDField],
 				rterrors.NewRetriable(status.Error(codes.Unknown, assert.AnError.Error())),
 			),
 		},
@@ -695,7 +695,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			responseStatus: runtimev1pb.TopicEventResponse_RETRY,
 			expectedError: fmt.Errorf(
 				"RETRY status returned from app while processing pub/sub event %v: %w",
-				testPubSubMessage.cloudEvent[contribpubsub.IDField],
+				testPubSubMessage.CloudEvent[contribpubsub.IDField],
 				rterrors.NewRetriable(nil),
 			),
 		},
@@ -711,7 +711,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			responseStatus: runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
 			expectedError: fmt.Errorf(
 				"unknown status returned from app while processing pub/sub event %v, status: %v, err: %w",
-				testPubSubMessage.cloudEvent[contribpubsub.IDField],
+				testPubSubMessage.CloudEvent[contribpubsub.IDField],
 				runtimev1pb.TopicEventResponse_TopicEventResponseStatus(99),
 				rterrors.NewRetriable(nil),
 			),

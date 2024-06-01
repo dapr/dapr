@@ -294,14 +294,14 @@ func TestRun(t *testing.T) {
 
 			require.Eventually(t, func() bool {
 				var conn net.Conn
-				conn, err = net.Dial("tcp", fmt.Sprintf(":%d", port))
+				conn, err = net.Dial("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 				if err == nil {
 					conn.Close()
 				}
 				return err == nil
 			}, time.Second, 10*time.Millisecond)
 
-			conn, err := grpc.DialContext(ctx, fmt.Sprintf(":%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			conn, err := grpc.DialContext(ctx, fmt.Sprintf("127.0.0.1:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			require.NoError(t, err)
 			t.Cleanup(func() {
 				require.NoError(t, conn.Close())

@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.22.2
+go 1.22.3
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -11,7 +11,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
 	github.com/dapr/components-contrib v1.13.0-rc.2.0.20240503231149-1f46231d875c
-	github.com/dapr/kit v0.13.1-0.20240402103809-0c7cfce53d9e
+	github.com/dapr/kit v0.13.1-0.20240415171926-a3f906d60908
 	github.com/evanphx/json-patch/v5 v5.8.1
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
@@ -45,7 +45,7 @@ require (
 	github.com/sony/gobreaker v0.5.0
 	github.com/spf13/cast v1.6.0
 	github.com/spf13/pflag v1.0.5
-	github.com/spiffe/go-spiffe/v2 v2.1.6
+	github.com/spiffe/go-spiffe/v2 v2.1.7
 	github.com/stretchr/testify v1.9.0
 	github.com/valyala/fasthttp v1.51.0
 	go.mongodb.org/mongo-driver v1.12.1
@@ -66,7 +66,6 @@ require (
 	google.golang.org/genproto/googleapis/api v0.0.0-20231120223509-83a465c0220f
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20231212172506-995d672761c0
 	google.golang.org/grpc v1.60.1
-	google.golang.org/grpc/examples v0.0.0-20230224211313-3775f633ce20
 	google.golang.org/protobuf v1.33.0
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.28.4
@@ -414,6 +413,7 @@ require (
 	google.golang.org/api v0.149.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
 	google.golang.org/genproto v0.0.0-20231211222908-989df2bf70f3 // indirect
+	google.golang.org/grpc/examples v0.0.0-20230224211313-3775f633ce20 // indirect
 	gopkg.in/alexcesaro/quotedprintable.v3 v3.0.0-20150716171945-2caba252f4dc // indirect
 	gopkg.in/couchbase/gocb.v1 v1.6.7 // indirect
 	gopkg.in/couchbase/gocbcore.v7 v7.1.18 // indirect
