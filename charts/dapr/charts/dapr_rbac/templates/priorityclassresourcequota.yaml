@@ -7,6 +7,10 @@ kind: ResourceQuota
 metadata:
   name: system-critical-quota
   namespace: {{ .Release.Namespace }}
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
 spec:
   scopeSelector:
     matchExpressions:
