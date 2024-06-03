@@ -627,7 +627,6 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 }
 
 func TestMetricsGetHTTPPathMatching(t *testing.T) {
-
 	t.Run("no http configuration, returns nil", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: nil,
