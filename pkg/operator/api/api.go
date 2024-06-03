@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
+	apiErrors "github.com/dapr/dapr/pkg/api/errors"
 )
 
 const (
@@ -104,7 +105,7 @@ func (a *apiServer) Run(ctx context.Context) error {
 
 	sec, err := a.sec.Handler(ctx)
 	if err != nil {
-		return err
+		return apiErrors.PlacementServiceContextError("Error in context")
 	}
 
 	s := grpc.NewServer(sec.GRPCServerOptionMTLS())
