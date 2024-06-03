@@ -46,7 +46,8 @@ func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_Rep
 // and the Dapr runtime grouped by namespace, with an assigned id for faster lookup/deletion
 // The id is a simple auto-incrementing number, for efficiency.
 type streamConnPool struct {
-	lock sync.RWMutex // locks the streams map itself
+	// locks the streams map itself
+	lock sync.RWMutex
 
 	streams map[string]map[uint32]*daprdStream
 
@@ -130,7 +131,8 @@ func (s *streamConnPool) getStream(stream placementv1pb.Placement_ReportDaprStat
 func hostNeedsVNodes(stream placementv1pb.Placement_ReportDaprStatusServer) bool {
 	md, ok := metadata.FromIncomingContext(stream.Context())
 	if !ok {
-		return true // default to older versions that need vnodes
+		// default to older versions that need vnodes
+		return true
 	}
 
 	// Extract apiLevel from metadata

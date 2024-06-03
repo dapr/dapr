@@ -28,14 +28,14 @@ import (
 )
 
 func init() {
-	suite.Register(new(namespaced))
+	suite.Register(new(notls))
 }
 
-type namespaced struct {
+type notls struct {
 	place *placement.Placement
 }
 
-func (n *namespaced) Setup(t *testing.T) []framework.Option {
+func (n *notls) Setup(t *testing.T) []framework.Option {
 	n.place = placement.New(t)
 
 	return []framework.Option{
@@ -43,7 +43,7 @@ func (n *namespaced) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (n *namespaced) Run(t *testing.T, ctx context.Context) {
+func (n *notls) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
 	t.Run("actors in different namespaces are disseminated properly", func(t *testing.T) {

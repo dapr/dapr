@@ -35,16 +35,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(placementfailover))
+	suite.Register(new(failover))
 }
 
-type placementfailover struct {
+type failover struct {
 	fp         *ports.Ports
 	placements []*placement.Placement
 	srv        *prochttp.HTTP
 }
 
-func (n *placementfailover) Setup(t *testing.T) []framework.Option {
+func (n *failover) Setup(t *testing.T) []framework.Option {
 	n.fp = ports.Reserve(t, 3)
 	port1, port2, port3 := n.fp.Port(t), n.fp.Port(t), n.fp.Port(t)
 	opts := []placement.Option{
@@ -76,7 +76,7 @@ func (n *placementfailover) Setup(t *testing.T) []framework.Option {
 	}
 }
 
-func (n *placementfailover) Run(t *testing.T, ctx context.Context) {
+func (n *failover) Run(t *testing.T, ctx context.Context) {
 	host1 := &v1pb.Host{
 		Name:      "myapp1",
 		Namespace: "ns1",
@@ -229,7 +229,7 @@ func (n *placementfailover) Run(t *testing.T, ctx context.Context) {
 	}, 10*time.Second, 500*time.Millisecond)
 }
 
-func (n *placementfailover) getLeader(t *testing.T, ctx context.Context, skip int) int {
+func (n *failover) getLeader(t *testing.T, ctx context.Context, skip int) int {
 	// Connect to each placement until one succeeds, indicating that a leader has been elected.
 	// If the condition is met, j is the index of the placement leader
 	var stream v1pb.Placement_ReportDaprStatusClient

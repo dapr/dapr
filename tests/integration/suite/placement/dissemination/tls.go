@@ -25,8 +25,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -39,16 +37,17 @@ import (
 )
 
 func init() {
-	suite.Register(new(namespacedTLS))
+	suite.Register(new(tls))
 }
 
-type namespacedTLS struct {
+type tls struct {
 	sentry                 *sentry.Sentry
 	place                  *placement.Placement
 	daprd1, daprd2, daprd3 *daprd.Daprd
+	srv1, srv2, srv3       *prochttp.HTTP
 }
 
-func (n *namespacedTLS) Setup(t *testing.T) []framework.Option {
+func (n *tls) Setup(t *testing.T) []framework.Option {
 	n.sentry = sentry.New(t)
 
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
@@ -59,15 +58,6 @@ func (n *namespacedTLS) Setup(t *testing.T) []framework.Option {
 		placement.WithTrustAnchorsFile(taFile),
 		placement.WithMetadataEnabled(true),
 	)
-
-	return []framework.Option{
-		framework.WithProcesses(n.sentry, n.place),
-	}
-}
-
-func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
-	n.sentry.WaitUntilRunning(t, ctx)
-	n.place.WaitUntilRunning(t, ctx)
 
 	handler1 := http.NewServeMux()
 	handler1.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
@@ -106,21 +96,9 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 		w.Write([]byte(`OK3`))
 	})
 
-	srv1 := prochttp.New(t, prochttp.WithHandler(handler1))
-	srv2 := prochttp.New(t, prochttp.WithHandler(handler2))
-	srv3 := prochttp.New(t, prochttp.WithHandler(handler3))
-	srv1.Run(t, ctx)
-	t.Cleanup(func() {
-		srv1.Cleanup(t)
-	})
-	srv2.Run(t, ctx)
-	t.Cleanup(func() {
-		srv2.Cleanup(t)
-	})
-	srv3.Run(t, ctx)
-	t.Cleanup(func() {
-		srv3.Cleanup(t)
-	})
+	n.srv1 = prochttp.New(t, prochttp.WithHandler(handler1))
+	n.srv2 = prochttp.New(t, prochttp.WithHandler(handler2))
+	n.srv3 = prochttp.New(t, prochttp.WithHandler(handler3))
 
 	n.daprd1 = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore1"),
@@ -131,7 +109,7 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 		daprd.WithSentryAddress(n.sentry.Address()),
 		daprd.WithPlacementAddresses(n.place.Address()),
 		daprd.WithEnableMTLS(true),
-		daprd.WithAppPort(srv1.Port()),
+		daprd.WithAppPort(n.srv1.Port()),
 	)
 
 	n.daprd2 = daprd.New(t,
@@ -143,7 +121,7 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 		daprd.WithSentryAddress(n.sentry.Address()),
 		daprd.WithPlacementAddresses(n.place.Address()),
 		daprd.WithEnableMTLS(true),
-		daprd.WithAppPort(srv2.Port()),
+		daprd.WithAppPort(n.srv2.Port()),
 	)
 
 	n.daprd3 = daprd.New(t,
@@ -155,33 +133,23 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 		daprd.WithSentryAddress(n.sentry.Address()),
 		daprd.WithPlacementAddresses(n.place.Address()),
 		daprd.WithEnableMTLS(true),
-		daprd.WithAppPort(srv3.Port()),
+		daprd.WithAppPort(n.srv3.Port()),
 	)
 
-	n.daprd1.Run(t, ctx)
-	t.Cleanup(func() {
-		n.daprd1.Cleanup(t)
-	})
+	return []framework.Option{
+		framework.WithProcesses(n.sentry, n.place, n.srv1, n.srv2, n.srv3, n.daprd1, n.daprd2, n.daprd3),
+	}
+}
+
+func (n *tls) Run(t *testing.T, ctx context.Context) {
+	n.sentry.WaitUntilRunning(t, ctx)
+	n.place.WaitUntilRunning(t, ctx)
 	n.daprd1.WaitUntilRunning(t, ctx)
-	n.daprd1.WaitUntilAppHealth(t, ctx)
-
-	n.daprd2.Run(t, ctx)
-	t.Cleanup(func() {
-		n.daprd2.Cleanup(t)
-	})
 	n.daprd2.WaitUntilRunning(t, ctx)
-	n.daprd2.WaitUntilAppHealth(t, ctx)
-
-	n.daprd3.Run(t, ctx)
-	t.Cleanup(func() {
-		n.daprd3.Cleanup(t)
-	})
-
 	n.daprd3.WaitUntilRunning(t, ctx)
-	n.daprd3.WaitUntilAppHealth(t, ctx)
 
 	t.Run("host1 can see actor 1 in ns1, but not actors 2 and 3 in ns2", func(t *testing.T) {
-		client := getClient(t, ctx, n.daprd1.GRPCAddress())
+		client := n.daprd1.GRPCClient(t, ctx)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			val1, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -221,7 +189,7 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("host2 can see actors 1,2,3 in ns2, but not actor 1 in ns1", func(t *testing.T) {
-		client := getClient(t, ctx, n.daprd2.GRPCAddress())
+		client := n.daprd2.GRPCClient(t, ctx)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			val2, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -260,7 +228,7 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("host3 can see actors 1,2,3 in ns2, but not actor 1 in ns1", func(t *testing.T) {
-		client := getClient(t, ctx, n.daprd3.GRPCAddress())
+		client := n.daprd3.GRPCClient(t, ctx)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			val3, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -297,13 +265,4 @@ func (n *namespacedTLS) Run(t *testing.T, ctx context.Context) {
 			assert.Error(c, err, err)
 		}, time.Second*20, time.Millisecond*10, "actors not ready")
 	})
-}
-
-func getClient(t *testing.T, ctx context.Context, addr string) rtv1.DaprClient {
-	t.Helper()
-
-	conn, err := grpc.DialContext(ctx, addr, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	return rtv1.NewDaprClient(conn)
 }

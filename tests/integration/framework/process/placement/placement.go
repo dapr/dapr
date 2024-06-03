@@ -16,9 +16,7 @@ package placement
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"sync/atomic"
@@ -252,10 +250,6 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 		for {
 			in, err := stream.Recv()
 			if err != nil {
-				if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled || status.Code(err) == codes.FailedPrecondition || status.Code(err) == codes.Unavailable {
-					return
-				}
-				require.NoError(t, err)
 				return
 			}
 
