@@ -125,7 +125,6 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 		return
 	}
 
-	// TODO: why this legacy mode does not call the convertPathToMetricLabel?
 	if h.legacy {
 		stats.RecordWithTags(
 			ctx,
