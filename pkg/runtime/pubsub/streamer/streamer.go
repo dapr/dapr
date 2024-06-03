@@ -92,7 +92,6 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 		if eventResp == nil {
 			return errors.New("duplicate initial request received")
 		}
-
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -119,7 +118,9 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 	defer defFn()
 
 	start := time.Now()
+	conn.streamLock.Lock()
 	err = conn.stream.Send(envelope)
+	conn.streamLock.Unlock()
 	elapsed := diag.ElapsedSince(start)
 
 	if span != nil {
