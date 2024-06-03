@@ -84,6 +84,30 @@ func testMiddleware(u grpc.UnaryServerInterceptor, s grpc.StreamServerIntercepto
 }
 
 func TestSetAPIEndpointsMiddleware(t *testing.T) {
+	t.Run("scheduler.v1alpha1 endpoints allowed", func(t *testing.T) {
+		allowed := []config.APIAccessRule{
+			{
+				Name:     "scheduler",
+				Version:  "v1alpha1",
+				Protocol: "grpc",
+			},
+		}
+
+		tm := testMiddleware(setAPIEndpointsMiddlewares(allowed, nil))
+
+		for _, e := range endpoints["scheduler.v1alpha1"] {
+			tm(t, e, false)
+		}
+
+		for k, v := range endpoints {
+			if k != "scheduler.v1alpha1" {
+				for _, e := range v {
+					tm(t, e, true)
+				}
+			}
+		}
+	})
+
 	t.Run("state.v1 endpoints allowed", func(t *testing.T) {
 		allowed := []config.APIAccessRule{
 			{
