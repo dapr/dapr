@@ -66,7 +66,7 @@ spec:
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 	})
-	handler.HandleFunc("/actors/myactortype/myactorid/method/remind/xyz", func(http.ResponseWriter, *http.Request) {
+	handler.HandleFunc("/actors/myactortype/myactorid/method/remind/xyz", func(_ http.ResponseWriter, r *http.Request) {
 		c.methodcalled.Add(1)
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/foo", func(http.ResponseWriter, *http.Request) {})
@@ -118,7 +118,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	time.Sleep(time.Second * 2)
-	assert.Equal(t, uint32(0), c.methodcalled.Load())
+	require.Equal(t, 0, int(c.methodcalled.Load()))
 
 	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "myactortype",
@@ -132,6 +132,9 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 		return c.methodcalled.Load() == 1
 	}, time.Second*5, time.Millisecond*10)
 
+	time.Sleep(time.Second * 2)
+	require.Equal(t, 1, int(c.methodcalled.Load()))
+
 	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "myactortype",
 		ActorId:   "myactorid",
@@ -142,7 +145,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.Eventually(t, func() bool {
-		return c.methodcalled.Load() == 2
+		return c.methodcalled.Load() == 4
 	}, time.Second*5, time.Millisecond*10)
 
 	_, err = gclient.UnregisterActorReminder(ctx, &rtv1.UnregisterActorReminderRequest{
@@ -152,14 +155,14 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	time.Sleep(time.Second)
+	time.Sleep(time.Second * 2)
 
 	last := c.methodcalled.Load()
 	assert.Eventually(t, func() bool {
 		called := c.methodcalled.Load()
 		defer func() { last = called }()
 		return called == last
-	}, time.Second*15, time.Second)
+	}, time.Second*15, time.Second*2)
 
 	time.Sleep(time.Second)
 	assert.Equal(t, last, c.methodcalled.Load())
