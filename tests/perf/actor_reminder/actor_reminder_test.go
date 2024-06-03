@@ -171,7 +171,7 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 		daprValue := daprResult.DurationHistogram.Percentiles[k].Value
 		t.Logf("%s percentile: %sms", v, fmt.Sprintf("%.2f", daprValue*1000))
 	}
-	t.Logf("Actual QPS: %.2f, expected QPS: %d", daprResult.ActualQPS, targetQPS) // TODO: Revert to p.QPS
+	t.Logf("Actual QPS: %.2f, expected QPS: %f", daprResult.ActualQPS, targetQPS) // TODO: Revert to p.QPS
 
 	summary.ForTest(t).
 		Service(appName).
