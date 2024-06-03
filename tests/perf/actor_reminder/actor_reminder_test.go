@@ -45,7 +45,7 @@ const (
 
 	// Target for the QPS - Temporary
 	targetQPS          float64 = 50
-	targetSchedulerQPS float64 = 2850
+	targetSchedulerQPS float64 = 4000
 
 	// Target for the QPS to trigger reminders.
 	targetTriggerQPS          float64 = 4700
@@ -57,8 +57,8 @@ const (
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
-	dueTime          = 110
-	dueTimeScheduler = 25
+	dueTime          = 140
+	dueTimeScheduler = 110
 )
 
 var tr *runner.TestRunner
