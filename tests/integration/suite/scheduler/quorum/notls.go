@@ -104,12 +104,13 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	req := &schedulerv1pb.ScheduleJobRequest{
 		Name: "testJob",
 		Job: &schedulerv1pb.Job{
-			// Set to 10 so the job doesn't get cleaned up before I check for it in etcd
-			Schedule: ptr.Of("@every 10s"),
+			// Set to 20 so the job doesn't get cleaned up before I check for it in etcd
+			Schedule: ptr.Of("@every 20s"),
 			Repeats:  ptr.Of(uint32(1)),
 			Data: &anypb.Any{
 				TypeUrl: "type.googleapis.com/google.type.Expr",
 			},
+			Ttl: ptr.Of("30s"),
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     n.daprd.AppID(),
