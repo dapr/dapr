@@ -45,20 +45,23 @@ var (
 )
 
 // InitMetrics initializes metrics.
-func InitMetrics(appID, namespace string, rules []config.MetricsRule, legacyMetricsHTTPMetrics bool) error {
-	if err := DefaultMonitoring.Init(appID); err != nil {
+func InitMetrics(appID, namespace string, rules []config.MetricsRule, legacyMetricsHTTPMetrics bool, latencyDistributionBuckets []float64) error {
+	// Initialize metrics
+	latencyDistribution := view.Distribution(latencyDistributionBuckets...)
+
+	if err := DefaultMonitoring.Init(appID, latencyDistribution); err != nil {
 		return err
 	}
 
-	if err := DefaultGRPCMonitoring.Init(appID); err != nil {
+	if err := DefaultGRPCMonitoring.Init(appID, latencyDistribution); err != nil {
 		return err
 	}
 
-	if err := DefaultHTTPMonitoring.Init(appID, legacyMetricsHTTPMetrics); err != nil {
+	if err := DefaultHTTPMonitoring.Init(appID, legacyMetricsHTTPMetrics, latencyDistribution); err != nil {
 		return err
 	}
 
-	if err := DefaultComponentMonitoring.Init(appID, namespace); err != nil {
+	if err := DefaultComponentMonitoring.Init(appID, namespace, latencyDistribution); err != nil {
 		return err
 	}
 
@@ -66,7 +69,7 @@ func InitMetrics(appID, namespace string, rules []config.MetricsRule, legacyMetr
 		return err
 	}
 
-	if err := DefaultWorkflowMonitoring.Init(appID, namespace); err != nil {
+	if err := DefaultWorkflowMonitoring.Init(appID, namespace, latencyDistribution); err != nil {
 		return err
 	}
 

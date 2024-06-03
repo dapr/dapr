@@ -29,3 +29,8 @@ spec:
     enabled: true
     http:
       increasedCardinality: false
+      latencyDistributionBuckets:
+        - 5
+        - 50
+        - 500
+        - 5000

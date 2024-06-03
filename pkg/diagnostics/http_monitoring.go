@@ -38,11 +38,8 @@ var (
 	httpMethodKey     = tag.MustNewKey("method")
 )
 
-var (
-	// <<10 -> KBs; <<20 -> MBs; <<30 -> GBs
-	defaultSizeDistribution    = view.Distribution(1<<10, 2<<10, 4<<10, 16<<10, 64<<10, 256<<10, 1<<20, 4<<20, 16<<20, 64<<20, 256<<20, 1<<30, 4<<30)
-	defaultLatencyDistribution = view.Distribution(1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000)
-)
+// <<10 -> KBs; <<20 -> MBs; <<30 -> GBs
+var defaultSizeDistribution = view.Distribution(1<<10, 2<<10, 4<<10, 16<<10, 64<<10, 256<<10, 1<<20, 4<<20, 16<<20, 64<<20, 256<<20, 1<<30, 4<<30)
 
 type httpMetrics struct {
 	serverRequestBytes  *stats.Int64Measure
@@ -227,7 +224,7 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		h.healthProbeRoundripLatency.M(elapsed))
 }
 
-func (h *httpMetrics) Init(appID string, legacy bool) error {
+func (h *httpMetrics) Init(appID string, legacy bool, latencyDistribution *view.Aggregation) error {
 	h.appID = appID
 	h.enabled = true
 	h.legacy = legacy
@@ -247,13 +244,13 @@ func (h *httpMetrics) Init(appID string, legacy bool) error {
 	views := []*view.View{
 		diagUtils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution),
-		diagUtils.NewMeasureView(h.serverLatency, serverTags, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.serverLatency, serverTags, latencyDistribution),
 		diagUtils.NewMeasureView(h.serverRequestCount, serverTags, view.Count()),
 		diagUtils.NewMeasureView(h.clientSentBytes, clientTags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
-		diagUtils.NewMeasureView(h.clientRoundtripLatency, clientTags, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.clientRoundtripLatency, clientTags, latencyDistribution),
 		diagUtils.NewMeasureView(h.clientCompletedCount, clientTags, view.Count()),
-		diagUtils.NewMeasureView(h.healthProbeRoundripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.healthProbeRoundripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, latencyDistribution),
 		diagUtils.NewMeasureView(h.healthProbeCompletedCount, []tag.Key{appIDKey, httpStatusCodeKey}, view.Count()),
 	}
 

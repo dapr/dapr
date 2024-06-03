@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cardinality
+package distributionbuckets
 
 import (
 	"context"
@@ -32,7 +32,8 @@ func init() {
 	suite.Register(new(high))
 }
 
-// high tests daprd metrics for the HTTP server configured with high cardinality
+// high tests daprd metrics for the HTTP server configured with high
+// cardinality of latency distribution buckets
 type high struct {
 	daprd *daprd.Daprd
 }
@@ -72,17 +73,12 @@ func (h *high) Run(t *testing.T, ctx context.Context) {
 	t.Run("service invocation", func(t *testing.T) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
 		metrics := h.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/healthz|status:204"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
-	})
-
-	t.Run("state stores", func(t *testing.T) {
-		body := `[{"key":"myvalue", "value":"hello world"}]`
-		h.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore", strings.NewReader(body), "content-type", "application/json")
-		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/state/mystore/myvalue")
-		metrics := h.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:/v1.0/state/mystore|status:204"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/state/mystore|status:200"]))
+		httpServerLatencyBuckets := 0
+		for k := range metrics {
+			if strings.HasPrefix(k, "dapr_http_server_latency_bucket") && strings.Contains(k, "app_id:myapp") && strings.Contains(k, "status:200") {
+				httpServerLatencyBuckets += 1
+			}
+		}
+		assert.Equal(t, 35, httpServerLatencyBuckets)
 	})
 }
