@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
 
 	"github.com/dapr/kit/logger"
@@ -130,7 +129,7 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		closeCh:           make(chan struct{}),
 		resiliency:        opts.Resiliency,
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
-		namespace:         security.CurrentNamespace(),
+		namespace:         opts.Namespace,
 	}
 }
 

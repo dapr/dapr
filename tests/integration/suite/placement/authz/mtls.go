@@ -18,8 +18,10 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -136,31 +138,17 @@ func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementCli
 	var stream v1pb.Placement_ReportDaprStatusClient
 	var err error
 
-	stream, err = client.ReportDaprStatus(ctx)
-	if err != nil {
-		return nil, err
-	}
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		stream, err = client.ReportDaprStatus(ctx)
+		if err != nil {
+			return
+		}
 
-	err = stream.Send(firstMessage)
-	if err != nil {
-		return nil, err
-	}
-
-	_, err = stream.Recv()
-
-	//require.EventuallyWithT(t, func(c *assert.CollectT) {
-	//	stream, err = client.ReportDaprStatus(ctx)
-	//	if err != nil {
-	//		return
-	//	}
-	//
-	//	err = stream.Send(firstMessage)
-	//	if err != nil {
-	//		return
-	//	}
-	//	_, err = stream.Recv()
-	//	//nolint:testifylint
-	//	assert.NoError(c, err)
-	//}, time.Second*5, time.Millisecond*10)
+		err = stream.Send(firstMessage)
+		if err != nil {
+			return
+		}
+		_, err = stream.Recv()
+	}, time.Second*5, time.Millisecond*10)
 	return stream, err
 }

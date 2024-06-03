@@ -37,5 +37,6 @@ type ActorsProviderOptions struct {
 	// Pointer to the API level object
 	APILevel *atomic.Uint32
 
-	Clock kclock.WithTicker
+	Clock     kclock.WithTicker
+	Namespace string
 }
