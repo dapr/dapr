@@ -630,3 +630,34 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 		assert.False(t, m.GetHTTPIncreasedCardinality(log))
 	})
 }
+
+func TestMetricsGetHTTPLatencyDistributionBuckets(t *testing.T) {
+	defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
+	log := logger.NewLogger("test")
+	log.SetOutput(io.Discard)
+
+	t.Run("no http configuration, returns default latency distribution buckets", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: nil,
+		}
+		assert.Equal(t, defaultLatencyDistribution, m.GetLatencyDistributionBuckets(log))
+	})
+
+	t.Run("nil value, returns latency distribution buckets", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				LatencyDistributionBuckets: nil,
+			},
+		}
+		assert.Equal(t, defaultLatencyDistribution, m.GetLatencyDistributionBuckets(log))
+	})
+
+	t.Run("value is set to list of integers", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				LatencyDistributionBuckets: ptr.Of([]int{1, 2, 3}),
+			},
+		}
+		assert.Equal(t, []float64{1, 2, 3}, m.GetLatencyDistributionBuckets(log))
+	})
+}
