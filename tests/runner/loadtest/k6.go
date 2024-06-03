@@ -267,7 +267,7 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 			Name:      k6.name,
 			Namespace: k6.namespace,
 		},
-		Spec: k6api.TestRunSpec{
+		Spec: k6api.K6Spec{
 			Script: k6api.K6Script{
 				ConfigMap: k6api.K6Configmap{
 					Name: k6.configName,
