@@ -47,7 +47,7 @@ type DaprHostMember struct {
 	APILevel uint32
 }
 
-func (d *DaprHostMember) NameAndNamespace() string {
+func (d *DaprHostMember) NamespaceAndName() string {
 	return d.Namespace + "||" + d.Name
 }
 

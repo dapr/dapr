@@ -75,7 +75,7 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 				// We only care about the hosts that haven't connected to the new leader
 				// The ones that have connected at some point, but have expired, will be handled
 				// through the disconnect mechanism in ReportDaprStatus
-				_, ok := p.lastHeartBeat.Load(h.NameAndNamespace())
+				_, ok := p.lastHeartBeat.Load(h.NamespaceAndName())
 
 				if !ok {
 					log.Debugf("Try to remove outdated host: %s, no heartbeat record", h.Name)
@@ -182,7 +182,7 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 }
 
 func (p *Service) handleDisconnectedMember(op hostMemberChange, updated bool) bool {
-	p.lastHeartBeat.Delete(op.host.NameAndNamespace())
+	p.lastHeartBeat.Delete(op.host.NamespaceAndName())
 
 	// If this is the last host in the namespace, we should:
 	// - remove namespace-specific data structures to prevent memory-leaks

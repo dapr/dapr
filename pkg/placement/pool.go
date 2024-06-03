@@ -48,19 +48,6 @@ func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_Rep
 type streamConnPool struct {
 	lock sync.RWMutex // locks the streams map itself
 
-	// Example representation of streams
-	//	{
-	//	  "ns1": {
-	//	  	1: stream1,
-	//	 	2: stream2,
-	//			3: stream3,
-	//		},
-	//
-	//	"ns2": {
-	//	  	4: stream4,
-	//	 	5: stream5,
-	//		},
-	//	}
 	streams map[string]map[uint32]*daprdStream
 
 	// streamIndex assigns an index to streams in the streamConnPool.
