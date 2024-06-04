@@ -21,7 +21,6 @@ func TestHTTPMiddleware(t *testing.T) {
 
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
-	latencyDistribution := view.Distribution(5, 50, 500, 5_000)
 	testHTTP.Init("fakeID", false, latencyDistribution)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -68,8 +67,6 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	latencyDistribution := view.Distribution(5, 50, 500, 5_000)
-
 	testHTTP.Init("fakeID", false, latencyDistribution)
 	v := view.Find("http/server/request_count")
 	views := []*view.View{v}

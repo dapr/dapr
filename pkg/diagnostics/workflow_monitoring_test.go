@@ -10,7 +10,6 @@ import (
 
 func initWorkflowMetrics() *workflowMetrics {
 	w := newWorkflowMetrics()
-	latencyDistribution := view.Distribution(5, 50, 500, 5_000)
 	w.Init("test", "default", latencyDistribution)
 
 	return w

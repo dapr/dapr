@@ -61,8 +61,6 @@ func (f *fakeProxyStream) RecvMsg(m interface{}) error {
 }
 
 func TestStreamingServerInterceptor(t *testing.T) {
-	latencyDistribution := view.Distribution(5, 50, 500, 5_000)
-
 	t.Run("not a proxy request, do not run pipeline", func(t *testing.T) {
 		m := newGRPCMetrics()
 		m.Init("test", latencyDistribution)
@@ -117,7 +115,6 @@ func TestStreamingServerInterceptor(t *testing.T) {
 }
 
 func TestStreamingClientInterceptor(t *testing.T) {
-	latencyDistribution := view.Distribution(5, 50, 500, 5_000)
 	t.Run("not a proxy request, do not run pipeline", func(t *testing.T) {
 		m := newGRPCMetrics()
 		m.Init("test", latencyDistribution)

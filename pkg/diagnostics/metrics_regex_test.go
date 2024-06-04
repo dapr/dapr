@@ -11,13 +11,18 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/kit/logger"
+)
+
+var (
+	metricsSpec         = config.LoadDefaultConfiguration().GetMetricsSpec()
+	latencyDistribution = metricsSpec.GetLatencyDistribution(logger.NewLogger("latency-logger"))
 )
 
 func TestRegexRulesSingle(t *testing.T) {
 	const statName = "test_stat_regex"
 	methodKey := tag.MustNewKey("method")
 	testStat := stats.Int64(statName, "Stat used in unit test", stats.UnitDimensionless)
-	latencyDistribution := view.Distribution(5, 50, 500, 5_000)
 
 	InitMetrics("testAppId2", "", []config.MetricsRule{
 		{

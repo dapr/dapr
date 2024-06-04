@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
@@ -29,7 +30,10 @@ const (
 	testStateStoreName           = "testStateStore"
 )
 
-var latencyDistribution = view.Distribution(5, 50, 500, 5_000)
+var (
+	metricsSpec         = config.LoadDefaultConfiguration().GetMetricsSpec()
+	latencyDistribution = metricsSpec.GetLatencyDistribution(logger.NewLogger("latency-logger"))
+)
 
 // TODO(jfreeland): Remove.  Troubleshooting only.
 // type customMetricsExporter struct{}

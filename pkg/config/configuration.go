@@ -270,8 +270,8 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	return *m.HTTP.IncreasedCardinality
 }
 
-// GetLatencyDistributionBuckets returns a []float64 to be used true for distribution latency buckets
-func (m MetricSpec) GetLatencyDistributionBuckets(log logger.Logger) *view.Aggregation {
+// GetLatencyDistribution returns a *view.Aggregration to be used true for latency distribtions and histograms
+func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation {
 	defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
 	if m.HTTP == nil || m.HTTP.LatencyDistributionBuckets == nil {
 		// The default is defaultLatencyDistribution

@@ -41,6 +41,7 @@ import (
 
 	codec "github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	pb "github.com/dapr/dapr/pkg/api/grpc/proxy/testservice"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
@@ -697,7 +698,8 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 func setupMetrics(s *proxyTestSuite) {
 	s.T().Helper()
 	metricsCleanup()
-	latencyDistribution := view.Distribution(5, 50, 500, 5_000)
+	metricsSpec := config.LoadDefaultConfiguration().GetMetricsSpec()
+	latencyDistribution := metricsSpec.GetLatencyDistribution(testLogger)
 	s.Require().NoError(diag.DefaultMonitoring.Init(testAppID, latencyDistribution))
 }
 

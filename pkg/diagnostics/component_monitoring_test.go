@@ -15,7 +15,6 @@ const (
 
 func componentsMetrics() *componentMetrics {
 	c := newComponentMetrics()
-	latencyDistribution := view.Distribution(5, 50, 500, 5_000)
 	c.Init("test", "default", latencyDistribution)
 
 	return c
