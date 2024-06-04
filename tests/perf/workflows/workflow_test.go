@@ -65,7 +65,6 @@ func TestMain(m *testing.M) {
 			AppPort:           -1,
 			Config:            "featureactorreminderscheduler",
 		},
-		Config: "featureactorreminderscheduler",
 	}
 
 	comps := []kube.ComponentDescription{}
