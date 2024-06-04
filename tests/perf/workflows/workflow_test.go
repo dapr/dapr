@@ -64,6 +64,7 @@ func TestMain(m *testing.M) {
 			AppMemoryRequest:  "800Mi",
 			AppPort:           -1,
 		},
+		Config: "featureactorreminderscheduler",
 	}
 
 	comps := []kube.ComponentDescription{}
