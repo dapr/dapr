@@ -24,7 +24,7 @@ GIT_VERSION ?= $(shell git describe --always --abbrev=7 --dirty)
 # By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
 CGO         ?= 0
 BINARIES    ?= daprd placement operator injector sentry scheduler
-HA_MODE     ?= true
+HA_MODE     ?= false
 # Force in-memory log for placement
 FORCE_INMEM ?= true
 # Dapr sidecar "flavor" build tag:
