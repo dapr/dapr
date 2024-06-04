@@ -32,17 +32,6 @@ const (
 
 var metricSpec = config.LoadDefaultConfiguration().GetMetricsSpec()
 
-// TODO(jfreeland): Remove.  Troubleshooting only.
-// type customMetricsExporter struct{}
-//
-// func (ce *customMetricsExporter) ExportView(vd *view.Data) {
-// 	log.Printf("vd.View: %+v\n%v\n", vd.View, vd.Rows)
-// 	for i, row := range vd.Rows {
-// 		log.Printf("\tRow: %d: %v\n", i, row)
-// 	}
-// 	log.Printf("StartTime: %s EndTime: %s\n\n", vd.Start.Round(0), vd.End.Round(0))
-// }
-
 func cleanupRegisteredViews() {
 	diag.CleanupRegisteredViews(
 		resiliencyCountViewName,
@@ -51,9 +40,6 @@ func cleanupRegisteredViews() {
 }
 
 func TestResiliencyCountMonitoring(t *testing.T) {
-	// TODO(jfreeland): Remove.  Troubleshooting only.
-	// view.RegisterExporter(new(customMetricsExporter))
-	// view.SetReportingPeriod(1 * time.Millisecond)
 	tests := []struct {
 		name             string
 		unitFn           func()

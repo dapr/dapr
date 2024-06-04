@@ -53,8 +53,8 @@ type grpcMetrics struct {
 	clientRoundtripLatency *stats.Float64Measure
 	clientCompletedRpcs    *stats.Int64Measure
 
-	healthProbeCompletedCount  *stats.Int64Measure
-	healthProbeRoundripLatency *stats.Float64Measure
+	healthProbeCompletedCount   *stats.Int64Measure
+	healthProbeRoundtripLatency *stats.Float64Measure
 
 	appID   string
 	enabled bool
@@ -100,7 +100,7 @@ func newGRPCMetrics() *grpcMetrics {
 			"grpc.io/healthprobes/completed_count",
 			"Count of completed health probes",
 			stats.UnitDimensionless),
-		healthProbeRoundripLatency: stats.Float64(
+		healthProbeRoundtripLatency: stats.Float64(
 			"grpc.io/healthprobes/roundtrip_latency",
 			"Time between first byte of health probes sent to last byte of response received, or terminal error",
 			stats.UnitMilliseconds),
@@ -122,7 +122,7 @@ func (g *grpcMetrics) Init(appID string) error {
 		diagUtils.NewMeasureView(g.clientReceivedBytes, []tag.Key{appIDKey, KeyClientMethod}, defaultSizeDistribution),
 		diagUtils.NewMeasureView(g.clientRoundtripLatency, []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus}, latencyDistribution),
 		diagUtils.NewMeasureView(g.clientCompletedRpcs, []tag.Key{appIDKey, KeyClientMethod, KeyClientStatus}, view.Count()),
-		diagUtils.NewMeasureView(g.healthProbeRoundripLatency, []tag.Key{appIDKey, KeyClientStatus}, latencyDistribution),
+		diagUtils.NewMeasureView(g.healthProbeRoundtripLatency, []tag.Key{appIDKey, KeyClientStatus}, latencyDistribution),
 		diagUtils.NewMeasureView(g.healthProbeCompletedCount, []tag.Key{appIDKey, KeyClientStatus}, view.Count()),
 	)
 }
@@ -209,8 +209,8 @@ func (g *grpcMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		diagUtils.WithTags(g.healthProbeCompletedCount.Name(), appIDKey, g.appID, KeyClientStatus, status),
 		g.healthProbeCompletedCount.M(1))
 	stats.RecordWithTags(ctx,
-		diagUtils.WithTags(g.healthProbeRoundripLatency.Name(), appIDKey, g.appID, KeyClientStatus, status),
-		g.healthProbeRoundripLatency.M(elapsed))
+		diagUtils.WithTags(g.healthProbeRoundtripLatency.Name(), appIDKey, g.appID, KeyClientStatus, status),
+		g.healthProbeRoundtripLatency.M(elapsed))
 }
 
 func (g *grpcMetrics) getPayloadSize(payload interface{}) int {

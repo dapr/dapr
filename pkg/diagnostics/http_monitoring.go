@@ -50,8 +50,8 @@ type httpMetrics struct {
 	clientRoundtripLatency *stats.Float64Measure
 	clientCompletedCount   *stats.Int64Measure
 
-	healthProbeCompletedCount  *stats.Int64Measure
-	healthProbeRoundripLatency *stats.Float64Measure
+	healthProbeCompletedCount   *stats.Int64Measure
+	healthProbeRoundtripLatency *stats.Float64Measure
 
 	appID   string
 	enabled bool
@@ -102,7 +102,7 @@ func newHTTPMetrics() *httpMetrics {
 			"http/healthprobes/completed_count",
 			"Count of completed health probes",
 			stats.UnitDimensionless),
-		healthProbeRoundripLatency: stats.Float64(
+		healthProbeRoundtripLatency: stats.Float64(
 			"http/healthprobes/roundtrip_latency",
 			"Time between first byte of health probes headers sent to last byte of response received, or terminal error",
 			stats.UnitMilliseconds),
@@ -217,8 +217,8 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		h.healthProbeCompletedCount.M(1))
 	stats.RecordWithTags(
 		ctx,
-		diagUtils.WithTags(h.healthProbeRoundripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
-		h.healthProbeRoundripLatency.M(elapsed))
+		diagUtils.WithTags(h.healthProbeRoundtripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
+		h.healthProbeRoundtripLatency.M(elapsed))
 }
 
 func (h *httpMetrics) Init(appID string, legacy bool) error {
@@ -247,7 +247,7 @@ func (h *httpMetrics) Init(appID string, legacy bool) error {
 		diagUtils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.clientRoundtripLatency, clientTags, latencyDistribution),
 		diagUtils.NewMeasureView(h.clientCompletedCount, clientTags, view.Count()),
-		diagUtils.NewMeasureView(h.healthProbeRoundripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, latencyDistribution),
+		diagUtils.NewMeasureView(h.healthProbeRoundtripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, latencyDistribution),
 		diagUtils.NewMeasureView(h.healthProbeCompletedCount, []tag.Key{appIDKey, httpStatusCodeKey}, view.Count()),
 	}
 
