@@ -247,13 +247,13 @@ func (h *httpMetrics) Init(appID string, legacy bool) error {
 	views := []*view.View{
 		diagUtils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution),
-		diagUtils.NewMeasureView(h.serverLatency, serverTags, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.serverLatency, serverTags, view.Distribution(1, 2, 3, 4)),
 		diagUtils.NewMeasureView(h.serverRequestCount, serverTags, view.Count()),
 		diagUtils.NewMeasureView(h.clientSentBytes, clientTags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
-		diagUtils.NewMeasureView(h.clientRoundtripLatency, clientTags, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.clientRoundtripLatency, clientTags, view.Distribution(1, 2, 3, 4)),
 		diagUtils.NewMeasureView(h.clientCompletedCount, clientTags, view.Count()),
-		diagUtils.NewMeasureView(h.healthProbeRoundripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.healthProbeRoundripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, view.Distribution(1, 2, 3, 4)),
 		diagUtils.NewMeasureView(h.healthProbeCompletedCount, []tag.Key{appIDKey, httpStatusCodeKey}, view.Count()),
 	}
 
