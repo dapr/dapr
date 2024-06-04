@@ -41,7 +41,6 @@ import (
 
 	codec "github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	pb "github.com/dapr/dapr/pkg/api/grpc/proxy/testservice"
-	"github.com/dapr/dapr/pkg/diagnostics"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
@@ -77,7 +76,7 @@ func metricsCleanup() {
 
 var (
 	testLogger             = logger.NewLogger("proxy-test")
-	setLatencyDistribution = diagnostics.SetLatencyDistribution(nil)
+	setLatencyDistribution = diag.SetLatencyDistribution(nil)
 )
 
 // asserting service is implemented on the server side and serves as a handler for stuff.
