@@ -24,6 +24,7 @@ import (
 
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
+	"go.opencensus.io/stats/view"
 	yaml "gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -270,19 +271,20 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 }
 
 // GetLatencyDistributionBuckets returns a []float64 to be used true for distribution latency buckets
-func (m MetricSpec) GetLatencyDistributionBuckets(log logger.Logger) []float64 {
+func (m MetricSpec) GetLatencyDistributionBuckets(log logger.Logger) *view.Aggregation {
 	defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
 	if m.HTTP == nil || m.HTTP.LatencyDistributionBuckets == nil {
 		// The default is defaultLatencyDistribution
 		log.Infof("Using default latency distribution buckets: %v", defaultLatencyDistribution)
-		return defaultLatencyDistribution
+		return view.Distribution(defaultLatencyDistribution...)
 	}
 	log.Infof("Using custom latency distribution buckets: %v", *m.HTTP.LatencyDistributionBuckets)
 	buckets := make([]float64, len(*m.HTTP.LatencyDistributionBuckets))
 	for i, v := range *m.HTTP.LatencyDistributionBuckets {
 		buckets[i] = float64(v)
 	}
-	return buckets
+
+	return view.Distribution(buckets...)
 }
 
 // MetricHTTP defines configuration for metrics for the HTTP server

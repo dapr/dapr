@@ -29,7 +29,18 @@ const (
 	testStateStoreName           = "testStateStore"
 )
 
-var latencyDistributionBuckets = []float64{5, 50, 500, 5_000}
+var latencyDistribution = view.Distribution(5, 50, 500, 5_000)
+
+// TODO(jfreeland): Remove.  Troubleshooting only.
+// type customMetricsExporter struct{}
+//
+// func (ce *customMetricsExporter) ExportView(vd *view.Data) {
+// 	log.Printf("vd.View: %+v\n%v\n", vd.View, vd.Rows)
+// 	for i, row := range vd.Rows {
+// 		log.Printf("\tRow: %d: %v\n", i, row)
+// 	}
+// 	log.Printf("StartTime: %s EndTime: %s\n\n", vd.Start.Round(0), vd.End.Round(0))
+// }
 
 func cleanupRegisteredViews() {
 	diag.CleanupRegisteredViews(
@@ -39,6 +50,9 @@ func cleanupRegisteredViews() {
 }
 
 func TestResiliencyCountMonitoring(t *testing.T) {
+	// TODO(jfreeland): Remove.  Troubleshooting only.
+	// view.RegisterExporter(new(customMetricsExporter))
+	// view.SetReportingPeriod(1 * time.Millisecond)
 	tests := []struct {
 		name             string
 		unitFn           func()
@@ -187,7 +201,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil, false, latencyDistributionBuckets))
+			require.NoError(t, diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil, false, latencyDistribution))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
@@ -273,7 +287,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false, latencyDistributionBuckets))
+			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false, latencyDistribution))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			require.NoError(t, err)
@@ -441,7 +455,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false, latencyDistributionBuckets))
+			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false, latencyDistribution))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyActivationViewName)
 			require.NoError(t, err)
@@ -498,7 +512,7 @@ func createDefaultTestResiliency(resiliencyName string, resiliencyNamespace stri
 func TestResiliencyLoadedMonitoring(t *testing.T) {
 	t.Run(resiliencyLoadedViewName, func(t *testing.T) {
 		cleanupRegisteredViews()
-		require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false, latencyDistributionBuckets))
+		require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false, latencyDistribution))
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)

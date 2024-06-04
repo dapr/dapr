@@ -697,8 +697,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 func setupMetrics(s *proxyTestSuite) {
 	s.T().Helper()
 	metricsCleanup()
-	latencyDistributionBuckets := []float64{5, 50, 500, 5_000}
-	latencyDistribution := view.Distribution(latencyDistributionBuckets...)
+	latencyDistribution := view.Distribution(5, 50, 500, 5_000)
 	s.Require().NoError(diag.DefaultMonitoring.Init(testAppID, latencyDistribution))
 }
 

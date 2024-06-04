@@ -45,10 +45,8 @@ var (
 )
 
 // InitMetrics initializes metrics.
-func InitMetrics(appID, namespace string, rules []config.MetricsRule, legacyMetricsHTTPMetrics bool, latencyDistributionBuckets []float64) error {
+func InitMetrics(appID, namespace string, rules []config.MetricsRule, legacyMetricsHTTPMetrics bool, latencyDistribution *view.Aggregation) error {
 	// Initialize metrics
-	latencyDistribution := view.Distribution(latencyDistributionBuckets...)
-
 	if err := DefaultMonitoring.Init(appID, latencyDistribution); err != nil {
 		return err
 	}
