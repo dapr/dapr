@@ -41,7 +41,7 @@ import (
 
 	codec "github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	pb "github.com/dapr/dapr/pkg/api/grpc/proxy/testservice"
-	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/diagnostics"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
@@ -75,7 +75,10 @@ func metricsCleanup() {
 		serviceInvocationResponseRecvName)
 }
 
-var testLogger = logger.NewLogger("proxy-test")
+var (
+	testLogger             = logger.NewLogger("proxy-test")
+	setLatencyDistribution = diagnostics.SetLatencyDistribution(nil)
+)
 
 // asserting service is implemented on the server side and serves as a handler for stuff.
 type assertingService struct {
@@ -698,9 +701,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 func setupMetrics(s *proxyTestSuite) {
 	s.T().Helper()
 	metricsCleanup()
-	metricsSpec := config.LoadDefaultConfiguration().GetMetricsSpec()
-	latencyDistribution := metricsSpec.GetLatencyDistribution(testLogger)
-	s.Require().NoError(diag.DefaultMonitoring.Init(testAppID, latencyDistribution))
+	s.Require().NoError(diag.DefaultMonitoring.Init(testAppID))
 }
 
 func (s *proxyTestSuite) initServer() {

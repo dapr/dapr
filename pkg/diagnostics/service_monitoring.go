@@ -209,7 +209,7 @@ func newServiceMetrics() *serviceMetrics {
 }
 
 // Init initialize metrics views for metrics.
-func (s *serviceMetrics) Init(appID string, latencyDistribution *view.Aggregation) error {
+func (s *serviceMetrics) Init(appID string) error {
 	s.appID = appID
 	s.enabled = true
 	return view.Register(

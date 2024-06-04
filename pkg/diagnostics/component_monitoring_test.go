@@ -13,16 +13,22 @@ const (
 	componentName = "test"
 )
 
-func componentsMetrics() *componentMetrics {
+func componentsMetrics() (*componentMetrics, error) {
 	c := newComponentMetrics()
-	c.Init("test", "default", latencyDistribution)
+	err := c.Init("test", "default")
+	if err != nil {
+		return nil, err
+	}
 
-	return c
+	return c, nil
 }
 
 func TestPubSub(t *testing.T) {
 	t.Run("record drop by app or sidecar", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.PubsubIngressEvent(context.Background(), componentName, "drop", "success", "A", 1)
 		c.PubsubIngressEvent(context.Background(), componentName, "drop", "drop", "A", 1)
@@ -38,7 +44,10 @@ func TestPubSub(t *testing.T) {
 	})
 
 	t.Run("record ingress count", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.PubsubIngressEvent(context.Background(), componentName, "retry", "retry", "A", 0)
 
@@ -49,7 +58,10 @@ func TestPubSub(t *testing.T) {
 	})
 
 	t.Run("record ingress latency", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.PubsubIngressEvent(context.Background(), componentName, "retry", "", "A", 1)
 
@@ -62,7 +74,10 @@ func TestPubSub(t *testing.T) {
 	})
 
 	t.Run("record egress latency", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.PubsubEgressEvent(context.Background(), componentName, "A", true, 1)
 
@@ -77,7 +92,10 @@ func TestPubSub(t *testing.T) {
 
 func TestBindings(t *testing.T) {
 	t.Run("record input binding count", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.InputBindingEvent(context.Background(), componentName, false, 0)
 
@@ -88,7 +106,10 @@ func TestBindings(t *testing.T) {
 	})
 
 	t.Run("record input binding latency", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.InputBindingEvent(context.Background(), componentName, false, 1)
 
@@ -101,7 +122,10 @@ func TestBindings(t *testing.T) {
 	})
 
 	t.Run("record output binding count", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.OutputBindingEvent(context.Background(), componentName, "set", false, 0)
 
@@ -112,7 +136,10 @@ func TestBindings(t *testing.T) {
 	})
 
 	t.Run("record output binding latency", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.OutputBindingEvent(context.Background(), componentName, "set", false, 1)
 
@@ -127,7 +154,10 @@ func TestBindings(t *testing.T) {
 
 func TestState(t *testing.T) {
 	t.Run("record state count", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.StateInvoked(context.Background(), componentName, "get", false, 0)
 
@@ -138,7 +168,10 @@ func TestState(t *testing.T) {
 	})
 
 	t.Run("record state latency", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.StateInvoked(context.Background(), componentName, "get", false, 1)
 
@@ -152,7 +185,10 @@ func TestState(t *testing.T) {
 
 func TestConfiguration(t *testing.T) {
 	t.Run("record configuration count", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.ConfigurationInvoked(context.Background(), componentName, "get", false, 0)
 
@@ -163,7 +199,10 @@ func TestConfiguration(t *testing.T) {
 	})
 
 	t.Run("record configuration latency", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.ConfigurationInvoked(context.Background(), componentName, "get", false, 1)
 
@@ -178,7 +217,10 @@ func TestConfiguration(t *testing.T) {
 
 func TestSecrets(t *testing.T) {
 	t.Run("record secret count", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.SecretInvoked(context.Background(), componentName, "get", false, 0)
 
@@ -189,7 +231,10 @@ func TestSecrets(t *testing.T) {
 	})
 
 	t.Run("record secret latency", func(t *testing.T) {
-		c := componentsMetrics()
+		c, err := componentsMetrics()
+		if err != nil {
+			t.Log(err)
+		}
 
 		c.SecretInvoked(context.Background(), componentName, "get", false, 1)
 
@@ -203,7 +248,10 @@ func TestSecrets(t *testing.T) {
 }
 
 func TestComponentMetricsInit(t *testing.T) {
-	c := componentsMetrics()
+	c, err := componentsMetrics()
+	if err != nil {
+		t.Log(err)
+	}
 	assert.True(t, c.enabled)
 	assert.Equal(t, "test", c.appID)
 	assert.Equal(t, "default", c.namespace)

@@ -11,33 +11,35 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/kit/logger"
 )
 
-var (
-	metricsSpec         = config.LoadDefaultConfiguration().GetMetricsSpec()
-	latencyDistribution = metricsSpec.GetLatencyDistribution(logger.NewLogger("latency-logger"))
-)
+func enableMetrics() *bool {
+	b := false
+	return &b
+}
 
 func TestRegexRulesSingle(t *testing.T) {
 	const statName = "test_stat_regex"
 	methodKey := tag.MustNewKey("method")
 	testStat := stats.Int64(statName, "Stat used in unit test", stats.UnitDimensionless)
 
-	InitMetrics("testAppId2", "", []config.MetricsRule{
-		{
-			Name: statName,
-			Labels: []config.MetricLabel{
-				{
-					Name: methodKey.Name(),
-					Regex: map[string]string{
-						"/orders/TEST":      "/orders/.+",
-						"/lightsabers/TEST": "/lightsabers/.+",
+	InitMetrics("testAppId2", "", config.MetricSpec{
+		Enabled: enableMetrics(),
+		Rules: []config.MetricsRule{
+			{
+				Name: statName,
+				Labels: []config.MetricLabel{
+					{
+						Name: methodKey.Name(),
+						Regex: map[string]string{
+							"/orders/TEST":      "/orders/.+",
+							"/lightsabers/TEST": "/lightsabers/.+",
+						},
 					},
 				},
 			},
 		},
-	}, false, latencyDistribution)
+	})
 
 	t.Run("single regex rule applied", func(t *testing.T) {
 		view.Register(
@@ -68,7 +70,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		})
 
 		s := newGRPCMetrics()
-		s.Init("test", latencyDistribution)
+		s.Init("test")
 
 		stats.RecordWithTags(context.Background(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/siths/123"),
@@ -91,7 +93,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		})
 
 		s := newGRPCMetrics()
-		s.Init("test", latencyDistribution)
+		s.Init("test")
 
 		stats.RecordWithTags(context.Background(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123"),

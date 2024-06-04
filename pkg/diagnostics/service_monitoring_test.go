@@ -10,7 +10,7 @@ import (
 
 func servicesMetrics() *serviceMetrics {
 	s := newServiceMetrics()
-	s.Init("testAppId", latencyDistribution)
+	s.Init("testAppId")
 
 	return s
 }

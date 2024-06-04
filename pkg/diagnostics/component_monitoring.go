@@ -161,10 +161,24 @@ func newComponentMetrics() *componentMetrics {
 }
 
 // Init registers the component metrics views.
-func (c *componentMetrics) Init(appID, namespace string, latencyDistribution *view.Aggregation) error {
+func (c *componentMetrics) Init(appID, namespace string) error {
 	c.appID = appID
 	c.enabled = true
 	c.namespace = namespace
+
+	// This is a gross hack that facilitates unit testing.  Once it's set here
+	// the rest of the unit tests in the diagnostics package consume the
+	// identical global view that was first set here because alphabetically this
+	// file was encountered first.
+	//
+	// NOTE: It might be more practical to explicitly run this check in each of
+	// the diagnostic package _test.go files where we call x.Init.
+	if latencyDistribution == nil {
+		err := SetLatencyDistribution(nil)
+		if err != nil {
+			return err
+		}
+	}
 
 	return view.Register(
 		diagUtils.NewMeasureView(c.pubsubIngressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey, statusKey}, latencyDistribution),

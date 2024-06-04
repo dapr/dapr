@@ -10,7 +10,7 @@ import (
 
 func initWorkflowMetrics() *workflowMetrics {
 	w := newWorkflowMetrics()
-	w.Init("test", "default", latencyDistribution)
+	w.Init("test", "default")
 
 	return w
 }

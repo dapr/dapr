@@ -109,7 +109,7 @@ func newGRPCMetrics() *grpcMetrics {
 	}
 }
 
-func (g *grpcMetrics) Init(appID string, latencyDistribution *view.Aggregation) error {
+func (g *grpcMetrics) Init(appID string) error {
 	g.appID = appID
 	g.enabled = true
 

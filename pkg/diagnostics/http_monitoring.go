@@ -38,9 +38,6 @@ var (
 	httpMethodKey     = tag.MustNewKey("method")
 )
 
-// <<10 -> KBs; <<20 -> MBs; <<30 -> GBs
-var defaultSizeDistribution = view.Distribution(1<<10, 2<<10, 4<<10, 16<<10, 64<<10, 256<<10, 1<<20, 4<<20, 16<<20, 64<<20, 256<<20, 1<<30, 4<<30)
-
 type httpMetrics struct {
 	serverRequestBytes  *stats.Int64Measure
 	serverResponseBytes *stats.Int64Measure
@@ -224,7 +221,7 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		h.healthProbeRoundripLatency.M(elapsed))
 }
 
-func (h *httpMetrics) Init(appID string, legacy bool, latencyDistribution *view.Aggregation) error {
+func (h *httpMetrics) Init(appID string, legacy bool) error {
 	h.appID = appID
 	h.enabled = true
 	h.legacy = legacy

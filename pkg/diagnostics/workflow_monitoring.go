@@ -99,7 +99,7 @@ func (w *workflowMetrics) IsEnabled() bool {
 }
 
 // Init registers the workflow metrics views.
-func (w *workflowMetrics) Init(appID, namespace string, latencyDistribution *view.Aggregation) error {
+func (w *workflowMetrics) Init(appID, namespace string) error {
 	w.appID = appID
 	w.enabled = true
 	w.namespace = namespace
