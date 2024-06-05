@@ -34,7 +34,6 @@ type Options struct {
 	AppID     string
 	Clients   *clients.Clients
 	Channels  *channels.Channels
-	IsHTTP    bool
 }
 
 // Manager manages connections to multiple schedulers.
@@ -44,7 +43,6 @@ type Manager struct {
 	appID     string
 	actors    actors.ActorRuntime
 	channels  *channels.Channels
-	isHTTP    bool
 
 	stopStartCh chan struct{}
 	lock        sync.Mutex
@@ -61,7 +59,6 @@ func New(opts Options) (*Manager, error) {
 		clients:     opts.Clients,
 		channels:    opts.Channels,
 		stopStartCh: make(chan struct{}, 1),
-		isHTTP:      opts.IsHTTP,
 	}, nil
 }
 
@@ -107,7 +104,6 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 
 	for i := 0; i < len(clients); i++ {
 		runners[i] = (&connector{
-			isHTTP:   m.isHTTP,
 			req:      req,
 			client:   clients[i],
 			channels: m.channels,

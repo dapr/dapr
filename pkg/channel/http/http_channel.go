@@ -296,6 +296,8 @@ func (h *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest
 
 	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
 
+	rsp.Status().Code = int32(invokev1.CodeFromHTTPStatus(resp.StatusCode))
+
 	return rsp, nil
 }
 
