@@ -75,8 +75,8 @@ func metricsCleanup() {
 }
 
 var (
-	testLogger             = logger.NewLogger("proxy-test")
-	setLatencyDistribution = diag.SetLatencyDistribution(nil)
+	testLogger = logger.NewLogger("proxy-test")
+	_          = diag.SetLatencyDistribution(nil)
 )
 
 // asserting service is implemented on the server side and serves as a handler for stuff.
