@@ -47,6 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/universal"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	endpointapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/components/pluggable"
@@ -72,6 +73,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
@@ -191,12 +193,40 @@ func newDaprRuntime(ctx context.Context,
 		Resiliency:     resiliencyProvider,
 		Mode:           runtimeConfig.mode,
 		PodName:        podName,
-		Standalone:     runtimeConfig.standalone,
 		OperatorClient: operatorClient,
 		GRPC:           grpc,
 		Channels:       channels,
 		MiddlewareHTTP: httpMiddleware,
+		Security:       sec,
 	})
+
+	var reloader *hotreload.Reloader
+	switch runtimeConfig.mode {
+	case modes.KubernetesMode:
+		reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
+			PodName:        podName,
+			Namespace:      namespace,
+			Client:         operatorClient,
+			Config:         globalConfig,
+			ComponentStore: compStore,
+			Authorizer:     authz,
+			Processor:      processor,
+		})
+	case modes.StandaloneMode:
+		reloader, err = hotreload.NewDisk(hotreload.OptionsReloaderDisk{
+			Config:         globalConfig,
+			Dirs:           runtimeConfig.standalone.ResourcesPath,
+			ComponentStore: compStore,
+			Authorizer:     authz,
+			Processor:      processor,
+			AppID:          runtimeConfig.id,
+		})
+		if err != nil {
+			return nil, err
+		}
+	default:
+		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
+	}
 
 	rt := &DaprRuntime{
 		runtimeConfig:     runtimeConfig,
@@ -213,6 +243,7 @@ func newDaprRuntime(ctx context.Context,
 		sec:               sec,
 		processor:         processor,
 		authz:             authz,
+		reloader:          reloader,
 		namespace:         namespace,
 		podName:           podName,
 		initComplete:      make(chan struct{}),
@@ -222,35 +253,6 @@ func newDaprRuntime(ctx context.Context,
 	}
 	close(rt.isAppHealthy)
 
-	if globalConfig.IsFeatureEnabled(config.HotReload) {
-		log.Info("Hot reloading enabled. Daprd will reload 'Component' resources on change.")
-		switch runtimeConfig.mode {
-		case modes.KubernetesMode:
-			rt.reloader = hotreload.NewOperator(hotreload.OptionsReloaderOperator{
-				PodName:        podName,
-				Namespace:      namespace,
-				Client:         operatorClient,
-				ComponentStore: compStore,
-				Authorizer:     authz,
-				Processor:      processor,
-			})
-		case modes.StandaloneMode:
-			rt.reloader, err = hotreload.NewDisk(hotreload.OptionsReloaderDisk{
-				Dirs:           runtimeConfig.standalone.ResourcesPath,
-				ComponentStore: compStore,
-				Authorizer:     authz,
-				Processor:      processor,
-			})
-			if err != nil {
-				return nil, fmt.Errorf("failed to create hot reload disk reloader: %w", err)
-			}
-		default:
-			return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
-		}
-	} else {
-		log.Debug("Hot reloading disabled")
-	}
-
 	var gracePeriod *time.Duration
 	if duration := runtimeConfig.gracefulShutdownDuration; duration > 0 {
 		gracePeriod = &duration
@@ -259,6 +261,7 @@ func newDaprRuntime(ctx context.Context,
 	rt.runnerCloser = concurrency.NewRunnerCloserManager(gracePeriod,
 		rt.runtimeConfig.metricsExporter.Run,
 		rt.processor.Process,
+		rt.reloader.Run,
 		func(ctx context.Context) error {
 			start := time.Now()
 			log.Infof("%s mode configured", rt.runtimeConfig.mode)
@@ -282,12 +285,6 @@ func newDaprRuntime(ctx context.Context,
 			return nil
 		},
 	)
-
-	if rt.reloader != nil {
-		if err := rt.runnerCloser.Add(rt.reloader.Run); err != nil {
-			return nil, err
-		}
-	}
 
 	if err := rt.runnerCloser.AddCloser(
 		func() error {
@@ -431,7 +428,7 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 	// Register a resource
 	r := resource.NewWithAttributes(
 		semconv.SchemaURL,
-		semconv.ServiceNameKey.String(a.runtimeConfig.id),
+		semconv.ServiceNameKey.String(getOtelServiceName(a.runtimeConfig.id)),
 	)
 
 	tpStore.RegisterResource(r)
@@ -444,6 +441,13 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 
 	a.tracerProvider = tpStore.RegisterTracerProvider()
 	return nil
+}
+
+func getOtelServiceName(fallback string) string {
+	if value := os.Getenv("OTEL_SERVICE_NAME"); value != "" {
+		return value
+	}
+	return fallback
 }
 
 func (a *DaprRuntime) initRuntime(ctx context.Context) error {
@@ -484,8 +488,12 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	if err != nil {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
 	}
-
 	a.flushOutstandingHTTPEndpoints(ctx)
+
+	err = a.loadDeclarativeSubscriptions(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to load declarative subscriptions: %s", err)
+	}
 
 	if err = a.channels.Refresh(); err != nil {
 		log.Warnf("failed to open %s channel to app: %s", string(a.runtimeConfig.appConnectionConfig.Protocol), err)
@@ -518,6 +526,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
 		TracingSpec:           a.globalConfig.GetTracingSpec(),
 		AccessControlList:     a.accessControlList,
+		Processor:             a.processor,
 	})
 
 	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
@@ -535,7 +544,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	// Start HTTP Server
-	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins)
+	err = a.startHTTPServer()
 	if err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
@@ -547,11 +556,11 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	log.Infof("The request body size parameter is: %v bytes", a.runtimeConfig.maxRequestBodySize)
 
 	// Start internal gRPC server (used for sidecar-to-sidecar communication)
-	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.internalGRPCPort)
+	err = a.startGRPCInternalServer(a.daprGRPCAPI)
 	if err != nil {
 		return fmt.Errorf("failed to start internal gRPC server: %w", err)
 	}
-	log.Infof("Internal gRPC server is running on port %v", a.runtimeConfig.internalGRPCPort)
+	log.Infof("Internal gRPC server is running on %s:%d", a.runtimeConfig.internalGRPCListenAddress, a.runtimeConfig.internalGRPCPort)
 
 	a.initDirectMessaging(a.nameResolver)
 
@@ -656,14 +665,14 @@ func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
 		ComponentStore: a.compStore,
 		Meta:           a.meta,
 	})
-	if err := wfe.Init(ctx, wfengine.ComponentDefinition()); err != nil {
+	if err := wfe.Init(ctx, wfbackend.ComponentDefinition()); err != nil {
 		return fmt.Errorf("failed to initialize Dapr workflow component: %w", err)
 	}
 
 	log.Info("Workflow engine initialized.")
 
 	return a.runnerCloser.AddCloser(func() error {
-		return wfe.Close(wfengine.ComponentDefinition())
+		return wfe.Close(wfbackend.ComponentDefinition())
 	})
 }
 
@@ -766,7 +775,7 @@ func (a *DaprRuntime) initProxy() {
 	})
 }
 
-func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string) error {
+func (a *DaprRuntime) startHTTPServer() error {
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		Universal:             a.daprUniversal,
 		Channels:              a.channels,
@@ -780,11 +789,12 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	serverConf := http.ServerConfig{
 		AppID:                   a.runtimeConfig.id,
 		HostAddress:             a.hostAddress,
-		Port:                    port,
+		Port:                    a.runtimeConfig.httpPort,
 		APIListenAddresses:      a.runtimeConfig.apiListenAddresses,
-		PublicPort:              publicPort,
-		ProfilePort:             profilePort,
-		AllowedOrigins:          allowedOrigins,
+		PublicPort:              a.runtimeConfig.publicPort,
+		PublicListenAddress:     a.runtimeConfig.publicListenAddress,
+		ProfilePort:             a.runtimeConfig.profilePort,
+		AllowedOrigins:          a.runtimeConfig.allowedOrigins,
 		EnableProfiling:         a.runtimeConfig.enableProfiling,
 		MaxRequestBodySize:      a.runtimeConfig.maxRequestBodySize,
 		UnixDomainSocket:        a.runtimeConfig.unixDomainSocket,
@@ -823,9 +833,9 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	return nil
 }
 
-func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
+func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
-	serverConf := a.getNewServerConfig([]string{""}, port)
+	serverConf := a.getNewServerConfig([]string{a.runtimeConfig.internalGRPCListenAddress}, a.runtimeConfig.internalGRPCPort)
 	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.sec, a.proxy)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
@@ -911,11 +921,19 @@ func (a *DaprRuntime) initNameResolution(ctx context.Context) (err error) {
 	if a.globalConfig.Spec.NameResolutionSpec != nil {
 		resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
 	}
+	// Override host address if the internal gRPC listen address is localhost.
+	hostAddress := a.hostAddress
+	if utils.Contains(
+		[]string{"127.0.0.1", "localhost", "[::1]"},
+		a.runtimeConfig.internalGRPCListenAddress,
+	) {
+		hostAddress = a.runtimeConfig.internalGRPCListenAddress
+	}
 	resolverMetadata.Instance = nr.Instance{
 		DaprHTTPPort:     a.runtimeConfig.httpPort,
 		DaprInternalPort: a.runtimeConfig.internalGRPCPort,
 		AppPort:          a.runtimeConfig.appConnectionConfig.Port,
-		Address:          a.hostAddress,
+		Address:          hostAddress,
 		AppID:            a.runtimeConfig.id,
 		Namespace:        a.namespace,
 	}
@@ -950,8 +968,16 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	if !ok {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
+	// Override host address if the internal gRPC listen address is localhost.
+	hostAddress := a.hostAddress
+	if utils.Contains(
+		[]string{"127.0.0.1", "localhost", "[::1]"},
+		a.runtimeConfig.internalGRPCListenAddress,
+	) {
+		hostAddress = a.runtimeConfig.internalGRPCListenAddress
+	}
 	actorConfig := actors.NewConfig(actors.ConfigOpts{
-		HostAddress:       a.hostAddress,
+		HostAddress:       hostAddress,
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
 		RemindersService:  a.runtimeConfig.remindersService,
@@ -999,7 +1025,10 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.New[compapi.Component](a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewComponents(disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
 	default:
 		return nil
 	}
@@ -1035,6 +1064,40 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 	return nil
 }
 
+func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
+	var loader loader.Loader[subapi.Subscription]
+
+	switch a.runtimeConfig.mode {
+	case modes.KubernetesMode:
+		loader = kubernetes.NewSubscriptions(kubernetes.Options{
+			Client:    a.operatorClient,
+			Namespace: a.namespace,
+			PodName:   a.podName,
+		})
+	case modes.StandaloneMode:
+		loader = disk.NewSubscriptions(disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
+	default:
+		return nil
+	}
+
+	log.Info("Loading Declarative Subscriptions…")
+	subs, err := loader.Load(ctx)
+	if err != nil {
+		return err
+	}
+
+	for _, s := range subs {
+		log.Infof("Found Subscription: %s", s.Name)
+	}
+
+	a.processor.AddPendingSubscription(ctx, subs...)
+
+	return nil
+}
+
 func (a *DaprRuntime) flushOutstandingHTTPEndpoints(ctx context.Context) {
 	log.Info("Waiting for all outstanding http endpoints to be processed…")
 	// We flush by sending a no-op http endpoint. Since the processHTTPEndpoints goroutine only reads one http endpoint at a time,
@@ -1063,7 +1126,10 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.New[endpointapi.HTTPEndpoint](a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewHTTPEndpoints(disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
 	default:
 		return nil
 	}

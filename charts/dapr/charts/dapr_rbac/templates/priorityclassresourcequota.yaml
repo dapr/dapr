@@ -1,0 +1,20 @@
+{{/* Allows to create a ResourceQuota for the priority class if it is set to system-node-critical or system-cluster-critical
+     this is required in some cases to ensure that the priority class is allowed in the namespace
+     https://kubernetes.io/docs/concepts/policy/resource-quotas/#limit-priority-class-consumption-by-default */}}
+{{ if or (eq .Values.global.priorityClassName "system-node-critical") (eq .Values.global.priorityClassName "system-cluster-critical") }}
+apiVersion: v1
+kind: ResourceQuota
+metadata:
+  name: system-critical-quota
+  namespace: {{ .Release.Namespace }}
+  labels:
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+spec:
+  scopeSelector:
+    matchExpressions:
+      - operator : In
+        scopeName: PriorityClass
+        values: [{{.Values.global.priorityClassName}}]
+{{ end }}

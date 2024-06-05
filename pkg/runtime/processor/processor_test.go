@@ -39,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/security/fake"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -63,6 +64,7 @@ func newTestProcWithID(id string) (*Processor, *registry.Registry) {
 		GRPC:           nil,
 		Channels:       new(channels.Channels),
 		GlobalConfig:   new(config.Configuration),
+		Security:       fake.New(),
 	}), reg
 }
 

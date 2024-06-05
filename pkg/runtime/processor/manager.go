@@ -24,6 +24,7 @@ import (
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/dapr/pkg/runtime/meta"
+	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
 // manager implements the life cycle events of a component category.
@@ -48,7 +49,9 @@ type PubsubManager interface {
 
 	StartSubscriptions(context.Context) error
 	StopSubscriptions(forever bool)
+	ReloadSubscriptions(context.Context) error
 	Outbox() outbox.Outbox
+	Streamer() rtpubsub.Streamer
 	manager
 }
 
@@ -74,31 +77,21 @@ func (p *Processor) managerFromComp(comp componentsapi.Component) (manager, erro
 }
 
 func (p *Processor) State() StateManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.state
 }
 
 func (p *Processor) Secret() SecretManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.secret
 }
 
 func (p *Processor) PubSub() PubsubManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.pubsub
 }
 
 func (p *Processor) Binding() BindingManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.binding
 }
 
 func (p *Processor) WorkflowBackend() WorkflowBackendManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
 	return p.workflowBackend
 }

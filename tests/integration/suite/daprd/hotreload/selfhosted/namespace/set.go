@@ -92,7 +92,7 @@ func (s *set) Run(t *testing.T, ctx context.Context) {
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 			},
-		}, s.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.GetMetaRegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
@@ -106,7 +106,7 @@ spec:
  version: v1
 `), 0o600))
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Empty(t, s.daprd.RegistedComponents(t, ctx))
+		assert.Empty(t, s.daprd.GetMetaRegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
@@ -124,7 +124,7 @@ spec:
 				Name: "123", Type: "pubsub.in-memory", Version: "v1",
 				Capabilities: []string{"SUBSCRIBE_WILDCARDS"},
 			},
-		}, s.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.GetMetaRegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
@@ -143,7 +143,7 @@ spec:
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 			},
-		}, s.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.GetMetaRegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
@@ -171,7 +171,7 @@ spec:
 				Name: "123", Type: "pubsub.in-memory", Version: "v1",
 				Capabilities: []string{"SUBSCRIBE_WILDCARDS"},
 			},
-		}, s.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.GetMetaRegistedComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`

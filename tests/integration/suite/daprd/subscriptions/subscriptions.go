@@ -17,4 +17,5 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/declarative"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/mixed"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/programmatic"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions/stream"
 )

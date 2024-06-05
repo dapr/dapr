@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/dapr/dapr/pkg/apis/common"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/kit/ptr"
 )
@@ -33,7 +34,9 @@ import (
 func TestLoad(t *testing.T) {
 	t.Run("valid yaml content", func(t *testing.T) {
 		tmp := t.TempDir()
-		request := New[compapi.Component](tmp)
+		request := NewComponents(Options{
+			Paths: []string{tmp},
+		})
 		filename := "test-component-valid.yaml"
 		yaml := `
 apiVersion: dapr.io/v1alpha1
@@ -56,7 +59,9 @@ spec:
 
 	t.Run("invalid yaml head", func(t *testing.T) {
 		tmp := t.TempDir()
-		request := New[compapi.Component](tmp)
+		request := NewComponents(Options{
+			Paths: []string{tmp},
+		})
 
 		filename := "test-component-invalid.yaml"
 		yaml := `
@@ -72,7 +77,9 @@ name: statestore`
 	})
 
 	t.Run("load components file not exist", func(t *testing.T) {
-		request := New[compapi.Component]("test-path-no-exists")
+		request := NewComponents(Options{
+			Paths: []string{"test-path-no-exists"},
+		})
 
 		components, err := request.Load(context.Background())
 		require.Error(t, err)
@@ -80,15 +87,19 @@ name: statestore`
 	})
 
 	t.Run("error and namespace", func(t *testing.T) {
-		buildComp := func(name string, namespace *string) string {
+		buildComp := func(name string, namespace *string, scopes ...string) string {
 			var ns string
 			if namespace != nil {
 				ns = fmt.Sprintf("\n namespace: %s\n", *namespace)
 			}
+			var scopeS string
+			if len(scopes) > 0 {
+				scopeS = fmt.Sprintf("\nscopes:\n- %s", strings.Join(scopes, "\n- "))
+			}
 			return fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
- name: %s%s`, name, ns)
+ name: %s%s%s`, name, ns, scopeS)
 		}
 
 		tests := map[string]struct {
@@ -183,6 +194,26 @@ metadata:
 				},
 				expErr: false,
 			},
+			"only return manifests in scope": {
+				comps: []string{
+					buildComp("comp1", nil, "myappid"),
+					buildComp("comp2", nil, "myappid", "anotherappid"),
+					buildComp("comp3", nil, "anotherappid"),
+				},
+				namespace: ptr.Of("foo"),
+				expComps: []compapi.Component{
+					{
+						TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
+						ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: ""},
+						Scoped:     common.Scoped{Scopes: []string{"myappid"}},
+					},
+					{
+						TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
+						ObjectMeta: metav1.ObjectMeta{Name: "comp2", Namespace: ""},
+						Scoped:     common.Scoped{Scopes: []string{"myappid", "anotherappid"}},
+					},
+				},
+			},
 		}
 
 		for name, test := range tests {
@@ -195,13 +226,141 @@ metadata:
 				if test.namespace != nil {
 					t.Setenv("NAMESPACE", *test.namespace)
 				}
-
-				loader := New[compapi.Component](tmp)
+				loader := NewComponents(Options{
+					Paths: []string{tmp},
+					AppID: "myappid",
+				})
 				components, err := loader.Load(context.Background())
-
 				assert.Equal(t, test.expErr, err != nil, "%v", err)
 				assert.Equal(t, test.expComps, components)
 			})
 		}
+	})
+}
+
+func Test_loadWithOrder(t *testing.T) {
+	t.Run("no file should return empty set", func(t *testing.T) {
+		tmp := t.TempDir()
+		d := NewComponents(Options{Paths: []string{tmp}}).(*disk[compapi.Component])
+		set, err := d.loadWithOrder()
+		require.NoError(t, err)
+		assert.Empty(t, set.order)
+		assert.Empty(t, set.ts)
+	})
+
+	t.Run("single manifest file should return", func(t *testing.T) {
+		tmp := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(tmp, "test-component.yaml"), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: statestore
+spec:
+  type: state.couchbase
+`), fs.FileMode(0o600)))
+
+		d := NewComponents(Options{Paths: []string{tmp}}).(*disk[compapi.Component])
+		set, err := d.loadWithOrder()
+		require.NoError(t, err)
+		assert.Equal(t, []manifestOrder{
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 0},
+		}, set.order)
+		assert.Len(t, set.ts, 1)
+	})
+
+	t.Run("3 manifest file should have order set", func(t *testing.T) {
+		tmp := t.TempDir()
+		require.NoError(t, os.WriteFile(filepath.Join(tmp, "test-component.yaml"), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: foo1
+spec:
+  type: state.couchbase
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: foo2
+spec:
+  type: state.couchbase
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: foo3
+spec:
+  type: state.couchbase
+`), fs.FileMode(0o600)))
+
+		d := NewComponents(Options{Paths: []string{tmp}}).(*disk[compapi.Component])
+		set, err := d.loadWithOrder()
+		require.NoError(t, err)
+		assert.Equal(t, []manifestOrder{
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 0},
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 1},
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 2},
+		}, set.order)
+		assert.Len(t, set.ts, 3)
+	})
+
+	t.Run("3 dirs, 3 files, 3 manifests should return order. Skips manifests of different type", func(t *testing.T) {
+		tmp1, tmp2, tmp3 := t.TempDir(), t.TempDir(), t.TempDir()
+
+		for _, dir := range []string{tmp1, tmp2, tmp3} {
+			for _, file := range []string{"1.yaml", "2.yaml", "3.yaml"} {
+				require.NoError(t, os.WriteFile(filepath.Join(dir, file), []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: foo1
+spec:
+  type: state.couchbase
+---
+apiVersion: dapr.io/v1alpha1
+kind: Subscription
+metadata:
+  name: foo2
+spec:
+  type: state.couchbase
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: foo3
+spec:
+  type: state.couchbase
+`), fs.FileMode(0o600)))
+			}
+		}
+
+		d := NewComponents(Options{
+			Paths: []string{tmp1, tmp2, tmp3},
+		}).(*disk[compapi.Component])
+		set, err := d.loadWithOrder()
+		require.NoError(t, err)
+		assert.Equal(t, []manifestOrder{
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 0},
+			{dirIndex: 0, fileIndex: 0, manifestIndex: 2},
+			{dirIndex: 0, fileIndex: 1, manifestIndex: 0},
+			{dirIndex: 0, fileIndex: 1, manifestIndex: 2},
+			{dirIndex: 0, fileIndex: 2, manifestIndex: 0},
+			{dirIndex: 0, fileIndex: 2, manifestIndex: 2},
+
+			{dirIndex: 1, fileIndex: 0, manifestIndex: 0},
+			{dirIndex: 1, fileIndex: 0, manifestIndex: 2},
+			{dirIndex: 1, fileIndex: 1, manifestIndex: 0},
+			{dirIndex: 1, fileIndex: 1, manifestIndex: 2},
+			{dirIndex: 1, fileIndex: 2, manifestIndex: 0},
+			{dirIndex: 1, fileIndex: 2, manifestIndex: 2},
+
+			{dirIndex: 2, fileIndex: 0, manifestIndex: 0},
+			{dirIndex: 2, fileIndex: 0, manifestIndex: 2},
+			{dirIndex: 2, fileIndex: 1, manifestIndex: 0},
+			{dirIndex: 2, fileIndex: 1, manifestIndex: 2},
+			{dirIndex: 2, fileIndex: 2, manifestIndex: 0},
+			{dirIndex: 2, fileIndex: 2, manifestIndex: 2},
+		}, set.order)
+		assert.Len(t, set.ts, 18)
 	})
 }

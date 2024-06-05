@@ -162,27 +162,49 @@ func TestStartInternalCallbackSpan(t *testing.T) {
 
 	t.Run("traceparent is provided with sampling flag = 0 and sampling is enabled (but not P=1.00)", func(t *testing.T) {
 		// We use a fixed seed for the RNG so we can use an exact number here
-		const expectSampled = 1051
+		const expectSampled = 0
 		const numTraces = 100000
-		sampledCount := runTraces(t, "test_trace", numTraces, "0.01", 0)
+		sampledCount := runTraces(t, "test_trace", numTraces, "0.01", true, 0)
 		require.Equal(t, expectSampled, sampledCount, "Expected to sample %d traces but sampled %d", expectSampled, sampledCount)
 		require.Less(t, sampledCount, numTraces, "Expected to sample fewer than the total number of traces, but sampled all of them!")
 	})
 
 	t.Run("traceparent is provided with sampling flag = 0 and sampling is enabled (and P=1.00)", func(t *testing.T) {
+		const expectSampled = 0
 		const numTraces = 1000
-		sampledCount := runTraces(t, "test_trace", numTraces, "1.00", 0)
-		require.Equal(t, numTraces, sampledCount, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
+		sampledCount := runTraces(t, "test_trace", numTraces, "1.00", true, 0)
+		require.Equal(t, expectSampled, sampledCount, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
 	})
 
 	t.Run("traceparent is provided with sampling flag = 1 and sampling is enabled (but not P=1.00)", func(t *testing.T) {
 		const numTraces = 1000
-		sampledCount := runTraces(t, "test_trace", numTraces, "0.00001", 1)
+		sampledCount := runTraces(t, "test_trace", numTraces, "0.00001", true, 1)
 		require.Equal(t, numTraces, sampledCount, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
+	})
+
+	t.Run("traceparent is not provided and sampling is enabled (but not P=1.00)", func(t *testing.T) {
+		// We use a fixed seed for the RNG so we can use an exact number here
+		const expectSampled = 1000 // we allow for a 10% margin of error to account for randomness
+		const numTraces = 100000
+		sampledCount := runTraces(t, "test_trace", numTraces, "0.01", false, 0)
+		require.InEpsilon(t, expectSampled, sampledCount, 0.1, "Expected to sample %d (+/- 10%) traces but sampled %d", expectSampled, sampledCount)
+		require.Less(t, sampledCount, numTraces, "Expected to sample fewer than the total number of traces, but sampled all of them!")
+	})
+
+	t.Run("traceparent is not provided and sampling is enabled (and P=1.00)", func(t *testing.T) {
+		const numTraces = 1000
+		sampledCount := runTraces(t, "test_trace", numTraces, "1.00", false, 0)
+		require.Equal(t, numTraces, sampledCount, "Expected to sample all traces (%d) but only sampled %d", numTraces, sampledCount)
+	})
+
+	t.Run("traceparent is not provided and sampling is enabled (but almost 0 P=0.00001)", func(t *testing.T) {
+		const numTraces = 1000
+		sampledCount := runTraces(t, "test_trace", numTraces, "0.00001", false, 0)
+		require.Less(t, sampledCount, int(numTraces*.001), "Expected to sample no traces (+/- 10%) but only sampled %d", sampledCount)
 	})
 }
 
-func runTraces(t *testing.T, testName string, numTraces int, samplingRate string, parentTraceFlag int) int {
+func runTraces(t *testing.T, testName string, numTraces int, samplingRate string, hasParentSpanContext bool, parentTraceFlag int) int {
 	d := NewDaprTraceSampler(samplingRate)
 	tracerOptions := []sdktrace.TracerProviderOption{
 		sdktrace.WithSampler(d),
@@ -199,17 +221,17 @@ func runTraces(t *testing.T, testName string, numTraces int, samplingRate string
 	sampledCount := 0
 
 	for i := 0; i < numTraces; i++ {
-		traceID, _ := idg.NewIDs(context.Background())
-		scConfig := trace.SpanContextConfig{
-			TraceID:    traceID,
-			SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
-			TraceFlags: trace.TraceFlags(parentTraceFlag),
-		}
-
-		parent := trace.NewSpanContext(scConfig)
-
 		ctx := context.Background()
-		ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
+		if hasParentSpanContext {
+			traceID, _ := idg.NewIDs(context.Background())
+			scConfig := trace.SpanContextConfig{
+				TraceID:    traceID,
+				SpanID:     trace.SpanID{0, 240, 103, 170, 11, 169, 2, 183},
+				TraceFlags: trace.TraceFlags(parentTraceFlag),
+			}
+			parent := trace.NewSpanContext(scConfig)
+			ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
+		}
 		ctx, span := testTracer.Start(ctx, "testTraceSpan", trace.WithSpanKind(trace.SpanKindClient))
 		assert.NotNil(t, span)
 		assert.NotNil(t, ctx)
