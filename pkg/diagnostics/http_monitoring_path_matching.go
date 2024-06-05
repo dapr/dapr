@@ -19,17 +19,19 @@ import (
 	"strings"
 )
 
+const unmatchedPathPlaceholder = "_"
+
 type pathMatching struct {
 	mux *http.ServeMux
 }
 
 func newPathMatching(paths []string, legacy bool) *pathMatching {
 	if paths == nil {
-		return &pathMatching{}
+		return nil
 	}
 
 	if len(paths) == 0 {
-		return &pathMatching{}
+		return nil
 	}
 
 	catchAllRegistered := false
@@ -45,7 +47,7 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 				log.Errorf("Failed to cast to PathMatchingRW")
 				return
 			}
-			rw.MatchedPath = pattern
+			rw.matchedPath = pattern
 		}))
 	}
 
@@ -58,7 +60,7 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 					log.Errorf("Failed to cast to PathMatchingRW")
 					return
 				}
-				rw.MatchedPath = unmatchedPathPlaceholder
+				rw.matchedPath = unmatchedPathPlaceholder
 			}
 		}))
 	}
@@ -92,22 +94,19 @@ func (pm *pathMatching) matchPath(path string) (string, bool) {
 		},
 	}
 
-	crw := &pathMatchingRW{MatchedPath: path}
+	crw := &pathMatchingRW{matchedPath: path}
 	pm.mux.ServeHTTP(crw, req)
 
-	return crw.MatchedPath, true
+	return crw.matchedPath, true
 }
-
-const unmatchedPathPlaceholder = "_"
 
 type pathMatchingRW struct {
 	http.ResponseWriter
-	MatchedPath string
+	matchedPath string
 }
 
 func (w *pathMatchingRW) WriteHeader(statusCode int) {
 }
-
 func (w *pathMatchingRW) Write(b []byte) (int, error) {
 	return len(b), nil
 }

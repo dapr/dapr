@@ -160,11 +160,13 @@ func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 			"/v1/orders/{orderID}/items/{itemID}",
 			"/v1/orders/{orderID}",
 			"/v1/items/{itemID}",
+			"/dapr/config",
 			"/v1/",
 			"/",
 		},
 		EgressPaths: []string{
 			"/v1/orders/{orderID}/items/{itemID}",
+			"/dapr/config",
 		},
 	}
 	testHTTP.Init("fakeID", config, false)
@@ -205,6 +207,14 @@ func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 	matchedPath, ok = testHTTP.egress.matchPath("/basket/12345")
 	require.True(t, ok)
 	require.Equal(t, "_", matchedPath)
+
+	matchedPath, ok = testHTTP.egress.matchPath("dapr/config")
+	require.True(t, ok)
+	require.Equal(t, "/dapr/config", matchedPath)
+
+	matchedPath, ok = testHTTP.egress.matchPath("/dapr/config")
+	require.True(t, ok)
+	require.Equal(t, "/dapr/config", matchedPath)
 }
 
 func fakeHTTPRequest(body string) *http.Request {
