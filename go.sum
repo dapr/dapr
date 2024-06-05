@@ -467,8 +467,8 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cu
 github.com/dgryski/go-sip13 v0.0.0-20181026042036-e10d5fee7954/go.mod h1:vAd38F8PWV+bWy6jNmig1y/TA+kYO4g3RSRF0IAv0no=
 github.com/dgryski/trifles v0.0.0-20200323201526-dd97f9abfb48 h1:fRzb/w+pyskVMQ+UbP35JkH8yB7MYb4q/qhBarqZE6g=
 github.com/dgryski/trifles v0.0.0-20200323201526-dd97f9abfb48/go.mod h1:if7Fbed8SFyPtHLHbg49SI7NAdJiC5WIA09pe59rfAA=
-github.com/diagridio/go-etcd-cron v0.0.0-20240605165516-38f6975fc7b6 h1:dPAld3LM8RASNQQB2sK1B3uWhYFmpXrxQ8RX9/9LzRQ=
-github.com/diagridio/go-etcd-cron v0.0.0-20240605165516-38f6975fc7b6/go.mod h1:OwyFpbtOGOlnvgDUosUDSynGa2fB4vgmThhYEf/l/10=
+github.com/diagridio/go-etcd-cron v0.0.0-20240605191856-c1fa1f19c160 h1:SNFmgs6D7fIgNpQ4mzTZJyKxOx8yc+iDtIne4nWMzKA=
+github.com/diagridio/go-etcd-cron v0.0.0-20240605191856-c1fa1f19c160/go.mod h1:OwyFpbtOGOlnvgDUosUDSynGa2fB4vgmThhYEf/l/10=
 github.com/didip/tollbooth/v7 v7.0.1 h1:TkT4sBKoQoHQFPf7blQ54iHrZiTDnr8TceU+MulVAog=
 github.com/didip/tollbooth/v7 v7.0.1/go.mod h1:VZhDSGl5bDSPj4wPsih3PFa4Uh9Ghv8hgacaTm5PRT4=
 github.com/dimfeld/httptreemux v5.0.1+incompatible h1:Qj3gVcDNoOthBAqftuD596rm4wg/adLLz5xh5CmpiCA=
