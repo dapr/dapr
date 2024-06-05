@@ -128,10 +128,6 @@ func (h *httpMetrics) IsEnabled() bool {
 	return h != nil && h.enabled
 }
 
-func (h *httpMetrics) pathMatchingEnabled() bool {
-	return h.ingress.enabled() || h.egress.enabled()
-}
-
 func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, status string, reqContentSize, resContentSize int64, elapsed float64) {
 	if !h.IsEnabled() {
 		return
@@ -273,8 +269,10 @@ func (h *httpMetrics) Init(appID string, config *config.PathMatching, legacy boo
 	} else {
 		serverTags = []tag.Key{appIDKey, httpMethodKey, httpStatusCodeKey}
 		clientTags = []tag.Key{appIDKey, httpStatusCodeKey}
-		if h.pathMatchingEnabled() {
+		if h.ingress.enabled() {
 			serverTags = append(serverTags, httpPathKey)
+		}
+		if h.egress.enabled() {
 			clientTags = append(clientTags, httpPathKey, httpMethodKey)
 		}
 	}
