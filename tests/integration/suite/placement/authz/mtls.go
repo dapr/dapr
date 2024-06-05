@@ -21,7 +21,6 @@ import (
 	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -97,53 +96,58 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	client := v1pb.NewPlacementClient(conn)
 
 	// Can only create hosts where the app ID match.
-	stream := establishStream(t, ctx, client)
-	require.NoError(t, stream.Send(&v1pb.Host{
+	// When no namespace is sent in the message, and tls is enabled
+	// the placement service will infer the namespace from the SPIFFE ID.
+	_, err = establishStream(t, ctx, client, &v1pb.Host{
 		Id: "app-1",
-	}))
-	waitForUnlock(t, stream)
-	_, err = stream.Recv()
+	})
 	require.NoError(t, err)
 
-	stream = establishStream(t, ctx, client)
-	require.NoError(t, stream.Send(&v1pb.Host{
+	_, err = establishStream(t, ctx, client, &v1pb.Host{
 		Id: "app-2",
-	}))
-	waitForUnlock(t, stream)
-	_, err = stream.Recv()
+	})
 	require.Error(t, err)
-	assert.Equal(t, codes.PermissionDenied, status.Code(err))
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
+
+	// Older sidecars (pre 1.4) will not send the namespace in the message.
+	// In this case the namespace is inferred from the SPIFFE ID.
+	_, err = establishStream(t, ctx, client, &v1pb.Host{
+		Id:        "app-1",
+		Namespace: "",
+	})
+	require.NoError(t, err)
+
+	// The namespace id in the message and SPIFFE ID should match
+	_, err = establishStream(t, ctx, client, &v1pb.Host{
+		Id:        "app-1",
+		Namespace: "default",
+	})
+	require.NoError(t, err)
+
+	_, err = establishStream(t, ctx, client, &v1pb.Host{
+		Id:        "app-1",
+		Namespace: "foo",
+	})
+	require.Error(t, err)
+	require.Equal(t, codes.PermissionDenied, status.Code(err))
 }
 
-func waitForUnlock(t *testing.T, stream v1pb.Placement_ReportDaprStatusClient) {
-	t.Helper()
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := stream.Recv()
-		//nolint:testifylint
-		if assert.NoError(c, err) {
-			assert.Equal(c, "unlock", resp.GetOperation())
-		}
-	}, time.Second*5, time.Millisecond*10)
-}
-
-func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementClient) v1pb.Placement_ReportDaprStatusClient {
+func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementClient, firstMessage *v1pb.Host) (v1pb.Placement_ReportDaprStatusClient, error) {
 	t.Helper()
 	var stream v1pb.Placement_ReportDaprStatusClient
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		var err error
+	var err error
+
+	require.Eventually(t, func() bool {
 		stream, err = client.ReportDaprStatus(ctx)
-		//nolint:testifylint
-		if !assert.NoError(c, err) {
-			return
+		if err != nil {
+			return false
 		}
-		//nolint:testifylint
-		if assert.NoError(c, stream.Send(&v1pb.Host{
-			Id: "app-1",
-		})) {
-			_, err = stream.Recv()
-			//nolint:testifylint
-			assert.NoError(c, err)
-		}
-	}, time.Second*5, time.Millisecond*10)
-	return stream
+
+		err = stream.Send(firstMessage)
+		return err == nil
+	}, 10*time.Second, 100*time.Millisecond)
+
+	_, err = stream.Recv()
+
+	return stream, err
 }

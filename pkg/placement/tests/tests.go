@@ -1,9 +1,22 @@
-package placement
+/*
+Copyright 2024 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package tests
 
 import (
 	"context"
 	"fmt"
-	"os"
+	"log"
 	"testing"
 	"time"
 
@@ -14,20 +27,18 @@ import (
 	daprtesting "github.com/dapr/dapr/pkg/testing"
 )
 
-var testRaftServer *raft.Server
+func Raft(t *testing.T) *raft.Server {
+	t.Helper()
 
-// TestMain is executed only one time in the entire package to
-// start test raft servers.
-func TestMain(m *testing.M) {
 	ports, err := daprtesting.GetFreePorts(1)
 	if err != nil {
 		log.Fatalf("failed to get test server port: %v", err)
-		return
+		return nil
 	}
 
 	clock := clocktesting.NewFakeClock(time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC))
 
-	testRaftServer = raft.New(raft.Options{
+	testRaftServer := raft.New(raft.Options{
 		ID:    "testnode",
 		InMem: true,
 		Peers: []raft.PeerInfo{
@@ -41,15 +52,17 @@ func TestMain(m *testing.M) {
 	})
 
 	ctx, cancel := context.WithCancel(context.Background())
-	serverStoped := make(chan struct{})
+	serverStopped := make(chan struct{})
 	go func() {
-		defer close(serverStoped)
+		defer close(serverStopped)
 		if err := testRaftServer.StartRaft(ctx, fake.New(), nil); err != nil {
 			log.Fatalf("error running test raft server: %v", err)
 		}
 	}()
+	t.Cleanup(cancel)
 
 	// Wait until test raft node become a leader.
+	//nolint:staticcheck
 	for range time.Tick(time.Microsecond) {
 		clock.Step(time.Second * 2)
 		if testRaftServer.IsLeader() {
@@ -65,15 +78,5 @@ func TestMain(m *testing.M) {
 	// library that is more deterministic and reliable for our use case.
 	time.Sleep(time.Second * 3)
 
-	retVal := m.Run()
-
-	cancel()
-	select {
-	case <-serverStoped:
-	case <-time.After(5 * time.Second):
-		log.Error("server did not stop in time")
-		retVal = 1
-	}
-
-	os.Exit(retVal)
+	return testRaftServer
 }
