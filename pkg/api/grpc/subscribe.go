@@ -63,7 +63,7 @@ func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1
 	}
 
 	if len(req.GetPubsubName()) == 0 {
-		return errors.New("pubsubName name is required")
+		return errors.New("pubsubName is required")
 	}
 
 	if len(req.GetTopic()) == 0 {

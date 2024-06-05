@@ -24,8 +24,8 @@ type DeclarativeSubscription struct {
 }
 
 type subscriptions struct {
-	programatics []rtpubsub.Subscription
-	declaratives map[string]*DeclarativeSubscription
+	programmatics []rtpubsub.Subscription
+	declaratives  map[string]*DeclarativeSubscription
 	// declarativesList used to track order of declarative subscriptions for
 	// processing priority.
 	declarativesList []string
@@ -35,7 +35,7 @@ type subscriptions struct {
 func (c *ComponentStore) SetProgramaticSubscriptions(subs ...rtpubsub.Subscription) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	c.subscriptions.programatics = subs
+	c.subscriptions.programmatics = subs
 }
 
 func (c *ComponentStore) AddDeclarativeSubscription(comp *subapi.Subscription, sub rtpubsub.Subscription) {
@@ -108,8 +108,8 @@ func (c *ComponentStore) ListSubscriptions() []rtpubsub.Subscription {
 			subs = append(subs, sub)
 		}
 	}
-	for i := range c.subscriptions.programatics {
-		sub := c.subscriptions.programatics[i]
+	for i := range c.subscriptions.programmatics {
+		sub := c.subscriptions.programmatics[i]
 		key := sub.PubsubName + "||" + sub.Topic
 		if j, ok := taken[key]; ok {
 			subs[j] = sub
@@ -149,8 +149,8 @@ func (c *ComponentStore) ListSubscriptionsAppByPubSub(name string) []rtpubsub.Su
 			subs = append(subs, sub.Subscription)
 		}
 	}
-	for i := range c.subscriptions.programatics {
-		sub := c.subscriptions.programatics[i]
+	for i := range c.subscriptions.programmatics {
+		sub := c.subscriptions.programmatics[i]
 		if sub.PubsubName != name {
 			continue
 		}
@@ -204,5 +204,5 @@ func (c *ComponentStore) ListDeclarativeSubscriptions() []subapi.Subscription {
 func (c *ComponentStore) ListProgramaticSubscriptions() []rtpubsub.Subscription {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
-	return c.subscriptions.programatics
+	return c.subscriptions.programmatics
 }
