@@ -18,6 +18,7 @@ import (
 	"os"
 	"path/filepath"
 	"testing"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/require"
@@ -136,15 +137,16 @@ func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementCli
 	var stream v1pb.Placement_ReportDaprStatusClient
 	var err error
 
-	stream, err = client.ReportDaprStatus(ctx)
-	if err != nil {
-		return nil, err
-	}
+	require.Eventually(t, func() bool {
+		stream, err = client.ReportDaprStatus(ctx)
+		if err != nil {
+			return false
+		}
 
-	err = stream.Send(firstMessage)
-	if err != nil {
-		return nil, err
-	}
+		err = stream.Send(firstMessage)
+		return err == nil
+	}, 10*time.Second, 100*time.Millisecond)
+
 	_, err = stream.Recv()
 
 	return stream, err
