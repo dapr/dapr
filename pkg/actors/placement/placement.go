@@ -61,6 +61,7 @@ const (
 type actorPlacement struct {
 	actorTypes []string
 	config     internal.Config
+	namespace  string
 
 	// client is the placement client.
 	client *placementClient
@@ -128,6 +129,7 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		closeCh:           make(chan struct{}),
 		resiliency:        opts.Resiliency,
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
+		namespace:         opts.Namespace,
 	}
 }
 
@@ -276,7 +278,8 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				Pod:      p.config.PodName,
 				// Port is redundant because Name should include port number
 				// Port: 0,
-				ApiLevel: internal.ActorAPILevel,
+				ApiLevel:  internal.ActorAPILevel,
+				Namespace: p.namespace,
 			}
 
 			err := p.client.send(&host)
@@ -310,7 +313,7 @@ func (p *actorPlacement) Close() error {
 	return nil
 }
 
-// WaitUntilReady waits until placement table is until table lock is unlocked.
+// WaitUntilReady waits until placement table is unlocked.
 func (p *actorPlacement) WaitUntilReady(ctx context.Context) error {
 	p.placementTableLock.RLock()
 	hasTablesCh := p.hasPlacementTablesCh
@@ -474,6 +477,7 @@ func (p *actorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 	case lockOperation:
 		p.blockPlacements()
 
+		// If we don't receive an unlock in 5 seconds, unlock the table
 		go func() {
 			// TODO: Use lock-free table update.
 			// current implementation is distributed two-phase locking algorithm.
