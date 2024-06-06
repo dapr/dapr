@@ -101,7 +101,7 @@ func InitMetrics(appID, namespace string, metricSpec config.MetricSpec) error {
 		return err
 	}
 
-	if err := DefaultHTTPMonitoring.Init(appID, metricSpec.GetEnabled()); err != nil {
+	if err := DefaultHTTPMonitoring.Init(appID, metricSpec.GetHTTPIncreasedCardinality(log)); err != nil {
 		return err
 	}
 
