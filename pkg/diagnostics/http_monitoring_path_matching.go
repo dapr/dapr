@@ -107,6 +107,7 @@ type pathMatchingRW struct {
 
 func (w *pathMatchingRW) WriteHeader(statusCode int) {
 }
+
 func (w *pathMatchingRW) Write(b []byte) (int, error) {
 	return len(b), nil
 }
