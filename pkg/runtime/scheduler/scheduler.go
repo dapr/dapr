@@ -16,6 +16,7 @@ package scheduler
 import (
 	"context"
 	"errors"
+	"fmt"
 	"sync"
 	"sync/atomic"
 
@@ -92,9 +93,12 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 	req := &schedulerv1pb.WatchJobsRequest{
 		WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Initial{
 			Initial: &schedulerv1pb.WatchJobsRequestInitial{
-				AppId:      m.appID,
-				Namespace:  m.namespace,
-				ActorTypes: entities,
+				AppId:     m.appID,
+				Namespace: m.namespace,
+				ActorTypes: append(entities,
+					fmt.Sprintf("dapr.internal.%s.%s.workflow", m.namespace, m.appID),
+					fmt.Sprintf("dapr.internal.%s.%s.activity", m.namespace, m.appID),
+				),
 			},
 		},
 	}

@@ -15,7 +15,6 @@ package scheduler
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -27,7 +26,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/kit/concurrency"
@@ -174,20 +172,10 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		}
 	}
 
-	data, err := json.Marshal(&actors.ReminderResponse{
-		Data: jspb.GetValue(),
+	return s.actors.ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
+		Name:      job.GetName(),
+		ActorType: actor.GetType(),
+		ActorID:   actor.GetId(),
+		Data:      jspb.GetValue(),
 	})
-	if err != nil {
-		return err
-	}
-
-	req := internalv1pb.NewInternalInvokeRequest("remind/"+job.GetName()).
-		WithActor(actor.GetType(), actor.GetId()).
-		WithData(data).
-		WithContentType(internalv1pb.JSONContentType)
-	if _, err := s.actors.Call(ctx, req); err != nil {
-		return err
-	}
-
-	return nil
 }

@@ -39,18 +39,22 @@ type InternalActor interface {
 }
 
 type InternalActorReminder struct {
-	Name    string
-	Data    []byte
-	DueTime string
-	Period  string
+	ActorType string
+	ActorID   string
+	Name      string
+	Data      []byte
+	DueTime   string
+	Period    string
 }
 
 func newInternalActorReminder(r *internal.Reminder) InternalActorReminder {
 	return InternalActorReminder{
-		Name:    r.Name,
-		Data:    r.Data,
-		DueTime: r.DueTime,
-		Period:  r.Period.String(),
+		ActorType: r.ActorType,
+		ActorID:   r.ActorID,
+		Name:      r.Name,
+		Data:      r.Data,
+		DueTime:   r.DueTime,
+		Period:    r.Period.String(),
 	}
 }
 
@@ -61,6 +65,10 @@ func (ir InternalActorReminder) DecodeData(dest any) error {
 		return fmt.Errorf("unrecognized internal actor reminder payload: %w", err)
 	}
 	return nil
+}
+
+func (ir InternalActorReminder) Key() string {
+	return ir.ActorType + daprSeparator + ir.ActorID + daprSeparator + ir.Name
 }
 
 // EncodeInternalActorData encodes result using the encoding/gob format.

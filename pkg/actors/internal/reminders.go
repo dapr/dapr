@@ -39,7 +39,7 @@ type RemindersProvider interface {
 
 	Init(ctx context.Context) error
 	GetReminder(ctx context.Context, req *GetReminderRequest) (*Reminder, error)
-	CreateReminder(ctx context.Context, req *Reminder) error
+	CreateReminder(ctx context.Context, req *CreateReminderRequest) error
 	DeleteReminder(ctx context.Context, req DeleteReminderRequest) error
 	DrainRebalancedReminders(actorType string, actorID string)
 	OnPlacementTablesUpdated(ctx context.Context)

@@ -273,6 +273,20 @@ func (_m *MockActors) GetBulkState(ctx context.Context, req *GetBulkStateRequest
 	return r0, r1
 }
 
+// ExecuteLocalOrRemoteActorReminder provides a mock function with given fields: req
+func (_m *MockActors) ExecuteLocalOrRemoteActorReminder(ctx context.Context, reminder *CreateReminderRequest) error {
+	ret := _m.Called(ctx, reminder)
+
+	var r0 error
+	if rf, ok := ret.Get(1).(func(context.Context, *CreateReminderRequest) error); ok {
+		r0 = rf(ctx, reminder)
+	} else {
+		r0 = ret.Error(1)
+	}
+
+	return r0
+}
+
 // Init provides a mock function with given fields:
 func (_m *MockActors) Init(_ context.Context) error {
 	ret := _m.Called()
@@ -427,6 +441,10 @@ func (f *FailingActors) DeleteTimer(ctx context.Context, req *DeleteTimerRequest
 
 func (f *FailingActors) IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool {
 	return true
+}
+
+func (f *FailingActors) ExecuteLocalOrRemoteActorReminder(ctx context.Context, reminder *CreateReminderRequest) error {
+	return nil
 }
 
 func (f *FailingActors) GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime {

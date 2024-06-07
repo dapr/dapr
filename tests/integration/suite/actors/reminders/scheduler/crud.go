@@ -31,7 +31,6 @@ import (
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -92,24 +91,8 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	c.place.WaitUntilRunning(t, ctx)
 	c.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
-
-	//nolint:goconst
-	daprdURL := "http://" + c.daprd.HTTPAddress() + "/v1.0/actors/myactortype/myactorid"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/method/foo", nil)
-	require.NoError(t, err)
-
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, rErr := client.Do(req)
-		//nolint:testifylint
-		if assert.NoError(c, rErr) {
-			assert.NoError(c, resp.Body.Close())
-			assert.Equal(c, http.StatusOK, resp.StatusCode)
-		}
-	}, time.Second*10, time.Millisecond*10, "actor not ready in time")
-
 	gclient := c.daprd.GRPCClient(t, ctx)
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+	_, err := gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "myactortype",
 		ActorId:   "myactorid",
 		Name:      "xyz",
