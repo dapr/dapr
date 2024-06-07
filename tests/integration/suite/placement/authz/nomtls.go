@@ -57,15 +57,17 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 	client := v1pb.NewPlacementClient(conn)
 
 	// Can create hosts with any appIDs or namespaces.
-	stream := establishStream(t, ctx, client)
-	require.NoError(t, stream.Send(new(v1pb.Host)))
-	waitForUnlock(t, stream)
-	_, err = stream.Recv()
+	_, err = establishStream(t, ctx, client, new(v1pb.Host))
 	require.NoError(t, err)
 
-	stream = establishStream(t, ctx, client)
-	require.NoError(t, stream.Send(&v1pb.Host{Name: "bar"}))
-	waitForUnlock(t, stream)
-	_, err = stream.Recv()
+	_, err = establishStream(t, ctx, client, &v1pb.Host{
+		Name: "bar",
+	})
+	require.NoError(t, err)
+
+	_, err = establishStream(t, ctx, client, &v1pb.Host{
+		Name:      "bar",
+		Namespace: "ns1",
+	})
 	require.NoError(t, err)
 }

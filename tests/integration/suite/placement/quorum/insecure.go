@@ -104,6 +104,8 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 
 	var stream v1pb.Placement_ReportDaprStatusClient
 
+	// Try connecting to each placement until one succeeds,
+	// indicating that a leader has been elected
 	j := -1
 	require.Eventually(t, func() bool {
 		j++
@@ -124,7 +126,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		if err != nil {
 			return false
 		}
-		err = stream.Send(&v1pb.Host{Id: "app-1"})
+		err = stream.Send(&v1pb.Host{Id: "app-1", Namespace: "default"})
 		if err != nil {
 			return false
 		}
@@ -136,12 +138,13 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	err = stream.Send(&v1pb.Host{
-		Name:     "app-1",
-		Port:     1234,
-		Load:     1,
-		Entities: []string{"entity-1", "entity-2"},
-		Id:       "app-1",
-		Pod:      "pod-1",
+		Name:      "app-1",
+		Namespace: "default",
+		Port:      1234,
+		Load:      1,
+		Entities:  []string{"entity-1", "entity-2"},
+		Id:        "app-1",
+		Pod:       "pod-1",
 	})
 	require.NoError(t, err)
 

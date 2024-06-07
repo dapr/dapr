@@ -201,6 +201,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		Clock:      a.clock,
 		APILevel:   &a.apiLevel,
 		Resiliency: a.resiliency,
+		Namespace:  security.CurrentNamespace(),
 	}
 
 	// Initialize the placement client if we don't have a mocked one already
