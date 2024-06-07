@@ -110,9 +110,10 @@ func TestMarshalAndUnmarshalMsgpack(t *testing.T) {
 func TestMakeRaftLogCommand(t *testing.T) {
 	// arrange
 	testMember := DaprHostMember{
-		Name:     "127.0.0.1:3030",
-		AppID:    "fakeAppID",
-		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		Name:      "127.0.0.1:3030",
+		Namespace: "ns1",
+		AppID:     "fakeAppID",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo"},
 	}
 
 	// act
