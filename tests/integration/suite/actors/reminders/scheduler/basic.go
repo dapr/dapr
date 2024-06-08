@@ -98,7 +98,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	daprdURL := fmt.Sprintf("http://%s/v1.0/actors/myactortype/myactorid", b.daprd.HTTPAddress())
 
-	//nolint:goconst
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/method/foo", nil)
 	require.NoError(t, err)
 

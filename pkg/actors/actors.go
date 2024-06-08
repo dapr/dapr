@@ -1112,6 +1112,40 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 }
 
 func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, reminder *CreateReminderRequest) error {
+	isLocal, _ := a.isActorLocallyHosted(ctx, reminder.ActorType, reminder.ActorID)
+
+	if !isLocal {
+		lar, err := a.placement.LookupActor(ctx, internal.LookupActorRequest{
+			ActorType: reminder.ActorType,
+			ActorID:   reminder.ActorID,
+		})
+		if err != nil {
+			return err
+		}
+
+		conn, teardown, err := a.grpcConnectionFn(ctx, lar.Address, a.actorsConfig.AppID, a.actorsConfig.Namespace)
+		if err != nil {
+			return err
+		}
+		defer teardown(false)
+
+		span := diagUtils.SpanFromContext(ctx)
+		reqCtx := diag.SpanContextToGRPCMetadata(context.Background(), span.SpanContext())
+		client := internalv1pb.NewServiceInvocationClient(conn)
+		reqCtx, cancel := context.WithTimeout(reqCtx, time.Second*10)
+		defer cancel()
+
+		_, err = client.CallActorReminder(reqCtx, &internalv1pb.Reminder{
+			ActorId:   reminder.ActorID,
+			ActorType: reminder.ActorType,
+			Name:      reminder.Name,
+			Data:      reminder.Data,
+			Period:    reminder.Period,
+			DueTime:   reminder.DueTime,
+		})
+		return err
+	}
+
 	ir := &internal.Reminder{
 		ActorID:   reminder.ActorID,
 		ActorType: reminder.ActorType,

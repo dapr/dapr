@@ -15,16 +15,14 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync"
+	"strconv"
 	"sync/atomic"
 	"testing"
 	"time"
 
-	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -38,10 +36,10 @@ import (
 )
 
 func init() {
-	suite.Register(new(remote))
+	suite.Register(new(hop))
 }
 
-type remote struct {
+type hop struct {
 	daprd1    *daprd.Daprd
 	daprd2    *daprd.Daprd
 	place     *placement.Placement
@@ -49,15 +47,9 @@ type remote struct {
 
 	daprd1called atomic.Uint64
 	daprd2called atomic.Uint64
-
-	actorIDsNum int
-	actorIDs    []string
-
-	lock         sync.Mutex
-	methodcalled []string
 }
 
-func (r *remote) Setup(t *testing.T) []framework.Option {
+func (h *hop) Setup(t *testing.T) []framework.Option {
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -69,15 +61,6 @@ spec:
   - name: SchedulerReminders
     enabled: true`), 0o600))
 
-	r.actorIDsNum = 500
-	r.methodcalled = make([]string, 0, r.actorIDsNum)
-	r.actorIDs = make([]string, r.actorIDsNum)
-	for i := 0; i < r.actorIDsNum; i++ {
-		uid, err := uuid.NewUUID()
-		require.NoError(t, err)
-		r.actorIDs[i] = uid.String()
-	}
-
 	newHTTP := func(called *atomic.Uint64) *prochttp.HTTP {
 		handler := http.NewServeMux()
 		handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
@@ -87,73 +70,64 @@ spec:
 			w.WriteHeader(http.StatusOK)
 		})
 
-		for _, id := range r.actorIDs {
-			id := id
-			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/remind/remindermethod", id), func(http.ResponseWriter, *http.Request) {
-				r.lock.Lock()
-				defer r.lock.Unlock()
-				r.methodcalled = append(r.methodcalled, id)
+		for i := 0; i < 100; i++ {
+			handler.HandleFunc("/actors/myactortype/foo/method/remind/"+strconv.Itoa(i), func(http.ResponseWriter, *http.Request) {
 				called.Add(1)
 			})
-			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/foo", id), func(http.ResponseWriter, *http.Request) {})
 		}
 
 		return prochttp.New(t, prochttp.WithHandler(handler))
 	}
 
-	r.scheduler = procscheduler.New(t)
-	r.place = placement.New(t)
+	h.scheduler = procscheduler.New(t)
+	h.place = placement.New(t)
 
-	srv1 := newHTTP(&r.daprd1called)
-	srv2 := newHTTP(&r.daprd2called)
-	r.daprd1 = daprd.New(t,
+	srv1 := newHTTP(&h.daprd1called)
+	srv2 := newHTTP(&h.daprd2called)
+	h.daprd1 = daprd.New(t,
 		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(r.place.Address()),
-		daprd.WithSchedulerAddresses(r.scheduler.Address()),
+		daprd.WithPlacementAddresses(h.place.Address()),
+		daprd.WithSchedulerAddresses(h.scheduler.Address()),
 		daprd.WithAppPort(srv1.Port()),
 	)
-	r.daprd2 = daprd.New(t,
+	h.daprd2 = daprd.New(t,
 		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(r.place.Address()),
-		daprd.WithSchedulerAddresses(r.scheduler.Address()),
+		daprd.WithPlacementAddresses(h.place.Address()),
+		daprd.WithSchedulerAddresses(h.scheduler.Address()),
 		daprd.WithAppPort(srv2.Port()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(srv1, srv2, r.scheduler, r.place, r.daprd1, r.daprd2),
+		framework.WithProcesses(srv1, srv2, h.scheduler, h.place, h.daprd1, h.daprd2),
 	}
 }
 
-func (r *remote) Run(t *testing.T, ctx context.Context) {
-	r.scheduler.WaitUntilRunning(t, ctx)
-	r.place.WaitUntilRunning(t, ctx)
-	r.daprd1.WaitUntilRunning(t, ctx)
-	r.daprd2.WaitUntilRunning(t, ctx)
+func (h *hop) Run(t *testing.T, ctx context.Context) {
+	h.scheduler.WaitUntilRunning(t, ctx)
+	h.place.WaitUntilRunning(t, ctx)
+	h.daprd1.WaitUntilRunning(t, ctx)
+	h.daprd2.WaitUntilRunning(t, ctx)
 
-	gclient := r.daprd1.GRPCClient(t, ctx)
-	for _, id := range r.actorIDs {
+	gclient := h.daprd1.GRPCClient(t, ctx)
+	for i := 0; i < 100; i++ {
 		_, err := gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 			ActorType: "myactortype",
-			ActorId:   id,
-			Name:      "remindermethod",
-			DueTime:   "1s",
+			ActorId:   "foo",
+			Name:      strconv.Itoa(i),
+			DueTime:   "0s",
 			Data:      []byte("reminderdata"),
 		})
 		require.NoError(t, err)
 	}
 
 	assert.Eventually(t, func() bool {
-		r.lock.Lock()
-		defer r.lock.Unlock()
-		return len(r.methodcalled) == r.actorIDsNum
-	}, time.Second*3, time.Millisecond*10)
+		return h.daprd1called.Load() == 100 || h.daprd2called.Load() == 100
+	}, time.Second*5, time.Millisecond*10)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(t, r.actorIDs, r.methodcalled)
-	}, time.Second*10, time.Millisecond*10)
-
-	assert.GreaterOrEqual(t, r.daprd1called.Load(), uint64(0))
-	assert.GreaterOrEqual(t, r.daprd2called.Load(), uint64(0))
+	assert.True(t,
+		(h.daprd1called.Load() == 100 && h.daprd2called.Load() == 0) ||
+			(h.daprd2called.Load() == 100 && h.daprd1called.Load() == 0),
+	)
 }

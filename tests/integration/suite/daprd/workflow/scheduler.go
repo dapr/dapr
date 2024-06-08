@@ -29,8 +29,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
 	"github.com/microsoft/durabletask-go/api"
@@ -44,6 +42,7 @@ import (
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -72,27 +71,40 @@ spec:
   - name: SchedulerReminders
     enabled: true`), 0o600))
 
+	db := sqlite.New(t,
+		sqlite.WithActorStateStore(true),
+		sqlite.WithMetadata("busyTimeout", "10s"),
+		sqlite.WithMetadata("disableWAL", "true"),
+	)
+
 	handler := http.NewServeMux()
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(""))
 	})
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	s.place = placement.New(t)
-	s.scheduler = procscheduler.New(t,
-		procscheduler.WithLogLevel("debug"),
-	)
+	s.scheduler = procscheduler.New(t)
 	s.daprd = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithPlacementAddresses(s.place.Address()),
-		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithResourceFiles(db.GetComponent(t)),
 		daprd.WithSchedulerAddresses(s.scheduler.Address()),
 		daprd.WithConfigs(configFile),
-		daprd.WithLogLevel("debug"),
+	)
+
+	daprd2 := daprd.New(t,
+		daprd.WithAppID(s.daprd.AppID()),
+		daprd.WithAppPort(srv.Port()),
+		daprd.WithAppProtocol("http"),
+		daprd.WithPlacementAddresses(s.place.Address()),
+		daprd.WithResourceFiles(db.GetComponent(t)),
+		daprd.WithSchedulerAddresses(s.scheduler.Address()),
+		daprd.WithConfigs(configFile),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(s.scheduler, s.place, srv, s.daprd),
+		framework.WithProcesses(db, s.scheduler, s.place, srv, daprd2, s.daprd),
 	}
 }
 
@@ -103,16 +115,9 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 
 	s.httpClient = util.HTTPClient(t)
 
-	conn, err := grpc.DialContext(ctx,
-		s.daprd.GRPCAddress(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	s.grpcClient = runtimev1pb.NewDaprClient(conn)
+	s.grpcClient = s.daprd.GRPCClient(t, ctx)
 
-	backendClient := client.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
+	backendClient := client.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
 	t.Run("basic", func(t *testing.T) {
 		r := task.NewTaskRegistry()

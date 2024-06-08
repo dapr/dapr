@@ -82,7 +82,6 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 	case <-ctx.Done():
 		return ctx.Err()
 	case <-m.stopStartCh:
-		defer m.wg.Done()
 	}
 
 	var entities []string
@@ -133,7 +132,6 @@ func (m *Manager) Start(actors actors.ActorRuntime) {
 	m.lock.Lock()
 	defer m.lock.Unlock()
 	if !m.started {
-		m.wg.Add(1)
 		m.started = true
 		m.stopped = false
 		m.actors = actors
