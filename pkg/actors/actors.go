@@ -516,16 +516,6 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 		return nil, fmt.Errorf("failed to wait for placement readiness: %w", err)
 	}
 
-	actorNamespace := a.actorsConfig.Config.Namespace
-	metadata := req.GetMetadata()
-	if metadata != nil {
-		if values, ok := metadata["namespace"]; ok {
-			if len(values.GetValues()) > 0 {
-				actorNamespace = values.GetValues()[0]
-			}
-		}
-	}
-
 	// Do a lookup to check if the actor is local
 	actor := req.GetActor()
 	actorType := actor.GetActorType()
@@ -546,7 +536,7 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 			res, err = a.callLocalActor(ctx, req)
 		}
 	} else {
-		res, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, actorNamespace, lar.Address, lar.AppID, req)
+		res, err = a.callRemoteActorWithRetry(ctx, retry.DefaultLinearRetryCount, retry.DefaultLinearBackoffInterval, a.callRemoteActor, lar.Address, lar.AppID, req)
 	}
 
 	if err != nil {
@@ -564,13 +554,13 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	numRetries int,
 	backoffInterval time.Duration,
 	fn func(ctx context.Context, namespace, targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, func(destroy bool), error),
-	namespace, targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest,
+	targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest,
 ) (*internalv1pb.InternalInvokeResponse, error) {
 	if !a.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries))
 		return policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
 			attempt := resiliency.GetAttempt(ctx)
-			rResp, teardown, rErr := fn(ctx, namespace, targetAddress, targetID, req)
+			rResp, teardown, rErr := fn(ctx, a.actorsConfig.Namespace, targetAddress, targetID, req)
 			if rErr == nil {
 				teardown(false)
 				return rResp, nil
@@ -588,7 +578,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 		})
 	}
 
-	res, teardown, err := fn(ctx, namespace, targetAddress, targetID, req)
+	res, teardown, err := fn(ctx, a.actorsConfig.Namespace, targetAddress, targetID, req)
 	teardown(false)
 	return res, err
 }
@@ -1123,7 +1113,7 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 			return err
 		}
 
-		conn, teardown, err := a.grpcConnectionFn(ctx, lar.Address, a.actorsConfig.AppID, a.actorsConfig.Namespace)
+		conn, teardown, err := a.grpcConnectionFn(ctx, lar.Address, lar.AppID, a.actorsConfig.Namespace)
 		if err != nil {
 			return err
 		}
