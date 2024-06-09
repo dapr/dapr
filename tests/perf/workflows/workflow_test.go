@@ -151,6 +151,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 
 				// Get the ingress external url of test app
 				log.Println("acquiring app external URL")
+				
 				externalURL := tr.Platform.AcquireAppExternalURL(testAppName)
 				require.NotEmpty(t, externalURL, "external URL must not be empty")
 
