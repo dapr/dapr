@@ -188,8 +188,8 @@ func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, error) {
 
 	idx := nsPool.idx.Add(1)
 
-	switch t := meta.GetType(); t.GetType().(type) {
-	case *schedulerv1pb.JobMetadataType_Job:
+	switch t := meta.GetTarget(); t.GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Job:
 		appIDConns, ok := nsPool.appID[meta.GetAppId()]
 		if !ok || len(appIDConns) == 0 {
 			return nil, fmt.Errorf("no connections available for appID: %s", meta.GetAppId())
@@ -197,7 +197,7 @@ func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, error) {
 		conn := nsPool.conns[appIDConns[int(idx)%len(appIDConns)]]
 		return conn, nil
 
-	case *schedulerv1pb.JobMetadataType_Actor:
+	case *schedulerv1pb.JobTargetMetadata_Actor:
 		actorTypeConns, ok := nsPool.actorType[t.GetActor().GetType()]
 		if !ok || len(actorTypeConns) == 0 {
 			return nil, fmt.Errorf("no connections available for actorType: %s", t.GetActor().GetType())

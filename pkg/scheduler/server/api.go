@@ -190,11 +190,11 @@ func buildJobName(name string, meta *schedulerv1pb.JobMetadata) (string, error) 
 		return strings.Join(ss, "||")
 	}
 
-	switch t := meta.GetType(); t.GetType().(type) {
-	case *schedulerv1pb.JobMetadataType_Actor:
+	switch t := meta.GetTarget(); t.GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Actor:
 		actor := t.GetActor()
 		return joinStrings("actorreminder", meta.GetNamespace(), actor.GetType(), actor.GetId(), name), nil
-	case *schedulerv1pb.JobMetadataType_Job:
+	case *schedulerv1pb.JobTargetMetadata_Job:
 		return joinStrings("app", meta.GetNamespace(), meta.GetAppId(), name), nil
 	default:
 		return "", fmt.Errorf("unknown job type: %v", t)

@@ -111,9 +111,9 @@ func (s *scheduler) CreateReminder(ctx context.Context, reminder *internal.Creat
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,
 			Namespace: s.namespace,
-			Type: &schedulerv1pb.JobMetadataType{
-				Type: &schedulerv1pb.JobMetadataType_Actor{
-					Actor: &schedulerv1pb.TypeActorReminder{
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{
 						Id:   reminder.ActorID,
 						Type: reminder.ActorType,
 					},
@@ -162,9 +162,9 @@ func (s *scheduler) GetReminder(ctx context.Context, req *internal.GetReminderRe
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,
 			Namespace: s.namespace,
-			Type: &schedulerv1pb.JobMetadataType{
-				Type: &schedulerv1pb.JobMetadataType_Actor{
-					Actor: &schedulerv1pb.TypeActorReminder{
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{
 						Id:   req.ActorID,
 						Type: req.ActorType,
 					},
@@ -211,9 +211,9 @@ func (s *scheduler) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,
 			Namespace: s.namespace,
-			Type: &schedulerv1pb.JobMetadataType{
-				Type: &schedulerv1pb.JobMetadataType_Actor{
-					Actor: &schedulerv1pb.TypeActorReminder{
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{
 						Id:   req.ActorID,
 						Type: req.ActorType,
 					},

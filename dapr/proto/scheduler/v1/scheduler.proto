@@ -35,13 +35,13 @@ message Job {
   google.protobuf.Any data = 5;
 }
 
-// TypeJob is the message used by the daprd sidecar to schedule a job
+// TargetJob is the message used by the daprd sidecar to schedule a job
 // from an App.
-message TypeJob {}
+message TargetJob {}
 
-// TypeActorReminder is the message used by the daprd sidecar to
+// TargetActorReminder is the message used by the daprd sidecar to
 // schedule a job from an Actor Reminder.
-message TypeActorReminder {
+message TargetActorReminder {
   // id is the actor ID.
 	string id = 1;
 
@@ -49,12 +49,12 @@ message TypeActorReminder {
 	string type = 2;
 }
 
-// JobMetadataType holds the typed metadata associated with the job for
+// JobTargetMetadata holds the typed metadata associated with the job for
 // different origins.
-message JobMetadataType {
+message JobTargetMetadata {
   oneof type {
-    TypeJob job = 1;
-    TypeActorReminder actor = 2;
+    TargetJob job = 1;
+    TargetActorReminder actor = 2;
   }
 }
 
@@ -67,8 +67,8 @@ message JobMetadata {
   // namespace is the namespace of the requester.
   string namespace = 2;
 
-  // type is the type of the job.
-	JobMetadataType type = 3;
+  // target is the type of the job.
+  JobTargetMetadata target = 3;
 }
 
 // WatchJobsRequest is the message used by the daprd sidecar to connect to the
@@ -88,8 +88,8 @@ message WatchJobsRequestInitial {
   // namespace is the namespace of the requester.
   string namespace = 2;
 
-  // actorTypes is the optional list of actor types to watch for.
-  repeated string actorTypes = 3;
+  // actor_types is the optional list of actor types to watch for.
+  repeated string actor_types = 3;
 }
 
 // WatchJobsRequestResult is the result of a job execution to allow the job to

@@ -101,13 +101,13 @@ func (s *streamer) outgoing(ctx context.Context) error {
 func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) {
 	meta := job.GetMetadata()
 
-	switch t := meta.GetType(); t.GetType().(type) {
-	case *schedulerv1pb.JobMetadataType_Job:
+	switch t := meta.GetTarget(); t.GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Job:
 		if err := s.invokeApp(ctx, job); err != nil {
 			log.Errorf("failed to invoke schedule app job: %s", err)
 		}
 
-	case *schedulerv1pb.JobMetadataType_Actor:
+	case *schedulerv1pb.JobTargetMetadata_Actor:
 		if err := s.invokeActorReminder(ctx, job); err != nil {
 			log.Errorf("failed to invoke scheduled actor reminder: %s", err)
 		}
@@ -163,7 +163,7 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		return errors.New("received actor reminder job but actor runtime is not initialized")
 	}
 
-	actor := job.GetMetadata().GetType().GetActor()
+	actor := job.GetMetadata().GetTarget().GetActor()
 
 	var jspb wrappers.BytesValue
 	if job.GetData() != nil {
