@@ -17,6 +17,7 @@ limitations under the License.
 package workflows
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -32,6 +33,9 @@ import (
 	"github.com/dapr/dapr/tests/runner/loadtest"
 	"github.com/dapr/dapr/tests/runner/summary"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var tr *runner.TestRunner
@@ -143,6 +147,21 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 		for index2, scenario := range scenarios {
 			subTestName := "[" + strings.ToUpper(scenario) + "]: "
 			t.Run(subTestName, func(t *testing.T) {
+				platform, ok := tr.Platform.(*runner.KubeTestPlatform)
+				if !ok {
+					t.Skip("skipping test; only supported on kubernetes")
+				}
+
+				scheme := runtime.NewScheme()
+				require.NoError(t, corev1.AddToScheme(scheme))
+				cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
+				require.NoError(t, err)
+				var pod corev1.Pod
+				err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+				require.NoError(t, err)
+				err = cl.Delete(context.Background(), &pod)
+				require.NoError(t, err)
+
 				// Re-starting the app to clear previous run's memory
 				if restart {
 					log.Printf("Restarting app %s", testAppName)
@@ -163,7 +182,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				// Initialize the workflow runtime
 				url := fmt.Sprintf("http://%s/start-workflow-runtime", externalURL)
 				// Calling start-workflow-runtime multiple times so that it is started in all app instances
-				_, err := utils.HTTPGet(url)
+				_, err = utils.HTTPGet(url)
 				require.NoError(t, err, "error starting workflow runtime")
 
 				time.Sleep(5 * time.Second)

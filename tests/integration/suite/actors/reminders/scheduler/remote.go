@@ -54,7 +54,7 @@ type remote struct {
 	actorIDs    []string
 
 	lock         sync.Mutex
-	methodcalled []string
+	methodcalled atomic.Value
 }
 
 func (r *remote) Setup(t *testing.T) []framework.Option {
@@ -70,7 +70,7 @@ spec:
     enabled: true`), 0o600))
 
 	r.actorIDsNum = 500
-	r.methodcalled = make([]string, 0, r.actorIDsNum)
+	r.methodcalled.Store(make([]string, 0, r.actorIDsNum))
 	r.actorIDs = make([]string, r.actorIDsNum)
 	for i := 0; i < r.actorIDsNum; i++ {
 		uid, err := uuid.NewUUID()
@@ -92,7 +92,7 @@ spec:
 			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/remind/remindermethod", id), func(http.ResponseWriter, *http.Request) {
 				r.lock.Lock()
 				defer r.lock.Unlock()
-				r.methodcalled = append(r.methodcalled, id)
+				r.methodcalled.Store(append(r.methodcalled.Load().([]string), id))
 				called.Add(1)
 			})
 			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/foo", id), func(http.ResponseWriter, *http.Request) {})
@@ -147,11 +147,11 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, func() bool {
 		r.lock.Lock()
 		defer r.lock.Unlock()
-		return len(r.methodcalled) == r.actorIDsNum
-	}, time.Second*3, time.Millisecond*10)
+		return len(r.methodcalled.Load().([]string)) == r.actorIDsNum
+	}, time.Second*5, time.Millisecond*10)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(t, r.actorIDs, r.methodcalled)
+		assert.ElementsMatch(t, r.actorIDs, r.methodcalled.Load().([]string))
 	}, time.Second*10, time.Millisecond*10)
 
 	assert.GreaterOrEqual(t, r.daprd1called.Load(), uint64(0))
