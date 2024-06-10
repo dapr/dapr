@@ -261,3 +261,12 @@ func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, true)
 }
+
+// Runs tests for `100k_wf` with 100,000 iterations
+func TestWorkflowWith100KIterations(t *testing.T) {
+	workflowName := "100k_wf"
+	inputs := []string{"100"}
+	scenarios := []string{"t_100000_1000"} // 100k workflows, 1k iterations
+	rateChecks := [][]string{{"rate==1"}}
+	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
+}
