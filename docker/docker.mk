@@ -48,13 +48,15 @@ else
   BIN_PATH := $(BIN_PATH)/debug
 endif
 
+DOCKER_IMAGE_ARCH:=amd64
 ifeq ($(TARGET_ARCH),arm)
-  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/arm/v7
+  DOCKER_IMAGE_ARCH:=arm/v7
 else ifeq ($(TARGET_ARCH),arm64)
-  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/arm64/v8
-else
-  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/amd64
+  DOCKER_IMAGE_ARCH:=arm64/v8
 endif
+DOCKER_IMAGE_PLATFORM=$(TARGET_OS)/$(DOCKER_IMAGE_ARCH)
+DOCKER_BUILDX_NAME=daprbuild_multi
+DOCKER_BUILDX_PLATFORMS=$(TARGET_OS)/arm/v7,$(TARGET_OS)/arm64/v8,$(TARGET_OS)/amd64
 
 # Supported docker image architecture
 DOCKER_MULTI_ARCH?=linux-amd64 linux-arm linux-arm64 windows-1809-amd64 windows-ltsc2022-amd64
@@ -116,28 +118,29 @@ docker-build: check-docker-env check-arch
 	$(info Building $(DOCKER_IMAGE):$(DAPR_TAG) docker images ...)
 ifeq ($(TARGET_ARCH),$(TARGET_ARCH_LOCAL))
 ifeq ($(ONLY_DAPR_IMAGE),true)
-	$(DOCKER) build --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
+	$(DOCKER) build --output type=docker --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
 else
-	$(DOCKER) build --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
+	$(DOCKER) build --output type=docker --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=daprd $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build --output type=docker --build-arg PKG_FILES=daprd $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=placement $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build --output type=docker --build-arg PKG_FILES=placement $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=sentry $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build --output type=docker --build-arg PKG_FILES=sentry $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=operator $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build --output type=docker --build-arg PKG_FILES=operator $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=injector $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build --output type=docker --build-arg PKG_FILES=injector $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 endif
 else
-	-$(DOCKER) buildx create --use --name daprbuild
-	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
+	-$(DOCKER) run --privileged --rm tonistiigi/binfmt:qemu-v7.0.0 --install all
+	-$(DOCKER) buildx create --use --name $(DOCKER_BUILDX_NAME) --platform $(DOCKER_BUILDX_PLATFORMS)
+	$(DOCKER) buildx inspect $(DOCKER_BUILDX_NAME) --bootstrap
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) buildx build --build-arg PKG_FILES=* $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG) --provenance=false
 else
@@ -186,8 +189,9 @@ else
 	fi
 endif
 else
-	-$(DOCKER) buildx create --use --name daprbuild
-	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
+	-$(DOCKER) run --privileged --rm tonistiigi/binfmt:qemu-v7.0.0 --install all
+	-$(DOCKER) buildx create --use --name $(DOCKER_BUILDX_NAME) --platform $(DOCKER_BUILDX_PLATFORMS)
+	$(DOCKER) buildx inspect $(DOCKER_BUILDX_NAME) --bootstrap
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG) --provenance=false --push
 else
@@ -332,9 +336,9 @@ ifeq ($(WINDOWS_VERSION),)
 endif
 
 docker-windows-base-build: check-windows-version
-	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
-	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-php-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-php-base:$(WINDOWS_VERSION)
-	$(DOCKER) build --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-python-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-python-base:$(WINDOWS_VERSION)
+	$(DOCKER) build --output type=docker --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
+	$(DOCKER) build --output type=docker --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-php-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-php-base:$(WINDOWS_VERSION)
+	$(DOCKER) build --output type=docker --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-python-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-python-base:$(WINDOWS_VERSION)
 
 docker-windows-base-push: check-windows-version
 	$(DOCKER) push $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
@@ -366,9 +370,9 @@ build-dev-container:
 ifeq ($(DAPR_REGISTRY),)
 	$(info DAPR_REGISTRY environment variable not set, tagging image without registry prefix.)
 	$(info `make tag-dev-container` should be run with DAPR_REGISTRY before `make push-dev-container.)
-	$(DOCKER) build --build-arg DAPR_CLI_VERSION=$(DEV_CONTAINER_CLI_TAG) -f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) $(DOCKERFILE_DIR)/. -t $(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
+	$(DOCKER) build --output type=docker --build-arg DAPR_CLI_VERSION=$(DEV_CONTAINER_CLI_TAG) -f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) $(DOCKERFILE_DIR)/. -t $(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
 else
-	$(DOCKER) build --build-arg DAPR_CLI_VERSION=$(DEV_CONTAINER_CLI_TAG) -f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) $(DOCKERFILE_DIR)/. -t $(DAPR_REGISTRY)/$(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
+	$(DOCKER) build --output type=docker --build-arg DAPR_CLI_VERSION=$(DEV_CONTAINER_CLI_TAG) -f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) $(DOCKERFILE_DIR)/. -t $(DAPR_REGISTRY)/$(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
 endif
 
 tag-dev-container: check-docker-env-for-dev-container
