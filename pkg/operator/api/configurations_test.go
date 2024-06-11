@@ -55,7 +55,7 @@ func Test_overrideConfigDefaults(t *testing.T) {
 		a := &apiServer{Client: cl}
 		c := newCardinalityConfig(defaultObjMeta, true)
 		oldC := c.DeepCopy()
-		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
+		require.NoError(t, a.overrideConfigDefaults(ctx, c))
 		assertEqual(t, c, oldC)
 	})
 
@@ -73,7 +73,7 @@ func Test_overrideConfigDefaults(t *testing.T) {
 			},
 		}
 		oldC := c.DeepCopy()
-		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
+		require.NoError(t, a.overrideConfigDefaults(ctx, c))
 		assertEqual(t, c, oldC)
 	})
 
@@ -91,7 +91,7 @@ func Test_overrideConfigDefaults(t *testing.T) {
 			},
 		}
 		oldC := c.DeepCopy()
-		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
+		require.NoError(t, a.overrideConfigDefaults(ctx, c))
 		assertEqual(t, c, oldC)
 	})
 
@@ -108,7 +108,7 @@ func Test_overrideConfigDefaults(t *testing.T) {
 		expectedC.Spec.MetricSpec.HTTP = &configapi.MetricHTTP{
 			IncreasedCardinality: ptr.Of(false),
 		}
-		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
+		require.NoError(t, a.overrideConfigDefaults(ctx, c))
 
 		assertEqual(t, c, expectedC)
 	})
@@ -126,7 +126,7 @@ func Test_overrideConfigDefaults(t *testing.T) {
 		expectedC.Spec.MetricSpec.HTTP = &configapi.MetricHTTP{
 			IncreasedCardinality: ptr.Of(false),
 		}
-		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
+		require.NoError(t, a.overrideConfigDefaults(ctx, c))
 
 		assertEqual(t, c, expectedC)
 	})
@@ -147,7 +147,7 @@ func Test_overrideConfigDefaults(t *testing.T) {
 		expectedC.Spec.MetricSpec.HTTP = &configapi.MetricHTTP{
 			IncreasedCardinality: ptr.Of(false),
 		}
-		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
+		require.NoError(t, a.overrideConfigDefaults(ctx, c))
 
 		assertEqual(t, c, expectedC)
 	})
