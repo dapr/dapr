@@ -47,7 +47,7 @@ func Test_overrideConfigDefaults(t *testing.T) {
 	t.Run("if default configuration doesn't exist, return no error", func(t *testing.T) {
 		cl := fake.NewClientBuilder().WithScheme(scheme).Build()
 		a := &apiServer{Client: cl}
-		assert.NoError(t, a.overrideConfigDefaults(ctx, &configapi.Configuration{}))
+		require.NoError(t, a.overrideConfigDefaults(ctx, &configapi.Configuration{}))
 	})
 
 	t.Run("if default configuration doesn't exist, and we provide a Configuration, nothing should change", func(t *testing.T) {
