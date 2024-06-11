@@ -3,16 +3,19 @@ package api
 import (
 	"context"
 	"encoding/json"
-	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"testing"
 
-	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
+	v1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	"github.com/dapr/kit/ptr"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
-	"k8s.io/utils/ptr"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
+
+	configapi "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 )
 
 func newCardinalityConfig(objectMeta v1.ObjectMeta, increaseCardinality bool) *configapi.Configuration {
@@ -21,7 +24,7 @@ func newCardinalityConfig(objectMeta v1.ObjectMeta, increaseCardinality bool) *c
 		Spec: configapi.ConfigurationSpec{
 			MetricSpec: &configapi.MetricSpec{
 				HTTP: &configapi.MetricHTTP{
-					IncreasedCardinality: ptr.To(increaseCardinality),
+					IncreasedCardinality: ptr.Of(increaseCardinality),
 				},
 			},
 		},
@@ -44,7 +47,7 @@ func Test_overrideConfigDefaults(t *testing.T) {
 	t.Run("if default configuration doesn't exist, return no error", func(t *testing.T) {
 		cl := fake.NewClientBuilder().WithScheme(scheme).Build()
 		a := &apiServer{Client: cl}
-		assert.Nil(t, a.overrideConfigDefaults(ctx, &configapi.Configuration{}))
+		assert.NoError(t, a.overrideConfigDefaults(ctx, &configapi.Configuration{}))
 	})
 
 	t.Run("if default configuration doesn't exist, and we provide a Configuration, nothing should change", func(t *testing.T) {
@@ -52,7 +55,7 @@ func Test_overrideConfigDefaults(t *testing.T) {
 		a := &apiServer{Client: cl}
 		c := newCardinalityConfig(defaultObjMeta, true)
 		oldC := c.DeepCopy()
-		assert.Nil(t, a.overrideConfigDefaults(ctx, c))
+		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
 		assertEqual(t, c, oldC)
 	})
 
@@ -64,13 +67,13 @@ func Test_overrideConfigDefaults(t *testing.T) {
 			Spec: configapi.ConfigurationSpec{
 				MetricSpec: &configapi.MetricSpec{
 					HTTP: &configapi.MetricHTTP{
-						IncreasedCardinality: ptr.To(true),
+						IncreasedCardinality: ptr.Of(true),
 					},
 				},
 			},
 		}
 		oldC := c.DeepCopy()
-		assert.Nil(t, a.overrideConfigDefaults(ctx, c))
+		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
 		assertEqual(t, c, oldC)
 	})
 
@@ -82,13 +85,13 @@ func Test_overrideConfigDefaults(t *testing.T) {
 			Spec: configapi.ConfigurationSpec{
 				MetricsSpec: &configapi.MetricSpec{
 					HTTP: &configapi.MetricHTTP{
-						IncreasedCardinality: ptr.To(true),
+						IncreasedCardinality: ptr.Of(true),
 					},
 				},
 			},
 		}
 		oldC := c.DeepCopy()
-		assert.Nil(t, a.overrideConfigDefaults(ctx, c))
+		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
 		assertEqual(t, c, oldC)
 	})
 
@@ -103,9 +106,9 @@ func Test_overrideConfigDefaults(t *testing.T) {
 		}
 		expectedC := c.DeepCopy()
 		expectedC.Spec.MetricSpec.HTTP = &configapi.MetricHTTP{
-			IncreasedCardinality: ptr.To(false),
+			IncreasedCardinality: ptr.Of(false),
 		}
-		assert.Nil(t, a.overrideConfigDefaults(ctx, c))
+		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
 
 		assertEqual(t, c, expectedC)
 	})
@@ -121,9 +124,9 @@ func Test_overrideConfigDefaults(t *testing.T) {
 		}
 		expectedC := c.DeepCopy()
 		expectedC.Spec.MetricSpec.HTTP = &configapi.MetricHTTP{
-			IncreasedCardinality: ptr.To(false),
+			IncreasedCardinality: ptr.Of(false),
 		}
-		assert.Nil(t, a.overrideConfigDefaults(ctx, c))
+		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
 
 		assertEqual(t, c, expectedC)
 	})
@@ -142,9 +145,9 @@ func Test_overrideConfigDefaults(t *testing.T) {
 		}
 		expectedC := c.DeepCopy()
 		expectedC.Spec.MetricSpec.HTTP = &configapi.MetricHTTP{
-			IncreasedCardinality: ptr.To(false),
+			IncreasedCardinality: ptr.Of(false),
 		}
-		assert.Nil(t, a.overrideConfigDefaults(ctx, c))
+		assert.NoError(t, a.overrideConfigDefaults(ctx, c))
 
 		assertEqual(t, c, expectedC)
 	})
@@ -157,5 +160,5 @@ func assertEqual(t *testing.T, c, cExpected *configapi.Configuration) {
 	cData, err := json.Marshal(c)
 	require.NoError(t, err)
 
-	assert.Equal(t, cData, expectedCData)
+	assert.Equal(t, expectedCData, cData)
 }
