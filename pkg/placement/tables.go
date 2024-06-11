@@ -13,6 +13,8 @@ limitations under the License.
 
 package placement
 
+import "github.com/dapr/dapr/pkg/placement/raft"
+
 type PlacementTables struct {
 	HostList     []HostInfo `json:"hostList,omitempty"`
 	TableVersion uint64     `json:"tableVersion"`
@@ -20,6 +22,7 @@ type PlacementTables struct {
 }
 type HostInfo struct {
 	Name       string   `json:"name,omitempty"`
+	Namespace  string   `json:"namespace,omitempty"`
 	AppID      string   `json:"appId,omitempty"`
 	ActorTypes []string `json:"actorTypes,omitempty"`
 	UpdatedAt  int64    `json:"updatedAt,omitempty"`
@@ -29,7 +32,6 @@ type HostInfo struct {
 // GetPlacementTables returns the current placement host infos.
 func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 	state := p.raftNode.FSM().State()
-	m := state.Members()
 	response := &PlacementTables{
 		TableVersion: state.TableGeneration(),
 		APILevel:     state.APILevel(),
@@ -40,19 +42,20 @@ func (p *Service) GetPlacementTables() (*PlacementTables, error) {
 	if p.maxAPILevel != nil && response.APILevel > *p.maxAPILevel {
 		response.APILevel = *p.maxAPILevel
 	}
-	members := make([]HostInfo, len(m))
-	// the key of the member map is the host name, so we can just ignore it.
-	var i int
-	for _, v := range m {
-		members[i] = HostInfo{
-			Name:       v.Name,
-			AppID:      v.AppID,
-			ActorTypes: v.Entities,
-			UpdatedAt:  v.UpdatedAt,
-			APILevel:   v.APILevel,
-		}
-		i++
-	}
+
+	members := make([]HostInfo, 0, state.MemberCount())
+	state.ForEachHost(func(host *raft.DaprHostMember) bool {
+		members = append(members, HostInfo{
+			Name:       host.Name,
+			Namespace:  host.Namespace,
+			AppID:      host.AppID,
+			ActorTypes: host.Entities,
+			UpdatedAt:  host.UpdatedAt,
+			APILevel:   host.APILevel,
+		})
+		return true
+	})
 	response.HostList = members
+
 	return response, nil
 }
