@@ -222,19 +222,6 @@ func WithConfigManifests(t *testing.T, manifests ...string) Option {
 	}
 }
 
-func WithConfigManifests(t *testing.T, manifests ...string) Option {
-	configs := make([]string, len(manifests))
-	for i, manifest := range manifests {
-		f := filepath.Join(t.TempDir(), fmt.Sprintf("config-%d.yaml", i))
-		require.NoError(t, os.WriteFile(f, []byte(manifest), 0o600))
-		configs[i] = f
-	}
-
-	return func(o *options) {
-		o.configs = append(o.configs, configs...)
-	}
-}
-
 func WithPlacementAddresses(addresses ...string) Option {
 	return func(o *options) {
 		o.placementAddresses = addresses

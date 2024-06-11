@@ -262,26 +262,6 @@ func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 	return rtv1.NewDaprClient(d.GRPCConn(t, ctx))
 }
 
-//nolint:testifylint
-func (d *Daprd) RegistedComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {
-	url := fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if !assert.NoError(t, err) {
-		return nil
-	}
-
-	var meta struct {
-		Components []*rtv1.RegisteredComponents
-	}
-	resp, err := d.httpClient.Do(req)
-	if assert.NoError(t, err) {
-		defer resp.Body.Close()
-		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
-	}
-
-	return meta.Components
-}
-
 func (d *Daprd) AppID() string {
 	return d.appID
 }
