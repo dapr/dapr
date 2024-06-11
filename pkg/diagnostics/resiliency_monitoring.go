@@ -8,6 +8,7 @@ import (
 	"go.opencensus.io/tag"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
 )
 
 var (
@@ -24,9 +25,12 @@ type PolicyType string
 type PolicyFlowDirection string
 
 type resiliencyMetrics struct {
-	policiesLoadCount *stats.Int64Measure
-	executionCount    *stats.Int64Measure
-	activationsCount  *stats.Int64Measure
+	policiesLoadCount       *stats.Int64Measure
+	executionCount          *stats.Int64Measure
+	activationsCount        *stats.Int64Measure
+	retryActivationsCount   *stats.Int64Measure
+	cbCurrentState          *stats.Int64Measure
+	timeoutActivationsCount *stats.Int64Measure
 
 	appID   string
 	ctx     context.Context
@@ -47,6 +51,18 @@ func newResiliencyMetrics() *resiliencyMetrics {
 			"resiliency/activations_total",
 			"Number of times a resiliency policyKey has been activated in a building block after a failure or after a state change.",
 			stats.UnitDimensionless),
+		cbCurrentState: stats.Int64(
+			"resiliency/cb_current_state",
+			"A resiliency policy's current CircuitBreakerState value.",
+			stats.UnitDimensionless),
+		retryActivationsCount: stats.Int64(
+			"resiliency/retry_activations_total",
+			"Number of times a resiliency policyKey has been activated in a building block after a retry.",
+			stats.UnitDimensionless),
+		timeoutActivationsCount: stats.Int64(
+			"resiliency/timeout_activations_total",
+			"Number of times a resiliency policyKey has been activated in a building block after a timeout.",
+			stats.UnitDimensionless),
 
 		// TODO: how to use correct context
 		ctx:     context.Background(),
@@ -62,6 +78,9 @@ func (m *resiliencyMetrics) Init(id string) error {
 		diagUtils.NewMeasureView(m.policiesLoadCount, []tag.Key{appIDKey, resiliencyNameKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(m.executionCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(m.activationsCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(m.cbCurrentState, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.LastValue()),
+		diagUtils.NewMeasureView(m.retryActivationsCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(m.timeoutActivationsCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
 	)
 }
 
@@ -98,15 +117,36 @@ func (m *resiliencyMetrics) PolicyActivated(resiliencyName, namespace string, po
 	m.PolicyWithStatusActivated(resiliencyName, namespace, policy, flowDirection, target, "")
 }
 
-// PolicyWithStatusActivated records metric when policy is activated after a failure or in the case of circuit breaker after a state change. with added state/status (e.g., circuit breaker open).
+// PolicyWithStatusActivated records metrics when policy is activated after a failure or in the case of circuit breaker after a state change. with added state/status (e.g., circuit breaker open).
 func (m *resiliencyMetrics) PolicyWithStatusActivated(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
 	if m.enabled {
+		// Record combined activation measure
 		_ = stats.RecordWithTags(
 			m.ctx,
 			diagUtils.WithTags(m.activationsCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
 				namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
 			m.activationsCount.M(1),
 		)
+
+		// Record unique activation measure
+		var uniquePolicyMeasurement stats.Measurement
+		switch policy {
+		case CircuitBreakerPolicy:
+			uniquePolicyMeasurement = m.cbCurrentState.M(ConvertCircuitBreakerState(status))
+		case RetryPolicy:
+			uniquePolicyMeasurement = m.retryActivationsCount.M(1)
+		case TimeoutPolicy:
+			uniquePolicyMeasurement = m.timeoutActivationsCount.M(1)
+		}
+
+		if uniquePolicyMeasurement.Measure() != nil {
+			_ = stats.RecordWithTags(
+				m.ctx,
+				diagUtils.WithTags(uniquePolicyMeasurement.Measure().Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
+					namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
+				uniquePolicyMeasurement,
+			)
+		}
 	}
 }
 
@@ -120,4 +160,21 @@ func ResiliencyAppTarget(app string) string {
 
 func ResiliencyComponentTarget(name string, componentType string) string {
 	return componentType + "_" + name
+}
+
+// ConvertCircuitBreakerState converts CircuitBreakerState to iota -1, 0, 1, 2
+// TODO: How to pass the CircuitBreakerState better?
+func ConvertCircuitBreakerState(state string) int64 {
+	switch state {
+	case string(breaker.StateClosed):
+		return 0
+	case string(breaker.StateHalfOpen):
+		return 1
+	case string(breaker.StateOpen):
+		return 2
+	case string(breaker.StateUnknown):
+		return -1
+	default:
+		return -1 // Some other unknown state
+	}
 }
