@@ -375,7 +375,6 @@ func TestComponentCalls(t *testing.T) {
 		})
 
 		require.NoError(t, err)
-		assert.NotNil(t, resp)
 		assert.Equal(t, &state.GetResponse{}, resp)
 		assert.Equal(t, int64(1), svc.getCalled.Load())
 		assert.NotNil(t, resp)
