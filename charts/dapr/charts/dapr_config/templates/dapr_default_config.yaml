@@ -18,6 +18,6 @@ spec:
   {{ if .Values.global.metrics.http }}
   metrics:
     http:
-      increasedCardinality: {{ default .Values.global.metrics.http.increasedCardinality false }}
+      increasedCardinality: {{ default false .Values.global.metrics.http.increasedCardinality }}
   {{- end }}
 {{- end }}
