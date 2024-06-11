@@ -15,4 +15,9 @@ spec:
     allowedClockSkew: {{ .Values.global.mtls.allowedClockSkew }}
     controlPlaneTrustDomain: {{ .Values.global.mtls.controlPlaneTrustDomain }}
     sentryAddress: {{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}
+  {{ if .Values.global.metrics.http }}
+  metrics:
+    http:
+      increasedCardinality: {{ default .Values.global.metrics.http.increasedCardinality false }}
+  {{- end }}
 {{- end }}
