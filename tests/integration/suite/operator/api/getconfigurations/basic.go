@@ -20,9 +20,10 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/kit/ptr"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+
+	"github.com/dapr/kit/ptr"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -49,7 +50,6 @@ type basic struct {
 	operator *operator.Operator
 
 	conf1 *confapi.Configuration
-	conf2 *confapi.Configuration
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
@@ -123,7 +123,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			var err error
 			resp, err = client.GetConfiguration(ctx, &operatorv1.GetConfigurationRequest{Namespace: "default", Name: "myconfig"})
 			require.NoError(t, err)
-			assert.Greater(c, len(resp.GetConfiguration()), 0)
+			assert.NotEmpty(c, resp.GetConfiguration())
 		}, time.Second*20, time.Millisecond*10)
 
 		b1, err := json.Marshal(b.conf1)

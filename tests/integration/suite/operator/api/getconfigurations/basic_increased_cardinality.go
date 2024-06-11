@@ -137,7 +137,7 @@ func (b *basicIncreasedCardinality) Run(t *testing.T, ctx context.Context) {
 			var err error
 			resp, err = client.GetConfiguration(ctx, &operatorv1.GetConfigurationRequest{Namespace: "default", Name: "myconfig"})
 			require.NoError(t, err)
-			assert.Greater(c, len(resp.GetConfiguration()), 0)
+			assert.NotEmpty(c, resp.GetConfiguration())
 		}, time.Second*20, time.Millisecond*10)
 
 		b1, err := json.Marshal(b.conf1Exp)
