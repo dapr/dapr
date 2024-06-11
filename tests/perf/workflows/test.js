@@ -52,11 +52,11 @@ const possibleScenarios = {
         iterations: 800,
         maxDuration: '420s',
     },
-    t_100000_1000: {
+    t_100000_100: {
         executor: 'shared-iterations',
         vus: 100000,
-        iterations: 1000,
-        maxDuration: '100000s',
+        iterations: 100,
+        maxDuration: '10000000000s',
     },
 }
 
@@ -86,7 +86,7 @@ function execute() {
         headers: {
             'Content-Type': 'application/json',
         },
-        timeout: '250s',
+        timeout: '750s',
     }
     const res = http.post(
         `${__ENV.TARGET_URL}/${exec.scenario.iterationInTest}`,

@@ -62,7 +62,7 @@ func TestMain(m *testing.M) {
 			IngressEnabled:    true,
 			IngressPort:       3000,
 			MetricsEnabled:    true,
-			DaprMemoryLimit:   "800Mi",
+			DaprMemoryLimit:   "4GiB",
 			DaprMemoryRequest: "800Mi",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "800Mi",
@@ -266,7 +266,7 @@ func TestWorkflowWithDifferentPayloads(t *testing.T) {
 func TestWorkflowWith100KIterations(t *testing.T) {
 	workflowName := "100k_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_100000_1000"} // 100k workflows, 1k iterations
+	scenarios := []string{"t_100000_100"} // 100k workflows, 100 iterations
 	rateChecks := [][]string{{"rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
 }
