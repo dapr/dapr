@@ -566,10 +566,10 @@ func NewK6(scriptPath string, opts ...K6Opt) *K6 {
 		setupOnce:         &sync.Once{},
 		ctx:               ctx,
 		cancel:            cancel,
-		daprMemoryLimit:   "512Mi",
-		daprMemoryRequest: "256Mi",
-		testMemoryLimit:   "1024Mi",
-		testMemoryRequest: "256Mi",
+		daprMemoryLimit:   "4Gi",
+		daprMemoryRequest: "4Gi",
+		testMemoryLimit:   "4Gi",
+		testMemoryRequest: "4Gi",
 		runnerEnv:         []corev1.EnvVar{},
 	}
 
