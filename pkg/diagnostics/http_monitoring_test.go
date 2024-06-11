@@ -203,14 +203,10 @@ func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 	require.True(t, ok)
 	assert.Equal(t, "/", matchedPath)
 
-	// no match so we fallback to "_"
+	// no match so we fallback to "/"
 	matchedPath, ok = testHTTP.egress.matchPath("/basket/12345")
 	require.True(t, ok)
-	require.Equal(t, "_", matchedPath)
-
-	matchedPath, ok = testHTTP.egress.matchPath("dapr/config")
-	require.True(t, ok)
-	require.Equal(t, "/dapr/config", matchedPath)
+	require.Equal(t, "/", matchedPath)
 
 	matchedPath, ok = testHTTP.egress.matchPath("/dapr/config")
 	require.True(t, ok)

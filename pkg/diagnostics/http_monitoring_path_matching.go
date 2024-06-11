@@ -16,10 +16,9 @@ package diagnostics
 import (
 	"net/http"
 	"net/url"
+	"slices"
 	"strings"
 )
-
-const unmatchedPathPlaceholder = "_"
 
 type pathMatching struct {
 	mux *http.ServeMux
@@ -34,34 +33,23 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 		return nil
 	}
 
-	catchAllRegistered := false
+	paths = append(paths, "/")
+	slices.Sort(paths)
+	paths = slices.Compact(paths)
 
 	mux := http.NewServeMux()
 	for _, pattern := range paths {
-		if pattern == "/" {
-			catchAllRegistered = true
-		}
 		mux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			// Skip the root path if legacy mode is enabled
+			if legacy && pattern == "/" {
+				return
+			}
 			rw, ok := w.(*pathMatchingRW)
 			if !ok {
 				log.Errorf("Failed to cast to PathMatchingRW")
 				return
 			}
 			rw.matchedPath = pattern
-		}))
-	}
-
-	// We can't register a catch-all handler if it was already registered
-	if !catchAllRegistered {
-		mux.Handle("/", http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			if !legacy {
-				rw, ok := w.(*pathMatchingRW)
-				if !ok {
-					log.Errorf("Failed to cast to PathMatchingRW")
-					return
-				}
-				rw.matchedPath = unmatchedPathPlaceholder
-			}
 		}))
 	}
 
@@ -103,11 +91,4 @@ func (pm *pathMatching) matchPath(path string) (string, bool) {
 type pathMatchingRW struct {
 	http.ResponseWriter
 	matchedPath string
-}
-
-func (w *pathMatchingRW) WriteHeader(statusCode int) {
-}
-
-func (w *pathMatchingRW) Write(b []byte) (int, error) {
-	return len(b), nil
 }
