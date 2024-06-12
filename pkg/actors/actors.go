@@ -1122,8 +1122,6 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 		span := diagUtils.SpanFromContext(ctx)
 		reqCtx := diag.SpanContextToGRPCMetadata(context.Background(), span.SpanContext())
 		client := internalv1pb.NewServiceInvocationClient(conn)
-		reqCtx, cancel := context.WithTimeout(reqCtx, time.Second*10)
-		defer cancel()
 
 		_, err = client.CallActorReminder(reqCtx, &internalv1pb.Reminder{
 			ActorId:   reminder.ActorID,
