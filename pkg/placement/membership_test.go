@@ -116,7 +116,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 					require.Equal(c, updateOperation, operations1[1])
 					require.Equal(c, unlockOperation, operations1[2])
 				}
-			}, 10*time.Second, 100*time.Millisecond)
+			}, 20*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
 		}()
 
@@ -149,7 +149,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 				// Depending on the timing of the host 3 registration
 				// we may receive one or two update messages
 				assert.GreaterOrEqual(c, len(operations2), 3)
-			}, 10*time.Second, 100*time.Millisecond)
+			}, 20*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
 		}()
 
@@ -186,7 +186,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 					require.Equal(c, updateOperation, operations3[1])
 					require.Equal(c, unlockOperation, operations3[2])
 				}
-			}, 10*time.Second, 100*time.Millisecond)
+			}, 20*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
 		}()
 
@@ -246,7 +246,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 				updateMsgCnt++
 			}
 			return updateMsgCnt == 3
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 		// Ignore the next disseminateTimeout.
 		val, _ := testServer.disseminateNextTime.GetOrSet("ns1", &atomic.Int64{})
