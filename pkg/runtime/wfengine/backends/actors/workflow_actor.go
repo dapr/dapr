@@ -100,7 +100,7 @@ func NewWorkflowActor(scheduler workflowScheduler, config actorsBackendConfig, o
 			actorID:          actorID,
 			actors:           actors,
 			scheduler:        scheduler,
-			defaultTimeout:   30 * time.Second,
+			defaultTimeout:   30000 * time.Second,
 			reminderInterval: 1 * time.Minute,
 			config:           config,
 			cachingDisabled:  opts.cachingDisabled,
