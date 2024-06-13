@@ -298,63 +298,61 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		// Disconnect the host in ns1
 		conn1.Close()
-		require.Eventually(t, func() bool {
-			assert.Equal(t, 2, testServer.raftNode.FSM().State().MemberCount())
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 2, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate locks have been deleted for ns1, but not ns2
-			assert.Equal(t, 1, testServer.disseminateLocks.ItemCount())
+			assert.Equal(c, 1, testServer.disseminateLocks.ItemCount())
 
 			// Disseminate timers have been deleted for ns1, but not ns2
 			_, ok := testServer.disseminateNextTime.Get("ns1")
-			assert.False(t, ok)
+			assert.False(c, ok)
 			_, ok = testServer.disseminateNextTime.Get("ns2")
-			assert.True(t, ok)
+			assert.True(c, ok)
 
 			// Member update counts have been deleted for ns1, but not ns2
 			_, ok = testServer.memberUpdateCount.Get("ns1")
-			assert.False(t, ok)
+			assert.False(c, ok)
 			_, ok = testServer.memberUpdateCount.Get("ns2")
-			assert.True(t, ok)
+			assert.True(c, ok)
 
-			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
-			assert.Equal(t, 2, testServer.streamConnPool.getStreamCount("ns2"))
-			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndex.Load())
+			assert.Equal(c, 0, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(c, 2, testServer.streamConnPool.getStreamCount("ns2"))
+			assert.Equal(c, uint32(3), testServer.streamConnPool.streamIndex.Load())
 			testServer.streamConnPool.lock.RLock()
-			assert.Len(t, testServer.streamConnPool.reverseLookup, 2)
+			assert.Len(c, testServer.streamConnPool.reverseLookup, 2)
 			testServer.streamConnPool.lock.RUnlock()
 
-			return true
-		}, 30*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 		// // Disconnect one host in ns2
 		conn2.Close()
-		require.Eventually(t, func() bool {
-			assert.Equal(t, 1, testServer.raftNode.FSM().State().MemberCount())
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 1, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate lock for ns2 hasn't been deleted
-			assert.Equal(t, 1, testServer.disseminateLocks.ItemCount())
+			assert.Equal(c, 1, testServer.disseminateLocks.ItemCount())
 
 			// Disseminate timer for ns2 hasn't been deleted,
 			// because there's still streams in the namespace
 			_, ok := testServer.disseminateNextTime.Get("ns1")
-			assert.False(t, ok)
+			assert.False(c, ok)
 			_, ok = testServer.disseminateNextTime.Get("ns2")
-			assert.True(t, ok)
+			assert.True(c, ok)
 
 			// Member update count for ns2 hasn't been deleted,
 			// because there's still streams in the namespace
 			_, ok = testServer.memberUpdateCount.Get("ns2")
-			assert.True(t, ok)
+			assert.True(c, ok)
 
-			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
-			assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns2"))
-			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndex.Load())
+			assert.Equal(c, 0, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(c, 1, testServer.streamConnPool.getStreamCount("ns2"))
+			assert.Equal(c, uint32(3), testServer.streamConnPool.streamIndex.Load())
 			testServer.streamConnPool.lock.RLock()
-			assert.Len(t, testServer.streamConnPool.reverseLookup, 1)
+			assert.Len(c, testServer.streamConnPool.reverseLookup, 1)
 			testServer.streamConnPool.lock.RUnlock()
 
-			return true
-		}, 30*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 		// Last host is disconnected
 		conn3.Close()
