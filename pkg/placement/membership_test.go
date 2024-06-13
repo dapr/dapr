@@ -355,27 +355,27 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// Last host is disconnected
 		conn3.Close()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			require.Equal(t, 0, testServer.raftNode.FSM().State().MemberCount())
+			require.Equal(c, 0, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate locks have been deleted
-			require.Equal(t, 0, testServer.disseminateLocks.ItemCount())
+			require.Equal(c, 0, testServer.disseminateLocks.ItemCount())
 
 			// Disseminate timers have been deleted
 			_, ok := testServer.disseminateNextTime.Get("ns1")
-			require.False(t, ok)
+			require.False(c, ok)
 			_, ok = testServer.disseminateNextTime.Get("ns2")
-			require.False(t, ok)
+			require.False(c, ok)
 
 			// Member update counts have been deleted
 			_, ok = testServer.memberUpdateCount.Get("ns1")
-			require.False(t, ok)
+			require.False(c, ok)
 			_, ok = testServer.memberUpdateCount.Get("ns2")
-			require.False(t, ok)
+			require.False(c, ok)
 
-			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
-			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns2"))
+			assert.Equal(c, 0, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(c, 0, testServer.streamConnPool.getStreamCount("ns2"))
 			testServer.streamConnPool.lock.RLock()
-			assert.Empty(t, testServer.streamConnPool.reverseLookup)
+			assert.Empty(c, testServer.streamConnPool.reverseLookup)
 			testServer.streamConnPool.lock.RUnlock()
 		}, 20*time.Second, 100*time.Millisecond)
 	})
