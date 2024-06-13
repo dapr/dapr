@@ -225,8 +225,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 			// This indicates the member has been added to the dissemination queue and is
 			// going to be disseminated in the next tick
 			ts1, ok := testServer.disseminateNextTime.Get("ns1")
-			if assert.True(t, ok) {
-				assert.Equal(t, clock.Now().Add(disseminateTimeout).UnixNano(), ts1.Load())
+			if assert.True(c, ok) {
+				assert.Equal(c, clock.Now().Add(disseminateTimeout).UnixNano(), ts1.Load())
 			}
 
 			ts2, ok := testServer.disseminateNextTime.Get("ns2")
