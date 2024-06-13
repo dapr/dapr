@@ -216,23 +216,24 @@ func TestMembershipChangeWorker(t *testing.T) {
 		require.NoError(t, stream2.Send(host2))
 		require.NoError(t, stream3.Send(host3))
 
-		require.Eventually(t, func() bool {
-			assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns1"))
-			assert.Equal(t, 2, testServer.streamConnPool.getStreamCount("ns2"))
-			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndex.Load())
-			assert.Len(t, testServer.streamConnPool.reverseLookup, 3)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 1, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(c, 2, testServer.streamConnPool.getStreamCount("ns2"))
+			assert.Equal(c, uint32(3), testServer.streamConnPool.streamIndex.Load())
+			assert.Len(c, testServer.streamConnPool.reverseLookup, 3)
 
 			// This indicates the member has been added to the dissemination queue and is
 			// going to be disseminated in the next tick
 			ts1, ok := testServer.disseminateNextTime.Get("ns1")
-			assert.True(t, ok)
-			assert.Equal(t, clock.Now().Add(disseminateTimeout).UnixNano(), ts1.Load())
+			if assert.True(t, ok) {
+				assert.Equal(t, clock.Now().Add(disseminateTimeout).UnixNano(), ts1.Load())
+			}
 
 			ts2, ok := testServer.disseminateNextTime.Get("ns2")
-			assert.True(t, ok)
-			assert.Equal(t, clock.Now().Add(disseminateTimeout).UnixNano(), ts2.Load())
+			if assert.True(c, ok) {
+				assert.Equal(c, clock.Now().Add(disseminateTimeout).UnixNano(), ts2.Load())
+			}
 
-			return true
 		}, 10*time.Second, 100*time.Millisecond)
 
 		// Move the clock forward so dissemination is triggered
@@ -356,7 +357,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		// Last host is disconnected
 		conn3.Close()
-		require.Eventually(t, func() bool {
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			require.Equal(t, 0, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate locks have been deleted
@@ -380,8 +381,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			assert.Empty(t, testServer.streamConnPool.reverseLookup)
 			testServer.streamConnPool.lock.RUnlock()
 
-			return true
-		}, 30*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 	})
 }
 
