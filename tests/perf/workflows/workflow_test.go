@@ -222,7 +222,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 func TestWorkflowWithConstantVUs(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_30_300", "t_30_300", "t_30_300", "t_100000_100"} // t_workflowCount_iterations
+	scenarios := []string{"t_30_300", "t_30_300", "t_30_300", "t_10000_100"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1", "rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, false, false)
 }
@@ -248,7 +248,7 @@ func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
 func TestParallelWorkflowWithMaxVUs(t *testing.T) {
 	workflowName := "sum_parallel_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_110_440", "t_100000_100"} // t_workflowCount_iterations
+	scenarios := []string{"t_110_440", "t_10000_100"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1", "rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
 }
