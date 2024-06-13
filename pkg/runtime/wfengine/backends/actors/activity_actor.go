@@ -73,7 +73,7 @@ func NewActivityActor(scheduler activityScheduler, backendConfig actorsBackendCo
 			actorID:          actorID,
 			actorRuntime:     actors,
 			scheduler:        scheduler,
-			defaultTimeout:   1 * time.Hour,
+			defaultTimeout:   6 * time.Hour,
 			reminderInterval: 1 * time.Minute,
 			config:           backendConfig,
 			cachingDisabled:  opts.cachingDisabled,
@@ -132,10 +132,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 	state, _ := a.loadActivityState(ctx)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 
-	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
-	defer cancelTimeout()
-
-	err := a.executeActivity(timeoutCtx, reminder.Name, state.EventPayload)
+	err := a.executeActivity(context.Background(), reminder.Name, state.EventPayload)
 
 	var recoverableErr *recoverableError
 	// Returning nil signals that we want the execution to be retried in the next period interval
@@ -210,7 +207,7 @@ func (a *activityActor) executeActivity(ctx context.Context, name string, eventP
 	}()
 loop:
 	for {
-		t := time.NewTimer(10 * time.Minute)
+		t := time.NewTimer(100 * time.Minute)
 		select {
 		case <-ctx.Done():
 			if !t.Stop() {

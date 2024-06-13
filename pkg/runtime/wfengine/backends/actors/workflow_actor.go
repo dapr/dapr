@@ -152,16 +152,15 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 	wfLogger.Debugf("Workflow actor '%s': invoking reminder '%s'", wf.actorID, reminder.Name)
 
 	// Workflow executions should never take longer than a few seconds at the most
-	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, wf.defaultTimeout)
-	defer cancelTimeout()
-	err := wf.runWorkflow(timeoutCtx, reminder)
+	err := wf.runWorkflow(ctx, reminder)
 
 	// We delete the reminder on success and on non-recoverable errors.
 	// Returning nil signals that we want the execution to be retried in the next period interval
 	var re recoverableError
 	switch {
 	case err == nil:
-		return actors.ErrReminderCanceled
+		wfLogger.Debugf("Ran Workflow successfully for actor ID: %s", wf.actorID)
+		return nil
 	case errors.Is(err, context.DeadlineExceeded):
 		wfLogger.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", wf.actorID, err)
 		return nil
