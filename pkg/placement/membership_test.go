@@ -233,7 +233,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 			if assert.True(c, ok) {
 				assert.Equal(c, clock.Now().Add(disseminateTimeout).UnixNano(), ts2.Load())
 			}
-
 		}, 10*time.Second, 100*time.Millisecond)
 
 		// Move the clock forward so dissemination is triggered
@@ -323,7 +322,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RLock()
 			assert.Len(c, testServer.streamConnPool.reverseLookup, 2)
 			testServer.streamConnPool.lock.RUnlock()
-
 		}, 20*time.Second, 100*time.Millisecond)
 
 		// // Disconnect one host in ns2
@@ -352,7 +350,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RLock()
 			assert.Len(c, testServer.streamConnPool.reverseLookup, 1)
 			testServer.streamConnPool.lock.RUnlock()
-
 		}, 20*time.Second, 100*time.Millisecond)
 
 		// Last host is disconnected
@@ -380,7 +377,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RLock()
 			assert.Empty(t, testServer.streamConnPool.reverseLookup)
 			testServer.streamConnPool.lock.RUnlock()
-
 		}, 20*time.Second, 100*time.Millisecond)
 	})
 }
