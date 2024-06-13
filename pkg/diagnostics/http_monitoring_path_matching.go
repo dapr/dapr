@@ -20,6 +20,21 @@ import (
 	"strings"
 )
 
+var (
+	pathMatchHandlerFunc = func(pattern string) http.HandlerFunc {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			rw, ok := w.(*pathMatchingRW)
+			if !ok {
+				log.Errorf("Failed to cast to PathMatchingRW")
+				return
+			}
+			rw.matchedPath = pattern
+		})
+	}
+
+	emptyHandlerFunc = http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {})
+)
+
 type pathMatching struct {
 	mux *http.ServeMux
 }
@@ -33,29 +48,38 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 		return nil
 	}
 
-	paths = append(paths, "/")
-	slices.Sort(paths)
-	paths = slices.Compact(paths)
+	cleanPaths := cleanAndSortPaths(paths)
 
 	mux := http.NewServeMux()
-	for _, pattern := range paths {
-		mux.Handle(pattern, http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-			// Skip the root path if legacy mode is enabled
-			if legacy && pattern == "/" {
-				return
-			}
-			rw, ok := w.(*pathMatchingRW)
-			if !ok {
-				log.Errorf("Failed to cast to PathMatchingRW")
-				return
-			}
-			rw.matchedPath = pattern
-		}))
+
+	// Skip the root path if legacy mode is enabled.
+	if legacy {
+		mux.Handle("/", emptyHandlerFunc)
+	} else {
+		mux.Handle("/", pathMatchHandlerFunc("/"))
+	}
+
+	for _, pattern := range cleanPaths {
+		mux.Handle(pattern, pathMatchHandlerFunc(pattern))
 	}
 
 	return &pathMatching{
 		mux: mux,
 	}
+}
+
+// cleanAndSortPaths ensures that we don't have duplicates and removes root path
+func cleanAndSortPaths(paths []string) []string {
+	slices.Sort(paths)
+	paths = slices.Compact(paths)
+	cleanPaths := make([]string, 0, len(paths))
+	for _, path := range paths {
+		if path == "/" {
+			continue
+		}
+		cleanPaths = append(cleanPaths, path)
+	}
+	return cleanPaths
 }
 
 func (pm *pathMatching) enabled() bool {
