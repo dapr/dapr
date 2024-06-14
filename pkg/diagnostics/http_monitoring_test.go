@@ -11,6 +11,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 func TestHTTPMiddleware(t *testing.T) {
@@ -21,7 +23,7 @@ func TestHTTPMiddleware(t *testing.T) {
 
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
-	testHTTP.Init("fakeID", false)
+	testHTTP.Init("fakeID", nil, false)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
@@ -67,8 +69,7 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-
-	testHTTP.Init("fakeID", false)
+	testHTTP.Init("fakeID", nil, false)
 	v := view.Find("http/server/request_count")
 	views := []*view.View{v}
 	view.Unregister(views...)
@@ -85,6 +86,131 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	rows, err := view.RetrieveData("http/server/request_count")
 	require.Error(t, err)
 	assert.Nil(t, rows)
+}
+
+func TestHTTPMetricsPathMatchingNotEnabled(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	testHTTP.enabled = false
+	pathMatching := &config.PathMatching{}
+	testHTTP.Init("fakeID", pathMatching, true)
+	matchedPath, ok := testHTTP.ingress.matchPath("/orders")
+	require.False(t, ok)
+	require.Equal(t, "", matchedPath)
+}
+
+func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	testHTTP.enabled = false
+	config := &config.PathMatching{
+		IngressPaths: []string{
+			"/v1/orders/{orderID}/items/12345",
+			"/v1/orders/{orderID}/items/{itemID}",
+			"/v1/items/{itemID}",
+		},
+		EgressPaths: []string{
+			"/v1/orders/{orderID}/items/{itemID}",
+		},
+	}
+	testHTTP.Init("fakeID", config, true)
+
+	// act & assert
+
+	// empty path
+	matchedPath, ok := testHTTP.ingress.matchPath("")
+	require.False(t, ok)
+	require.Equal(t, "", matchedPath)
+
+	// match "/v1/orders/{orderID}/items/12345"
+	matchedPath, ok = testHTTP.ingress.matchPath("/v1/orders/12345/items/12345")
+	require.True(t, ok)
+	require.Equal(t, "/v1/orders/{orderID}/items/12345", matchedPath)
+
+	// match "/v1/orders/{orderID}/items/{itemID}"
+	matchedPath, ok = testHTTP.ingress.matchPath("/v1/orders/12345/items/1111")
+	require.True(t, ok)
+	require.Equal(t, "/v1/orders/{orderID}/items/{itemID}", matchedPath)
+
+	// match "/v1/items/{itemID}"
+	matchedPath, ok = testHTTP.ingress.matchPath("/v1/items/12345")
+	require.True(t, ok)
+	require.Equal(t, "/v1/items/{itemID}", matchedPath)
+
+	// no match so we keep the path as is
+	matchedPath, ok = testHTTP.ingress.matchPath("/v2/basket/12345")
+	require.True(t, ok)
+	require.Equal(t, "/v2/basket/12345", matchedPath)
+
+	// match "/v1/orders/{orderID}/items/{itemID}"
+	matchedPath, ok = testHTTP.egress.matchPath("/v1/orders/12345/items/1111")
+	require.True(t, ok)
+	require.Equal(t, "/v1/orders/{orderID}/items/{itemID}", matchedPath)
+
+	// no match so we keep the path as is
+	matchedPath, ok = testHTTP.egress.matchPath("/v1/items/12345")
+	require.True(t, ok)
+	require.Equal(t, "/v1/items/12345", matchedPath)
+}
+
+func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	testHTTP.enabled = false
+	config := &config.PathMatching{
+		IngressPaths: []string{
+			"/v1/orders/{orderID}/items/12345",
+			"/v1/orders/{orderID}/items/{itemID}",
+			"/v1/orders/{orderID}",
+			"/v1/items/{itemID}",
+			"/dapr/config",
+			"/v1/",
+			"/",
+		},
+		EgressPaths: []string{
+			"/v1/orders/{orderID}/items/{itemID}",
+			"/dapr/config",
+		},
+	}
+	testHTTP.Init("fakeID", config, false)
+
+	// act & assert
+
+	// empty path
+	matchedPath, ok := testHTTP.ingress.matchPath("")
+	require.False(t, ok)
+	require.Equal(t, "", matchedPath)
+
+	// match "/v1/orders/{orderID}/items/12345"
+	matchedPath, ok = testHTTP.ingress.matchPath("/v1/orders/12345/items/12345")
+	require.True(t, ok)
+	require.Equal(t, "/v1/orders/{orderID}/items/12345", matchedPath)
+
+	// match "/v1/orders/{orderID}"
+	matchedPath, ok = testHTTP.ingress.matchPath("/v1/orders/12345")
+	require.True(t, ok)
+	require.Equal(t, "/v1/orders/{orderID}", matchedPath)
+
+	// match "/v1/items/{itemID}"
+	matchedPath, ok = testHTTP.ingress.matchPath("/v1/items/12345")
+	require.True(t, ok)
+	require.Equal(t, "/v1/items/{itemID}", matchedPath)
+
+	// match "/v1/"
+	matchedPath, ok = testHTTP.ingress.matchPath("/v1/basket")
+	require.True(t, ok)
+	assert.Equal(t, "/v1/", matchedPath)
+
+	// match "/"
+	matchedPath, ok = testHTTP.ingress.matchPath("/v2/orders/1111")
+	require.True(t, ok)
+	assert.Equal(t, "/", matchedPath)
+
+	// no match so we fallback to "/"
+	matchedPath, ok = testHTTP.egress.matchPath("/basket/12345")
+	require.True(t, ok)
+	require.Equal(t, "/", matchedPath)
+
+	matchedPath, ok = testHTTP.egress.matchPath("/dapr/config")
+	require.True(t, ok)
+	require.Equal(t, "/dapr/config", matchedPath)
 }
 
 func fakeHTTPRequest(body string) *http.Request {
