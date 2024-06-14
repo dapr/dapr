@@ -386,9 +386,8 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, tests.Raft(t))
 	testServer.hasLeadership.Store(true)
 	var (
-		overArr     [testClients]int64
-		overArrLock sync.RWMutex
-		// arrange.
+		overArr       [testClients]int64
+		overArrLock   sync.RWMutex
 		clientConns   []*grpc.ClientConn
 		clientStreams []v1pb.Placement_ReportDaprStatusClient
 		wg            sync.WaitGroup
