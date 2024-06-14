@@ -215,10 +215,10 @@ func TestInvalidStart(t *testing.T) {
 	require.NotNil(t, be)
 
 	err = be.Start(context.TODO())
-	require.NoError(t, err)
+	require.Error(t, err)
 
 	err = be.Start(context.TODO())
-	require.NoError(t, err)
+	require.Error(t, err)
 }
 
 func getActorRuntime(t *testing.T) actors.Actors {
