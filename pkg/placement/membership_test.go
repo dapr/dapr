@@ -233,7 +233,6 @@ func TestMembershipChangeWorker(t *testing.T) {
 			if assert.True(c, ok) {
 				assert.Equal(c, clock.Now().Add(disseminateTimeout).UnixNano(), ts2.Load())
 			}
-
 		}, 10*time.Second, 100*time.Millisecond)
 
 		// Move the clock forward so dissemination is triggered
