@@ -355,22 +355,22 @@ func TestMembershipChangeWorker(t *testing.T) {
 		// Last host is disconnected
 		conn3.Close()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			require.Equal(c, 0, testServer.raftNode.FSM().State().MemberCount())
+			assert.Equal(c, 0, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate locks have been deleted
-			require.Equal(c, 0, testServer.disseminateLocks.ItemCount())
+			assert.Equal(c, 0, testServer.disseminateLocks.ItemCount())
 
 			// Disseminate timers have been deleted
 			_, ok := testServer.disseminateNextTime.Get("ns1")
-			require.False(c, ok)
+			assert.False(c, ok)
 			_, ok = testServer.disseminateNextTime.Get("ns2")
-			require.False(c, ok)
+			assert.False(c, ok)
 
 			// Member update counts have been deleted
 			_, ok = testServer.memberUpdateCount.Get("ns1")
-			require.False(c, ok)
+			assert.False(c, ok)
 			_, ok = testServer.memberUpdateCount.Get("ns2")
-			require.False(c, ok)
+			assert.False(c, ok)
 
 			assert.Equal(c, 0, testServer.streamConnPool.getStreamCount("ns1"))
 			assert.Equal(c, 0, testServer.streamConnPool.getStreamCount("ns2"))
