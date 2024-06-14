@@ -110,7 +110,8 @@ func Run() {
 		healthzHandlers = append(healthzHandlers, server.Handler{
 			Path: "/placement/state",
 			Getter: func() ([]byte, error) {
-				tables, err := apiServer.GetPlacementTables()
+				var tables *placement.PlacementTables
+				tables, err = apiServer.GetPlacementTables()
 				if err != nil {
 					return nil, err
 				}
