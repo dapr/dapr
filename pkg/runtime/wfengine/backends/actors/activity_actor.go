@@ -73,7 +73,7 @@ func NewActivityActor(scheduler activityScheduler, backendConfig actorsBackendCo
 			actorID:          actorID,
 			actorRuntime:     actors,
 			scheduler:        scheduler,
-			defaultTimeout:   6 * time.Hour,
+			defaultTimeout:   1 * time.Hour,
 			reminderInterval: 1 * time.Minute,
 			config:           backendConfig,
 			cachingDisabled:  opts.cachingDisabled,
@@ -207,7 +207,7 @@ func (a *activityActor) executeActivity(ctx context.Context, name string, eventP
 	}()
 loop:
 	for {
-		t := time.NewTimer(100 * time.Minute)
+		t := time.NewTimer(10 * time.Minute)
 		select {
 		case <-ctx.Done():
 			if !t.Stop() {

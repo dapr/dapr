@@ -40,8 +40,8 @@ import (
 const (
 	// needed to load balance requests for target services with multiple endpoints, ie. multiple instances.
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
-	dialTimeout       = 30000 * time.Second
-	maxConnIdle       = 30000 * time.Minute
+	dialTimeout       = 30 * time.Second
+	maxConnIdle       = 3 * time.Minute
 )
 
 // ConnCreatorFn is a function that returns a gRPC connection
@@ -198,9 +198,9 @@ func (g *Manager) connectRemote(
 		g.sec.GRPCDialOptionMTLSUnknownTrustDomain(namespace, id),
 		grpc.WithKeepaliveParams(grpcKeepalive.ClientParameters{
 			// Ping the server every 10s if there's no activity
-			Time: 1000 * time.Second,
+			Time: 10 * time.Second,
 			// Wait 5s for the ping ACK before assuming the connection is dead
-			Timeout: 50000 * time.Second,
+			Timeout: 5 * time.Second,
 			// Send pings even without active streams
 			PermitWithoutStream: true,
 		}),

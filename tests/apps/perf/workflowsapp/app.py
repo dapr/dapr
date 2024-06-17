@@ -174,7 +174,7 @@ def run_workflow(run_id):
         sleep(0.5)
 
         workflow_state = workflowClient.wait_for_workflow_completion(
-                instance_id=instance_id, timeout_in_seconds=10000000000)
+                instance_id=instance_id, timeout_in_seconds=750)
         assert workflow_state.runtime_status == WorkflowStatus.COMPLETED
 
         try:
