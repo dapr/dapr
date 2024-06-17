@@ -364,7 +364,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Equal(c, 0, testServer.raftNode.FSM().State().MemberCount())
-		}, 50*time.Second, 100*time.Millisecond)
+		}, 30*time.Second, 100*time.Millisecond)
 
 		// Disseminate locks have been deleted
 		require.Equal(t, 0, testServer.disseminateLocks.ItemCount())
