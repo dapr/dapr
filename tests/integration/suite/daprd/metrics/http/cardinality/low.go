@@ -22,6 +22,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
@@ -35,20 +37,30 @@ func init() {
 // low tests daprd metrics for the HTTP server configured with low cardinality
 type low struct {
 	daprd *daprd.Daprd
+	place *placement.Placement
 }
 
 func (l *low) Setup(t *testing.T) []framework.Option {
 	app := app.New(t,
+		app.WithHandlerFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`OK`))
+		}),
 		app.WithHandlerFunc("/hi", func(w http.ResponseWriter, _ *http.Request) {
 			fmt.Fprint(w, "OK")
 		}),
+		app.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"entities": ["myactortype"]}`))
+		}),
 	)
+
+	l.place = placement.New(t)
 
 	l.daprd = daprd.New(t,
 		daprd.WithAppPort(app.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppID("myapp"),
-		daprd.WithInMemoryStateStore("mystore"),
+		daprd.WithPlacementAddresses(l.place.Address()),
+		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -62,12 +74,13 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, l.daprd),
+		framework.WithProcesses(app, l.daprd, l.place),
 	}
 }
 
 func (l *low) Run(t *testing.T, ctx context.Context) {
 	l.daprd.WaitUntilRunning(t, ctx)
+	l.place.WaitUntilRunning(t, ctx)
 
 	t.Run("service invocation", func(t *testing.T) {
 		l.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
@@ -84,5 +97,12 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 		metrics := l.daprd.Metrics(t, ctx)
 		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:SaveState|status:204"]))
 		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GetState|status:200"]))
+	})
+
+	t.Run("actor invocation", func(t *testing.T) {
+		l.daprd.HTTPPost2xx(t, ctx, "/v1.0/actors/myactortype/myactorid/method/foo", nil, "content-type", "application/json")
+		metrics := l.daprd.Metrics(t, ctx)
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:InvokeActor/myactortype|status:200"]))
+		assert.NotContains(t, metrics, "method:InvokeActor/myactortype.")
 	})
 }
