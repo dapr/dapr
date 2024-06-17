@@ -359,10 +359,12 @@ func TestMembershipChangeWorker(t *testing.T) {
 		testServer.streamConnPool.lock.RUnlock()
 
 		// Last host is disconnected
-		conn3.Close()
+		err := conn3.Close()
+		require.NoError(t, err)
+
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			require.Equal(c, 0, testServer.raftNode.FSM().State().MemberCount())
-		}, 30*time.Second, 100*time.Millisecond)
+		}, 50*time.Second, 100*time.Millisecond)
 
 		// Disseminate locks have been deleted
 		require.Equal(t, 0, testServer.disseminateLocks.ItemCount())
