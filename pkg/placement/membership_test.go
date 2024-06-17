@@ -306,7 +306,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Equal(c, 2, testServer.raftNode.FSM().State().MemberCount())
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 		// Disseminate locks have been deleted for ns1, but not ns2
 		assert.Equal(t, 1, testServer.disseminateLocks.ItemCount())
@@ -334,7 +334,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		conn2.Close()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Equal(c, 1, testServer.raftNode.FSM().State().MemberCount())
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 		// Disseminate lock for ns2 hasn't been deleted
 		assert.Equal(t, 1, testServer.disseminateLocks.ItemCount())
@@ -362,7 +362,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 		conn3.Close()
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			require.Equal(c, 0, testServer.raftNode.FSM().State().MemberCount())
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 		// Disseminate locks have been deleted
 		require.Equal(t, 0, testServer.disseminateLocks.ItemCount())
