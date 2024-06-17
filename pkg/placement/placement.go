@@ -23,9 +23,10 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/google/go-cmp/cmp"
+	"github.com/alphadose/haxmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/clock"
 
@@ -34,32 +35,16 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.placement")
 
-type placementGRPCStream placementv1pb.Placement_ReportDaprStatusServer //nolint:nosnakecase
-
 const (
 	// membershipChangeChSize is the channel size of membership change request from Dapr runtime.
 	// MembershipChangeWorker will process actor host member change request.
 	membershipChangeChSize = 100
-
-	// faultyHostDetectDuration is the maximum duration when existing host is marked as faulty.
-	// Dapr runtime sends heartbeat every 1 second. Whenever placement server gets the heartbeat,
-	// it updates the last heartbeat time in UpdateAt of the FSM state. If Now - UpdatedAt exceeds
-	// faultyHostDetectDuration, membershipChangeWorker() tries to remove faulty Dapr runtim/ from
-	// membership.
-	// When placement gets the leadership, faultyHostDetectionDuration will be faultyHostDetectInitialDuration.
-	// This duration will give more time to let each runtime find the leader of placement nodes.
-	// Once the first dissemination happens after getting leadership, membershipChangeWorker will
-	// use faultyHostDetectDefaultDuration.
-	faultyHostDetectInitialDuration = 6 * time.Second
-	faultyHostDetectDefaultDuration = 3 * time.Second
-
-	// faultyHostDetectInterval is the interval to check the faulty member.
-	faultyHostDetectInterval = 500 * time.Millisecond
 
 	// disseminateTimerInterval is the interval to disseminate the latest consistent hashing table.
 	disseminateTimerInterval = 500 * time.Millisecond
@@ -70,6 +55,17 @@ const (
 	// is applied to raft state or each pod is deployed. If we increase disseminateTimeout, it will
 	// reduce the frequency of dissemination, but it will delay the table dissemination.
 	disseminateTimeout = 2 * time.Second
+
+	// faultyHostDetectDuration is the maximum duration after which a host is considered faulty.
+	// Dapr runtime sends a heartbeat (stored in lastHeartBeat) every second.
+	// When placement failover occurs, the new leader will wait for faultyHostDetectDuration, then
+	// it will loop through all the members in the state and remove the ones that
+	// have not sent a heartbeat
+	faultyHostDetectDuration = 6 * time.Second
+
+	lockOperation   = "lock"
+	unlockOperation = "unlock"
+	updateOperation = "update"
 )
 
 type hostMemberChange struct {
@@ -78,7 +74,7 @@ type hostMemberChange struct {
 }
 
 type tablesUpdateRequest struct {
-	hosts            []placementGRPCStream
+	hosts            []daprdStream
 	tables           *placementv1pb.PlacementTables
 	tablesWithVNodes *placementv1pb.PlacementTables // Temporary. Will be removed in 1.15
 }
@@ -113,11 +109,7 @@ func (r *tablesUpdateRequest) SetAPILevel(minAPILevel uint32, maxAPILevel *uint3
 
 // Service updates the Dapr runtimes with distributed hash tables for stateful entities.
 type Service struct {
-	// streamConnPool has the stream connections established between placement gRPC server and Dapr runtime.
-	streamConnPool []placementGRPCStream
-
-	// streamConnPoolLock is the lock for streamConnPool change.
-	streamConnPoolLock sync.RWMutex
+	streamConnPool *streamConnPool
 
 	// raftNode is the raft server instance.
 	raftNode *raft.Server
@@ -126,22 +118,22 @@ type Service struct {
 	lastHeartBeat sync.Map
 	// membershipCh is the channel to maintain Dapr runtime host membership update.
 	membershipCh chan hostMemberChange
-	// disseminateLock is the lock for hashing table dissemination.
-	disseminateLock sync.Mutex
-	// disseminateNextTime is the time when the hashing tables are disseminated.
-	disseminateNextTime atomic.Int64
-	// memberUpdateCount represents how many dapr runtimes needs to change.
-	// consistent hashing table. Only actor runtime's heartbeat will increase this.
-	memberUpdateCount atomic.Uint32
+
+	// disseminateLocks is a map of lock per namespace for disseminating the hashing tables
+	disseminateLocks concurrency.MutexMap[string]
+
+	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
+	disseminateNextTime haxmap.Map[string, *atomic.Int64]
+
+	// memberUpdateCount represents how many dapr runtimes needs to change in a namespace.
+	// Only actor runtime's heartbeat can increase this.
+	memberUpdateCount haxmap.Map[string, *atomic.Uint32]
 
 	// Maximum API level to return.
 	// If nil, there's no limit.
 	maxAPILevel *uint32
 	// Minimum API level to return
 	minAPILevel uint32
-
-	// faultyHostDetectDuration
-	faultyHostDetectDuration *atomic.Int64
 
 	// hasLeadership indicates the state for leadership.
 	hasLeadership atomic.Bool
@@ -171,25 +163,24 @@ type PlacementServiceOpts struct {
 
 // NewPlacementService returns a new placement service.
 func NewPlacementService(opts PlacementServiceOpts) *Service {
-	fhdd := &atomic.Int64{}
-	fhdd.Store(int64(faultyHostDetectInitialDuration))
-
 	return &Service{
-		streamConnPool:           []placementGRPCStream{},
-		membershipCh:             make(chan hostMemberChange, membershipChangeChSize),
-		faultyHostDetectDuration: fhdd,
-		raftNode:                 opts.RaftNode,
-		maxAPILevel:              opts.MaxAPILevel,
-		minAPILevel:              opts.MinAPILevel,
-		clock:                    &clock.RealClock{},
-		closedCh:                 make(chan struct{}),
-		sec:                      opts.SecProvider,
+		streamConnPool:      newStreamConnPool(),
+		membershipCh:        make(chan hostMemberChange, membershipChangeChSize),
+		raftNode:            opts.RaftNode,
+		maxAPILevel:         opts.MaxAPILevel,
+		minAPILevel:         opts.MinAPILevel,
+		clock:               &clock.RealClock{},
+		closedCh:            make(chan struct{}),
+		sec:                 opts.SecProvider,
+		disseminateLocks:    concurrency.NewMutexMap[string](),
+		memberUpdateCount:   *haxmap.New[string, *atomic.Uint32](),
+		disseminateNextTime: *haxmap.New[string, *atomic.Int64](),
 	}
 }
 
 // Run starts the placement service gRPC server.
 // Blocks until the service is closed and all connections are drained.
-func (p *Service) Run(ctx context.Context, port string) error {
+func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	if p.closed.Load() {
 		return errors.New("placement service is closed")
 	}
@@ -203,11 +194,16 @@ func (p *Service) Run(ctx context.Context, port string) error {
 		return err
 	}
 
-	serverListener, err := net.Listen("tcp", fmt.Sprintf(":%s", port))
+	serverListener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", listenAddress, port))
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
-	grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS())
+
+	keepaliveParams := keepalive.ServerParameters{
+		Time:    2 * time.Second,
+		Timeout: 3 * time.Second,
+	}
+	grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS(), grpc.KeepaliveParams(keepaliveParams))
 
 	placementv1pb.RegisterPlacementServer(grpcServer, p)
 
@@ -236,112 +232,86 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	registeredMemberID := ""
 	isActorRuntime := false
 
-	sec, err := p.sec.Handler(stream.Context())
+	clientID, err := p.validateClient(stream)
 	if err != nil {
-		return status.Errorf(codes.Internal, "")
+		return err
 	}
 
-	var clientID *spiffe.Parsed
-	if sec.MTLSEnabled() {
-		id, ok, err := spiffe.FromGRPCContext(stream.Context())
-		if err != nil || !ok {
-			log.Debugf("failed to get client ID from context: err=%v, ok=%t", err, ok)
-			return status.Errorf(codes.Unauthenticated, "failed to get client ID from context")
-		}
-		clientID = id
+	firstMessage, err := p.receiveAndValidateFirstMessage(stream, clientID)
+	if err != nil {
+		return err
 	}
 
+	// Older versions won't be sending the namespace in subsequent messages either,
+	// so we'll save this one in a separate variable
+	namespace := firstMessage.GetNamespace()
+
+	daprStream := newDaprdStream(firstMessage, stream)
 	p.streamConnGroup.Add(1)
+	p.streamConnPool.add(daprStream)
+
 	defer func() {
+		// Runs when a stream is disconnected or when the placement service loses leadership
 		p.streamConnGroup.Done()
-		p.deleteStreamConn(stream)
+		p.streamConnPool.delete(daprStream)
 	}()
 
 	for p.hasLeadership.Load() {
-		req, err := stream.Recv()
+		var req *placementv1pb.Host
+		if firstMessage != nil {
+			req, err = firstMessage, nil
+			firstMessage = nil
+		} else {
+			req, err = stream.Recv()
+		}
+
 		switch err {
 		case nil:
+
 			if clientID != nil && req.GetId() != clientID.AppID() {
 				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
 			}
 
-			state := p.raftNode.FSM().State()
-
 			if registeredMemberID == "" {
-				// New connection
-				// Ensure that the reported API level is at least equal to the current one in the cluster
-				clusterAPILevel := state.APILevel()
-				if clusterAPILevel < p.minAPILevel {
-					clusterAPILevel = p.minAPILevel
-				}
-				if p.maxAPILevel != nil && clusterAPILevel > *p.maxAPILevel {
-					clusterAPILevel = *p.maxAPILevel
-				}
-				if req.GetApiLevel() < clusterAPILevel {
-					return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.GetApiLevel())
-				}
-
-				registeredMemberID = req.GetName()
-				p.addStreamConn(stream)
-
-				updateReq := &tablesUpdateRequest{
-					hosts: []placementGRPCStream{stream},
-				}
-				if hostAcceptsVNodes(stream) {
-					updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false)
-				} else {
-					updateReq.tables = p.raftNode.FSM().PlacementState(true)
-				}
-
-				// We need to use a background context here so dissemination isn't tied to the context of this stream
-				err = p.performTablesUpdate(context.Background(), updateReq)
+				registeredMemberID, err = p.handleNewConnection(req, daprStream, namespace)
 				if err != nil {
 					return err
 				}
-				log.Debugf("Stream connection is established from %s", registeredMemberID)
 			}
 
 			// Ensure that the incoming runtime is actor instance.
 			isActorRuntime = len(req.GetEntities()) > 0
 			if !isActorRuntime {
-				// ignore if this runtime is non-actor.
+				// we already disseminated the existing tables to this member,
+				// so we can ignore the rest if it's a non-actor.
 				continue
 			}
 
 			now := p.clock.Now()
 
 			for _, entity := range req.GetEntities() {
-				monitoring.RecordActorHeartbeat(req.GetId(), entity, req.GetName(), req.GetPod(), now)
+				monitoring.RecordActorHeartbeat(req.GetId(), entity, req.GetName(), req.GetNamespace(), req.GetPod(), now)
 			}
 
-			// Record the heartbeat timestamp. This timestamp will be used to check if the member
-			// state maintained by raft is valid or not. If the member is outdated based the timestamp
-			// the member will be marked as faulty node and removed.
-			p.lastHeartBeat.Store(req.GetName(), now.UnixNano())
+			// Record the heartbeat timestamp. Used for metrics and for disconnecting faulty hosts
+			// on placement fail-over by comparing the member list in raft with the heartbeats
+			p.lastHeartBeat.Store(req.GetNamespace()+"||"+req.GetName(), now.UnixNano())
 
-			members := state.Members()
-
-			// Upsert incoming member only if it is an actor service (not actor client) and
-			// the existing member info is unmatched with the incoming member info.
-			upsertRequired := true
-			if m, ok := members[req.GetName()]; ok {
-				if m.AppID == req.GetId() && m.Name == req.GetName() && cmp.Equal(m.Entities, req.GetEntities()) {
-					upsertRequired = false
-				}
-			}
-
-			if upsertRequired {
+			// Upsert incoming member only if the existing member info
+			// doesn't match with the incoming member info.
+			if p.raftNode.FSM().State().UpsertRequired(namespace, req) {
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberUpsert,
 					host: raft.DaprHostMember{
 						Name:      req.GetName(),
 						AppID:     req.GetId(),
+						Namespace: namespace,
 						Entities:  req.GetEntities(),
 						UpdatedAt: now.UnixNano(),
 						APILevel:  req.GetApiLevel(),
 					},
 				}
-				log.Debugf("Member changed upserting appid %s with entities %v", req.GetId(), req.GetEntities())
+				log.Debugf("Member changed; upserting appid %s in namespace %s with entities %v", req.GetId(), namespace, req.GetEntities())
 			}
 
 		default:
@@ -352,16 +322,15 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 				log.Debugf("Stream connection is disconnected gracefully: %s", registeredMemberID)
-				if isActorRuntime {
-					p.membershipCh <- hostMemberChange{
-						cmdType: raft.MemberRemove,
-						host:    raft.DaprHostMember{Name: registeredMemberID},
-					}
-				}
 			} else {
-				// no actions for hashing table. Instead, MembershipChangeWorker will check
-				// host updatedAt and if now - updatedAt > p.faultyHostDetectDuration, remove hosts.
 				log.Debugf("Stream connection is disconnected with the error: %v", err)
+			}
+
+			if isActorRuntime {
+				p.membershipCh <- hostMemberChange{
+					cmdType: raft.MemberRemove,
+					host:    raft.DaprHostMember{Name: registeredMemberID, Namespace: namespace},
+				}
 			}
 
 			return nil
@@ -371,32 +340,87 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
 }
 
-// addStreamConn adds stream connection between runtime and placement to the dissemination pool.
-func (p *Service) addStreamConn(conn placementGRPCStream) {
-	p.streamConnPoolLock.Lock()
-	p.streamConnPool = append(p.streamConnPool, conn)
-	p.streamConnPoolLock.Unlock()
+func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatusServer) (*spiffe.Parsed, error) {
+	sec, err := p.sec.Handler(stream.Context())
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "")
+	}
+
+	if !sec.MTLSEnabled() {
+		return nil, nil
+	}
+
+	clientID, ok, err := spiffe.FromGRPCContext(stream.Context())
+	if err != nil || !ok {
+		log.Debugf("failed to get client ID from context: err=%v, ok=%t", err, ok)
+		return nil, status.Errorf(codes.Unauthenticated, "failed to get client ID from context")
+	}
+
+	return clientID, nil
 }
 
-func (p *Service) deleteStreamConn(conn placementGRPCStream) {
-	p.streamConnPoolLock.Lock()
-	for i, c := range p.streamConnPool {
-		if c == conn {
-			p.streamConnPool = append(p.streamConnPool[:i], p.streamConnPool[i+1:]...)
-			break
-		}
+func (p *Service) receiveAndValidateFirstMessage(stream placementv1pb.Placement_ReportDaprStatusServer, clientID *spiffe.Parsed) (*placementv1pb.Host, error) {
+	firstMessage, err := stream.Recv()
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to receive the first message: %v", err)
 	}
-	p.streamConnPoolLock.Unlock()
+
+	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
+		return nil, status.Errorf(codes.PermissionDenied, "provided app ID %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetId(), clientID.AppID())
+	}
+
+	// For older versions that are not sending their namespace as part of the message
+	// we will use the namespace from the Spiffe clientID
+	if clientID != nil && firstMessage.GetNamespace() == "" {
+		firstMessage.Namespace = clientID.Namespace()
+	}
+
+	if clientID != nil && firstMessage.GetNamespace() != clientID.Namespace() {
+		return nil, status.Errorf(codes.PermissionDenied, "provided client namespace %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetNamespace(), clientID.Namespace())
+	}
+
+	return firstMessage, nil
 }
 
-func (p *Service) hasStreamConn(conn placementGRPCStream) bool {
-	p.streamConnPoolLock.RLock()
-	defer p.streamConnPoolLock.RUnlock()
+func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprdStream, namespace string) (string, error) {
+	err := p.checkAPILevel(req)
+	if err != nil {
+		return "", err
+	}
 
-	for _, c := range p.streamConnPool {
-		if c == conn {
-			return true
+	registeredMemberID := req.GetName()
+
+	// If the member is not an actor runtime (len(req.GetEntities()) == 0) we disseminate the tables
+	// If it is, we'll disseminate in the next disseminate interval
+	if len(req.GetEntities()) == 0 {
+		updateReq := &tablesUpdateRequest{
+			hosts: []daprdStream{*daprStream},
+		}
+		if daprStream.needsVNodes {
+			updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, namespace)
+		} else {
+			updateReq.tables = p.raftNode.FSM().PlacementState(true, namespace)
+		}
+		err = p.performTablesUpdate(context.Background(), updateReq)
+		if err != nil {
+			return registeredMemberID, err
 		}
 	}
-	return false
+
+	return registeredMemberID, nil
+}
+
+func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
+	clusterAPILevel := max(p.minAPILevel, p.raftNode.FSM().State().APILevel())
+
+	if p.maxAPILevel != nil && clusterAPILevel > *p.maxAPILevel {
+		clusterAPILevel = *p.maxAPILevel
+	}
+
+	// Ensure that the reported API level is at least equal to the current one in the cluster
+	if req.GetApiLevel() < clusterAPILevel {
+		return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.GetApiLevel())
+	}
+
+	return nil
 }

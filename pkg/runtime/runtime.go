@@ -197,6 +197,7 @@ func newDaprRuntime(ctx context.Context,
 		GRPC:           grpc,
 		Channels:       channels,
 		MiddlewareHTTP: httpMiddleware,
+		Security:       sec,
 	})
 
 	var reloader *hotreload.Reloader
@@ -218,6 +219,7 @@ func newDaprRuntime(ctx context.Context,
 			ComponentStore: compStore,
 			Authorizer:     authz,
 			Processor:      processor,
+			AppID:          runtimeConfig.id,
 		})
 		if err != nil {
 			return nil, err
@@ -524,6 +526,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
 		TracingSpec:           a.globalConfig.GetTracingSpec(),
 		AccessControlList:     a.accessControlList,
+		Processor:             a.processor,
 	})
 
 	if err = a.runnerCloser.AddCloser(a.daprGRPCAPI); err != nil {
@@ -541,7 +544,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	}
 
 	// Start HTTP Server
-	err = a.startHTTPServer(a.runtimeConfig.httpPort, a.runtimeConfig.publicPort, a.runtimeConfig.profilePort, a.runtimeConfig.allowedOrigins)
+	err = a.startHTTPServer()
 	if err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
@@ -553,11 +556,11 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	log.Infof("The request body size parameter is: %v bytes", a.runtimeConfig.maxRequestBodySize)
 
 	// Start internal gRPC server (used for sidecar-to-sidecar communication)
-	err = a.startGRPCInternalServer(a.daprGRPCAPI, a.runtimeConfig.internalGRPCPort)
+	err = a.startGRPCInternalServer(a.daprGRPCAPI)
 	if err != nil {
 		return fmt.Errorf("failed to start internal gRPC server: %w", err)
 	}
-	log.Infof("Internal gRPC server is running on port %v", a.runtimeConfig.internalGRPCPort)
+	log.Infof("Internal gRPC server is running on %s:%d", a.runtimeConfig.internalGRPCListenAddress, a.runtimeConfig.internalGRPCPort)
 
 	a.initDirectMessaging(a.nameResolver)
 
@@ -772,7 +775,8 @@ func (a *DaprRuntime) initProxy() {
 	})
 }
 
-func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int, allowedOrigins string) error {
+func (a *DaprRuntime) startHTTPServer() error {
+	getMetricSpec := a.globalConfig.GetMetricsSpec()
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		Universal:             a.daprUniversal,
 		Channels:              a.channels,
@@ -780,17 +784,19 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 		PubsubAdapter:         a.processor.PubSub(),
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
 		TracingSpec:           a.globalConfig.GetTracingSpec(),
+		MetricSpec:            &getMetricSpec,
 		MaxRequestBodySize:    int64(a.runtimeConfig.maxRequestBodySize),
 	})
 
 	serverConf := http.ServerConfig{
 		AppID:                   a.runtimeConfig.id,
 		HostAddress:             a.hostAddress,
-		Port:                    port,
+		Port:                    a.runtimeConfig.httpPort,
 		APIListenAddresses:      a.runtimeConfig.apiListenAddresses,
-		PublicPort:              publicPort,
-		ProfilePort:             profilePort,
-		AllowedOrigins:          allowedOrigins,
+		PublicPort:              a.runtimeConfig.publicPort,
+		PublicListenAddress:     a.runtimeConfig.publicListenAddress,
+		ProfilePort:             a.runtimeConfig.profilePort,
+		AllowedOrigins:          a.runtimeConfig.allowedOrigins,
 		EnableProfiling:         a.runtimeConfig.enableProfiling,
 		MaxRequestBodySize:      a.runtimeConfig.maxRequestBodySize,
 		UnixDomainSocket:        a.runtimeConfig.unixDomainSocket,
@@ -829,9 +835,9 @@ func (a *DaprRuntime) startHTTPServer(port int, publicPort *int, profilePort int
 	return nil
 }
 
-func (a *DaprRuntime) startGRPCInternalServer(api grpc.API, port int) error {
+func (a *DaprRuntime) startGRPCInternalServer(api grpc.API) error {
 	// Since GRPCInteralServer is encrypted & authenticated, it is safe to listen on *
-	serverConf := a.getNewServerConfig([]string{""}, port)
+	serverConf := a.getNewServerConfig([]string{a.runtimeConfig.internalGRPCListenAddress}, a.runtimeConfig.internalGRPCPort)
 	server := grpc.NewInternalServer(api, serverConf, a.globalConfig.GetTracingSpec(), a.globalConfig.GetMetricsSpec(), a.sec, a.proxy)
 	if err := server.StartNonBlocking(); err != nil {
 		return err
@@ -917,11 +923,19 @@ func (a *DaprRuntime) initNameResolution(ctx context.Context) (err error) {
 	if a.globalConfig.Spec.NameResolutionSpec != nil {
 		resolverMetadata.Configuration = a.globalConfig.Spec.NameResolutionSpec.Configuration
 	}
+	// Override host address if the internal gRPC listen address is localhost.
+	hostAddress := a.hostAddress
+	if utils.Contains(
+		[]string{"127.0.0.1", "localhost", "[::1]"},
+		a.runtimeConfig.internalGRPCListenAddress,
+	) {
+		hostAddress = a.runtimeConfig.internalGRPCListenAddress
+	}
 	resolverMetadata.Instance = nr.Instance{
 		DaprHTTPPort:     a.runtimeConfig.httpPort,
 		DaprInternalPort: a.runtimeConfig.internalGRPCPort,
 		AppPort:          a.runtimeConfig.appConnectionConfig.Port,
-		Address:          a.hostAddress,
+		Address:          hostAddress,
 		AppID:            a.runtimeConfig.id,
 		Namespace:        a.namespace,
 	}
@@ -956,8 +970,16 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	if !ok {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
+	// Override host address if the internal gRPC listen address is localhost.
+	hostAddress := a.hostAddress
+	if utils.Contains(
+		[]string{"127.0.0.1", "localhost", "[::1]"},
+		a.runtimeConfig.internalGRPCListenAddress,
+	) {
+		hostAddress = a.runtimeConfig.internalGRPCListenAddress
+	}
 	actorConfig := actors.NewConfig(actors.ConfigOpts{
-		HostAddress:       a.hostAddress,
+		HostAddress:       hostAddress,
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
 		RemindersService:  a.runtimeConfig.remindersService,
@@ -1005,7 +1027,10 @@ func (a *DaprRuntime) loadComponents(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.NewComponents(a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewComponents(disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
 	default:
 		return nil
 	}
@@ -1052,7 +1077,10 @@ func (a *DaprRuntime) loadDeclarativeSubscriptions(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.NewSubscriptions(a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewSubscriptions(disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
 	default:
 		return nil
 	}
@@ -1100,7 +1128,10 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 			PodName:   a.podName,
 		})
 	case modes.StandaloneMode:
-		loader = disk.NewHTTPEndpoints(a.runtimeConfig.standalone.ResourcesPath...)
+		loader = disk.NewHTTPEndpoints(disk.Options{
+			AppID: a.runtimeConfig.id,
+			Paths: a.runtimeConfig.standalone.ResourcesPath,
+		})
 	default:
 		return nil
 	}

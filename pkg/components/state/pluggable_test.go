@@ -374,9 +374,14 @@ func TestComponentCalls(t *testing.T) {
 			Key: fakeKey,
 		})
 
-		require.Error(t, err)
+		require.NoError(t, err)
+		assert.Equal(t, &state.GetResponse{}, resp)
 		assert.Equal(t, int64(1), svc.getCalled.Load())
-		assert.Nil(t, resp)
+		assert.NotNil(t, resp)
+		assert.Nil(t, resp.Data)
+		assert.Nil(t, resp.Metadata)
+		assert.Nil(t, resp.ContentType)
+		assert.Nil(t, resp.ETag)
 	})
 
 	t.Run("get should return get response when response is returned from the grpc call", func(t *testing.T) {

@@ -48,9 +48,10 @@ func TestPersist(t *testing.T) {
 		maxAPILevel:       100,
 	})
 	testMember := DaprHostMember{
-		Name:     "127.0.0.1:3030",
-		AppID:    "fakeAppID",
-		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		Name:      "127.0.0.1:3030",
+		Namespace: "ns1",
+		AppID:     "fakeAppID",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo"},
 	}
 	cmdLog, _ := makeRaftLogCommand(MemberUpsert, testMember)
 	raftLog := &raft.Log{
@@ -77,8 +78,13 @@ func TestPersist(t *testing.T) {
 	err = restoredState.restore(buf)
 	require.NoError(t, err)
 
-	expectedMember := fsm.State().Members()[testMember.Name]
-	restoredMember := restoredState.Members()[testMember.Name]
+	members, err := fsm.State().members("ns1")
+	require.NoError(t, err)
+	expectedMember := members[testMember.Name]
+
+	restoredMembers, err := restoredState.members("ns1")
+	require.NoError(t, err)
+	restoredMember := restoredMembers[testMember.Name]
 	assert.Equal(t, fsm.State().Index(), restoredState.Index())
 	assert.Equal(t, expectedMember.Name, restoredMember.Name)
 	assert.Equal(t, expectedMember.AppID, restoredMember.AppID)

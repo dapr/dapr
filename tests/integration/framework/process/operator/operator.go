@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/kit/ptr"
 )
 
 type Operator struct {
@@ -70,12 +71,16 @@ func New(t *testing.T, fopts ...Option) *Operator {
 	args := []string{
 		"-log-level=" + opts.logLevel,
 		"-port=" + strconv.Itoa(opts.port),
+		"-listen-address=127.0.0.1",
 		"-healthz-port=" + strconv.Itoa(opts.healthzPort),
+		"-healthz-listen-address=127.0.0.1",
 		"-metrics-port=" + strconv.Itoa(opts.metricsPort),
+		"-metrics-listen-address=127.0.0.1",
 		"-trust-anchors-file=" + *opts.trustAnchorsFile,
 		"-disable-leader-election=" + strconv.FormatBool(opts.disableLeaderElection),
 		"-kubeconfig=" + *opts.kubeconfigPath,
 		"-webhook-server-port=" + strconv.Itoa(fp.Port(t)),
+		"-webhook-server-listen-address=127.0.0.1",
 	}
 
 	if opts.configPath != nil {
@@ -147,7 +152,7 @@ func (o *Operator) Dial(t *testing.T, ctx context.Context, sentry *sentry.Sentry
 		SentryAddress:           "localhost:" + strconv.Itoa(sentry.Port()),
 		ControlPlaneTrustDomain: "integration.test.dapr.io",
 		ControlPlaneNamespace:   o.namespace,
-		TrustAnchorsFile:        sentry.TrustAnchorsFile(t),
+		TrustAnchorsFile:        ptr.Of(sentry.TrustAnchorsFile(t)),
 		AppID:                   appID,
 		Mode:                    modes.StandaloneMode,
 		MTLSEnabled:             true,

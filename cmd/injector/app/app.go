@@ -91,7 +91,7 @@ func Run() {
 		SentryAddress:           cfg.SentryAddress,
 		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
 		ControlPlaneNamespace:   namespace,
-		TrustAnchorsFile:        cfg.TrustAnchorsFile,
+		TrustAnchorsFile:        &cfg.TrustAnchorsFile,
 		AppID:                   "dapr-injector",
 		MTLSEnabled:             true,
 		Mode:                    modes.KubernetesMode,
@@ -102,6 +102,7 @@ func Run() {
 
 	inj, err := service.NewInjector(service.Options{
 		Port:                    opts.Port,
+		ListenAddress:           opts.ListenAddress,
 		AuthUIDs:                uids,
 		Config:                  cfg,
 		DaprClient:              daprClient,
@@ -143,7 +144,7 @@ func Run() {
 			return nil
 		},
 		func(ctx context.Context) error {
-			healhtzErr := healthzServer.Run(ctx, opts.HealthzPort)
+			healhtzErr := healthzServer.Run(ctx, opts.HealthzListenAddress, opts.HealthzPort)
 			if healhtzErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", healhtzErr)
 			}
@@ -165,7 +166,7 @@ func Run() {
 				return rerr
 			}
 
-			caBundle, rErr := sec.CurrentTrustAnchors()
+			caBundle, rErr := sec.CurrentTrustAnchors(ctx)
 			if rErr != nil {
 				return rErr
 			}

@@ -224,18 +224,6 @@ func TestServiceInvocationGrpcPerformance(t *testing.T) {
 		OutputFortio(daprResult).
 		Flush()
 
-	report := perf.NewTestReport(
-		[]perf.TestResult{baselineResult, daprResult},
-		"Service Invocation",
-		sidecarUsage,
-		appUsage)
-	report.SetTotalRestartCount(restarts)
-	err = utils.UploadAzureBlob(report)
-
-	if err != nil {
-		t.Error(err)
-	}
-
 	require.Equal(t, 0, daprResult.RetCodes.Num400)
 	require.Equal(t, 0, daprResult.RetCodes.Num500)
 	require.Equal(t, 0, restarts)
