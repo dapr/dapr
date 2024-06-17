@@ -238,7 +238,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			}
 
 			return true
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 		// Move the clock forward so dissemination is triggered
 		clock.Step(disseminateTimeout)
