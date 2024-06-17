@@ -835,6 +835,7 @@ func (a *DaprRuntime) initProxy() {
 }
 
 func (a *DaprRuntime) startHTTPServer() error {
+	getMetricSpec := a.globalConfig.GetMetricsSpec()
 	a.daprHTTPAPI = http.NewAPI(http.APIOpts{
 		Universal:             a.daprUniversal,
 		Channels:              a.channels,
@@ -842,6 +843,7 @@ func (a *DaprRuntime) startHTTPServer() error {
 		PubsubAdapter:         a.processor.PubSub(),
 		SendToOutputBindingFn: a.processor.Binding().SendToOutputBinding,
 		TracingSpec:           a.globalConfig.GetTracingSpec(),
+		MetricSpec:            &getMetricSpec,
 		MaxRequestBodySize:    int64(a.runtimeConfig.maxRequestBodySize),
 	})
 
