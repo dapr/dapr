@@ -27,6 +27,6 @@ spec:
       {{ $key }}: {{ tpl $value $ }}
       {{- end }}
       {{- with .Values.global.labels }}
-        {{- toYaml . | nindent 6 }}
+      {{- toYaml . | nindent 6 }}
       {{- end }}
 {{- end }}
