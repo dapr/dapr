@@ -439,6 +439,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
+github.com/dapr/components-contrib v0.0.0-20240618132727-a385743e35c4 h1:wzvmUrvKwnZHNAf/D0ipOQTU0WFJ4twgAizoKPQ7Tik=
+github.com/dapr/components-contrib v0.0.0-20240618132727-a385743e35c4/go.mod h1:nu+nC0WCWAg46zT/Y+mdW7i6HcabjqdwmO/PudNV4gc=
 github.com/dapr/kit v0.13.1-0.20240523225705-106329e5839f h1:X/QX+YP+2z/f5F5XGpUsZ7hfdwYTlcK6M3n7D/mkpcM=
 github.com/dapr/kit v0.13.1-0.20240523225705-106329e5839f/go.mod h1:LkPZyrSpa2xLBgYMwUhDbWZcZVt/WdL7FSPlN0PrSog=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -498,8 +500,6 @@ github.com/eapache/queue v1.1.0/go.mod h1:6eCeP0CKFpHLu8blIFXhExK/dRa7WDZfr6jVFP
 github.com/eclipse/paho.mqtt.golang v1.4.3 h1:2kwcUGn8seMUfWndX0hGbvH8r7crgcJguQNCyp70xik=
 github.com/eclipse/paho.mqtt.golang v1.4.3/go.mod h1:CSYvoAlsMkhYOXh/oKyxa8EcBci6dVkLCbo5tTC1RIE=
 github.com/edsrzf/mmap-go v1.0.0/go.mod h1:YO35OhQPt3KJa3ryjFM5Bs14WD66h8eGKpfaBNrHW5M=
-github.com/elena-kolevska/components-contrib v0.0.0-20240618113121-a84431a1179d h1:TPwe+lLCxPT+VtEl2PRaKjHgKMY89cpzoxi4epZkeDM=
-github.com/elena-kolevska/components-contrib v0.0.0-20240618113121-a84431a1179d/go.mod h1:nu+nC0WCWAg46zT/Y+mdW7i6HcabjqdwmO/PudNV4gc=
 github.com/emicklei/go-restful/v3 v3.8.0/go.mod h1:6n3XBCmQQb25CM2LCACGz8ukIrRry+4bhvbpWn3mrbc=
 github.com/emicklei/go-restful/v3 v3.11.0 h1:rAQeMHw1c7zTmncogyy8VvRZwtkmkZ4FxERmMY4rD+g=
 github.com/emicklei/go-restful/v3 v3.11.0/go.mod h1:6n3XBCmQQb25CM2LCACGz8ukIrRry+4bhvbpWn3mrbc=

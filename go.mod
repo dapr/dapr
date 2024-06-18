@@ -10,7 +10,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.14.0
-	github.com/dapr/components-contrib v0.0.0-20240606223258-787b23d5d0a3
+	github.com/dapr/components-contrib v0.0.0-20240618132727-a385743e35c4
 	github.com/dapr/kit v0.13.1-0.20240523225705-106329e5839f
 	github.com/evanphx/json-patch/v5 v5.8.1
 	github.com/go-chi/chi/v5 v5.0.11
@@ -472,8 +472,7 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/components-contrib => github.com/elena-kolevska/components-contrib v0.0.0-20240618113121-a84431a1179d
-
+// replace github.com/dapr/components-contrib => ../components-contrib
 // replace github.com/dapr/kit => ../kit
 //
 // Then, run `make modtidy-all` in this repository.
