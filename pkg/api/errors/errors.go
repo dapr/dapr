@@ -43,7 +43,7 @@ func NotFound(name string, componentType string, metadata map[string]string, grp
 }
 
 func NotConfigured(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string) error {
-	message := fmt.Sprintf("%s %s is not configured", componentType, name)
+	message := componentType + " " + name + " is not configured"
 
 	return kiterrors.NewBuilder(
 		grpcCode,
