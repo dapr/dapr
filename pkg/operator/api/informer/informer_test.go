@@ -76,8 +76,8 @@ func Test_WatchUpdates(t *testing.T) {
 			operator.ResourceEventType_UPDATED,
 		)
 
-		require.Eventually(t, func() bool {
-			return i.batchID == 1
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 1, i.batchID.Load())
 		}, 5*time.Second, 100*time.Millisecond)
 
 		i.handleEvent(context.Background(),
@@ -92,8 +92,8 @@ func Test_WatchUpdates(t *testing.T) {
 			operator.ResourceEventType_UPDATED,
 		)
 
-		require.Eventually(t, func() bool {
-			return i.batchID == 2
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 2, i.batchID.Load())
 		}, 5*time.Second, 100*time.Millisecond)
 
 		i.handleEvent(context.Background(),
@@ -104,8 +104,8 @@ func Test_WatchUpdates(t *testing.T) {
 			operator.ResourceEventType_CREATED,
 		)
 
-		require.Eventually(t, func() bool {
-			return i.batchID == 3
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 3, i.batchID.Load())
 		}, 5*time.Second, 100*time.Millisecond)
 
 		for _, appCh := range []<-chan *Event[compapi.Component]{appCh1, appCh2} {
