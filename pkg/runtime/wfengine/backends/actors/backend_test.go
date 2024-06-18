@@ -29,6 +29,7 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -206,6 +207,18 @@ func TestResetLoadedState(t *testing.T) {
 	upsertCount, deleteCount := countOperations(t, req)
 	assert.Equal(t, 2, upsertCount)  // metadata + customStatus
 	assert.Equal(t, 15, deleteCount) // all history and inbox records are deleted
+}
+
+func TestInvalidStart(t *testing.T) {
+	be, err := NewActorBackend(wfbackend.Metadata{}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, be)
+
+	err = be.Start(context.TODO())
+	require.Error(t, err)
+
+	err = be.Start(context.TODO())
+	require.Error(t, err)
 }
 
 func getActorRuntime(t *testing.T) actors.Actors {
