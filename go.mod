@@ -472,7 +472,8 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
-// replace github.com/dapr/components-contrib => ../components-contrib
+replace github.com/dapr/components-contrib => github.com/elena-kolevska/components-contrib v0.0.0-20240618113121-a84431a1179d
+
 // replace github.com/dapr/kit => ../kit
 //
 // Then, run `make modtidy-all` in this repository.
