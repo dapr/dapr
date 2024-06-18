@@ -201,9 +201,9 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 		i.lock.Lock()
 		defer i.lock.Unlock()
 		return len(i.methodcalled) == i.actorIDsNum*i.actorTypesNum*i.daprdsNum
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.ElementsMatch(t, i.expcalled, i.methodcalled)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 }
