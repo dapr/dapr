@@ -254,20 +254,6 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 
 	t.Logf("Actual QPS: %.2f, expected QPS: %.0f", daprResult.ActualQPS, targetSchedulerQPS)
 
-	report := perf.NewTestReport(
-
-		[]perf.TestResult{daprResult},
-		"Actor Reminder",
-		sidecarUsage,
-		appUsage)
-
-	report.SetTotalRestartCount(restarts)
-	err = utils.UploadAzureBlob(report)
-
-	if err != nil {
-		t.Error(err)
-	}
-
 	summary.ForTest(t).
 		Service(appNameScheduler).
 		Client(appNameScheduler).
