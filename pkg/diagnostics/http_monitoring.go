@@ -40,13 +40,6 @@ var (
 	log = logger.NewLogger("dapr.runtime.diagnostics")
 )
 
-var staticPaths = map[string]bool{
-	"/dapr/config":    true,
-	"/dapr/metrics":   true,
-	"/dapr/subscribe": true,
-	"/healthz":        true,
-}
-
 var (
 	// <<10 -> KBs; <<20 -> MBs; <<30 -> GBs
 	defaultSizeDistribution    = view.Distribution(1<<10, 2<<10, 4<<10, 16<<10, 64<<10, 256<<10, 1<<20, 4<<20, 16<<20, 64<<20, 256<<20, 1<<30, 4<<30)
@@ -133,7 +126,7 @@ func (h *httpMetrics) IsEnabled() bool {
 }
 
 func (h *httpMetrics) getMetricsPath(path string) string {
-	if _, ok := staticPaths[path]; ok {
+	if _, ok := diagUtils.StaticPaths[path]; ok {
 		return path
 	}
 	if matchedPath, ok := h.pathMatcher.match(path); ok {
@@ -151,6 +144,7 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 	}
 
 	path = h.getMetricsPath(path)
+	method = diagUtils.GetMetricsMethod(method)
 
 	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
@@ -189,6 +183,7 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 	}
 
 	path = h.getMetricsPath(path)
+	method = diagUtils.GetMetricsMethod(method)
 
 	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
@@ -209,6 +204,7 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 	}
 
 	path = h.getMetricsPath(path)
+	method = diagUtils.GetMetricsMethod(method)
 
 	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
@@ -319,6 +315,6 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		respSize := int64(rw.Size())
 
 		// Record the request
-		h.ServerRequestCompleted(r.Context(), r.Method, path, status, reqContentSize, respSize, elapsed)
+		h.ServerRequestCompleted(r.Context(), diagUtils.GetMetricsMethod(r.Method), path, status, reqContentSize, respSize, elapsed)
 	})
 }

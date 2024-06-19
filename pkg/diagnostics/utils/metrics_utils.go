@@ -27,6 +27,32 @@ import (
 
 var metricsRules map[string][]regexPair
 
+var StaticPaths = map[string]bool{
+	"/dapr/config":    true,
+	"/dapr/metrics":   true,
+	"/dapr/subscribe": true,
+	"/healthz":        true,
+}
+
+var ValidHTTPMethods = map[string]bool{
+	"GET":     true,
+	"PUT":     true,
+	"POST":    true,
+	"PATCH":   true,
+	"DELETE":  true,
+	"HEAD":    true,
+	"OPTIONS": true,
+	"CONNECT": true,
+	"TRACE":   true,
+}
+
+func GetMetricsMethod(method string) string {
+	if _, ok := ValidHTTPMethods[method]; !ok {
+		return "UNKNOWN"
+	}
+	return method
+}
+
 type regexPair struct {
 	regex   *regexp.Regexp
 	replace string

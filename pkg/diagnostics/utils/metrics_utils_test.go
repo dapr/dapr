@@ -102,3 +102,16 @@ func TestCreateRulesMap(t *testing.T) {
 		assert.NotNil(t, metricsRules["testlabel"][0].regex)
 	})
 }
+
+func TestGetMetricsMethod(t *testing.T) {
+	assert.Equal(t, "GET", GetMetricsMethod("GET"))
+	assert.Equal(t, "POST", GetMetricsMethod("POST"))
+	assert.Equal(t, "PUT", GetMetricsMethod("PUT"))
+	assert.Equal(t, "DELETE", GetMetricsMethod("DELETE"))
+	assert.Equal(t, "PATCH", GetMetricsMethod("PATCH"))
+	assert.Equal(t, "HEAD", GetMetricsMethod("HEAD"))
+	assert.Equal(t, "OPTIONS", GetMetricsMethod("OPTIONS"))
+	assert.Equal(t, "CONNECT", GetMetricsMethod("CONNECT"))
+	assert.Equal(t, "TRACE", GetMetricsMethod("TRACE"))
+	assert.Equal(t, "UNKNOWN", GetMetricsMethod("INVALID"))
+}
