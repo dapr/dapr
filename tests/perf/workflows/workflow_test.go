@@ -199,7 +199,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				// Initialize the workflow runtime
 				url := fmt.Sprintf("http://%s/start-workflow-runtime", externalURL)
 				// Calling start-workflow-runtime multiple times so that it is started in all app instances
-				_, err = utils.HTTPGet(url)
+				_, err := utils.HTTPGet(url)
 				require.NoError(t, err, "error starting workflow runtime")
 
 				time.Sleep(5 * time.Second)
