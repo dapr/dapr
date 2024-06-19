@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/modes"
+	outboxfake "github.com/dapr/dapr/pkg/outbox/fake"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
@@ -52,6 +53,7 @@ func TestInitState(t *testing.T) {
 		GlobalConfig:   new(config.Configuration),
 		Meta:           meta.New(meta.Options{Mode: modes.StandaloneMode}),
 		Security:       fake.New(),
+		Outbox:         outboxfake.New(),
 	})
 
 	bytes := make([]byte, 32)
