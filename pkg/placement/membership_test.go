@@ -116,7 +116,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 					require.Equal(c, updateOperation, operations1[1])
 					require.Equal(c, unlockOperation, operations1[2])
 				}
-			}, 10*time.Second, 100*time.Millisecond)
+			}, 20*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
 		}()
 
@@ -149,7 +149,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 				// Depending on the timing of the host 3 registration
 				// we may receive one or two update messages
 				assert.GreaterOrEqual(c, len(operations2), 3)
-			}, 10*time.Second, 100*time.Millisecond)
+			}, 20*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
 		}()
 
@@ -186,7 +186,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 					require.Equal(c, updateOperation, operations3[1])
 					require.Equal(c, unlockOperation, operations3[2])
 				}
-			}, 10*time.Second, 100*time.Millisecond)
+			}, 20*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
 		}()
 
@@ -216,28 +216,23 @@ func TestMembershipChangeWorker(t *testing.T) {
 		require.NoError(t, stream2.Send(host2))
 		require.NoError(t, stream3.Send(host3))
 
-		require.Eventually(t, func() bool {
-			assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns1"))
-			assert.Equal(t, 2, testServer.streamConnPool.getStreamCount("ns2"))
-			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndex.Load())
-			assert.Len(t, testServer.streamConnPool.reverseLookup, 3)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 1, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(c, 2, testServer.streamConnPool.getStreamCount("ns2"))
+			assert.Equal(c, uint32(3), testServer.streamConnPool.streamIndex.Load())
+			assert.Len(c, testServer.streamConnPool.reverseLookup, 3)
 
 			// This indicates the member has been added to the dissemination queue and is
 			// going to be disseminated in the next tick
 			ts1, ok := testServer.disseminateNextTime.Get("ns1")
-			if assert.True(t, ok) {
-				assert.Equal(t, clock.Now().Add(disseminateTimeout).UnixNano(), ts1.Load())
-			} else {
-				return false
-			}
-			ts2, ok := testServer.disseminateNextTime.Get("ns2")
-			if assert.True(t, ok) {
-				assert.Equal(t, clock.Now().Add(disseminateTimeout).UnixNano(), ts2.Load())
-			} else {
-				return false
+			if assert.True(c, ok) {
+				assert.Equal(c, clock.Now().Add(disseminateTimeout).UnixNano(), ts1.Load())
 			}
 
-			return true
+			ts2, ok := testServer.disseminateNextTime.Get("ns2")
+			if assert.True(c, ok) {
+				assert.Equal(c, clock.Now().Add(disseminateTimeout).UnixNano(), ts2.Load())
+			}
 		}, 10*time.Second, 100*time.Millisecond)
 
 		// Move the clock forward so dissemination is triggered
@@ -251,7 +246,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 				updateMsgCnt++
 			}
 			return updateMsgCnt == 3
-		}, 10*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 		// Ignore the next disseminateTimeout.
 		val, _ := testServer.disseminateNextTime.GetOrSet("ns1", &atomic.Int64{})
@@ -303,92 +298,86 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		// Disconnect the host in ns1
 		conn1.Close()
-		require.Eventually(t, func() bool {
-			assert.Equal(t, 2, testServer.raftNode.FSM().State().MemberCount())
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 2, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate locks have been deleted for ns1, but not ns2
-			assert.Equal(t, 1, testServer.disseminateLocks.ItemCount())
+			assert.Equal(c, 1, testServer.disseminateLocks.ItemCount())
 
 			// Disseminate timers have been deleted for ns1, but not ns2
 			_, ok := testServer.disseminateNextTime.Get("ns1")
-			assert.False(t, ok)
+			assert.False(c, ok)
 			_, ok = testServer.disseminateNextTime.Get("ns2")
-			assert.True(t, ok)
+			assert.True(c, ok)
 
 			// Member update counts have been deleted for ns1, but not ns2
 			_, ok = testServer.memberUpdateCount.Get("ns1")
-			assert.False(t, ok)
+			assert.False(c, ok)
 			_, ok = testServer.memberUpdateCount.Get("ns2")
-			assert.True(t, ok)
+			assert.True(c, ok)
 
-			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
-			assert.Equal(t, 2, testServer.streamConnPool.getStreamCount("ns2"))
-			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndex.Load())
+			assert.Equal(c, 0, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(c, 2, testServer.streamConnPool.getStreamCount("ns2"))
+			assert.Equal(c, uint32(3), testServer.streamConnPool.streamIndex.Load())
 			testServer.streamConnPool.lock.RLock()
-			assert.Len(t, testServer.streamConnPool.reverseLookup, 2)
+			assert.Len(c, testServer.streamConnPool.reverseLookup, 2)
 			testServer.streamConnPool.lock.RUnlock()
-
-			return true
-		}, 30*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 		// // Disconnect one host in ns2
 		conn2.Close()
-		require.Eventually(t, func() bool {
-			assert.Equal(t, 1, testServer.raftNode.FSM().State().MemberCount())
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 1, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate lock for ns2 hasn't been deleted
-			assert.Equal(t, 1, testServer.disseminateLocks.ItemCount())
+			assert.Equal(c, 1, testServer.disseminateLocks.ItemCount())
 
 			// Disseminate timer for ns2 hasn't been deleted,
 			// because there's still streams in the namespace
 			_, ok := testServer.disseminateNextTime.Get("ns1")
-			assert.False(t, ok)
+			assert.False(c, ok)
 			_, ok = testServer.disseminateNextTime.Get("ns2")
-			assert.True(t, ok)
+			assert.True(c, ok)
 
 			// Member update count for ns2 hasn't been deleted,
 			// because there's still streams in the namespace
 			_, ok = testServer.memberUpdateCount.Get("ns2")
-			assert.True(t, ok)
+			assert.True(c, ok)
 
-			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
-			assert.Equal(t, 1, testServer.streamConnPool.getStreamCount("ns2"))
-			assert.Equal(t, uint32(3), testServer.streamConnPool.streamIndex.Load())
+			assert.Equal(c, 0, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(c, 1, testServer.streamConnPool.getStreamCount("ns2"))
+			assert.Equal(c, uint32(3), testServer.streamConnPool.streamIndex.Load())
 			testServer.streamConnPool.lock.RLock()
-			assert.Len(t, testServer.streamConnPool.reverseLookup, 1)
+			assert.Len(c, testServer.streamConnPool.reverseLookup, 1)
 			testServer.streamConnPool.lock.RUnlock()
-
-			return true
-		}, 30*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 
 		// Last host is disconnected
 		conn3.Close()
-		require.Eventually(t, func() bool {
-			require.Equal(t, 0, testServer.raftNode.FSM().State().MemberCount())
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 0, testServer.raftNode.FSM().State().MemberCount())
 
 			// Disseminate locks have been deleted
-			require.Equal(t, 0, testServer.disseminateLocks.ItemCount())
+			assert.Equal(c, 0, testServer.disseminateLocks.ItemCount())
 
 			// Disseminate timers have been deleted
 			_, ok := testServer.disseminateNextTime.Get("ns1")
-			require.False(t, ok)
+			assert.False(c, ok)
 			_, ok = testServer.disseminateNextTime.Get("ns2")
-			require.False(t, ok)
+			assert.False(c, ok)
 
 			// Member update counts have been deleted
 			_, ok = testServer.memberUpdateCount.Get("ns1")
-			require.False(t, ok)
+			assert.False(c, ok)
 			_, ok = testServer.memberUpdateCount.Get("ns2")
-			require.False(t, ok)
+			assert.False(c, ok)
 
-			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns1"))
-			assert.Equal(t, 0, testServer.streamConnPool.getStreamCount("ns2"))
+			assert.Equal(c, 0, testServer.streamConnPool.getStreamCount("ns1"))
+			assert.Equal(c, 0, testServer.streamConnPool.getStreamCount("ns2"))
 			testServer.streamConnPool.lock.RLock()
-			assert.Empty(t, testServer.streamConnPool.reverseLookup)
+			assert.Empty(c, testServer.streamConnPool.reverseLookup)
 			testServer.streamConnPool.lock.RUnlock()
-
-			return true
-		}, 30*time.Second, 100*time.Millisecond)
+		}, 20*time.Second, 100*time.Millisecond)
 	})
 }
 
@@ -397,9 +386,8 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, tests.Raft(t))
 	testServer.hasLeadership.Store(true)
 	var (
-		overArr     [testClients]int64
-		overArrLock sync.RWMutex
-		// arrange.
+		overArr       [testClients]int64
+		overArrLock   sync.RWMutex
 		clientConns   []*grpc.ClientConn
 		clientStreams []v1pb.Placement_ReportDaprStatusClient
 		wg            sync.WaitGroup
