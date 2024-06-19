@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"strings"
 	"sync"
+	"sync/atomic"
 
 	"k8s.io/client-go/tools/cache"
 	ctrlcache "sigs.k8s.io/controller-runtime/pkg/cache"
@@ -50,7 +51,7 @@ type informer[T meta.Resource] struct {
 	cache   ctrlcache.Cache
 	lock    sync.Mutex
 	batcher *batcher.Batcher[int, *informerEvent[T]]
-	batchID int
+	batchID atomic.Uint32
 
 	log     logger.Logger
 	closeCh chan struct{}
@@ -149,8 +150,8 @@ func (i *informer[T]) handleEvent(ctx context.Context, oldObj, newObj any, event
 		event.oldObj = &oldT
 	}
 
-	i.batcher.Batch(i.batchID, event)
-	i.batchID++
+	i.batcher.Batch(int(i.batchID.Load()), event)
+	i.batchID.Add(1)
 }
 
 func (i *informer[T]) anyToT(obj any) (T, bool) {
