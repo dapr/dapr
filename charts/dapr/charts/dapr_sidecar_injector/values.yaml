@@ -30,7 +30,7 @@ sidecarRunAsNonRoot: true
 sidecarReadOnlyRootFilesystem: true
 sidecarDropALLCapabilities: false
 enableK8sDownwardAPIs: false
-allowedServiceAccounts: ""
+allowedServiceAccounts: "kube-system:cronjob-controller,kube-system:job-controller,kube-system:daemon-set-controller,tekton-pipelines:tekton-pipelines-controller"
 allowedServiceAccountsPrefixNames: ""
 resources: {}
 kubeClusterDomain: cluster.local

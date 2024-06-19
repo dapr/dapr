@@ -61,6 +61,7 @@ func Run() {
 		HealthzListenAddress:                opts.HealthzListenAddress,
 		WebhookServerPort:                   opts.WebhookServerPort,
 		WebhookServerListenAddress:          opts.WebhookServerListenAddress,
+		AllowedServiceResources:             opts.AllowedServiceResources,
 	})
 	if err != nil {
 		log.Fatalf("error creating operator: %v", err)
