@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub
+package subscription
 
 import (
 	"bytes"
@@ -33,6 +33,7 @@ import (
 
 	"github.com/dapr/components-contrib/contenttype"
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	inmemory "github.com/dapr/components-contrib/pubsub/in-memory"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
@@ -43,7 +44,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
-	"github.com/dapr/dapr/pkg/runtime/meta"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	testinggrpc "github.com/dapr/dapr/pkg/testing/grpc"
@@ -58,8 +58,9 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		CloudEvent: map[string]interface{}{},
 		Topic:      topic,
 		Data:       []byte("testing"),
-		Metadata:   map[string]string{pubsubName: TestPubsubName},
+		Metadata:   map[string]string{"pubsubName": "testpubsub"},
 		Path:       "topic1",
+		PubSub:     "testpubsub",
 	}
 
 	fakeReq := invokev1.NewInvokeMethodRequest(testPubSubMessage.Topic).
@@ -69,23 +70,18 @@ func TestErrorPublishedNonCloudEventHTTP(t *testing.T) {
 		WithCustomHTTPMetadata(testPubSubMessage.Metadata)
 	defer fakeReq.Close()
 
-	ps := New(Options{
-		Registry:       registry.New(registry.NewOptions()).PubSubs(),
-		IsHTTP:         true,
-		Resiliency:     resiliency.New(logger.NewLogger("test")),
-		ComponentStore: compstore.New(),
-		Meta:           meta.New(meta.Options{}),
-		Mode:           modes.StandaloneMode,
-		Namespace:      "ns1",
-		ID:             TestRuntimeConfigID,
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	comp := inmemory.New(log)
+	require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
+	ps, err := New(Options{
+		IsHTTP:     true,
+		Resiliency: resiliency.New(logger.NewLogger("test")),
+		Namespace:  "ns1",
+		PubSub:     &runtimePubsub.PubsubItem{Component: comp},
 	})
-	ps.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
-		TestPubsubName: map[string]compstore.TopicRouteElem{
-			"topic1": {
-				Rules: []*runtimePubsub.Rule{{Path: "topic1"}},
-			},
-		},
-	})
+	require.NoError(t, err)
 
 	t.Run("ok without result body", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -213,28 +209,26 @@ func TestErrorPublishedNonCloudEventGRPC(t *testing.T) {
 		CloudEvent: map[string]interface{}{},
 		Topic:      topic,
 		Data:       []byte("testing"),
-		Metadata:   map[string]string{pubsubName: TestPubsubName},
+		Metadata:   map[string]string{"pubsubName": "testpubsub"},
 		Path:       "topic1",
 	}
 
-	ps := New(Options{
-		Registry:       registry.New(registry.NewOptions()).PubSubs(),
-		IsHTTP:         false,
-		Resiliency:     resiliency.New(logger.NewLogger("test")),
-		ComponentStore: compstore.New(),
-		Meta:           meta.New(meta.Options{}),
-		Mode:           modes.StandaloneMode,
-		Namespace:      "ns1",
-		ID:             TestRuntimeConfigID,
-		GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{}),
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	comp := inmemory.New(log)
+	require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
+	ps, err := New(Options{
+		AppID:      "test",
+		Namespace:  "ns1",
+		PubSubName: "testpubsub",
+		Topic:      topic,
+		IsHTTP:     false,
+		PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+		Resiliency: resiliency.New(logger.NewLogger("test")),
+		GRPC:       manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{}),
 	})
-	ps.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
-		TestPubsubName: map[string]compstore.TopicRouteElem{
-			"topic1": {
-				Rules: []*runtimePubsub.Rule{{Path: "topic1"}},
-			},
-		},
-	})
+	require.NoError(t, err)
 
 	testcases := []struct {
 		Name        string
@@ -302,7 +296,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 	topic := "topic1"
 
 	envelope := contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", topic,
-		TestSecondPubsubName, "", []byte("Test Message"), "", "")
+		"testpubsub2", "", []byte("Test Message"), "", "")
 	b, err := json.Marshal(envelope)
 	require.NoError(t, err)
 
@@ -310,7 +304,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		CloudEvent: envelope,
 		Topic:      topic,
 		Data:       b,
-		Metadata:   map[string]string{pubsubName: TestPubsubName},
+		Metadata:   map[string]string{"pubsubName": "testpubsub"},
 		Path:       "topic1",
 	}
 
@@ -321,23 +315,19 @@ func TestOnNewPublishedMessage(t *testing.T) {
 		WithCustomHTTPMetadata(testPubSubMessage.Metadata)
 	defer fakeReq.Close()
 
-	ps := New(Options{
-		Registry:       registry.New(registry.NewOptions()).PubSubs(),
-		IsHTTP:         true,
-		Resiliency:     resiliency.New(logger.NewLogger("test")),
-		ComponentStore: compstore.New(),
-		Meta:           meta.New(meta.Options{}),
-		Mode:           modes.StandaloneMode,
-		Namespace:      "ns1",
-		ID:             TestRuntimeConfigID,
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	comp := inmemory.New(log)
+	require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
+	ps, err := New(Options{
+		IsHTTP:     true,
+		Resiliency: resiliency.New(logger.NewLogger("test")),
+		Namespace:  "ns1",
+		PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+		AppID:      "consumer0",
 	})
-	ps.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
-		TestPubsubName: map[string]compstore.TopicRouteElem{
-			"topic1": {
-				Rules: []*runtimePubsub.Rule{{Path: "topic1"}},
-			},
-		},
-	})
+	require.NoError(t, err)
 
 	t.Run("succeeded to publish message to user app with empty response", func(t *testing.T) {
 		mockAppChannel := new(channelt.MockAppChannel)
@@ -373,7 +363,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 
 		// Generate a new envelope to avoid affecting other tests by modifying shared `envelope`
 		envelopeNoTraceID := contribpubsub.NewCloudEventsEnvelope(
-			"", "", contribpubsub.DefaultCloudEventType, "", topic, TestSecondPubsubName, "",
+			"", "", contribpubsub.DefaultCloudEventType, "", topic, "testpubsub2", "",
 			[]byte("Test Message"), "", "")
 		delete(envelopeNoTraceID, contribpubsub.TraceIDField)
 		bNoTraceID, err := json.Marshal(envelopeNoTraceID)
@@ -383,7 +373,7 @@ func TestOnNewPublishedMessage(t *testing.T) {
 			CloudEvent: envelopeNoTraceID,
 			Topic:      topic,
 			Data:       bNoTraceID,
-			Metadata:   map[string]string{pubsubName: TestPubsubName},
+			Metadata:   map[string]string{"pubsubName": "testpubsub"},
 			Path:       "topic1",
 		}
 
@@ -609,7 +599,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 	topic := "topic1"
 
 	envelope := contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", topic,
-		TestSecondPubsubName, "", []byte("Test Message"), "", "")
+		"testpubsub2", "", []byte("Test Message"), "", "")
 	// add custom attributes
 	envelope["customInt"] = 123
 	envelope["customString"] = "abc"
@@ -624,12 +614,12 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		CloudEvent: envelope,
 		Topic:      topic,
 		Data:       b,
-		Metadata:   map[string]string{pubsubName: TestPubsubName},
+		Metadata:   map[string]string{"pubsubName": "testpubsub"},
 		Path:       "topic1",
 	}
 
 	envelope = contribpubsub.NewCloudEventsEnvelope("", "", contribpubsub.DefaultCloudEventType, "", topic,
-		TestSecondPubsubName, "application/octet-stream", []byte{0x1}, "", "")
+		"testpubsub2", "application/octet-stream", []byte{0x1}, "", "")
 	// add custom attributes
 	envelope["customInt"] = 123
 	envelope["customString"] = "abc"
@@ -644,7 +634,7 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		CloudEvent: envelope,
 		Topic:      topic,
 		Data:       base64,
-		Metadata:   map[string]string{pubsubName: TestPubsubName},
+		Metadata:   map[string]string{"pubsubName": "testpubsub"},
 		Path:       "topic1",
 	}
 
@@ -748,26 +738,27 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// setup
 			// getting new port for every run to avoid conflict and timing issues between tests if sharing same port
-			port, _ := freeport.GetFreePort()
+
+			port, err := freeport.GetFreePort()
+			require.NoError(t, err)
+
+			ctx, cancel := context.WithCancel(context.Background())
+			t.Cleanup(cancel)
+			comp := inmemory.New(log)
+			require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
 			reg := registry.New(registry.NewOptions())
-			ps := New(Options{
-				Registry:       reg.PubSubs(),
-				IsHTTP:         false,
-				Resiliency:     resiliency.New(logger.NewLogger("test")),
-				ComponentStore: compstore.New(),
-				Meta:           meta.New(meta.Options{}),
-				Mode:           modes.StandaloneMode,
-				Namespace:      "ns1",
-				ID:             TestRuntimeConfigID,
-				GRPC:           manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port}),
+			ps, err := New(Options{
+				IsHTTP:     true,
+				Resiliency: resiliency.New(logger.NewLogger("test")),
+				Namespace:  "ns1",
+				PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+				Topic:      topic,
+				PubSubName: "testpubsub",
+				AppID:      "consumer0",
+				GRPC:       manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port}),
 			})
-			ps.compStore.SetTopicRoutes(map[string]compstore.TopicRoutes{
-				TestPubsubName: map[string]compstore.TopicRouteElem{
-					topic: {
-						Rules: []*runtimePubsub.Rule{{Path: topic}},
-					},
-				},
-			})
+			require.NoError(t, err)
 
 			var grpcServer *grpc.Server
 
@@ -791,8 +782,8 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 
 			grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 			ps.channels = channels.New(channels.Options{
-				ComponentStore:      compstore.New(),
 				Registry:            reg,
+				ComponentStore:      compstore.New(),
 				GlobalConfig:        new(config.Configuration),
 				AppConnectionConfig: config.AppConnectionConfig{Port: port},
 				GRPC:                grpc,
