@@ -37,8 +37,10 @@ func TestHTTPMiddleware(t *testing.T) {
 	assert.Len(t, rows, 1)
 	assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 	assert.Equal(t, "fakeID", rows[0].Tags[0].Value)
-	assert.Equal(t, "status", rows[0].Tags[1].Key.Name())
-	assert.Equal(t, "200", rows[0].Tags[1].Value)
+	assert.Equal(t, "method", rows[0].Tags[1].Key.Name())
+	assert.Equal(t, "POST", rows[0].Tags[1].Value)
+	assert.Equal(t, "status", rows[0].Tags[2].Key.Name())
+	assert.Equal(t, "200", rows[0].Tags[2].Value)
 
 	rows, err = view.RetrieveData("http/server/request_bytes")
 	require.NoError(t, err)
