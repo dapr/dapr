@@ -70,6 +70,6 @@ func (h *defaultCardinality) Run(t *testing.T, ctx context.Context) {
 	t.Run("service invocation - default", func(t *testing.T) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/orders/123")
 		metrics := h.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:InvokeService/myapp|status:200"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/orders/123|status:200"]))
 	})
 }
