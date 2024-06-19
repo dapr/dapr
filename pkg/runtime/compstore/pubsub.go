@@ -15,26 +15,16 @@ package compstore
 
 import (
 	"github.com/dapr/components-contrib/pubsub"
+	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
-// PubsubItem is a pubsub component with its scoped subscriptions and
-// publishings.
-type PubsubItem struct {
-	Component           pubsub.PubSub
-	ScopedSubscriptions []string
-	ScopedPublishings   []string
-	AllowedTopics       []string
-	ProtectedTopics     []string
-	NamespaceScoped     bool
-}
-
-func (c *ComponentStore) AddPubSub(name string, item PubsubItem) {
+func (c *ComponentStore) AddPubSub(name string, item *rtpubsub.PubsubItem) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 	c.pubSubs[name] = item
 }
 
-func (c *ComponentStore) GetPubSub(name string) (PubsubItem, bool) {
+func (c *ComponentStore) GetPubSub(name string) (*rtpubsub.PubsubItem, bool) {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	pubsub, ok := c.pubSubs[name]
@@ -52,7 +42,7 @@ func (c *ComponentStore) GetPubSubComponent(name string) (pubsub.PubSub, bool) {
 	return pubsub.Component, ok
 }
 
-func (c *ComponentStore) ListPubSubs() map[string]PubsubItem {
+func (c *ComponentStore) ListPubSubs() map[string]*rtpubsub.PubsubItem {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 	return c.pubSubs
