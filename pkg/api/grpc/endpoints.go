@@ -114,7 +114,7 @@ var endpoints = map[string][]string{
 		daprRuntimePrefix + "v1.Dapr/PauseWorkflowBeta1",
 		daprRuntimePrefix + "v1.Dapr/ResumeWorkflowBeta1",
 	},
-	"scheduler.v1alpha1": {
+	"jobs.v1alpha1": {
 		daprRuntimePrefix + "v1.Dapr/ScheduleJobAlpha1",
 		daprRuntimePrefix + "v1.Dapr/DeleteJobAlpha1",
 		daprRuntimePrefix + "v1.Dapr/GetJobAlpha1",
