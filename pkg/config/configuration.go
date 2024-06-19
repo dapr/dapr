@@ -269,7 +269,7 @@ func (m MetricSpec) GetHTTPIncreasedCardinality() bool {
 }
 
 // GetHTTPPathMatching returns the path matching configuration for HTTP metrics
-func (m MetricSpec) GetHTTPPathMatching() *PathMatching {
+func (m MetricSpec) GetHTTPPathMatching() []string {
 	if m.HTTP == nil {
 		return nil
 	}
@@ -279,14 +279,8 @@ func (m MetricSpec) GetHTTPPathMatching() *PathMatching {
 // MetricHTTP defines configuration for metrics for the HTTP server
 type MetricHTTP struct {
 	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
-	IncreasedCardinality *bool         `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
-	PathMatching         *PathMatching `json:"pathMatching,omitempty" yaml:"pathMatching,omitempty"`
-}
-
-// PathMatching defines configuration options for path matching.
-type PathMatching struct {
-	IngressPaths []string `json:"ingress,omitempty" yaml:"ingress,omitempty"`
-	EgressPaths  []string `json:"egress,omitempty" yaml:"egress,omitempty"`
+	IncreasedCardinality *bool    `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
+	PathMatching         []string `json:"pathMatching,omitempty" yaml:"pathMatching,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.
