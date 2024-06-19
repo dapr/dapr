@@ -67,6 +67,20 @@ func TestMain(m *testing.M) {
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "800Mi",
 			AppPort:           -1,
+		},
+		{
+			AppName:           appNamePrefix + backend + "-scheduler",
+			DaprEnabled:       true,
+			ImageName:         "perf-workflowsapp",
+			Replicas:          1,
+			IngressEnabled:    true,
+			IngressPort:       3000,
+			MetricsEnabled:    true,
+			DaprMemoryLimit:   "800Mi",
+			DaprMemoryRequest: "800Mi",
+			AppMemoryLimit:    "800Mi",
+			AppMemoryRequest:  "800Mi",
+			AppPort:           -1,
 			Config:            "featureactorreminderscheduler",
 		},
 	}
@@ -147,20 +161,23 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 		for index2, scenario := range scenarios {
 			subTestName := "[" + strings.ToUpper(scenario) + "]: "
 			t.Run(subTestName, func(t *testing.T) {
-				platform, ok := tr.Platform.(*runner.KubeTestPlatform)
-				if !ok {
-					t.Skip("skipping test; only supported on kubernetes")
-				}
+				// restart scheduler if the app is the one using scheduler for reminders under the hood
+				if strings.Contains(testAppName, "-scheduler") {
+					platform, ok := tr.Platform.(*runner.KubeTestPlatform)
+					if !ok {
+						t.Skip("skipping test; only supported on kubernetes")
+					}
 
-				scheme := runtime.NewScheme()
-				require.NoError(t, corev1.AddToScheme(scheme))
-				cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
-				require.NoError(t, err)
-				var pod corev1.Pod
-				err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-				require.NoError(t, err)
-				err = cl.Delete(context.Background(), &pod)
-				require.NoError(t, err)
+					scheme := runtime.NewScheme()
+					require.NoError(t, corev1.AddToScheme(scheme))
+					cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
+					require.NoError(t, err)
+					var pod corev1.Pod
+					err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+					require.NoError(t, err)
+					err = cl.Delete(context.Background(), &pod)
+					require.NoError(t, err)
+				}
 
 				// Re-starting the app to clear previous run's memory
 				if restart {
