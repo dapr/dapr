@@ -24,19 +24,19 @@ import (
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-var endpointGroupSchedulerV1Alpha1 = &endpoints.EndpointGroup{
-	Name:                 endpoints.EndpointGroupScheduler,
+var endpointGroupJobsV1Alpha1 = &endpoints.EndpointGroup{
+	Name:                 endpoints.EndpointGroupJobs,
 	Version:              endpoints.EndpointGroupVersion1alpha1,
 	AppendSpanAttributes: nil,
 }
 
-func (a *api) constructSchedulerEndpoints() []endpoints.Endpoint {
+func (a *api) constructJobsEndpoints() []endpoints.Endpoint {
 	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodPost},
-			Route:   "job/schedule/{name}",
+			Route:   "jobs/{name}",
 			Version: apiVersionV1alpha1,
-			Group:   endpointGroupSchedulerV1Alpha1,
+			Group:   endpointGroupJobsV1Alpha1,
 			Handler: a.onCreateScheduleHandler(),
 			Settings: endpoints.EndpointSettings{
 				Name: "ScheduleJob",
@@ -44,9 +44,9 @@ func (a *api) constructSchedulerEndpoints() []endpoints.Endpoint {
 		},
 		{
 			Methods: []string{http.MethodDelete},
-			Route:   "job/{name}",
+			Route:   "jobs/{name}",
 			Version: apiVersionV1alpha1,
-			Group:   endpointGroupSchedulerV1Alpha1,
+			Group:   endpointGroupJobsV1Alpha1,
 			Handler: a.onDeleteJobHandler(),
 			Settings: endpoints.EndpointSettings{
 				Name: "DeleteJob",
@@ -54,9 +54,9 @@ func (a *api) constructSchedulerEndpoints() []endpoints.Endpoint {
 		},
 		{
 			Methods: []string{http.MethodGet},
-			Route:   "job/{name}",
+			Route:   "jobs/{name}",
 			Version: apiVersionV1alpha1,
-			Group:   endpointGroupSchedulerV1Alpha1,
+			Group:   endpointGroupJobsV1Alpha1,
 			Handler: a.onGetJobHandler(),
 			Settings: endpoints.EndpointSettings{
 				Name: "GetJob",
