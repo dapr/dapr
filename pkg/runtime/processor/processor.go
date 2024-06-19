@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/outbox"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -40,7 +41,9 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
+	"github.com/dapr/dapr/pkg/runtime/processor/subscriber"
 	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
+	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
@@ -96,6 +99,11 @@ type Options struct {
 	MiddlewareHTTP *http.HTTP
 
 	Security security.Handler
+
+	Outbox outbox.Outbox
+
+	Adapter         rtpubsub.Adapter
+	AdapterStreamer rtpubsub.AdapterStreamer
 }
 
 // Processor manages the lifecycle of all components categories.
@@ -105,10 +113,10 @@ type Processor struct {
 	managers        map[components.Category]manager
 	state           StateManager
 	secret          SecretManager
-	pubsub          PubsubManager
 	binding         BindingManager
 	workflowBackend WorkflowBackendManager
 	security        security.Handler
+	subscriber      *subscriber.Subscriber
 
 	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
 	pendingComponents          chan componentsapi.Component
@@ -124,20 +132,17 @@ type Processor struct {
 }
 
 func New(opts Options) *Processor {
-	ps := pubsub.New(pubsub.Options{
-		ID:             opts.ID,
-		Namespace:      opts.Namespace,
-		Mode:           opts.Mode,
-		PodName:        opts.PodName,
-		IsHTTP:         opts.IsHTTP,
-		Registry:       opts.Registry.PubSubs(),
-		ComponentStore: opts.ComponentStore,
-		Meta:           opts.Meta,
-		Resiliency:     opts.Resiliency,
-		TracingSpec:    opts.GlobalConfig.Spec.TracingSpec,
-		GRPC:           opts.GRPC,
-		Channels:       opts.Channels,
-		OperatorClient: opts.OperatorClient,
+	subscriber := subscriber.New(subscriber.Options{
+		AppID:           opts.ID,
+		Namespace:       opts.Namespace,
+		Resiliency:      opts.Resiliency,
+		TracingSpec:     opts.GlobalConfig.Spec.TracingSpec,
+		IsHTTP:          opts.IsHTTP,
+		Channels:        opts.Channels,
+		GRPC:            opts.GRPC,
+		CompStore:       opts.ComponentStore,
+		Adapter:         opts.Adapter,
+		AdapterStreamer: opts.AdapterStreamer,
 	})
 
 	state := state.New(state.Options{
@@ -145,7 +150,7 @@ func New(opts Options) *Processor {
 		Registry:       opts.Registry.StateStores(),
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
-		Outbox:         ps.Outbox(),
+		Outbox:         opts.Outbox,
 	})
 
 	secret := secret.New(secret.Options{
@@ -182,11 +187,11 @@ func New(opts Options) *Processor {
 		closedCh:                   make(chan struct{}),
 		compStore:                  opts.ComponentStore,
 		state:                      state,
-		pubsub:                     ps,
 		binding:                    binding,
 		secret:                     secret,
 		workflowBackend:            wfbe,
 		security:                   opts.Security,
+		subscriber:                 subscriber,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{
@@ -204,7 +209,13 @@ func New(opts Options) *Processor {
 				ComponentStore: opts.ComponentStore,
 				Meta:           opts.Meta,
 			}),
-			components.CategoryPubSub:          ps,
+			components.CategoryPubSub: pubsub.New(pubsub.Options{
+				AppID:          opts.ID,
+				Registry:       opts.Registry.PubSubs(),
+				Meta:           opts.Meta,
+				ComponentStore: opts.ComponentStore,
+				Subscriber:     subscriber,
+			}),
 			components.CategorySecretStore:     secret,
 			components.CategoryStateStore:      state,
 			components.CategoryWorkflowBackend: wfbe,
@@ -226,6 +237,7 @@ func (p *Processor) Process(ctx context.Context) error {
 		p.processComponents,
 		p.processHTTPEndpoints,
 		p.processSubscriptions,
+		p.subscriber.Run,
 		func(ctx context.Context) error {
 			<-ctx.Done()
 			close(p.closedCh)
