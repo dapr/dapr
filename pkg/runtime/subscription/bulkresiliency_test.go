@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub
+package subscription
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
+	inmemory "github.com/dapr/components-contrib/pubsub/in-memory"
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -31,7 +32,6 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -215,15 +215,20 @@ func getInput() input {
 
 func TestBulkSubscribeResiliency(t *testing.T) {
 	t.Run("verify Responses when few entries fail even after retries", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps := New(Options{
-			Registry:   reg.PubSubs(),
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
+		ps, err := New(Options{
 			IsHTTP:     true,
 			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
 		})
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -285,14 +290,20 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when ALL entries fail even after retries", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry: reg.PubSubs(),
-			IsHTTP:   true,
-		})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		ps, err := New(Options{
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+		})
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -354,14 +365,20 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("pass ALL entries in second attempt", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry: reg.PubSubs(),
-			IsHTTP:   true,
-		})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		ps, err := New(Options{
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+		})
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -423,14 +440,20 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("pass ALL entries in first attempt", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry: reg.PubSubs(),
-			IsHTTP:   true,
-		})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		ps, err := New(Options{
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			IsHTTP:     true,
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+		})
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -492,14 +515,21 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("fail ALL entries due to timeout", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry: reg.PubSubs(),
-			IsHTTP:   true,
-		})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+
+		ps, err := New(Options{
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			IsHTTP:     true,
+		})
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -550,14 +580,21 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when ALL entries fail with Circuitbreaker and exhaust retries", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry: reg.PubSubs(),
-			IsHTTP:   true,
-		})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+
+		ps, err := New(Options{
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			IsHTTP:     true,
+		})
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -635,14 +672,21 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when Partial entries fail with Circuitbreaker and exhaust retries", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry: reg.PubSubs(),
-			IsHTTP:   true,
-		})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+
+		ps, err := New(Options{
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			IsHTTP:     true,
+		})
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -720,14 +764,21 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("verify Responses when Partial entries Pass with Circuitbreaker half open timeout", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry: reg.PubSubs(),
-			IsHTTP:   true,
-		})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+
+		ps, err := New(Options{
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			IsHTTP:     true,
+		})
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -796,14 +847,21 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("Partial success with CB and exhaust retries, then act with short half open timeout", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry: reg.PubSubs(),
-			IsHTTP:   true,
-		})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+
+		ps, err := New(Options{
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			IsHTTP:     true,
+		})
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -909,14 +967,20 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 	})
 
 	t.Run("Fail all events with timeout and then Open CB - short retries", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry: reg.PubSubs(),
-			IsHTTP:   true,
-		})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		ps, err := New(Options{
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			IsHTTP:     true,
+		})
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -982,14 +1046,21 @@ func TestBulkSubscribeResiliency(t *testing.T) {
 
 func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 	t.Run("verify Responses when Circuitbreaker half open state changes happen", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry: reg.PubSubs(),
-			IsHTTP:   true,
-		})
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
+		ps, err := New(Options{
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+			IsHTTP:     true,
+		})
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
@@ -1149,14 +1220,20 @@ func TestBulkSubscribeResiliencyStateConversionsFromHalfOpen(t *testing.T) {
 
 func TestBulkSubscribeResiliencyWithLongRetries(t *testing.T) {
 	t.Run("Fail all events with timeout and then Open CB - long retries", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry: reg.PubSubs(),
-			IsHTTP:   true,
-		})
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(cancel)
+		comp := inmemory.New(log)
+		require.NoError(t, comp.Init(ctx, contribpubsub.Metadata{}))
+
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
+		ps, err := New(Options{
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			Resiliency: resiliency.New(logger.NewLogger("test")),
+		})
+		require.NoError(t, err)
 
 		ts := testSettings{
 			entryIdRetryTimes: map[string]int{},
