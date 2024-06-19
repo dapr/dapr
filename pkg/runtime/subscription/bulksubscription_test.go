@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub
+package subscription
 
 import (
 	"context"
@@ -30,11 +30,9 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
-	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -43,8 +41,8 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/meta"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	publisherfake "github.com/dapr/dapr/pkg/runtime/pubsub/publisher/fake"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testinggrpc "github.com/dapr/dapr/pkg/testing/grpc"
@@ -129,187 +127,166 @@ func getExpectedExtension() map[string]ExpectedExtension {
 }
 
 func TestBulkSubscribe(t *testing.T) {
-	testBulkSubscribePubsub := "bulkSubscribePubSub"
-	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: testBulkSubscribePubsub,
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:     "pubsub.mockPubSub",
-			Version:  "v1",
-			Metadata: daprt.GetFakeMetadataItems(),
-		},
-	}
+	const testBulkSubscribePubsub = "bulkSubscribePubSub"
 
 	t.Run("bulk Subscribe Message for raw payload", func(t *testing.T) {
-		ps := New(Options{
-			Registry:       registry.New(registry.NewOptions()).PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         true,
-			Channels:       new(channels.Channels),
-		})
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{}
-			},
-			"mockPubSub",
-		)
+		comp := &mockSubscribePubSub{}
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
 
-		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{
-				PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders",
-				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
-				Metadata:      map[string]string{"rawPayload": "true"},
-			},
-		}
-		sub, _ := json.Marshal(subscriptionItems)
+		resp := contribpubsub.AppBulkResponse{AppResponses: []contribpubsub.AppBulkResponseEntry{{
+			EntryId: "0",
+			Status:  contribpubsub.Success,
+		}}}
+
+		respB, _ := json.Marshal(resp)
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawDataBytes(sub).
+			WithRawDataBytes(respB).
 			WithContentType("application/json")
 		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels.WithAppChannel(mockAppChannel)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules:    []*runtimePubsub.Rule{{Path: "orders"}},
+				Metadata: map[string]string{"rawPayload": "true"},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
-		err := ps.Publish(context.TODO(), &contribpubsub.PublishRequest{
+		err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Data:       []byte(`{"orderId":"1"}`),
 		})
-		require.Error(t, err)
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
+		require.NoError(t, err)
+		pubsubIns := comp
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 		assert.Contains(t, string(reqs["orders"]), `event":"eyJvcmRlcklkIjoiMSJ9"`)
 	})
 
 	t.Run("bulk Subscribe Message for cloud event", func(t *testing.T) {
-		ps := New(Options{
-			Registry:       registry.New(registry.NewOptions()).PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         true,
-			Channels:       new(channels.Channels),
-		})
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{}
-			},
-			"mockPubSub",
-		)
-		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{
-				PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders",
-				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
-			},
-		}
-		sub, _ := json.Marshal(subscriptionItems)
+		comp := &mockSubscribePubSub{}
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+
+		resp := contribpubsub.AppBulkResponse{AppResponses: []contribpubsub.AppBulkResponseEntry{{
+			EntryId: "0",
+			Status:  contribpubsub.Success,
+		}}}
+
+		respB, _ := json.Marshal(resp)
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawDataBytes(sub).
+			WithRawDataBytes(respB).
 			WithContentType("application/json")
 		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels.WithAppChannel(mockAppChannel)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
 		order := `{"data":{"orderId":1},"datacontenttype":"application/json","id":"8b540b03-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"com.dapr.event.sent"}`
 
-		err := ps.Publish(context.TODO(), &contribpubsub.PublishRequest{
+		err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Data:       []byte(order),
 		})
-		require.Error(t, err)
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
+		require.NoError(t, err)
+		pubsubIns := comp
 		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
 		assert.True(t, pubsubIns.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 		assert.Contains(t, string(reqs["orders"]), eventKey+order)
 	})
 
 	t.Run("bulk Subscribe multiple Messages at once for cloud events", func(t *testing.T) {
-		ps := New(Options{
-			Registry:       registry.New(registry.NewOptions()).PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         true,
-			Channels:       new(channels.Channels),
-		})
-		ms := &mockSubscribePubSub{
+		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return ms
-			},
-			"mockPubSub",
-		)
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
 
-		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{
-				PubsubName: testBulkSubscribePubsub, Topic: "topic0", Route: "orders",
-				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
-			},
-		}
-		sub, _ := json.Marshal(subscriptionItems)
+		resp := contribpubsub.AppBulkResponse{AppResponses: []contribpubsub.AppBulkResponseEntry{
+			{EntryId: "1111111a", Status: contribpubsub.Success},
+			{EntryId: "2222222b", Status: contribpubsub.Success},
+		}}
+		respB, _ := json.Marshal(resp)
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawDataBytes(sub).
+			WithRawDataBytes(respB).
 			WithContentType("application/json")
 		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels.WithAppChannel(mockAppChannel)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
-		fakeResp1 := invokev1.NewInvokeMethodResponse(200, "OK", nil)
-		defer fakeResp1.Close()
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp1, nil)
+		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
 		msgArr := getBulkMessageEntries(2)
 
-		ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 
-		assert.Len(t, ms.GetBulkResponse().Statuses, 2)
-		require.Error(t, ms.GetBulkResponse().Error)
-		require.NoError(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b"))
+		assert.Len(t, comp.GetBulkResponse().Statuses, 2)
+		require.NoError(t, assertItemExistsOnce(comp.GetBulkResponse().Statuses, "1111111a", "2222222b"))
 
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
-		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
-		assert.True(t, pubsubIns.isBulkSubscribe)
+		assert.Equal(t, 1, comp.bulkPubCount["topic0"])
+		assert.True(t, comp.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 		assert.Contains(t, string(reqs["orders"]), eventKey+order1)
 		assert.Contains(t, string(reqs["orders"]), eventKey+order2)
 
@@ -322,18 +299,18 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr = getBulkMessageEntries(3)
 
-		ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 
-		assert.Len(t, ms.GetBulkResponse().Statuses, 3)
-		require.NoError(t, ms.GetBulkResponse().Error)
-		require.NoError(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b", "333333c"))
+		assert.Len(t, comp.GetBulkResponse().Statuses, 3)
+		require.NoError(t, comp.GetBulkResponse().Error)
+		require.NoError(t, assertItemExistsOnce(comp.GetBulkResponse().Statuses, "1111111a", "2222222b", "333333c"))
 
-		assert.Equal(t, 2, pubsubIns.bulkPubCount["topic0"])
-		assert.True(t, pubsubIns.isBulkSubscribe)
+		assert.Equal(t, 2, comp.bulkPubCount["topic0"])
+		assert.True(t, comp.isBulkSubscribe)
 		reqs = mockAppChannel1.GetInvokedRequest()
 		mockAppChannel1.AssertNumberOfCalls(t, "InvokeMethod", 1)
 		assert.Contains(t, string(reqs["orders"]), eventKey+order1)
@@ -349,18 +326,18 @@ func TestBulkSubscribe(t *testing.T) {
 
 		msgArr = getBulkMessageEntries(4)
 
-		ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 
-		assert.Len(t, ms.GetBulkResponse().Statuses, 4)
-		require.Error(t, ms.GetBulkResponse().Error)
-		require.NoError(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b", "333333c", "4444444d"))
+		assert.Len(t, comp.GetBulkResponse().Statuses, 4)
+		require.Error(t, comp.GetBulkResponse().Error)
+		require.NoError(t, assertItemExistsOnce(comp.GetBulkResponse().Statuses, "1111111a", "2222222b", "333333c", "4444444d"))
 
-		assert.Equal(t, 3, pubsubIns.bulkPubCount["topic0"])
-		assert.True(t, pubsubIns.isBulkSubscribe)
+		assert.Equal(t, 3, comp.bulkPubCount["topic0"])
+		assert.True(t, comp.isBulkSubscribe)
 		reqs = mockAppChannel2.GetInvokedRequest()
 		mockAppChannel2.AssertNumberOfCalls(t, "InvokeMethod", 1)
 		assert.Contains(t, string(reqs["orders"]), eventKey+order1)
@@ -374,92 +351,79 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel3.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(nil, errors.New("Mock error"))
 		msgArr = getBulkMessageEntries(1)
 
-		ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 
-		assert.Len(t, ms.GetBulkResponse().Statuses, 1)
-		require.Error(t, ms.GetBulkResponse().Error)
-		require.NoError(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a"))
+		assert.Len(t, comp.GetBulkResponse().Statuses, 1)
+		require.Error(t, comp.GetBulkResponse().Error)
+		require.NoError(t, assertItemExistsOnce(comp.GetBulkResponse().Statuses, "1111111a"))
 
-		assert.Equal(t, 4, pubsubIns.bulkPubCount["topic0"])
-		assert.True(t, pubsubIns.isBulkSubscribe)
+		assert.Equal(t, 4, comp.bulkPubCount["topic0"])
+		assert.True(t, comp.isBulkSubscribe)
 		reqs = mockAppChannel3.GetInvokedRequest()
 		mockAppChannel3.AssertNumberOfCalls(t, "InvokeMethod", 1)
 		assert.Contains(t, string(reqs["orders"]), eventKey+order1)
 	})
 
 	t.Run("bulk Subscribe events on different paths", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         true,
-			Channels:       new(channels.Channels),
-		})
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{
-					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
-				}
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{
-				PubsubName: testBulkSubscribePubsub,
-				Topic:      "topic0",
-				Routes: runtimePubsub.RoutesJSON{
-					Rules: []*runtimePubsub.RuleJSON{
-						{
-							Path:  orders1,
-							Match: `event.type == "type1"`,
-						},
-						{
-							Path:  "orders2",
-							Match: `event.type == "type2"`,
-						},
-					},
-				},
-				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
-			},
+		comp := &mockSubscribePubSub{
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		sub, _ := json.Marshal(subscriptionItems)
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+
+		resp := contribpubsub.AppBulkResponse{AppResponses: []contribpubsub.AppBulkResponseEntry{
+			{EntryId: "1111111a", Status: contribpubsub.Success},
+			{EntryId: "2222222b", Status: contribpubsub.Success},
+		}}
+		respB, _ := json.Marshal(resp)
 		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawDataBytes(sub).
+			WithRawDataBytes(respB).
 			WithContentType("application/json")
 		defer fakeResp.Close()
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels.WithAppChannel(mockAppChannel)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		rule1, err := runtimePubsub.CreateRoutingRule(`event.type == "type1"`, "orders1")
+		require.NoError(t, err)
+		rule2, err := runtimePubsub.CreateRoutingRule(`event.type == "type2"`, "orders2")
+		require.NoError(t, err)
+
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{rule1, rule2},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
 		msgArr := getBulkMessageEntries(2)
 
-		_, err := ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 		require.NoError(t, err)
 
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
-		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
-		assert.True(t, pubsubIns.isBulkSubscribe)
+		assert.Equal(t, 1, comp.bulkPubCount["topic0"])
+		assert.True(t, comp.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.Contains(t, string(reqs["orders1"]), eventKey+order1)
 		assert.NotContains(t, string(reqs["orders1"]), eventKey+order2)
 		assert.Contains(t, string(reqs["orders2"]), eventKey+order2)
@@ -467,58 +431,14 @@ func TestBulkSubscribe(t *testing.T) {
 	})
 
 	t.Run("verify Responses when bulk Subscribe events on different paths", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         true,
-			Channels:       new(channels.Channels),
-		})
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{
-					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
-				}
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{
-				PubsubName: testBulkSubscribePubsub,
-				Topic:      "topic0",
-				Routes: runtimePubsub.RoutesJSON{
-					Rules: []*runtimePubsub.RuleJSON{
-						{
-							Path:  orders1,
-							Match: `event.type == "type1"`,
-						},
-						{
-							Path:  "orders2",
-							Match: `event.type == "type2"`,
-						},
-					},
-				},
-				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
-			},
+		comp := &mockSubscribePubSub{
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawDataBytes(sub).
-			WithContentType("application/json")
-		defer fakeResp.Close()
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels.WithAppChannel(mockAppChannel)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
-
-		msgArr := getBulkMessageEntries(10)
 		responseItemsOrders1 := contribpubsub.AppBulkResponse{
 			AppResponses: []contribpubsub.AppBulkResponseEntry{
 				{EntryId: "1111111a", Status: "SUCCESS"},
@@ -529,13 +449,11 @@ func TestBulkSubscribe(t *testing.T) {
 				{EntryId: "9999999i", Status: "SUCCESS"},
 			},
 		}
-
 		resp1, _ := json.Marshal(responseItemsOrders1)
 		respInvoke1 := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataBytes(resp1).
 			WithContentType("application/json")
 		defer respInvoke1.Close()
-
 		responseItemsOrders2 := contribpubsub.AppBulkResponse{
 			AppResponses: []contribpubsub.AppBulkResponseEntry{
 				{EntryId: "2222222b", Status: "SUCCESS"},
@@ -544,7 +462,6 @@ func TestBulkSubscribe(t *testing.T) {
 				{EntryId: "10101010j", Status: "SUCCESS"},
 			},
 		}
-
 		resp2, _ := json.Marshal(responseItemsOrders2)
 		respInvoke2 := invokev1.NewInvokeMethodResponse(200, "OK", nil).
 			WithRawDataBytes(resp2).
@@ -554,20 +471,41 @@ func TestBulkSubscribe(t *testing.T) {
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders1")).Return(respInvoke1, nil)
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders2")).Return(respInvoke2, nil)
 
-		_, err := ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		rule1, err := runtimePubsub.CreateRoutingRule(`event.type == "type1"`, orders1)
+		require.NoError(t, err)
+		rule2, err := runtimePubsub.CreateRoutingRule(`event.type == "type2"`, "orders2")
+		require.NoError(t, err)
+
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{rule1, rule2},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
+
+		msgArr := getBulkMessageEntries(10)
+		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 		require.NoError(t, err)
 
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
-		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
-		assert.True(t, pubsubIns.isBulkSubscribe)
+		assert.Equal(t, 1, comp.bulkPubCount["topic0"])
+		assert.True(t, comp.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
 		assert.True(t, verifyIfEventContainsStrings(reqs["orders1"], eventKey+order1,
 			eventKey+order3, eventKey+order5, eventKey+order7, eventKey+order8, eventKey+order9))
 		assert.True(t, verifyIfEventNotContainsStrings(reqs["orders1"], eventKey+order2,
@@ -592,49 +530,35 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
 	})
 
 	t.Run("verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         true,
-			Channels:       new(channels.Channels),
-		})
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{
-					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
-				}
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{
-				PubsubName:    testBulkSubscribePubsub,
-				Topic:         "topic0",
-				Route:         "orders",
-				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
-			},
+		comp := &mockSubscribePubSub{
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawDataBytes(sub).
-			WithContentType("application/json")
-		defer fakeResp.Close()
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels.WithAppChannel(mockAppChannel)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
 		msgArr := getBulkMessageEntries(4)
 		msgArr[0].EntryId = ""
@@ -655,20 +579,17 @@ func TestBulkSubscribe(t *testing.T) {
 
 		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("orders")).Return(respInvoke1, nil)
 
-		_, err := ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 		require.NoError(t, err)
 
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
-		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
-		assert.True(t, pubsubIns.isBulkSubscribe)
+		assert.Equal(t, 1, comp.bulkPubCount["topic0"])
+		assert.True(t, comp.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 		assert.True(t, verifyIfEventContainsStrings(reqs["orders"], eventKey+order2,
 			eventKey+order4))
 		assert.True(t, verifyIfEventNotContainsStrings(reqs["orders"], eventKey+order1,
@@ -683,49 +604,35 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
 	})
 
 	t.Run("verify bulk Subscribe Responses when App sends back out of order entryIds", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         true,
-			Channels:       new(channels.Channels),
-		})
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{
-					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
-				}
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{
-				PubsubName:    testBulkSubscribePubsub,
-				Topic:         "topic0",
-				Route:         "orders",
-				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
-			},
+		comp := &mockSubscribePubSub{
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawDataBytes(sub).
-			WithContentType("application/json")
-		defer fakeResp.Close()
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels.WithAppChannel(mockAppChannel)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
 		msgArr := getBulkMessageEntries(5)
 
@@ -751,20 +658,17 @@ func TestBulkSubscribe(t *testing.T) {
 			matchDaprRequestMethod("orders"),
 		).Return(respInvoke1, nil)
 
-		_, err := ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 		require.NoError(t, err)
 
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
-		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
-		assert.True(t, pubsubIns.isBulkSubscribe)
+		assert.Equal(t, 1, comp.bulkPubCount["topic0"])
+		assert.True(t, comp.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 		assert.True(t, verifyIfEventContainsStrings(reqs["orders"], eventKey+order1,
 			eventKey+order2, eventKey+order3, eventKey+order4, eventKey+order5))
 
@@ -778,49 +682,35 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
 	})
 
 	t.Run("verify bulk Subscribe Responses when App sends back wrong entryIds", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         true,
-			Channels:       new(channels.Channels),
-		})
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{
-					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
-				}
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{
-				PubsubName:    testBulkSubscribePubsub,
-				Topic:         "topic0",
-				Route:         "orders",
-				BulkSubscribe: runtimePubsub.BulkSubscribeJSON{Enabled: true},
-			},
+		comp := &mockSubscribePubSub{
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawDataBytes(sub).
-			WithContentType("application/json")
-		defer fakeResp.Close()
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
 
 		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.Init()
-		ps.channels.WithAppChannel(mockAppChannel)
-		mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).Return(fakeResp, nil)
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
 		msgArr := getBulkMessageEntries(5)
 
@@ -844,20 +734,17 @@ func TestBulkSubscribe(t *testing.T) {
 			matchDaprRequestMethod("orders"),
 		).Return(respInvoke1, nil)
 
-		_, err := ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 		require.NoError(t, err)
 
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
-		assert.Equal(t, 1, pubsubIns.bulkPubCount["topic0"])
-		assert.True(t, pubsubIns.isBulkSubscribe)
+		assert.Equal(t, 1, comp.bulkPubCount["topic0"])
+		assert.True(t, comp.isBulkSubscribe)
 		reqs := mockAppChannel.GetInvokedRequest()
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2)
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
 		assert.True(t, verifyIfEventContainsStrings(reqs["orders"], eventKey+order1,
 			eventKey+order2, eventKey+order3, eventKey+order4, eventKey+order5))
 
@@ -871,58 +758,21 @@ func TestBulkSubscribe(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
 	})
 }
 
 func TestBulkSubscribeGRPC(t *testing.T) {
 	testBulkSubscribePubsub := "bulkSubscribePubSub"
-	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: testBulkSubscribePubsub,
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:     "pubsub.mockPubSub",
-			Version:  "v1",
-			Metadata: daprt.GetFakeMetadataItems(),
-		},
-	}
 
 	t.Run("GRPC - bulk Subscribe Message for raw payload", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         false,
-			Channels:       new(channels.Channels),
-		})
-		ms := &mockSubscribePubSub{
+
+		comp := &mockSubscribePubSub{
 			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return ms
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
-			Subscriptions: []*runtimev1pb.TopicSubscription{
-				{
-					PubsubName: testBulkSubscribePubsub,
-					Topic:      "topic0",
-					Routes: &runtimev1pb.TopicRoutes{
-						Default: "orders",
-					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
-					Metadata:      map[string]string{"rawPayload": "true"},
-				},
-			},
-		}
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
 
 		nbei1 := contribpubsub.BulkMessageEntry{EntryId: "1111111a", Event: []byte(`{"orderId":"1"}`)}
 		nbei2 := contribpubsub.BulkMessageEntry{EntryId: "2222222b", Event: []byte(`{"orderId":"2"}`)}
@@ -944,9 +794,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp["orders"] = &responses
 		// create mock application server first
 		mockServer := &channelt.MockServer{
-			ListTopicSubscriptionsResponse: &subscriptionItems,
-			BulkResponsePerPath:            mapResp,
-			Error:                          nil,
+			BulkResponsePerPath: mapResp,
+			Error:               nil,
 		}
 		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
@@ -957,34 +806,47 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
 
 		// create a new AppChannel and gRPC client for every test
-		ps.channels = channels.New(channels.Options{
+		mockAppChannel := channels.New(channels.Options{
+			Registry:       registry.New(registry.NewOptions()),
 			ComponentStore: compstore.New(),
-			Registry:       reg,
 			GlobalConfig:   new(config.Configuration),
 			GRPC:           grpc,
 			AppConnectionConfig: config.AppConnectionConfig{
 				Port: port,
 			},
 		})
-		require.NoError(t, ps.channels.Refresh())
-		ps.grpc = grpc
+		require.NoError(t, mockAppChannel.Refresh())
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     false,
+			GRPC:       grpc,
+			Channels:   mockAppChannel,
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules:    []*runtimePubsub.Rule{{Path: "orders"}},
+				Metadata: map[string]string{"rawPayload": "true"},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
-		_, err = ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
-		assert.Len(t, ms.GetBulkResponse().Statuses, 2)
-		require.NoError(t, ms.GetBulkResponse().Error)
-		require.NoError(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b"))
+		assert.Len(t, comp.GetBulkResponse().Statuses, 2)
+		require.NoError(t, comp.GetBulkResponse().Error)
+		require.NoError(t, assertItemExistsOnce(comp.GetBulkResponse().Statuses, "1111111a", "2222222b"))
 
 		require.NoError(t, err)
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -994,73 +856,45 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 		assert.Contains(t, string(mockServer.RequestsReceived["orders"].GetEntries()[0].GetBytes()), `{"orderId":"1"}`)
 		assert.Contains(t, string(mockServer.RequestsReceived["orders"].GetEntries()[1].GetBytes()), `{"orderId":"2"}`)
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
 
 		mockServer.BulkResponsePerPath = nil
 		mockServer.Error = status.Error(codes.Unimplemented, "method not implemented")
-		ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
-		assert.Len(t, ms.GetBulkResponse().Statuses, 2)
-		require.NoError(t, ms.GetBulkResponse().Error)
-		require.NoError(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b"))
+		assert.Len(t, comp.GetBulkResponse().Statuses, 2)
+		require.NoError(t, comp.GetBulkResponse().Error)
+		require.NoError(t, assertItemExistsOnce(comp.GetBulkResponse().Statuses, "1111111a", "2222222b"))
 
 		mockServer.Error = status.Error(codes.Unknown, "unknown error")
-		ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
-		assert.Len(t, ms.GetBulkResponse().Statuses, 2)
-		require.Error(t, ms.GetBulkResponse().Error)
-		require.NoError(t, assertItemExistsOnce(ms.GetBulkResponse().Statuses, "1111111a", "2222222b"))
+		assert.Len(t, comp.GetBulkResponse().Statuses, 2)
+		require.Error(t, comp.GetBulkResponse().Error)
+		require.NoError(t, assertItemExistsOnce(comp.GetBulkResponse().Statuses, "1111111a", "2222222b"))
 	})
 
 	t.Run("GRPC - bulk Subscribe cloud event Message on different paths and verify response", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         false,
-			Channels:       new(channels.Channels),
-		})
 
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{
-					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
-				}
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
-			Subscriptions: []*runtimev1pb.TopicSubscription{
-				{
-					PubsubName: testBulkSubscribePubsub,
-					Topic:      "topic0",
-					Routes: &runtimev1pb.TopicRoutes{
-						Rules: []*runtimev1pb.TopicRule{
-							{
-								Path:  orders1,
-								Match: `event.type == "type1"`,
-							},
-							{
-								Path:  "orders2",
-								Match: `event.type == "type2"`,
-							},
-						},
-					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
-				},
-			},
+		comp := &mockSubscribePubSub{
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+
+		rule1, err := runtimePubsub.CreateRoutingRule(`event.type == "type1"`, orders1)
+		require.NoError(t, err)
+		rule2, err := runtimePubsub.CreateRoutingRule(`event.type == "type2"`, "orders2")
+		require.NoError(t, err)
+
 		msgArr := getBulkMessageEntries(10)
 		responseEntries1 := make([]*runtimev1pb.TopicEventBulkResponseEntry, 6)
 		responseEntries2 := make([]*runtimev1pb.TopicEventBulkResponseEntry, 4)
@@ -1104,9 +938,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp["orders2"] = &responses2
 		// create mock application server first
 		mockServer := &channelt.MockServer{
-			ListTopicSubscriptionsResponse: &subscriptionItems,
-			BulkResponsePerPath:            mapResp,
-			Error:                          nil,
+			BulkResponsePerPath: mapResp,
+			Error:               nil,
 		}
 		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
@@ -1116,28 +949,40 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 
 		// create a new AppChannel and gRPC client for every test
 		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
-		ps.channels = channels.New(channels.Options{
+		mockAppChannel := channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 			GRPC:                grpc,
 		})
-		require.NoError(t, ps.channels.Refresh())
-		ps.grpc = grpc
+		require.NoError(t, mockAppChannel.Refresh())
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     false,
+			GRPC:       grpc,
+			Channels:   mockAppChannel,
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{rule1, rule2},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
-		_, err = ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 		require.NoError(t, err)
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1157,43 +1002,19 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			getExpectedExtension()["type1"], mockServer.RequestsReceived[orders1]))
 		assert.True(t, verifyBulkSubscribeRequest(getExpectedBulkRequests()["type2"],
 			getExpectedExtension()["type2"], mockServer.RequestsReceived["orders2"]))
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
 	})
 
 	t.Run("GRPC - verify Responses when entryId supplied blank while sending messages", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         false,
-			Channels:       new(channels.Channels),
-		})
 
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{
-					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
-				}
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
-			Subscriptions: []*runtimev1pb.TopicSubscription{
-				{
-					PubsubName: testBulkSubscribePubsub,
-					Topic:      "topic0",
-					Routes: &runtimev1pb.TopicRoutes{
-						Default: "orders",
-					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
-				},
-			},
+		comp := &mockSubscribePubSub{
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+
 		msgArr := getBulkMessageEntries(4)
 		msgArr[0].EntryId = ""
 		msgArr[2].EntryId = ""
@@ -1212,9 +1033,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp["orders"] = &responses
 		// create mock application server first
 		mockServer := &channelt.MockServer{
-			ListTopicSubscriptionsResponse: &subscriptionItems,
-			BulkResponsePerPath:            mapResp,
-			Error:                          nil,
+			BulkResponsePerPath: mapResp,
+			Error:               nil,
 		}
 		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
@@ -1223,7 +1043,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 
 		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
-		ps.channels = channels.New(channels.Options{
+		mockAppChannel := channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
@@ -1231,21 +1051,33 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
 		require.NoError(t, err)
-		require.NoError(t, ps.channels.Refresh())
-		ps.grpc = grpc
+		require.NoError(t, mockAppChannel.Refresh())
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     false,
+			GRPC:       grpc,
+			Channels:   mockAppChannel,
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
-		_, err = ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 		require.NoError(t, err)
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1256,43 +1088,19 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
 	})
 
 	t.Run("GRPC - verify bulk Subscribe Responses when App sends back out of order entryIds", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         false,
-			Channels:       new(channels.Channels),
-		})
 
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{
-					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
-				}
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
-			Subscriptions: []*runtimev1pb.TopicSubscription{
-				{
-					PubsubName: testBulkSubscribePubsub,
-					Topic:      "topic0",
-					Routes: &runtimev1pb.TopicRoutes{
-						Default: "orders",
-					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
-				},
-			},
+		comp := &mockSubscribePubSub{
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+
 		msgArr := getBulkMessageEntries(5)
 		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 5)
 		responseEntries[0] = &runtimev1pb.TopicEventBulkResponseEntry{
@@ -1322,9 +1130,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp["orders"] = &responses
 		// create mock application server first
 		mockServer := &channelt.MockServer{
-			ListTopicSubscriptionsResponse: &subscriptionItems,
-			BulkResponsePerPath:            mapResp,
-			Error:                          nil,
+			BulkResponsePerPath: mapResp,
+			Error:               nil,
 		}
 		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
@@ -1333,7 +1140,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 
 		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
-		ps.channels = channels.New(channels.Options{
+		mockAppChannel := channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
@@ -1341,21 +1148,33 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
 		require.NoError(t, err)
-		require.NoError(t, ps.channels.Refresh())
-		ps.grpc = grpc
+		require.NoError(t, mockAppChannel.Refresh())
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     false,
+			GRPC:       grpc,
+			Channels:   mockAppChannel,
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
-		_, err = ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 		require.NoError(t, err)
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1367,43 +1186,19 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
 	})
 
 	t.Run("GRPC - verify bulk Subscribe Responses when App sends back wrong entryIds", func(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         false,
-			Channels:       new(channels.Channels),
-		})
 
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{
-					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
-				}
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
-			Subscriptions: []*runtimev1pb.TopicSubscription{
-				{
-					PubsubName: testBulkSubscribePubsub,
-					Topic:      "topic0",
-					Routes: &runtimev1pb.TopicRoutes{
-						Default: "orders",
-					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
-				},
-			},
+		comp := &mockSubscribePubSub{
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+
 		msgArr := getBulkMessageEntries(5)
 		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 5)
 		for k, msg := range msgArr {
@@ -1427,9 +1222,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		mapResp["orders"] = &responses
 		// create mock application server first
 		mockServer := &channelt.MockServer{
-			ListTopicSubscriptionsResponse: &subscriptionItems,
-			BulkResponsePerPath:            mapResp,
-			Error:                          nil,
+			BulkResponsePerPath: mapResp,
+			Error:               nil,
 		}
 		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
@@ -1438,7 +1232,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 
 		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
-		ps.channels = channels.New(channels.Options{
+		mockAppChannel := channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
@@ -1446,21 +1240,33 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
 		require.NoError(t, err)
-		require.NoError(t, ps.channels.Refresh())
-		ps.grpc = grpc
+		require.NoError(t, mockAppChannel.Refresh())
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     false,
+			GRPC:       grpc,
+			Channels:   mockAppChannel,
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
-		_, err = ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 		require.NoError(t, err)
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1472,43 +1278,19 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
 	})
 
 	t.Run("GRPC - verify bulk Subscribe Response when error while fetching Entry due to wrong dataContentType", func(t *testing.T) {
+		comp := &mockSubscribePubSub{
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
+		}
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         false,
-			Channels:       new(channels.Channels),
-		})
 
-		ps.registry.RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{
-					features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
-				}
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := runtimev1pb.ListTopicSubscriptionsResponse{
-			Subscriptions: []*runtimev1pb.TopicSubscription{
-				{
-					PubsubName: testBulkSubscribePubsub,
-					Topic:      "topic0",
-					Routes: &runtimev1pb.TopicRoutes{
-						Default: "orders",
-					},
-					BulkSubscribe: &runtimev1pb.BulkSubscribeConfig{Enabled: true},
-				},
-			},
-		}
 		msgArr := getBulkMessageEntriesWithWrongData()
 		responseEntries := make([]*runtimev1pb.TopicEventBulkResponseEntry, 5)
 		for k, msg := range msgArr {
@@ -1518,9 +1300,8 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 		// create mock application server first
 		mockServer := &channelt.MockServer{
-			ListTopicSubscriptionsResponse: &subscriptionItems,
-			BulkResponsePerPath:            nil,
-			Error:                          nil,
+			BulkResponsePerPath: nil,
+			Error:               nil,
 		}
 		grpcServer := startTestAppCallbackAlphaGRPCServer(t, port, mockServer)
 		if grpcServer != nil {
@@ -1529,28 +1310,40 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 		}
 
 		grpc := manager.NewManager(nil, modes.StandaloneMode, &manager.AppChannelConfig{Port: port})
-		ps.channels = channels.New(channels.Options{
+		mockAppChannel := channels.New(channels.Options{
 			ComponentStore:      compstore.New(),
 			Registry:            reg,
 			GlobalConfig:        new(config.Configuration),
 			GRPC:                grpc,
 			AppConnectionConfig: config.AppConnectionConfig{Port: port},
 		})
-		require.NoError(t, ps.channels.Refresh())
-		ps.grpc = grpc
+		require.NoError(t, mockAppChannel.Refresh())
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     false,
+			GRPC:       grpc,
+			Channels:   mockAppChannel,
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{{Path: "orders"}},
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
 
-		_, err = ps.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
+		_, err = comp.BulkPublish(context.TODO(), &contribpubsub.BulkPublishRequest{
 			PubsubName: testBulkSubscribePubsub,
 			Topic:      "topic0",
 			Entries:    msgArr,
 		})
 		require.NoError(t, err)
-		pubSub, ok := ps.compStore.GetPubSub(testBulkSubscribePubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 
 		expectedResponse := BulkResponseExpectation{
 			Responses: []BulkResponseEntryExpectation{
@@ -1558,7 +1351,7 @@ func TestBulkSubscribeGRPC(t *testing.T) {
 			},
 		}
 
-		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, pubsubIns.bulkReponse.Statuses))
+		assert.True(t, verifyBulkSubscribeResponses(expectedResponse, comp.bulkReponse.Statuses))
 	})
 }
 
@@ -1580,6 +1373,7 @@ func startTestAppCallbackAlphaGRPCServer(t *testing.T, port int, mockServer *cha
 }
 
 func setBulkResponseStatus(responses []*runtimev1pb.TopicEventBulkResponseEntry,
+
 	status ...runtimev1pb.TopicEventResponse_TopicEventResponseStatus,
 ) []*runtimev1pb.TopicEventBulkResponseEntry {
 	for i, s := range status {
@@ -1628,6 +1422,7 @@ func verifyIfEventNotContainsStrings(event []byte, elems ...string) bool {
 }
 
 func verifyBulkSubscribeRequest(expectedData []string, expectedExtension ExpectedExtension,
+
 	actual *runtimev1pb.TopicEventBulkRequest,
 ) bool {
 	for i, expectedEntryReq := range expectedData {
@@ -1656,6 +1451,7 @@ func assertItemExistsOnce(collection []contribpubsub.BulkSubscribeResponseEntry,
 }
 
 // mockSubscribePubSub is an in-memory pubsub component.
+
 type mockSubscribePubSub struct {
 	bulkHandlers    map[string]contribpubsub.BulkHandler
 	handlers        map[string]contribpubsub.Handler
@@ -1669,6 +1465,7 @@ type mockSubscribePubSub struct {
 // type BulkSubscribeResponse struct {
 
 // Init is a mock initialization method.
+
 func (m *mockSubscribePubSub) Init(ctx context.Context, metadata contribpubsub.Metadata) error {
 	m.bulkHandlers = make(map[string]contribpubsub.BulkHandler)
 	m.handlers = make(map[string]contribpubsub.Handler)
@@ -1678,6 +1475,7 @@ func (m *mockSubscribePubSub) Init(ctx context.Context, metadata contribpubsub.M
 }
 
 // Publish is a mock publish method. Immediately trigger handler if topic is subscribed.
+
 func (m *mockSubscribePubSub) Publish(ctx context.Context, req *contribpubsub.PublishRequest) error {
 	m.pubCount[req.Topic]++
 	var err error
@@ -1704,6 +1502,7 @@ func (m *mockSubscribePubSub) Publish(ctx context.Context, req *contribpubsub.Pu
 }
 
 // BulkPublish is a mock publish method. Immediately call the handler for each event in request if topic is subscribed.
+
 func (m *mockSubscribePubSub) BulkPublish(_ context.Context, req *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error) {
 	m.bulkPubCount[req.Topic]++
 	res := contribpubsub.BulkPublishResponse{}
@@ -1731,6 +1530,7 @@ func (m *mockSubscribePubSub) BulkPublish(_ context.Context, req *contribpubsub.
 }
 
 // Subscribe is a mock subscribe method.
+
 func (m *mockSubscribePubSub) Subscribe(_ context.Context, req contribpubsub.SubscribeRequest, handler contribpubsub.Handler) error {
 	m.handlers[req.Topic] = handler
 	return nil
@@ -1755,129 +1555,110 @@ func (m *mockSubscribePubSub) GetBulkResponse() contribpubsub.BulkSubscribeRespo
 }
 
 func TestPubSubDeadLetter(t *testing.T) {
+	const testBulkSubscribePubsub = "bulkSubscribePubSub"
 	testDeadLetterPubsub := "failPubsub"
-	pubsubComponent := componentsV1alpha1.Component{
-		ObjectMeta: metav1.ObjectMeta{
-			Name: testDeadLetterPubsub,
-		},
-		Spec: componentsV1alpha1.ComponentSpec{
-			Type:     "pubsub.mockPubSub",
-			Version:  "v1",
-			Metadata: daprt.GetFakeMetadataItems(),
-		},
-	}
 
 	t.Run("succeeded to publish message to dead letter when send message to app returns error", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         true,
-			Channels:       new(channels.Channels),
-		})
-		reg.PubSubs().RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{}
-			},
-			"mockPubSub",
-		)
-
-		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
-			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
+		comp := &mockSubscribePubSub{
+			features: []contribpubsub.Feature{contribpubsub.FeatureBulkPublish},
 		}
-		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawDataBytes(sub).
-			WithContentType("application/json")
-		defer fakeResp.Close()
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
 
-		mockAppChannel := new(channelt.MockAppChannel)
-		ps.channels.WithAppChannel(mockAppChannel)
-		mockAppChannel.
-			On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).
-			Return(fakeResp, nil)
 		// Mock send message to app returns error.
+		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.
 			On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).
 			Return(nil, errors.New("failed to send"))
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		var bulkPublishedCalled string
+		adapter := publisherfake.New().WithBulkPublishFn(func(_ context.Context, req *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error) {
+			bulkPublishedCalled = req.Topic
+			return contribpubsub.BulkPublishResponse{}, nil
+		})
 
-		err := ps.Publish(context.TODO(), &contribpubsub.PublishRequest{
+		ps, err := New(Options{
+			Resiliency: resiliency.New(log),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testBulkSubscribePubsub,
+			Topic:      "topic0",
+			Adapter:    adapter,
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{
+					{Path: "orders"},
+				},
+				DeadLetterTopic: "topic1",
+				BulkSubscribe: &runtimePubsub.BulkSubscribe{
+					Enabled: true,
+				},
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
+
+		err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
 			Topic:      "topic0",
 			Data:       []byte(`{"id":"1"}`),
 		})
 		require.NoError(t, err)
-		pubSub, ok := ps.compStore.GetPubSub(testDeadLetterPubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
-		assert.Equal(t, 1, pubsubIns.pubCount["topic0"])
-		// Ensure the message is sent to dead letter topic.
-		assert.Equal(t, 1, pubsubIns.pubCount["topic1"])
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 3)
+		assert.Equal(t, 1, comp.pubCount["topic0"])
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+		assert.Equal(t, "topic1", bulkPublishedCalled)
 	})
 
 	t.Run("use dead letter with resiliency", func(t *testing.T) {
-		reg := registry.New(registry.NewOptions())
-		ps := New(Options{
-			Registry:       reg.PubSubs(),
-			Meta:           meta.New(meta.Options{}),
-			Resiliency:     resiliency.New(log),
-			ComponentStore: compstore.New(),
-			IsHTTP:         true,
-			Channels:       new(channels.Channels),
-		})
-		ps.resiliency = resiliency.FromConfigurations(logger.NewLogger("test"), daprt.TestResiliency)
-		reg.PubSubs().RegisterComponent(
-			func(_ logger.Logger) contribpubsub.PubSub {
-				return &mockSubscribePubSub{}
-			},
-			"mockPubSub",
-		)
+		comp := &mockSubscribePubSub{}
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
 
-		subscriptionItems := []runtimePubsub.SubscriptionJSON{
-			{PubsubName: testDeadLetterPubsub, Topic: "topic0", DeadLetterTopic: "topic1", Route: "error"},
-			{PubsubName: testDeadLetterPubsub, Topic: "topic1", Route: "success"},
-		}
-		sub, _ := json.Marshal(subscriptionItems)
-		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
-			WithRawDataBytes(sub).
-			WithContentType("application/json")
-		defer fakeResp.Close()
-
-		mockAppChannel := new(channelt.MockAppChannel)
-		ps.channels.WithAppChannel(mockAppChannel)
-		mockAppChannel.
-			On("InvokeMethod", mock.MatchedBy(matchContextInterface), matchDaprRequestMethod("dapr/subscribe")).
-			Return(fakeResp, nil)
 		// Mock send message to app returns error.
+		mockAppChannel := new(channelt.MockAppChannel)
 		mockAppChannel.
 			On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).
 			Return(nil, errors.New("failed to send"))
 
-		require.NoError(t, ps.Init(context.TODO(), pubsubComponent))
-		require.NoError(t, ps.StartSubscriptions(context.TODO()))
+		var publishedCalled string
+		var publishedCount int
+		adapter := publisherfake.New().WithPublishFn(func(_ context.Context, req *contribpubsub.PublishRequest) error {
+			publishedCalled = req.Topic
+			publishedCount++
+			return nil
+		})
 
-		err := ps.Publish(context.TODO(), &contribpubsub.PublishRequest{
+		ps, err := New(Options{
+			Resiliency: resiliency.FromConfigurations(logger.NewLogger("test"), daprt.TestResiliency),
+			IsHTTP:     true,
+			Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+			PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+			AppID:      TestRuntimeConfigID,
+			PubSubName: testDeadLetterPubsub,
+			Topic:      "topic0",
+			Adapter:    adapter,
+			Route: runtimePubsub.Subscription{
+				Rules: []*runtimePubsub.Rule{
+					{Path: "orders"},
+				},
+				DeadLetterTopic: "topic1",
+			},
+		})
+		require.NoError(t, err)
+		t.Cleanup(ps.Stop)
+
+		err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
 			PubsubName: testDeadLetterPubsub,
 			Topic:      "topic0",
 			Data:       []byte(`{"id":"1"}`),
 		})
 		require.NoError(t, err)
-		pubSub, ok := ps.compStore.GetPubSub(testDeadLetterPubsub)
-		require.True(t, ok)
-		pubsubIns := pubSub.Component.(*mockSubscribePubSub)
 		// Consider of resiliency, publish message may retry in some cases, make sure the pub count is greater than 1.
-		assert.GreaterOrEqual(t, pubsubIns.pubCount["topic0"], 1)
+		assert.GreaterOrEqual(t, comp.pubCount["topic0"], 1)
 		// Make sure every message that is sent to topic0 is sent to its dead letter topic1.
-		assert.Equal(t, pubsubIns.pubCount["topic0"], pubsubIns.pubCount["topic1"])
+		assert.Equal(t, comp.pubCount["topic0"], publishedCount)
 		// Except of the one getting config from app, make sure each publish will result to twice subscribe call
-		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1+2*pubsubIns.pubCount["topic0"]+2*pubsubIns.pubCount["topic1"])
+		mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 2*comp.pubCount["topic0"])
+		assert.Equal(t, "topic1", publishedCalled)
 	})
 }
 

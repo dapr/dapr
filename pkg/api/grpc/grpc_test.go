@@ -64,6 +64,7 @@ import (
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	outboxfake "github.com/dapr/dapr/pkg/outbox/fake"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -2379,7 +2380,7 @@ func TestPublishTopic(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	srv.Universal.CompStore().AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
+	srv.Universal.CompStore().AddPubSub("pubsub", &runtimePubsub.PubsubItem{Component: &mock})
 
 	server, lis := startTestServerAPI(srv)
 	defer server.Stop()
@@ -2575,7 +2576,7 @@ func TestBulkPublish(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	fakeAPI.Universal.CompStore().AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
+	fakeAPI.Universal.CompStore().AddPubSub("pubsub", &runtimePubsub.PubsubItem{Component: &mock})
 
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -2753,6 +2754,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -3308,6 +3310,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			Resiliency: res,
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -4149,17 +4152,15 @@ func TestMetadata(t *testing.T) {
 		},
 	}))
 	require.NoError(t, compStore.CommitPendingComponent())
-	compStore.SetSubscriptions([]runtimePubsub.Subscription{
-		{
-			PubsubName:      "test",
-			Topic:           "topic",
-			DeadLetterTopic: "dead",
-			Metadata:        map[string]string{},
-			Rules: []*runtimePubsub.Rule{
-				{
-					Match: &expr.Expr{},
-					Path:  "path",
-				},
+	compStore.SetProgramaticSubscriptions(runtimePubsub.Subscription{
+		PubsubName:      "test",
+		Topic:           "topic",
+		DeadLetterTopic: "dead",
+		Metadata:        map[string]string{},
+		Rules: []*runtimePubsub.Rule{
+			{
+				Match: &expr.Expr{},
+				Path:  "path",
 			},
 		},
 	})
