@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub
+package subscription
 
 import (
 	"context"
@@ -32,66 +32,11 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/dapr/pkg/resiliency"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
-// Publish is an adapter method for the runtime to pre-validate publish requests
-// And then forward them to the Pub/Sub component.
-// This method is used by the HTTP and gRPC APIs.
-func (p *pubsub) Publish(ctx context.Context, req *contribpubsub.PublishRequest) error {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-
-	ps, ok := p.compStore.GetPubSub(req.PubsubName)
-	if !ok {
-		return rtpubsub.NotFoundError{PubsubName: req.PubsubName}
-	}
-
-	if allowed := p.isOperationAllowed(req.PubsubName, req.Topic, ps.ScopedPublishings); !allowed {
-		return rtpubsub.NotAllowedError{Topic: req.Topic, ID: p.id}
-	}
-
-	if ps.NamespaceScoped {
-		req.Topic = p.namespace + req.Topic
-	}
-
-	policyRunner := resiliency.NewRunner[any](ctx,
-		p.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub),
-	)
-	_, err := policyRunner(func(ctx context.Context) (any, error) {
-		return nil, ps.Component.Publish(ctx, req)
-	})
-	return err
-}
-
-func (p *pubsub) BulkPublish(ctx context.Context, req *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error) {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-
-	ps, ok := p.compStore.GetPubSub(req.PubsubName)
-	if !ok {
-		return contribpubsub.BulkPublishResponse{}, rtpubsub.NotFoundError{PubsubName: req.PubsubName}
-	}
-
-	if allowed := p.isOperationAllowed(req.PubsubName, req.Topic, ps.ScopedPublishings); !allowed {
-		return contribpubsub.BulkPublishResponse{}, rtpubsub.NotAllowedError{Topic: req.Topic, ID: p.id}
-	}
-
-	policyDef := p.resiliency.ComponentOutboundPolicy(req.PubsubName, resiliency.Pubsub)
-
-	if contribpubsub.FeatureBulkPublish.IsPresent(ps.Component.Features()) {
-		return rtpubsub.ApplyBulkPublishResiliency(ctx, req, policyDef, ps.Component.(contribpubsub.BulkPublisher))
-	}
-
-	log.Debugf("pubsub %s does not implement the BulkPublish API; falling back to publishing messages individually", req.PubsubName)
-	defaultBulkPublisher := rtpubsub.NewDefaultBulkPublisher(ps.Component)
-
-	return rtpubsub.ApplyBulkPublishResiliency(ctx, req, policyDef, defaultBulkPublisher)
-}
-
-func (p *pubsub) publishMessageHTTP(ctx context.Context, msg *rtpubsub.SubscribedMessage) error {
+func (s *Subscription) publishMessageHTTP(ctx context.Context, msg *rtpubsub.SubscribedMessage) error {
 	cloudEvent := msg.CloudEvent
 
 	var span trace.Span
@@ -110,11 +55,11 @@ func (p *pubsub) publishMessageHTTP(ctx context.Context, msg *rtpubsub.Subscribe
 	if iTraceID != nil {
 		traceID := iTraceID.(string)
 		sc, _ := diag.SpanContextFromW3CString(traceID)
-		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, p.tracingSpec)
+		ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+msg.Topic, sc, s.tracingSpec)
 	}
 
 	start := time.Now()
-	resp, err := p.channels.AppChannel().InvokeMethod(ctx, req, "")
+	resp, err := s.channels.AppChannel().InvokeMethod(ctx, req, "")
 	elapsed := diag.ElapsedSince(start)
 
 	if err != nil {
@@ -184,17 +129,17 @@ func (p *pubsub) publishMessageHTTP(ctx context.Context, msg *rtpubsub.Subscribe
 	return rterrors.NewRetriable(errors.New(errMsg))
 }
 
-func (p *pubsub) publishMessageGRPC(ctx context.Context, msg *rtpubsub.SubscribedMessage) error {
+func (s *Subscription) publishMessageGRPC(ctx context.Context, msg *rtpubsub.SubscribedMessage) error {
 	cloudEvent := msg.CloudEvent
 
-	envelope, span, err := rtpubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, p.tracingSpec)
+	envelope, span, err := rtpubsub.GRPCEnvelopeFromSubscriptionMessage(ctx, msg, log, s.tracingSpec)
 	if err != nil {
 		return err
 	}
 
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, msg.Metadata)
 
-	conn, err := p.grpc.GetAppClient()
+	conn, err := s.grpc.GetAppClient()
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
