@@ -900,6 +900,7 @@ func (x *DeleteJobRequest) GetMetadata() *JobMetadata {
 	return nil
 }
 
+// DeleteJobRequest is the response message used by the daprd sidecar to delete or get a job.
 type DeleteJobResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

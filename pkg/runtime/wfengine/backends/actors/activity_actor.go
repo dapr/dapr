@@ -132,7 +132,10 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 	state, _ := a.loadActivityState(ctx)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 
-	err := a.executeActivity(context.Background(), reminder.Name, state.EventPayload)
+	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
+	defer cancelTimeout()
+
+	err := a.executeActivity(timeoutCtx, reminder.Name, state.EventPayload)
 
 	var recoverableErr *recoverableError
 	// Returning nil signals that we want the execution to be retried in the next period interval

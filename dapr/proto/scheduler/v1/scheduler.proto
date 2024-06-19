@@ -62,7 +62,7 @@ message JobTargetMetadata {
 // job.
 message JobMetadata {
   // app_id is the App ID of the requester.
-	string app_id = 1;
+  string app_id = 1;
 
   // namespace is the namespace of the requester.
   string namespace = 2;
@@ -108,51 +108,52 @@ message WatchJobsResponse {
   // the client to be marked as processed.
   uint64 uuid = 2;
 
-	// Job data.
-	google.protobuf.Any data = 3;
+  // Job data.
+  google.protobuf.Any data = 3;
 
-	// The metadata associated with the job.
-	JobMetadata metadata = 4;
+  // The metadata associated with the job.
+  JobMetadata metadata = 4;
 }
 
 message ScheduleJobRequest {
   // name is the name of the job to create.
   string name = 1;
 
-	// The job to be scheduled.
-	Job job = 2;
+  // The job to be scheduled.
+  Job job = 2;
 
-	// The metadata associated with the job.
-	JobMetadata metadata = 3;
+  // The metadata associated with the job.
+  JobMetadata metadata = 3;
 }
 
 message ScheduleJobResponse {
-	// Empty as of now
+  // Empty
 }
 
 // GetJobRequest is the message used by the daprd sidecar to delete or get a job.
 message GetJobRequest {
   // name is the name of the job.
-	string name = 1;
+  string name = 1;
 
-	// The metadata associated with the job.
-	JobMetadata metadata = 2;
+  // The metadata associated with the job.
+  JobMetadata metadata = 2;
 }
 
 // GetJobResponse is the response message to convey the details of a job.
 message GetJobResponse {
   // The job to be scheduled.
-	Job job = 1;
+  Job job = 1;
 }
 
 // DeleteJobRequest is the message used by the daprd sidecar to delete or get a job.
 message DeleteJobRequest {
-	string name = 1;
+  string name = 1;
 
-	// The metadata associated with the job.
-	JobMetadata metadata = 2;
+  // The metadata associated with the job.
+  JobMetadata metadata = 2;
 }
 
+// DeleteJobRequest is the response message used by the daprd sidecar to delete or get a job.
 message DeleteJobResponse {
-	// Empty as of now
+  // Empty
 }

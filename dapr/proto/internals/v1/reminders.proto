@@ -38,7 +38,7 @@ message Reminders {
 
 // TimerFiredEvent is the event that is sent to the actor when a timer fires.
 message TimerFiredEvent {
-  google.protobuf.Timestamp fireAt = 1;
+  google.protobuf.Timestamp fire_at = 1;
   int32 timerId = 2;
   uint64 generation = 3;
 }

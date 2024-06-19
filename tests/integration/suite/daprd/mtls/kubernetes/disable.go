@@ -32,11 +32,10 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )

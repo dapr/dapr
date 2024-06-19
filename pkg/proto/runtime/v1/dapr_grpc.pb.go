@@ -210,11 +210,11 @@ type DaprClient interface {
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Create and schedule a job
-	ScheduleJobAlpha1(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	ScheduleJobAlpha1(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error)
 	// Gets a scheduled job
 	GetJobAlpha1(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
 	// Delete a job
-	DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
 }
 
 type daprClient struct {
@@ -832,8 +832,8 @@ func (c *daprClient) Shutdown(ctx context.Context, in *ShutdownRequest, opts ...
 	return out, nil
 }
 
-func (c *daprClient) ScheduleJobAlpha1(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) ScheduleJobAlpha1(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error) {
+	out := new(ScheduleJobResponse)
 	err := c.cc.Invoke(ctx, Dapr_ScheduleJobAlpha1_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -850,8 +850,8 @@ func (c *daprClient) GetJobAlpha1(ctx context.Context, in *GetJobRequest, opts .
 	return out, nil
 }
 
-func (c *daprClient) DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
-	out := new(emptypb.Empty)
+func (c *daprClient) DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error) {
+	out := new(DeleteJobResponse)
 	err := c.cc.Invoke(ctx, Dapr_DeleteJobAlpha1_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -976,11 +976,11 @@ type DaprServer interface {
 	// Shutdown the sidecar
 	Shutdown(context.Context, *ShutdownRequest) (*emptypb.Empty, error)
 	// Create and schedule a job
-	ScheduleJobAlpha1(context.Context, *ScheduleJobRequest) (*emptypb.Empty, error)
+	ScheduleJobAlpha1(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error)
 	// Gets a scheduled job
 	GetJobAlpha1(context.Context, *GetJobRequest) (*GetJobResponse, error)
 	// Delete a job
-	DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*emptypb.Empty, error)
+	DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -1152,13 +1152,13 @@ func (UnimplementedDaprServer) RaiseEventWorkflowBeta1(context.Context, *RaiseEv
 func (UnimplementedDaprServer) Shutdown(context.Context, *ShutdownRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
 }
-func (UnimplementedDaprServer) ScheduleJobAlpha1(context.Context, *ScheduleJobRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) ScheduleJobAlpha1(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ScheduleJobAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) GetJobAlpha1(context.Context, *GetJobRequest) (*GetJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method GetJobAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*emptypb.Empty, error) {
+func (UnimplementedDaprServer) DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteJobAlpha1 not implemented")
 }
 

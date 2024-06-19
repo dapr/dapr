@@ -195,13 +195,13 @@ service Dapr {
   rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
 
   // Create and schedule a job
-  rpc ScheduleJobAlpha1(ScheduleJobRequest) returns (google.protobuf.Empty) {}
+  rpc ScheduleJobAlpha1(ScheduleJobRequest) returns (ScheduleJobResponse) {}
 
   // Gets a scheduled job
   rpc GetJobAlpha1(GetJobRequest) returns (GetJobResponse) {}
 
   // Delete a job
-  rpc DeleteJobAlpha1(DeleteJobRequest) returns (google.protobuf.Empty) {}
+  rpc DeleteJobAlpha1(DeleteJobRequest) returns (DeleteJobResponse) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -1192,6 +1192,11 @@ message ScheduleJobRequest {
   Job job = 1;
 }
 
+// ScheduleJobResponse is the message response to create/schedule the job.
+message ScheduleJobResponse {
+  // Empty
+}
+
 // GetJobRequest is the message to retrieve a job.
 message GetJobRequest {
   // The name of the job.
@@ -1208,4 +1213,9 @@ message GetJobResponse {
 message DeleteJobRequest {
   // The name of the job.
   string name = 1;
+}
+
+// DeleteJobResponse is the message response to delete the job by name.
+message DeleteJobResponse {
+  // Empty
 }

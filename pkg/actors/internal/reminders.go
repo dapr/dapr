@@ -33,7 +33,6 @@ type LookupActorFn func(ctx context.Context, actorType string, actorID string) (
 type StateStoreProviderFn func() (string, TransactionalStateStore, error)
 
 // RemindersProvider is the interface for the object that provides reminders services.
-// Deprecated: this will be removed after we have migrated to Scheduler Service.
 type RemindersProvider interface {
 	io.Closer
 

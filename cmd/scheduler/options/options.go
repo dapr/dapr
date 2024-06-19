@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -58,21 +58,6 @@ type Options struct {
 }
 
 func New(origArgs []string) (*Options, error) {
-	// We are using pflag to parse the CLI flags
-	// pflag is a drop-in replacement for the standard library's "flag" package, however…
-	// There's one key difference: with the stdlib's "flag" package, there are no short-hand options so options can be defined with a single slash (such as "daprd -mode").
-	// With pflag, single slashes are reserved for shorthands.
-	// So, we are doing this thing where we iterate through all args and double-up the slash if it's single
-	// This works *as long as* we don't start using shorthand flags (which haven't been in use so far).
-	args := make([]string, len(origArgs))
-	for i, a := range origArgs {
-		if len(a) > 2 && a[0] == '-' && a[1] != '-' {
-			args[i] = "-" + a
-		} else {
-			args[i] = a
-		}
-	}
-
 	var opts Options
 
 	// Create a flag set
@@ -107,7 +92,7 @@ func New(origArgs []string) (*Options, error) {
 	opts.Metrics = metrics.DefaultMetricOptions()
 	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
-	_ = fs.Parse(args)
+	_ = fs.Parse(origArgs)
 
 	replicaID, err := strconv.ParseUint(opts.ID, 10, 32)
 	if err != nil {

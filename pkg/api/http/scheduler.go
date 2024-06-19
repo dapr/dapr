@@ -18,7 +18,6 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
@@ -69,7 +68,7 @@ func (a *api) constructSchedulerEndpoints() []endpoints.Endpoint {
 func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.ScheduleJobAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.ScheduleJobRequest, *emptypb.Empty]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.ScheduleJobRequest, *runtimev1pb.ScheduleJobResponse]{
 			InModifier: func(r *http.Request, in *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobRequest, error) {
 				// Users should set the name in the url, and not in the url and body
 				name := strings.TrimSpace(chi.URLParam(r, nameParam))
@@ -88,7 +87,7 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 
 				return in, nil
 			},
-			OutModifier: func(out *emptypb.Empty) (any, error) {
+			OutModifier: func(out *runtimev1pb.ScheduleJobResponse) (any, error) {
 				// Nullify the response so status code is 204
 				return nil, nil // empty body
 			},
@@ -99,14 +98,14 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 func (a *api) onDeleteJobHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.DeleteJobAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.DeleteJobRequest, *emptypb.Empty]{
+		UniversalHTTPHandlerOpts[*runtimev1pb.DeleteJobRequest, *runtimev1pb.DeleteJobResponse]{
 			SkipInputBody: true,
 			InModifier: func(r *http.Request, in *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobRequest, error) {
 				name := chi.URLParam(r, "name")
 				in.Name = name
 				return in, nil
 			},
-			OutModifier: func(out *emptypb.Empty) (any, error) {
+			OutModifier: func(out *runtimev1pb.DeleteJobResponse) (any, error) {
 				// Nullify the response so status code is 204
 				return nil, nil // empty body
 			},

@@ -17,14 +17,12 @@ import (
 	"context"
 	"strings"
 
-	"google.golang.org/protobuf/types/known/emptypb"
-
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*emptypb.Empty, error) {
+func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
@@ -33,16 +31,16 @@ func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.Sc
 	job := inReq.GetJob()
 
 	if job == nil {
-		return &emptypb.Empty{}, apierrors.Empty("Job", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
+		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Job", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
 	}
 
 	if job.GetName() == "" || strings.Contains(job.GetName(), "|") {
-		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
+		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
 	//nolint:protogetter
 	if job.Schedule == nil && job.DueTime == nil {
-		return &emptypb.Empty{}, apierrors.Empty("Schedule", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty))
+		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Schedule", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty))
 	}
 
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
@@ -68,13 +66,13 @@ func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.Sc
 	_, err := a.schedulerClients.Next().ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
 		a.logger.Errorf("Error scheduling job %s", inReq.GetJob().GetName())
-		return &emptypb.Empty{}, apierrors.SchedulerScheduleJob(errMetadata, err)
+		return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerScheduleJob(errMetadata, err)
 	}
 
-	return &emptypb.Empty{}, nil
+	return &runtimev1pb.ScheduleJobResponse{}, nil
 }
 
-func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*emptypb.Empty, error) {
+func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.DeleteJobRequest) (*runtimev1pb.DeleteJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
@@ -82,7 +80,7 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 
 	if inReq.GetName() == "" {
 		a.logger.Error("Job name is empty.")
-		return &emptypb.Empty{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
+		return &runtimev1pb.DeleteJobResponse{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
 	internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
@@ -101,10 +99,10 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 	_, err := a.schedulerClients.Next().DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
 		a.logger.Errorf("Error deleting job: %s", inReq.GetName())
-		return &emptypb.Empty{}, apierrors.SchedulerDeleteJob(errMetadata, err)
+		return &runtimev1pb.DeleteJobResponse{}, apierrors.SchedulerDeleteJob(errMetadata, err)
 	}
 
-	return &emptypb.Empty{}, nil
+	return &runtimev1pb.DeleteJobResponse{}, nil
 }
 
 func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobRequest) (*runtimev1pb.GetJobResponse, error) {
