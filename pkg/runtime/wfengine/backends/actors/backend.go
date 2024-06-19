@@ -241,26 +241,34 @@ func (abe *ActorBackend) GetOrchestrationMetadata(ctx context.Context, id api.In
 
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
-func (*ActorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (a *ActorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	wfLogger.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
 	// Sending false signals the waiting activity actor to abort the activity execution.
-	if channel, ok := wi.Properties[CallbackChannelProperty]; ok {
-		channel.(chan bool) <- false
-	}
-	return nil
+	fmt.Printf(">>%s\n", wi.InstanceID)
+	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
+		ActorType: a.config.activityActorType,
+		ActorID:   string(wi.InstanceID),
+		Data:      []byte(`"failed"`),
+		DueTime:   "0s",
+		Name:      "run-activity-sync",
+	})
 }
 
 // AbandonOrchestrationWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow orchestration execution pipeline.
-func (*ActorBackend) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (a *ActorBackend) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 	wfLogger.Warnf("%s: aborting workflow execution", wi.InstanceID)
 
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
-	if channel, ok := wi.Properties[CallbackChannelProperty]; ok {
-		channel.(chan bool) <- false
-	}
-	return nil
+	fmt.Printf(">>%s\n", wi.InstanceID)
+	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
+		ActorType: a.config.activityActorType,
+		ActorID:   string(wi.InstanceID),
+		Data:      []byte(`"failed"`),
+		DueTime:   "0s",
+		Name:      "run-activity-sync",
+	})
 }
 
 // AddNewOrchestrationEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
@@ -291,17 +299,29 @@ func (abe *ActorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.In
 }
 
 // CompleteActivityWorkItem implements backend.Backend
-func (*ActorBackend) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (a *ActorBackend) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	// Sending true signals the waiting activity actor to complete the execution normally.
-	wi.Properties[CallbackChannelProperty].(chan bool) <- true
-	return nil
+	fmt.Printf(">>%s\n", wi.InstanceID)
+	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
+		ActorType: a.config.activityActorType,
+		ActorID:   string(wi.InstanceID),
+		Data:      []byte(`"completed"`),
+		DueTime:   "0s",
+		Name:      "run-activity-sync",
+	})
 }
 
 // CompleteOrchestrationWorkItem implements backend.Backend
-func (*ActorBackend) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (a *ActorBackend) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 	// Sending true signals the waiting workflow actor to complete the execution normally.
-	wi.Properties[CallbackChannelProperty].(chan bool) <- true
-	return nil
+	fmt.Printf(">>%s\n", wi.InstanceID)
+	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
+		ActorType: a.config.activityActorType,
+		ActorID:   string(wi.InstanceID),
+		Data:      []byte(`"completed"`),
+		DueTime:   "0s",
+		Name:      "run-activity-sync",
+	})
 }
 
 // CreateTaskHub implements backend.Backend
