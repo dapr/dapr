@@ -75,6 +75,11 @@ func Test_WatchUpdates(t *testing.T) {
 			},
 			operator.ResourceEventType_UPDATED,
 		)
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 1, int(i.batchID.Load()))
+		}, 5*time.Second, 100*time.Millisecond)
+
 		i.handleEvent(context.Background(),
 			&compapi.Component{
 				ObjectMeta: metav1.ObjectMeta{Name: "comp1", Namespace: "ns1"},
@@ -86,6 +91,11 @@ func Test_WatchUpdates(t *testing.T) {
 			},
 			operator.ResourceEventType_UPDATED,
 		)
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 2, int(i.batchID.Load()))
+		}, 5*time.Second, 100*time.Millisecond)
+
 		i.handleEvent(context.Background(),
 			nil,
 			&compapi.Component{
@@ -93,6 +103,10 @@ func Test_WatchUpdates(t *testing.T) {
 			},
 			operator.ResourceEventType_CREATED,
 		)
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 3, int(i.batchID.Load()))
+		}, 5*time.Second, 100*time.Millisecond)
 
 		for _, appCh := range []<-chan *Event[compapi.Component]{appCh1, appCh2} {
 			for _, exp := range []*Event[compapi.Component]{

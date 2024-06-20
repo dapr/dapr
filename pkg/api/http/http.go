@@ -47,6 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/outbox"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -70,6 +71,7 @@ type api struct {
 	directMessaging       invokev1.DirectMessaging
 	channels              *channels.Channels
 	pubsubAdapter         runtimePubsub.Adapter
+	outbox                outbox.Outbox
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	readyStatus           bool
 	outboundReadyStatus   bool
@@ -112,7 +114,8 @@ type APIOpts struct {
 	Universal             *universal.Universal
 	Channels              *channels.Channels
 	DirectMessaging       invokev1.DirectMessaging
-	PubsubAdapter         runtimePubsub.Adapter
+	PubSubAdapter         runtimePubsub.Adapter
+	Outbox                outbox.Outbox
 	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec           config.TracingSpec
 	MetricSpec            *config.MetricSpec
@@ -125,7 +128,8 @@ func NewAPI(opts APIOpts) API {
 		universal:             opts.Universal,
 		channels:              opts.Channels,
 		directMessaging:       opts.DirectMessaging,
-		pubsubAdapter:         opts.PubsubAdapter,
+		pubsubAdapter:         opts.PubSubAdapter,
+		outbox:                opts.Outbox,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		metricSpec:            opts.MetricSpec,
@@ -1577,11 +1581,11 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
-	outboxEnabled := a.pubsubAdapter.Outbox().Enabled(storeName)
+	outboxEnabled := a.outbox.Enabled(storeName)
 	if outboxEnabled {
 		span := diagUtils.SpanFromContext(reqCtx)
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
-		ops, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID(), corID, traceState)
+		ops, err := a.outbox.PublishInternal(reqCtx, storeName, operations, a.universal.AppID(), corID, traceState)
 		if err != nil {
 			nerr := apierrors.PubSubOutbox(a.universal.AppID(), err)
 			universalFastHTTPErrorResponder(reqCtx, nerr)
