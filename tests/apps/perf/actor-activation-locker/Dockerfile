@@ -19,7 +19,7 @@ COPY . .
 RUN go get -d -v
 RUN go build -o app .
 
-FROM gcr.io/distroless/static:nonroot
+FROM ggcr.io/distroless/base-nossl:nonroot
 WORKDIR /
 COPY --from=build_env /app/app /
 CMD ["/app"]
