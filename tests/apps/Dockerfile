@@ -11,7 +11,7 @@
 # limitations under the License.
 #
 
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/base-nossl:nonroot
 
 WORKDIR /app
 COPY . .
