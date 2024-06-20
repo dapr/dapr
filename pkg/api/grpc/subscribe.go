@@ -70,9 +70,8 @@ func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1
 		return errors.New("topic is required")
 	}
 
-	// TODO: @joshvanl: handle duplicate key names.
 	key := a.pubsubAdapterStreamer.StreamerKey(req.GetPubsubName(), req.GetTopic())
-	a.Universal.CompStore().AddStreamSubscription(&subapi.Subscription{
+	err = a.Universal.CompStore().AddStreamSubscription(&subapi.Subscription{
 		ObjectMeta: metav1.ObjectMeta{Name: key},
 		Spec: subapi.SubscriptionSpec{
 			Pubsubname:      req.GetPubsubName(),
@@ -82,17 +81,18 @@ func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1
 			Routes:          subapi.Routes{Default: "/"},
 		},
 	})
+	if err != nil {
+		return err
+	}
 
-	if err := a.processor.Subscriber().ReloadPubSub(req.GetPubsubName()); err != nil {
+	if err := a.processor.Subscriber().StartStreamerSubscription(key); err != nil {
 		a.Universal.CompStore().DeleteStreamSubscription(key)
 		return err
 	}
 
 	defer func() {
+		a.processor.Subscriber().StopStreamerSubscription(req.GetPubsubName(), key)
 		a.Universal.CompStore().DeleteStreamSubscription(key)
-		if err := a.processor.Subscriber().ReloadPubSub(req.GetPubsubName()); err != nil {
-			a.logger.Errorf("Error reloading subscriptions after gRPC Subscribe shutdown: %s", err)
-		}
 	}()
 
 	return a.pubsubAdapterStreamer.Subscribe(stream, req)
