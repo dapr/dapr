@@ -175,7 +175,9 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 			case raft.TableDisseminate:
 				// TableDisseminate will be triggered by disseminateTimer.
 				// This disseminates the latest consistent hashing tables to Dapr runtime.
-				p.performTableDissemination(ctx, op.host.Namespace)
+				if err := p.performTableDissemination(ctx, op.host.Namespace); err != nil {
+					log.Errorf("fail to perform table dissemination. Details: %v", err)
+				}
 			}
 		}
 	}
