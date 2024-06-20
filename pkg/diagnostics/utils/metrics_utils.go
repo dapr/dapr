@@ -34,7 +34,7 @@ var StaticPaths = map[string]bool{
 	"/healthz":        true,
 }
 
-var ValidHTTPMethods = map[string]bool{
+var ValidHTTPVerbs = map[string]bool{
 	"GET":     true,
 	"PUT":     true,
 	"POST":    true,
@@ -44,13 +44,6 @@ var ValidHTTPMethods = map[string]bool{
 	"OPTIONS": true,
 	"CONNECT": true,
 	"TRACE":   true,
-}
-
-func GetMetricsMethod(method string) string {
-	if _, ok := ValidHTTPMethods[method]; !ok {
-		return "UNKNOWN"
-	}
-	return method
 }
 
 type regexPair struct {

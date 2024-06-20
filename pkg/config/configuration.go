@@ -271,6 +271,15 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	return *m.HTTP.IncreasedCardinality
 }
 
+// GetHTTPExcludeVerbs returns true if exclude verbs is enabled for HTTP metrics
+func (m MetricSpec) GetHTTPExcludeVerbs() bool {
+	if m.HTTP == nil || m.HTTP.ExcludeVerbs == nil {
+		// The default is false
+		return false
+	}
+	return *m.HTTP.ExcludeVerbs
+}
+
 // GetHTTPPathMatching returns the path matching configuration for HTTP metrics
 func (m MetricSpec) GetHTTPPathMatching() []string {
 	if m.HTTP == nil {
@@ -284,6 +293,13 @@ type MetricHTTP struct {
 	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
 	IncreasedCardinality *bool    `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
 	PathMatching         []string `json:"pathMatching,omitempty" yaml:"pathMatching,omitempty"`
+	ExcludeVerbs         *bool    `json:"excludeVerbs,omitempty" yaml:"excludeVerbs,omitempty"`
+}
+
+// PathMatching defines configuration options for path matching.
+type PathMatching struct {
+	IngressPaths []string `json:"ingress,omitempty" yaml:"ingress,omitempty"`
+	EgressPaths  []string `json:"egress,omitempty" yaml:"egress,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.

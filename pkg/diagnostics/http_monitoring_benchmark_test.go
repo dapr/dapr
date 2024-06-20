@@ -30,7 +30,8 @@ const (
 
 func BenchmarkHTTPMiddlewareLowCardinalityNoPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	testHTTP.Init("fakeID", nil, false)
+	configHTTP := NewHTTPMonitoringConfig(nil, false, true)
+	testHTTP.Init("fakeID", configHTTP)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)
@@ -46,7 +47,8 @@ func BenchmarkHTTPMiddlewareLowCardinalityNoPathMatching(b *testing.B) {
 
 func BenchmarkHTTPMiddlewareHighCardinalityNoPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	testHTTP.Init("fakeID", nil, true)
+	configHTTP := NewHTTPMonitoringConfig(nil, true, true)
+	testHTTP.Init("fakeID", configHTTP)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)
@@ -63,7 +65,9 @@ func BenchmarkHTTPMiddlewareHighCardinalityNoPathMatching(b *testing.B) {
 func BenchmarkHTTPMiddlewareLowCardinalityWithPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
 	pathMatching := []string{"/invoke/method/orders/{orderID}"}
-	testHTTP.Init("fakeID", pathMatching, false)
+
+	configHTTP := NewHTTPMonitoringConfig(pathMatching, false, true)
+	testHTTP.Init("fakeID", configHTTP)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)
@@ -80,7 +84,7 @@ func BenchmarkHTTPMiddlewareLowCardinalityWithPathMatching(b *testing.B) {
 func BenchmarkHTTPMiddlewareHighCardinalityWithPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
 	pathMatching := []string{"/invoke/method/orders/{orderID}"}
-	testHTTP.Init("fakeID", pathMatching, true)
+	testHTTP.Init("fakeID", HTTPMonitoringConfig{pathMatching: pathMatching, legacy: true})
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)

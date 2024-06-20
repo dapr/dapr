@@ -67,6 +67,8 @@ type httpMetrics struct {
 	// Enable legacy metrics, which includes the full path
 	legacy bool
 
+	excludeVerbs bool
+
 	pathMatcher *pathMatching
 }
 
@@ -138,13 +140,23 @@ func (h *httpMetrics) getMetricsPath(path string) string {
 	return path
 }
 
+func (h *httpMetrics) getMetricsMethod(method string) string {
+	if h.excludeVerbs {
+		return ""
+	}
+	if _, ok := diagUtils.ValidHTTPVerbs[method]; !ok {
+		return "UNKNOWN"
+	}
+	return method
+}
+
 func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, status string, reqContentSize, resContentSize int64, elapsed float64) {
 	if !h.IsEnabled() {
 		return
 	}
 
 	path = h.getMetricsPath(path)
-	method = diagUtils.GetMetricsMethod(method)
+	method = h.getMetricsMethod(method)
 
 	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
@@ -183,7 +195,7 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 	}
 
 	path = h.getMetricsPath(path)
-	method = diagUtils.GetMetricsMethod(method)
+	method = h.getMetricsMethod(method)
 
 	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
@@ -204,7 +216,7 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 	}
 
 	path = h.getMetricsPath(path)
-	method = diagUtils.GetMetricsMethod(method)
+	method = h.getMetricsMethod(method)
 
 	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
@@ -253,13 +265,28 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		h.healthProbeRoundTripLatency.M(elapsed))
 }
 
-func (h *httpMetrics) Init(appID string, paths []string, legacy bool) error {
+type HTTPMonitoringConfig struct {
+	pathMatching []string
+	legacy       bool
+	excludeVerbs bool
+}
+
+func NewHTTPMonitoringConfig(pathMatching []string, legacy bool, excludeVerbs bool) HTTPMonitoringConfig {
+	return HTTPMonitoringConfig{
+		pathMatching: pathMatching,
+		legacy:       legacy,
+		excludeVerbs: excludeVerbs,
+	}
+}
+
+func (h *httpMetrics) Init(appID string, config HTTPMonitoringConfig) error {
 	h.appID = appID
 	h.enabled = true
-	h.legacy = legacy
+	h.legacy = config.legacy
+	h.excludeVerbs = config.excludeVerbs
 
-	if paths != nil {
-		h.pathMatcher = newPathMatching(paths, legacy)
+	if config.pathMatching != nil {
+		h.pathMatcher = newPathMatching(config.pathMatching, config.legacy)
 	}
 
 	tags := []tag.Key{appIDKey}
@@ -315,6 +342,6 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		respSize := int64(rw.Size())
 
 		// Record the request
-		h.ServerRequestCompleted(r.Context(), diagUtils.GetMetricsMethod(r.Method), path, status, reqContentSize, respSize, elapsed)
+		h.ServerRequestCompleted(r.Context(), h.getMetricsMethod(r.Method), path, status, reqContentSize, respSize, elapsed)
 	})
 }
