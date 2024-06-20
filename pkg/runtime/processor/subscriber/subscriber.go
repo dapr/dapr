@@ -58,13 +58,18 @@ type Subscriber struct {
 	adapter         rtpubsub.Adapter
 	adapterStreamer rtpubsub.AdapterStreamer
 
-	appSubs      map[string][]*subscription.Subscription
-	streamSubs   map[string][]*subscription.Subscription
+	appSubs      map[string][]*namedSubscription
+	streamSubs   map[string][]*namedSubscription
 	appSubActive bool
 	hasInitProg  bool
 	lock         sync.RWMutex
 	running      atomic.Bool
 	closed       bool
+}
+
+type namedSubscription struct {
+	name *string
+	*subscription.Subscription
 }
 
 var log = logger.NewLogger("dapr.runtime.processor.subscription")
@@ -81,8 +86,8 @@ func New(opts Options) *Subscriber {
 		compStore:       opts.CompStore,
 		adapter:         opts.Adapter,
 		adapterStreamer: opts.AdapterStreamer,
-		appSubs:         make(map[string][]*subscription.Subscription),
-		streamSubs:      make(map[string][]*subscription.Subscription),
+		appSubs:         make(map[string][]*namedSubscription),
+		streamSubs:      make(map[string][]*namedSubscription),
 	}
 }
 
@@ -120,6 +125,97 @@ func (s *Subscriber) ReloadPubSub(name string) error {
 	return errors.Join(errs...)
 }
 
+func (s *Subscriber) StartStreamerSubscription(key string) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if s.closed {
+		return nil
+	}
+
+	sub, ok := s.compStore.GetStreamSubscription(key)
+	if !ok {
+		return nil
+	}
+
+	pubsub, ok := s.compStore.GetPubSub(sub.PubsubName)
+	if !ok {
+		return nil
+	}
+
+	ss, err := s.startSubscription(pubsub, sub, true)
+	if err != nil {
+		return fmt.Errorf("failed to create subscription for %s: %s", sub.PubsubName, err)
+	}
+
+	s.streamSubs[sub.PubsubName] = append(s.streamSubs[sub.PubsubName], &namedSubscription{
+		name:         &key,
+		Subscription: ss,
+	})
+
+	return nil
+}
+
+func (s *Subscriber) StopStreamerSubscription(pubsubName, key string) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if s.closed {
+		return
+	}
+
+	for i, sub := range s.streamSubs[pubsubName] {
+		if sub.name != nil && *sub.name == key {
+			sub.Stop()
+			s.streamSubs[pubsubName] = append(s.streamSubs[pubsubName][:i], s.streamSubs[pubsubName][i+1:]...)
+			return
+		}
+	}
+}
+
+func (s *Subscriber) ReloadDeclaredAppSubscription(name, pubsubName string) error {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+	if s.closed {
+		return nil
+	}
+
+	for i, appsub := range s.appSubs[pubsubName] {
+		if appsub.name != nil && name == *appsub.name {
+			appsub.Stop()
+			s.appSubs[pubsubName] = append(s.appSubs[pubsubName][:i], s.appSubs[pubsubName][i+1:]...)
+			break
+		}
+	}
+
+	ps, ok := s.compStore.GetPubSub(pubsubName)
+	if !ok {
+		return nil
+	}
+
+	sub, ok := s.compStore.GetDeclarativeSubscription(name)
+	if !ok {
+		return nil
+	}
+
+	if !rtpubsub.IsOperationAllowed(sub.Topic, ps, ps.ScopedSubscriptions) {
+		return nil
+	}
+
+	ss, err := s.startSubscription(ps, sub.NamedSubscription, false)
+	if err != nil {
+		return fmt.Errorf("failed to create subscription for %s: %s", sub.PubsubName, err)
+	}
+
+	s.appSubs[sub.PubsubName] = append(s.appSubs[sub.PubsubName], &namedSubscription{
+		name:         &name,
+		Subscription: ss,
+	})
+
+	return nil
+}
+
 func (s *Subscriber) StopPubSub(name string) {
 	s.lock.Lock()
 	defer s.lock.Unlock()
@@ -154,33 +250,22 @@ func (s *Subscriber) StartAppSubscriptions() error {
 			sub.Stop()
 		}
 	}
-	s.appSubs = make(map[string][]*subscription.Subscription)
+	s.appSubs = make(map[string][]*namedSubscription)
 
 	var errs []error
 	for name, ps := range s.compStore.ListPubSubs() {
 		ps := ps
 		for _, sub := range s.compStore.ListSubscriptionsAppByPubSub(name) {
-			sub := sub
-			ss, err := subscription.New(subscription.Options{
-				AppID:      s.appID,
-				Namespace:  s.namespace,
-				PubSubName: sub.PubsubName,
-				Topic:      sub.Topic,
-				IsHTTP:     s.isHTTP,
-				PubSub:     ps,
-				Resiliency: s.resiliency,
-				TraceSpec:  s.tracingSpec,
-				Route:      sub,
-				Channels:   s.channels,
-				GRPC:       s.grpc,
-				Adapter:    s.adapter,
-			})
+			ss, err := s.startSubscription(ps, sub, false)
 			if err != nil {
 				errs = append(errs, err)
 				continue
 			}
 
-			s.appSubs[name] = append(s.appSubs[name], ss)
+			s.appSubs[name] = append(s.appSubs[name], &namedSubscription{
+				name:         sub.Name,
+				Subscription: ss,
+			})
 		}
 	}
 
@@ -203,7 +288,7 @@ func (s *Subscriber) StopAppSubscriptions() {
 		}
 	}
 
-	s.appSubs = make(map[string][]*subscription.Subscription)
+	s.appSubs = make(map[string][]*namedSubscription)
 }
 
 func (s *Subscriber) StopAllSubscriptionsForever() {
@@ -223,8 +308,8 @@ func (s *Subscriber) StopAllSubscriptionsForever() {
 		}
 	}
 
-	s.appSubs = make(map[string][]*subscription.Subscription)
-	s.streamSubs = make(map[string][]*subscription.Subscription)
+	s.appSubs = make(map[string][]*namedSubscription)
+	s.streamSubs = make(map[string][]*namedSubscription)
 }
 
 func (s *Subscriber) InitProgramaticSubscriptions(ctx context.Context) error {
@@ -243,30 +328,19 @@ func (s *Subscriber) reloadPubSubStream(name string, pubsub *rtpubsub.PubsubItem
 		return nil
 	}
 
-	subs := make([]*subscription.Subscription, 0, len(s.compStore.ListSubscriptionsStreamByPubSub(name)))
+	subs := make([]*namedSubscription, 0, len(s.compStore.ListSubscriptionsStreamByPubSub(name)))
 	var errs []error
 	for _, sub := range s.compStore.ListSubscriptionsStreamByPubSub(name) {
-		ss, err := subscription.New(subscription.Options{
-			AppID:           s.appID,
-			Namespace:       s.namespace,
-			PubSubName:      name,
-			Topic:           sub.Topic,
-			IsHTTP:          s.isHTTP,
-			PubSub:          pubsub,
-			Resiliency:      s.resiliency,
-			TraceSpec:       s.tracingSpec,
-			Route:           sub,
-			Channels:        s.channels,
-			GRPC:            s.grpc,
-			Adapter:         s.adapter,
-			AdapterStreamer: s.adapterStreamer,
-		})
+		ss, err := s.startSubscription(pubsub, sub, true)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to create subscription for %s: %s", name, err))
 			continue
 		}
 
-		subs = append(subs, ss)
+		subs = append(subs, &namedSubscription{
+			name:         sub.Name,
+			Subscription: ss,
+		})
 	}
 
 	s.streamSubs[name] = subs
@@ -290,28 +364,18 @@ func (s *Subscriber) reloadPubSubApp(name string, pubsub *rtpubsub.PubsubItem) e
 	}
 
 	var errs []error
-	subs := make([]*subscription.Subscription, 0, len(s.compStore.ListSubscriptionsAppByPubSub(name)))
+	subs := make([]*namedSubscription, 0, len(s.compStore.ListSubscriptionsAppByPubSub(name)))
 	for _, sub := range s.compStore.ListSubscriptionsAppByPubSub(name) {
-		ss, err := subscription.New(subscription.Options{
-			AppID:      s.appID,
-			Namespace:  s.namespace,
-			PubSubName: name,
-			Topic:      sub.Topic,
-			IsHTTP:     s.isHTTP,
-			PubSub:     pubsub,
-			Resiliency: s.resiliency,
-			TraceSpec:  s.tracingSpec,
-			Route:      sub,
-			Channels:   s.channels,
-			GRPC:       s.grpc,
-			Adapter:    s.adapter,
-		})
+		ss, err := s.startSubscription(pubsub, sub, false)
 		if err != nil {
 			errs = append(errs, fmt.Errorf("failed to create subscription for %s: %s", name, err))
 			continue
 		}
 
-		subs = append(subs, ss)
+		subs = append(subs, &namedSubscription{
+			name:         sub.Name,
+			Subscription: ss,
+		})
 	}
 
 	s.appSubs[name] = subs
@@ -369,4 +433,26 @@ func (s *Subscriber) initProgramaticSubscriptions(ctx context.Context) error {
 	s.compStore.SetProgramaticSubscriptions(subscriptions...)
 
 	return nil
+}
+
+func (s *Subscriber) startSubscription(pubsub *rtpubsub.PubsubItem, comp *compstore.NamedSubscription, isStreamer bool) (*subscription.Subscription, error) {
+	var streamer rtpubsub.AdapterStreamer
+	if isStreamer {
+		streamer = s.adapterStreamer
+	}
+	return subscription.New(subscription.Options{
+		AppID:           s.appID,
+		Namespace:       s.namespace,
+		PubSubName:      comp.PubsubName,
+		Topic:           comp.Topic,
+		IsHTTP:          s.isHTTP,
+		PubSub:          pubsub,
+		Resiliency:      s.resiliency,
+		TraceSpec:       s.tracingSpec,
+		Route:           comp.Subscription,
+		Channels:        s.channels,
+		GRPC:            s.grpc,
+		Adapter:         s.adapter,
+		AdapterStreamer: streamer,
+	})
 }
