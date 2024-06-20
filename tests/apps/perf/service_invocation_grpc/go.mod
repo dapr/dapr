@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/perf/service_invocation_grpc
 
-go 1.22
+go 1.22.3
 
 require github.com/dapr/go-sdk v1.8.0
 
