@@ -22,6 +22,9 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
 	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -79,7 +82,12 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 	for {
 		resp, err := stream.Recv()
 
-		if errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) {
+		s, ok := status.FromError(err)
+
+		if (ok && s.Code() == codes.Canceled) ||
+			errors.Is(err, context.Canceled) ||
+			errors.Is(err, io.EOF) {
+			log.Infof("Unsubscribed from pubsub '%s' topic '%s'", req.GetPubsubName(), req.GetTopic())
 			return err
 		}
 
@@ -92,7 +100,6 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 		if eventResp == nil {
 			return errors.New("duplicate initial request received")
 		}
-
 		wg.Add(1)
 		go func() {
 			defer wg.Done()
@@ -119,7 +126,9 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 	defer defFn()
 
 	start := time.Now()
+	conn.streamLock.Lock()
 	err = conn.stream.Send(envelope)
+	conn.streamLock.Unlock()
 	elapsed := diag.ElapsedSince(start)
 
 	if span != nil {
