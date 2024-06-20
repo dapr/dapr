@@ -33,9 +33,6 @@ func (p *Processor) AddPendingSubscription(ctx context.Context, subscriptions ..
 		return true
 	}
 
-	// TODO: @joshvanl: also index by subscription so entire pubsub doesn't need
-	// to be reloaded.
-	pubsubsToReload := make(map[string]struct{})
 	for i := range scopedSubs {
 		comp := scopedSubs[i]
 		sub := rtpubsub.Subscription{
@@ -65,16 +62,8 @@ func (p *Processor) AddPendingSubscription(ctx context.Context, subscriptions ..
 		}
 
 		p.compStore.AddDeclarativeSubscription(&comp, sub)
-		pubsubsToReload[comp.Spec.Pubsubname] = struct{}{}
-	}
-
-	for pubsubName := range pubsubsToReload {
-		if err := p.subscriber.ReloadPubSub(pubsubName); err != nil {
-			names := make([]string, len(scopedSubs))
-			for i, sub := range scopedSubs {
-				names[i] = sub.Name
-			}
-			p.compStore.DeleteDeclarativeSubscription(names...)
+		if err := p.subscriber.ReloadDeclaredAppSubscription(comp.Name, comp.Spec.Pubsubname); err != nil {
+			p.compStore.DeleteDeclarativeSubscription(comp.Name)
 			p.errorSubscriptions(ctx, err)
 			return false
 		}
@@ -101,9 +90,7 @@ func (p *Processor) CloseSubscription(ctx context.Context, sub *subapi.Subscript
 		return nil
 	}
 	p.compStore.DeleteDeclarativeSubscription(sub.Name)
-	// TODO: @joshvanl: also index by subscription so entire pubsub doesn't need
-	// to be reloaded.
-	if err := p.subscriber.ReloadPubSub(sub.Spec.Pubsubname); err != nil {
+	if err := p.subscriber.ReloadDeclaredAppSubscription(sub.Name, sub.Spec.Pubsubname); err != nil {
 		return err
 	}
 	return nil
