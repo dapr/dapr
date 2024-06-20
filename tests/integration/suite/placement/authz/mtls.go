@@ -145,7 +145,7 @@ func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementCli
 
 		err = stream.Send(firstMessage)
 		return err == nil
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 
 	_, err = stream.Recv()
 
