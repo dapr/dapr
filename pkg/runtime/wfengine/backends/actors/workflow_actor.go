@@ -80,11 +80,11 @@ func NewDurableTimer(bytes []byte, generation uint64) durableTimer {
 	return durableTimer{bytes, generation}
 }
 
-func newRecoverableError(err error) recoverableError {
-	return recoverableError{cause: err}
+func newRecoverableError(err error) *recoverableError {
+	return &recoverableError{cause: err}
 }
 
-func (err recoverableError) Error() string {
+func (err *recoverableError) Error() string {
 	return err.cause.Error()
 }
 
@@ -158,7 +158,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 
 	// We delete the reminder on success and on non-recoverable errors.
 	// Returning nil signals that we want the execution to be retried in the next period interval
-	var re recoverableError
+	var re *recoverableError
 	switch {
 	case err == nil:
 		return actors.ErrReminderCanceled
