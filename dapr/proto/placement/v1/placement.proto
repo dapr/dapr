@@ -52,4 +52,5 @@ message Host {
   string pod = 6;
   // Version of the Actor APIs supported by the Dapr runtime
   uint32 api_level = 7;
+  string namespace = 8;
 }

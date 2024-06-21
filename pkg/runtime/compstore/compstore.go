@@ -46,13 +46,12 @@ type ComponentStore struct {
 	inputBindingRoutes      map[string]string
 	outputBindings          map[string]bindings.OutputBinding
 	locks                   map[string]lock.Store
-	pubSubs                 map[string]PubsubItem
-	topicRoutes             map[string]TopicRoutes
+	pubSubs                 map[string]*rtpubsub.PubsubItem
 	workflowComponents      map[string]workflows.Workflow
 	workflowBackends        map[string]backend.Backend
 	cryptoProviders         map[string]crypto.SubtleCrypto
 	components              []compsv1alpha1.Component
-	subscriptions           []rtpubsub.Subscription
+	subscriptions           *subscriptions
 	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
 	actorStateStore         struct {
 		name  string
@@ -74,10 +73,13 @@ func New() *ComponentStore {
 		inputBindingRoutes:      make(map[string]string),
 		outputBindings:          make(map[string]bindings.OutputBinding),
 		locks:                   make(map[string]lock.Store),
-		pubSubs:                 make(map[string]PubsubItem),
+		pubSubs:                 make(map[string]*rtpubsub.PubsubItem),
 		workflowComponents:      make(map[string]workflows.Workflow),
 		workflowBackends:        make(map[string]backend.Backend),
 		cryptoProviders:         make(map[string]crypto.SubtleCrypto),
-		topicRoutes:             make(map[string]TopicRoutes),
+		subscriptions: &subscriptions{
+			declaratives: make(map[string]*DeclarativeSubscription),
+			streams:      make(map[string]*DeclarativeSubscription),
+		},
 	}
 }

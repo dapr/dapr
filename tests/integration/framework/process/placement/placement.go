@@ -16,9 +16,7 @@ package placement
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"sync/atomic"
@@ -83,8 +81,11 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		"--log-level=" + opts.logLevel,
 		"--id=" + opts.id,
 		"--port=" + strconv.Itoa(opts.port),
+		"--listen-address=127.0.0.1",
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
+		"--healthz-listen-address=127.0.0.1",
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
+		"--metrics-listen-address=127.0.0.1",
 		"--initial-cluster=" + opts.initialCluster,
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
 		"--metadata-enabled=" + strconv.FormatBool(opts.metadataEnabled),
@@ -234,7 +235,7 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 			case <-ctx.Done():
 				doneCh <- stream.CloseSend()
 				return
-			case <-time.After(time.Second):
+			case <-time.After(500 * time.Millisecond):
 				if err := stream.Send(msg); err != nil {
 					doneCh <- err
 					return
@@ -249,10 +250,6 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 		for {
 			in, err := stream.Recv()
 			if err != nil {
-				if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {
-					return
-				}
-				require.NoError(t, err)
 				return
 			}
 

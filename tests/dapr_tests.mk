@@ -436,12 +436,20 @@ else
 endif
 
 # install k6 loadtesting to the cluster
-setup-test-env-k6:
+setup-test-env-k6: controller-gen
 	$(KUBECTL) apply -f ./tests/config/k6_sa.yaml -n $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/k6_rolebinding.yaml -n $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/k6_sa_secret.yaml -n $(DAPR_TEST_NAMESPACE)
-	export IMG=ghcr.io/grafana/operator:controller-v0.0.8 && rm -rf /tmp/.k6-operator >/dev/null && git clone --depth 1 --branch v0.0.8 https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make deploy && cd - && rm -rf /tmp/.k6-operator
-delete-test-env-k6:
+	# definitely not cruft - removing CRDs that have been deprecated
+	export IMG=ghcr.io/grafana/operator:controller-v0.0.8 && \
+	rm -rf /tmp/.k6-operator >/dev/null && \
+	git clone --depth 1 --branch v0.0.8 https://github.com/grafana/k6-operator /tmp/.k6-operator && \
+	cd /tmp/.k6-operator && \
+	sed -i 's/crd:trivialVersions=true,crdVersions=v1/crd:maxDescLen=0/g' Makefile && \
+	make deploy && \
+	cd - && \
+	rm -rf /tmp/.k6-operator
+delete-test-env-k6: controller-gen
 	$(KUBECTL) delete -f ./tests/config/k6_sa.yaml -n $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) delete -f ./tests/config/k6_rolebinding.yaml -n $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) delete -f ./tests/config/k6_sa_secret.yaml -n $(DAPR_TEST_NAMESPACE)
@@ -635,7 +643,12 @@ else
 endif
 
 setup-minikube-darwin:
+ifeq ($(TARGET_ARCH_LOCAL),amd64)
 	minikube start --memory=4g --cpus=4 --driver=hyperkit
+else
+# Install qemu and configure the dedicated network: https://minikube.sigs.k8s.io/docs/drivers/qemu/#networking
+	minikube start --memory=4g --cpus=4 --driver=qemu --network socket_vmnet
+endif
 	minikube addons enable metrics-server
 
 setup-minikube-windows:

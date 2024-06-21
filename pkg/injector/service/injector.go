@@ -56,7 +56,7 @@ var AllowedServiceAccountInfos = []string{
 }
 
 type (
-	currentTrustAnchorsFn func() (ca []byte, err error)
+	currentTrustAnchorsFn func(context.Context) (ca []byte, err error)
 )
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
@@ -66,11 +66,12 @@ type Injector interface {
 }
 
 type Options struct {
-	AuthUIDs   []string
-	Config     Config
-	DaprClient scheme.Interface
-	KubeClient kubernetes.Interface
-	Port       int
+	AuthUIDs      []string
+	Config        Config
+	DaprClient    scheme.Interface
+	KubeClient    kubernetes.Interface
+	Port          int
+	ListenAddress string
 
 	ControlPlaneNamespace   string
 	ControlPlaneTrustDomain string
@@ -138,7 +139,7 @@ func NewInjector(opts Options) (Injector, error) {
 			runtime.NewScheme(),
 		).UniversalDeserializer(),
 		server: &http.Server{
-			Addr:              fmt.Sprintf(":%d", opts.Port),
+			Addr:              fmt.Sprintf("%s:%d", opts.ListenAddress, opts.Port),
 			Handler:           mux,
 			ReadHeaderTimeout: 10 * time.Second,
 		},

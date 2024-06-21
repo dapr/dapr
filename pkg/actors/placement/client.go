@@ -107,7 +107,7 @@ func (c *placementClient) disconnect() {
 	c.disconnectFn(noop)
 }
 
-// disonnectFn disconnects from the current server providing a way to run a function inside the lock in case of new disconnection occurs.
+// disconnectFn disconnects from the current server providing a way to run a function inside the lock in case of new disconnection occurs.
 // the function will not be executed in case of the stream is already disconnected.
 func (c *placementClient) disconnectFn(insideLockFn func()) {
 	c.streamConnectedCond.L.Lock()
@@ -153,7 +153,7 @@ func (c *placementClient) recv() (*v1pb.PlacementOrder, error) {
 	return stream.Recv() // cannot recv in parallel
 }
 
-// sned is a convenient way of invoking send providing thread-safe guarantees with `CloseSend` operations.
+// send is a convenient way of invoking send providing thread-safe guarantees with `CloseSend` operations.
 func (c *placementClient) send(host *v1pb.Host) error {
 	c.streamConnectedCond.L.Lock()
 	stream := c.clientStream

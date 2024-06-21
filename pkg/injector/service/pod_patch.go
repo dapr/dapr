@@ -51,7 +51,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sentryAddress := patcher.ServiceSentry.Address(i.config.Namespace, i.config.KubeClusterDomain)
 	operatorAddress := patcher.ServiceAPI.Address(i.config.Namespace, i.config.KubeClusterDomain)
 
-	trustAnchors, err := i.currentTrustAnchors()
+	trustAnchors, err := i.currentTrustAnchors(ctx)
 	if err != nil {
 		return nil, err
 	}

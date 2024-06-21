@@ -73,6 +73,7 @@ func Run() {
 	cfg.RootCertPath = rootCertPath
 	cfg.TrustDomain = opts.TrustDomain
 	cfg.Port = opts.Port
+	cfg.ListenAddress = opts.ListenAddress
 
 	var (
 		watchDir    = filepath.Dir(cfg.IssuerCertPath)
@@ -146,7 +147,7 @@ func Run() {
 	err = mngr.Add(func(ctx context.Context) error {
 		healthzServer := health.NewServer(health.Options{Log: log})
 		healthzServer.Ready()
-		runErr := healthzServer.Run(ctx, opts.HealthzPort)
+		runErr := healthzServer.Run(ctx, opts.HealthzListenAddress, opts.HealthzPort)
 		if runErr != nil {
 			return fmt.Errorf("failed to start healthz server: %s", runErr)
 		}

@@ -50,7 +50,7 @@ const (
 	httpScheme     = "http"
 	httpsScheme    = "https"
 
-	appConfigEndpoint = "dapr/config"
+	appConfigEndpoint = "/dapr/config"
 )
 
 // Channel is an HTTP implementation of an AppChannel.
