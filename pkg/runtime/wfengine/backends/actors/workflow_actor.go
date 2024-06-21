@@ -158,7 +158,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 
 	// We delete the reminder on success and on non-recoverable errors.
 	// Returning nil signals that we want the execution to be retried in the next period interval
-	var re recoverableError
+	var re *recoverableError
 	switch {
 	case err == nil:
 		return actors.ErrReminderCanceled
