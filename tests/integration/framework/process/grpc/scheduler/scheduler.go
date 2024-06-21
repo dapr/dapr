@@ -84,6 +84,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		procgrpc.WithRegister(func(s *grpc.Server) {
 			srv := &server{
 				scheduleJobFn: opts.scheduleJobFn,
+				getJobFn:      opts.getJobFn,
 				deleteJobFn:   opts.deleteJobFn,
 				watchJobsFn:   opts.watchJobsFn,
 			}
