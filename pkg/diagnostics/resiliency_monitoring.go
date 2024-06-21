@@ -117,13 +117,13 @@ func (m *resiliencyMetrics) PolicyWithStatusActivated(resiliencyName, namespace 
 
 		// Record individual circuit breaker gauge metric
 		if policy == CircuitBreakerPolicy {
-			circuitbreakerState := m.circuitbreakerState.M(ConvertCircuitBreakerState(status))
-			if circuitbreakerState.Measure() != nil {
+			cbMeasure := m.circuitbreakerState.M(ConvertCircuitBreakerState(status))
+			if cbMeasure.Measure() != nil {
 				_ = stats.RecordWithTags(
 					m.ctx,
-					diagUtils.WithTags(circuitbreakerState.Measure().Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
+					diagUtils.WithTags(m.circuitbreakerState.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
 						namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
-					circuitbreakerState,
+					cbMeasure,
 				)
 			}
 		}
