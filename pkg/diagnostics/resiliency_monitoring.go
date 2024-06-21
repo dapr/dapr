@@ -28,9 +28,7 @@ type resiliencyMetrics struct {
 	policiesLoadCount       *stats.Int64Measure
 	executionCount          *stats.Int64Measure
 	activationsCount        *stats.Int64Measure
-	retryActivationsCount   *stats.Int64Measure
-	cbCurrentState          *stats.Int64Measure
-	timeoutActivationsCount *stats.Int64Measure
+	circuitbreakerState     *stats.Int64Measure
 
 	appID   string
 	ctx     context.Context
@@ -51,19 +49,10 @@ func newResiliencyMetrics() *resiliencyMetrics {
 			"resiliency/activations_total",
 			"Number of times a resiliency policyKey has been activated in a building block after a failure or after a state change.",
 			stats.UnitDimensionless),
-		cbCurrentState: stats.Int64(
-			"resiliency/cb_current_state",
-			"A resiliency policy's current CircuitBreakerState value.",
+		circuitbreakerState: stats.Int64(
+			"resiliency/cb_state",
+			"A resiliency policy's current CircuitBreakerState state. 0 is closed, 1 is half-open, 2 is open, and -1 is unknown.",
 			stats.UnitDimensionless),
-		retryActivationsCount: stats.Int64(
-			"resiliency/retry_activations_total",
-			"Number of times a resiliency policyKey has been activated in a building block after a retry.",
-			stats.UnitDimensionless),
-		timeoutActivationsCount: stats.Int64(
-			"resiliency/timeout_activations_total",
-			"Number of times a resiliency policyKey has been activated in a building block after a timeout.",
-			stats.UnitDimensionless),
-
 		// TODO: how to use correct context
 		ctx:     context.Background(),
 		enabled: false,
@@ -78,9 +67,7 @@ func (m *resiliencyMetrics) Init(id string) error {
 		diagUtils.NewMeasureView(m.policiesLoadCount, []tag.Key{appIDKey, resiliencyNameKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(m.executionCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(m.activationsCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(m.cbCurrentState, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.LastValue()),
-		diagUtils.NewMeasureView(m.retryActivationsCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(m.timeoutActivationsCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(m.circuitbreakerState, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.LastValue()),
 	)
 }
 
@@ -128,24 +115,17 @@ func (m *resiliencyMetrics) PolicyWithStatusActivated(resiliencyName, namespace 
 			m.activationsCount.M(1),
 		)
 
-		// Record unique activation measure
-		var uniquePolicyMeasurement stats.Measurement
-		switch policy {
-		case CircuitBreakerPolicy:
-			uniquePolicyMeasurement = m.cbCurrentState.M(ConvertCircuitBreakerState(status))
-		case RetryPolicy:
-			uniquePolicyMeasurement = m.retryActivationsCount.M(1)
-		case TimeoutPolicy:
-			uniquePolicyMeasurement = m.timeoutActivationsCount.M(1)
-		}
-
-		if uniquePolicyMeasurement.Measure() != nil {
-			_ = stats.RecordWithTags(
-				m.ctx,
-				diagUtils.WithTags(uniquePolicyMeasurement.Measure().Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
-					namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
-				uniquePolicyMeasurement,
-			)
+		// Record individual circuit breaker gauge metric
+		if policy == CircuitBreakerPolicy {
+			circuitbreakerState := m.circuitbreakerState.M(ConvertCircuitBreakerState(status))
+			if circuitbreakerState.Measure() != nil {
+				_ = stats.RecordWithTags(
+					m.ctx,
+					diagUtils.WithTags(circuitbreakerState.Measure().Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
+						namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
+					circuitbreakerState,
+				)
+			}
 		}
 	}
 }
