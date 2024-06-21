@@ -314,14 +314,15 @@ func appHTTPClient(connConfig config.AppConnectionConfig, globalConfig *config.C
 			}
 		}
 
-		transport = &http.Transport{
-			TLSClientConfig:        tlsConfig,
-			ReadBufferSize:         readBufferSize,
-			MaxResponseHeaderBytes: int64(readBufferSize),
-			MaxConnsPerHost:        1024,
-			MaxIdleConns:           64, // A local channel connects to a single host
-			MaxIdleConnsPerHost:    64,
-		}
+		ts := http.DefaultTransport.(*http.Transport).Clone()
+		ts.ForceAttemptHTTP2 = false
+		ts.TLSClientConfig = tlsConfig
+		ts.ReadBufferSize = readBufferSize
+		ts.MaxResponseHeaderBytes = int64(readBufferSize)
+		ts.MaxConnsPerHost = 1024
+		ts.MaxIdleConns = 64 // A local channel connects to a single host
+		ts.MaxIdleConnsPerHost = 64
+		transport = ts
 	}
 
 	// Initialize this property in the object, and then pass it to the HTTP channel and the actors runtime (for health checks)
