@@ -68,7 +68,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 
-	fs.StringVar(&opts.ListenAddress, "listen-address", "127.0.0.1", "The address for the Scheduler to listen on")
+	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The address for the Scheduler to listen on")
 	fs.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the scheduler gRPC server")
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	fs.StringVar(&opts.taFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
