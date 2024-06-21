@@ -335,7 +335,6 @@ func main() {
 		ctx,
 		net.JoinHostPort("127.0.0.1", strconv.Itoa(daprGRPCPort)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	cancel()
 	if err != nil {

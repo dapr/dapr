@@ -48,7 +48,7 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
 	host := n.place.Address()
-	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
+	conn, err := grpc.NewClient(host,
 		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 	)
 	require.NoError(t, err)

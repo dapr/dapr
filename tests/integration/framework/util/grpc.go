@@ -30,7 +30,7 @@ import (
 func DaprGRPCClient(t *testing.T, ctx context.Context, port int) rtv1.DaprClient {
 	t.Helper()
 
-	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(port),
+	conn, err := grpc.NewClient("localhost:"+strconv.Itoa(port),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)

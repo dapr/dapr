@@ -79,13 +79,12 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			)
 		}
 
-		conn, err := grpc.DialContext(ctx,
+		conn, err := grpc.NewClient(
 			sentryAddress,
 			grpc.WithTransportCredentials(
 				grpccredentials.TLSClientCredentials(trustAnchors, tlsconfig.AuthorizeID(sentryID)),
 			),
 			grpc.WithUnaryInterceptor(unaryClientInterceptor),
-			grpc.WithReturnConnectionError(),
 		)
 		if err != nil {
 			diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")

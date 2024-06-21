@@ -98,7 +98,7 @@ scopes:
 func (o *projection) Run(t *testing.T, ctx context.Context) {
 	o.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, o.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.NewClient(o.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 

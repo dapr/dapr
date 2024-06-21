@@ -84,17 +84,13 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 
 func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.TCPConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
 	t.Helper()
-
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
 	tcpConn, err := net.Dial("tcp", serverAddress)
 	require.NoError(t, err)
-	conn, err := grpc.DialContext(ctx, "",
+	conn, err := grpc.NewClient("",
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return tcpConn, nil
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	require.NoError(t, err)
 

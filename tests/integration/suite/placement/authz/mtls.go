@@ -90,7 +90,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 
 	host := m.place.Address()
 
-	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), sec.GRPCDialOptionMTLS(placeID))
+	conn, err := grpc.NewClient(host, sec.GRPCDialOptionMTLS(placeID))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := v1pb.NewPlacementClient(conn)

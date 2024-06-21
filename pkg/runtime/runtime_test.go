@@ -1752,11 +1752,9 @@ func runGRPCApp(port int) (func(), error) {
 }
 
 func pingStreamClient(ctx context.Context, port int) (pb.TestService_PingStreamClient, error) {
-	clientConn, err := grpc.DialContext(
-		ctx,
+	clientConn, err := grpc.NewClient(
 		fmt.Sprintf("localhost:%d", port),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
 	)
 	if err != nil {
 		return nil, err

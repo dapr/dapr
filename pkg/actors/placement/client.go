@@ -56,7 +56,7 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 		return err
 	}
 
-	conn, err := grpc.DialContext(ctx, serverAddr, opts...)
+	conn, err := grpc.NewClient(serverAddr, opts...)
 	if err != nil {
 		if conn != nil {
 			conn.Close()

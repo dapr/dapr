@@ -98,7 +98,7 @@ func (a *authz) Run(t *testing.T, ctx context.Context) {
 	a.op.WaitUntilRunning(t, ctx)
 
 	t.Run("no client auth should error", func(t *testing.T) {
-		conn, err := grpc.DialContext(ctx,
+		conn, err := grpc.NewClient(
 			"localhost:"+strconv.Itoa(a.op.Port()),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)

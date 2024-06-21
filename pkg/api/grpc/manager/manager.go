@@ -159,10 +159,7 @@ func (g *Manager) createLocalConnection(parentCtx context.Context, port int, ena
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
 	address := net.JoinHostPort(g.channelConfig.BaseAddress, strconv.Itoa(port))
-
-	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
-	defer cancel()
-	return grpc.DialContext(ctx, dialPrefix+address, opts...)
+	return grpc.NewClient(dialPrefix+address, opts...)
 }
 
 // GetGRPCConnection returns a new grpc connection for a given address and inits one if doesn't exist.
@@ -215,10 +212,7 @@ func (g *Manager) connectRemote(
 	opts = append(opts, customOpts...)
 
 	dialPrefix := GetDialAddressPrefix(g.mode)
-
-	ctx, cancel := context.WithTimeout(parentCtx, dialTimeout)
-	defer cancel()
-	conn, err = grpc.DialContext(ctx, dialPrefix+address, opts...)
+	conn, err = grpc.NewClient(dialPrefix+address, opts...)
 	if err != nil {
 		return nil, err
 	}

@@ -91,10 +91,7 @@ func (e *enable) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("trying plain text connection to Dapr API should fail", func(t *testing.T) {
-		gctx, gcancel := context.WithTimeout(ctx, time.Second)
-		t.Cleanup(gcancel)
-		_, err := grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(),
-			grpc.WithReturnConnectionError(),
+		_, err := grpc.NewClient(e.daprd.InternalGRPCAddress(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 		require.ErrorContains(t, err, "error reading server preface")
@@ -134,8 +131,7 @@ func (e *enable) Run(t *testing.T, ctx context.Context) {
 		myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "my-app")
 		require.NoError(t, err)
 
-		conn, err := grpc.DialContext(ctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID),
-			grpc.WithReturnConnectionError())
+		conn, err := grpc.NewClient(e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID))
 		require.NoError(t, err)
 		conn.Connect()
 		assert.Equal(t, connectivity.Ready, conn.GetState())

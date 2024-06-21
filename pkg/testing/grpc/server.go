@@ -57,8 +57,7 @@ func TestServerFor[TServer any, TClient any](logger logger.Logger, registersvc f
 				logger.Debugf("Server exited with error: %v", serveErr)
 			}
 		}()
-		ctx := context.Background()
-		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
+		conn, err := grpc.NewClient("bufnet", grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return lis.Dial()
 		}), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {
@@ -90,7 +89,7 @@ func TestServerWithDialer[TServer any](logger logger.Logger, registersvc func(*g
 				opts = append(opts, grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 					return lis.Dial()
 				}), grpc.WithTransportCredentials(insecure.NewCredentials()))
-				return grpc.DialContext(ctx, "bufnet", opts...)
+				return grpc.NewClient("bufnet", opts...)
 			}, func() {
 				lis.Close()
 			}, nil

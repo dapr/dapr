@@ -266,17 +266,13 @@ func main() {
 	)
 	grpcSocketAddr := os.Getenv("DAPR_GRPC_SOCKET_ADDR")
 	if grpcSocketAddr != "" {
-		conn, err = grpc.Dial(
+		conn, err = grpc.NewClient(
 			"unix://"+grpcSocketAddr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 	} else {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
-		defer cancel()
-
-		conn, err = grpc.DialContext(ctx, "localhost:50001",
+		conn, err = grpc.NewClient("localhost:50001",
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
 		)
 	}
 	if err != nil {

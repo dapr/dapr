@@ -212,15 +212,9 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 	require.NoError(t, err)
 	transportCredentials := grpccredentials.TLSClientCredentials(x509bundle, tlsconfig.AuthorizeID(sentrySPIFFEID))
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
-	defer cancel()
-	conn, err := grpc.DialContext(
-		ctx,
+	conn, err := grpc.NewClient(
 		fmt.Sprintf("127.0.0.1:%d", s.Port()),
-		grpc.WithTransportCredentials(transportCredentials),
-		grpc.WithReturnConnectionError(),
-		grpc.WithBlock(),
-	)
+		grpc.WithTransportCredentials(transportCredentials))
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, conn.Close())

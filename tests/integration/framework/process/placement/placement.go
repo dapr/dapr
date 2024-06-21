@@ -181,8 +181,7 @@ func (p *Placement) CurrentActorsAPILevel() int {
 }
 
 func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host, contextMetadata map[string]string) chan *placementv1pb.PlacementTables {
-	conn, err := grpc.DialContext(parentCtx, p.Address(),
-		grpc.WithBlock(),
+	conn, err := grpc.NewClient(p.Address(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)
@@ -284,8 +283,7 @@ func (p *Placement) AssertRegisterHostFails(t *testing.T, ctx context.Context, a
 		ApiLevel: uint32(apiLevel),
 	}
 
-	conn, err := grpc.DialContext(ctx, p.Address(),
-		grpc.WithBlock(),
+	conn, err := grpc.NewClient(p.Address(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)
