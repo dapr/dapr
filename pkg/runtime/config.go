@@ -242,7 +242,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 			namespace,
 			metricsSpec.Rules,
 			metricsSpec.GetHTTPPathMatching(),
-			metricsSpec.GetHTTPIncreasedCardinality(),
+			metricsSpec.GetHTTPIncreasedCardinality(log),
 		)
 		if err != nil {
 			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())

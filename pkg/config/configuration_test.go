@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"reflect"
 	"sort"
@@ -25,6 +26,7 @@ import (
 	"golang.org/x/exp/maps"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
+	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -591,20 +593,23 @@ func TestSortMetrics(t *testing.T) {
 }
 
 func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
-	t.Run("no http configuration, returns false", func(t *testing.T) {
+	log := logger.NewLogger("test")
+	log.SetOutput(io.Discard)
+
+	t.Run("no http configuration, returns true", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: nil,
 		}
-		assert.False(t, m.GetHTTPIncreasedCardinality())
+		assert.True(t, m.GetHTTPIncreasedCardinality(log))
 	})
 
-	t.Run("nil value, returns false", func(t *testing.T) {
+	t.Run("nil value, returns true", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
 				IncreasedCardinality: nil,
 			},
 		}
-		assert.False(t, m.GetHTTPIncreasedCardinality())
+		assert.True(t, m.GetHTTPIncreasedCardinality(log))
 	})
 
 	t.Run("value is set to true", func(t *testing.T) {
@@ -613,7 +618,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 				IncreasedCardinality: ptr.Of(true),
 			},
 		}
-		assert.True(t, m.GetHTTPIncreasedCardinality())
+		assert.True(t, m.GetHTTPIncreasedCardinality(log))
 	})
 
 	t.Run("value is set to false", func(t *testing.T) {
@@ -622,7 +627,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 				IncreasedCardinality: ptr.Of(false),
 			},
 		}
-		assert.False(t, m.GetHTTPIncreasedCardinality())
+		assert.False(t, m.GetHTTPIncreasedCardinality(log))
 	})
 }
 
