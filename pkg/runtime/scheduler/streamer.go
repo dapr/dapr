@@ -131,15 +131,11 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 
 	response, err := appChannel.TriggerJob(ctx, req)
 	if err != nil {
-		return err
-	}
-
-	if response != nil {
-		defer response.Close()
-	}
-	if err != nil {
 		// TODO(Cassie): add an orphaned job go routine to retry sending job at a later time
 		return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
+	}
+	if response != nil {
+		defer response.Close()
 	}
 
 	// TODO: standardize on the error code returned by both protocol channels,

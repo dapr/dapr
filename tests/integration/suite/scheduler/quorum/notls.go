@@ -64,12 +64,13 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 		"scheduler-2=" + strconv.Itoa(fp.Port(t)),
 	}
 	n.schedulers = []*scheduler.Scheduler{
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithLogLevel("debug"), scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithLogLevel("debug"), scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithLogLevel("debug"), scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...),
 	}
 
 	n.daprd = daprd.New(t,
+		daprd.WithLogLevel("debug"),
 		daprd.WithSchedulerAddresses(n.schedulers[0].Address(), n.schedulers[1].Address(), n.schedulers[2].Address()),
 	)
 
