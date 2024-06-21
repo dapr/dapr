@@ -37,7 +37,7 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) {
 
 	if exists {
 		log.Infof("Closing existing Subscription to reload: %s", oldSub.Name)
-		if err := s.proc.CloseSubscription(ctx, oldSub); err != nil {
+		if err := s.proc.CloseSubscription(ctx, oldSub.Comp); err != nil {
 			log.Errorf("Failed to close existing Subscription: %s", err)
 			return
 		}

@@ -41,12 +41,15 @@ type SecretManager interface {
 }
 
 type SubscribeManager interface {
-	ReloadPubSub(string) error
-	StopPubSub(string)
 	InitProgramaticSubscriptions(context.Context) error
 	StartAppSubscriptions() error
 	StopAppSubscriptions()
 	StopAllSubscriptionsForever()
+	ReloadDeclaredAppSubscription(name, pubsubName string) error
+	StartStreamerSubscription(key string) error
+	StopStreamerSubscription(pubsubName, key string)
+	ReloadPubSub(string) error
+	StopPubSub(string)
 }
 
 type BindingManager interface {
