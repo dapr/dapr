@@ -80,11 +80,11 @@ func NewDurableTimer(bytes []byte, generation uint64) durableTimer {
 	return durableTimer{bytes, generation}
 }
 
-func newRecoverableError(err error) recoverableError {
-	return recoverableError{cause: err}
+func newRecoverableError(err error) *recoverableError {
+	return &recoverableError{cause: err}
 }
 
-func (err recoverableError) Error() string {
+func (err *recoverableError) Error() string {
 	return err.cause.Error()
 }
 
