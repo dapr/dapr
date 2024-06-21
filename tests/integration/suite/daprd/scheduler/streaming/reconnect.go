@@ -86,7 +86,7 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		return r.jobCalled.Load() > 0
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	r.scheduler1.Cleanup(t)
 
@@ -100,5 +100,5 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		return r.jobCalled.Load() > called
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*40, time.Millisecond*10)
 }

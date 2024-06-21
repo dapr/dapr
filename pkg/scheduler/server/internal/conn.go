@@ -47,7 +47,7 @@ type conn struct {
 
 // newConn creates a new connection and starts the goroutines to handle sending
 // jobs to the client and receiving job process results from the client.
-func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer, uuid uint64) *conn {
+func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer, id uint64) *conn {
 	conn := &conn{
 		pool:     p,
 		closeCh:  make(chan struct{}),
@@ -59,7 +59,7 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 
 	go func() {
 		defer p.wg.Done()
-		defer p.remove(req, uuid)
+		defer p.remove(req, id)
 		defer close(conn.closeCh)
 		for {
 			select {
@@ -88,7 +88,7 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 				return
 			}
 
-			conn.handleJobProcessed(resp.GetResult().GetUuid())
+			conn.handleJobProcessed(resp.GetResult().GetId())
 		}
 	}()
 
@@ -105,7 +105,7 @@ func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) {
 	c.inflight[c.idx] = ackCh
 	job := &schedulerv1pb.WatchJobsResponse{
 		Name:     jobEvt.Name,
-		Uuid:     c.idx,
+		Id:       c.idx,
 		Data:     jobEvt.Data,
 		Metadata: jobEvt.Metadata,
 	}
@@ -113,7 +113,7 @@ func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) {
 
 	defer func() {
 		c.lock.Lock()
-		delete(c.inflight, job.GetUuid())
+		delete(c.inflight, job.GetId())
 		c.lock.Unlock()
 	}()
 

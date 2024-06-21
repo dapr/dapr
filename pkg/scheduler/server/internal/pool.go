@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 	"sync"
 	"sync/atomic"
 
@@ -89,21 +88,21 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 	}
 
 	ok = true
-	var uuid uint64
+	var id uint64
 	for ok {
-		uuid = rand.Uint64() //nolint:gosec
-		_, ok = nsPool.conns[uuid]
+		id++
+		_, ok = nsPool.conns[id]
 	}
 
 	log.Debugf("Adding a Sidecar connection to Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
-	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], uuid)
+	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], id)
 
 	for _, actorType := range req.GetActorTypes() {
 		log.Debugf("Adding a Sidecar connection to Scheduler for actor type: %s/%s.", req.GetNamespace(), actorType)
-		nsPool.actorType[actorType] = append(nsPool.actorType[actorType], uuid)
+		nsPool.actorType[actorType] = append(nsPool.actorType[actorType], id)
 	}
 
-	nsPool.conns[uuid] = p.newConn(req, stream, uuid)
+	nsPool.conns[id] = p.newConn(req, stream, id)
 }
 
 // Send is a blocking function that sends a job trigger to a correct job
@@ -120,7 +119,7 @@ func (p *Pool) Send(ctx context.Context, job *JobEvent) error {
 }
 
 // remove removes a connection from the pool with the given UUID.
-func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid uint64) {
+func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -134,11 +133,11 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid uint64) {
 		return
 	}
 
-	delete(nsPool.conns, uuid)
+	delete(nsPool.conns, id)
 
 	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
 	for i := 0; i < len(appIDConns); i++ {
-		if appIDConns[i] == uuid {
+		if appIDConns[i] == id {
 			appIDConns = append(appIDConns[:i], appIDConns[i+1:]...)
 			break
 		}
@@ -154,7 +153,7 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, uuid uint64) {
 
 		log.Infof("Removing a Sidecar connection from Scheduler for actor type: %s/%s.", req.GetNamespace(), actorType)
 		for i := 0; i < len(actorTypeConns); i++ {
-			if actorTypeConns[i] == uuid {
+			if actorTypeConns[i] == id {
 				actorTypeConns = append(actorTypeConns[:i], actorTypeConns[i+1:]...)
 				break
 			}

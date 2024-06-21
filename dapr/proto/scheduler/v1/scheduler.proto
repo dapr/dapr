@@ -95,8 +95,8 @@ message WatchJobsRequestInitial {
 // WatchJobsRequestResult is the result of a job execution to allow the job to
 // be marked as processed.
 message WatchJobsRequestResult {
-  // uuid is the uuid of the job that has finished processing.
-  uint64 uuid = 1;
+  // id is the id of the job that has finished processing, used as an incremental counter.
+  uint64 id = 1;
 }
 
 // WatchJobsResponse is the response message to convey the details of a job.
@@ -104,9 +104,9 @@ message WatchJobsResponse {
   // name is the name of the job which was triggered.
   string name = 1;
 
-  // uuid is the uuid of the job trigger event which should be sent back from
-  // the client to be marked as processed.
-  uint64 uuid = 2;
+  // id is the id of the job trigger event which should be sent back from
+  // the client to be marked as processed, used as an incremental counter.
+  uint64 id = 2;
 
   // Job data.
   google.protobuf.Any data = 3;
