@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	apiErrors "github.com/dapr/dapr/pkg/api/errors"
+
 	"github.com/alphadose/haxmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -182,16 +184,16 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 // Blocks until the service is closed and all connections are drained.
 func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 	if p.closed.Load() {
-		return errors.New("placement service is closed")
+		return apiErrors.PlacementServiceIsClosedOnRun("placement service is closed")
 	}
 
 	if !p.running.CompareAndSwap(false, true) {
-		return errors.New("placement service is already running")
+		return apiErrors.PlacementServiceIsAlreadyRunning(fmt.Sprintf("placement service is already running"))
 	}
 
 	sec, err := p.sec.Handler(ctx)
 	if err != nil {
-		return err
+		return apiErrors.PlacementServiceContextError("context error occurred")
 	}
 
 	serverListener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", listenAddress, port))
@@ -234,12 +236,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 	clientID, err := p.validateClient(stream)
 	if err != nil {
-		return err
+		return apiErrors.PlacementServiceInternalError(fmt.Sprintf("Internal Error: %s", codes.Internal))
 	}
 
 	firstMessage, err := p.receiveAndValidateFirstMessage(stream, clientID)
 	if err != nil {
-		return err
+		return apiErrors.PlacementServiceUnAuthenticated(fmt.Sprintf("Failed to get client ID from context with code: %s", codes.Unauthenticated))
 	}
 
 	// Older versions won't be sending the namespace in subsequent messages either,
@@ -269,7 +271,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		case nil:
 
 			if clientID != nil && req.GetId() != clientID.AppID() {
-				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
+				return apiErrors.PlacementServicePermissionDenied(fmt.Sprintf("Failed wih code %s. Client ID %s is not allowed", codes.PermissionDenied, req.GetId()))
 			}
 
 			if registeredMemberID == "" {
@@ -337,7 +339,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		}
 	}
 
-	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
+	return apiErrors.PlacementServiceFailedPrecondition(fmt.Sprintf("Failed with code: %s. Only leader can serve the request", codes.FailedPrecondition))
 }
 
 func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatusServer) (*spiffe.Parsed, error) {
