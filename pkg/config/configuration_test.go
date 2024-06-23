@@ -597,20 +597,20 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 	log := logger.NewLogger("test")
 	log.SetOutput(io.Discard)
 
-	t.Run("no http configuration, returns false", func(t *testing.T) {
+	t.Run("no http configuration, returns true", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: nil,
 		}
-		assert.False(t, m.GetHTTPIncreasedCardinality(log))
+		assert.True(t, m.GetHTTPIncreasedCardinality(log))
 	})
 
-	t.Run("nil value, returns false", func(t *testing.T) {
+	t.Run("nil value, returns true", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
 				IncreasedCardinality: nil,
 			},
 		}
-		assert.False(t, m.GetHTTPIncreasedCardinality(log))
+		assert.True(t, m.GetHTTPIncreasedCardinality(log))
 	})
 
 	t.Run("value is set to true", func(t *testing.T) {
@@ -663,5 +663,48 @@ func TestMetricsGetHTTPLatencyDistributionBuckets(t *testing.T) {
 			},
 		}
 		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
+
+func TestMetricsGetHTTPPathMatching(t *testing.T) {
+	t.Run("no http configuration, returns nil", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: nil,
+		}
+		assert.Nil(t, m.GetHTTPPathMatching())
+	})
+
+	t.Run("nil value, returns nil", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				PathMatching: nil,
+			},
+		}
+		assert.Nil(t, m.GetHTTPPathMatching())
+	})
+
+	t.Run("config is enabled", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				PathMatching: &PathMatching{
+					IngressPaths: []string{"/resource/1"},
+					EgressPaths:  []string{"/resource/2"},
+				},
+			},
+		}
+		config := m.GetHTTPPathMatching()
+		assert.Equal(t, []string{"/resource/1"}, config.IngressPaths)
+		assert.Equal(t, []string{"/resource/2"}, config.EgressPaths)
+	})
+
+	t.Run("config is enabled with only ingress", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				PathMatching: &PathMatching{
+					IngressPaths: []string{"/resource/1"},
+				},
+			},
+		}
+		config := m.GetHTTPPathMatching()
+		assert.Equal(t, []string{"/resource/1"}, config.IngressPaths)
+		assert.Nil(t, config.EgressPaths)
 	})
 }

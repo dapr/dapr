@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub
+package subscription
 
 import (
 	"context"
@@ -35,7 +35,6 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/dapr/dapr/pkg/runtime/compstore"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 )
 
@@ -99,25 +98,22 @@ type bulkSubscribeCallData struct {
 //     3.B. Send the envelope to app by invoking http/grpc endpoint
 //  4. Check if any error has occurred so far in processing for any of the message and invoke DLQ, if configured.
 //  5. Send back responses array to broker interface.
-func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.PolicyDefinition,
-	psName string, topic string, route compstore.TopicRouteElem, namespacedConsumer bool,
-) error {
-	ps, ok := p.compStore.GetPubSub(psName)
-	if !ok {
-		return rtpubsub.NotFoundError{PubsubName: psName}
-	}
-
-	subscribeTopic := topic
+func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.PolicyDefinition) error {
+	subscribeTopic := s.topic
+	psName := s.pubsubName
+	route := s.route
+	topic := s.topic
+	namespacedConsumer := s.pubsub.NamespaceScoped
 	if namespacedConsumer {
-		subscribeTopic = p.namespace + topic
+		subscribeTopic = s.namespace + s.topic
 	}
 
 	req := contribpubsub.SubscribeRequest{
 		Topic:    subscribeTopic,
-		Metadata: route.Metadata,
+		Metadata: s.route.Metadata,
 		BulkSubscribeConfig: contribpubsub.BulkSubscribeConfig{
-			MaxMessagesCount:   int(route.BulkSubscribe.MaxMessagesCount),
-			MaxAwaitDurationMs: int(route.BulkSubscribe.MaxAwaitDurationMs),
+			MaxMessagesCount:   int(s.route.BulkSubscribe.MaxMessagesCount),
+			MaxAwaitDurationMs: int(s.route.BulkSubscribe.MaxAwaitDurationMs),
 		},
 	}
 
@@ -126,7 +122,7 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 			msg.Metadata = make(map[string]string, 1)
 		}
 
-		msg.Metadata[rtpubsub.MetadataKeyPubSub] = psName
+		msg.Metadata[rtpubsub.MetadataKeyPubSub] = s.pubsubName
 		bulkSubDiag := newBulkSubIngressDiagnostics()
 		bulkResponses := make([]contribpubsub.BulkSubscribeResponseEntry, len(msg.Entries))
 		routePathBulkMessageMap := make(map[string]bulkSubscribedMessage)
@@ -141,7 +137,7 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 		rawPayload, err := metadata.IsRawPayload(route.Metadata)
 		if err != nil {
 			log.Errorf("error deserializing pubsub metadata: %s", err)
-			if dlqErr := p.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, true, route); dlqErr != nil {
+			if dlqErr := s.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, true, route); dlqErr != nil {
 				populateAllBulkResponsesWithError(msg, &bulkResponses, err)
 				reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 				return bulkResponses, err
@@ -158,20 +154,20 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 			}
 			entryIdIndexMap[message.EntryId] = i
 			if rawPayload {
-				rPath, routeErr := p.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, string(message.Event))
+				rPath, routeErr := s.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, string(message.Event))
 				if routeErr != nil {
 					hasAnyError = true
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && p.isHTTP {
+				if rPath == "" && s.isHTTP {
 					continue
 				}
 				dataB64 := base64.StdEncoding.EncodeToString(message.Event)
 				if message.ContentType == "" {
 					message.ContentType = "application/octet-stream"
 				}
-				populateBulkSubcribedMessage(&(msg.Entries[i]), dataB64, &routePathBulkMessageMap, rPath, i, msg, false, psName, message.ContentType, namespacedConsumer, p.namespace)
+				populateBulkSubcribedMessage(&(msg.Entries[i]), dataB64, &routePathBulkMessageMap, rPath, i, msg, false, psName, message.ContentType, namespacedConsumer, s.namespace)
 			} else {
 				var cloudEvent map[string]interface{}
 				err = json.Unmarshal(message.Event, &cloudEvent)
@@ -186,7 +182,7 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 					log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[contribpubsub.IDField], cloudEvent[contribpubsub.ExpirationField])
 					bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)]++
 					if route.DeadLetterTopic != "" {
-						_ = p.sendToDeadLetter(ctx, psName, &contribpubsub.NewMessage{
+						_ = s.sendToDeadLetter(ctx, psName, &contribpubsub.NewMessage{
 							Data:        message.Event,
 							Topic:       topic,
 							Metadata:    message.Metadata,
@@ -197,24 +193,24 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 					bulkResponses[i].Error = nil
 					continue
 				}
-				rPath, routeErr := p.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, cloudEvent)
+				rPath, routeErr := s.getRouteIfProcessable(ctx, &bulkSubCallData, route, &(msg.Entries[i]), i, cloudEvent)
 				if routeErr != nil {
 					hasAnyError = true
 					continue
 				}
 				// For grpc, we can still send the entry even if path is blank, App can take a decision
-				if rPath == "" && p.isHTTP {
+				if rPath == "" && s.isHTTP {
 					continue
 				}
 				if message.ContentType == "" {
 					message.ContentType = contenttype.CloudEventContentType
 				}
-				populateBulkSubcribedMessage(&(msg.Entries[i]), cloudEvent, &routePathBulkMessageMap, rPath, i, msg, true, psName, message.ContentType, namespacedConsumer, p.namespace)
+				populateBulkSubcribedMessage(&(msg.Entries[i]), cloudEvent, &routePathBulkMessageMap, rPath, i, msg, true, psName, message.ContentType, namespacedConsumer, s.namespace)
 			}
 		}
 		var overallInvokeErr error
 		for path, psm := range routePathBulkMessageMap {
-			invokeErr := p.createEnvelopeAndInvokeSubscriber(ctx, &bulkSubCallData, psm, msg, route, path, policyDef, rawPayload)
+			invokeErr := s.createEnvelopeAndInvokeSubscriber(ctx, &bulkSubCallData, psm, msg, route, path, policyDef, rawPayload)
 			if invokeErr != nil {
 				hasAnyError = true
 				err = invokeErr
@@ -229,7 +225,7 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			bulkSubDiag.retryReported = true
-			if dlqErr := p.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, false, route); dlqErr != nil {
+			if dlqErr := s.sendBulkToDLQIfConfigured(ctx, &bulkSubCallData, msg, false, route); dlqErr != nil {
 				reportBulkSubDiagnostics(ctx, topic, &bulkSubDiag)
 				return bulkResponses, err
 			}
@@ -240,20 +236,20 @@ func (p *pubsub) bulkSubscribeTopic(ctx context.Context, policyDef *resiliency.P
 		return bulkResponses, err
 	}
 
-	if bulkSubscriber, ok := ps.Component.(contribpubsub.BulkSubscriber); ok {
+	if bulkSubscriber, ok := s.pubsub.Component.(contribpubsub.BulkSubscriber); ok {
 		return bulkSubscriber.BulkSubscribe(ctx, req, bulkHandler)
 	}
 
-	return rtpubsub.NewDefaultBulkSubscriber(ps.Component).BulkSubscribe(ctx, req, bulkHandler)
+	return rtpubsub.NewDefaultBulkSubscriber(s.pubsub.Component).BulkSubscribe(ctx, req, bulkHandler)
 }
 
 // sendBulkToDLQIfConfigured sends the message to the dead letter queue if configured.
-func (p *pubsub) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, msg *contribpubsub.BulkMessage,
-	sendAllEntries bool, route compstore.TopicRouteElem,
+func (s *Subscription) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, msg *contribpubsub.BulkMessage,
+	sendAllEntries bool, route rtpubsub.Subscription,
 ) error {
 	bscData := *bulkSubCallData
 	if route.DeadLetterTopic != "" {
-		if dlqErr := p.sendBulkToDeadLetter(ctx, bulkSubCallData, msg, route.DeadLetterTopic, sendAllEntries); dlqErr == nil {
+		if dlqErr := s.sendBulkToDeadLetter(ctx, bulkSubCallData, msg, route.DeadLetterTopic, sendAllEntries); dlqErr == nil {
 			// dlq has been configured and whole bulk of messages is successfully sent to dlq.
 			return nil
 		}
@@ -265,7 +261,7 @@ func (p *pubsub) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCallData 
 }
 
 // getRouteIfProcessable returns the route path if the message is processable.
-func (p *pubsub) getRouteIfProcessable(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, route compstore.TopicRouteElem, message *contribpubsub.BulkMessageEntry,
+func (s *Subscription) getRouteIfProcessable(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, route rtpubsub.Subscription, message *contribpubsub.BulkMessageEntry,
 	i int, matchElem interface{},
 ) (string, error) {
 	bscData := *bulkSubCallData
@@ -280,7 +276,7 @@ func (p *pubsub) getRouteIfProcessable(ctx context.Context, bulkSubCallData *bul
 		log.Warnf("No matching route for event in pubsub %s and topic %s; skipping", bscData.psName, bscData.topic)
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)]++
 		if route.DeadLetterTopic != "" {
-			_ = p.sendToDeadLetter(ctx, bscData.psName, &contribpubsub.NewMessage{
+			_ = s.sendToDeadLetter(ctx, bscData.psName, &contribpubsub.NewMessage{
 				Data:        message.Event,
 				Topic:       bscData.topic,
 				Metadata:    message.Metadata,
@@ -294,8 +290,8 @@ func (p *pubsub) getRouteIfProcessable(ctx context.Context, bulkSubCallData *bul
 }
 
 // createEnvelopeAndInvokeSubscriber creates the envelope and invokes the subscriber.
-func (p *pubsub) createEnvelopeAndInvokeSubscriber(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm bulkSubscribedMessage,
-	msg *contribpubsub.BulkMessage, route compstore.TopicRouteElem, path string, policyDef *resiliency.PolicyDefinition,
+func (s *Subscription) createEnvelopeAndInvokeSubscriber(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm bulkSubscribedMessage,
+	msg *contribpubsub.BulkMessage, route rtpubsub.Subscription, path string, policyDef *resiliency.PolicyDefinition,
 	rawPayload bool,
 ) error {
 	bscData := *bulkSubCallData
@@ -312,13 +308,13 @@ func (p *pubsub) createEnvelopeAndInvokeSubscriber(ctx context.Context, bulkSubC
 		Pubsub:   bscData.psName,
 		Metadata: msg.Metadata,
 	})
-	_, e := p.applyBulkSubscribeResiliency(ctx, bulkSubCallData, psm, route.DeadLetterTopic,
+	_, e := s.applyBulkSubscribeResiliency(ctx, bulkSubCallData, psm, route.DeadLetterTopic,
 		path, policyDef, rawPayload, envelope)
 	return e
 }
 
 // publishBulkMessageHTTP publishes bulk message to a subscriber using HTTP and takes care of corresponding responses.
-func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm *bulkSubscribedMessage,
+func (s *Subscription) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm *bulkSubscribedMessage,
 	bsrr *bulkSubscribeResiliencyRes, deadLetterTopic string,
 ) error {
 	bscData := *bulkSubCallData
@@ -343,7 +339,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 				Topic:    psm.topic,
 				Metadata: psm.metadata,
 			}
-			if dlqErr := p.sendBulkToDeadLetter(ctx, bulkSubCallData, &bulkMsg, deadLetterTopic, true); dlqErr == nil {
+			if dlqErr := s.sendBulkToDeadLetter(ctx, bulkSubCallData, &bulkMsg, deadLetterTopic, true); dlqErr == nil {
 				// dlq has been configured and message is successfully sent to dlq.
 				for _, item := range rawMsgEntries {
 					addBulkResponseEntry(&bsrr.entries, item.EntryId, nil)
@@ -379,7 +375,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 			traceID := iTraceID.(string)
 			sc, _ := diag.SpanContextFromW3CString(traceID)
 			var span trace.Span
-			ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.topic, sc, p.tracingSpec)
+			ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.topic, sc, s.tracingSpec)
 			if span != nil {
 				spans[n] = span
 				n++
@@ -389,7 +385,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 	spans = spans[:n]
 	defer endSpans(spans)
 	start := time.Now()
-	resp, err := p.channels.AppChannel().InvokeMethod(ctx, req, "")
+	resp, err := s.channels.AppChannel().InvokeMethod(ctx, req, "")
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
@@ -410,7 +406,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 	if (statusCode >= 200) && (statusCode <= 299) {
 		// Any 2xx is considered a success.
 		var appBulkResponse contribpubsub.AppBulkResponse
-		err := json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
+		err = json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
 		if err != nil {
 			bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
 			bscData.bulkSubDiag.elapsed = elapsed
@@ -442,7 +438,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 					addBulkResponseEntry(&bsrr.entries, response.EntryId, nil)
 					if deadLetterTopic != "" {
 						msg := psm.pubSubMessages[(*bscData.entryIdIndexMap)[response.EntryId]]
-						_ = p.sendToDeadLetter(ctx, bscData.psName, &contribpubsub.NewMessage{
+						_ = s.sendToDeadLetter(ctx, bscData.psName, &contribpubsub.NewMessage{
 							Data:        msg.entry.Event,
 							Topic:       bscData.topic,
 							Metadata:    msg.entry.Metadata,
@@ -502,7 +498,7 @@ func (p *pubsub) publishBulkMessageHTTP(ctx context.Context, bulkSubCallData *bu
 }
 
 // publishBulkMessageGRPC publishes bulk message to a subscriber using gRPC and takes care of corresponding responses.
-func (p *pubsub) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm *bulkSubscribedMessage,
+func (s *Subscription) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bulkSubscribeCallData, psm *bulkSubscribedMessage,
 	bulkResponses *[]contribpubsub.BulkSubscribeResponseEntry, rawPayload bool, deadLetterTopic string,
 ) error {
 	bscData := *bulkSubCallData
@@ -547,7 +543,7 @@ func (p *pubsub) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bu
 
 				// no ops if trace is off
 				var span trace.Span
-				ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.topic, sc, p.tracingSpec)
+				ctx, span = diag.StartInternalCallbackSpan(ctx, "pubsub/"+psm.topic, sc, s.tracingSpec)
 				if span != nil {
 					ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 					spans[n] = span
@@ -562,7 +558,7 @@ func (p *pubsub) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bu
 	defer endSpans(spans)
 	ctx = invokev1.WithCustomGRPCMetadata(ctx, psm.metadata)
 
-	conn, err := p.grpc.GetAppClient()
+	conn, err := s.grpc.GetAppClient()
 	if err != nil {
 		return fmt.Errorf("error while getting app client: %w", err)
 	}
@@ -622,7 +618,7 @@ func (p *pubsub) publishBulkMessageGRPC(ctx context.Context, bulkSubCallData *bu
 				addBulkResponseEntry(bulkResponses, entryID, nil)
 				if deadLetterTopic != "" {
 					msg := psm.pubSubMessages[(*bscData.entryIdIndexMap)[entryID]]
-					_ = p.sendToDeadLetter(ctx, bscData.psName, &contribpubsub.NewMessage{
+					_ = s.sendToDeadLetter(ctx, bscData.psName, &contribpubsub.NewMessage{
 						Data:        msg.entry.Event,
 						Topic:       bscData.topic,
 						Metadata:    msg.entry.Metadata,
@@ -669,7 +665,7 @@ func endSpans(spans []trace.Span) {
 }
 
 // sendBulkToDeadLetter sends the bulk message to deadletter topic.
-func (p *pubsub) sendBulkToDeadLetter(ctx context.Context,
+func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 	bulkSubCallData *bulkSubscribeCallData, msg *contribpubsub.BulkMessage, deadLetterTopic string,
 	sendAllEntries bool,
 ) error {
@@ -700,7 +696,7 @@ func (p *pubsub) sendBulkToDeadLetter(ctx context.Context,
 		Metadata:   msg.Metadata,
 	}
 
-	_, err := p.BulkPublish(ctx, req)
+	_, err := s.adapter.BulkPublish(ctx, req)
 	if err != nil {
 		log.Errorf("error sending message to dead letter, origin topic: %s dead letter topic %s err: %w", msg.Topic, deadLetterTopic, err)
 	}

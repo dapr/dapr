@@ -264,8 +264,10 @@ func (m MetricSpec) GetEnabled() bool {
 // GetHTTPIncreasedCardinality returns true if increased cardinality is enabled for HTTP metrics
 func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
-		// The default is false
-		return false
+		// The default is true in Dapr 1.13, but will be changed to false in 1.15+
+		// TODO: [MetricsCardinality] Change default in 1.15+
+		log.Warn("The default value for 'spec.metric.http.increasedCardinality' will change to 'false' in Dapr 1.15 or later")
+		return true
 	}
 	return *m.HTTP.IncreasedCardinality
 }
@@ -287,15 +289,33 @@ func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation 
 	return view.Distribution(buckets...)
 }
 
+// GetHTTPPathMatching returns the path matching configuration for HTTP metrics
+func (m MetricSpec) GetHTTPPathMatching() *PathMatching {
+	if m.HTTP == nil {
+		return nil
+	}
+	return m.HTTP.PathMatching
+}
+
 // MetricHTTP defines configuration for metrics for the HTTP server
 type MetricHTTP struct {
 	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
-	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
+  // If false, metrics for the HTTP server are collected with increased cardinality.
+	// The default is true in Dapr 1.13, but will be changed to false in 1.14+
+	// TODO: [MetricsCardinality] Change default in 1.15+
+  IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
 	// Latency distribution buckets. If not set, the default buckets are used.
 	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty"`
+	PathMatching               *PathMatching `json:"pathMatching,omitempty" yaml:"pathMatching,omitempty"`
 }
 
-// MetricsRu le defines configuration options for a metric.
+// PathMatching defines configuration options for path matching.
+type PathMatching struct {
+	IngressPaths []string `json:"ingress,omitempty" yaml:"ingress,omitempty"`
+	EgressPaths  []string `json:"egress,omitempty" yaml:"egress,omitempty"`
+}
+
+// MetricsRule defines configuration options for a metric.
 type MetricsRule struct {
 	Name   string        `json:"name,omitempty"   yaml:"name,omitempty"`
 	Labels []MetricLabel `json:"labels,omitempty" yaml:"labels,omitempty"`

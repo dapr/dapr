@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package pubsub
+package subscription
 
 import (
 	"context"
@@ -30,7 +30,7 @@ type bulkSubscribeResiliencyRes struct {
 
 // applyBulkSubscribeResiliency applies resiliency support to bulk subscribe. It tries to filter
 // out the messages that have been successfully processed and only retries the ones that have failed
-func (p *pubsub) applyBulkSubscribeResiliency(ctx context.Context, bulkSubCallData *bulkSubscribeCallData,
+func (s *Subscription) applyBulkSubscribeResiliency(ctx context.Context, bulkSubCallData *bulkSubscribeCallData,
 	psm bulkSubscribedMessage, deadLetterTopic string, path string, policyDef *resiliency.PolicyDefinition,
 	rawPayload bool, envelope map[string]interface{},
 ) (*[]contribpubsub.BulkSubscribeResponseEntry, error) {
@@ -61,10 +61,10 @@ func (p *pubsub) applyBulkSubscribeResiliency(ctx context.Context, bulkSubCallDa
 			entries:  make([]contribpubsub.BulkSubscribeResponseEntry, 0, len(psm.pubSubMessages)),
 			envelope: maps.Clone(envelope),
 		}
-		if p.isHTTP {
-			pErr = p.publishBulkMessageHTTP(ctx, &bscData, &psm, bsrr, deadLetterTopic)
+		if s.isHTTP {
+			pErr = s.publishBulkMessageHTTP(ctx, &bscData, &psm, bsrr, deadLetterTopic)
 		} else {
-			pErr = p.publishBulkMessageGRPC(ctx, &bscData, &psm, &bsrr.entries, rawPayload, deadLetterTopic)
+			pErr = s.publishBulkMessageGRPC(ctx, &bscData, &psm, &bsrr.entries, rawPayload, deadLetterTopic)
 		}
 		return bsrr, pErr
 	})
