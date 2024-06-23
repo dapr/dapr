@@ -253,8 +253,9 @@ spec:
                       the HTTP server
                     properties:
                       increasedCardinality:
-                        description: |-
-                          If false (the default), metrics for the HTTP server are collected with increased cardinality.
+                        description: 'If true, metrics for the HTTP server are collected
+                          with increased cardinality. The default is true in Dapr 1.13,
+                          but will be changed to false in 1.15+'
                         type: boolean
                       pathMatching:
                         description: PathMatching defines the path matching configuration for HTTP server metrics.

@@ -76,7 +76,7 @@ func actorInvocationMethodNameFn(r *http.Request) string {
 
 func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 	methodNameFn := actorInvocationMethodNameWithIDFn
-	if a.metricSpec != nil && !a.metricSpec.GetHTTPIncreasedCardinality() {
+	if a.metricSpec != nil && !a.metricSpec.GetHTTPIncreasedCardinality(log) {
 		methodNameFn = actorInvocationMethodNameFn
 	}
 	return []endpoints.Endpoint{
