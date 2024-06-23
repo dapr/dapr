@@ -62,7 +62,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	t.Run("service invocation", func(t *testing.T) {
 		b.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
 		metrics := b.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:InvokeService/myapp|status:200"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
 	})
 
 	t.Run("state stores", func(t *testing.T) {
@@ -72,7 +72,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		b.daprd.HTTPGet2xx(t, ctx, "/v1.0/state/mystore/myvalue")
 
 		metrics := b.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:SaveState|status:204"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GetState|status:200"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:/v1.0/state/mystore|status:204"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/state/mystore|status:200"]))
 	})
 }
