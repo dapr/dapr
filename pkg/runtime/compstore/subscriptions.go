@@ -51,7 +51,6 @@ func (c *ComponentStore) SetProgramaticSubscriptions(subs ...rtpubsub.Subscripti
 func (c *ComponentStore) AddDeclarativeSubscription(comp *subapi.Subscription, sub rtpubsub.Subscription) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
-	sub.Type = rtpubsub.SubscriptionTypeDeclarative
 	for i, existing := range c.subscriptions.declarativesList {
 		if existing == comp.Name {
 			c.subscriptions.declarativesList = append(c.subscriptions.declarativesList[:i], c.subscriptions.declarativesList[i+1:]...)
@@ -59,6 +58,7 @@ func (c *ComponentStore) AddDeclarativeSubscription(comp *subapi.Subscription, s
 		}
 	}
 
+	sub.Type = rtpubsub.SubscriptionTypeDeclarative
 	c.subscriptions.declaratives[comp.Name] = &DeclarativeSubscription{
 		Comp: comp,
 		NamedSubscription: &NamedSubscription{
