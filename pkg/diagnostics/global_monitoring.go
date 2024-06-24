@@ -16,9 +16,10 @@ package diagnostics
 import (
 	"sync"
 
+	"go.opencensus.io/stats/view"
+
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/kit/logger"
-	"go.opencensus.io/stats/view"
 )
 
 var (
