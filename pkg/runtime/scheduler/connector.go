@@ -51,8 +51,13 @@ func (c *connector) run(ctx context.Context) error {
 		log.Info("Scheduler stream connected")
 
 		if err = stream.Send(c.req); err != nil {
-			log.Errorf("scheduler stream error, re-connecting: %s", err)
-			return err
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			default:
+				log.Errorf("scheduler stream error, re-connecting: %s", err)
+				return err
+			}
 		}
 
 		err = (&streamer{
@@ -65,7 +70,7 @@ func (c *connector) run(ctx context.Context) error {
 		log.Errorf("Scheduler stream disconnected: %s", err)
 
 		if ctx.Err() != nil {
-			return err
+			return ctx.Err()
 		}
 	}
 }

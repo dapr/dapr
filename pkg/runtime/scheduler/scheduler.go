@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"sync"
 	"sync/atomic"
 
@@ -71,6 +72,14 @@ func (m *Manager) Run(ctx context.Context) error {
 
 	for {
 		if err := m.watchJobs(ctx); err != nil {
+			// don't retry if closing down
+			if ctx.Err() != nil {
+				return nil //nolint:nilerr
+			}
+			if err == io.EOF {
+				log.Warnf("Received EOF, re-establishing connection: %v", err)
+				continue
+			}
 			return fmt.Errorf("error watching scheduler jobs: %w", err)
 		}
 
