@@ -5,17 +5,17 @@ import "fmt"
 type SubscriptionType int32
 
 const (
-	SubscriptionTypeUnknown      = 0
-	SubscriptionTypeDeclarative  = 1
-	SubscriptionTypeProgrammatic = 2
-	SubscriptionTypeStreaming    = 3
+	SubscriptionTypeUnknown = iota
+	SubscriptionTypeDeclarative
+	SubscriptionTypeProgrammatic
+	SubscriptionTypeStreaming
 )
 
 var subscriptionTypeName = map[int32]string{
-	0: "Unknown",
-	1: "Declarative",
-	2: "Programmatic",
-	3: "Streaming",
+	SubscriptionTypeUnknown:      "Unknown",
+	SubscriptionTypeDeclarative:  "Declarative",
+	SubscriptionTypeProgrammatic: "Programmatic",
+	SubscriptionTypeStreaming:    "Streaming",
 }
 
 func (s SubscriptionType) String() string {
