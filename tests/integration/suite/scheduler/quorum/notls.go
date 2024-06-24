@@ -16,7 +16,6 @@ package quorum
 import (
 	"context"
 	"fmt"
-	"log"
 	"math/rand"
 	"runtime"
 	"strconv"
@@ -165,7 +164,6 @@ func checkKeysForJobName(t *testing.T, daprd *daprd.Daprd, jobName string, keys 
 
 	found := false
 	for _, kv := range keys {
-		log.Printf("ETCD Keys: %+v", keys)
 		if string(kv.Key) == fmt.Sprintf("%s||%s||%s||%s", jobPrefix, daprd.Namespace(), daprd.AppID(), jobName) {
 			found = true
 			break
