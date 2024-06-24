@@ -240,9 +240,9 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 				CommitTimeout:      100 * time.Millisecond,
 				MaxAppendEntries:   64,
 				ShutdownOnRemove:   true,
-				TrailingLogs:       500,
-				SnapshotInterval:   60 * time.Second,
-				SnapshotThreshold:  1000,
+				TrailingLogs:       1000,
+				SnapshotInterval:   30 * time.Second,
+				SnapshotThreshold:  2000,
 				LeaderLeaseTimeout: 2 * time.Second,
 			}
 		}
