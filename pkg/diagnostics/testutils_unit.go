@@ -39,6 +39,24 @@ func GetValueForObservationWithTagSet(rows []*view.Row, wantedTagSetCount map[ta
 	return 0
 }
 
+// GetValueForObservationWithTagSet is a helper to find a row out of a slice of rows retrieved when executing view.RetrieveData
+// This particular row should have the tags present in the tag set.
+// It doesn't return the value, only if it present or not
+func FindForObservationWithTagSet(rows []*view.Row, wantedTagSetCount map[tag.Tag]bool) bool {
+	for _, row := range rows {
+		foundTags := 0
+		for _, aTag := range row.Tags {
+			if wantedTagSetCount[aTag] {
+				foundTags++
+			}
+		}
+		if foundTags == len(wantedTagSetCount) {
+			return true
+		}
+	}
+	return false
+}
+
 // RequireTagExist tries to find a tag in a slice of rows return from view.RetrieveData
 func RequireTagExist(t *testing.T, rows []*view.Row, wantedTag tag.Tag) {
 	t.Helper()

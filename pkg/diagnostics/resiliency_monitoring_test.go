@@ -22,6 +22,7 @@ import (
 const (
 	resiliencyCountViewName      = "resiliency/count"
 	resiliencyActivationViewName = "resiliency/activations_total"
+	resiliencyCBStateViewName    = "resiliency/cb_state"
 	resiliencyLoadedViewName     = "resiliency/loaded"
 	testAppID                    = "fakeID"
 	testResiliencyName           = "testResiliency"
@@ -33,7 +34,8 @@ func cleanupRegisteredViews() {
 	diag.CleanupRegisteredViews(
 		resiliencyCountViewName,
 		resiliencyLoadedViewName,
-		resiliencyActivationViewName)
+		resiliencyActivationViewName,
+		resiliencyCBStateViewName)
 }
 
 func TestResiliencyCountMonitoring(t *testing.T) {
@@ -277,6 +279,10 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, rows, test.wantNumberOfRows)
 
+			rows_cb_state, err2 := view.RetrieveData(resiliencyCBStateViewName)
+			require.NoError(t, err2)
+			require.NotNil(t, rows_cb_state)
+
 			wantedTags := []tag.Tag{
 				diag.NewTag("app_id", testAppID),
 				diag.NewTag("name", testResiliencyName),
@@ -294,6 +300,10 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				gotCount := diag.GetValueForObservationWithTagSet(
 					rows, map[tag.Tag]bool{cbTag: true, diag.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
 				require.Equal(t, wantCount, gotCount)
+
+				found := diag.FindForObservationWithTagSet(
+					rows_cb_state, map[tag.Tag]bool{cbTag: true, diag.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
+				require.Equal(t, true, found)
 			}
 		})
 	}

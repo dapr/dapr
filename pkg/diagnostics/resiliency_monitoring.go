@@ -91,6 +91,19 @@ func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace s
 				namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
 			m.executionCount.M(1),
 		)
+
+		// Record individual circuit breaker gauge metric
+		if policy == CircuitBreakerPolicy {
+			cbMeasure := m.circuitbreakerState.M(ConvertCircuitBreakerState(status))
+			if cbMeasure.Measure() != nil {
+				_ = stats.RecordWithTags(
+					m.ctx,
+					diagUtils.WithTags(m.circuitbreakerState.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
+						namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
+					cbMeasure,
+				)
+			}
+		}
 	}
 }
 
@@ -114,19 +127,6 @@ func (m *resiliencyMetrics) PolicyWithStatusActivated(resiliencyName, namespace 
 				namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
 			m.activationsCount.M(1),
 		)
-
-		// Record individual circuit breaker gauge metric
-		if policy == CircuitBreakerPolicy {
-			cbMeasure := m.circuitbreakerState.M(ConvertCircuitBreakerState(status))
-			if cbMeasure.Measure() != nil {
-				_ = stats.RecordWithTags(
-					m.ctx,
-					diagUtils.WithTags(m.circuitbreakerState.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
-						namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
-					cbMeasure,
-				)
-			}
-		}
 	}
 }
 
