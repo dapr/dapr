@@ -91,7 +91,7 @@ func (s *StateStore) Run(t *testing.T, ctx context.Context) {
 
 	conn, err := grpc.DialContext(ctx, "unix://"+s.listener.Addr().String(), //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(), //nolint:staticcheck
+		grpc.WithBlock(),
 	)
 	require.NoError(t, err)
 

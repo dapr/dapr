@@ -315,7 +315,7 @@ func createTestClient(socket string) *grpc.ClientConn {
 		ctx,
 		socket,
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(), //nolint:staticcheck
+		grpc.WithBlock(),
 		grpc.WithContextDialer(func(ctx context.Context, addr string) (net.Conn, error) {
 			return net.Dial("unix", addr)
 		}),

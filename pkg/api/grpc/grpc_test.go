@@ -343,7 +343,7 @@ func createTestClient(lis *bufconn.Listener) *grpc.ClientConn {
 			return lis.DialContext(ctx)
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(), //nolint:staticcheck
+		grpc.WithBlock(),
 	)
 	if err != nil {
 		panic(err)

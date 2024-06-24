@@ -85,7 +85,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 				grpccredentials.TLSClientCredentials(trustAnchors, tlsconfig.AuthorizeID(sentryID)),
 			),
 			grpc.WithUnaryInterceptor(unaryClientInterceptor),
-			grpc.WithReturnConnectionError(), //nolint:staticcheck
+			grpc.WithReturnConnectionError(),
 		)
 		if err != nil {
 			diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")

@@ -77,7 +77,7 @@ func createConnection(t *testing.T) *grpc.ClientConn {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	conn, err := grpc.DialContext(ctx, "localhost:9998", //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(), //nolint:staticcheck
+		grpc.WithBlock(),
 	)
 	cancel()
 	require.NoError(t, err, "failed to connect to gRPC server")

@@ -87,7 +87,6 @@ func TestGRPCConnector(t *testing.T) {
 		listener, err := net.Listen("unix", fakeSocketPath)
 		require.NoError(t, err)
 		defer listener.Close()
-		//nolint:staticcheck
 		connector := NewGRPCConnectorWithDialer(socketDialer(fakeSocketPath, grpc.WithBlock()), fakeFactory)
 		defer connector.Close()
 
@@ -132,7 +131,6 @@ func TestGRPCConnector(t *testing.T) {
 		listener, err := net.Listen("unix", fakeSocketPath)
 		require.NoError(t, err)
 		defer listener.Close()
-		//nolint:staticcheck
 		connector := NewGRPCConnectorWithDialer(socketDialer(fakeSocketPath, grpc.WithBlock(), grpc.FailOnNonTempDialError(true)), fakeFactory)
 		defer connector.Close()
 
