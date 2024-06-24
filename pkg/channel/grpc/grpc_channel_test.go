@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,9 +74,12 @@ func TestMain(m *testing.M) {
 }
 
 func createConnection(t *testing.T) *grpc.ClientConn {
-	conn, err := grpc.NewClient("localhost:9998",
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
+	conn, err := grpc.DialContext(ctx, "localhost:9998", //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
+	cancel()
 	require.NoError(t, err, "failed to connect to gRPC server")
 	return conn
 }

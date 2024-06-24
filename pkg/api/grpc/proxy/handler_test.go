@@ -741,10 +741,14 @@ func (s *proxyTestSuite) getServerClientConn() (conn *grpc.ClientConn, teardown 
 	}
 
 	if s.serverClientConn == nil {
-		conn, err = grpc.NewClient(
+		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
+		defer cancel()
+		conn, err = grpc.DialContext( //nolint:staticcheck
+			ctx,
 			s.serverListener.Addr().String(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
+			grpc.WithBlock(), //nolint:staticcheck
 			grpc.WithStreamInterceptor(createGrpcStreamingChaosInterceptor(s.service.simulateConnectionFailures, codes.Unavailable)),
 		)
 		if err != nil {
@@ -826,7 +830,8 @@ func (s *proxyTestSuite) SetupSuite() {
 
 	time.Sleep(500 * time.Millisecond)
 
-	clientConn, err := grpc.NewClient(
+	clientConn, err := grpc.DialContext( //nolint:staticcheck
+		context.Background(),
 		s.proxyListener.Addr().String(), // DO NOT USE "localhost" as it does not resolve to loopback in some environments.
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),

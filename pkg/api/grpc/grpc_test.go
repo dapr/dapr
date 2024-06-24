@@ -335,12 +335,15 @@ func startDaprAPIServer(testAPIServer *api, token string) (*grpc.Server, *bufcon
 }
 
 func createTestClient(lis *bufconn.Listener) *grpc.ClientConn {
-	conn, err := grpc.NewClient(
-		"bufnet",
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	conn, err := grpc.DialContext( //nolint:staticcheck
+		ctx, "bufnet",
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
 	if err != nil {
 		panic(err)
