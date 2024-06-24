@@ -83,9 +83,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	b.httpClient = util.HTTPClient(t)
 
-	conn, err := grpc.NewClient(
+	conn, err := grpc.DialContext(ctx, //nolint:staticcheck
 		b.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
