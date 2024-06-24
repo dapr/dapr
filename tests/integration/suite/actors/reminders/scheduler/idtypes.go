@@ -16,7 +16,6 @@ package scheduler
 import (
 	"context"
 	"fmt"
-	"log"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -80,7 +79,7 @@ spec:
   - name: SchedulerReminders
     enabled: true`), 0o600))
 
-	i.scheduler = scheduler.New(t, scheduler.WithLogLevel("debug"))
+	i.scheduler = scheduler.New(t)
 	i.place = placement.New(t)
 
 	i.daprdsNum = 10
@@ -138,7 +137,6 @@ spec:
 		)...)
 
 		i.daprds[x] = daprd.New(t,
-			daprd.WithLogLevel("debug"),
 			daprd.WithConfigs(configFile),
 			daprd.WithInMemoryActorStateStore("mystore"),
 			daprd.WithPlacementAddresses(i.place.Address()),
@@ -202,16 +200,12 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		i.lock.Lock()
 		defer i.lock.Unlock()
-		log.Printf("methodcalled count: %d, expected: %d", len(i.methodcalled), i.actorIDsNum*i.actorTypesNum*i.daprdsNum)
-
 		assert.Len(c, i.methodcalled, i.actorIDsNum*i.actorTypesNum*i.daprdsNum)
 	}, time.Second*20, time.Millisecond*10)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		i.lock.Lock()
 		defer i.lock.Unlock()
-		log.Printf("expcalled len: %d, expcalled contents %+v, methodcalled count: %d", len(i.expcalled), i.expcalled, len(i.methodcalled))
-
 		assert.ElementsMatch(c, i.expcalled, i.methodcalled)
 	}, time.Second*20, time.Millisecond*10)
 }
