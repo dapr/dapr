@@ -7,6 +7,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
+	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
@@ -58,6 +59,11 @@ func newResiliencyMetrics() *resiliencyMetrics {
 func (m *resiliencyMetrics) Init(id string) error {
 	m.enabled = true
 	m.appID = id
+
+	if err := InitGlobals(config.MetricSpec{}); err != nil {
+		return err
+	}
+
 	return view.Register(
 		diagUtils.NewMeasureView(m.policiesLoadCount, []tag.Key{appIDKey, resiliencyNameKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(m.executionCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),

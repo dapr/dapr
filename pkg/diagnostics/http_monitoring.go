@@ -55,7 +55,7 @@ type httpMetrics struct {
 	clientCompletedCount   *stats.Int64Measure
 
 	healthProbeCompletedCount   *stats.Int64Measure
-	healthProbeRoundTripLatency *stats.Float64Measure
+	healthProbeRoundtripLatency *stats.Float64Measure
 
 	appID   string
 	enabled bool
@@ -109,7 +109,7 @@ func newHTTPMetrics() *httpMetrics {
 			"http/healthprobes/completed_count",
 			"Count of completed health probes",
 			stats.UnitDimensionless),
-		healthProbeRoundTripLatency: stats.Float64(
+		healthProbeRoundtripLatency: stats.Float64(
 			"http/healthprobes/roundtrip_latency",
 			"Time between first byte of health probes headers sent to last byte of response received, or terminal error",
 			stats.UnitMilliseconds),
@@ -239,18 +239,22 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		h.healthProbeCompletedCount.M(1))
 	stats.RecordWithTags(
 		ctx,
-		diagUtils.WithTags(h.healthProbeRoundTripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
-		h.healthProbeRoundTripLatency.M(elapsed))
+		diagUtils.WithTags(h.healthProbeRoundtripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
+		h.healthProbeRoundtripLatency.M(elapsed))
 }
 
-func (h *httpMetrics) Init(appID string, config *config.PathMatching, legacy bool) error {
+func (h *httpMetrics) Init(appID string, pmConfig *config.PathMatching, legacy bool) error {
 	h.appID = appID
 	h.enabled = true
 	h.legacy = legacy
 
-	if config != nil {
-		h.ingress = newPathMatching(config.IngressPaths, legacy)
-		h.egress = newPathMatching(config.EgressPaths, legacy)
+	if err := InitGlobals(config.MetricSpec{}); err != nil {
+		return err
+	}
+
+	if pmConfig != nil {
+		h.ingress = newPathMatching(pmConfig.IngressPaths, legacy)
+		h.egress = newPathMatching(pmConfig.EgressPaths, legacy)
 	}
 
 	tags := []tag.Key{appIDKey}

@@ -20,6 +20,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
+	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
@@ -103,7 +104,9 @@ func (w *workflowMetrics) Init(appID, namespace string) error {
 	w.appID = appID
 	w.enabled = true
 	w.namespace = namespace
-
+	if err := InitGlobals(config.MetricSpec{}); err != nil {
+		return err
+	}
 	return view.Register(
 		diagUtils.NewMeasureView(w.workflowOperationCount, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(w.workflowOperationLatency, []tag.Key{appIDKey, namespaceKey, operationKey, statusKey}, latencyDistribution),

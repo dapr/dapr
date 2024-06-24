@@ -25,6 +25,7 @@ import (
 	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
+	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
@@ -112,6 +113,10 @@ func newGRPCMetrics() *grpcMetrics {
 func (g *grpcMetrics) Init(appID string) error {
 	g.appID = appID
 	g.enabled = true
+
+	if err := InitGlobals(config.MetricSpec{}); err != nil {
+		return err
+	}
 
 	return view.Register(
 		diagUtils.NewMeasureView(g.serverReceivedBytes, []tag.Key{appIDKey, KeyServerMethod}, defaultSizeDistribution),

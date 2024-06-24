@@ -663,6 +663,8 @@ func TestMetricsGetHTTPLatencyDistributionBuckets(t *testing.T) {
 			},
 		}
 		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
+	})
+}
 
 func TestMetricsGetHTTPPathMatching(t *testing.T) {
 	t.Run("no http configuration, returns nil", func(t *testing.T) {

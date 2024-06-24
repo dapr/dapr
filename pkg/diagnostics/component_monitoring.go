@@ -9,6 +9,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
+	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
@@ -166,18 +167,8 @@ func (c *componentMetrics) Init(appID, namespace string) error {
 	c.enabled = true
 	c.namespace = namespace
 
-	// This is a gross hack that facilitates unit testing.  Once it's set here
-	// the rest of the unit tests in the diagnostics package consume the
-	// identical global view that was first set here because alphabetically this
-	// file was encountered first.
-	//
-	// NOTE: It might be more practical to explicitly run this check in each of
-	// the diagnostic package _test.go files where we call x.Init.
-	if latencyDistribution == nil {
-		err := SetLatencyDistribution(nil)
-		if err != nil {
-			return err
-		}
+	if err := InitGlobals(config.MetricSpec{}); err != nil {
+		return err
 	}
 
 	return view.Register(
