@@ -452,10 +452,10 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		require.NoError(t, err)
 		assert.Len(t, rows, 2)
 		// 2 Ping failures
-		assert.Equal(t, int64(2), diag.GetValueForObservationWithTagSet(
+		assert.Equal(t, int64(2), diag.GetCountValueForObservationWithTagSet(
 			rows, map[tag.Tag]bool{diag.NewTag("status", strconv.Itoa(int(codes.Internal))): true}))
 		// 1 success
-		assert.Equal(t, int64(1), diag.GetValueForObservationWithTagSet(
+		assert.Equal(t, int64(1), diag.GetCountValueForObservationWithTagSet(
 			rows, map[tag.Tag]bool{diag.NewTag("status", strconv.Itoa(int(codes.OK))): true}))
 	})
 
@@ -543,7 +543,7 @@ func assertResponseReceiveMetricsSameCode(t *testing.T, requestType string, code
 	rows, err := view.RetrieveData(serviceInvocationResponseRecvName)
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
-	count := diag.GetValueForObservationWithTagSet(
+	count := diag.GetCountValueForObservationWithTagSet(
 		rows, map[tag.Tag]bool{
 			diag.NewTag("status", strconv.Itoa(int(code))): true,
 			diag.NewTag("type", requestType):               true,
@@ -557,7 +557,7 @@ func assertRequestSentMetrics(t *testing.T, requestType string, requestsSentExpe
 	rows, err := view.RetrieveData(serviceInvocationRequestSentName)
 	require.NoError(t, err)
 	assert.Len(t, rows, 1)
-	requestsSent := diag.GetValueForObservationWithTagSet(
+	requestsSent := diag.GetCountValueForObservationWithTagSet(
 		rows, map[tag.Tag]bool{diag.NewTag("type", requestType): true})
 
 	if assertEqualFn == nil {

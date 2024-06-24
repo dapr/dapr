@@ -18,6 +18,13 @@ var (
 
 	OutboundPolicyFlowDirection PolicyFlowDirection = "outbound"
 	InboundPolicyFlowDirection  PolicyFlowDirection = "inbound"
+
+	cbStatuses = []string{
+		string(breaker.StateClosed),
+		string(breaker.StateHalfOpen),
+		string(breaker.StateOpen),
+		string(breaker.StateUnknown),
+	}
 )
 
 type PolicyType string
@@ -85,22 +92,37 @@ func (m *resiliencyMetrics) PolicyLoaded(resiliencyName, namespace string) {
 // PolicyWithStatusExecuted records metric when policy is executed with added status information (e.g., circuit breaker open).
 func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
 	if m.enabled {
+		// Common tags for all metrics
+		commonTags := []interface{}{
+			appIDKey, m.appID, 
+			resiliencyNameKey, resiliencyName, 
+			policyKey, string(policy),
+			namespaceKey, namespace, 
+			flowDirectionKey, string(flowDirection), 
+			targetKey, target, 
+			statusKey, status,
+		}
+
 		_ = stats.RecordWithTags(
 			m.ctx,
-			diagUtils.WithTags(m.executionCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
-				namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
+			diagUtils.WithTags(m.executionCount.Name(), commonTags...),
 			m.executionCount.M(1),
 		)
 
-		// Record individual circuit breaker gauge metric
+		// Record 4 metrics, one for each cb state, with the active state having a value of 1
 		if policy == CircuitBreakerPolicy {
-			cbMeasure := m.circuitbreakerState.M(ConvertCircuitBreakerState(status))
-			if cbMeasure.Measure() != nil {
+			for _, s := range cbStatuses {
+				//Use correct status tag
+				commonTags = append(commonTags[:len(commonTags)-1], s)
+				stateActive := int64(0)
+				if s == status {
+					stateActive = int64(1)
+				}
+
 				_ = stats.RecordWithTags(
 					m.ctx,
-					diagUtils.WithTags(m.circuitbreakerState.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
-						namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
-					cbMeasure,
+					diagUtils.WithTags(m.circuitbreakerState.Name(), commonTags...),
+					m.circuitbreakerState.M(stateActive),
 				)
 			}
 		}
@@ -140,21 +162,4 @@ func ResiliencyAppTarget(app string) string {
 
 func ResiliencyComponentTarget(name string, componentType string) string {
 	return componentType + "_" + name
-}
-
-// ConvertCircuitBreakerState converts CircuitBreakerState to iota -1, 0, 1, 2
-// TODO: How to pass the CircuitBreakerState better?
-func ConvertCircuitBreakerState(state string) int64 {
-	switch state {
-	case string(breaker.StateClosed):
-		return 0
-	case string(breaker.StateHalfOpen):
-		return 1
-	case string(breaker.StateOpen):
-		return 2
-	case string(breaker.StateUnknown):
-		return -1
-	default:
-		return -1 // Some other unknown state
-	}
 }
