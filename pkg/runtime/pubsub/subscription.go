@@ -30,7 +30,7 @@ type Subscription struct {
 	Rules           []*Rule           `json:"rules,omitempty"`
 	Scopes          []string          `json:"scopes"`
 	BulkSubscribe   *BulkSubscribe    `json:"bulkSubscribe"`
-	Type            SubscriptionType
+	Type            SubscriptionType  `json:"type"`
 }
 
 type BulkSubscribe struct {
