@@ -159,7 +159,9 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 			i = 0
 		}
 		host := j.places[i].Address()
-		conn, cerr := grpc.NewClient(host, sec.GRPCDialOptionMTLS(placeID))
+		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(), //nolint:staticcheck
+			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID), //nolint:staticcheck
+		)
 		if cerr != nil {
 			return false
 		}

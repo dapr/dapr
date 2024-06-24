@@ -490,10 +490,11 @@ func TestInvokeService(w http.ResponseWriter, r *http.Request) {
 		}
 		log.Printf("Proxying message: %+v", message)
 		b, _ := json.Marshal(message)
-
-		conn, err := grpc.NewClient(
+		//nolint:staticcheck
+		conn, err := grpc.Dial(
 			fmt.Sprintf("localhost:%d", daprGrpcPort),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(), //nolint:staticcheck
 		)
 		if err != nil {
 			log.Fatalf("did not connect: %v", err)

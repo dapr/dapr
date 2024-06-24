@@ -74,7 +74,8 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			j = 0
 		}
 		host := n.places[j].Address()
-		conn, err := grpc.NewClient(host,
+		//nolint:staticcheck
+		conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
 			grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 		)
 		if err != nil {

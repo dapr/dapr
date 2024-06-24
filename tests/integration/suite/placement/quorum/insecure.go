@@ -113,7 +113,9 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 			j = 0
 		}
 		host := i.places[j].Address()
-		conn, cerr := grpc.NewClient(host, sec.GRPCDialOptionMTLS(placeID))
+		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(), //nolint:staticcheck
+			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID), //nolint:staticcheck
+		)
 		if cerr != nil {
 			return false
 		}

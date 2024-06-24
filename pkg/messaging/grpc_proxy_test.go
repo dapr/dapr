@@ -33,7 +33,7 @@ import (
 )
 
 func connectionFn(ctx context.Context, address, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(bool), error) {
-	conn, err := grpc.NewClient(id,
+	conn, err := grpc.Dial(id, //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			// Don't actually connect to anything
