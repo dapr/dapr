@@ -40,13 +40,9 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	s := &Scheduler{}
 
-	opts := options{
-		// TODO: add scheduler server funcs here as needed
-		// TODO: add watchjobs here
-	}
-
+	opts := new(options)
 	for _, fopt := range fopts {
-		fopt(&opts)
+		fopt(opts)
 	}
 
 	require.NotNil(t, opts.sentry, "must provide sentry")

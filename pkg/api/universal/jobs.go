@@ -65,7 +65,7 @@ func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.Sc
 
 	_, err := a.schedulerClients.Next().ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
-		a.logger.Errorf("Error scheduling job %s", inReq.GetJob().GetName())
+		a.logger.Errorf("Error scheduling job %s due to: %s", inReq.GetJob().GetName(), err)
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerScheduleJob(errMetadata, err)
 	}
 
@@ -98,7 +98,7 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 
 	_, err := a.schedulerClients.Next().DeleteJob(ctx, internalDeleteJobReq)
 	if err != nil {
-		a.logger.Errorf("Error deleting job: %s", inReq.GetName())
+		a.logger.Errorf("Error deleting job: %s due to: %s", inReq.GetName(), err)
 		return &runtimev1pb.DeleteJobResponse{}, apierrors.SchedulerDeleteJob(errMetadata, err)
 	}
 
@@ -131,7 +131,7 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 
 	resp, err := a.schedulerClients.Next().GetJob(ctx, internalGetJobReq)
 	if err != nil {
-		a.logger.Errorf("Error getting job %s", inReq.GetName())
+		a.logger.Errorf("Error getting job %s due to: %s", inReq.GetName(), err)
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 

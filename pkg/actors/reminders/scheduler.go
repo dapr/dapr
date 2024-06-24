@@ -123,6 +123,9 @@ func (s *scheduler) CreateReminder(ctx context.Context, reminder *internal.Creat
 	}
 
 	_, err = s.clients.Next().ScheduleJob(ctx, internalScheduleJobReq)
+	if err != nil {
+		log.Errorf("Error scheduling reminder job %s due to: %s", reminder.Name, err)
+	}
 	return err
 }
 
@@ -180,7 +183,7 @@ func (s *scheduler) GetReminder(ctx context.Context, req *internal.GetReminderRe
 			"namespace": s.namespace,
 			"jobType":   "reminder",
 		}
-		log.Errorf("Error getting reminder job %s", req.Name)
+		log.Errorf("Error getting reminder job %s due to: %s", req.Name, err)
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 
@@ -223,5 +226,8 @@ func (s *scheduler) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 	}
 
 	_, err := s.clients.Next().DeleteJob(ctx, internalDeleteJobReq)
+	if err != nil {
+		log.Errorf("Error deleting reminder job %s due to: %s", req.Name, err)
+	}
 	return err
 }

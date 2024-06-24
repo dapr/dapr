@@ -71,7 +71,12 @@ func (m *Manager) Run(ctx context.Context) error {
 
 	for {
 		if err := m.watchJobs(ctx); err != nil {
-			return err
+			return fmt.Errorf("error watching scheduler jobs: %w", err)
+		}
+
+		// don't retry if closing down
+		if ctx.Err() != nil {
+			return nil
 		}
 	}
 }

@@ -62,6 +62,8 @@ func (c *connector) run(ctx context.Context) error {
 			channels: c.channels,
 		}).run(ctx)
 
+		log.Errorf("Scheduler stream disconnected: %s", err)
+
 		if ctx.Err() != nil {
 			return err
 		}

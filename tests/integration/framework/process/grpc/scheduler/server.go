@@ -51,5 +51,6 @@ func (s *server) WatchJobs(srv schedulerv1pb.Scheduler_WatchJobsServer) error {
 	if s.watchJobsFn != nil {
 		return s.watchJobsFn(srv)
 	}
+	<-srv.Context().Done()
 	return nil
 }
