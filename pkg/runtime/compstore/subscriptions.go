@@ -51,6 +51,7 @@ func (c *ComponentStore) SetProgramaticSubscriptions(subs ...rtpubsub.Subscripti
 func (c *ComponentStore) AddDeclarativeSubscription(comp *subapi.Subscription, sub rtpubsub.Subscription) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	sub.Type = rtpubsub.SubscriptionTypeDeclarative
 	for i, existing := range c.subscriptions.declarativesList {
 		if existing == comp.Name {
 			c.subscriptions.declarativesList = append(c.subscriptions.declarativesList[:i], c.subscriptions.declarativesList[i+1:]...)
@@ -85,6 +86,7 @@ func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription) error 
 				DeadLetterTopic: comp.Spec.DeadLetterTopic,
 				Metadata:        comp.Spec.Metadata,
 				Rules:           []*rtpubsub.Rule{{Path: "/"}},
+				Type:            rtpubsub.SubscriptionTypeStreaming,
 			},
 		},
 	}
