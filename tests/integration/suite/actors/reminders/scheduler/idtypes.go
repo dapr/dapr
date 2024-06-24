@@ -79,7 +79,7 @@ spec:
   - name: SchedulerReminders
     enabled: true`), 0o600))
 
-	i.scheduler = scheduler.New(t)
+	i.scheduler = scheduler.New(t, scheduler.WithLogLevel("debug"))
 	i.place = placement.New(t)
 
 	i.daprdsNum = 10
@@ -137,6 +137,7 @@ spec:
 		)...)
 
 		i.daprds[x] = daprd.New(t,
+			daprd.WithLogLevel("debug"),
 			daprd.WithConfigs(configFile),
 			daprd.WithInMemoryActorStateStore("mystore"),
 			daprd.WithPlacementAddresses(i.place.Address()),
