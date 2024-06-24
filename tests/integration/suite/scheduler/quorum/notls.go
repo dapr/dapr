@@ -16,6 +16,7 @@ package quorum
 import (
 	"context"
 	"fmt"
+	"log"
 	"math/rand"
 	"strconv"
 	"testing"
@@ -53,7 +54,7 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 
 	opts := []scheduler.Option{
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d,scheduler-1=http://localhost:%d,scheduler-2=http://localhost:%d", port1, port2, port3)),
+		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://127.0.0.1:%d,scheduler-1=http://127.0.0.1:%d,scheduler-2=http://127.0.0.1:%d", port1, port2, port3)),
 		scheduler.WithInitialClusterPorts(port1, port2, port3),
 		scheduler.WithReplicaCount(3),
 	}
@@ -64,12 +65,13 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 		"scheduler-2=" + strconv.Itoa(fp.Port(t)),
 	}
 	n.schedulers = []*scheduler.Scheduler{
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithLogLevel("debug"), scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithLogLevel("debug"), scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithLogLevel("debug"), scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...),
 	}
 
 	n.daprd = daprd.New(t,
+		daprd.WithLogLevel("debug"),
 		daprd.WithSchedulerAddresses(n.schedulers[0].Address(), n.schedulers[1].Address(), n.schedulers[2].Address()),
 	)
 
@@ -156,6 +158,7 @@ func checkKeysForJobName(t *testing.T, daprd *daprd.Daprd, jobName string, keys 
 
 	found := false
 	for _, kv := range keys {
+		log.Printf("ETCD Keys: %+v", keys)
 		if string(kv.Key) == fmt.Sprintf("dapr/jobs/app||%s||%s||%s", daprd.Namespace(), daprd.AppID(), jobName) {
 			found = true
 			break
