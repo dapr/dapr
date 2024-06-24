@@ -76,7 +76,7 @@ func (m *Manager) Run(ctx context.Context) error {
 
 		// don't retry if closing down
 		if ctx.Err() != nil {
-			return nil
+			return nil //nolint:nilerr
 		}
 	}
 }
