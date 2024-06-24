@@ -79,7 +79,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		port:            fp.Port(t),
 		healthzPort:     fp.Port(t),
 		metricsPort:     fp.Port(t),
-		initialCluster:  uids + "=http://localhost:" + strconv.Itoa(port1),
+		initialCluster:  uids + "=http://127.0.0.1:" + strconv.Itoa(port1),
 		etcdClientPorts: []string{uids + "=" + strconv.Itoa(fp.Port(t))},
 		namespace:       "default",
 	}
@@ -172,7 +172,7 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 
 	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", s.healthzPort), nil)
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", s.healthzPort), nil)
 		require.NoError(t, err)
 		resp, err := client.Do(req)
 		if err != nil {
@@ -192,7 +192,7 @@ func (s *Scheduler) Port() int {
 }
 
 func (s *Scheduler) Address() string {
-	return "localhost:" + strconv.Itoa(s.port)
+	return "127.0.0.1:" + strconv.Itoa(s.port)
 }
 
 func (s *Scheduler) HealthzPort() int {

@@ -64,13 +64,12 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 		"scheduler-2=" + strconv.Itoa(fp.Port(t)),
 	}
 	n.schedulers = []*scheduler.Scheduler{
-		scheduler.New(t, append(opts, scheduler.WithLogLevel("debug"), scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithLogLevel("debug"), scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithLogLevel("debug"), scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...),
+		scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...),
 	}
 
 	n.daprd = daprd.New(t,
-		daprd.WithLogLevel("debug"),
 		daprd.WithSchedulerAddresses(n.schedulers[0].Address(), n.schedulers[1].Address(), n.schedulers[2].Address()),
 	)
 
@@ -105,13 +104,15 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	req := &schedulerv1pb.ScheduleJobRequest{
 		Name: "testJob",
 		Job: &schedulerv1pb.Job{
-			// Set to 20 so the job doesn't get cleaned up before I check for it in etcd
-			Schedule: ptr.Of("@every 20s"),
+			// Set to 90 so the job doesn't get cleaned up before I check for it in etcd
+			// also so the job doesn't reach daprd to be sent to an app bc there is not app
+			// for this test
+			Schedule: ptr.Of("@every 90s"),
 			Repeats:  ptr.Of(uint32(1)),
 			Data: &anypb.Any{
 				TypeUrl: "type.googleapis.com/google.type.Expr",
 			},
-			Ttl: ptr.Of("30s"),
+			Ttl: ptr.Of("90s"),
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     n.daprd.AppID(),

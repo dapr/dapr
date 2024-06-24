@@ -145,7 +145,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	case codes.OK:
 		log.Debugf("Sent job %s to app", job.GetName())
 	case codes.NotFound:
-		log.Errorf("non-retriable error returned from app while processing triggered job %v: %s. status code returned: %v", job.GetName(), statusCode)
+		log.Errorf("non-retriable error returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
 	default:
 		log.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
 	}
