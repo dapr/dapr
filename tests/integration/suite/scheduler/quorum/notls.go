@@ -166,7 +166,7 @@ func checkKeysForJobName(t *testing.T, daprd *daprd.Daprd, jobName string, keys 
 
 func getEtcdKeys(t *testing.T, port string) []*mvccpb.KeyValue {
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{fmt.Sprintf("localhost:%s", port)},
+		Endpoints:   []string{fmt.Sprintf("127.0.0.1:%s", port)},
 		DialTimeout: 40 * time.Second,
 	})
 	require.NoError(t, err)
