@@ -229,8 +229,10 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 
 	case "grpc":
 		assert.Eventually(t, func() bool {
-			conn, err := grpc.NewClient(d.AppAddress(),
-				grpc.WithTransportCredentials(insecure.NewCredentials()))
+			//nolint:staticcheck
+			conn, err := grpc.Dial(d.AppAddress(),
+				grpc.WithTransportCredentials(insecure.NewCredentials()),
+				grpc.WithBlock())
 			if conn != nil {
 				defer conn.Close()
 			}
@@ -247,8 +249,10 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
-	conn, err := grpc.NewClient(d.GRPCAddress(),
+	//nolint:staticcheck
+	conn, err := grpc.DialContext(ctx, d.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })

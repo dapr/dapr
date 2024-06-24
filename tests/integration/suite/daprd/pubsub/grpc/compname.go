@@ -97,7 +97,8 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 		pubsubName := c.pubsubNames[i]
 		topicName := c.topicNames[i]
 		pt.Add(func(col *assert.CollectT) {
-			conn, err := grpc.NewClient(c.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			//nolint:staticcheck
+			conn, err := grpc.DialContext(ctx, c.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 			require.NoError(col, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 

@@ -101,9 +101,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			}
 		}, 10*time.Second, 10*time.Millisecond, "actor not ready in time")
 	})
-
-	conn, err := grpc.NewClient(b.daprd.GRPCAddress(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	//nolint:staticcheck
+	conn, err := grpc.DialContext(ctx, b.daprd.GRPCAddress(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })

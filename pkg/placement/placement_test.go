@@ -84,27 +84,22 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 
 func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.TCPConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
 	t.Helper()
-	t.Logf("Dialing server at address: %s", serverAddress)
 
+	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
+	defer cancel()
 	tcpConn, err := net.Dial("tcp", serverAddress)
 	require.NoError(t, err)
-	t.Logf("Creating gRPC client")
-
-	// Log server address
-	t.Logf("Dialing server at address: %s", serverAddress)
-
-	conn, err := grpc.NewClient(tcpConn.RemoteAddr().String(),
+	conn, err := grpc.DialContext(ctx, "", //nolint:staticcheck
+		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
+			return tcpConn, nil
+		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
-	t.Logf("maybe failed to create gRPC client: %v", err)
-
 	require.NoError(t, err)
-	t.Logf("sam %v", conn.Target())
 
 	client := v1pb.NewPlacementClient(conn)
-	stream, err := client.ReportDaprStatus(context.TODO())
-	t.Logf("maybe failed to create report status stream: %v", err)
-
+	stream, err := client.ReportDaprStatus(context.Background())
 	require.NoError(t, err)
 
 	return conn, tcpConn.(*net.TCPConn), stream

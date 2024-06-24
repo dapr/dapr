@@ -48,8 +48,9 @@ func run(w http.ResponseWriter, r *http.Request) {
 		log.Fatalf("could not decode request body: %v", err)
 	}
 
-	conn, err := grpc.NewClient("localhost:50001",
+	conn, err := grpc.Dial("localhost:50001",
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(),
 		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(6*1024*1024), grpc.MaxCallSendMsgSize(6*1024*1024)),
 	)
 	if err != nil {

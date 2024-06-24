@@ -76,7 +76,7 @@ func (o *mockOperator) ComponentUpdate(in *operatorv1pb.ComponentUpdateRequest, 
 }
 
 func getOperatorClient(address string) operatorv1pb.OperatorClient {
-	conn, _ := grpc.NewClient(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, _ := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials())) //nolint:staticcheck
 	return operatorv1pb.NewOperatorClient(conn)
 }
 

@@ -76,7 +76,8 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("trying plain text connection to Dapr API should succeed", func(t *testing.T) {
-		conn, err := grpc.NewClient(e.daprd.InternalGRPCAddress(),
+		conn, err := grpc.DialContext(ctx, e.daprd.InternalGRPCAddress(), //nolint:staticcheck
+			grpc.WithReturnConnectionError(), //nolint:staticcheck
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 		require.NoError(t, err)
@@ -120,7 +121,10 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		assert.Eventually(t, func() bool {
-			_, err = grpc.NewClient(e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID))
+			gctx, gcancel := context.WithTimeout(ctx, time.Second)
+			t.Cleanup(gcancel)
+			_, err = grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID), //nolint:staticcheck
+				grpc.WithReturnConnectionError()) //nolint:staticcheck
 			require.Error(t, err)
 			if runtime.GOOS == "windows" {
 				return !strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host.")

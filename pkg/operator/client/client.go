@@ -2,6 +2,7 @@ package client
 
 import (
 	"context"
+	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
@@ -11,6 +12,10 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
+)
+
+const (
+	dialTimeout = 30 * time.Second
 )
 
 // GetOperatorClient returns a new k8s operator client and the underlying connection.
@@ -32,10 +37,12 @@ func GetOperatorClient(ctx context.Context, address string, sec security.Handler
 
 	opts := []grpc.DialOption{
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
-		sec.GRPCDialOptionMTLS(operatorID),
+		sec.GRPCDialOptionMTLS(operatorID), grpc.WithReturnConnectionError(), //nolint:staticcheck
 	}
 
-	conn, err := grpc.NewClient(address, opts...)
+	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
+	defer cancel()
+	conn, err := grpc.DialContext(ctx, address, opts...) //nolint:staticcheck
 	if err != nil {
 		return nil, nil, err
 	}
