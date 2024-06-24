@@ -22,9 +22,9 @@ func NewTag(key string, value string) tag.Tag {
 	}
 }
 
-// GetValueForObservationWithTagSet is a helper to find a row out of a slice of rows retrieved when executing view.RetrieveData
+// GetCountValueForObservationWithTagSet is a helper to find a row out of a slice of rows retrieved when executing view.RetrieveData
 // This particular row should have the tags present in the tag set.
-func GetValueForObservationWithTagSet(rows []*view.Row, wantedTagSetCount map[tag.Tag]bool) int64 {
+func GetCountValueForObservationWithTagSet(rows []*view.Row, wantedTagSetCount map[tag.Tag]bool) int64 {
 	for _, row := range rows {
 		foundTags := 0
 		for _, aTag := range row.Tags {
@@ -39,10 +39,9 @@ func GetValueForObservationWithTagSet(rows []*view.Row, wantedTagSetCount map[ta
 	return 0
 }
 
-// GetValueForObservationWithTagSet is a helper to find a row out of a slice of rows retrieved when executing view.RetrieveData
+// GetLastValueForObservationWithTagset is a helper to find a row out of a slice of rows retrieved when executing view.RetrieveData
 // This particular row should have the tags present in the tag set.
-// It doesn't return the value, only if it present or not
-func FindForObservationWithTagSet(rows []*view.Row, wantedTagSetCount map[tag.Tag]bool) bool {
+func GetLastValueForObservationWithTagset(rows []*view.Row, wantedTagSetCount map[tag.Tag]bool) (bool, float64) {
 	for _, row := range rows {
 		foundTags := 0
 		for _, aTag := range row.Tags {
@@ -51,10 +50,10 @@ func FindForObservationWithTagSet(rows []*view.Row, wantedTagSetCount map[tag.Ta
 			}
 		}
 		if foundTags == len(wantedTagSetCount) {
-			return true
+			return true, row.Data.(*view.LastValueData).Value
 		}
 	}
-	return false
+	return false, -1
 }
 
 // RequireTagExist tries to find a tag in a slice of rows return from view.RetrieveData
