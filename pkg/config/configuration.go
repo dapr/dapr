@@ -32,6 +32,7 @@ import (
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -260,10 +261,12 @@ func (m MetricSpec) GetEnabled() bool {
 }
 
 // GetHTTPIncreasedCardinality returns true if increased cardinality is enabled for HTTP metrics
-func (m MetricSpec) GetHTTPIncreasedCardinality() bool {
+func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
-		// The default is false
-		return false
+		// The default is true in Dapr 1.13, but will be changed to false in 1.15+
+		// TODO: [MetricsCardinality] Change default in 1.15+
+		log.Warn("The default value for 'spec.metric.http.increasedCardinality' will change to 'false' in Dapr 1.15 or later")
+		return true
 	}
 	return *m.HTTP.IncreasedCardinality
 }
