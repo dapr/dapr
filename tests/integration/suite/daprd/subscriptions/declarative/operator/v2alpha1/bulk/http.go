@@ -16,12 +16,17 @@ package bulk
 import (
 	"context"
 	"testing"
+	"time"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -120,6 +125,14 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.daprd.WaitUntilRunning(t, ctx)
+
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		subsInMeta = h.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 2)
+	}, time.Second*5, time.Millisecond*10)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE.String(), subsInMeta[0].Type)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE.String(), subsInMeta[1].Type)
 
 	// TODO: @joshvanl: add support for bulk publish to in-memory pubsub.
 	h.sub.PublishBulk(t, ctx, subscriber.PublishBulkRequest{

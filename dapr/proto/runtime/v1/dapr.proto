@@ -721,6 +721,19 @@ message PubsubSubscription {
   map<string,string> metadata = 3 [json_name = "metadata"];
   PubsubSubscriptionRules rules = 4 [json_name = "rules"];
   string dead_letter_topic = 5 [json_name = "deadLetterTopic"];
+  PubsubSubscriptionType type = 6 [json_name = "type"];
+}
+
+// PubsubSubscriptionType indicates the type of subscription
+enum PubsubSubscriptionType {
+  // UNKNOWN is the default value for the subscription type.
+  UNKNOWN = 0;
+  // Declarative subscription (k8s CRD)
+  DECLARATIVE = 1;
+  // Programmatically created subscription
+  PROGRAMMATIC = 2;
+  // Bidirectional Streaming subscription
+  STREAMING = 3;
 }
 
 message PubsubSubscriptionRules {
