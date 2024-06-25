@@ -190,6 +190,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				url = fmt.Sprintf("http://%s/shutdown-workflow-runtime", externalURL)
 				_, err = utils.HTTPGet(url)
 				require.NoError(t, err, "error shutdown workflow runtime")
+
 			})
 		}
 	}

@@ -142,7 +142,7 @@ func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurati
 	require.NoError(t, err)
 	require.NotNil(t, sm)
 
-	testAppName := component.TestAppName + "-" + subscribeType
+	var testAppName = component.TestAppName + "-" + subscribeType
 
 	appUsage, err := tr.Platform.GetAppUsage(testAppName)
 	require.NoError(t, err)
