@@ -16,13 +16,16 @@ package basic
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -106,6 +109,13 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.operator.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
+
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		subsInMeta = h.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 1)
+	}, time.Second*5, time.Millisecond*10)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE.String(), subsInMeta[0].Type)
 
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{
 		Daprd:      h.daprd,
