@@ -16,6 +16,12 @@ package bulk
 import (
 	"context"
 	"testing"
+	"time"
+
+	http2 "github.com/dapr/dapr/pkg/api/http"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -120,6 +126,14 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 
 func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.daprd.WaitUntilRunning(t, ctx)
+
+	var subsInMeta []http2.MetadataResponsePubsubSubscription
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		subsInMeta = h.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 2)
+	}, time.Second*5, time.Millisecond*10)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE, subsInMeta[0].Type)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE, subsInMeta[1].Type)
 
 	// TODO: @joshvanl: add support for bulk publish to in-memory pubsub.
 	h.sub.PublishBulk(t, ctx, subscriber.PublishBulkRequest{

@@ -424,7 +424,6 @@ func (s *Subscriber) initProgramaticSubscriptions(ctx context.Context) error {
 
 	subbedTopics := make(map[string][]string)
 	for _, sub := range subscriptions {
-		sub.Type = runtimev1pb.PubsubSubscriptionType_STREAMING
 		subbedTopics[sub.PubsubName] = append(subbedTopics[sub.PubsubName], sub.Topic)
 	}
 	for pubsubName, topics := range subbedTopics {

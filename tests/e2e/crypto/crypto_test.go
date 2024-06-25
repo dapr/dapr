@@ -239,7 +239,7 @@ func TestSubtleCrypto(t *testing.T) {
 								ComponentName: component,
 								Name:          "rsakey",
 								// PEM is the default format
-								//Format: runtimev1pb.SubtleGetKeyRequest_PEM,
+								// Format: runtimev1pb.SubtleGetKeyRequest_PEM,
 							},
 							&runtimev1pb.SubtleGetKeyResponse{}
 					},

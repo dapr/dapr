@@ -18,6 +18,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/api/http"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/emptypb"
@@ -92,9 +94,18 @@ func (m *mixed) Run(t *testing.T, ctx context.Context) {
 		},
 	}))
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, m.daprd.GetMetaSubscriptions(c, ctx), 3)
-	}, time.Second*10, time.Millisecond*10)
+	var subsInMeta []http.MetadataResponsePubsubSubscription
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		subsInMeta = m.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 3)
+	}, time.Second*5, time.Millisecond*10)
+	assert.ElementsMatch(t, []http.MetadataResponsePubsubSubscription{
+		{PubsubName: "mypub", Topic: "a", Rules: []http.MetadataResponsePubsubSubscriptionRule{{Path: "/123"}}, Type: rtv1.PubsubSubscriptionType_PROGRAMMATIC},
+		{PubsubName: "mypub", Topic: "b", Rules: []http.MetadataResponsePubsubSubscriptionRule{{Path: "/zyx"}}, Type: rtv1.PubsubSubscriptionType_DECLARATIVE},
+		{PubsubName: "mypub", Topic: "c", Rules: []http.MetadataResponsePubsubSubscriptionRule{{Path: "/"}}, Type: rtv1.PubsubSubscriptionType_STREAMING},
+	},
+		subsInMeta,
+	)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub", Topic: "a", Data: []byte(`{"status": "completed"}`),

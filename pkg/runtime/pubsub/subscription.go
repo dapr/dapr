@@ -2,6 +2,7 @@ package pubsub
 
 import (
 	"fmt"
+
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 

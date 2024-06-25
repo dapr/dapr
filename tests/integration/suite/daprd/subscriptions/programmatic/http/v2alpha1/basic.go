@@ -16,6 +16,11 @@ package v2alpha1
 import (
 	"context"
 	"testing"
+	"time"
+
+	"github.com/dapr/dapr/pkg/api/http"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/stretchr/testify/require"
 
 	"github.com/stretchr/testify/assert"
 
@@ -127,4 +132,11 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "a", resp.Extensions()["topic"])
 	assert.Equal(t, "com.dapr.event.sent", resp.Type())
 	assert.Equal(t, "text/plain", resp.DataContentType())
+
+	var subsInMeta []http.MetadataResponsePubsubSubscription
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		subsInMeta = b.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 1)
+	}, time.Second*2, time.Millisecond*10)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_PROGRAMMATIC, subsInMeta[0].Type)
 }

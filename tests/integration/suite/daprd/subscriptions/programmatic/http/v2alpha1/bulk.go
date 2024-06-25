@@ -16,6 +16,11 @@ package v2alpha1
 import (
 	"context"
 	"testing"
+	"time"
+
+	"github.com/dapr/dapr/pkg/api/http"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -110,4 +115,16 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 	b.sub.ReceiveBulk(t, ctx)
 	b.sub.ReceiveBulk(t, ctx)
 	b.sub.ReceiveBulk(t, ctx)
+
+	var subsInMeta []http.MetadataResponsePubsubSubscription
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		subsInMeta = b.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 2)
+	}, time.Second*2, time.Millisecond*10)
+	assert.ElementsMatch(t, []http.MetadataResponsePubsubSubscription{
+		{PubsubName: "mypub", Topic: "a", Rules: []http.MetadataResponsePubsubSubscriptionRule{{Path: "/a"}}, Type: rtv1.PubsubSubscriptionType_PROGRAMMATIC},
+		{PubsubName: "mypub", Topic: "b", Rules: []http.MetadataResponsePubsubSubscriptionRule{{Path: "/b"}}, Type: rtv1.PubsubSubscriptionType_PROGRAMMATIC},
+	},
+		subsInMeta,
+	)
 }

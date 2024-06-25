@@ -34,8 +34,10 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var tr *runner.TestRunner
-var appNamePrefix = "perf-workflowsapp"
+var (
+	tr            *runner.TestRunner
+	appNamePrefix = "perf-workflowsapp"
+)
 
 type K6RunConfig struct {
 	TARGET_URL     string
@@ -190,7 +192,6 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 				url = fmt.Sprintf("http://%s/shutdown-workflow-runtime", externalURL)
 				_, err = utils.HTTPGet(url)
 				require.NoError(t, err, "error shutdown workflow runtime")
-
 			})
 		}
 	}

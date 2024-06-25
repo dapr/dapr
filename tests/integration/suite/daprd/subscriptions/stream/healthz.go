@@ -15,9 +15,10 @@ package stream
 
 import (
 	"context"
-	"github.com/dapr/dapr/pkg/api/http"
 	"testing"
 	"time"
+
+	"github.com/dapr/dapr/pkg/api/http"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -80,7 +81,7 @@ func (h *healthz) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		subsInMeta = h.daprd.GetMetaSubscriptions(c, ctx)
 		assert.Len(c, subsInMeta, 1)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*5, time.Millisecond*10)
 	assert.Equal(t, rtv1.PubsubSubscriptionType_STREAMING, subsInMeta[0].Type)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{

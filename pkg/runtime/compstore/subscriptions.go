@@ -15,6 +15,7 @@ package compstore
 
 import (
 	"fmt"
+
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -46,6 +47,9 @@ type subscriptions struct {
 func (c *ComponentStore) SetProgramaticSubscriptions(subs ...rtpubsub.Subscription) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
+	for i := range subs {
+		subs[i].Type = runtimev1pb.PubsubSubscriptionType_PROGRAMMATIC
+	}
 	c.subscriptions.programmatics = subs
 }
 
@@ -190,6 +194,7 @@ func (c *ComponentStore) ListSubscriptionsAppByPubSub(name string) []*NamedSubsc
 			subs = append(subs, &NamedSubscription{Subscription: sub})
 		}
 	}
+	// TODO: there is no streaming here, is it ok??
 
 	return subs
 }

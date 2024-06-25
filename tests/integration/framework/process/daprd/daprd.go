@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	http2 "github.com/dapr/dapr/pkg/api/http"
 	"io"
 	"net"
 	"net/http"
@@ -27,6 +26,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	http2 "github.com/dapr/dapr/pkg/api/http"
 
 	"github.com/google/uuid"
 	"github.com/prometheus/common/expfmt"

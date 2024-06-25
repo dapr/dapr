@@ -105,9 +105,9 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 						}
 
 						if v.GetRules() != nil && len(v.GetRules().GetRules()) > 0 {
-							subs[i].Rules = make([]metadataResponsePubsubSubscriptionRule, len(v.GetRules().GetRules()))
+							subs[i].Rules = make([]MetadataResponsePubsubSubscriptionRule, len(v.GetRules().GetRules()))
 							for j, r := range v.GetRules().GetRules() {
-								subs[i].Rules[j] = metadataResponsePubsubSubscriptionRule{
+								subs[i].Rules[j] = MetadataResponsePubsubSubscriptionRule{
 									Match: r.GetMatch(),
 									Path:  r.GetPath(),
 								}
@@ -181,12 +181,12 @@ type MetadataResponsePubsubSubscription struct {
 	PubsubName      string                                   `json:"pubsubname"`
 	Topic           string                                   `json:"topic"`
 	Metadata        map[string]string                        `json:"metadata,omitempty"`
-	Rules           []metadataResponsePubsubSubscriptionRule `json:"rules,omitempty"`
+	Rules           []MetadataResponsePubsubSubscriptionRule `json:"rules,omitempty"`
 	DeadLetterTopic string                                   `json:"deadLetterTopic"`
 	Type            runtimev1pb.PubsubSubscriptionType       `json:"type"`
 }
 
-type metadataResponsePubsubSubscriptionRule struct {
+type MetadataResponsePubsubSubscriptionRule struct {
 	Match string `json:"match,omitempty"`
 	Path  string `json:"path,omitempty"`
 }
