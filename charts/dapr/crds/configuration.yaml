@@ -262,6 +262,9 @@ spec:
                         type: array
                         items:
                           type: string
+                      excludeVerbs:
+                        description: If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
+                        type: boolean
                     type: object
                   rules:
                     items:
@@ -315,6 +318,9 @@ spec:
                         type: array
                         items:
                           type: string
+                      excludeVerbs:
+                          description: If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
+                          type: boolean
                     type: object
                   rules:
                     items:
