@@ -91,7 +91,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	host := m.place.Address()
-
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), sec.GRPCDialOptionMTLS(placeID))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
