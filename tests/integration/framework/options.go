@@ -19,6 +19,9 @@ import (
 )
 
 func WithProcesses(procs ...process.Interface) Option {
+	// TODO: if procs string contains `logline` we should move it to the start
+	// of the list here otherwise daprd doesn't start up and it just hangs
+	// we should make this easier to debug, or just move it to before daprd
 	return func(o *options) {
 		for _, proc := range procs {
 			var found bool
