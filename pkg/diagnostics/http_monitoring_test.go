@@ -21,7 +21,8 @@ func TestHTTPMiddleware(t *testing.T) {
 
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
-	testHTTP.Init("fakeID", nil, false)
+	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
+	testHTTP.Init("fakeID", configHTTP)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
@@ -37,8 +38,10 @@ func TestHTTPMiddleware(t *testing.T) {
 	assert.Len(t, rows, 1)
 	assert.Equal(t, "app_id", rows[0].Tags[0].Key.Name())
 	assert.Equal(t, "fakeID", rows[0].Tags[0].Value)
-	assert.Equal(t, "status", rows[0].Tags[1].Key.Name())
-	assert.Equal(t, "200", rows[0].Tags[1].Value)
+	assert.Equal(t, "method", rows[0].Tags[1].Key.Name())
+	assert.Equal(t, "POST", rows[0].Tags[1].Value)
+	assert.Equal(t, "status", rows[0].Tags[2].Key.Name())
+	assert.Equal(t, "200", rows[0].Tags[2].Value)
 
 	rows, err = view.RetrieveData("http/server/request_bytes")
 	require.NoError(t, err)
@@ -67,7 +70,8 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	testHTTP.Init("fakeID", nil, false)
+	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
+	testHTTP.Init("fakeID", configHTTP)
 	v := view.Find("http/server/request_count")
 	views := []*view.View{v}
 	view.Unregister(views...)
@@ -89,7 +93,7 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 func TestHTTPMetricsPathMatchingNotEnabled(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	testHTTP.Init("fakeID", nil, true)
+	testHTTP.Init("fakeID", HTTPMonitoringConfig{})
 	matchedPath, ok := testHTTP.pathMatcher.match("/orders")
 	require.False(t, ok)
 	require.Equal(t, "", matchedPath)
@@ -98,13 +102,14 @@ func TestHTTPMetricsPathMatchingNotEnabled(t *testing.T) {
 func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	config := []string{
+	paths := []string{
 		"/v1/orders/{orderID}/items/12345",
 		"/v1/orders/{orderID}/items/{itemID}",
 		"/v1/items/{itemID}",
 		"/v1/orders/{orderID}/items/{itemID}",
 	}
-	testHTTP.Init("fakeID", config, true)
+	configHTTP := NewHTTPMonitoringConfig(paths, true, false)
+	testHTTP.Init("fakeID", configHTTP)
 
 	// act & assert
 
@@ -142,7 +147,7 @@ func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
 func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	config := []string{
+	paths := []string{
 		"/v1/orders/{orderID}/items/12345",
 		"/v1/orders/{orderID}/items/{itemID}",
 		"/v1/orders/{orderID}",
@@ -151,7 +156,8 @@ func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 		"/v1/",
 		"/",
 	}
-	testHTTP.Init("fakeID", config, false)
+	configHTTP := NewHTTPMonitoringConfig(paths, false, false)
+	testHTTP.Init("fakeID", configHTTP)
 
 	// act & assert
 
@@ -200,18 +206,50 @@ func TestHTTPMetricsPathMatchingLowCardinalityRootPathRegister(t *testing.T) {
 	testHTTP.enabled = false
 
 	// 1 - Root path not registered fallback to ""
-	config1 := []string{"/v1/orders/{orderID}"}
-	testHTTP.Init("fakeID", config1, false)
+	paths1 := []string{"/v1/orders/{orderID}"}
+	testHTTP.Init("fakeID", HTTPMonitoringConfig{paths1, false, false})
 	matchedPath, ok := testHTTP.pathMatcher.match("/thispathdoesnotexist")
 	require.True(t, ok)
 	require.Equal(t, "", matchedPath)
 
 	// 2 - Root path registered fallback to "/"
-	config2 := []string{"/v1/orders/{orderID}", "/"}
-	testHTTP.Init("fakeID", config2, false)
+	paths2 := []string{"/v1/orders/{orderID}", "/"}
+	testHTTP.Init("fakeID", HTTPMonitoringConfig{paths2, false, false})
 	matchedPath, ok = testHTTP.pathMatcher.match("/thispathdoesnotexist")
 	require.True(t, ok)
 	require.Equal(t, "/", matchedPath)
+}
+
+func TestGetMetricsMethod(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
+	testHTTP.Init("fakeID", configHTTP)
+	assert.Equal(t, "GET", testHTTP.getMetricsMethod("GET"))
+	assert.Equal(t, "POST", testHTTP.getMetricsMethod("POST"))
+	assert.Equal(t, "PUT", testHTTP.getMetricsMethod("PUT"))
+	assert.Equal(t, "DELETE", testHTTP.getMetricsMethod("DELETE"))
+	assert.Equal(t, "PATCH", testHTTP.getMetricsMethod("PATCH"))
+	assert.Equal(t, "HEAD", testHTTP.getMetricsMethod("HEAD"))
+	assert.Equal(t, "OPTIONS", testHTTP.getMetricsMethod("OPTIONS"))
+	assert.Equal(t, "CONNECT", testHTTP.getMetricsMethod("CONNECT"))
+	assert.Equal(t, "TRACE", testHTTP.getMetricsMethod("TRACE"))
+	assert.Equal(t, "UNKNOWN", testHTTP.getMetricsMethod("INVALID"))
+}
+
+func TestGetMetricsMethodExcludeVerbs(t *testing.T) {
+	testHTTP := newHTTPMetrics()
+	configHTTP := NewHTTPMonitoringConfig(nil, false, true)
+	testHTTP.Init("fakeID", configHTTP)
+	assert.Equal(t, "", testHTTP.getMetricsMethod("GET"))
+	assert.Equal(t, "", testHTTP.getMetricsMethod("POST"))
+	assert.Equal(t, "", testHTTP.getMetricsMethod("PUT"))
+	assert.Equal(t, "", testHTTP.getMetricsMethod("DELETE"))
+	assert.Equal(t, "", testHTTP.getMetricsMethod("PATCH"))
+	assert.Equal(t, "", testHTTP.getMetricsMethod("HEAD"))
+	assert.Equal(t, "", testHTTP.getMetricsMethod("OPTIONS"))
+	assert.Equal(t, "", testHTTP.getMetricsMethod("CONNECT"))
+	assert.Equal(t, "", testHTTP.getMetricsMethod("TRACE"))
+	assert.Equal(t, "", testHTTP.getMetricsMethod("INVALID"))
 }
 
 func fakeHTTPRequest(body string) *http.Request {
