@@ -14,6 +14,7 @@ limitations under the License.
 package daprd
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -322,9 +323,29 @@ func (d *Daprd) ProfilePort() int {
 	return d.profilePort
 }
 
+type MetricBucket struct {
+	UpperBound      float64
+	CumulativeCount uint64
+}
+
+type metricsOptions struct {
+	includeBuckets bool
+}
+
+func WithIncludeBuckets() func(metricsOptions *metricsOptions) {
+	return func(m *metricsOptions) {
+		m.includeBuckets = true
+	}
+}
+
 // Returns a subset of metrics scraped from the metrics endpoint
-func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
+func (d *Daprd) Metrics(t *testing.T, ctx context.Context, opts ...func(*metricsOptions)) map[string]float64 {
 	t.Helper()
+
+	curOpts := metricsOptions{}
+	for _, o := range opts {
+		o(&curOpts)
+	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()), nil)
 	require.NoError(t, err)
@@ -332,6 +353,10 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	resp, err := d.httpClient.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// read resp.Body to variable
+	body, _ := io.ReadAll(resp.Body)
+	resp.Body = io.NopCloser(bytes.NewReader(body))
 
 	// Extract the metrics
 	parser := expfmt.TextParser{}
@@ -342,11 +367,23 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	metrics := make(map[string]float64)
 	for _, mf := range metricFamilies {
 		for _, m := range mf.GetMetric() {
-			key := mf.GetName()
+			metricName := mf.GetName()
+			labels := ""
 			for _, l := range m.GetLabel() {
-				key += "|" + l.GetName() + ":" + l.GetValue()
+				labels += "|" + l.GetName() + ":" + l.GetValue()
 			}
-			metrics[key] = m.GetCounter().GetValue()
+			metrics[metricName+labels] = m.GetCounter().GetValue()
+
+			if curOpts.includeBuckets {
+				h := m.GetHistogram()
+				if h == nil {
+					continue
+				}
+				for _, b := range h.GetBucket() {
+					bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.Itoa(int(*b.UpperBound))
+					metrics[bucketKey] = float64(*b.CumulativeCount)
+				}
+			}
 		}
 	}
 

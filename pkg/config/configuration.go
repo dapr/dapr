@@ -290,7 +290,7 @@ func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation 
 }
 
 // GetHTTPPathMatching returns the path matching configuration for HTTP metrics
-func (m MetricSpec) GetHTTPPathMatching() *PathMatching {
+func (m MetricSpec) GetHTTPPathMatching() []string {
 	if m.HTTP == nil {
 		return nil
 	}
@@ -299,20 +299,11 @@ func (m MetricSpec) GetHTTPPathMatching() *PathMatching {
 
 // MetricHTTP defines configuration for metrics for the HTTP server
 type MetricHTTP struct {
-	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
-	// If false, metrics for the HTTP server are collected with increased cardinality.
-	// The default is true in Dapr 1.13, but will be changed to false in 1.14+
-	// TODO: [MetricsCardinality] Change default in 1.15+
-	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
 	// Latency distribution buckets. If not set, the default buckets are used.
-	LatencyDistributionBuckets *[]int        `json:"latencyDistributionBuckets,omitempty"`
-	PathMatching               *PathMatching `json:"pathMatching,omitempty" yaml:"pathMatching,omitempty"`
-}
-
-// PathMatching defines configuration options for path matching.
-type PathMatching struct {
-	IngressPaths []string `json:"ingress,omitempty" yaml:"ingress,omitempty"`
-	EgressPaths  []string `json:"egress,omitempty" yaml:"egress,omitempty"`
+	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty"`
+	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
+	IncreasedCardinality *bool    `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
+	PathMatching         []string `json:"pathMatching,omitempty" yaml:"pathMatching,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.

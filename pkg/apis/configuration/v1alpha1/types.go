@@ -228,15 +228,7 @@ type MetricHTTP struct {
 	// +optional
 	LatencyDistributionBuckets []int `json:"latencyDistributionBuckets,omitempty"`
 	// +optional
-	PathMatching *PathMatching `json:"pathMatching,omitempty"`
-}
-
-// PathMatching defines configuration options for path matching.
-type PathMatching struct {
-	// IngressPaths is a list of paths to match for ingress metrics.
-	IngressPaths []string `json:"ingress,omitempty"`
-	// EgressPaths is a list of paths to match for egress metrics.
-	EgressPaths []string `json:"egress,omitempty"`
+	PathMatching []string `json:"pathMatching,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.

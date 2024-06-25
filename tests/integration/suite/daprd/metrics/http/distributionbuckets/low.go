@@ -17,10 +17,12 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"sort"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -77,13 +79,17 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("service invocation", func(t *testing.T) {
 		l.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
-		metrics := l.daprd.Metrics(t, ctx)
-		httpServerLatencyBuckets := 0
+		metrics := l.daprd.Metrics(t, ctx, daprd.WithIncludeBuckets())
+		var httpServerLatencyBuckets []float64
 		for k := range metrics {
 			if strings.HasPrefix(k, "dapr_http_server_latency_bucket") && strings.Contains(k, "app_id:myapp") && strings.Contains(k, "status:200") {
-				httpServerLatencyBuckets += 1
+				bucket, err := getBucketFromKey(k)
+				require.NoError(t, err)
+				httpServerLatencyBuckets = append(httpServerLatencyBuckets, bucket)
 			}
 		}
-		assert.Equal(t, 5, httpServerLatencyBuckets)
+		sort.Slice(httpServerLatencyBuckets, func(i, j int) bool { return httpServerLatencyBuckets[i] < httpServerLatencyBuckets[j] })
+		expected := []float64{5, 50, 500, 5_000}
+		assert.Equal(t, expected, httpServerLatencyBuckets)
 	})
 }
