@@ -17,6 +17,7 @@ import (
 	"fmt"
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/kit/ptr"
 )
@@ -40,6 +41,12 @@ type subscriptions struct {
 	// processing priority.
 	declarativesList []string
 	streams          map[string]*DeclarativeSubscription
+}
+
+// MetadataSubscription is a temporary wrapper for rtpubsub.Subscription to add a Type attribute to be used in GetMetadata
+type TypedSubscription struct {
+	rtpubsub.Subscription
+	Type runtimev1pb.PubsubSubscriptionType
 }
 
 func (c *ComponentStore) SetProgramaticSubscriptions(subs ...rtpubsub.Subscription) {
@@ -115,39 +122,51 @@ func (c *ComponentStore) DeleteDeclarativeSubscription(names ...string) {
 	}
 }
 
-func (c *ComponentStore) ListSubscriptions() []rtpubsub.Subscription {
+func (c *ComponentStore) ListTypedSubscriptions() []TypedSubscription {
 	c.lock.RLock()
 	defer c.lock.RUnlock()
 
-	var subs []rtpubsub.Subscription
+	var subs []TypedSubscription
 	taken := make(map[string]int)
 
 	for _, name := range c.subscriptions.declarativesList {
 		sub := c.subscriptions.declaratives[name].Subscription
+		typedSub := TypedSubscription{
+			Subscription: sub,
+			Type:         runtimev1pb.PubsubSubscriptionType_DECLARATIVE,
+		}
 		key := sub.PubsubName + "||" + sub.Topic
 		if _, ok := taken[key]; !ok {
 			taken[key] = len(subs)
-			subs = append(subs, sub)
+			subs = append(subs, typedSub)
 		}
 	}
 	for i := range c.subscriptions.programmatics {
 		sub := c.subscriptions.programmatics[i]
+		typedSub := TypedSubscription{
+			Subscription: sub,
+			Type:         runtimev1pb.PubsubSubscriptionType_PROGRAMMATIC,
+		}
 		key := sub.PubsubName + "||" + sub.Topic
 		if j, ok := taken[key]; ok {
-			subs[j] = sub
+			subs[j] = typedSub
 		} else {
 			taken[key] = len(subs)
-			subs = append(subs, sub)
+			subs = append(subs, typedSub)
 		}
 	}
 	for i := range c.subscriptions.streams {
 		sub := c.subscriptions.streams[i].Subscription
+		typedSub := TypedSubscription{
+			Subscription: sub,
+			Type:         runtimev1pb.PubsubSubscriptionType_STREAMING,
+		}
 		key := sub.PubsubName + "||" + sub.Topic
 		if j, ok := taken[key]; ok {
-			subs[j] = sub
+			subs[j] = typedSub
 		} else {
 			taken[key] = len(subs)
-			subs = append(subs, sub)
+			subs = append(subs, typedSub)
 		}
 	}
 
