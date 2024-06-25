@@ -45,7 +45,7 @@ const (
 	storeName                       = "testStore"
 )
 
-func newTestReminders() *reminders {
+func newTestStateStore() *statestore {
 	conf := internal.Config{
 		AppID:            TestAppID,
 		ActorsService:    "placement:placement:5050",
@@ -54,7 +54,7 @@ func newTestReminders() *reminders {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	apiLevel := &atomic.Uint32{}
 	apiLevel.Store(internal.ActorAPILevel)
-	r := NewRemindersProvider(internal.ActorsProviderOptions{
+	r := NewStateStore(internal.ActorsProviderOptions{
 		Clock:    clock,
 		Config:   conf,
 		APILevel: apiLevel,
@@ -69,7 +69,7 @@ func newTestReminders() *reminders {
 	r.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 		return true
 	})
-	return r.(*reminders)
+	return r.(*statestore)
 }
 
 // testRequest is the request object that encapsulates the `data` field of a request.
@@ -78,7 +78,7 @@ type testRequest struct {
 }
 
 func TestStoreIsNotInitialized(t *testing.T) {
-	testReminders := newTestReminders()
+	testReminders := newTestStateStore()
 	defer testReminders.Close()
 
 	testReminders.SetStateStoreProviderFn(func() (string, internal.TransactionalStateStore, error) {
@@ -98,9 +98,7 @@ func TestStoreIsNotInitialized(t *testing.T) {
 
 	t.Run("CreateReminder", func(t *testing.T) {
 		req := internal.CreateReminderRequest{}
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(context.Background(), reminder)
+		err := testReminders.CreateReminder(context.Background(), &req)
 		require.Error(t, err)
 	})
 
@@ -120,7 +118,7 @@ func TestStoreIsNotInitialized(t *testing.T) {
 func TestReminderCountFiring(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 
-	testReminders := newTestReminders()
+	testReminders := newTestStateStore()
 	defer testReminders.Close()
 	clock := testReminders.clock.(*clocktesting.FakeClock)
 
@@ -154,9 +152,7 @@ func TestReminderCountFiring(t *testing.T) {
 			Period:    "10s",
 			DueTime:   "10s",
 		}
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		require.NoError(t, testReminders.CreateReminder(context.Background(), reminder))
+		require.NoError(t, testReminders.CreateReminder(context.Background(), &req))
 	}
 
 	advanceTickers(t, clock, 500*time.Millisecond)
@@ -176,7 +172,7 @@ func TestReminderCountFiring(t *testing.T) {
 
 func TestCreateTimerDueTimes(t *testing.T) {
 	t.Run("create reminder with positive DueTime", func(t *testing.T) {
-		provider := newTestReminders()
+		provider := newTestStateStore()
 		defer provider.Close()
 		clock := provider.clock.(*clocktesting.FakeClock)
 
@@ -192,9 +188,8 @@ func TestCreateTimerDueTimes(t *testing.T) {
 			Name:      "myreminder",
 			DueTime:   "1s",
 		}
-		r := createReminder(t, clock.Now(), req)
 
-		err := provider.CreateReminder(context.Background(), r)
+		err := provider.CreateReminder(context.Background(), &req)
 		require.NoError(t, err)
 
 		advanceTickers(t, clock, 1*time.Second)
@@ -207,7 +202,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	})
 
 	t.Run("create reminder with 0 DueTime", func(t *testing.T) {
-		provider := newTestReminders()
+		provider := newTestStateStore()
 		defer provider.Close()
 		clock := provider.clock.(*clocktesting.FakeClock)
 
@@ -223,9 +218,8 @@ func TestCreateTimerDueTimes(t *testing.T) {
 			Name:      "myreminder",
 			DueTime:   "0",
 		}
-		r := createReminder(t, clock.Now(), req)
 
-		err := provider.CreateReminder(context.Background(), r)
+		err := provider.CreateReminder(context.Background(), &req)
 		require.NoError(t, err)
 
 		advanceTickers(t, clock, 10*time.Millisecond)
@@ -238,7 +232,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 	})
 
 	t.Run("create reminder with no DueTime", func(t *testing.T) {
-		provider := newTestReminders()
+		provider := newTestStateStore()
 		defer provider.Close()
 		clock := provider.clock.(*clocktesting.FakeClock)
 
@@ -254,9 +248,8 @@ func TestCreateTimerDueTimes(t *testing.T) {
 			Name:      "myreminder",
 			DueTime:   "",
 		}
-		r := createReminder(t, clock.Now(), req)
 
-		err := provider.CreateReminder(context.Background(), r)
+		err := provider.CreateReminder(context.Background(), &req)
 		require.NoError(t, err)
 
 		advanceTickers(t, clock, 10*time.Millisecond)
@@ -270,7 +263,7 @@ func TestCreateTimerDueTimes(t *testing.T) {
 }
 
 func TestSetReminderTrack(t *testing.T) {
-	testReminders := newTestReminders()
+	testReminders := newTestStateStore()
 	defer testReminders.Close()
 	testReminders.Init(context.Background())
 
@@ -282,7 +275,7 @@ func TestSetReminderTrack(t *testing.T) {
 
 func TestGetReminderTrack(t *testing.T) {
 	t.Run("reminder doesn't exist", func(t *testing.T) {
-		testReminders := newTestReminders()
+		testReminders := newTestStateStore()
 		defer testReminders.Close()
 		testReminders.Init(context.Background())
 
@@ -293,7 +286,7 @@ func TestGetReminderTrack(t *testing.T) {
 	})
 
 	t.Run("reminder exists", func(t *testing.T) {
-		testReminders := newTestReminders()
+		testReminders := newTestStateStore()
 		defer testReminders.Close()
 		testReminders.Init(context.Background())
 
@@ -311,7 +304,7 @@ func TestGetReminderTrack(t *testing.T) {
 
 func TestCreateReminder(t *testing.T) {
 	numReminders := 100
-	testReminders := newTestReminders()
+	testReminders := newTestStateStore()
 	defer testReminders.Close()
 
 	// Set the state store to not use locks when accessing data.
@@ -346,9 +339,7 @@ func TestCreateReminder(t *testing.T) {
 			TTL:       "PT10M",
 			Data:      nil,
 		}
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder)
+		err := testReminders.CreateReminder(ctx, &req)
 		require.NoError(t, err)
 	}()
 	go func() {
@@ -362,15 +353,13 @@ func TestCreateReminder(t *testing.T) {
 			TTL:       "PT10M",
 			Data:      nil,
 		}
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder)
+		err := testReminders.CreateReminder(ctx, &req)
 		require.NoError(t, err)
 	}()
 	wg.Wait()
 
 	// Now creates new reminders and migrates the previous one.
-	testRemindersWithPartition := newTestRemindersWithMockAndActorMetadataPartition()
+	testRemindersWithPartition := newTestStateStoreWithMockAndActorMetadataPartition()
 	defer testRemindersWithPartition.Close()
 
 	testRemindersWithPartition.SetStateStoreProviderFn(func() (string, internal.TransactionalStateStore, error) {
@@ -388,9 +377,7 @@ func TestCreateReminder(t *testing.T) {
 				TTL:       "10m",
 				Data:      nil,
 			}
-			reminder, err := req.NewReminder(testReminders.clock.Now())
-			require.NoError(t, err)
-			err = testRemindersWithPartition.CreateReminder(ctx, reminder)
+			err := testRemindersWithPartition.CreateReminder(ctx, &req)
 			require.NoError(t, err)
 		}
 	}
@@ -444,7 +431,7 @@ func TestCreateReminder(t *testing.T) {
 	assert.Len(t, reminders, numReminders)
 }
 
-func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
+func newTestStateStoreWithMockAndActorMetadataPartition() *statestore {
 	appConfig := config.ApplicationConfig{
 		Entities:                   []string{"cat", "actor2"},
 		RemindersStoragePartitions: TestActorMetadataPartitionCount,
@@ -499,12 +486,12 @@ func newTestRemindersWithMockAndActorMetadataPartition() *reminders {
 	clock := clocktesting.NewFakeClock(startOfTime)
 	apiLevel := &atomic.Uint32{}
 	apiLevel.Store(internal.ActorAPILevel)
-	r := NewRemindersProvider(internal.ActorsProviderOptions{
+	r := NewStateStore(internal.ActorsProviderOptions{
 		Clock:    clock,
 		Config:   conf,
 		APILevel: apiLevel,
 	})
-	return r.(*reminders)
+	return r.(*statestore)
 }
 
 func translateEntityConfig(appConfig config.EntityConfig) internal.EntityConfig {
@@ -538,21 +525,17 @@ func translateEntityConfig(appConfig config.EntityConfig) internal.EntityConfig 
 func TestOverrideReminder(t *testing.T) {
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
-		testReminders := newTestReminders()
+		testReminders := newTestStateStore()
 		defer testReminders.Close()
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 		req := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "a")
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder)
+		err := testReminders.CreateReminder(ctx, &req)
 		require.NoError(t, err)
 
 		req2 := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "b")
-		reminder2, err := req2.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder2)
+		err = testReminders.CreateReminder(ctx, &req2)
 		require.NoError(t, err)
 		reminders, _, err := testReminders.getRemindersForActorType(ctx, actorType, false)
 		require.NoError(t, err)
@@ -561,42 +544,34 @@ func TestOverrideReminder(t *testing.T) {
 	})
 
 	t.Run("override dueTime", func(t *testing.T) {
-		testReminders := newTestReminders()
+		testReminders := newTestStateStore()
 		defer testReminders.Close()
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 		req := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder)
+		err := testReminders.CreateReminder(ctx, &req)
 		require.NoError(t, err)
 
 		req2 := createReminderData(actorID, actorType, "reminder1", "1s", "2s", "", "")
-		reminder2, err := req2.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		testReminders.CreateReminder(ctx, reminder2)
+		testReminders.CreateReminder(ctx, &req2)
 		reminders, _, err := testReminders.getRemindersForActorType(context.Background(), actorType, false)
 		require.NoError(t, err)
 		assert.Equal(t, testReminders.clock.Now().Add(2*time.Second), reminders[0].Reminder.RegisteredTime)
 	})
 
 	t.Run("override period", func(t *testing.T) {
-		testReminders := newTestReminders()
+		testReminders := newTestStateStore()
 		defer testReminders.Close()
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 		req := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder)
+		err := testReminders.CreateReminder(ctx, &req)
 		require.NoError(t, err)
 
 		req2 := createReminderData(actorID, actorType, "reminder1", "2s", "1s", "", "")
-		reminder2, err := req2.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder2)
+		err = testReminders.CreateReminder(ctx, &req2)
 		require.NoError(t, err)
 		reminders, _, err := testReminders.getRemindersForActorType(context.Background(), actorType, false)
 		require.NoError(t, err)
@@ -604,24 +579,20 @@ func TestOverrideReminder(t *testing.T) {
 	})
 
 	t.Run("override TTL", func(t *testing.T) {
-		testReminders := newTestReminders()
+		testReminders := newTestStateStore()
 		defer testReminders.Close()
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 		req := createReminderData(actorID, actorType, "reminder1", "2s", "1s", "PT5M", "")
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder)
+		err := testReminders.CreateReminder(ctx, &req)
 		require.NoError(t, err)
 
 		ttl := "9999-09-01T00:00:00Z"
 		origTime, err := time.Parse(time.RFC3339, ttl)
 		require.NoError(t, err)
 		req2 := createReminderData(actorID, actorType, "reminder1", "2s", "1s", ttl, "")
-		reminder2, err := req2.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder2)
+		err = testReminders.CreateReminder(ctx, &req2)
 		require.NoError(t, err)
 		reminders, _, err := testReminders.getRemindersForActorType(context.Background(), actorType, false)
 		require.NoError(t, err)
@@ -634,7 +605,7 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
 		requestC := make(chan testRequest, 10)
-		testReminders := newTestReminders()
+		testReminders := newTestStateStore()
 		defer testReminders.Close()
 		clock := testReminders.clock.(*clocktesting.FakeClock)
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -647,15 +618,12 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		reminderName := "reminder1"
 
 		req := createReminderData(actorID, actorType, reminderName, "10s", "1s", "", "a")
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder)
+		err := testReminders.CreateReminder(ctx, &req)
 		require.NoError(t, err)
 
 		req2 := createReminderData(actorID, actorType, reminderName, "9s", "1s", "", "b")
-		reminder2, err := req2.NewReminder(testReminders.clock.Now())
+		err = testReminders.CreateReminder(ctx, &req2)
 		require.NoError(t, err)
-		testReminders.CreateReminder(ctx, reminder2)
 		reminders, _, err := testReminders.getRemindersForActorType(context.Background(), actorType, false)
 		require.NoError(t, err)
 		// Check reminder is updated
@@ -664,9 +632,8 @@ func TestOverrideReminderCancelsActiveReminders(t *testing.T) {
 		assert.Equal(t, json.RawMessage(`"b"`), reminders[0].Reminder.Data)
 
 		req3 := createReminderData(actorID, actorType, reminderName, "8s", "2s", "", "c")
-		reminder3, err := req3.NewReminder(testReminders.clock.Now())
+		err = testReminders.CreateReminder(ctx, &req3)
 		require.NoError(t, err)
-		testReminders.CreateReminder(ctx, reminder3)
 		reminders, _, err = testReminders.getRemindersForActorType(context.Background(), actorType, false)
 		require.NoError(t, err)
 		// Check reminder is updated
@@ -704,7 +671,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 	ctx := context.Background()
 	t.Run("override data", func(t *testing.T) {
 		requestC := make(chan testRequest, 10)
-		testReminders := newTestReminders()
+		testReminders := newTestStateStore()
 		defer testReminders.Close()
 		testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 			requestC <- testRequest{Data: "d"}
@@ -719,20 +686,14 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		reminderName := "reminder1"
 
 		req := createReminderData(actorID, actorType, reminderName, "10s", "3s", "", "a")
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder)
+		err := testReminders.CreateReminder(ctx, &req)
 		require.NoError(t, err)
 
 		req2 := createReminderData(actorID, actorType, reminderName, "8s", "4s", "", "b")
-		reminder2, err := req2.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder2)
+		err = testReminders.CreateReminder(ctx, &req2)
 		require.NoError(t, err)
 		req3 := createReminderData(actorID, actorType, reminderName, "8s", "4s", "", "c")
-		reminder3, err := req3.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder3)
+		err = testReminders.CreateReminder(ctx, &req3)
 		require.NoError(t, err)
 
 		// due time for reminders is 4s, advance less
@@ -747,9 +708,8 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 		assert.Equal(t, start.Add(4*time.Second), reminders[0].Reminder.RegisteredTime)
 
 		req4 := createReminderData(actorID, actorType, reminderName, "7s", "2s", "", "d")
-		reminder4, err := req4.NewReminder(testReminders.clock.Now())
+		err = testReminders.CreateReminder(ctx, &req4)
 		require.NoError(t, err)
-		testReminders.CreateReminder(ctx, reminder4)
 		reminders, _, err = testReminders.getRemindersForActorType(context.Background(), actorType, false)
 		require.NoError(t, err)
 
@@ -774,7 +734,7 @@ func TestOverrideReminderCancelsMultipleActiveReminders(t *testing.T) {
 }
 
 func TestDeleteReminderWithPartitions(t *testing.T) {
-	testReminders := newTestRemindersWithMockAndActorMetadataPartition()
+	testReminders := newTestStateStoreWithMockAndActorMetadataPartition()
 	defer testReminders.Close()
 	stateStore := daprt.NewFakeStateStore()
 	testReminders.SetStateStoreProviderFn(func() (string, internal.TransactionalStateStore, error) {
@@ -788,9 +748,7 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 	t.Run("Delete a reminder", func(t *testing.T) {
 		// Create a reminder
 		req := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		require.NoError(t, err)
-		err = testReminders.CreateReminder(ctx, reminder)
+		err := testReminders.CreateReminder(ctx, &req)
 		require.NoError(t, err)
 		assert.Len(t, testReminders.reminders[actorType], 1)
 
@@ -824,7 +782,7 @@ func TestDeleteReminderWithPartitions(t *testing.T) {
 }
 
 func TestDeleteReminder(t *testing.T) {
-	testReminders := newTestReminders()
+	testReminders := newTestStateStore()
 	defer testReminders.Close()
 
 	// Set the state store to not use locks when accessing data.
@@ -844,15 +802,11 @@ func TestDeleteReminder(t *testing.T) {
 		errs := make(chan error, 2)
 		go func() {
 			req := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "")
-			reminder, err := req.NewReminder(testReminders.clock.Now())
-			require.NoError(t, err)
-			errs <- testReminders.CreateReminder(ctx, reminder)
+			errs <- testReminders.CreateReminder(ctx, &req)
 		}()
 		go func() {
 			req := createReminderData(actorID, actorType, "reminder2", "1s", "1s", "", "")
-			reminder, err := req.NewReminder(testReminders.clock.Now())
-			require.NoError(t, err)
-			errs <- testReminders.CreateReminder(ctx, reminder)
+			errs <- testReminders.CreateReminder(ctx, &req)
 		}()
 		for i := 0; i < 2; i++ {
 			require.NoError(t, <-errs)
@@ -1003,7 +957,7 @@ func TestReminderRepeats(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			requestC := make(chan testRequest, 10)
-			testReminders := newTestReminders()
+			testReminders := newTestStateStore()
 			defer testReminders.Close()
 			testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 				requestC <- testRequest{Data: "data"}
@@ -1049,7 +1003,7 @@ func TestReminderRepeats(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			err = testReminders.CreateReminder(ctx, reminder)
+			err = testReminders.CreateReminder(ctx, &req)
 			require.NoError(t, err)
 
 			testReminders.remindersLock.RLock()
@@ -1147,7 +1101,7 @@ func TestReminderTTL(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			requestC := make(chan testRequest)
-			testReminders := newTestReminders()
+			testReminders := newTestStateStore()
 			defer testReminders.Close()
 			testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
 				requestC <- testRequest{Data: "data"}
@@ -1179,9 +1133,7 @@ func TestReminderTTL(t *testing.T) {
 				TTL:       ttl,
 				Data:      json.RawMessage(`"data"`),
 			}
-			reminder, err := req.NewReminder(testReminders.clock.Now())
-			require.NoError(t, err)
-			err = testReminders.CreateReminder(ctx, reminder)
+			err := testReminders.CreateReminder(ctx, &req)
 			require.NoError(t, err)
 
 			count := 0
@@ -1201,7 +1153,7 @@ func TestReminderTTL(t *testing.T) {
 					case request := <-requestC:
 						// Decrease i since time hasn't increased.
 						i--
-						assert.Equal(t, string(reminder.Data), "\""+request.Data.(string)+"\"")
+						assert.Equal(t, string(req.Data), "\""+request.Data.(string)+"\"")
 						count++
 					case <-ctx.Done():
 					case <-ticker.C():
@@ -1224,17 +1176,14 @@ func TestReminderTTL(t *testing.T) {
 
 func reminderValidation(dueTime, period, ttl, msg string) func(t *testing.T) {
 	return func(t *testing.T) {
-		testReminders := newTestReminders()
+		testReminders := newTestStateStore()
 		defer testReminders.Close()
 		testReminders.Init(context.Background())
 
 		actorType, actorID := getTestActorTypeAndID()
 
 		req := createReminderData(actorID, actorType, "reminder4", period, dueTime, ttl, "data")
-		reminder, err := req.NewReminder(testReminders.clock.Now())
-		if err == nil {
-			err = testReminders.CreateReminder(context.Background(), reminder)
-		}
+		err := testReminders.CreateReminder(context.Background(), &req)
 		if len(msg) != 0 {
 			require.ErrorContains(t, err, msg)
 		} else {
@@ -1259,16 +1208,14 @@ func TestReminderValidation(t *testing.T) {
 }
 
 func TestGetReminder(t *testing.T) {
-	testReminders := newTestReminders()
+	testReminders := newTestStateStore()
 	defer testReminders.Close()
 	testReminders.Init(context.Background())
 
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
 	req := createReminderData(actorID, actorType, "reminder1", "1s", "1s", "", "a")
-	reminder, err := req.NewReminder(testReminders.clock.Now())
-	require.NoError(t, err)
-	testReminders.CreateReminder(ctx, reminder)
+	testReminders.CreateReminder(ctx, &req)
 	assert.Len(t, testReminders.reminders[actorType], 1)
 	r, err := testReminders.GetReminder(ctx, &internal.GetReminderRequest{
 		Name:      "reminder1",
@@ -1282,7 +1229,7 @@ func TestGetReminder(t *testing.T) {
 }
 
 func TestReminderFires(t *testing.T) {
-	testReminders := newTestReminders()
+	testReminders := newTestStateStore()
 	defer testReminders.Close()
 	testReminders.Init(context.Background())
 
@@ -1291,9 +1238,7 @@ func TestReminderFires(t *testing.T) {
 	actorType, actorID := getTestActorTypeAndID()
 	ctx := context.Background()
 	req := createReminderData(actorID, actorType, "reminder1", "100ms", "100ms", "", "a")
-	reminder, err := req.NewReminder(testReminders.clock.Now())
-	require.NoError(t, err)
-	err = testReminders.CreateReminder(ctx, reminder)
+	err := testReminders.CreateReminder(ctx, &req)
 	require.NoError(t, err)
 
 	advanceTickers(t, clock, time.Millisecond*101)
@@ -1308,7 +1253,7 @@ func TestReminderFires(t *testing.T) {
 }
 
 func TestReminderDueDate(t *testing.T) {
-	testReminders := newTestReminders()
+	testReminders := newTestStateStore()
 	defer testReminders.Close()
 	testReminders.Init(context.Background())
 
@@ -1318,9 +1263,7 @@ func TestReminderDueDate(t *testing.T) {
 	ctx := context.Background()
 	actorKey := constructCompositeKey(actorType, actorID)
 	req := createReminderData(actorID, actorType, "reminder1", "100ms", "500ms", "", "a")
-	reminder, err := req.NewReminder(testReminders.clock.Now())
-	require.NoError(t, err)
-	err = testReminders.CreateReminder(ctx, reminder)
+	err := testReminders.CreateReminder(ctx, &req)
 	require.NoError(t, err)
 
 	track, err := testReminders.getReminderTrack(context.Background(), constructCompositeKey(actorKey, "reminder1"))
@@ -1338,7 +1281,7 @@ func TestReminderDueDate(t *testing.T) {
 }
 
 func TestReminderPeriod(t *testing.T) {
-	testReminders := newTestReminders()
+	testReminders := newTestStateStore()
 	defer testReminders.Close()
 	testReminders.Init(context.Background())
 
@@ -1356,9 +1299,7 @@ func TestReminderPeriod(t *testing.T) {
 		TTL:       "",
 		Data:      json.RawMessage(`"a"`),
 	}
-	reminder, errRem := req.NewReminder(testReminders.clock.Now())
-	require.NoError(t, errRem)
-	require.NoError(t, testReminders.CreateReminder(ctx, reminder))
+	require.NoError(t, testReminders.CreateReminder(ctx, &req))
 
 	advanceTickers(t, clock, 0)
 
@@ -1385,7 +1326,7 @@ func TestReminderPeriod(t *testing.T) {
 }
 
 func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
-	testReminders := newTestReminders()
+	testReminders := newTestStateStore()
 	defer testReminders.Close()
 	executed := make(chan string, 1)
 	testReminders.SetExecuteReminderFn(func(reminder *internal.Reminder) bool {
@@ -1400,9 +1341,7 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 	ctx := context.Background()
 	actorKey := constructCompositeKey(actorType, actorID)
 	req := createReminderData(actorID, actorType, "reminder1", "", "100ms", "", "a")
-	reminder, err := req.NewReminder(testReminders.clock.Now())
-	require.NoError(t, err)
-	err = testReminders.CreateReminder(ctx, reminder)
+	err := testReminders.CreateReminder(ctx, &req)
 	require.NoError(t, err)
 
 	clock.Step(100 * time.Millisecond)
@@ -1412,7 +1351,7 @@ func TestReminderFiresOnceWithEmptyPeriod(t *testing.T) {
 }
 
 func TestCreateReminderGoroutineLeak(t *testing.T) {
-	testReminders := newTestReminders()
+	testReminders := newTestStateStore()
 	clock := testReminders.clock.(*clocktesting.FakeClock)
 
 	actorType, actorID := getTestActorTypeAndID()
@@ -1430,11 +1369,7 @@ func TestCreateReminderGoroutineLeak(t *testing.T) {
 			req.Period = "1s"
 			req.TTL = "2s"
 		}
-		reminder, err := req.NewReminder(clock.Now())
-		if err != nil {
-			return err
-		}
-		return testReminders.CreateReminder(context.Background(), reminder)
+		return testReminders.CreateReminder(context.Background(), req)
 	}
 
 	// Get the baseline goroutines
@@ -1500,13 +1435,4 @@ func createReminderData(actorID, actorType, name, period, dueTime, ttl, data str
 		r.Data = json.RawMessage(`"` + data + `"`)
 	}
 	return r
-}
-
-func createReminder(t *testing.T, now time.Time, req internal.CreateReminderRequest) *internal.Reminder {
-	t.Helper()
-
-	reminder, err := req.NewReminder(now)
-	require.NoError(t, err)
-
-	return reminder
 }

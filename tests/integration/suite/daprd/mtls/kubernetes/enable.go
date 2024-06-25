@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -47,6 +48,7 @@ type enable struct {
 	sentry       *sentry.Sentry
 	placement    *placement.Placement
 	operator     *operator.Operator
+	scheduler    *scheduler.Scheduler
 	trustAnchors []byte
 }
 
@@ -59,11 +61,14 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
+
 	e.placement = placement.New(t,
 		placement.WithEnableTLS(true),
 		placement.WithTrustAnchorsFile(taFile),
 		placement.WithSentryAddress(e.sentry.Address()),
 	)
+
+	e.scheduler = scheduler.New(t, scheduler.WithSentry(e.sentry))
 
 	e.operator = operator.New(t, operator.WithSentry(e.sentry))
 
@@ -75,19 +80,21 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 		procdaprd.WithControlPlaneAddress(e.operator.Address(t)),
 		procdaprd.WithDisableK8sSecretStore(true),
 		procdaprd.WithPlacementAddresses(e.placement.Address()),
+		procdaprd.WithSchedulerAddresses(e.scheduler.Address()),
 
 		// Enable mTLS
 		procdaprd.WithEnableMTLS(true),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(e.sentry, e.placement, e.operator, e.daprd),
+		framework.WithProcesses(e.sentry, e.placement, e.operator, e.scheduler, e.daprd),
 	}
 }
 
 func (e *enable) Run(t *testing.T, ctx context.Context) {
 	e.sentry.WaitUntilRunning(t, ctx)
 	e.placement.WaitUntilRunning(t, ctx)
+	e.scheduler.WaitUntilRunning(t, ctx)
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("trying plain text connection to Dapr API should fail", func(t *testing.T) {

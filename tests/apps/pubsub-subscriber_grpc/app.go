@@ -437,6 +437,10 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	}, nil
 }
 
+func (s *server) OnJobEventAlpha1(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return nil, nil
+}
+
 func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
 	reqID := uuid.New().String()
 	log.Printf("(%s) Entered in OnBulkTopicEventAlpha1 in Bulk Subscribe - Topic: %s", reqID, in.GetTopic())
