@@ -236,13 +236,17 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 
 	// Initialize metrics only if MetricSpec is enabled.
 	metricsSpec := globalConfig.GetMetricsSpec()
+	httpConfig := diag.NewHTTPMonitoringConfig(
+		metricsSpec.GetHTTPPathMatching(),
+		metricsSpec.GetHTTPIncreasedCardinality(log),
+		metricsSpec.GetHTTPExcludeVerbs(),
+	)
 	if metricsSpec.GetEnabled() {
 		err = diag.InitMetrics(
 			intc.id,
 			namespace,
 			metricsSpec.Rules,
-			metricsSpec.GetHTTPPathMatching(),
-			metricsSpec.GetHTTPIncreasedCardinality(log),
+			httpConfig,
 		)
 		if err != nil {
 			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
