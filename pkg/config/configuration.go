@@ -271,6 +271,15 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 	return *m.HTTP.IncreasedCardinality
 }
 
+// GetHTTPExcludeVerbs returns true if exclude verbs is enabled for HTTP metrics
+func (m MetricSpec) GetHTTPExcludeVerbs() bool {
+	if m.HTTP == nil || m.HTTP.ExcludeVerbs == nil {
+		// The default is false
+		return false
+	}
+	return *m.HTTP.ExcludeVerbs
+}
+
 // GetHTTPPathMatching returns the path matching configuration for HTTP metrics
 func (m MetricSpec) GetHTTPPathMatching() []string {
 	if m.HTTP == nil {
@@ -281,9 +290,16 @@ func (m MetricSpec) GetHTTPPathMatching() []string {
 
 // MetricHTTP defines configuration for metrics for the HTTP server
 type MetricHTTP struct {
-	// If false (the default), metrics for the HTTP server are collected with increased cardinality.
-	IncreasedCardinality *bool    `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
-	PathMatching         []string `json:"pathMatching,omitempty" yaml:"pathMatching,omitempty"`
+	// If false, metrics for the HTTP server are collected with increased cardinality.
+	// The default is true in Dapr 1.13, but will be changed to false in 1.15+
+	// TODO: [MetricsCardinality] Change default in 1.15+
+	// +optional
+	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
+	// +optional
+	PathMatching []string `json:"pathMatching,omitempty" yaml:"pathMatching,omitempty"`
+	// If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
+	// +optional
+	ExcludeVerbs *bool `json:"excludeVerbs,omitempty" yaml:"excludeVerbs,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.

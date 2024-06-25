@@ -226,6 +226,9 @@ type MetricHTTP struct {
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty"`
 	// +optional
 	PathMatching []string `json:"pathMatching,omitempty"`
+	// If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
+	// +optional
+	ExcludeVerbs *bool `json:"excludeVerbs,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.
