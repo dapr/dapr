@@ -2,9 +2,10 @@ package diagnostics
 
 import (
 	"context"
-	"github.com/dapr/dapr/pkg/config"
 	"testing"
 	"time"
+
+	"github.com/dapr/dapr/pkg/config"
 
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
