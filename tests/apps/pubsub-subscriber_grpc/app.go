@@ -115,7 +115,6 @@ func main() {
 	/* #nosec */
 	s := grpc.NewServer()
 	runtimev1pb.RegisterAppCallbackServer(s, &server{})
-	runtimev1pb.RegisterAppCallbackAlphaServer(s, &server{})
 
 	log.Println("Client starting...")
 
@@ -511,8 +510,4 @@ func (s *server) ListInputBindings(ctx context.Context, in *emptypb.Empty) (*run
 func (s *server) OnBindingEvent(ctx context.Context, in *runtimev1pb.BindingEventRequest) (*runtimev1pb.BindingEventResponse, error) {
 	log.Printf("Invoked from binding: %s", in.GetName())
 	return &runtimev1pb.BindingEventResponse{}, nil
-}
-
-func (s *server) OnJobEvent(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
-	return nil, nil
 }

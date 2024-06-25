@@ -46,9 +46,6 @@ service AppCallback {
   // User application can save the states or send the events to the output
   // bindings optionally by returning BindingEventResponse.
   rpc OnBindingEvent(BindingEventRequest) returns (BindingEventResponse) {}
-
-  // Sends job back to the app's endpoint at trigger time.
-  rpc OnJobEvent (JobEventRequest) returns (JobEventResponse);
 }
 
 // AppCallbackHealthCheck V1 is an optional extension to AppCallback V1 to implement
@@ -63,6 +60,9 @@ service AppCallbackHealthCheck {
 service AppCallbackAlpha {
     // Subscribes bulk events from Pubsub
   rpc OnBulkTopicEventAlpha1(TopicEventBulkRequest) returns (TopicEventBulkResponse) {}
+
+  // Sends job back to the app's endpoint at trigger time.
+  rpc OnJobEventAlpha1 (JobEventRequest) returns (JobEventResponse);
 }
 
 message JobEventRequest {

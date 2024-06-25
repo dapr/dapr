@@ -130,8 +130,12 @@ func (s *server) OnBindingEvent(ctx context.Context, request *runtimev1pb.Bindin
 	return nil, nil
 }
 
+func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, request *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
+	return nil, nil
+}
+
 // OnJobEvent is called by daprd once daprd receives a job from the scheduler at trigger time
-func (s *server) OnJobEvent(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+func (s *server) OnJobEventAlpha1(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
 	jobName := request.GetName()
 	data := request.GetData().GetValue()
 
@@ -281,6 +285,7 @@ func main() {
 	grpcServer := grpc.NewServer()
 	runtimev1pb.RegisterAppCallbackServer(grpcServer, &server{})
 	runtimev1pb.RegisterAppCallbackHealthCheckServer(grpcServer, &server{})
+	runtimev1pb.RegisterAppCallbackAlphaServer(grpcServer, &server{})
 
 	log.Printf("Scheduler grpc server listening on :%d", appPortGRPC)
 

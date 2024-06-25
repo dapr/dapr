@@ -86,10 +86,6 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 	return &pb.HelloReply{Message: "Hello"}, nil
 }
 
-func (s *server) OnJobEvent(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
-	return nil, nil
-}
-
 // gRPC server definitions.
 func (s *server) OnInvoke(ctx context.Context, in *commonv1pb.InvokeRequest) (*commonv1pb.InvokeResponse, error) {
 	log.Printf("Got invoked method %s and data: %s", in.Method, string(in.GetData().Value))
