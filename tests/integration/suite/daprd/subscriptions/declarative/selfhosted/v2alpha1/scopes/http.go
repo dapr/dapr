@@ -142,16 +142,16 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	meta, err := client1.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 	assert.Equal(t, []*rtv1.PubsubSubscription{
-		{PubsubName: "mypub", Topic: "all", Rules: &rtv1.PubsubSubscriptionRules{
+		{PubsubName: "mypub", Topic: "all", Type: rtv1.PubsubSubscriptionType_DECLARATIVE, Rules: &rtv1.PubsubSubscriptionRules{
 			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/all"}},
 		}},
-		{PubsubName: "mypub", Topic: "allempty", Rules: &rtv1.PubsubSubscriptionRules{
+		{PubsubName: "mypub", Topic: "allempty", Type: rtv1.PubsubSubscriptionType_DECLARATIVE, Rules: &rtv1.PubsubSubscriptionRules{
 			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/allempty"}},
 		}},
-		{PubsubName: "mypub", Topic: "only1", Rules: &rtv1.PubsubSubscriptionRules{
+		{PubsubName: "mypub", Topic: "only1", Type: rtv1.PubsubSubscriptionType_DECLARATIVE, Rules: &rtv1.PubsubSubscriptionRules{
 			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/only1"}},
 		}},
-		{PubsubName: "mypub", Topic: "both", Rules: &rtv1.PubsubSubscriptionRules{
+		{PubsubName: "mypub", Topic: "both", Type: rtv1.PubsubSubscriptionType_DECLARATIVE, Rules: &rtv1.PubsubSubscriptionRules{
 			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/both"}},
 		}},
 	}, meta.GetSubscriptions())
@@ -159,16 +159,16 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	meta, err = client2.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 	assert.Equal(t, []*rtv1.PubsubSubscription{
-		{PubsubName: "mypub", Topic: "all", Rules: &rtv1.PubsubSubscriptionRules{
+		{PubsubName: "mypub", Topic: "all", Type: rtv1.PubsubSubscriptionType_DECLARATIVE, Rules: &rtv1.PubsubSubscriptionRules{
 			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/all"}},
 		}},
-		{PubsubName: "mypub", Topic: "allempty", Rules: &rtv1.PubsubSubscriptionRules{
+		{PubsubName: "mypub", Topic: "allempty", Type: rtv1.PubsubSubscriptionType_DECLARATIVE, Rules: &rtv1.PubsubSubscriptionRules{
 			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/allempty"}},
 		}},
-		{PubsubName: "mypub", Topic: "only2", Rules: &rtv1.PubsubSubscriptionRules{
+		{PubsubName: "mypub", Topic: "only2", Type: rtv1.PubsubSubscriptionType_DECLARATIVE, Rules: &rtv1.PubsubSubscriptionRules{
 			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/only2"}},
 		}},
-		{PubsubName: "mypub", Topic: "both", Rules: &rtv1.PubsubSubscriptionRules{
+		{PubsubName: "mypub", Topic: "both", Type: rtv1.PubsubSubscriptionType_DECLARATIVE, Rules: &rtv1.PubsubSubscriptionRules{
 			Rules: []*rtv1.PubsubSubscriptionRule{{Path: "/both"}},
 		}},
 	}, meta.GetSubscriptions())
