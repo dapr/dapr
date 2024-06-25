@@ -71,10 +71,6 @@ func NewParallel(t *testing.T, fns ...func(*assert.CollectT)) *ParallelTest {
 
 		wg.Wait()
 
-		for _, collect := range collects {
-			collect.Copy(t)
-		}
-
 		close(jobs)
 	})
 

@@ -135,7 +135,7 @@ spec:
 func (i *timeout) Run(t *testing.T, ctx context.Context) {
 	i.daprd.Run(t, ctx)
 	i.daprd.WaitUntilRunning(t, ctx)
-
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, i.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })

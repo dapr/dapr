@@ -156,8 +156,8 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		if i >= 3 {
 			i = 0
 		}
-		host := j.places[i].Address() //nolint:staticcheck
-		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(),
+		host := j.places[i].Address()
+		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(), //nolint:staticcheck
 			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID),
 		)
 		if cerr != nil {
