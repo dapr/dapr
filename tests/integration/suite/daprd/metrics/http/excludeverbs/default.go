@@ -47,7 +47,6 @@ func (h *defaultExcludeVerbs) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppPort(app.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppID("myapp"),
-		daprd.WithInMemoryStateStore("mystore"),
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -70,6 +69,6 @@ func (h *defaultExcludeVerbs) Run(t *testing.T, ctx context.Context) {
 	t.Run("service invocation - default", func(t *testing.T) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/orders/123")
 		metrics := h.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:|status:200"]))
+		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/orders/123|status:200"]))
 	})
 }
