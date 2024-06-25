@@ -58,7 +58,7 @@ func TestServerFor[TServer any, TClient any](logger logger.Logger, registersvc f
 			}
 		}()
 		ctx := context.Background()
-		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
+		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) { //nolint:staticcheck
 			return lis.Dial()
 		}), grpc.WithTransportCredentials(insecure.NewCredentials()))
 		if err != nil {

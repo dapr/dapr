@@ -167,7 +167,7 @@ func (o *Operator) Dial(t *testing.T, ctx context.Context, ns string, sentry *se
 
 	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", o.namespace, "dapr-operator")
 	require.NoError(t, err)
-
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(o.Port()), sech.GRPCDialOptionMTLS(id))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })

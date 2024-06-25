@@ -70,7 +70,7 @@ func (r *Requester) dialSentryConnection(ctx context.Context) error {
 	connCtx, cancel := context.WithTimeout(ctx, time.Minute)
 	defer cancel()
 
-	conn, err := grpc.DialContext(connCtx, r.sentryAddress, r.sec.GRPCDialOptionMTLS(r.sentryID), grpc.WithBlock())
+	conn, err := grpc.DialContext(connCtx, r.sentryAddress, r.sec.GRPCDialOptionMTLS(r.sentryID), grpc.WithBlock()) //nolint:staticcheck
 	if err != nil {
 		return fmt.Errorf("error establishing connection to sentry: %w", err)
 	}

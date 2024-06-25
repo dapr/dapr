@@ -216,7 +216,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		daprdNoStateStore.Run(t, ctx)
 		daprdNoStateStore.WaitUntilRunning(t, ctx)
 		defer daprdNoStateStore.Cleanup(t)
-
+		//nolint:staticcheck
 		connNoStateStore, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", daprdNoStateStore.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, connNoStateStore.Close()) })

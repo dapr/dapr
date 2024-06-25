@@ -156,7 +156,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		if i >= 3 {
 			i = 0
 		}
-		host := j.places[i].Address()
+		host := j.places[i].Address() //nolint:staticcheck
 		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(),
 			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID),
 		)

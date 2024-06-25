@@ -106,9 +106,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	assert.Eventually(t, func() bool {
 		return b.methodcalled.Load() == 1
 	}, time.Second*3, time.Millisecond*10)
-
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, b.daprd.GRPCAddress(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
