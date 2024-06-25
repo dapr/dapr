@@ -10,7 +10,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.13.1
+	github.com/dapr/components-contrib v1.13.0-rc.2.0.20240625140521-7619e752365d
 	github.com/dapr/kit v0.13.1-0.20240523225705-106329e5839f
 	github.com/evanphx/json-patch/v5 v5.8.1
 	github.com/go-chi/chi/v5 v5.0.11
@@ -31,7 +31,7 @@ require (
 	github.com/hashicorp/golang-lru/v2 v2.0.7
 	github.com/hashicorp/raft v1.4.0
 	github.com/hashicorp/raft-boltdb v0.0.0-20230125174641-2a8082862702
-	github.com/jackc/pgx/v5 v5.5.4
+	github.com/jackc/pgx/v5 v5.5.5
 	github.com/jhump/protoreflect v1.15.2
 	github.com/kelseyhightower/envconfig v1.4.0
 	github.com/lestrrat-go/jwx/v2 v2.0.21
@@ -153,6 +153,7 @@ require (
 	github.com/aws/aws-sdk-go-v2/config v1.18.28 // indirect
 	github.com/aws/aws-sdk-go-v2/credentials v1.13.27 // indirect
 	github.com/aws/aws-sdk-go-v2/feature/ec2/imds v1.13.5 // indirect
+	github.com/aws/aws-sdk-go-v2/feature/rds/auth v1.3.10 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/configsources v1.1.35 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/endpoints/v2 v2.4.29 // indirect
 	github.com/aws/aws-sdk-go-v2/internal/ini v1.3.36 // indirect
@@ -255,7 +256,7 @@ require (
 	github.com/grpc-ecosystem/grpc-gateway/v2 v2.16.0 // indirect
 	github.com/gsterjov/go-libsecret v0.0.0-20161001094733-a6f4afe4910c // indirect
 	github.com/hailocab/go-hostpool v0.0.0-20160125115350-e80d13ce29ed // indirect
-	github.com/hamba/avro/v2 v2.15.0 // indirect
+	github.com/hamba/avro/v2 v2.20.1 // indirect
 	github.com/hashicorp/consul/api v1.25.1 // indirect
 	github.com/hashicorp/errwrap v1.1.0 // indirect
 	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
