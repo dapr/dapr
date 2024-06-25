@@ -746,7 +746,7 @@ func (s *proxyTestSuite) getServerClientConn() (conn *grpc.ClientConn, teardown 
 	if s.serverClientConn == nil {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		conn, err = grpc.DialContext(
+		conn, err = grpc.DialContext( //nolint:staticcheck
 			ctx,
 			s.serverListener.Addr().String(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -833,7 +833,7 @@ func (s *proxyTestSuite) SetupSuite() {
 
 	time.Sleep(500 * time.Millisecond)
 
-	clientConn, err := grpc.DialContext(
+	clientConn, err := grpc.DialContext( //nolint:staticcheck
 		context.Background(),
 		s.proxyListener.Addr().String(), // DO NOT USE "localhost" as it does not resolve to loopback in some environments.
 		grpc.WithTransportCredentials(insecure.NewCredentials()),

@@ -693,3 +693,39 @@ func TestMetricsGetHTTPPathMatching(t *testing.T) {
 		assert.Equal(t, []string{"/resource/1"}, config)
 	})
 }
+
+func TestMetricsGetHTTPExcludeVerbs(t *testing.T) {
+	t.Run("no configuration, returns false", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: nil,
+		}
+		assert.False(t, m.GetHTTPExcludeVerbs())
+	})
+
+	t.Run("nil value, returns false", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				ExcludeVerbs: nil,
+			},
+		}
+		assert.False(t, m.GetHTTPExcludeVerbs())
+	})
+
+	t.Run("config is enabled", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				ExcludeVerbs: ptr.Of(true),
+			},
+		}
+		assert.True(t, m.GetHTTPExcludeVerbs())
+	})
+
+	t.Run("config is disabled", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				ExcludeVerbs: ptr.Of(false),
+			},
+		}
+		assert.False(t, m.GetHTTPExcludeVerbs())
+	})
+}

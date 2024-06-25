@@ -111,7 +111,7 @@ spec:
 
 func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
-
+	//nolint:staticcheck
 	conn, connErr := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", e.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, connErr)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })

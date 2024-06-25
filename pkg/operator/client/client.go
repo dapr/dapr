@@ -42,7 +42,7 @@ func GetOperatorClient(ctx context.Context, address string, sec security.Handler
 
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, address, opts...)
+	conn, err := grpc.DialContext(ctx, address, opts...) //nolint:staticcheck
 	if err != nil {
 		return nil, nil, err
 	}

@@ -224,11 +224,14 @@ type MetricHTTP struct {
 	// TODO: [MetricsCardinality] Change default in 1.15+
 	// +optional
 	IncreasedCardinality *bool `json:"increasedCardinality,omitempty"`
+	// +optional
+	PathMatching []string `json:"pathMatching,omitempty"`
+	// If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
+	// +optional
+	ExcludeVerbs *bool `json:"excludeVerbs,omitempty"`
 	// Latency distribution buckets. If not set, the default buckets are used.
 	// +optional
 	LatencyDistributionBuckets []int `json:"latencyDistributionBuckets,omitempty"`
-	// +optional
-	PathMatching []string `json:"pathMatching,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.
