@@ -17,6 +17,7 @@ func TestRegexRulesSingle(t *testing.T) {
 	const statName = "test_stat_regex"
 	methodKey := tag.MustNewKey("method")
 	testStat := stats.Int64(statName, "Stat used in unit test", stats.UnitDimensionless)
+	httpConfig := NewHTTPMonitoringConfig(nil, false, true)
 
 	InitMetrics("testAppId2", "", []config.MetricsRule{
 		{
@@ -31,7 +32,7 @@ func TestRegexRulesSingle(t *testing.T) {
 				},
 			},
 		},
-	})
+	}, httpConfig)
 
 	t.Run("single regex rule applied", func(t *testing.T) {
 		view.Register(

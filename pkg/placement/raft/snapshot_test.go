@@ -42,11 +42,16 @@ func (m *MockSnapShotSink) Close() error {
 
 func TestPersist(t *testing.T) {
 	// arrange
-	fsm := newFSM(10)
+	fsm := newFSM(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	testMember := DaprHostMember{
-		Name:     "127.0.0.1:3030",
-		AppID:    "fakeAppID",
-		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		Name:      "127.0.0.1:3030",
+		Namespace: "ns1",
+		AppID:     "fakeAppID",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo"},
 	}
 	cmdLog, _ := makeRaftLogCommand(MemberUpsert, testMember)
 	raftLog := &raft.Log{
@@ -65,12 +70,21 @@ func TestPersist(t *testing.T) {
 	snap.Persist(fakeSink)
 
 	// assert
-	restoredState := newDaprHostMemberState(10)
+	restoredState := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	err = restoredState.restore(buf)
 	require.NoError(t, err)
 
-	expectedMember := fsm.State().Members()[testMember.Name]
-	restoredMember := restoredState.Members()[testMember.Name]
+	members, err := fsm.State().members("ns1")
+	require.NoError(t, err)
+	expectedMember := members[testMember.Name]
+
+	restoredMembers, err := restoredState.members("ns1")
+	require.NoError(t, err)
+	restoredMember := restoredMembers[testMember.Name]
 	assert.Equal(t, fsm.State().Index(), restoredState.Index())
 	assert.Equal(t, expectedMember.Name, restoredMember.Name)
 	assert.Equal(t, expectedMember.AppID, restoredMember.AppID)

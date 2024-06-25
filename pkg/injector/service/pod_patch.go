@@ -48,14 +48,11 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	)
 
 	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
+	schedulerAddress := patcher.ServiceScheduler.Address(i.config.Namespace, i.config.KubeClusterDomain)
 	sentryAddress := patcher.ServiceSentry.Address(i.config.Namespace, i.config.KubeClusterDomain)
 	operatorAddress := patcher.ServiceAPI.Address(i.config.Namespace, i.config.KubeClusterDomain)
 
-	trustAnchors, err := i.currentTrustAnchors()
-	if err != nil {
-		return nil, err
-	}
-	daprdCert, daprdPrivateKey, err := i.signDaprdCertificate(ctx, ar.Request.Namespace)
+	trustAnchors, err := i.currentTrustAnchors(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -73,13 +70,12 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.SentryAddress = sentryAddress
 	sidecar.RunAsNonRoot = i.config.GetRunAsNonRoot()
 	sidecar.ReadOnlyRootFilesystem = i.config.GetReadOnlyRootFilesystem()
+	sidecar.EnableK8sDownwardAPIs = i.config.GetEnableK8sDownwardAPIs()
 	sidecar.SidecarDropALLCapabilities = i.config.GetDropCapabilities()
 	sidecar.ControlPlaneNamespace = i.controlPlaneNamespace
 	sidecar.ControlPlaneTrustDomain = i.controlPlaneTrustDomain
 	sidecar.SentrySPIFFEID = i.sentrySPIFFEID.String()
 	sidecar.CurrentTrustAnchors = trustAnchors
-	sidecar.CertChain = string(daprdCert)
-	sidecar.CertKey = string(daprdPrivateKey)
 	sidecar.DisableTokenVolume = !token.HasKubernetesToken()
 
 	// Set addresses for actor services
@@ -110,6 +106,10 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	if useRemindersSvc {
 		// Set the reminders-service CLI flag with "<name>:<address>"
 		sidecar.RemindersService = remindersSvcName + ":" + remindersSvc.Address(i.config.Namespace, i.config.KubeClusterDomain)
+	}
+
+	if sidecar.SchedulerAddress == "" {
+		sidecar.SchedulerAddress = schedulerAddress
 	}
 
 	// Default value for the sidecar image, which can be overridden by annotations

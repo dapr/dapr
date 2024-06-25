@@ -72,7 +72,7 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 	)
 
 	// Init placement
-	i.place = placement.New(t, placement.WithMaxAPILevel(0))
+	i.place = placement.New(t)
 
 	// Init two instances of daprd, each with its own server
 	for j := 0; j < 2; j++ {
@@ -126,7 +126,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 				assert.Equal(c, http.StatusOK, resp.StatusCode)
 			}
 		}
-	}, 15*time.Second, 100*time.Millisecond, "actors not ready")
+	}, 15*time.Second, 10*time.Millisecond, "actors not ready")
 
 	// Do a bunch of things in parallel
 	errCh := make(chan error)
@@ -197,17 +197,23 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 				errCh <- fmt.Errorf("failed invoking actor %d: %w", j, rErr)
 				return
 			}
-			resp, rErr := client.Do(req)
-			if rErr != nil {
-				errCh <- fmt.Errorf("failed invoking actor %d: %w", j, rErr)
-				return
-			}
-			defer resp.Body.Close()
-			// We don't check the status code here as it could be 500 if we tried invoking the fake app
-			if resp.StatusCode != http.StatusOK {
-				log.Printf("MYLOG Invoking actor %d on non-existent host", j)
-			}
-			errCh <- nil
+			assert.Eventually(t,
+				func() bool {
+					resp, respErr := client.Do(req)
+					if respErr != nil {
+						rErr = fmt.Errorf("failed invoking actor %d: %w", j, rErr)
+						return false
+					}
+					defer resp.Body.Close()
+					// We don't check the status code here as it could be 500 if we tried invoking the fake app
+					if resp.StatusCode != http.StatusOK {
+						log.Printf("MYLOG Invoking actor %d on non-existent host", j)
+					}
+
+					rErr = nil
+					return true
+				}, 20*time.Second, 1*time.Second)
+			errCh <- rErr
 		}(j)
 	}
 
@@ -341,8 +347,9 @@ func (h *httpServer) WaitForActorsReady(ctx context.Context) error {
 
 func (i *rebalancing) getPlacementStream(t *testing.T, ctx context.Context) placementv1pb.Placement_ReportDaprStatusClient {
 	// Establish a connection with placement
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(i.place.Port()),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 	)
 	require.NoError(t, err)
@@ -365,7 +372,7 @@ func (i *rebalancing) getPlacementStream(t *testing.T, ctx context.Context) plac
 			stream.CloseSend()
 			stream = nil
 		}
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
 	return stream
 }
@@ -376,6 +383,7 @@ func (i *rebalancing) reportStatusToPlacement(ctx context.Context, stream placem
 		Port:     1234,
 		Entities: entities,
 		Id:       "invalidapp",
+		ApiLevel: 20,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to send message: %w", err)

@@ -17,6 +17,7 @@ config/crd/bases/*.yaml
 **/.project
 **/.factorypath
 google
+dapr.sln
 
 test_report*
 coverage.txt

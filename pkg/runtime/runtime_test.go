@@ -824,9 +824,9 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 		enableProfiling:              false,
 		mTLSEnabled:                  false,
 		sentryServiceAddress:         "",
-		maxRequestBodySize:           4,
+		maxRequestBodySize:           4 << 20,
+		readBufferSize:               4 << 10,
 		unixDomainSocket:             "",
-		readBufferSize:               4,
 		gracefulShutdownDuration:     time.Second,
 		enableAPILogging:             ptr.Of(true),
 		disableBuiltinK8sSecretStore: false,
@@ -944,7 +944,6 @@ func TestActorReentrancyConfig(t *testing.T) {
 	fullConfig := `{
 		"entities":["actorType1", "actorType2"],
 		"actorIdleTimeout": "1h",
-		"actorScanInterval": "30s",
 		"drainOngoingCallTimeout": "30s",
 		"drainRebalancedActors": true,
 		"reentrancy": {
@@ -957,7 +956,6 @@ func TestActorReentrancyConfig(t *testing.T) {
 	minimumConfig := `{
 		"entities":["actorType1", "actorType2"],
 		"actorIdleTimeout": "1h",
-		"actorScanInterval": "30s",
 		"drainOngoingCallTimeout": "30s",
 		"drainRebalancedActors": true,
 		"reentrancy": {
@@ -968,7 +966,6 @@ func TestActorReentrancyConfig(t *testing.T) {
 	emptyConfig := `{
 		"entities":["actorType1", "actorType2"],
 		"actorIdleTimeout": "1h",
-		"actorScanInterval": "30s",
 		"drainOngoingCallTimeout": "30s",
 		"drainRebalancedActors": true
 	  }`
@@ -1755,6 +1752,7 @@ func runGRPCApp(port int) (func(), error) {
 }
 
 func pingStreamClient(ctx context.Context, port int) (pb.TestService_PingStreamClient, error) {
+	//nolint:staticcheck
 	clientConn, err := grpc.DialContext(
 		ctx,
 		fmt.Sprintf("localhost:%d", port),
@@ -1960,9 +1958,9 @@ func TestGracefulShutdownPubSub(t *testing.T) {
 		GlobalConfig:   rt.globalConfig,
 		Resiliency:     rt.resiliency,
 		Mode:           rt.runtimeConfig.mode,
-		Standalone:     rt.runtimeConfig.standalone,
 		Channels:       rt.channels,
 		GRPC:           rt.grpc,
+		Security:       rt.sec,
 	})
 
 	require.NoError(t, rt.processor.Init(context.Background(), cPubSub))
@@ -2138,7 +2136,7 @@ func testSecurity(t *testing.T) security.Handler {
 		ControlPlaneTrustDomain: "test.example.com",
 		ControlPlaneNamespace:   "default",
 		MTLSEnabled:             false,
-		OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
+		OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
 			return []*x509.Certificate{nil}, nil
 		},
 	})
@@ -2148,4 +2146,30 @@ func testSecurity(t *testing.T) security.Handler {
 	require.NoError(t, err)
 
 	return sec
+}
+
+func TestGetOtelServiceName(t *testing.T) {
+	// Save the original value of the OTEL_SERVICE_NAME variable and restore at the end
+
+	tests := []struct {
+		env      string // The value of the OTEL_SERVICE_NAME variable
+		fallback string // The fallback value
+		expected string // The expected value
+	}{
+		{"", "my-app", "my-app"},                 // Case 1: No environment variable, use fallback
+		{"service-abc", "my-app", "service-abc"}, // Case 2: Environment variable set, use it
+	}
+
+	for _, tc := range tests {
+		t.Run(tc.env, func(t *testing.T) {
+			// Set the environment variable to the test case value
+			t.Setenv("OTEL_SERVICE_NAME", tc.env)
+			// Call the function and check the result
+			got := getOtelServiceName(tc.fallback)
+			if got != tc.expected {
+				// Report an error if the result doesn't match
+				t.Errorf("getOtelServiceName(%q) = %q; expected %q", tc.fallback, got, tc.expected)
+			}
+		})
+	}
 }

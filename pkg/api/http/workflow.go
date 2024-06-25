@@ -16,10 +16,8 @@ package http
 import (
 	"io"
 	"net/http"
-	"strconv"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
@@ -201,16 +199,7 @@ func (a *api) onStartWorkflowHandler() http.HandlerFunc {
 			InModifier: func(r *http.Request, in *runtimev1pb.StartWorkflowRequest) (*runtimev1pb.StartWorkflowRequest, error) {
 				in.WorkflowName = chi.URLParam(r, workflowName)
 				in.WorkflowComponent = chi.URLParam(r, workflowComponent)
-
-				// The instance ID is optional. If not specified, we generate a random one.
 				in.InstanceId = r.URL.Query().Get(instanceID)
-				if in.GetInstanceId() == "" {
-					randomID, err := uuid.NewRandom()
-					if err != nil {
-						return nil, err
-					}
-					in.InstanceId = randomID.String()
-				}
 
 				// We accept the HTTP request body as the input to the workflow
 				// without making any assumptions about its format.
@@ -242,16 +231,6 @@ func (a *api) onTerminateWorkflowHandler() http.HandlerFunc {
 			InModifier: func(r *http.Request, in *runtimev1pb.TerminateWorkflowRequest) (*runtimev1pb.TerminateWorkflowRequest, error) {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
-
-				// Extract non_recursive option from query string
-				nonRecursive := r.URL.Query().Get(nonRecursive)
-				if nonRecursive != "" {
-					var err error
-					in.NonRecursive, err = strconv.ParseBool(nonRecursive)
-					if err != nil {
-						return nil, err
-					}
-				}
 				return in, nil
 			},
 			SuccessStatusCode: http.StatusAccepted,
@@ -310,16 +289,6 @@ func (a *api) onPurgeWorkflowHandler() http.HandlerFunc {
 			InModifier: func(r *http.Request, in *runtimev1pb.PurgeWorkflowRequest) (*runtimev1pb.PurgeWorkflowRequest, error) {
 				in.SetWorkflowComponent(chi.URLParam(r, workflowComponent))
 				in.SetInstanceId(chi.URLParam(r, instanceID))
-
-				// Extract non_recursive option from query string
-				nonRecursive := r.URL.Query().Get(nonRecursive)
-				if nonRecursive != "" {
-					var err error
-					in.NonRecursive, err = strconv.ParseBool(nonRecursive)
-					if err != nil {
-						return nil, err
-					}
-				}
 				return in, nil
 			},
 			SuccessStatusCode: http.StatusAccepted,

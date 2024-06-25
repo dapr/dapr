@@ -18,11 +18,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strconv"
 	"testing"
 	"time"
-
-	"google.golang.org/grpc/metadata"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
@@ -33,8 +30,8 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -55,10 +52,11 @@ func (i *insecure) Setup(t *testing.T) []framework.Option {
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
 
-	fp := util.ReservePorts(t, 3)
+	fp := ports.Reserve(t, 3)
+	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 	opts := []placement.Option{
-		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
-		placement.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
+		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", port1, port2, port3)),
+		placement.WithInitialClusterPorts(port1, port2, port3),
 		placement.WithEnableTLS(true),
 		placement.WithTrustAnchorsFile(taFile),
 		placement.WithSentryAddress(i.sentry.Address()),
@@ -69,9 +67,8 @@ func (i *insecure) Setup(t *testing.T) []framework.Option {
 		placement.New(t, append(opts, placement.WithID("p3"))...),
 	}
 
-	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(i.sentry, i.places[0], i.places[1], i.places[2]),
+		framework.WithProcesses(i.sentry, fp, i.places[0], i.places[1], i.places[2]),
 	}
 }
 
@@ -107,6 +104,8 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 
 	var stream v1pb.Placement_ReportDaprStatusClient
 
+	// Try connecting to each placement until one succeeds,
+	// indicating that a leader has been elected
 	j := -1
 	require.Eventually(t, func() bool {
 		j++
@@ -114,7 +113,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 			j = 0
 		}
 		host := i.places[j].Address()
-		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(),
+		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(), //nolint:staticcheck
 			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID),
 		)
 		if cerr != nil {
@@ -122,13 +121,12 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		}
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
 		client := v1pb.NewPlacementClient(conn)
-		ctx = metadata.AppendToOutgoingContext(ctx, "dapr-placement-api-level", strconv.Itoa(i.places[j].CurrentActorsAPILevel()))
 
 		stream, err = client.ReportDaprStatus(ctx)
 		if err != nil {
 			return false
 		}
-		err = stream.Send(&v1pb.Host{Id: "app-1"})
+		err = stream.Send(&v1pb.Host{Id: "app-1", Namespace: "default"})
 		if err != nil {
 			return false
 		}
@@ -137,15 +135,16 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 			return false
 		}
 		return true
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*10, time.Millisecond*10)
 
 	err = stream.Send(&v1pb.Host{
-		Name:     "app-1",
-		Port:     1234,
-		Load:     1,
-		Entities: []string{"entity-1", "entity-2"},
-		Id:       "app-1",
-		Pod:      "pod-1",
+		Name:      "app-1",
+		Namespace: "default",
+		Port:      1234,
+		Load:      1,
+		Entities:  []string{"entity-1", "entity-2"},
+		Id:        "app-1",
+		Pod:       "pod-1",
 	})
 	require.NoError(t, err)
 
@@ -158,5 +157,5 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(c, o.GetTables().GetEntries(), "entity-1")
 			assert.Contains(c, o.GetTables().GetEntries(), "entity-2")
 		}
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 }

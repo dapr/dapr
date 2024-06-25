@@ -14,6 +14,7 @@ limitations under the License.
 package raft
 
 import (
+	"fmt"
 	"io"
 	"sync"
 
@@ -21,7 +22,10 @@ import (
 	"github.com/hashicorp/go-msgpack/v2/codec"
 
 	"github.com/dapr/dapr/pkg/placement/hashing"
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
+
+var ErrNamespaceNotFound = fmt.Errorf("namespace not found")
 
 // DaprHostMember represents Dapr runtime actor host member which serve actor types.
 type DaprHostMember struct {
@@ -29,6 +33,10 @@ type DaprHostMember struct {
 	Name string
 	// AppID is Dapr runtime app ID.
 	AppID string
+
+	// Namespace is the namespace of the Dapr runtime host.
+	Namespace string
+
 	// Entities is the list of Actor Types which this Dapr runtime supports.
 	Entities []string
 
@@ -39,18 +47,14 @@ type DaprHostMember struct {
 	APILevel uint32
 }
 
-type DaprHostMemberStateData struct {
-	// Index is the index number of raft log.
-	Index uint64
+func (d *DaprHostMember) NamespaceAndName() string {
+	return d.Namespace + "||" + d.Name
+}
+
+// daprNamespace represents Dapr runtime namespace that can contain multiple DaprHostMembers
+type daprNamespace struct {
 	// Members includes Dapr runtime hosts.
 	Members map[string]*DaprHostMember
-
-	// TableGeneration is the generation of hashingTableMap.
-	// This is increased whenever hashingTableMap is updated.
-	TableGeneration uint64
-
-	// Version of the actor APIs for the cluster
-	APILevel uint32
 
 	// hashingTableMap is the map for storing consistent hashing data
 	// per Actor types. This will be generated when log entries are replayed.
@@ -59,22 +63,47 @@ type DaprHostMemberStateData struct {
 	hashingTableMap map[string]*hashing.Consistent
 }
 
-// DaprHostMemberState is the state to store Dapr runtime host and
-// consistent hashing tables.
+// DaprHostMemberStateData is the state that stores Dapr namespace, runtime host and
+// consistent hashing tables data
+type DaprHostMemberStateData struct {
+	// Index is the index number of raft log.
+	Index uint64
+	// Version of the actor APIs for the cluster
+	APILevel uint32
+	// TableGeneration is the generation of hashingTableMap.
+	// This is increased whenever hashingTableMap is updated.
+	TableGeneration uint64
+	Namespace       map[string]*daprNamespace
+}
+
+func newDaprHostMemberStateData() DaprHostMemberStateData {
+	return DaprHostMemberStateData{
+		Namespace: make(map[string]*daprNamespace),
+	}
+}
+
+// DaprHostMemberState is the wrapper over DaprHostMemberStateData that includes
+// the cluster config and lock
 type DaprHostMemberState struct {
 	lock sync.RWMutex
 
-	replicationFactor int
-	data              DaprHostMemberStateData
+	config DaprHostMemberStateConfig
+
+	data DaprHostMemberStateData
 }
 
-func newDaprHostMemberState(replicationFactor int) *DaprHostMemberState {
+// DaprHostMemberStateConfig contains the placement cluster configuration data
+// that needs to be consistent across leader changes
+type DaprHostMemberStateConfig struct {
+	replicationFactor int64
+	minAPILevel       uint32
+	maxAPILevel       uint32
+}
+
+func newDaprHostMemberState(config DaprHostMemberStateConfig) *DaprHostMemberState {
 	return &DaprHostMemberState{
-		replicationFactor: replicationFactor,
-		data: DaprHostMemberStateData{
-			Members:         map[string]*DaprHostMember{},
-			hashingTableMap: map[string]*hashing.Consistent{},
-		},
+		config: config,
+		data:   newDaprHostMemberStateData(),
 	}
 }
 
@@ -93,15 +122,99 @@ func (s *DaprHostMemberState) APILevel() uint32 {
 	return s.data.APILevel
 }
 
-func (s *DaprHostMemberState) Members() map[string]*DaprHostMember {
+// NamespaceCount returns the number of namespaces in the store
+func (s *DaprHostMemberState) NamespaceCount() int {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	members := make(map[string]*DaprHostMember, len(s.data.Members))
-	for k, v := range s.data.Members {
-		members[k] = v
+	return len(s.data.Namespace)
+}
+
+// ForEachNamespace loops through all namespaces  and runs the provided function
+// Early exit can be achieved by returning false from the provided function
+func (s *DaprHostMemberState) ForEachNamespace(fn func(string, *daprNamespace) bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	for namespace, namespaceData := range s.data.Namespace {
+		if !fn(namespace, namespaceData) {
+			break
+		}
 	}
-	return members
+}
+
+// ForEachHost loops through hosts across all namespaces  and runs the provided function
+// Early exit can be achieved by returning false from the provided function
+func (s *DaprHostMemberState) ForEachHost(fn func(*DaprHostMember) bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+
+outer:
+	for _, ns := range s.data.Namespace {
+		for _, host := range ns.Members {
+			if !fn(host) {
+				break outer
+			}
+		}
+	}
+}
+
+// ForEachHostInNamespace loops through all hosts in a namespace and runs the provided function
+// Early exit can be achieved by returning false from the provided function
+func (s *DaprHostMemberState) ForEachHostInNamespace(ns string, fn func(*DaprHostMember) bool) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	n, ok := s.data.Namespace[ns]
+	if !ok {
+		return
+	}
+	for _, host := range n.Members {
+		if !fn(host) {
+			break
+		}
+	}
+}
+
+// MemberCount returns number of hosts in a namespace
+func (s *DaprHostMemberState) MemberCount() int {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	count := 0
+	for _, ns := range s.data.Namespace {
+		count += len(ns.Members)
+	}
+
+	return count
+}
+
+// MemberCountInNamespace returns number of hosts in a namespace
+func (s *DaprHostMemberState) MemberCountInNamespace(ns string) int {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	n, ok := s.data.Namespace[ns]
+	if !ok {
+		return 0
+	}
+
+	return len(n.Members)
+}
+
+// UpsertRequired checks if the newly reported data matches the saved state, or needs to be updated
+func (s *DaprHostMemberState) UpsertRequired(ns string, new *placementv1pb.Host) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	n, ok := s.data.Namespace[ns]
+	if !ok {
+		return true // If the member doesn't exist, we need to upsert
+	}
+	if m, ok := n.Members[new.GetName()]; ok {
+		// If all attributes match, no upsert is required
+		return !(m.AppID == new.GetId() && m.Name == new.GetName() && cmp.Equal(m.Entities, new.GetEntities()))
+	}
+
+	return true
 }
 
 func (s *DaprHostMemberState) TableGeneration() uint64 {
@@ -111,13 +224,37 @@ func (s *DaprHostMemberState) TableGeneration() uint64 {
 	return s.data.TableGeneration
 }
 
+// members requires a lock to be held by the caller.
+func (s *DaprHostMemberState) members(ns string) (map[string]*DaprHostMember, error) {
+	n, ok := s.data.Namespace[ns]
+	if !ok {
+		return nil, fmt.Errorf("namespace %s not found", ns)
+	}
+	return n.Members, nil
+}
+
+// allMembers requires a lock to be held by the caller.
+func (s *DaprHostMemberState) allMembers() map[string]*DaprHostMember {
+	members := make(map[string]*DaprHostMember)
+	for _, ns := range s.data.Namespace {
+		for k, v := range ns.Members {
+			members[k] = v
+		}
+	}
+
+	return members
+}
+
 // Internal function that updates the API level in the object.
 // The API level can only be increased.
-// Make sure you have a lock before calling this method.
+// Make sure you have a Lock before calling this method.
 func (s *DaprHostMemberState) updateAPILevel() {
 	var observedMinLevel uint32
-	for k := range s.data.Members {
-		apiLevel := s.data.Members[k].APILevel
+
+	// Loop through all namespaces and members to find the minimum API level
+	for _, m := range s.allMembers() {
+		apiLevel := m.APILevel
+
 		if apiLevel <= 0 {
 			apiLevel = 0
 		}
@@ -126,16 +263,35 @@ func (s *DaprHostMemberState) updateAPILevel() {
 		}
 	}
 
+	// Only enforce minAPILevel if value > 0
+	// 0 is the default value of the struct.
+	// -1 is the default value of the CLI flag.
+	if s.config.minAPILevel >= uint32(0) && observedMinLevel < s.config.minAPILevel {
+		observedMinLevel = s.config.minAPILevel
+	}
+
+	// Only enforce maxAPILevel if value > 0
+	// 0 is the default value of the struct.
+	// -1 is the default value of the CLI flag.
+	if s.config.maxAPILevel > uint32(0) && observedMinLevel > s.config.maxAPILevel {
+		observedMinLevel = s.config.maxAPILevel
+	}
+
 	if observedMinLevel > s.data.APILevel {
 		s.data.APILevel = observedMinLevel
 	}
 }
 
-func (s *DaprHostMemberState) hashingTableMap() map[string]*hashing.Consistent {
+func (s *DaprHostMemberState) hashingTableMap(ns string) (map[string]*hashing.Consistent, error) {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
-	return s.data.hashingTableMap
+	n, ok := s.data.Namespace[ns]
+	if !ok {
+		return nil, ErrNamespaceNotFound
+	}
+
+	return n.hashingTableMap, nil
 }
 
 func (s *DaprHostMemberState) clone() *DaprHostMemberState {
@@ -143,49 +299,72 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 	defer s.lock.RUnlock()
 
 	newMembers := &DaprHostMemberState{
-		replicationFactor: s.replicationFactor,
+		config: s.config,
 		data: DaprHostMemberStateData{
 			Index:           s.data.Index,
+			Namespace:       make(map[string]*daprNamespace, len(s.data.Namespace)),
 			TableGeneration: s.data.TableGeneration,
-			Members:         make(map[string]*DaprHostMember, len(s.data.Members)),
 			APILevel:        s.data.APILevel,
 		},
 	}
-	for k, v := range s.data.Members {
-		m := &DaprHostMember{
-			Name:      v.Name,
-			AppID:     v.AppID,
-			Entities:  make([]string, len(v.Entities)),
-			UpdatedAt: v.UpdatedAt,
-			APILevel:  v.APILevel,
+
+	for nsName, nsData := range s.data.Namespace {
+		newMembers.data.Namespace[nsName] = &daprNamespace{
+			Members: make(map[string]*DaprHostMember, len(nsData.Members)),
+			// hashingTableMap: make(map[string]*hashing.Consistent, len(nsData.hashingTableMap)),
 		}
-		copy(m.Entities, v.Entities)
-		newMembers.data.Members[k] = m
+		for k, v := range nsData.Members {
+			m := &DaprHostMember{
+				Name:      v.Name,
+				Namespace: v.Namespace,
+				AppID:     v.AppID,
+				Entities:  make([]string, len(v.Entities)),
+				UpdatedAt: v.UpdatedAt,
+				APILevel:  v.APILevel,
+			}
+			copy(m.Entities, v.Entities)
+			newMembers.data.Namespace[nsName].Members[k] = m
+		}
 	}
+
 	return newMembers
 }
 
-// caller should holds lock.
+// caller should hold Lock.
 func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
+	if _, ok := s.data.Namespace[host.Namespace]; !ok {
+		s.data.Namespace[host.Namespace] = &daprNamespace{
+			Members:         make(map[string]*DaprHostMember),
+			hashingTableMap: make(map[string]*hashing.Consistent),
+		}
+	}
 	for _, e := range host.Entities {
-		if _, ok := s.data.hashingTableMap[e]; !ok {
-			s.data.hashingTableMap[e] = hashing.NewConsistentHash(s.replicationFactor)
+		if s.data.Namespace[host.Namespace].hashingTableMap == nil {
+			s.data.Namespace[host.Namespace].hashingTableMap = make(map[string]*hashing.Consistent)
 		}
 
-		s.data.hashingTableMap[e].Add(host.Name, host.AppID, 0)
+		if _, ok := s.data.Namespace[host.Namespace].hashingTableMap[e]; !ok {
+			s.data.Namespace[host.Namespace].hashingTableMap[e] = hashing.NewConsistentHash(s.config.replicationFactor)
+		}
+
+		s.data.Namespace[host.Namespace].hashingTableMap[e].Add(host.Name, host.AppID, 0)
 	}
 }
 
-// caller should holds lock.
+// removeHashingTables caller should hold Lock.
 func (s *DaprHostMemberState) removeHashingTables(host *DaprHostMember) {
+	ns, ok := s.data.Namespace[host.Namespace]
+	if !ok {
+		return
+	}
 	for _, e := range host.Entities {
-		if t, ok := s.data.hashingTableMap[e]; ok {
+		if t, ok := ns.hashingTableMap[e]; ok {
 			t.Remove(host.Name)
 
-			// if no dedicated actor service instance for the particular actor type,
-			// we must delete consistent hashing table to avoid the memory leak.
+			// if no there are no other actor service instance for the particular actor type
+			// we should delete the hashing table map element to avoid memory leaks.
 			if len(t.Hosts()) == 0 {
-				delete(s.data.hashingTableMap, e)
+				delete(ns.hashingTableMap, e)
 			}
 		}
 	}
@@ -201,7 +380,15 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if m, ok := s.data.Members[host.Name]; ok {
+	ns, ok := s.data.Namespace[host.Namespace]
+	if !ok {
+		s.data.Namespace[host.Namespace] = &daprNamespace{
+			Members: make(map[string]*DaprHostMember),
+		}
+		ns = s.data.Namespace[host.Namespace]
+	}
+
+	if m, ok := ns.Members[host.Name]; ok {
 		// No need to update consistent hashing table if the same dapr host member exists
 		if m.AppID == host.AppID && m.Name == host.Name && cmp.Equal(m.Entities, host.Entities) {
 			m.UpdatedAt = host.UpdatedAt
@@ -213,18 +400,19 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 		s.removeHashingTables(m)
 	}
 
-	s.data.Members[host.Name] = &DaprHostMember{
+	ns.Members[host.Name] = &DaprHostMember{
 		Name:      host.Name,
+		Namespace: host.Namespace,
 		AppID:     host.AppID,
 		UpdatedAt: host.UpdatedAt,
 		APILevel:  host.APILevel,
 	}
 
-	// Update hashing table only when host reports actor types
-	s.data.Members[host.Name].Entities = make([]string, len(host.Entities))
-	copy(s.data.Members[host.Name].Entities, host.Entities)
+	ns.Members[host.Name].Entities = make([]string, len(host.Entities))
+	copy(ns.Members[host.Name].Entities, host.Entities)
 
-	s.updateHashingTables(s.data.Members[host.Name])
+	// Update hashing table only when host reports actor types
+	s.updateHashingTables(ns.Members[host.Name])
 	s.updateAPILevel()
 
 	// Increase hashing table generation version. Runtime will compare the table generation
@@ -240,10 +428,15 @@ func (s *DaprHostMemberState) removeMember(host *DaprHostMember) bool {
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if m, ok := s.data.Members[host.Name]; ok {
+	ns, ok := s.data.Namespace[host.Namespace]
+	if !ok {
+		return false
+	}
+
+	if m, ok := ns.Members[host.Name]; ok {
 		s.removeHashingTables(m)
 		s.data.TableGeneration++
-		delete(s.data.Members, host.Name)
+		delete(ns.Members, host.Name)
 		s.updateAPILevel()
 
 		return true
@@ -256,14 +449,16 @@ func (s *DaprHostMemberState) isActorHost(host *DaprHostMember) bool {
 	return len(host.Entities) > 0
 }
 
-// caller should hold lock.
+// caller should hold Lock.
 func (s *DaprHostMemberState) restoreHashingTables() {
-	if s.data.hashingTableMap == nil {
-		s.data.hashingTableMap = map[string]*hashing.Consistent{}
-	}
+	for _, ns := range s.data.Namespace {
+		if ns.hashingTableMap == nil {
+			ns.hashingTableMap = map[string]*hashing.Consistent{}
+		}
 
-	for _, m := range s.data.Members {
-		s.updateHashingTables(m)
+		for _, m := range ns.Members {
+			s.updateHashingTables(m)
+		}
 	}
 }
 

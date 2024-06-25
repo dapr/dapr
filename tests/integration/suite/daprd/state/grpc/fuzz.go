@@ -99,10 +99,7 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 		},
 	}
 
-	for f.storeName == "" ||
-		len(path.IsValidPathSegmentName(f.storeName)) > 0 {
-		fuzz.New().Fuzz(&f.storeName)
-	}
+	f.storeName = util.RandomString(t, 10)
 
 	f.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
@@ -170,7 +167,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, util.GetMetaComponents(c, ctx, util.HTTPClient(t), f.daprd.HTTPPort()), 1)
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 
 	client := f.daprd.GRPCClient(t, ctx)
 

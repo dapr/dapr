@@ -11,7 +11,7 @@
 # limitations under the License.
 #
 
-# E2E test app list
+# E2E test app list (folder name)
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
 E2E_TEST_APPS=actorjava \
 actordotnet \
@@ -19,6 +19,8 @@ actorpython \
 actorphp \
 healthapp \
 hellodapr \
+schedulerapp \
+schedulerapp_grpc \
 stateapp \
 secretapp \
 service_invocation \
@@ -68,22 +70,23 @@ E2E_TESTAPP_DIR=./tests/apps
 PERF_TESTAPP_DIR=./tests/apps/perf
 
 # PERFORMANCE tests
-PERF_TESTS=actor_timer \
-actor_reminder \
-actor_activation \
-service_invocation_http \
-service_invocation_grpc \
-state_get_grpc \
-state_get_http \
-pubsub_publish_grpc \
-pubsub_publish_http \
-pubsub_bulk_publish_grpc \
-pubsub_bulk_publish_http \
+PERF_TESTS=actor_activation \
 actor_double_activation \
 actor_id_scale \
+actor_reminder \
+actor_timer \
 actor_type_scale \
 configuration \
+pubsub_bulk_publish_grpc \
+pubsub_bulk_publish_http \
+pubsub_publish_grpc \
+pubsub_publish_http \
 pubsub_subscribe_http \
+scheduler \
+service_invocation_grpc \
+service_invocation_http \
+state_get_grpc \
+state_get_http \
 workflows \
 
 KUBECTL=kubectl
@@ -436,12 +439,20 @@ else
 endif
 
 # install k6 loadtesting to the cluster
-setup-test-env-k6:
+setup-test-env-k6: controller-gen
 	$(KUBECTL) apply -f ./tests/config/k6_sa.yaml -n $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/k6_rolebinding.yaml -n $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/k6_sa_secret.yaml -n $(DAPR_TEST_NAMESPACE)
-	export IMG=ghcr.io/grafana/operator:controller-v0.0.8 && rm -rf /tmp/.k6-operator >/dev/null && git clone --depth 1 --branch v0.0.8 https://github.com/grafana/k6-operator /tmp/.k6-operator && cd /tmp/.k6-operator && make deploy && cd - && rm -rf /tmp/.k6-operator
-delete-test-env-k6:
+	# definitely not cruft - removing CRDs that have been deprecated
+	export IMG=ghcr.io/grafana/operator:controller-v0.0.8 && \
+	rm -rf /tmp/.k6-operator >/dev/null && \
+	git clone --depth 1 --branch v0.0.8 https://github.com/grafana/k6-operator /tmp/.k6-operator && \
+	cd /tmp/.k6-operator && \
+	sed -i 's/crd:trivialVersions=true,crdVersions=v1/crd:maxDescLen=0/g' Makefile && \
+	make deploy && \
+	cd - && \
+	rm -rf /tmp/.k6-operator
+delete-test-env-k6: controller-gen
 	$(KUBECTL) delete -f ./tests/config/k6_sa.yaml -n $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) delete -f ./tests/config/k6_rolebinding.yaml -n $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) delete -f ./tests/config/k6_sa_secret.yaml -n $(DAPR_TEST_NAMESPACE)
@@ -548,6 +559,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_host_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kubernetes_actor_reminder_scheduler_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state_actorstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_query_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
@@ -635,7 +647,12 @@ else
 endif
 
 setup-minikube-darwin:
+ifeq ($(TARGET_ARCH_LOCAL),amd64)
 	minikube start --memory=4g --cpus=4 --driver=hyperkit
+else
+# Install qemu and configure the dedicated network: https://minikube.sigs.k8s.io/docs/drivers/qemu/#networking
+	minikube start --memory=4g --cpus=4 --driver=qemu --network socket_vmnet
+endif
 	minikube addons enable metrics-server
 
 setup-minikube-windows:

@@ -112,7 +112,7 @@ func SocketDial(ctx context.Context, socket string, additionalOpts ...grpc.DialO
 	log.Debugf("using socket defined at '%s'", udsSocket)
 	additionalOpts = append(additionalOpts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 
-	grpcConn, err := grpc.DialContext(ctx, udsSocket, additionalOpts...)
+	grpcConn, err := grpc.DialContext(ctx, udsSocket, additionalOpts...) //nolint:staticcheck
 	if err != nil {
 		return nil, fmt.Errorf("unable to open GRPC connection using socket '%s': %w", udsSocket, err)
 	}

@@ -11,7 +11,7 @@
 # limitations under the License.
 #
 
-FROM golang:1.21 as build_env
+FROM golang:1.22.3 as build_env
 
 ENV CGO_ENABLED=0
 WORKDIR /app
@@ -24,7 +24,7 @@ RUN go mod download
 COPY *.go /app/
 RUN go build -o app .
 
-FROM gcr.io/distroless/static:nonroot
+FROM gcr.io/distroless/base-nossl:nonroot
 WORKDIR /
 COPY --from=build_env /app/app /
 CMD ["/app"]

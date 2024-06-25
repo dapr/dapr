@@ -85,7 +85,7 @@ spec:
   - name: actorStateStore
     value: true
 `),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(h.place.Port())),
+		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(h.place.Port())),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppPort(srv.Port()),
 	)
@@ -113,7 +113,7 @@ func (h *deactivateOnPlacementFail) Run(t *testing.T, ctx context.Context) {
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			assert.Equalf(t, http.StatusOK, resp.StatusCode, "Response body: %v", string(body))
-		}, 10*time.Second, 100*time.Millisecond, "actor not ready")
+		}, 10*time.Second, 10*time.Millisecond, "actor not ready")
 	}
 
 	// Validate invocations

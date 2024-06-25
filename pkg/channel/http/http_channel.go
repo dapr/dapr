@@ -50,48 +50,48 @@ const (
 	httpScheme     = "http"
 	httpsScheme    = "https"
 
-	appConfigEndpoint = "dapr/config"
+	appConfigEndpoint = "/dapr/config"
 )
 
 // Channel is an HTTP implementation of an AppChannel.
 type Channel struct {
-	client                *http.Client
-	baseAddress           string
-	ch                    chan struct{}
-	compStore             *compstore.ComponentStore
-	tracingSpec           *config.TracingSpec
-	appHeaderToken        string
-	maxResponseBodySizeMB int
-	appHealthCheckPath    string
-	appHealth             *apphealth.AppHealth
-	middleware            middleware.HTTP
+	client              *http.Client
+	baseAddress         string
+	ch                  chan struct{}
+	compStore           *compstore.ComponentStore
+	tracingSpec         *config.TracingSpec
+	appHeaderToken      string
+	maxResponseBodySize int
+	appHealthCheckPath  string
+	appHealth           *apphealth.AppHealth
+	middleware          middleware.HTTP
 }
 
 // ChannelConfiguration is the configuration used to create an HTTP AppChannel.
 type ChannelConfiguration struct {
-	Client               *http.Client
-	CompStore            *compstore.ComponentStore
-	Endpoint             string
-	MaxConcurrency       int
-	Middleware           middleware.HTTP
-	TracingSpec          *config.TracingSpec
-	MaxRequestBodySizeMB int
-	TLSClientCert        string
-	TLSClientKey         string
-	TLSRootCA            string
-	TLSRenegotiation     string
+	Client             *http.Client
+	CompStore          *compstore.ComponentStore
+	Endpoint           string
+	MaxConcurrency     int
+	Middleware         middleware.HTTP
+	TracingSpec        *config.TracingSpec
+	MaxRequestBodySize int
+	TLSClientCert      string
+	TLSClientKey       string
+	TLSRootCA          string
+	TLSRenegotiation   string
 }
 
 // CreateHTTPChannel creates an HTTP AppChannel.
 func CreateHTTPChannel(config ChannelConfiguration) (channel.AppChannel, error) {
 	c := &Channel{
-		middleware:            config.Middleware,
-		client:                config.Client,
-		compStore:             config.CompStore,
-		baseAddress:           config.Endpoint,
-		tracingSpec:           config.TracingSpec,
-		appHeaderToken:        security.GetAppToken(),
-		maxResponseBodySizeMB: config.MaxRequestBodySizeMB,
+		middleware:          config.Middleware,
+		client:              config.Client,
+		compStore:           config.CompStore,
+		baseAddress:         config.Endpoint,
+		tracingSpec:         config.TracingSpec,
+		appHeaderToken:      security.GetAppToken(),
+		maxResponseBodySize: config.MaxRequestBodySize,
 	}
 
 	if config.MaxConcurrency > 0 {
@@ -170,6 +170,137 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	return nil, status.Error(codes.Unimplemented, fmt.Sprintf("Unsupported spec version: %d", req.APIVersion()))
 }
 
+// TriggerJob sends the triggered job back to the app via HTTP.
+func (h *Channel) TriggerJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	// NOTE: Using invokeMethodReq for future extensibility on httpExt types based on (future) metadata
+	// passed in from the app
+	return h.sendJob(ctx, req)
+}
+
+func (h *Channel) constructJobRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) (*http.Request, error) {
+	msg := req.Message()
+	verb := msg.GetHttpExtension().GetVerb().String()
+	method := msg.GetMethod()
+
+	// Construct the URL using the base address from the channel
+	uri := strings.Builder{}
+	uri.WriteString(h.baseAddress)
+
+	if len(method) > 0 && method[0] != '/' {
+		uri.WriteRune('/')
+	}
+	uri.WriteString(method)
+
+	// Create the HTTP request with the constructed URL and request data
+	channelReq, err := http.NewRequestWithContext(ctx, verb, uri.String(), req.RawData())
+	if err != nil {
+		return nil, err
+	}
+
+	// Recover headers from the request metadata
+	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Add)
+
+	if ct := req.ContentType(); ct != "" {
+		channelReq.Header.Set("content-type", ct)
+	} else {
+		channelReq.Header.Del("content-type")
+	}
+
+	if cl := channelReq.Header.Get(invokev1.ContentLengthHeader); cl != "" {
+		v, err := strconv.ParseInt(cl, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+
+		channelReq.ContentLength = v
+	}
+
+	// HTTP client needs to inject trace parent header for proper tracing stack.
+	span := diagUtils.SpanFromContext(ctx)
+	if span.SpanContext().HasTraceID() {
+		tp := diag.SpanContextToW3CString(span.SpanContext())
+		channelReq.Header.Set("traceparent", tp)
+	}
+	ts := diag.TraceStateToW3CString(span.SpanContext())
+	if ts != "" {
+		channelReq.Header.Set("tracestate", ts)
+	}
+
+	// Set any additional headers or tokens required
+	if h.appHeaderToken != "" {
+		channelReq.Header.Set(securityConsts.APITokenHeader, h.appHeaderToken)
+	}
+
+	return channelReq, nil
+}
+
+func (h *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	channelReq, err := h.constructJobRequest(ctx, req)
+	if err != nil {
+		return nil, err
+	}
+
+	if h.ch != nil {
+		h.ch <- struct{}{}
+	}
+	defer func() {
+		if h.ch != nil {
+			<-h.ch
+		}
+	}()
+
+	// Emit metric when request is sent
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().GetMethod(), int64(len(req.Message().GetData().GetValue())))
+	startRequest := time.Now()
+
+	rw := &RWRecorder{
+		W: &bytes.Buffer{},
+	}
+	execPipeline := h.middleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		// Send request to user application
+		// (Body is closed below, but linter isn't detecting that)
+		//nolint:bodyclose
+		clientResp, clientErr := h.client.Do(r)
+		if clientResp != nil {
+			copyHeader(w.Header(), clientResp.Header)
+			w.WriteHeader(clientResp.StatusCode)
+			_, _ = io.Copy(w, clientResp.Body)
+		}
+		if clientErr != nil {
+			err = clientErr
+		}
+	}))
+
+	execPipeline.ServeHTTP(rw, channelReq)
+	resp := rw.Result() //nolint:bodyclose
+
+	elapsedMs := float64(time.Since(startRequest) / time.Millisecond)
+
+	var contentLength int64
+	if resp != nil {
+		if resp.Header != nil {
+			contentLength, _ = strconv.ParseInt(resp.Header.Get("content-length"), 10, 64)
+		}
+	}
+
+	if err != nil {
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		return nil, err
+	}
+
+	rsp, err := h.parseChannelResponse(req, resp)
+	if err != nil {
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		return nil, err
+	}
+
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
+
+	rsp.Status().Code = int32(invokev1.CodeFromHTTPStatus(resp.StatusCode))
+
+	return rsp, nil
+}
+
 // SetAppHealthCheckPath sets the path where to send requests for health probes.
 func (h *Channel) SetAppHealthCheckPath(path string) {
 	h.appHealthCheckPath = "/" + strings.TrimPrefix(path, "/")
@@ -228,7 +359,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}()
 
 	// Emit metric when request is sent
-	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, int64(len(req.Message().GetData().GetValue())))
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().GetMethod(), int64(len(req.Message().GetData().GetValue())))
 	startRequest := time.Now()
 
 	rw := &RWRecorder{
@@ -261,17 +392,17 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 	}
 
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
 	rsp, err := h.parseChannelResponse(req, resp)
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
 
 	return rsp, nil
 }
@@ -362,8 +493,8 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channe
 
 	// Limit response body if needed
 	var body io.ReadCloser
-	if h.maxResponseBodySizeMB > 0 {
-		body = streamutils.LimitReadCloser(channelResp.Body, int64(h.maxResponseBodySizeMB)<<20)
+	if h.maxResponseBodySize > 0 {
+		body = streamutils.LimitReadCloser(channelResp.Body, int64(h.maxResponseBodySize)<<20)
 	} else {
 		body = channelResp.Body
 	}

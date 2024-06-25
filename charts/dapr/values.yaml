@@ -53,11 +53,13 @@ global:
   #  placement:
   #  operator:
   #  injector:
+  #  scheduler:
   extraVolumeMounts: {}
   #  sentry:
   #  placement:
   #  operator:
   #  injector:
+  #  scheduler:
 
   actors:
     # Enables actor functionality in the cluster
@@ -69,6 +71,10 @@ global:
     # Name of the service that provides reminders
     # If empty, uses the built-in reminders capabilities in Dapr sidecars
     serviceName: ""
+
+  scheduler:
+    # Enables scheduler functionality in the cluster
+    enabled: true
 
   daprControlPlaneOs: linux
   labels: {}

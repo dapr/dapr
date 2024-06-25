@@ -16,23 +16,19 @@ package http
 import (
 	"context"
 	"fmt"
-	"os"
-	"path/filepath"
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/tests/integration/framework/process/statestore/inmemory"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/net/nettest"
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore"
+	"github.com/dapr/dapr/tests/integration/framework/process/statestore/inmemory"
+	"github.com/dapr/dapr/tests/integration/framework/socket"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -46,19 +42,10 @@ type basic struct {
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	// Darwin enforces a maximum 104 byte socket name limit, so we need to be a
-	// bit fancy on how we generate the name.
-	tmp, err := nettest.LocalPath()
-	require.NoError(t, err)
-
-	socketDir := filepath.Join(tmp, util.RandomString(t, 4))
-	require.NoError(t, os.MkdirAll(socketDir, 0o700))
-	t.Cleanup(func() {
-		require.NoError(t, os.RemoveAll(socketDir))
-	})
+	socket := socket.New(t)
 
 	store := statestore.New(t,
-		statestore.WithSocketDirectory(socketDir),
+		statestore.WithSocket(socket),
 		statestore.WithStateStore(inmemory.New(t)),
 	)
 
@@ -72,9 +59,7 @@ spec:
   type: state.%s
   version: v1
 `, store.SocketName())),
-		daprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_COMPONENTS_SOCKETS_FOLDER", socketDir,
-		)),
+		daprd.WithSocket(t, socket),
 	)
 
 	return []framework.Option{
@@ -184,5 +169,5 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			assert.Empty(c, resp.GetData())
 		}
-	}, time.Second*2, time.Millisecond*100)
+	}, time.Second*2, time.Millisecond*10)
 }

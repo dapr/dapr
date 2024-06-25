@@ -87,16 +87,18 @@ func (*mockInternalActor) InvokeTimer(ctx context.Context, timer InternalActorRe
 func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalActorFactory) (*actorsRuntime, error) {
 	spec := config.TracingSpec{SamplingRate: "1"}
 	store := fakeStore()
-	config := NewConfig(ConfigOpts{
+	cfg := NewConfig(ConfigOpts{
 		AppID:         TestAppID,
 		ActorsService: "placement:placement:5050",
+		HostAddress:   "localhost",
+		Port:          Port,
 	})
 
 	compStore := compstore.New()
 	compStore.AddStateStore("actorStore", store)
 	a, err := NewActors(ActorsOpts{
 		CompStore:      compStore,
-		Config:         config,
+		Config:         cfg,
 		TracingSpec:    spec,
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",

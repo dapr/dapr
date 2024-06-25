@@ -14,7 +14,16 @@ limitations under the License.
 package daprd
 
 import (
+	"fmt"
+	"os"
+	"path/filepath"
+	"testing"
+
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/socket"
 )
 
 // Option is a function that configures the dapr process.
@@ -50,11 +59,13 @@ type options struct {
 	disableK8sSecretStore   *bool
 	gracefulShutdownSeconds *int
 	blockShutdownDuration   *string
+	controlPlaneTrustDomain *string
+	schedulerAddresses      []string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
 	return func(o *options) {
-		o.execOpts = execOptions
+		o.execOpts = append(o.execOpts, execOptions...)
 	}
 }
 
@@ -68,6 +79,19 @@ func WithNamespace(namespace string) Option {
 	return func(o *options) {
 		o.namespace = &namespace
 	}
+}
+
+func WithLogLineStdout(ll *logline.LogLine) Option {
+	return WithExecOptions(exec.WithStdout(ll.Stdout()))
+}
+
+func WithExit1() Option {
+	return WithExecOptions(
+		exec.WithExitCode(1),
+		exec.WithRunError(func(t *testing.T, err error) {
+			require.ErrorContains(t, err, "exit status 1")
+		}),
+	)
 }
 
 func WithAppPort(port int) Option {
@@ -144,8 +168,19 @@ func WithAppHealthProbeThreshold(threshold int) Option {
 
 func WithResourceFiles(files ...string) Option {
 	return func(o *options) {
-		o.resourceFiles = files
+		o.resourceFiles = append(o.resourceFiles, files...)
 	}
+}
+
+func WithInMemoryStateStore(storeName string) Option {
+	return WithResourceFiles(`apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: ` + storeName + `
+spec:
+  type: state.in-memory
+  version: v1
+`)
 }
 
 // WithInMemoryActorStateStore adds an in-memory state store component, which is also enabled as actor state store.
@@ -171,13 +206,32 @@ func WithResourcesDir(dirs ...string) Option {
 
 func WithConfigs(configs ...string) Option {
 	return func(o *options) {
-		o.configs = configs
+		o.configs = append(o.configs, configs...)
+	}
+}
+
+func WithConfigManifests(t *testing.T, manifests ...string) Option {
+	configs := make([]string, len(manifests))
+	for i, manifest := range manifests {
+		f := filepath.Join(t.TempDir(), fmt.Sprintf("config-%d.yaml", i))
+		require.NoError(t, os.WriteFile(f, []byte(manifest), 0o600))
+		configs[i] = f
+	}
+
+	return func(o *options) {
+		o.configs = append(o.configs, configs...)
 	}
 }
 
 func WithPlacementAddresses(addresses ...string) Option {
 	return func(o *options) {
 		o.placementAddresses = addresses
+	}
+}
+
+func WithSchedulerAddresses(addresses ...string) Option {
+	return func(o *options) {
+		o.schedulerAddresses = append(o.schedulerAddresses, addresses...)
 	}
 }
 
@@ -227,4 +281,22 @@ func WithDaprBlockShutdownDuration(duration string) Option {
 	return func(o *options) {
 		o.blockShutdownDuration = &duration
 	}
+}
+
+func WithControlPlaneTrustDomain(trustDomain string) Option {
+	return func(o *options) {
+		o.controlPlaneTrustDomain = &trustDomain
+	}
+}
+
+func WithSocket(t *testing.T, socket *socket.Socket) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"DAPR_COMPONENTS_SOCKETS_FOLDER", socket.Directory(),
+	))
+}
+
+func WithAppAPIToken(t *testing.T, token string) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"APP_API_TOKEN", token,
+	))
 }

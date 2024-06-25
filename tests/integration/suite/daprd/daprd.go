@@ -27,9 +27,11 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resiliency"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resources"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/secret"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/state"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow"
 )

@@ -20,12 +20,13 @@ type ServerConfig struct {
 	Port                    int
 	APIListenAddresses      []string
 	PublicPort              *int
+	PublicListenAddress     string
 	ProfilePort             int
 	AllowedOrigins          string
 	EnableProfiling         bool
-	MaxRequestBodySizeMB    int
+	MaxRequestBodySize      int // In bytes
 	UnixDomainSocket        string
-	ReadBufferSizeKB        int
+	ReadBufferSize          int
 	EnableAPILogging        bool
 	APILoggingObfuscateURLs bool
 	APILogHealthChecks      bool

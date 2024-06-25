@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/injector/sentry"
 	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -83,11 +82,16 @@ func Run() {
 		log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
 	}
 
+	namespace, err := security.CurrentNamespaceOrError()
+	if err != nil {
+		log.Fatalf("Failed to get current namespace: %s", err)
+	}
+
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           cfg.SentryAddress,
 		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
-		ControlPlaneNamespace:   security.CurrentNamespace(),
-		TrustAnchorsFile:        cfg.TrustAnchorsFile,
+		ControlPlaneNamespace:   namespace,
+		TrustAnchorsFile:        &cfg.TrustAnchorsFile,
 		AppID:                   "dapr-injector",
 		MTLSEnabled:             true,
 		Mode:                    modes.KubernetesMode,
@@ -97,6 +101,8 @@ func Run() {
 	}
 
 	inj, err := service.NewInjector(service.Options{
+		Port:                    opts.Port,
+		ListenAddress:           opts.ListenAddress,
 		AuthUIDs:                uids,
 		Config:                  cfg,
 		DaprClient:              daprClient,
@@ -122,15 +128,9 @@ func Run() {
 			if err != nil {
 				return rerr
 			}
-			requester := sentry.New(sentry.Options{
-				SentryAddress: cfg.SentryAddress,
-				SentryID:      sentryID,
-				Security:      sec,
-			})
 			return inj.Run(ctx,
 				sec.TLSServerConfigNoClientAuth(),
 				sentryID,
-				requester.RequestCertificateFromSentry,
 				sec.CurrentTrustAnchors,
 			)
 		},
@@ -144,7 +144,7 @@ func Run() {
 			return nil
 		},
 		func(ctx context.Context) error {
-			healhtzErr := healthzServer.Run(ctx, opts.HealthzPort)
+			healhtzErr := healthzServer.Run(ctx, opts.HealthzListenAddress, opts.HealthzPort)
 			if healhtzErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", healhtzErr)
 			}
@@ -166,7 +166,7 @@ func Run() {
 				return rerr
 			}
 
-			caBundle, rErr := sec.CurrentTrustAnchors()
+			caBundle, rErr := sec.CurrentTrustAnchors(ctx)
 			if rErr != nil {
 				return rErr
 			}

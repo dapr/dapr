@@ -11,6 +11,7 @@ This chart installs Dapr via "child-charts":
 * Dapr Sidecar injector
 * Dapr Sentry
 * Dapr Placement
+* Dapr Scheduler
 
 ## Prerequisites
 
@@ -34,7 +35,7 @@ For more details on initializing Helm, [read the Helm docs](https://helm.sh/docs
 
 2. Install the Dapr chart on your cluster in the dapr-system namespace:
     ```
-    helm install dapr dapr/dapr --namespace dapr-system --wait
+    helm install dapr dapr/dapr --namespace dapr-system --create-namespace --wait
     ```
 
 ## Verify installation
@@ -72,50 +73,54 @@ dapr_operator:
 The Helm chart has the follow configuration options that can be supplied:
 
 ### Global options:
-| Parameter                                 | Description                                                             | Default                 |
-|-------------------------------------------|-------------------------------------------------------------------------|-------------------------|
-| `global.registry`                         | Docker image registry                                                   | `docker.io/daprio`      |
-| `global.tag`                              | Docker image version tag                                                | latest release          |
-| `global.logAsJson`                        | Json log format for control plane services                              | `false`                 |
-| `global.imagePullPolicy`                  | Global Control plane service imagePullPolicy                            | `IfNotPresent`          |
-| `global.imagePullSecrets`                 | Control plane service images pull secrets for docker registry. Its value can be: a string with single imagePullSecret, an array of `{name: pullSecret}` maps (Kubernetes-style), or an array of strings | `[]` |
-| `global.ha.enabled`                       | Highly Availability mode enabled for control plane                      | `false`                 |
-| `global.ha.replicaCount`                  | Number of replicas of control plane services in Highly Availability mode<br>Note that in HA mode, Dapr Placement has 3 replicas and that cannot be configured. | `3`                   |
-| `global.ha.disruption.minimumAvailable`   | Minimum amount of available instances for control plane. This can either be effective count or %. | ``             |
-| `global.ha.disruption.maximumUnavailable` | Maximum amount of instances that are allowed to be unavailable for control plane. This can either be effective count or %. | `25%`             |
-| `global.prometheus.enabled`               | Prometheus metrics enablement for control plane services                | `true`                  |
-| `global.prometheus.port`                  | Prometheus scrape http endpoint port                                    | `9090`                  |
-| `global.mtls.enabled`                     | Mutual TLS enablement                                                   | `true`                  |
-| `global.mtls.workloadCertTTL`             | TTL for workload cert                                                   | `24h`                   |
-| `global.mtls.allowedClockSkew`            | Allowed clock skew for workload cert rotation                           | `15m`                   |
-| `global.mtls.controlPlaneTrustDomain `    | Trust domain for control plane                                          | `cluster.local`         |
-| `global.mtls.sentryAddress`               | Sentry address for control plane                                        | `dapr-sentry.{{ .ReleaseNamespace  }}.svc:443` |
-| `global.mtls.mountSentryToken`            | Gates whether the sentry bound service account token volume is mounted to control plane pods | `true` |
-| `global.extraVolumes.sentry`              | Array of extra volumes to make available to sentry pods                 | `[]`                    |
-| `global.extraVolumes.placement`           | Array of extra volumes to make available to placement pods              | `[]`                    |
-| `global.extraVolumes.operator`            | Array of extra volumes to make available to operator pods               | `[]`                    |
-| `global.extraVolumes.injector`            | Array of extra volumes to make available to sidecar injector pods       | `[]`                    |
-| `global.extraVolumeMounts.sentry`         | Array of extra volume mounts to make available to sentry pod containers           | `[]`          |
-| `global.extraVolumeMounts.placement`      | Array of extra volume mounts to make available to placement pod containers        | `[]`          |
-| `global.extraVolumeMounts.operator`       | Array of extra volume mounts to make available to operator pod containers         | `[]`          |
-| `global.extraVolumeMounts.injector`       | Array of extra volume mounts to make available to sidecar injector pod containers | `[]`          |
-| `global.dnsSuffix`                        | Kuberentes DNS suffix                                                   | `.cluster.local`        |
-| `global.daprControlPlaneOs`               | Operating System for Dapr control plane                                 | `linux`                 |
-| `global.daprControlPlaneArch`             | CPU Architecture for Dapr control plane                                 | `amd64`                 |
-| `global.nodeSelector`                     | Pods will be scheduled onto a node node whose labels match the nodeSelector        | `{}`         |
-| `global.tolerations`                      | Pods will be allowed to schedule onto a node whose taints match the tolerations    | `{}`         |
-| `global.labels`                           | Custom pod labels                                                                  | `{}`         |
-| `global.k8sLabels`                        | Custom metadata labels                                                             | `{}`         |
-| `global.issuerFilenames.ca`               | Custom name of the file containing the root CA certificate inside the container    | `ca.crt`     |
-| `global.issuerFilenames.cert`             | Custom name of the file containing the leaf certificate inside the container       | `issuer.crt` |
-| `global.issuerFilenames.key`              | Custom name of the file containing the leaf certificate's key inside the container | `issuer.key` |
-| `global.actors.enabled`                   | Enables the Dapr actors building block. When "false", the Dapr Placement service is not installed, and attempting to use Dapr actors will fail. | `true` |
-| `global.actors.serviceName` | Name of the service that provides actor placement services. | `placement` |
-| `global.reminders.serviceName` | Name of the service that provides reminders functionality. If empty (the default), uses the built-in reminders capabilities in Dapr sidecars. | |
-| `global.seccompProfile` | SeccompProfile for Dapr control plane services | `""` |
-| `global.rbac.namespaced`                  | Removes cluster wide permissions where applicable  | `false` |
-| `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts        | `false`                 |
-| `global.priorityClassName`                | Adds `priorityClassName` to Dapr pods                                   | `""`                    |
+| Parameter                                     | Description                                                                                                                                                                                             | Default                 |
+|-----------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|-------------------------|
+| `global.registry`                             | Docker image registry                                                                                                                                                                                   | `docker.io/daprio`      |
+| `global.tag`                                  | Docker image version tag                                                                                                                                                                                | latest release          |
+| `global.logAsJson`                            | Json log format for control plane services                                                                                                                                                              | `false`                 |
+| `global.imagePullPolicy`                      | Global Control plane service imagePullPolicy                                                                                                                                                            | `IfNotPresent`          |
+| `global.imagePullSecrets`                     | Control plane service images pull secrets for docker registry. Its value can be: a string with single imagePullSecret, an array of `{name: pullSecret}` maps (Kubernetes-style), or an array of strings | `[]` |
+| `global.ha.enabled`                           | Highly Availability mode enabled for control plane                                                                                                                                                      | `false`                 |
+| `global.ha.replicaCount`                      | Number of replicas of control plane services in Highly Availability mode<br>Note that in HA mode, Dapr Placement has 3 replicas and that cannot be configured.                                          | `3`                   |
+| `global.ha.disruption.minimumAvailable`       | Minimum amount of available instances for control plane. This can either be effective count or %.                                                                                                       | ``             |
+| `global.ha.disruption.maximumUnavailable`     | Maximum amount of instances that are allowed to be unavailable for control plane. This can either be effective count or %.                                                                              | `25%`             |
+| `global.prometheus.enabled`                   | Prometheus metrics enablement for control plane services                                                                                                                                                | `true`                  |
+| `global.prometheus.port`                      | Prometheus scrape http endpoint port                                                                                                                                                                    | `9090`                  |
+| `global.mtls.enabled`                         | Mutual TLS enablement                                                                                                                                                                                   | `true`                  |
+| `global.mtls.workloadCertTTL`                 | TTL for workload cert                                                                                                                                                                                   | `24h`                   |
+| `global.mtls.allowedClockSkew`                | Allowed clock skew for workload cert rotation                                                                                                                                                           | `15m`                   |
+| `global.mtls.controlPlaneTrustDomain `        | Trust domain for control plane                                                                                                                                                                          | `cluster.local`         |
+| `global.mtls.sentryAddress`                   | Sentry address for control plane                                                                                                                                                                        | `dapr-sentry.{{ .ReleaseNamespace  }}.svc:443` |
+| `global.mtls.mountSentryToken`                | Gates whether the sentry bound service account token volume is mounted to control plane pods                                                                                                            | `true` |
+| `global.extraVolumes.sentry`                  | Array of extra volumes to make available to sentry pods                                                                                                                                                 | `[]`                    |
+| `global.extraVolumes.placement`               | Array of extra volumes to make available to placement pods                                                                                                                                              | `[]`                    |
+| `global.extraVolumes.operator`                | Array of extra volumes to make available to operator pods                                                                                                                                               | `[]`                    |
+| `global.extraVolumes.injector`                | Array of extra volumes to make available to sidecar injector pods                                                                                                                                       | `[]`                    |
+| `global.extraVolumes.scheduler`               | Array of extra volumes to make available to scheduler pods                                                                                                                                       | `[]`                    |
+| `global.extraVolumeMounts.sentry`             | Array of extra volume mounts to make available to sentry pod containers                                                                                                                                 | `[]`          |
+| `global.extraVolumeMounts.placement`          | Array of extra volume mounts to make available to placement pod containers                                                                                                                              | `[]`          |
+| `global.extraVolumeMounts.operator`           | Array of extra volume mounts to make available to operator pod containers                                                                                                                               | `[]`          |
+| `global.extraVolumeMounts.injector`           | Array of extra volume mounts to make available to sidecar injector pod containers                                                                                                                       | `[]`          |
+| `global.extraVolumeMounts.scheduler`          | Array of extra volume mounts to make available to scheduler pod containers                                                                                                                              | `[]`          |
+| `global.dnsSuffix`                            | Kuberentes DNS suffix                                                                                                                                                                                   | `.cluster.local`        |
+| `global.daprControlPlaneOs`                   | Operating System for Dapr control plane                                                                                                                                                                 | `linux`                 |
+| `global.daprControlPlaneArch`                 | CPU Architecture for Dapr control plane                                                                                                                                                                 | `amd64`                 |
+| `global.nodeSelector`                         | Pods will be scheduled onto a node node whose labels match the nodeSelector                                                                                                                             | `{}`         |
+| `global.tolerations`                          | Pods will be allowed to schedule onto a node whose taints match the tolerations                                                                                                                         | `[]`         |
+| `global.labels`                               | Custom pod labels                                                                                                                                                                                       | `{}`         |
+| `global.k8sLabels`                            | Custom metadata labels                                                                                                                                                                                  | `{}`         |
+| `global.issuerFilenames.ca`                   | Custom name of the file containing the root CA certificate inside the container                                                                                                                         | `ca.crt`     |
+| `global.issuerFilenames.cert`                 | Custom name of the file containing the leaf certificate inside the container                                                                                                                            | `issuer.crt` |
+| `global.issuerFilenames.key`                  | Custom name of the file containing the leaf certificate's key inside the container                                                                                                                      | `issuer.key` |
+| `global.actors.enabled`                       | Enables the Dapr actors building block. When "false", the Dapr Placement service is not installed, and attempting to use Dapr actors will fail.                                                         | `true` |
+| `global.actors.serviceName`                   | Name of the service that provides actor placement services.                                                                                                                                             | `placement` |
+| `global.reminders.serviceName`                | Name of the service that provides reminders functionality. If empty (the default), uses the built-in reminders capabilities in Dapr sidecars.                                                           | |
+| `global.seccompProfile`                       | SeccompProfile for Dapr control plane services                                                                                                                                                          | `""` |
+| `global.rbac.namespaced`                      | Removes cluster wide permissions where applicable                                                                                                                                                       | `false` |
+| `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts                                                                                                                                            | `false`                 |
+| `global.priorityClassName`                    | Adds `priorityClassName` to Dapr pods                                                                                                                                                                   | `""`                    |
+| `global.scheduler.enabled`                    | Enables the Dapr Scheduler building block. When "false", the Dapr Scheduler service is not installed, and attempting to schedule jobs in Dapr will fail.                                                | `true` |
+
 
 ### Dapr Operator options:
 | Parameter                                  | Description                                                                                                                                                                                   | Default     |
@@ -166,6 +171,24 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_rbac.secretReader.enabled`          | Deploys a default secret reader Role and RoleBinding                    | `true`                  |
 | `dapr_rbac.secretReader.namespace`        | Namespace for the default secret reader                                 | `default`               |
 
+### Dapr Scheduler options:
+| Parameter                                      | Description                                                                                                                                                               | Default                                      |
+|------------------------------------------------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------|
+| `dapr_scheduler.replicaCount`                  | Number of replicas                                                                                                                                                        | `1`                                          |
+| `dapr_scheduler.logLevel`                      | Service Log level                                                                                                                                                         | `info`                                       |
+| `dapr_scheduler.image.name`                    | Service docker image name (`global.registry/dapr_scheduler.image.name`)                                                                                                   | `dapr`                                       |
+| `dapr_scheduler.cluster.etcdDataDirPath`       | Mount path for persistent volume for log store in unix-like system                                                                                                        | `/var/run/data/dapr-scheduler/etcd-data-dir` |
+| `dapr_scheduler.cluster.etcdDataDirWinPath`    | Mount path for persistent volume for log store in windows                                                                                                                 | `C:\\etcd-data-dir`                          |
+| `dapr_scheduler.cluster.storageSize`      | Attached volume size                                                                                                                                                      | `1Gi`                                        |
+| `dapr_scheduler.cluster.storageClassName` | Storage class name                                                                                                                                                        |                                              |
+| `dapr_scheduler.runAsNonRoot`                  | Boolean value for `securityContext.runAsNonRoot`. Does not apply unless `forceInMemoryLog` is set to `true`. You may have to set this to `false` when running in Minikube | `false`                                      |
+| `dapr_scheduler.resources`                     | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty                         | `{}`                                         |
+| `dapr_scheduler.debug.enabled`                 | Boolean value for enabling debug mode                                                                                                                                     | `{}`                                         |
+| `dapr_scheduler.statefulsetAnnotations`        | Custom annotations for Dapr Scheduler Statefulset                                                                                                                         | `{}`                                         |
+| `dapr_scheduler.service.annotations`           | Custom annotations for "dapr-scheduler-server" Service resource                                                                                                           | `{}`                                         |
+| `dapr_scheduler.extraEnvVars`                  | Dictionary (key: value pairs) to use as extra environment variables in the injected sidecar containers (e.g. `my-env-var: "my-val"`, etc)                                 | `{}`                                         |
+
+
 ### Dapr Sentry options:
 | Parameter | Description | Default |
 |---|---|---|
@@ -194,10 +217,11 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_sidecar_injector.injectorImage.name`                | Docker image name for sidecar injector service (`global.registry/dapr_sidecar_injector.injectorImage.name`)                                                                                                                                                                                                                                                                                                                                                            | `dapr`|
 | `dapr_sidecar_injector.webhookFailurePolicy`              | Failure policy for the sidecar injector                                                                                                                                                                                                                                                                                                                                                                                                                                | `Ignore`                |
 | `dapr_sidecar_injector.runAsNonRoot`                      | Boolean value for `securityContext.runAsNonRoot` for the Sidecar Injector container itself. You may have to set this to `false` when running in Minikube                                                                                                                                                                                                                                                                                                               | `true` |
-| `dapr_sidecar_injector.sidecarRunAsNonRoot`               | When this boolean value is true (the default), the injected sidecar containers have `runAsRoot: true`. You may have to set this to `false` when running Minikube                                                                                                                                                                                                                                                                                                       | `true` |
-| `dapr_sidecar_injector.sidecarReadOnlyRootFilesystem`     | When this boolean value is true (the default), the injected sidecar containers have `readOnlyRootFilesystem: true`                                                                                                                                                                                                                                                                                                                                                     | `true` |
-| `dapr_sidecar_injector.sidecarDropALLCapabilities`        | When this boolean valus is true, the injected sidecar containers have `securityContext.capabilities.drop: ["ALL"]`                                                                                                                                                                                                                                                                                                                                                     | `false` |
-| `dapr_sidecar_injector.allowedServiceAccounts`            | String value for extra allowed service accounts in the format of `namespace1:serviceAccount1,namespace2:serviceAccount2`                                                                                                                                                                                                                                                                                                                                               | `""` |
+| `dapr_sidecar_injector.sidecarRunAsNonRoot` | When this boolean value is true (the default), the injected sidecar containers have `runAsRoot: true`. You may have to set this to `false` when running Minikube | `true` |
+| `dapr_sidecar_injector.sidecarReadOnlyRootFilesystem` | When this boolean value is true (the default), the injected sidecar containers have `readOnlyRootFilesystem: true` | `true` |
+| `dapr_sidecar_injector.enableK8sDownwardAPIs` | When set to true, uses the Kubernetes downward projection APIs to inject certain environmental variables (such as pod IP) into the daprd container. (default: `false`) | `true` |
+| `dapr_sidecar_injector.sidecarDropALLCapabilities` | When this boolean valus is true, the injected sidecar containers have `securityContext.capabilities.drop: ["ALL"]` | `false` |
+| `dapr_sidecar_injector.allowedServiceAccounts` | String value for extra allowed service accounts in the format of `namespace1:serviceAccount1,namespace2:serviceAccount2` | `""` |
 | `dapr_sidecar_injector.allowedServiceAccountsPrefixNames` | Comma-separated list of extra allowed service accounts. Each item in the list should be in the format of namespace:serviceaccount. To match service accounts by a common prefix, you can add an asterisk (`*`) at the end of the prefix. For instance, ns1*:sa2* will match any service account that starts with sa2, whose namespace starts with ns1. For example, it will match service accounts like sa21 and sa2223 in namespaces such as ns1, ns1dapr, and so on. | `""` |
 | `dapr_sidecar_injector.resources`                         | Value of `resources` attribute. Can be used to set memory/cpu resources/limits. See the section "Resource configuration" above. Defaults to empty                                                                                                                                                                                                                                                                                                                      | `{}` |
 | `dapr_sidecar_injector.debug.enabled`                     | Boolean value for enabling debug mode                                                                                                                                                                                                                                                                                                                                                                                                                                  | `{}` |
@@ -215,7 +239,7 @@ The Helm chart has the follow configuration options that can be supplied:
 This command creates three replicas of each control plane pod for an HA deployment (with the exception of the Placement pod) in the dapr-system namespace:
 
 ```
-helm install dapr dapr/dapr --namespace dapr-system --set global.ha.enabled=true --wait
+helm install dapr dapr/dapr --namespace dapr-system --create-namespace --set global.ha.enabled=true --wait
 ```
 
 ## Example of installing edge version of Dapr
@@ -223,7 +247,7 @@ helm install dapr dapr/dapr --namespace dapr-system --set global.ha.enabled=true
 This command deploys the latest `edge` version of Dapr to `dapr-system` namespace. This is useful if you want to deploy the latest version of Dapr to test a feature or some capability in your Kubernetes cluster.
 
 ```
-helm install dapr dapr/dapr --namespace dapr-system --set-string global.tag=edge --wait
+helm install dapr dapr/dapr --namespace dapr-system --create-namespace --set-string global.tag=edge --wait
 ```
 
 ## Example of installing dapr on Minikube
@@ -251,7 +275,7 @@ global:
 
 Install dapr:
 ```bash
-helm install dapr dapr/dapr --namespace dapr-system --values values.yml --wait
+helm install dapr dapr/dapr --namespace dapr-system --create-namespace --values values.yml --wait
 ```
 
 ## Example of debugging dapr
@@ -288,6 +312,6 @@ Port forward the debugging port so that it's visible to your IDE:
 kubectl port-forward dapr-operator-5c99475ffc-m9z9f 40000:40000 -n dapr-system
 ```
 ## Example of using nodeSelector option
-```
-helm install dapr dapr/dapr --namespace dapr-system --set global.nodeSelector.myLabel=myValue --wait
+```bash
+helm install dapr dapr/dapr --namespace dapr-system --create-namespace --set global.nodeSelector.myLabel=myValue --wait
 ```

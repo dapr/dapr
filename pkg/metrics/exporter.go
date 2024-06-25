@@ -90,7 +90,7 @@ func (m *promMetricsExporter) startMetricServer(ctx context.Context) error {
 		return nil
 	}
 
-	addr := fmt.Sprintf(":%d", m.options.MetricsPort())
+	addr := fmt.Sprintf("%s:%d", m.options.MetricsListenAddress(), m.options.MetricsPort())
 
 	if m.ocExporter == nil {
 		return errors.New("exporter was not initialized")

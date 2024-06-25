@@ -40,21 +40,21 @@ const (
 
 // FSM implements a finite state machine that is used
 // along with Raft to provide strong consistency. We implement
-// this outside the Server to avoid exposing this outside the package.
+// this outside the Server to avoid exposing it outside the package.
 type FSM struct {
 	// stateLock is only used to protect outside callers to State() from
 	// racing with Restore(), which is called by Raft (it puts in a totally
 	// new state store). Everything internal here is synchronized by the
-	// Raft side, so doesn't need to lock this.
-	stateLock         sync.RWMutex
-	state             *DaprHostMemberState
-	replicationFactor int64
+	// Raft side, so doesn't need to Lock this.
+	stateLock sync.RWMutex
+	state     *DaprHostMemberState
+	config    DaprHostMemberStateConfig
 }
 
-func newFSM(replicationFactor int64) *FSM {
+func newFSM(config DaprHostMemberStateConfig) *FSM {
 	return &FSM{
-		state:             newDaprHostMemberState(int(replicationFactor)),
-		replicationFactor: replicationFactor,
+		state:  newDaprHostMemberState(config),
+		config: config,
 	}
 }
 
@@ -66,9 +66,9 @@ func (c *FSM) State() *DaprHostMemberState {
 }
 
 // PlacementState returns the current placement tables.
-// the withVirtualNodes parameter is here for backwards compatibility and should be removed in 1.14
+// the withVirtualNodes parameter is here for backwards compatibility and should be removed in 1.15
 // TODO in v1.15 remove the withVirtualNodes parameter
-func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
+func (c *FSM) PlacementState(withVirtualNodes bool, namespace string) *v1pb.PlacementTables {
 	c.stateLock.RLock()
 	defer c.stateLock.RUnlock()
 
@@ -76,14 +76,17 @@ func (c *FSM) PlacementState(withVirtualNodes bool) *v1pb.PlacementTables {
 		Version:           strconv.FormatUint(c.state.TableGeneration(), 10),
 		Entries:           make(map[string]*v1pb.PlacementTable),
 		ApiLevel:          c.state.APILevel(),
-		ReplicationFactor: c.replicationFactor,
+		ReplicationFactor: c.config.replicationFactor,
 	}
 
 	totalHostSize := 0
 	totalSortedSet := 0
 	totalLoadMap := 0
 
-	entries := c.state.hashingTableMap()
+	entries, err := c.state.hashingTableMap(namespace)
+	if err != nil {
+		return newTable
+	}
 	for k, v := range entries {
 		var table v1pb.PlacementTable
 		v.ReadInternals(func(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*hashing.Host, totalLoad int64) {
@@ -209,7 +212,7 @@ func (c *FSM) Snapshot() (raft.FSMSnapshot, error) {
 func (c *FSM) Restore(old io.ReadCloser) error {
 	defer old.Close()
 
-	members := newDaprHostMemberState(int(c.replicationFactor))
+	members := newDaprHostMemberState(c.config)
 	if err := members.restore(old); err != nil {
 		return err
 	}

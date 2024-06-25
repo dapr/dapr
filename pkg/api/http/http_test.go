@@ -59,6 +59,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/middleware"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
+	outboxfake "github.com/dapr/dapr/pkg/outbox/fake"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -168,10 +169,10 @@ func TestPubSubEndpoints(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.universal.CompStore().AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("pubsubname", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errorpubsub", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotfound", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotallowed", &runtimePubsub.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
@@ -347,10 +348,10 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.universal.CompStore().AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("pubsubname", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errorpubsub", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotfound", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotallowed", &runtimePubsub.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
@@ -1000,9 +1001,11 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	rc := resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency)
+	testLog := logger.NewLogger("test.api.http.actors")
+	rc := resiliency.FromConfigurations(testLog, testResiliency)
 	testAPI := &api{
 		universal: universal.New(universal.Options{
+			Logger:     testLog,
 			AppID:      "fakeAPI",
 			Resiliency: rc,
 		}),
@@ -1088,7 +1091,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, fakeData, resp.RawBody)
-		assert.Equal(t, "2020-01-01T00:00:00Z", resp.RawHeader.Get("metadata.ttlexpiretime"))
+		assert.Equalf(t, "2020-01-01T00:00:00Z", resp.RawHeader.Get("metadata.ttlexpiretime"), "Headers: %v", resp.RawHeader)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
@@ -1512,34 +1515,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
-	t.Run("Reminder Get - 500 on JSON encode failure from actor", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-		reminderRequest := actors.GetReminderRequest{
-			Name:      "reminder1",
-			ActorType: "fakeActorType",
-			ActorID:   "fakeActorID",
-		}
-
-		reminderResponse := actors.MockReminder{
-			// This is not valid JSON
-			Data: json.RawMessage(`foo`),
-		}
-
-		mockActors := new(actors.MockActors)
-
-		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
-
-		testAPI.universal.SetActorRuntime(mockActors)
-
-		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-		// assert
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
-	})
-
 	t.Run("Timer Create - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 
@@ -1772,17 +1747,15 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		},
 	}))
 	require.NoError(t, compStore.CommitPendingComponent())
-	compStore.SetSubscriptions([]runtimePubsub.Subscription{
-		{
-			PubsubName:      "test",
-			Topic:           "topic",
-			DeadLetterTopic: "dead",
-			Metadata:        map[string]string{},
-			Rules: []*runtimePubsub.Rule{
-				{
-					Match: &expr.Expr{},
-					Path:  "path",
-				},
+	compStore.SetProgramaticSubscriptions(runtimePubsub.Subscription{
+		PubsubName:      "test",
+		Topic:           "topic",
+		DeadLetterTopic: "dead",
+		Metadata:        map[string]string{},
+		Rules: []*runtimePubsub.Rule{
+			{
+				Match: &expr.Expr{},
+				Path:  "path",
 			},
 		},
 	})
@@ -1847,7 +1820,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
-	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"RUNNING","activeActors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"hostReady":true}}`
+	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead","type":"PROGRAMMATIC"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"RUNNING","activeActors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"hostReady":true}}`
 
 	t.Run("Get Metadata", func(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", "v1.0/metadata", nil, nil)
@@ -1883,6 +1856,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 	testAPI := &api{
 		universal: universal.New(universal.Options{
+			Logger:     logger.NewLogger("fakeLogger"),
 			Resiliency: resiliency.New(nil),
 		}),
 		tracingSpec: spec,
@@ -2817,30 +2791,6 @@ func TestV1Beta1Workflow(t *testing.T) {
 		assert.Nil(t, resp.ErrorBody)
 	})
 
-	t.Run("Terminate with non_recursive set to false", func(t *testing.T) {
-		// This has the same behavior as the case when non_recursive parameter is not set.
-		// This is because default case is set to recursive termination.
-
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate?non_recursive=false"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 202, resp.StatusCode)
-
-		// assert
-		assert.Nil(t, resp.ErrorBody)
-	})
-
-	t.Run("Terminate with non_recursive true", func(t *testing.T) {
-		// Note that in case of non_recursive true, MockWorkflow intentionally returns fake error, even when it is not an actual error.
-		// This is to test that non_recursive flag is being passed correctly to the workflow component.
-
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate?non_recursive=true"
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_TERMINATE_WORKFLOW", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrTerminateWorkflow.Message(), "instanceID", daprt.ErrFakeWorkflowNonRecursiveTerminateError), resp.ErrorBody["message"])
-	})
-
 	///////////////////////////
 	// RAISE EVENT API TESTS //
 	///////////////////////////
@@ -2950,28 +2900,6 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 		// assert
 		assert.Nil(t, resp.ErrorBody)
-	})
-
-	t.Run("Purge with non_recursive false", func(t *testing.T) {
-		// This has the same behavior as the case when non_recursive parameter is not set.
-		// This is because default case is set to recursive purge.
-
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge?non_recursive=false"
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 202, resp.StatusCode)
-
-		// assert
-		assert.Nil(t, resp.ErrorBody)
-	})
-	t.Run("Purge with non_recursive true", func(t *testing.T) {
-		// Note that in case of non_recursive true, MockWorkflow intentionally returns fake error, even when it is not an actual error.
-		// This is to test that non_recursive flag is being passed correctly to the workflow component.
-
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge?non_recursive=true"
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_PURGE_WORKFLOW", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrPurgeWorkflow.Message(), "instanceID", daprt.ErrFakeWorkflowNonRecurisvePurgeError), resp.ErrorBody["message"])
 	})
 }
 
@@ -3195,7 +3123,7 @@ func (f *fakeHTTPServer) Shutdown() {
 }
 
 func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body []byte) fakeHTTPResponse {
-	url := fmt.Sprintf("http://localhost/%s", path)
+	url := fmt.Sprintf("http://127.0.0.1/%s", path)
 	r, _ := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("dapr-api-token", token)
@@ -3214,9 +3142,9 @@ func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body 
 }
 
 func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, params map[string]string, headers ...string) fakeHTTPResponse {
-	url := fmt.Sprintf("http://localhost/%s", path)
+	url := fmt.Sprintf("http://127.0.0.1/%s", path)
 	if basicAuth != "" {
-		url = fmt.Sprintf("http://%s@localhost/%s", basicAuth, path)
+		url = fmt.Sprintf("http://%s@127.0.0.1/%s", basicAuth, path)
 	}
 
 	if params != nil {
@@ -3306,6 +3234,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			Resiliency: rc,
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
@@ -4464,6 +4393,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}

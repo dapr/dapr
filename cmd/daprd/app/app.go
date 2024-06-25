@@ -55,7 +55,10 @@ func Run() {
 	// set GOMAXPROCS
 	_, _ = maxprocs.Set()
 
-	opts := options.New(os.Args[1:])
+	opts, err := options.New(os.Args[1:])
+	if err != nil {
+		log.Fatalf("Failed to parse flags: %v", err)
+	}
 
 	if opts.RuntimeVersion {
 		//nolint:forbidigo
@@ -77,7 +80,8 @@ func Run() {
 	// Apply options to all loggers.
 	opts.Logger.SetAppID(opts.AppID)
 
-	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
+	err = logger.ApplyOptionsToLoggers(&opts.Logger)
+	if err != nil {
 		log.Fatal(err)
 	}
 
@@ -132,44 +136,47 @@ func Run() {
 			}
 
 			rt, rerr := runtime.FromConfig(ctx, &runtime.Config{
-				AppID:                        opts.AppID,
-				ActorsService:                opts.ActorsService,
-				RemindersService:             opts.RemindersService,
-				AllowedOrigins:               opts.AllowedOrigins,
-				ResourcesPath:                opts.ResourcesPath,
-				ControlPlaneAddress:          opts.ControlPlaneAddress,
-				AppProtocol:                  opts.AppProtocol,
-				Mode:                         opts.Mode,
-				DaprHTTPPort:                 opts.DaprHTTPPort,
-				DaprInternalGRPCPort:         opts.DaprInternalGRPCPort,
-				DaprAPIGRPCPort:              opts.DaprAPIGRPCPort,
-				DaprAPIListenAddresses:       opts.DaprAPIListenAddresses,
-				DaprPublicPort:               opts.DaprPublicPort,
-				ApplicationPort:              opts.AppPort,
-				ProfilePort:                  opts.ProfilePort,
-				EnableProfiling:              opts.EnableProfiling,
-				AppMaxConcurrency:            opts.AppMaxConcurrency,
-				EnableMTLS:                   opts.EnableMTLS,
-				SentryAddress:                opts.SentryAddress,
-				DaprHTTPMaxRequestSize:       opts.DaprHTTPMaxRequestSize,
-				UnixDomainSocket:             opts.UnixDomainSocket,
-				DaprHTTPReadBufferSize:       opts.DaprHTTPReadBufferSize,
-				DaprGracefulShutdownSeconds:  opts.DaprGracefulShutdownSeconds,
-				DaprBlockShutdownDuration:    opts.DaprBlockShutdownDuration,
-				DisableBuiltinK8sSecretStore: opts.DisableBuiltinK8sSecretStore,
-				EnableAppHealthCheck:         opts.EnableAppHealthCheck,
-				AppHealthCheckPath:           opts.AppHealthCheckPath,
-				AppHealthProbeInterval:       opts.AppHealthProbeInterval,
-				AppHealthProbeTimeout:        opts.AppHealthProbeTimeout,
-				AppHealthThreshold:           opts.AppHealthThreshold,
-				AppChannelAddress:            opts.AppChannelAddress,
-				EnableAPILogging:             opts.EnableAPILogging,
-				Config:                       opts.Config,
-				Metrics:                      opts.Metrics,
-				AppSSL:                       opts.AppSSL,
-				ComponentsPath:               opts.ComponentsPath,
-				Registry:                     reg,
-				Security:                     sec,
+				AppID:                         opts.AppID,
+				ActorsService:                 opts.ActorsService,
+				RemindersService:              opts.RemindersService,
+				SchedulerAddress:              opts.SchedulerAddress,
+				AllowedOrigins:                opts.AllowedOrigins,
+				ResourcesPath:                 opts.ResourcesPath,
+				ControlPlaneAddress:           opts.ControlPlaneAddress,
+				AppProtocol:                   opts.AppProtocol,
+				Mode:                          opts.Mode,
+				DaprHTTPPort:                  opts.DaprHTTPPort,
+				DaprInternalGRPCPort:          opts.DaprInternalGRPCPort,
+				DaprInternalGRPCListenAddress: opts.DaprInternalGRPCListenAddress,
+				DaprAPIGRPCPort:               opts.DaprAPIGRPCPort,
+				DaprAPIListenAddresses:        opts.DaprAPIListenAddresses,
+				DaprPublicPort:                opts.DaprPublicPort,
+				DaprPublicListenAddress:       opts.DaprPublicListenAddress,
+				ApplicationPort:               opts.AppPort,
+				ProfilePort:                   opts.ProfilePort,
+				EnableProfiling:               opts.EnableProfiling,
+				AppMaxConcurrency:             opts.AppMaxConcurrency,
+				EnableMTLS:                    opts.EnableMTLS,
+				SentryAddress:                 opts.SentryAddress,
+				MaxRequestSize:                opts.MaxRequestSize,
+				ReadBufferSize:                opts.ReadBufferSize,
+				UnixDomainSocket:              opts.UnixDomainSocket,
+				DaprGracefulShutdownSeconds:   opts.DaprGracefulShutdownSeconds,
+				DaprBlockShutdownDuration:     opts.DaprBlockShutdownDuration,
+				DisableBuiltinK8sSecretStore:  opts.DisableBuiltinK8sSecretStore,
+				EnableAppHealthCheck:          opts.EnableAppHealthCheck,
+				AppHealthCheckPath:            opts.AppHealthCheckPath,
+				AppHealthProbeInterval:        opts.AppHealthProbeInterval,
+				AppHealthProbeTimeout:         opts.AppHealthProbeTimeout,
+				AppHealthThreshold:            opts.AppHealthThreshold,
+				AppChannelAddress:             opts.AppChannelAddress,
+				EnableAPILogging:              opts.EnableAPILogging,
+				Config:                        opts.Config,
+				Metrics:                       opts.Metrics,
+				AppSSL:                        opts.AppSSL,
+				ComponentsPath:                opts.ComponentsPath,
+				Registry:                      reg,
+				Security:                      sec,
 			})
 			if rerr != nil {
 				return rerr

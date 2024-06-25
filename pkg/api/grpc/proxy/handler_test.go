@@ -23,7 +23,6 @@ import (
 	"io"
 	"net"
 	"strconv"
-	"strings"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -744,7 +743,7 @@ func (s *proxyTestSuite) getServerClientConn() (conn *grpc.ClientConn, teardown 
 	if s.serverClientConn == nil {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Second)
 		defer cancel()
-		conn, err = grpc.DialContext(
+		conn, err = grpc.DialContext( //nolint:staticcheck
 			ctx,
 			s.serverListener.Addr().String(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -813,7 +812,7 @@ func (s *proxyTestSuite) SetupSuite() {
 		func(ctx context.Context, address, id, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error) {
 			return s.getServerClientConn()
 		},
-		4,
+		4<<10,
 	)
 	s.proxy = grpc.NewServer(
 		grpc.UnknownServiceHandler(th),
@@ -831,9 +830,9 @@ func (s *proxyTestSuite) SetupSuite() {
 
 	time.Sleep(500 * time.Millisecond)
 
-	clientConn, err := grpc.DialContext(
+	clientConn, err := grpc.DialContext( //nolint:staticcheck
 		context.Background(),
-		strings.Replace(s.proxyListener.Addr().String(), "127.0.0.1", "localhost", 1),
+		s.proxyListener.Addr().String(), // DO NOT USE "localhost" as it does not resolve to loopback in some environments.
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
 	)

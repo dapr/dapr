@@ -62,6 +62,8 @@ func Run() {
 		Peers:             opts.RaftPeers,
 		LogStorePath:      opts.RaftLogStorePath,
 		ReplicationFactor: int64(opts.ReplicationFactor),
+		MinAPILevel:       uint32(opts.MinAPILevel),
+		MaxAPILevel:       uint32(opts.MaxAPILevel),
 	})
 	if raftServer == nil {
 		log.Fatal("Failed to create raft server.")
@@ -72,7 +74,7 @@ func Run() {
 		SentryAddress:           opts.SentryAddress,
 		ControlPlaneTrustDomain: opts.TrustDomain,
 		ControlPlaneNamespace:   security.CurrentNamespace(),
-		TrustAnchorsFile:        opts.TrustAnchorsFile,
+		TrustAnchorsFile:        &opts.TrustAnchorsFile,
 		AppID:                   "dapr-placement",
 		MTLSEnabled:             opts.TLSEnabled,
 		Mode:                    modes.DaprMode(opts.Mode),
@@ -114,13 +116,13 @@ func Run() {
 				RouterOptions: metadataOptions,
 			})
 			healthzServer.Ready()
-			if healthzErr := healthzServer.Run(ctx, opts.HealthzPort); healthzErr != nil {
+			if healthzErr := healthzServer.Run(ctx, opts.HealthzListenAddress, opts.HealthzPort); healthzErr != nil {
 				return fmt.Errorf("failed to start healthz server: %w", healthzErr)
 			}
 			return nil
 		},
 		func(ctx context.Context) error {
-			return apiServer.Run(ctx, strconv.Itoa(opts.PlacementPort))
+			return apiServer.Run(ctx, opts.PlacementListenAddress, strconv.Itoa(opts.PlacementPort))
 		},
 	).Run(ctx)
 	if err != nil {

@@ -31,7 +31,7 @@ import (
 func BuildAll(t *testing.T) {
 	t.Helper()
 
-	binaryNames := []string{"daprd", "placement", "sentry", "operator"}
+	binaryNames := []string{"daprd", "placement", "sentry", "operator", "injector", "scheduler"}
 
 	var wg sync.WaitGroup
 	wg.Add(len(binaryNames))
@@ -60,7 +60,13 @@ func Build(t *testing.T, name string) {
 
 		// Use a consistent temp dir for the binary so that the binary is cached on
 		// subsequent runs.
-		binPath := filepath.Join(os.TempDir(), "dapr_integration_tests/"+name)
+		var tmpdir string
+		if runtime.GOOS == "darwin" {
+			tmpdir = "/tmp"
+		} else {
+			tmpdir = os.TempDir()
+		}
+		binPath := filepath.Join(tmpdir, "dapr_integration_tests/"+name)
 		if runtime.GOOS == "windows" {
 			binPath += ".exe"
 		}
@@ -70,7 +76,7 @@ func Build(t *testing.T, name string) {
 
 		t.Logf("Root dir: %q", rootDir)
 		t.Logf("Compiling %q binary to: %q", name, binPath)
-		cmd := exec.Command("go", "build", "-tags=allcomponents", "-v", "-o", binPath, "./cmd/"+name)
+		cmd := exec.Command("go", "build", "-tags=allcomponents,wfbackendsqlite", "-v", "-o", binPath, "./cmd/"+name)
 		cmd.Dir = rootDir
 		cmd.Stdout = ioout
 		cmd.Stderr = ioerr

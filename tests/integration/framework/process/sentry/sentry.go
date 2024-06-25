@@ -38,27 +38,30 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Sentry struct {
-	exec     process.Interface
-	freeport *util.FreePort
+	exec  process.Interface
+	ports *ports.Ports
 
 	bundle      *ca.Bundle
 	port        int
 	healthzPort int
 	metricsPort int
+	trustDomain *string
+	namespace   string
 }
 
 func New(t *testing.T, fopts ...Option) *Sentry {
 	t.Helper()
 
-	fp := util.ReservePorts(t, 3)
+	fp := ports.Reserve(t, 3)
 	opts := options{
-		port:        fp.Port(t, 0),
-		healthzPort: fp.Port(t, 1),
-		metricsPort: fp.Port(t, 2),
+		port:        fp.Port(t),
+		healthzPort: fp.Port(t),
+		metricsPort: fp.Port(t),
 		writeBundle: true,
 		writeConfig: true,
 	}
@@ -87,7 +90,10 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		"-issuer-certificate-filename=issuer.crt",
 		"-issuer-key-filename=issuer.key",
 		"-metrics-port=" + strconv.Itoa(opts.metricsPort),
+		"-metrics-listen-address=127.0.0.1",
 		"-healthz-port=" + strconv.Itoa(opts.healthzPort),
+		"-healthz-listen-address=127.0.0.1",
+		"-listen-address=127.0.0.1",
 	}
 
 	if opts.writeBundle {
@@ -125,22 +131,26 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		args = append(args, "-config="+configPath)
 	}
 
+	ns := "default"
 	if opts.namespace != nil {
 		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
+		ns = *opts.namespace
 	}
 
 	return &Sentry{
 		exec:        exec.New(t, binary.EnvValue("sentry"), args, opts.execOpts...),
-		freeport:    fp,
+		ports:       fp,
 		bundle:      opts.bundle,
 		port:        opts.port,
 		metricsPort: opts.metricsPort,
 		healthzPort: opts.healthzPort,
+		trustDomain: opts.trustDomain,
+		namespace:   ns,
 	}
 }
 
 func (s *Sentry) Run(t *testing.T, ctx context.Context) {
-	s.freeport.Free(t)
+	s.ports.Free(t)
 	s.exec.Run(t, ctx)
 }
 
@@ -160,7 +170,7 @@ func (s *Sentry) WaitUntilRunning(t *testing.T, ctx context.Context) {
 			defer resp.Body.Close()
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
 		}
-	}, time.Second*20, 100*time.Millisecond)
+	}, time.Second*20, 10*time.Millisecond)
 }
 
 func (s *Sentry) TrustAnchorsFile(t *testing.T) string {
@@ -190,6 +200,17 @@ func (s *Sentry) HealthzPort() int {
 	return s.healthzPort
 }
 
+func (s *Sentry) Namespace() string {
+	return s.namespace
+}
+
+func (s *Sentry) TrustDomain(t *testing.T) string {
+	if s.trustDomain == nil {
+		return "localhost"
+	}
+	return *s.trustDomain
+}
+
 // DialGRPC dials the sentry using the given context and returns a grpc client
 // connection.
 func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *grpc.ClientConn {
@@ -203,12 +224,13 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(
 		ctx,
 		fmt.Sprintf("127.0.0.1:%d", s.Port()),
 		grpc.WithTransportCredentials(transportCredentials),
-		grpc.WithReturnConnectionError(),
-		grpc.WithBlock(),
+		grpc.WithReturnConnectionError(), //nolint:staticcheck
+		grpc.WithBlock(),                 //nolint:staticcheck
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() {
