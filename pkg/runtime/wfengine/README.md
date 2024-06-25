@@ -14,7 +14,7 @@ Internally, this engine depends on the [Durable Task Framework for Go](https://g
 go get github.com/microsoft/durabletask-go
 ```
 
-Be mindful, that the above command will also pull in dependencies for sqlite, which we don't want or require. Those can be manually removed from go.mod and go.sum.
+Be mindful that the above command will also pull in dependencies for sqlite, which we don't want or require. Those can be manually removed from go.mod and go.sum.
 
 The following bash command can be used to build a version of Daprd that supports the workflow engine.
 
@@ -159,7 +159,7 @@ Below is an example of what keys would be used to store the state of a simple wo
 
 ### Resiliency
 
-Workflows are resilient to infrastructure failures. This is achieved by using reminders to drive all execution. If a process faults mid-execution, the reminder that initiated that execution will get scheduled again by Dapr to resume the execution from it's previous checkpoint, which is stored in the state store. 
+Workflows are resilient to infrastructure failures. This is achieved by using reminders to drive all execution. If a process faults mid-execution, the reminder that initiated that execution will get scheduled again by Dapr to resume the execution from its previous checkpoint, which is stored in the state store. 
 
 At all times, there is at least one reminder active for each workflow. However, there is typically a different reminder created for each *step* in the workflow. Here's an example of all the reminders that may get created as part of running a full end-to-end workflow.
 
