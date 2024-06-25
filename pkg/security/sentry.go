@@ -79,7 +79,7 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			)
 		}
 
-		conn, err := grpc.DialContext(ctx,
+		conn, err := grpc.DialContext(ctx, //nolint:staticcheck
 			sentryAddress,
 			grpc.WithTransportCredentials(
 				grpccredentials.TLSClientCredentials(trustAnchors, tlsconfig.AuthorizeID(sentryID)),

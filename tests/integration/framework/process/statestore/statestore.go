@@ -89,7 +89,7 @@ func (s *StateStore) Run(t *testing.T, ctx context.Context) {
 		s.srvErrCh <- s.server.Serve(s.listener)
 	}()
 
-	conn, err := grpc.DialContext(ctx, "unix://"+s.listener.Addr().String(),
+	conn, err := grpc.DialContext(ctx, "unix://"+s.listener.Addr().String(), //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
 	)
