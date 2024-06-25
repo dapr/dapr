@@ -18,9 +18,10 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/require"
+
 	http2 "github.com/dapr/dapr/pkg/api/http"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/stretchr/testify/require"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"

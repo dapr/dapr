@@ -18,10 +18,11 @@ import (
 	"testing"
 	"time"
 
-	http2 "github.com/dapr/dapr/pkg/api/http"
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	http2 "github.com/dapr/dapr/pkg/api/http"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
