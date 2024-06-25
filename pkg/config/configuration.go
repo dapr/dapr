@@ -46,6 +46,10 @@ const (
 
 	// Enables support for hot reloading of Daprd Components.
 	HotReload Feature = "HotReload"
+
+	// Enables support for using the Scheduler control plane service
+	// for Actor Reminders.
+	SchedulerReminders Feature = "SchedulerReminders"
 )
 
 // end feature flags section

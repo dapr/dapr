@@ -49,7 +49,7 @@ const (
 type remindersMetricsCollectorFn = func(actorType string, reminders int64)
 
 // Implements a reminders provider.
-type reminders struct {
+type statestore struct {
 	clock                clock.WithTicker
 	apiLevel             *atomic.Uint32
 	runningCh            chan struct{}
@@ -66,16 +66,16 @@ type reminders struct {
 	metricsCollector     remindersMetricsCollectorFn
 }
 
-// NewRemindersProviderOpts contains the options for the NewRemindersProvider function.
-type NewRemindersProviderOpts struct {
+// StateStoreOptions contains the options for the StateStoreOptions function.
+type StateStoreOptions struct {
 	StoreName string
 	Config    internal.Config
 	APILevel  *atomic.Uint32
 }
 
-// NewRemindersProvider returns a reminders provider.
-func NewRemindersProvider(opts internal.ActorsProviderOptions) internal.RemindersProvider {
-	return &reminders{
+// NewStateStore returns a reminders provider.
+func NewStateStore(opts internal.ActorsProviderOptions) internal.RemindersProvider {
+	return &statestore{
 		clock:            opts.Clock,
 		apiLevel:         opts.APILevel,
 		runningCh:        make(chan struct{}),
@@ -89,24 +89,24 @@ func NewRemindersProvider(opts internal.ActorsProviderOptions) internal.Reminder
 	}
 }
 
-func (r *reminders) SetExecuteReminderFn(fn internal.ExecuteReminderFn) {
+func (r *statestore) SetExecuteReminderFn(fn internal.ExecuteReminderFn) {
 	r.executeReminderFn = fn
 }
 
-func (r *reminders) SetStateStoreProviderFn(fn internal.StateStoreProviderFn) {
+func (r *statestore) SetStateStoreProviderFn(fn internal.StateStoreProviderFn) {
 	r.stateStoreProviderFn = fn
 }
 
-func (r *reminders) SetLookupActorFn(fn internal.LookupActorFn) {
+func (r *statestore) SetLookupActorFn(fn internal.LookupActorFn) {
 	r.lookUpActorFn = fn
 }
 
-func (r *reminders) SetMetricsCollectorFn(fn remindersMetricsCollectorFn) {
+func (r *statestore) SetMetricsCollectorFn(fn remindersMetricsCollectorFn) {
 	r.metricsCollector = fn
 }
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
-func (r *reminders) OnPlacementTablesUpdated(ctx context.Context) {
+func (r *statestore) OnPlacementTablesUpdated(ctx context.Context) {
 	go func() {
 		// To handle bursts, use a queue so no more than one evaluation can be queued up at the same time, since they'd all fetch the same data anyways
 		select {
@@ -122,7 +122,7 @@ func (r *reminders) OnPlacementTablesUpdated(ctx context.Context) {
 	}()
 }
 
-func (r *reminders) DrainRebalancedReminders(actorType string, actorID string) {
+func (r *statestore) DrainRebalancedReminders(actorType string, actorID string) {
 	r.remindersLock.RLock()
 	reminders := r.reminders[actorType]
 	r.remindersLock.RUnlock()
@@ -141,7 +141,13 @@ func (r *reminders) DrainRebalancedReminders(actorType string, actorID string) {
 	}
 }
 
-func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Reminder) error {
+func (r *statestore) CreateReminder(ctx context.Context, req *internal.CreateReminderRequest) error {
+	// Create the new reminder object
+	reminder, err := req.NewReminder(r.clock.Now())
+	if err != nil {
+		return err
+	}
+
 	storeName, store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return err
@@ -204,17 +210,17 @@ func (r *reminders) CreateReminder(ctx context.Context, reminder *internal.Remin
 	return r.startReminder(reminder, stop)
 }
 
-func (r *reminders) Close() error {
+func (r *statestore) Close() error {
 	// Close the runningCh
 	close(r.runningCh)
 	return nil
 }
 
-func (r *reminders) Init(ctx context.Context) error {
+func (r *statestore) Init(ctx context.Context) error {
 	return nil
 }
 
-func (r *reminders) GetReminder(ctx context.Context, req *internal.GetReminderRequest) (*internal.Reminder, error) {
+func (r *statestore) GetReminder(ctx context.Context, req *internal.GetReminderRequest) (*internal.Reminder, error) {
 	list, _, err := r.getRemindersForActorType(ctx, req.ActorType, false)
 	if err != nil {
 		return nil, err
@@ -232,7 +238,7 @@ func (r *reminders) GetReminder(ctx context.Context, req *internal.GetReminderRe
 	return nil, nil
 }
 
-func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteReminderRequest) error {
+func (r *statestore) DeleteReminder(ctx context.Context, req internal.DeleteReminderRequest) error {
 	if !r.waitForEvaluationChan() {
 		return errors.New("error deleting reminder: timed out after 30s")
 	}
@@ -274,7 +280,7 @@ func (r *reminders) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 	return nil
 }
 
-func (r *reminders) evaluateReminders(ctx context.Context) {
+func (r *statestore) evaluateReminders(ctx context.Context) {
 	// Wait for the evaluation channel
 	select {
 	case r.evaluationChan <- struct{}{}:
@@ -350,7 +356,7 @@ func (r *reminders) evaluateReminders(ctx context.Context) {
 	wg.Wait()
 }
 
-func (r *reminders) waitForEvaluationChan() bool {
+func (r *statestore) waitForEvaluationChan() bool {
 	t := r.clock.NewTimer(30 * time.Second)
 
 	select {
@@ -374,7 +380,7 @@ func (r *reminders) waitForEvaluationChan() bool {
 	}
 }
 
-func (r *reminders) getReminder(reminderName string, actorType string, actorID string) (*internal.Reminder, bool) {
+func (r *statestore) getReminder(reminderName string, actorType string, actorID string) (*internal.Reminder, bool) {
 	r.remindersLock.RLock()
 	reminders := r.reminders[actorType]
 	r.remindersLock.RUnlock()
@@ -388,7 +394,7 @@ func (r *reminders) getReminder(reminderName string, actorType string, actorID s
 	return nil, false
 }
 
-func (r *reminders) doDeleteReminder(ctx context.Context, actorType, actorID, name string) error {
+func (r *statestore) doDeleteReminder(ctx context.Context, actorType, actorID, name string) error {
 	storeName, store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return err
@@ -497,7 +503,7 @@ func (r *reminders) doDeleteReminder(ctx context.Context, actorType, actorID, na
 	return err
 }
 
-func (r *reminders) storeReminder(ctx context.Context, storeName string, store internal.TransactionalStateStore, reminder *internal.Reminder, stopChannel chan struct{}) error {
+func (r *statestore) storeReminder(ctx context.Context, storeName string, store internal.TransactionalStateStore, reminder *internal.Reminder, stopChannel chan struct{}) error {
 	// Store the reminder in active reminders list
 	reminderKey := reminder.Key()
 
@@ -572,7 +578,7 @@ func (r *reminders) storeReminder(ctx context.Context, storeName string, store i
 	return nil
 }
 
-func (r *reminders) executeStateStoreTransaction(ctx context.Context, storeName string, store internal.TransactionalStateStore, operations []state.TransactionalStateOperation, metadata map[string]string) error {
+func (r *statestore) executeStateStoreTransaction(ctx context.Context, storeName string, store internal.TransactionalStateStore, operations []state.TransactionalStateOperation, metadata map[string]string) error {
 	var policyDef *resiliency.PolicyDefinition
 	if r.resiliency != nil && !r.resiliency.PolicyDefined(storeName, resiliency.ComponentOutboundPolicy) {
 		policyDef = r.resiliency.ComponentOutboundPolicy(storeName, resiliency.Statestore)
@@ -592,7 +598,7 @@ func (r *reminders) executeStateStoreTransaction(ctx context.Context, storeName 
 	return err
 }
 
-func (r *reminders) serializeRemindersToProto(reminders []internal.Reminder) ([]byte, error) {
+func (r *statestore) serializeRemindersToProto(reminders []internal.Reminder) ([]byte, error) {
 	pb := &internalv1pb.Reminders{
 		Reminders: make([]*internalv1pb.Reminder, len(reminders)),
 	}
@@ -625,7 +631,7 @@ func (r *reminders) serializeRemindersToProto(reminders []internal.Reminder) ([]
 	return res, nil
 }
 
-func (r *reminders) unserialize(data []byte) ([]internal.Reminder, error) {
+func (r *statestore) unserialize(data []byte) ([]internal.Reminder, error) {
 	// Check if we have the protobuf prefix
 	if bytes.HasPrefix(data, []byte{0, 'p', 'b'}) {
 		return r.unserializeRemindersFromProto(data[3:])
@@ -638,7 +644,7 @@ func (r *reminders) unserialize(data []byte) ([]internal.Reminder, error) {
 }
 
 //nolint:protogetter
-func (r *reminders) unserializeRemindersFromProto(data []byte) ([]internal.Reminder, error) {
+func (r *statestore) unserializeRemindersFromProto(data []byte) ([]internal.Reminder, error) {
 	pb := internalv1pb.Reminders{}
 	err := proto.Unmarshal(data, &pb)
 	if err != nil {
@@ -688,7 +694,7 @@ func (r *reminders) unserializeRemindersFromProto(data []byte) ([]internal.Remin
 	return res, nil
 }
 
-func (r *reminders) saveRemindersInPartitionRequest(stateKey string, reminders []internal.Reminder, etag *string, metadata map[string]string) (state.SetRequest, error) {
+func (r *statestore) saveRemindersInPartitionRequest(stateKey string, reminders []internal.Reminder, etag *string, metadata map[string]string) (state.SetRequest, error) {
 	req := state.SetRequest{
 		Key:      stateKey,
 		ETag:     etag,
@@ -713,7 +719,7 @@ func (r *reminders) saveRemindersInPartitionRequest(stateKey string, reminders [
 	return req, nil
 }
 
-func (r *reminders) saveActorTypeMetadataRequest(actorType string, actorMetadata *ActorMetadata, stateMetadata map[string]string) state.SetRequest {
+func (r *statestore) saveActorTypeMetadataRequest(actorType string, actorMetadata *ActorMetadata, stateMetadata map[string]string) state.SetRequest {
 	return state.SetRequest{
 		Key:      constructCompositeKey("actors", actorType, "metadata"),
 		Value:    actorMetadata,
@@ -725,7 +731,7 @@ func (r *reminders) saveActorTypeMetadataRequest(actorType string, actorMetadata
 	}
 }
 
-func (r *reminders) getRemindersForActorType(ctx context.Context, actorType string, migrate bool) ([]ActorReminderReference, *ActorMetadata, error) {
+func (r *statestore) getRemindersForActorType(ctx context.Context, actorType string, migrate bool) ([]ActorReminderReference, *ActorMetadata, error) {
 	storeName, store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return nil, nil, err
@@ -856,7 +862,7 @@ func (r *reminders) getRemindersForActorType(ctx context.Context, actorType stri
 
 // getActorTypeMetadata gets the metadata object for the given actor type.
 // If "migrate" is true, it also performs migration of reminders if needed. Note that this should be set to "true" only by a caller who owns a lock via evaluationChan.
-func (r *reminders) getActorTypeMetadata(ctx context.Context, actorType string, migrate bool) (*ActorMetadata, error) {
+func (r *statestore) getActorTypeMetadata(ctx context.Context, actorType string, migrate bool) (*ActorMetadata, error) {
 	storeName, store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return nil, err
@@ -912,7 +918,7 @@ func (r *reminders) getActorTypeMetadata(ctx context.Context, actorType string, 
 
 // migrateRemindersForActorType migrates reminders for actors of a given type.
 // Note that this method should be invoked by a caller that owns the evaluationChan lock.
-func (r *reminders) migrateRemindersForActorType(ctx context.Context, storeName string, store internal.TransactionalStateStore, actorType string, actorMetadata *ActorMetadata) error {
+func (r *statestore) migrateRemindersForActorType(ctx context.Context, storeName string, store internal.TransactionalStateStore, actorType string, actorMetadata *ActorMetadata) error {
 	reminderPartitionCount := r.config.GetRemindersPartitionCountForType(actorType)
 	if actorMetadata.RemindersMetadata.PartitionCount == reminderPartitionCount {
 		return nil
@@ -985,7 +991,7 @@ func constructCompositeKey(keys ...string) string {
 	return strings.Join(keys, daprSeparator)
 }
 
-func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan struct{}) error {
+func (r *statestore) startReminder(reminder *internal.Reminder, stopChannel chan struct{}) error {
 	reminderKey := reminder.Key()
 
 	track, err := r.getReminderTrack(context.TODO(), reminderKey)
@@ -1095,7 +1101,7 @@ func (r *reminders) startReminder(reminder *internal.Reminder, stopChannel chan 
 	return nil
 }
 
-func (r *reminders) getReminderTrack(ctx context.Context, key string) (*internal.ReminderTrack, error) {
+func (r *statestore) getReminderTrack(ctx context.Context, key string) (*internal.ReminderTrack, error) {
 	storeName, store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return nil, err
@@ -1132,7 +1138,7 @@ func (r *reminders) getReminderTrack(ctx context.Context, key string) (*internal
 	return track, nil
 }
 
-func (r *reminders) updateReminderTrack(ctx context.Context, key string, repetition int, lastInvokeTime time.Time, etag *string) error {
+func (r *statestore) updateReminderTrack(ctx context.Context, key string, repetition int, lastInvokeTime time.Time, etag *string) error {
 	storeName, store, err := r.stateStoreProviderFn()
 	if err != nil {
 		return err
