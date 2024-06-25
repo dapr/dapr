@@ -376,6 +376,7 @@ var AppCallbackHealthCheck_ServiceDesc = grpc.ServiceDesc{
 
 const (
 	AppCallbackAlpha_OnBulkTopicEventAlpha1_FullMethodName = "/dapr.proto.runtime.v1.AppCallbackAlpha/OnBulkTopicEventAlpha1"
+	AppCallbackAlpha_OnJobEventAlpha1_FullMethodName       = "/dapr.proto.runtime.v1.AppCallbackAlpha/OnJobEventAlpha1"
 )
 
 // AppCallbackAlphaClient is the client API for AppCallbackAlpha service.
@@ -384,6 +385,8 @@ const (
 type AppCallbackAlphaClient interface {
 	// Subscribes bulk events from Pubsub
 	OnBulkTopicEventAlpha1(ctx context.Context, in *TopicEventBulkRequest, opts ...grpc.CallOption) (*TopicEventBulkResponse, error)
+	// Sends job back to the app's endpoint at trigger time.
+	OnJobEventAlpha1(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*JobEventResponse, error)
 }
 
 type appCallbackAlphaClient struct {
@@ -403,12 +406,23 @@ func (c *appCallbackAlphaClient) OnBulkTopicEventAlpha1(ctx context.Context, in 
 	return out, nil
 }
 
+func (c *appCallbackAlphaClient) OnJobEventAlpha1(ctx context.Context, in *JobEventRequest, opts ...grpc.CallOption) (*JobEventResponse, error) {
+	out := new(JobEventResponse)
+	err := c.cc.Invoke(ctx, AppCallbackAlpha_OnJobEventAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // AppCallbackAlphaServer is the server API for AppCallbackAlpha service.
 // All implementations should embed UnimplementedAppCallbackAlphaServer
 // for forward compatibility
 type AppCallbackAlphaServer interface {
 	// Subscribes bulk events from Pubsub
 	OnBulkTopicEventAlpha1(context.Context, *TopicEventBulkRequest) (*TopicEventBulkResponse, error)
+	// Sends job back to the app's endpoint at trigger time.
+	OnJobEventAlpha1(context.Context, *JobEventRequest) (*JobEventResponse, error)
 }
 
 // UnimplementedAppCallbackAlphaServer should be embedded to have forward compatible implementations.
@@ -417,6 +431,9 @@ type UnimplementedAppCallbackAlphaServer struct {
 
 func (UnimplementedAppCallbackAlphaServer) OnBulkTopicEventAlpha1(context.Context, *TopicEventBulkRequest) (*TopicEventBulkResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method OnBulkTopicEventAlpha1 not implemented")
+}
+func (UnimplementedAppCallbackAlphaServer) OnJobEventAlpha1(context.Context, *JobEventRequest) (*JobEventResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method OnJobEventAlpha1 not implemented")
 }
 
 // UnsafeAppCallbackAlphaServer may be embedded to opt out of forward compatibility for this service.
@@ -448,6 +465,24 @@ func _AppCallbackAlpha_OnBulkTopicEventAlpha1_Handler(srv interface{}, ctx conte
 	return interceptor(ctx, in, info, handler)
 }
 
+func _AppCallbackAlpha_OnJobEventAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(JobEventRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(AppCallbackAlphaServer).OnJobEventAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: AppCallbackAlpha_OnJobEventAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(AppCallbackAlphaServer).OnJobEventAlpha1(ctx, req.(*JobEventRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // AppCallbackAlpha_ServiceDesc is the grpc.ServiceDesc for AppCallbackAlpha service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -458,6 +493,10 @@ var AppCallbackAlpha_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "OnBulkTopicEventAlpha1",
 			Handler:    _AppCallbackAlpha_OnBulkTopicEventAlpha1_Handler,
+		},
+		{
+			MethodName: "OnJobEventAlpha1",
+			Handler:    _AppCallbackAlpha_OnJobEventAlpha1_Handler,
 		},
 	},
 	Streams:  []grpc.StreamDesc{},

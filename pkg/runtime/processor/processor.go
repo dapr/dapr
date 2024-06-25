@@ -72,6 +72,10 @@ type Options struct {
 	// ActorsEnabled indicates whether placement service is enabled in this Dapr cluster.
 	ActorsEnabled bool
 
+	// SchedulerEnabled indicates whether scheduler service is enabled in this
+	// Dapr cluster.
+	SchedulerEnabled bool
+
 	// IsHTTP indicates whether the connection to the application is using the
 	// HTTP protocol.
 	IsHTTP bool

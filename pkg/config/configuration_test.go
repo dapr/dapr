@@ -651,27 +651,46 @@ func TestMetricsGetHTTPPathMatching(t *testing.T) {
 	t.Run("config is enabled", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				PathMatching: &PathMatching{
-					IngressPaths: []string{"/resource/1"},
-					EgressPaths:  []string{"/resource/2"},
-				},
+				PathMatching: []string{"/resource/1"},
 			},
 		}
 		config := m.GetHTTPPathMatching()
-		assert.Equal(t, []string{"/resource/1"}, config.IngressPaths)
-		assert.Equal(t, []string{"/resource/2"}, config.EgressPaths)
+		assert.Equal(t, []string{"/resource/1"}, config)
+	})
+}
+
+func TestMetricsGetHTTPExcludeVerbs(t *testing.T) {
+	t.Run("no configuration, returns false", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: nil,
+		}
+		assert.False(t, m.GetHTTPExcludeVerbs())
 	})
 
-	t.Run("config is enabled with only ingress", func(t *testing.T) {
+	t.Run("nil value, returns false", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				PathMatching: &PathMatching{
-					IngressPaths: []string{"/resource/1"},
-				},
+				ExcludeVerbs: nil,
 			},
 		}
-		config := m.GetHTTPPathMatching()
-		assert.Equal(t, []string{"/resource/1"}, config.IngressPaths)
-		assert.Nil(t, config.EgressPaths)
+		assert.False(t, m.GetHTTPExcludeVerbs())
+	})
+
+	t.Run("config is enabled", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				ExcludeVerbs: ptr.Of(true),
+			},
+		}
+		assert.True(t, m.GetHTTPExcludeVerbs())
+	})
+
+	t.Run("config is disabled", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				ExcludeVerbs: ptr.Of(false),
+			},
+		}
+		assert.False(t, m.GetHTTPExcludeVerbs())
 	})
 }

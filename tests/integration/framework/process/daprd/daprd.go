@@ -147,6 +147,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.blockShutdownDuration != nil {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
+	if len(opts.schedulerAddresses) > 0 {
+		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
+	}
 	if opts.controlPlaneTrustDomain != nil {
 		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
 	}
@@ -229,6 +232,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 
 	case "grpc":
 		assert.Eventually(t, func() bool {
+			//nolint:staticcheck
 			conn, err := grpc.Dial(d.AppAddress(),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock())
@@ -248,6 +252,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, d.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),

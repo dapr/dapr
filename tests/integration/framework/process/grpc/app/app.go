@@ -43,6 +43,7 @@ func New(t *testing.T, fopts ...Option) *App {
 		grpc: procgrpc.New(t, append(opts.grpcopts, procgrpc.WithRegister(func(s *grpc.Server) {
 			srv := &server{
 				onInvokeFn:         opts.onInvokeFn,
+				onJobEventFn:       opts.onJobEventFn,
 				onTopicEventFn:     opts.onTopicEventFn,
 				onBulkTopicEventFn: opts.onBulkTopicEventFn,
 				listTopicSubFn:     opts.listTopicSubFn,

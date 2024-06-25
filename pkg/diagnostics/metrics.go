@@ -45,7 +45,7 @@ var (
 )
 
 // InitMetrics initializes metrics.
-func InitMetrics(appID, namespace string, rules []config.MetricsRule, pathMatching *config.PathMatching, legacyMetricsHTTPMetrics bool) error {
+func InitMetrics(appID, namespace string, rules []config.MetricsRule, httpConfig HTTPMonitoringConfig) error {
 	if err := DefaultMonitoring.Init(appID); err != nil {
 		return err
 	}
@@ -54,7 +54,7 @@ func InitMetrics(appID, namespace string, rules []config.MetricsRule, pathMatchi
 		return err
 	}
 
-	if err := DefaultHTTPMonitoring.Init(appID, pathMatching, legacyMetricsHTTPMetrics); err != nil {
+	if err := DefaultHTTPMonitoring.Init(appID, httpConfig); err != nil {
 		return err
 	}
 

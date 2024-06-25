@@ -21,8 +21,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/dapr/dapr/pkg/config"
 )
 
 const (
@@ -32,8 +30,8 @@ const (
 
 func BenchmarkHTTPMiddlewareLowCardinalityNoPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	pathMatching := &config.PathMatching{}
-	testHTTP.Init("fakeID", pathMatching, false)
+	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
+	testHTTP.Init("fakeID", configHTTP)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)
@@ -49,8 +47,8 @@ func BenchmarkHTTPMiddlewareLowCardinalityNoPathMatching(b *testing.B) {
 
 func BenchmarkHTTPMiddlewareHighCardinalityNoPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	pathMatching := &config.PathMatching{}
-	testHTTP.Init("fakeID", pathMatching, true)
+	configHTTP := NewHTTPMonitoringConfig(nil, true, false)
+	testHTTP.Init("fakeID", configHTTP)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)
@@ -66,15 +64,10 @@ func BenchmarkHTTPMiddlewareHighCardinalityNoPathMatching(b *testing.B) {
 
 func BenchmarkHTTPMiddlewareLowCardinalityWithPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	pathMatching := &config.PathMatching{
-		IngressPaths: []string{
-			"/invoke/method/orders/{orderID}",
-		},
-		EgressPaths: []string{
-			"/invoke/method/orders/{orderID}",
-		},
-	}
-	testHTTP.Init("fakeID", pathMatching, false)
+	pathMatching := []string{"/invoke/method/orders/{orderID}"}
+
+	configHTTP := NewHTTPMonitoringConfig(pathMatching, false, false)
+	testHTTP.Init("fakeID", configHTTP)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)
@@ -90,15 +83,8 @@ func BenchmarkHTTPMiddlewareLowCardinalityWithPathMatching(b *testing.B) {
 
 func BenchmarkHTTPMiddlewareHighCardinalityWithPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	pathMatching := &config.PathMatching{
-		IngressPaths: []string{
-			"/invoke/method/orders/{orderID}",
-		},
-		EgressPaths: []string{
-			"/invoke/method/orders/{orderID}",
-		},
-	}
-	testHTTP.Init("fakeID", pathMatching, true)
+	pathMatching := []string{"/invoke/method/orders/{orderID}"}
+	testHTTP.Init("fakeID", HTTPMonitoringConfig{pathMatching: pathMatching, legacy: true})
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)

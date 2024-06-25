@@ -191,6 +191,10 @@ func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalIn
 	return resp.ProtoWithData()
 }
 
+func (m *mockGRPCAPI) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
+	return new(emptypb.Empty), nil
+}
+
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
 	return &emptypb.Empty{}, nil
 }
@@ -337,7 +341,7 @@ func startDaprAPIServer(testAPIServer *api, token string) (*grpc.Server, *bufcon
 func createTestClient(lis *bufconn.Listener) *grpc.ClientConn {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, err := grpc.DialContext(
+	conn, err := grpc.DialContext( //nolint:staticcheck
 		ctx, "bufnet",
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)

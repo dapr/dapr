@@ -259,16 +259,12 @@ spec:
                         type: boolean
                       pathMatching:
                         description: PathMatching defines the path matching configuration for HTTP server metrics.
-                        properties:
-                          ingress:
-                            type: array
-                            items:
-                              type: string
-                          egress:
-                            type: array
-                            items:
-                              type: string
-                        type: object
+                        type: array
+                        items:
+                          type: string
+                      excludeVerbs:
+                        description: If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
+                        type: boolean
                     type: object
                   rules:
                     items:
@@ -319,16 +315,12 @@ spec:
                         type: boolean
                       pathMatching:
                         description: PathMatching defines the path matching configuration for HTTP server metrics.
-                        properties:
-                          ingress:
-                            type: array
-                            items:
-                              type: string
-                          egress:
-                            type: array
-                            items:
-                              type: string
-                        type: object
+                        type: array
+                        items:
+                          type: string
+                      excludeVerbs:
+                          description: If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
+                          type: boolean
                     type: object
                   rules:
                     items:

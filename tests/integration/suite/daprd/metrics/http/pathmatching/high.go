@@ -67,14 +67,10 @@ spec:
     http:
       increasedCardinality: true
       pathMatching:
-        ingress:
-        - /v1.0/invoke/myapp/method/orders/{orderID}
         - /v1.0/invoke/myapp/method/basket
-        egress:
         - /v1.0/invoke/myapp/method/orders/1234
         - /v1.0/invoke/myapp/method/orders/{orderID}
         - /v1.0/invoke/myapp/method/orders
-        - /v1.0/invoke/myapp/method/basket
 `),
 	)
 
