@@ -39,6 +39,14 @@ type pathMatching struct {
 	mux *http.ServeMux
 }
 
+// newPathMatching creates a new pathMatching instance.
+// The root path ("/") must always be registered:
+// - If the user explicitly registers the root path, we match it accordingly.
+// - If the root path is not explicitly registered:
+//   - If legacy is true, we fall back to using an empty handler function.
+//   - If legacy is false, we match the root path to an empty string.
+//
+// All other paths in the 'paths' slice are cleaned, sorted, and registered.
 func newPathMatching(paths []string, legacy bool) *pathMatching {
 	if paths == nil {
 		return nil
@@ -48,15 +56,16 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 		return nil
 	}
 
-	cleanPaths := cleanAndSortPaths(paths)
-
 	mux := http.NewServeMux()
 
-	// Skip the root path if legacy mode is enabled.
-	if legacy {
-		mux.Handle("/", emptyHandlerFunc)
-	} else {
-		mux.Handle("/", pathMatchHandlerFunc("/"))
+	cleanPaths, foundRootPath := cleanAndSortPaths(paths)
+
+	if !foundRootPath {
+		if legacy {
+			mux.Handle("/", emptyHandlerFunc)
+		} else {
+			mux.Handle("/", pathMatchHandlerFunc(""))
+		}
 	}
 
 	for _, pattern := range cleanPaths {
@@ -68,25 +77,27 @@ func newPathMatching(paths []string, legacy bool) *pathMatching {
 	}
 }
 
-// cleanAndSortPaths ensures that we don't have duplicates and removes root path
-func cleanAndSortPaths(paths []string) []string {
+// cleanAndSortPaths processes the given slice of paths by sorting and compacting it,
+// and checks if the root path ("/") is included.
+func cleanAndSortPaths(paths []string) ([]string, bool) {
+	foundRootPath := false
 	slices.Sort(paths)
 	paths = slices.Compact(paths)
 	cleanPaths := make([]string, 0, len(paths))
 	for _, path := range paths {
 		if path == "/" {
-			continue
+			foundRootPath = true
 		}
 		cleanPaths = append(cleanPaths, path)
 	}
-	return cleanPaths
+	return cleanPaths, foundRootPath
 }
 
 func (pm *pathMatching) enabled() bool {
 	return pm != nil && pm.mux != nil
 }
 
-func (pm *pathMatching) matchPath(path string) (string, bool) {
+func (pm *pathMatching) match(path string) (string, bool) {
 	if !pm.enabled() {
 		return "", false
 	}

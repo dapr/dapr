@@ -259,16 +259,9 @@ spec:
                         type: boolean
                       pathMatching:
                         description: PathMatching defines the path matching configuration for HTTP server metrics.
-                        properties:
-                          ingress:
-                            type: array
-                            items:
-                              type: string
-                          egress:
-                            type: array
-                            items:
-                              type: string
-                        type: object
+                        type: array
+                        items:
+                          type: string
                     type: object
                   rules:
                     items:
@@ -319,16 +312,9 @@ spec:
                         type: boolean
                       pathMatching:
                         description: PathMatching defines the path matching configuration for HTTP server metrics.
-                        properties:
-                          ingress:
-                            type: array
-                            items:
-                              type: string
-                          egress:
-                            type: array
-                            items:
-                              type: string
-                        type: object
+                        type: array
+                        items:
+                          type: string
                     type: object
                   rules:
                     items:
