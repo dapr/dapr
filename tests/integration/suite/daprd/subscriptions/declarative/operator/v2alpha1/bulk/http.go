@@ -21,13 +21,12 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
-
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
