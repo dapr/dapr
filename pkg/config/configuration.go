@@ -296,12 +296,6 @@ type MetricHTTP struct {
 	ExcludeVerbs         *bool    `json:"excludeVerbs,omitempty" yaml:"excludeVerbs,omitempty"`
 }
 
-// PathMatching defines configuration options for path matching.
-type PathMatching struct {
-	IngressPaths []string `json:"ingress,omitempty" yaml:"ingress,omitempty"`
-	EgressPaths  []string `json:"egress,omitempty" yaml:"egress,omitempty"`
-}
-
 // MetricsRule defines configuration options for a metric.
 type MetricsRule struct {
 	Name   string        `json:"name,omitempty"   yaml:"name,omitempty"`
