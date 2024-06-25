@@ -95,6 +95,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 			Metadata:        s.Metadata,
 			DeadLetterTopic: s.DeadLetterTopic,
 			Rules:           metadataConvertPubSubSubscriptionRules(s.Rules),
+			Type:            s.Type,
 		}
 	}
 

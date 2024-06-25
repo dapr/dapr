@@ -1,36 +1,19 @@
 package pubsub
 
-import "fmt"
-
-type SubscriptionType int32
-
-const (
-	SubscriptionTypeUnknown = iota
-	SubscriptionTypeDeclarative
-	SubscriptionTypeProgrammatic
-	SubscriptionTypeStreaming
+import (
+	"fmt"
+	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-var subscriptionTypeName = map[int32]string{
-	SubscriptionTypeUnknown:      "Unknown",
-	SubscriptionTypeDeclarative:  "Declarative",
-	SubscriptionTypeProgrammatic: "Programmatic",
-	SubscriptionTypeStreaming:    "Streaming",
-}
-
-func (s SubscriptionType) String() string {
-	return subscriptionTypeName[int32(s)]
-}
-
 type Subscription struct {
-	PubsubName      string            `json:"pubsubname"`
-	Topic           string            `json:"topic"`
-	DeadLetterTopic string            `json:"deadLetterTopic"`
-	Metadata        map[string]string `json:"metadata"`
-	Rules           []*Rule           `json:"rules,omitempty"`
-	Scopes          []string          `json:"scopes"`
-	BulkSubscribe   *BulkSubscribe    `json:"bulkSubscribe"`
-	Type            SubscriptionType  `json:"type"`
+	PubsubName      string                         `json:"pubsubname"`
+	Topic           string                         `json:"topic"`
+	DeadLetterTopic string                         `json:"deadLetterTopic"`
+	Metadata        map[string]string              `json:"metadata"`
+	Rules           []*Rule                        `json:"rules,omitempty"`
+	Scopes          []string                       `json:"scopes"`
+	BulkSubscribe   *BulkSubscribe                 `json:"bulkSubscribe"`
+	Type            runtime.PubsubSubscriptionType `json:"type"`
 }
 
 type BulkSubscribe struct {

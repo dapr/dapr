@@ -15,6 +15,7 @@ package compstore
 
 import (
 	"fmt"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
@@ -58,7 +59,7 @@ func (c *ComponentStore) AddDeclarativeSubscription(comp *subapi.Subscription, s
 		}
 	}
 
-	sub.Type = rtpubsub.SubscriptionTypeDeclarative
+	sub.Type = runtimev1pb.PubsubSubscriptionType_DECLARATIVE
 	c.subscriptions.declaratives[comp.Name] = &DeclarativeSubscription{
 		Comp: comp,
 		NamedSubscription: &NamedSubscription{
@@ -86,7 +87,7 @@ func (c *ComponentStore) AddStreamSubscription(comp *subapi.Subscription) error 
 				DeadLetterTopic: comp.Spec.DeadLetterTopic,
 				Metadata:        comp.Spec.Metadata,
 				Rules:           []*rtpubsub.Rule{{Path: "/"}},
-				Type:            rtpubsub.SubscriptionTypeStreaming,
+				Type:            runtimev1pb.PubsubSubscriptionType_STREAMING,
 			},
 		},
 	}

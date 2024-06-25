@@ -93,13 +93,15 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 
 				// Copy the subscriptions into a custom struct
 				if len(out.GetSubscriptions()) > 0 {
-					subs := make([]metadataResponsePubsubSubscription, len(out.GetSubscriptions()))
+					subs := make([]MetadataResponsePubsubSubscription, len(out.GetSubscriptions()))
 					for i, v := range out.GetSubscriptions() {
-						subs[i] = metadataResponsePubsubSubscription{
+						// TODO: switch to runtimev1pb.PubsubSubscription. Rules becomes Rules.Rules
+						subs[i] = MetadataResponsePubsubSubscription{
 							PubsubName:      v.GetPubsubName(),
 							Topic:           v.GetTopic(),
 							Metadata:        v.GetMetadata(),
 							DeadLetterTopic: v.GetDeadLetterTopic(),
+							Type:            v.GetType(),
 						}
 
 						if v.GetRules() != nil && len(v.GetRules().GetRules()) > 0 {
@@ -162,7 +164,7 @@ type metadataResponse struct {
 	ActiveActorsCount       []*runtimev1pb.ActiveActorsCount        `json:"actors,omitempty"`
 	RegisteredComponents    []*runtimev1pb.RegisteredComponents     `json:"components,omitempty"`
 	Extended                map[string]string                       `json:"extended,omitempty"`
-	Subscriptions           []metadataResponsePubsubSubscription    `json:"subscriptions,omitempty"`
+	Subscriptions           []MetadataResponsePubsubSubscription    `json:"subscriptions,omitempty"`
 	HTTPEndpoints           []*runtimev1pb.MetadataHTTPEndpoint     `json:"httpEndpoints,omitempty"`
 	AppConnectionProperties metadataResponseAppConnectionProperties `json:"appConnectionProperties,omitempty"`
 	ActorRuntime            metadataActorRuntime                    `json:"actorRuntime,omitempty"`
@@ -175,12 +177,13 @@ type metadataActorRuntime struct {
 	Placement    string                           `json:"placement,omitempty"`
 }
 
-type metadataResponsePubsubSubscription struct {
+type MetadataResponsePubsubSubscription struct {
 	PubsubName      string                                   `json:"pubsubname"`
 	Topic           string                                   `json:"topic"`
 	Metadata        map[string]string                        `json:"metadata,omitempty"`
 	Rules           []metadataResponsePubsubSubscriptionRule `json:"rules,omitempty"`
 	DeadLetterTopic string                                   `json:"deadLetterTopic"`
+	Type            runtimev1pb.PubsubSubscriptionType       `json:"type"`
 }
 
 type metadataResponsePubsubSubscriptionRule struct {

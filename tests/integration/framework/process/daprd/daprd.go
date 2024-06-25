@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	http2 "github.com/dapr/dapr/pkg/api/http"
 	"io"
 	"net"
 	"net/http"
@@ -388,13 +389,13 @@ func (d *Daprd) GetMetaRegistedComponents(t assert.TestingT, ctx context.Context
 	return d.meta(t, ctx).RegisteredComponents
 }
 
-func (d *Daprd) GetMetaSubscriptions(t assert.TestingT, ctx context.Context) []any {
+func (d *Daprd) GetMetaSubscriptions(t assert.TestingT, ctx context.Context) []http2.MetadataResponsePubsubSubscription {
 	return d.meta(t, ctx).Subscriptions
 }
 
 type metaResponse struct {
-	RegisteredComponents []*rtv1.RegisteredComponents `json:"components,omitempty"`
-	Subscriptions        []any                        `json:"subscriptions,omitempty"`
+	RegisteredComponents []*rtv1.RegisteredComponents               `json:"components,omitempty"`
+	Subscriptions        []http2.MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
 }
 
 func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {
