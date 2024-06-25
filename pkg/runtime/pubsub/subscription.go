@@ -1,8 +1,6 @@
 package pubsub
 
-import (
-	"fmt"
-)
+import "fmt"
 
 type Subscription struct {
 	PubsubName      string            `json:"pubsubname"`

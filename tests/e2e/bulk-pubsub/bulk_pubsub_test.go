@@ -246,8 +246,7 @@ func testDropToDeadLetter(t *testing.T, publisherExternalURL, subscriberExternal
 			ReceivedByTopicCESub:      []string{},
 			ReceivedByTopicDead:       sentTopicDeadMessages,
 			ReceivedByTopicDeadLetter: sentTopicDeadMessages,
-			ReceivedByTopicCEBulkSub:  sentTopicCEMessages,
-		})
+			ReceivedByTopicCEBulkSub:  sentTopicCEMessages})
 	return subscriberExternalURL
 }
 
