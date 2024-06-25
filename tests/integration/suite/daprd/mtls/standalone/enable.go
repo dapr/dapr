@@ -29,10 +29,11 @@ import (
 
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	procplacement "github.com/dapr/dapr/tests/integration/framework/process/placement"
-	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -42,14 +43,15 @@ func init() {
 
 // enable tests standalone Dapr with mTLS enabled.
 type enable struct {
-	daprd        *procdaprd.Daprd
-	sentry       *procsentry.Sentry
-	placement    *procplacement.Placement
+	daprd        *daprd.Daprd
+	sentry       *sentry.Sentry
+	placement    *placement.Placement
+	scheduler    *scheduler.Scheduler
 	trustAnchors []byte
 }
 
 func (e *enable) Setup(t *testing.T) []framework.Option {
-	e.sentry = procsentry.New(t)
+	e.sentry = sentry.New(t)
 
 	bundle := e.sentry.CABundle()
 	e.trustAnchors = bundle.TrustAnchors
@@ -57,31 +59,34 @@ func (e *enable) Setup(t *testing.T) []framework.Option {
 	// Control plane services always serves with mTLS in kubernetes mode.
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
-	e.placement = procplacement.New(t,
-		procplacement.WithEnableTLS(true),
-		procplacement.WithTrustAnchorsFile(taFile),
-		procplacement.WithSentryAddress(e.sentry.Address()),
+
+	e.scheduler = scheduler.New(t, scheduler.WithSentry(e.sentry))
+
+	e.placement = placement.New(t,
+		placement.WithEnableTLS(true),
+		placement.WithTrustAnchorsFile(taFile),
+		placement.WithSentryAddress(e.sentry.Address()),
 	)
 
-	e.daprd = procdaprd.New(t,
-		procdaprd.WithAppID("my-app"),
-		procdaprd.WithMode("standalone"),
-		procdaprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
-		procdaprd.WithSentryAddress(e.sentry.Address()),
-		procdaprd.WithPlacementAddresses(e.placement.Address()),
-
-		// Enable mTLS
-		procdaprd.WithEnableMTLS(true),
+	e.daprd = daprd.New(t,
+		daprd.WithAppID("my-app"),
+		daprd.WithMode("standalone"),
+		daprd.WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(bundle.TrustAnchors))),
+		daprd.WithSentryAddress(e.sentry.Address()),
+		daprd.WithPlacementAddresses(e.placement.Address()),
+		daprd.WithSchedulerAddresses(e.scheduler.Address()),
+		daprd.WithEnableMTLS(true),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(e.sentry, e.placement, e.daprd),
+		framework.WithProcesses(e.sentry, e.placement, e.scheduler, e.daprd),
 	}
 }
 
 func (e *enable) Run(t *testing.T, ctx context.Context) {
 	e.sentry.WaitUntilRunning(t, ctx)
 	e.placement.WaitUntilRunning(t, ctx)
+	e.scheduler.WaitUntilRunning(t, ctx)
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("trying plain text connection to Dapr API should fail", func(t *testing.T) {

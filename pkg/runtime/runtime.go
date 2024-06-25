@@ -80,6 +80,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/pubsub/publisher"
 	"github.com/dapr/dapr/pkg/runtime/pubsub/streamer"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/runtime/scheduler"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
@@ -109,6 +111,8 @@ type DaprRuntime struct {
 	daprHTTPAPI           http.API
 	daprGRPCAPI           grpc.API
 	operatorClient        operatorv1pb.OperatorClient
+	schedulerManager      *scheduler.Manager
+	schedulerClients      *clients.Clients
 	isAppHealthy          chan struct{}
 	appHealth             *apphealth.AppHealth
 	appHealthReady        func(context.Context) error // Invoked the first time the app health becomes ready
@@ -206,25 +210,26 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:              runtimeConfig.id,
-		Namespace:       namespace,
-		IsHTTP:          runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:   len(runtimeConfig.actorsService) > 0,
-		Registry:        runtimeConfig.registry,
-		ComponentStore:  compStore,
-		Meta:            meta,
-		GlobalConfig:    globalConfig,
-		Resiliency:      resiliencyProvider,
-		Mode:            runtimeConfig.mode,
-		PodName:         podName,
-		OperatorClient:  operatorClient,
-		GRPC:            grpc,
-		Channels:        channels,
-		MiddlewareHTTP:  httpMiddleware,
-		Security:        sec,
-		Outbox:          outbox,
-		Adapter:         pubsubAdapter,
-		AdapterStreamer: pubsubAdapterStreamer,
+		ID:               runtimeConfig.id,
+		Namespace:        namespace,
+		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
+		SchedulerEnabled: len(runtimeConfig.schedulerAddress) > 0,
+		Registry:         runtimeConfig.registry,
+		ComponentStore:   compStore,
+		Meta:             meta,
+		GlobalConfig:     globalConfig,
+		Resiliency:       resiliencyProvider,
+		Mode:             runtimeConfig.mode,
+		PodName:          podName,
+		OperatorClient:   operatorClient,
+		GRPC:             grpc,
+		Channels:         channels,
+		MiddlewareHTTP:   httpMiddleware,
+		Security:         sec,
+		Outbox:           outbox,
+		Adapter:          pubsubAdapter,
+		AdapterStreamer:  pubsubAdapterStreamer,
 	})
 
 	var reloader *hotreload.Reloader
@@ -297,8 +302,8 @@ func newDaprRuntime(ctx context.Context,
 			log.Infof("%s mode configured", rt.runtimeConfig.mode)
 			log.Infof("app id: %s", rt.runtimeConfig.id)
 
-			if err := rt.initRuntime(ctx); err != nil {
-				return err
+			if rerr := rt.initRuntime(ctx); rerr != nil {
+				return rerr
 			}
 
 			d := time.Since(start).Milliseconds()
@@ -315,6 +320,31 @@ func newDaprRuntime(ctx context.Context,
 			return nil
 		},
 	)
+
+	if runtimeConfig.SchedulerEnabled() {
+		opts := clients.Options{
+			Addresses: runtimeConfig.schedulerAddress,
+			Security:  sec,
+		}
+
+		rt.schedulerClients, err = continuouslyRetrySchedulerClient(ctx, opts)
+		if err != nil {
+			return nil, err
+		}
+
+		rt.schedulerManager, err = scheduler.New(scheduler.Options{
+			Namespace: namespace,
+			AppID:     runtimeConfig.id,
+			Clients:   rt.schedulerClients,
+			Channels:  channels,
+		})
+		if err != nil {
+			return nil, err
+		}
+		if err := rt.runnerCloser.Add(rt.schedulerManager.Run); err != nil {
+			return nil, err
+		}
+	}
 
 	if err := rt.runnerCloser.AddCloser(
 		func() error {
@@ -383,6 +413,22 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 	}
 
 	return a.runnerCloser.Run(ctx)
+}
+
+func continuouslyRetrySchedulerClient(ctx context.Context, opts clients.Options) (*clients.Clients, error) {
+	for {
+		cli, err := clients.New(ctx, opts)
+		if err == nil {
+			return cli, nil
+		}
+
+		log.Errorf("Failed to initialize scheduler clients: %s. Retrying...", err)
+		select {
+		case <-time.After(time.Second):
+		case <-ctx.Done():
+			return nil, ctx.Err()
+		}
+	}
 }
 
 func getPodName() string {
@@ -532,9 +578,12 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	// Setup allow/deny list for secrets
 	a.populateSecretsConfiguration()
 
+	a.namespace = security.CurrentNamespace()
+
 	// Create and start the external gRPC server
 	a.daprUniversal = universal.New(universal.Options{
 		AppID:                       a.runtimeConfig.id,
+		Namespace:                   a.namespace,
 		Logger:                      logger.NewLogger("dapr.api"),
 		CompStore:                   a.compStore,
 		Resiliency:                  a.resiliency,
@@ -543,6 +592,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
+		SchedulerClients:            a.schedulerClients,
 		WorkflowEngine:              wfe,
 	})
 
@@ -758,6 +808,11 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		if err := a.outbox.SubscribeToInternalTopics(ctx, a.runtimeConfig.id); err != nil {
 			log.Warnf("failed to subscribe to outbox topics: %s", err)
 		}
+
+		if a.runtimeConfig.SchedulerEnabled() {
+			a.schedulerManager.Start(a.actor)
+		}
+
 	case apphealth.AppStatusUnhealthy:
 		select {
 		case <-a.isAppHealthy:
@@ -768,6 +823,10 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		// Stop topic subscriptions and input bindings
 		a.processor.Subscriber().StopAppSubscriptions()
 		a.processor.Binding().StopReadingFromBindings(false)
+
+		if a.runtimeConfig.SchedulerEnabled() {
+			a.schedulerManager.Stop()
+		}
 	}
 }
 
@@ -1018,6 +1077,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		AppID:             a.runtimeConfig.id,
 		ActorsService:     a.runtimeConfig.actorsService,
 		RemindersService:  a.runtimeConfig.remindersService,
+		SchedulerClients:  a.schedulerClients,
 		Port:              a.runtimeConfig.internalGRPCPort,
 		Namespace:         a.namespace,
 		AppConfig:         a.appConfig,
@@ -1036,8 +1096,10 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		StateStoreName:   actorStateStoreName,
 		CompStore:        a.compStore,
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
-		StateTTLEnabled: a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
-		Security:        a.sec,
+		StateTTLEnabled:    a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
+		Security:           a.sec,
+		SchedulerClients:   a.schedulerClients,
+		SchedulerReminders: a.globalConfig.IsFeatureEnabled(config.SchedulerReminders),
 	})
 	if err != nil {
 		return rterrors.NewInit(rterrors.InitFailure, "actors", err)

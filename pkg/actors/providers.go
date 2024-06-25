@@ -36,7 +36,7 @@ var (
 	}
 	remindersProviders map[string]func(config Config, placement internal.PlacementService) (remindersProviderFactory, error) = map[string]func(config Config, placement internal.PlacementService) (remindersProviderFactory, error){
 		"default": func(config Config, placement internal.PlacementService) (func(opts internal.ActorsProviderOptions) internal.RemindersProvider, error) {
-			return reminders.NewRemindersProvider, nil
+			return reminders.NewStateStore, nil
 		},
 	}
 )

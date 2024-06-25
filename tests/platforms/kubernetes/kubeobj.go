@@ -148,6 +148,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	if len(appDesc.PlacementAddresses) != 0 {
 		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
 	}
+	if len(appDesc.SchedulerAddresses) != 0 {
+		annotationObject["dapr.io/scheduler-host-address"] = strings.Join(appDesc.SchedulerAddresses, ",")
+	}
 
 	if appDesc.InjectPluggableComponents {
 		annotationObject["dapr.io/inject-pluggable-components"] = "true"
