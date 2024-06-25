@@ -49,7 +49,7 @@ func New(ctx context.Context, address string, sec security.Handler) (schedulerv1
 
 	opts := []grpc.DialOption{
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
-		sec.GRPCDialOptionMTLS(schedulerID), grpc.WithReturnConnectionError(),
+		sec.GRPCDialOptionMTLS(schedulerID), grpc.WithReturnConnectionError(), //nolint:staticcheck
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
