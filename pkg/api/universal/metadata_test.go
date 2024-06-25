@@ -119,7 +119,7 @@ func TestGetMetadata(t *testing.T) {
 				`"active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],` +
 				`"registered_components":[{"name":"testComponent","capabilities":["mock.feat.testComponent"]}],` +
 				`"extended_metadata":{"daprRuntimeVersion":"edge","testKey":"testValue"},` +
-				`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],` +
+				`"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead","type":2}],` +
 				`"app_connection_properties":{"port":1234,"protocol":"http","channel_address":"1.2.3.4","max_concurrency":10` +
 				healthCheckJSON +
 				`"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true}}`

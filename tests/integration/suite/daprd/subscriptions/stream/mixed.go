@@ -92,9 +92,18 @@ func (m *mixed) Run(t *testing.T, ctx context.Context) {
 		},
 	}))
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, m.daprd.GetMetaSubscriptions(c, ctx), 3)
-	}, time.Second*10, time.Millisecond*10)
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		subsInMeta = m.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 3)
+	}, time.Second*5, time.Millisecond*10)
+	assert.ElementsMatch(t, []daprd.MetadataResponsePubsubSubscription{
+		{PubsubName: "mypub", Topic: "a", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/123"}}, Type: rtv1.PubsubSubscriptionType_PROGRAMMATIC.String()},
+		{PubsubName: "mypub", Topic: "b", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/zyx"}}, Type: rtv1.PubsubSubscriptionType_DECLARATIVE.String()},
+		{PubsubName: "mypub", Topic: "c", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/"}}, Type: rtv1.PubsubSubscriptionType_STREAMING.String()},
+	},
+		subsInMeta,
+	)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub", Topic: "a", Data: []byte(`{"status": "completed"}`),
