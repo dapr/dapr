@@ -15,5 +15,6 @@ package api
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/componentupdate"
+	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/getconfigurations"
 	_ "github.com/dapr/dapr/tests/integration/suite/operator/api/listcomponents"
 )

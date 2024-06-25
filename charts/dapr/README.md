@@ -85,6 +85,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.ha.disruption.maximumUnavailable` | Maximum amount of instances that are allowed to be unavailable for control plane. This can either be effective count or %. | `25%`             |
 | `global.prometheus.enabled`               | Prometheus metrics enablement for control plane services                | `true`                  |
 | `global.prometheus.port`                  | Prometheus scrape http endpoint port                                    | `9090`                  |
+| `global.metrics.http.increasedCardinality`| Allow global change to cardinality on sidecars                          | `false`                 |
 | `global.mtls.enabled`                     | Mutual TLS enablement                                                   | `true`                  |
 | `global.mtls.workloadCertTTL`             | TTL for workload cert                                                   | `24h`                   |
 | `global.mtls.allowedClockSkew`            | Allowed clock skew for workload cert rotation                           | `15m`                   |

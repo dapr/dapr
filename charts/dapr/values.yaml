@@ -35,6 +35,9 @@ global:
   prometheus:
     enabled: true
     port: 9090
+  metrics: {}
+  # http:
+  #   increasedCardinality: false # set to true to revert to old behavior by default (dapr < 1.14)
   mtls:
     enabled: true
     workloadCertTTL: 24h
