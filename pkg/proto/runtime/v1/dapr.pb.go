@@ -36,14 +36,18 @@ const (
 	_ = protoimpl.EnforceVersion(protoimpl.MaxVersion - 20)
 )
 
+// PubsubSubscriptionType indicates the type of subscription
 type PubsubSubscriptionType int32
 
 const (
-	// Indicates that the subscription is a topic subscription.
-	PubsubSubscriptionType_UNKNOWN      PubsubSubscriptionType = 0
-	PubsubSubscriptionType_DECLARATIVE  PubsubSubscriptionType = 1
+	// UNKNOWN is the default value for the subscription type.
+	PubsubSubscriptionType_UNKNOWN PubsubSubscriptionType = 0
+	// Declarative subscription (k8s CRD)
+	PubsubSubscriptionType_DECLARATIVE PubsubSubscriptionType = 1
+	// Programmatically created subscription
 	PubsubSubscriptionType_PROGRAMMATIC PubsubSubscriptionType = 2
-	PubsubSubscriptionType_STREAMING    PubsubSubscriptionType = 3
+	// Bidirectional Streaming subscription
+	PubsubSubscriptionType_STREAMING PubsubSubscriptionType = 3
 )
 
 // Enum value maps for PubsubSubscriptionType.

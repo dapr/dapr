@@ -714,11 +714,15 @@ message PubsubSubscription {
   PubsubSubscriptionType type = 6 [json_name = "type"];
 }
 
+// PubsubSubscriptionType indicates the type of subscription
 enum PubsubSubscriptionType {
-  // Indicates that the subscription is a topic subscription.
+  // UNKNOWN is the default value for the subscription type.
   UNKNOWN = 0;
+  // Declarative subscription (k8s CRD)
   DECLARATIVE = 1;
+  // Programmatically created subscription
   PROGRAMMATIC = 2;
+  // Bidirectional Streaming subscription
   STREAMING = 3;
 }
 

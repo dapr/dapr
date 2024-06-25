@@ -31,7 +31,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var tr *runner.TestRunner
+var (
+	tr *runner.TestRunner
+)
 
 const (
 	k6AppName = "k6-test-app"

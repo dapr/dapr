@@ -35,7 +35,9 @@ const (
 	actorType              = "scale-id"
 )
 
-var tr *runner.TestRunner
+var (
+	tr *runner.TestRunner
+)
 
 func TestMain(m *testing.M) {
 	utils.SetupLogs("actor_id_stress_test")

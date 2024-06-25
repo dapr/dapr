@@ -34,10 +34,8 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var (
-	tr            *runner.TestRunner
-	appNamePrefix = "perf-workflowsapp"
-)
+var tr *runner.TestRunner
+var appNamePrefix = "perf-workflowsapp"
 
 type K6RunConfig struct {
 	TARGET_URL     string

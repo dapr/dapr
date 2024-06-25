@@ -31,7 +31,9 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-var tr *runner.TestRunner
+var (
+	tr *runner.TestRunner
+)
 
 const (
 	numHealthChecks                   = 60 // Number of times to check for endpoint health per app.

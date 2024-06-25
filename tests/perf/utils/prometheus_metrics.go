@@ -37,6 +37,7 @@ type DaprMetrics struct {
 
 // DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_URL needs to be set
 func PushPrometheusMetrics(metrics DaprMetrics, perfTest, component string) {
+
 	prometheusPushgatewayURL := os.Getenv("DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_URL")
 	if prometheusPushgatewayURL == "" {
 		log.Println("DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_URL is not set, skipping pushing perf test metrics to Prometheus Pushgateway")

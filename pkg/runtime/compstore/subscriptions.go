@@ -16,9 +16,8 @@ package compstore
 import (
 	"fmt"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/kit/ptr"
 )
@@ -194,7 +193,6 @@ func (c *ComponentStore) ListSubscriptionsAppByPubSub(name string) []*NamedSubsc
 			subs = append(subs, &NamedSubscription{Subscription: sub})
 		}
 	}
-	// TODO: there is no streaming here, is it ok??
 
 	return subs
 }
