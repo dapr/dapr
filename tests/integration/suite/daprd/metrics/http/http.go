@@ -15,5 +15,6 @@ package http
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/http/cardinality"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/http/excludeverbs"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics/http/pathmatching"
 )
