@@ -116,6 +116,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("invoke host", func(t *testing.T) {
 		doReq := func(host, hostID string, verb commonv1.HTTPExtension_Verb) ([]byte, string) {
+			//nolint:staticcheck
 			conn, err := grpc.DialContext(ctx, host,
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock(),
@@ -168,9 +169,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("method doesn't exist", func(t *testing.T) {
 		host := b.daprd1.GRPCAddress()
+		//nolint:staticcheck
 		conn, err := grpc.DialContext(ctx, host,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
+			grpc.WithBlock(), //nolint:staticcheck
 		)
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -191,9 +193,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("no method", func(t *testing.T) {
 		host := b.daprd1.GRPCAddress()
+		//nolint:staticcheck
 		conn, err := grpc.DialContext(ctx, host,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
+			grpc.WithBlock(), //nolint:staticcheck
 		)
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -214,7 +217,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("multiple segments", func(t *testing.T) {
 		host := b.daprd1.GRPCAddress()
-		conn, err := grpc.DialContext(ctx, host,
+		conn, err := grpc.DialContext(ctx, host, //nolint:staticcheck
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
 		)
@@ -237,6 +240,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	for i := 0; i < 100; i++ {
 		pt.Add(func(c *assert.CollectT) {
 			host := b.daprd1.GRPCAddress()
+			//nolint:staticcheck
 			conn, err := grpc.DialContext(ctx, host, grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 			require.NoError(c, err)
 			t.Cleanup(func() { require.NoError(c, conn.Close()) })
@@ -257,7 +261,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("type URL", func(t *testing.T) {
 		host := b.daprd1.GRPCAddress()
-		conn, err := grpc.DialContext(ctx, host,
+		conn, err := grpc.DialContext(ctx, host, //nolint:staticcheck
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),
 		)
