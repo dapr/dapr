@@ -51,4 +51,7 @@ const (
 
 	// ControlPlaneDefaultTrustAnchorsPath is the default path where the trust anchors are placed for control plane services.
 	ControlPlaneDefaultTrustAnchorsPath = "/var/run/secrets/dapr.io/tls/ca.crt"
+
+	// SchedulerAddressEnvVar is the env var for the scheduler addresses
+	SchedulerHostAddressEnvVar = "DAPR_SCHEDULER_HOST_ADDRESS"
 )

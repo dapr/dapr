@@ -61,6 +61,7 @@ type options struct {
 	gracefulShutdownSeconds *int
 	blockShutdownDuration   *string
 	controlPlaneTrustDomain *string
+	schedulerAddresses      []string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -226,6 +227,12 @@ func WithConfigManifests(t *testing.T, manifests ...string) Option {
 func WithPlacementAddresses(addresses ...string) Option {
 	return func(o *options) {
 		o.placementAddresses = addresses
+	}
+}
+
+func WithSchedulerAddresses(addresses ...string) Option {
+	return func(o *options) {
+		o.schedulerAddresses = append(o.schedulerAddresses, addresses...)
 	}
 }
 

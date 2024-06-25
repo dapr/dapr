@@ -32,6 +32,7 @@ type options struct {
 	onTopicEventFn     func(context.Context, *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error)
 	onBulkTopicEventFn func(context.Context, *rtv1.TopicEventBulkRequest) (*rtv1.TopicEventBulkResponse, error)
 	onInvokeFn         func(context.Context, *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)
+	onJobEventFn       func(context.Context, *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error)
 	listTopicSubFn     func(ctx context.Context, in *emptypb.Empty) (*rtv1.ListTopicSubscriptionsResponse, error)
 	listInputBindFn    func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error)
 	onBindingEventFn   func(context.Context, *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error)
@@ -59,6 +60,12 @@ func WithOnBulkTopicEventFn(fn func(context.Context, *rtv1.TopicEventBulkRequest
 func WithOnInvokeFn(fn func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)) func(*options) {
 	return func(opts *options) {
 		opts.onInvokeFn = fn
+	}
+}
+
+func WithOnJobEventFn(fn func(ctx context.Context, in *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error)) func(*options) {
+	return func(opts *options) {
+		opts.onJobEventFn = fn
 	}
 }
 

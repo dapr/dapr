@@ -52,6 +52,15 @@ func NewEmptyReminderPeriod() ReminderPeriod {
 	}
 }
 
+// NewSchedulerReminderPeriod returns a new reminder period from the Scheduler service job schedule.
+func NewSchedulerReminderPeriod(val string, repeats uint32) ReminderPeriod {
+	p := NewEmptyReminderPeriod()
+	p.repeats = int(repeats)
+	p.value = val
+
+	return p
+}
+
 // HasRepeats returns true if the period will repeat.
 func (p ReminderPeriod) HasRepeats() bool {
 	return p.repeats != 0 &&

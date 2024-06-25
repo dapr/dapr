@@ -1,0 +1,8 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: featureactorreminderscheduler
+spec:
+  features:
+  - name: SchedulerReminders
+    enabled: true

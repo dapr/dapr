@@ -16,8 +16,10 @@ syntax = "proto3";
 package dapr.proto.internals.v1;
 
 import "dapr/proto/common/v1/common.proto";
+import "dapr/proto/internals/v1/reminders.proto";
 import "dapr/proto/internals/v1/apiversion.proto";
 import "dapr/proto/internals/v1/status.proto";
+import "google/protobuf/empty.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/internals/v1;internals";
 
@@ -37,6 +39,9 @@ service ServiceInvocation {
 
   // Invokes a method of the specific service.
   rpc CallLocal (InternalInvokeRequest) returns (InternalInvokeResponse) {}
+
+  // Invoke a remote internal actor reminder
+  rpc CallActorReminder(Reminder) returns (google.protobuf.Empty) {}
 
   // Invokes a method of the specific service using a stream of data.
   // Although this uses a bi-directional stream, it behaves as a "simple RPC" in which the caller sends the full request (chunked in multiple messages in the stream), then reads the full response (chunked in the stream). 
