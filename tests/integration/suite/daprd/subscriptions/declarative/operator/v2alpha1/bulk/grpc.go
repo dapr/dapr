@@ -127,6 +127,14 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 
 	client := g.daprd.GRPCClient(t, ctx)
 
+	meta, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+	require.NoError(t, err)
+	subs := meta.GetSubscriptions()
+	require.Len(t, subs, 2)
+
+	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE, subs[0].GetType())
+	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE, subs[1].GetType())
+
 	// TODO: @joshvanl: add support for bulk publish to in-memory pubsub.
 	resp, err := client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{
 		PubsubName: "mypub",
