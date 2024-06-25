@@ -115,6 +115,7 @@ func main() {
 	/* #nosec */
 	s := grpc.NewServer()
 	runtimev1pb.RegisterAppCallbackServer(s, &server{})
+	runtimev1pb.RegisterAppCallbackAlphaServer(s, &server{})
 
 	log.Println("Client starting...")
 
@@ -434,6 +435,10 @@ func (s *server) OnTopicEvent(ctx context.Context, in *runtimev1pb.TopicEventReq
 	return &runtimev1pb.TopicEventResponse{
 		Status: runtimev1pb.TopicEventResponse_SUCCESS, //nolint:nosnakecase
 	}, nil
+}
+
+func (s *server) OnJobEventAlpha1(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return nil, nil
 }
 
 func (s *server) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb.TopicEventBulkRequest) (*runtimev1pb.TopicEventBulkResponse, error) {
