@@ -21,8 +21,6 @@ import (
 	"strings"
 	"testing"
 	"time"
-
-	"github.com/dapr/dapr/pkg/config"
 )
 
 const (
@@ -32,8 +30,7 @@ const (
 
 func BenchmarkHTTPMiddlewareLowCardinalityNoPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	pathMatching := &config.PathMatching{}
-	testHTTP.Init("fakeID", pathMatching, false)
+	testHTTP.Init("fakeID", nil, false)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)
@@ -49,8 +46,7 @@ func BenchmarkHTTPMiddlewareLowCardinalityNoPathMatching(b *testing.B) {
 
 func BenchmarkHTTPMiddlewareHighCardinalityNoPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	pathMatching := &config.PathMatching{}
-	testHTTP.Init("fakeID", pathMatching, true)
+	testHTTP.Init("fakeID", nil, true)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(5 * time.Millisecond)
@@ -66,14 +62,7 @@ func BenchmarkHTTPMiddlewareHighCardinalityNoPathMatching(b *testing.B) {
 
 func BenchmarkHTTPMiddlewareLowCardinalityWithPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	pathMatching := &config.PathMatching{
-		IngressPaths: []string{
-			"/invoke/method/orders/{orderID}",
-		},
-		EgressPaths: []string{
-			"/invoke/method/orders/{orderID}",
-		},
-	}
+	pathMatching := []string{"/invoke/method/orders/{orderID}"}
 	testHTTP.Init("fakeID", pathMatching, false)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -90,14 +79,7 @@ func BenchmarkHTTPMiddlewareLowCardinalityWithPathMatching(b *testing.B) {
 
 func BenchmarkHTTPMiddlewareHighCardinalityWithPathMatching(b *testing.B) {
 	testHTTP := newHTTPMetrics()
-	pathMatching := &config.PathMatching{
-		IngressPaths: []string{
-			"/invoke/method/orders/{orderID}",
-		},
-		EgressPaths: []string{
-			"/invoke/method/orders/{orderID}",
-		},
-	}
+	pathMatching := []string{"/invoke/method/orders/{orderID}"}
 	testHTTP.Init("fakeID", pathMatching, true)
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
