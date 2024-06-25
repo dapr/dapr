@@ -48,6 +48,7 @@ func (n *nomtls) Setup(t *testing.T) []framework.Option {
 func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 	n.scheduler.WaitUntilRunning(t, ctx)
 
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, n.scheduler.Address(), grpc.WithBlock(), grpc.WithReturnConnectionError(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)

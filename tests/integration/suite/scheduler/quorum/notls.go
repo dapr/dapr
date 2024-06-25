@@ -93,6 +93,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	chosenScheduler := n.schedulers[rand.Intn(3)]
 
 	host := chosenScheduler.Address()
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)

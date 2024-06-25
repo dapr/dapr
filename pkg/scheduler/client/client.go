@@ -55,6 +55,7 @@ func New(ctx context.Context, address string, sec security.Handler) (schedulerv1
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
 
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, address, opts...)
 	if err != nil {
 		return nil, err

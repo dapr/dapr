@@ -117,6 +117,7 @@ func (d *duetime) Run(t *testing.T, ctx context.Context) {
 		}, 10*time.Second, 10*time.Millisecond, "actor not ready in time")
 	})
 
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, d.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
 	)
