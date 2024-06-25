@@ -647,9 +647,7 @@ func TestMetricsGetHTTPLatencyDistributionBuckets(t *testing.T) {
 
 	t.Run("nil value, returns latency distribution buckets", func(t *testing.T) {
 		m := MetricSpec{
-			HTTP: &MetricHTTP{
-				LatencyDistributionBuckets: nil,
-			},
+			LatencyDistributionBuckets: nil,
 		}
 		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
 	})
@@ -658,9 +656,7 @@ func TestMetricsGetHTTPLatencyDistributionBuckets(t *testing.T) {
 	latencyDistribution = view.Distribution(customLatencyDistribution...)
 	t.Run("value is set to list of integers", func(t *testing.T) {
 		m := MetricSpec{
-			HTTP: &MetricHTTP{
-				LatencyDistributionBuckets: ptr.Of([]int{1, 2, 3}),
-			},
+			LatencyDistributionBuckets: ptr.Of([]int{1, 2, 3}),
 		}
 		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
 	})

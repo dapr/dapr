@@ -385,8 +385,8 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context, opts ...func(*metrics
 					continue
 				}
 				for _, b := range h.GetBucket() {
-					bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.Itoa(int(*b.UpperBound))
-					metrics[bucketKey] = float64(*b.CumulativeCount)
+					bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.Itoa(int(b.GetUpperBound()))
+					metrics[bucketKey] = float64(b.GetCumulativeCount())
 				}
 			}
 		}
