@@ -20,7 +20,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	http2 "github.com/dapr/dapr/pkg/api/http"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
@@ -113,7 +112,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.operator.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
-	var subsInMeta []http2.MetadataResponsePubsubSubscription
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		subsInMeta = h.daprd.GetMetaSubscriptions(c, ctx)
 		assert.Len(c, subsInMeta, 1)

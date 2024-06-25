@@ -18,8 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/api/http"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -72,7 +70,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		},
 	}))
 
-	var subsInMeta []http.MetadataResponsePubsubSubscription
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		subsInMeta = b.daprd.GetMetaSubscriptions(c, ctx)
 		assert.Len(c, subsInMeta, 1)

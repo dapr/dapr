@@ -20,7 +20,6 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/api/http"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	"github.com/stretchr/testify/assert"
@@ -134,7 +133,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "com.dapr.event.sent", resp.Type())
 	assert.Equal(t, "text/plain", resp.DataContentType())
 
-	var subsInMeta []http.MetadataResponsePubsubSubscription
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		subsInMeta = b.daprd.GetMetaSubscriptions(c, ctx)
 		assert.Len(c, subsInMeta, 1)

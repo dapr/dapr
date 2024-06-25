@@ -18,8 +18,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/api/http"
-
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -70,7 +68,7 @@ func (d *disconnect) Run(t *testing.T, ctx context.Context) {
 	stream2, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
 
-	var subsInMeta []http.MetadataResponsePubsubSubscription
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		subsInMeta = d.daprd.GetMetaSubscriptions(c, ctx)
 		assert.Len(c, subsInMeta, 1)
