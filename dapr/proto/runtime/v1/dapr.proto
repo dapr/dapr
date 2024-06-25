@@ -193,6 +193,15 @@ service Dapr {
   rpc RaiseEventWorkflowBeta1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
   // Shutdown the sidecar
   rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
+
+  // Create and schedule a job
+  rpc ScheduleJobAlpha1(ScheduleJobRequest) returns (ScheduleJobResponse) {}
+
+  // Gets a scheduled job
+  rpc GetJobAlpha1(GetJobRequest) returns (GetJobResponse) {}
+
+  // Delete a job
+  rpc DeleteJobAlpha1(DeleteJobRequest) returns (DeleteJobResponse) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -651,6 +660,7 @@ message GetMetadataResponse {
   string runtime_version = 8 [json_name = "runtimeVersion"];
   repeated string enabled_features = 9 [json_name = "enabledFeatures"];
   ActorRuntime actor_runtime = 10 [json_name = "actorRuntime"];
+  //TODO: Cassie: probably add scheduler runtime status
 }
 
 message ActorRuntime {
@@ -1152,5 +1162,60 @@ message PurgeWorkflowRequest {
 
 // ShutdownRequest is the request for Shutdown.
 message ShutdownRequest {
+  // Empty
+}
+
+// Job is the definition of a job.
+message Job {
+  // The unique name for the job.
+  string name = 1;
+
+  // The schedule for the job.
+  optional string schedule = 2;
+
+  // Optional: jobs with fixed repeat counts (accounting for Actor Reminders).
+  optional uint32 repeats = 3;
+
+  // Optional: sets time at which or time interval before the callback is invoked for the first time.
+  optional string due_time = 4;
+
+  // Optional: Time To Live to allow for auto deletes (accounting for Actor Reminders).
+  optional string ttl = 5;
+
+  // Job data.
+  google.protobuf.Any data = 6;
+}
+
+// ScheduleJobRequest is the message to create/schedule the job.
+message ScheduleJobRequest {
+  // The job details.
+  Job job = 1;
+}
+
+// ScheduleJobResponse is the message response to create/schedule the job.
+message ScheduleJobResponse {
+  // Empty
+}
+
+// GetJobRequest is the message to retrieve a job.
+message GetJobRequest {
+  // The name of the job.
+  string name = 1;
+}
+
+// GetJobResponse is the message's response for a job retrieved.
+message GetJobResponse {
+  // The job details.
+  Job job = 1;
+}
+
+// DeleteJobRequest is the message to delete the job by name.
+message DeleteJobRequest {
+  // The name of the job.
+  string name = 1;
+}
+
+// DeleteJobResponse is the message response to delete the job by name.
+message DeleteJobResponse {
   // Empty
 }

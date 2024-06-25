@@ -47,6 +47,10 @@ func FromGRPCContext(ctx context.Context) (*Parsed, bool, error) {
 		return nil, false, fmt.Errorf("malformed SPIFFE ID: %s", id.String())
 	}
 
+	if len(split[2]) == 0 || len(split[3]) == 0 {
+		return nil, false, fmt.Errorf("malformed SPIFFE ID: %s", id.String())
+	}
+
 	return &Parsed{
 		id:        id,
 		namespace: split[2],

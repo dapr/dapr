@@ -85,7 +85,7 @@ func TestConfig_GetRemindersProvider(t *testing.T) {
 		factory, err := c.GetRemindersProvider(nil)
 		require.NoError(t, err)
 		require.NotNil(t, factory)
-		equalFunctions(t, reminders.NewRemindersProvider, factory)
+		equalFunctions(t, reminders.NewStateStore, factory)
 	})
 
 	t.Run("RemindersService with default provider", func(t *testing.T) {
