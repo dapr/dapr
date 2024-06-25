@@ -80,7 +80,7 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 		subsInMeta = b.daprd.GetMetaSubscriptions(c, ctx)
 		assert.Len(c, subsInMeta, 1)
 	}, time.Second*10, time.Millisecond*10)
-	assert.Equal(t, rtv1.PubsubSubscriptionType_STREAMING, subsInMeta[0].Type)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_STREAMING.String(), subsInMeta[0].Type)
 
 	errCh := make(chan error, 8)
 	go func() {

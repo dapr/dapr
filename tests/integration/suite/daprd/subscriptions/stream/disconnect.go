@@ -75,7 +75,7 @@ func (d *disconnect) Run(t *testing.T, ctx context.Context) {
 		subsInMeta = d.daprd.GetMetaSubscriptions(c, ctx)
 		assert.Len(c, subsInMeta, 1)
 	}, time.Second*5, time.Millisecond*10)
-	assert.Equal(t, rtv1.PubsubSubscriptionType_STREAMING, subsInMeta[0].Type)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_STREAMING.String(), subsInMeta[0].Type)
 
 	d.daprd.Cleanup(t)
 

@@ -133,8 +133,8 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		subsInMeta = h.daprd.GetMetaSubscriptions(c, ctx)
 		assert.Len(c, subsInMeta, 2)
 	}, time.Second*5, time.Millisecond*10)
-	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE, subsInMeta[0].Type)
-	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE, subsInMeta[1].Type)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE.String(), subsInMeta[0].Type)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE.String(), subsInMeta[1].Type)
 
 	// TODO: @joshvanl: add support for bulk publish to in-memory pubsub.
 	h.sub.PublishBulk(t, ctx, subscriber.PublishBulkRequest{

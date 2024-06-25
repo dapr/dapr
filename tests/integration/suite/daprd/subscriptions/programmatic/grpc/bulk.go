@@ -97,8 +97,8 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, subsInMeta, 2)
 	}, time.Second*2, time.Millisecond*10)
 	assert.ElementsMatch(t, []http.MetadataResponsePubsubSubscription{
-		{PubsubName: "mypub", Topic: "a", Rules: []http.MetadataResponsePubsubSubscriptionRule{{Path: "/a"}}, Type: rtv1.PubsubSubscriptionType_PROGRAMMATIC},
-		{PubsubName: "mypub", Topic: "b", Rules: []http.MetadataResponsePubsubSubscriptionRule{{Path: "/b"}}, Type: rtv1.PubsubSubscriptionType_PROGRAMMATIC},
+		{PubsubName: "mypub", Topic: "a", Rules: []http.MetadataResponsePubsubSubscriptionRule{{Path: "/a"}}, Type: rtv1.PubsubSubscriptionType_PROGRAMMATIC.String()},
+		{PubsubName: "mypub", Topic: "b", Rules: []http.MetadataResponsePubsubSubscriptionRule{{Path: "/b"}}, Type: rtv1.PubsubSubscriptionType_PROGRAMMATIC.String()},
 	},
 		subsInMeta,
 	)

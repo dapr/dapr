@@ -101,7 +101,7 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 							Topic:           v.GetTopic(),
 							Metadata:        v.GetMetadata(),
 							DeadLetterTopic: v.GetDeadLetterTopic(),
-							Type:            v.GetType(),
+							Type:            v.GetType().String(),
 						}
 
 						if v.GetRules() != nil && len(v.GetRules().GetRules()) > 0 {
@@ -183,7 +183,7 @@ type MetadataResponsePubsubSubscription struct {
 	Metadata        map[string]string                        `json:"metadata,omitempty"`
 	Rules           []MetadataResponsePubsubSubscriptionRule `json:"rules,omitempty"`
 	DeadLetterTopic string                                   `json:"deadLetterTopic"`
-	Type            runtimev1pb.PubsubSubscriptionType       `json:"type"`
+	Type            string                                   `json:"type"`
 }
 
 type MetadataResponsePubsubSubscriptionRule struct {

@@ -77,7 +77,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		subsInMeta = b.daprd.GetMetaSubscriptions(c, ctx)
 		assert.Len(c, subsInMeta, 1)
 	}, time.Second*5, time.Millisecond*10)
-	assert.Equal(t, rtv1.PubsubSubscriptionType_STREAMING, subsInMeta[0].Type)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_STREAMING.String(), subsInMeta[0].Type)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub", Topic: "a",

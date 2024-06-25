@@ -118,7 +118,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		subsInMeta = h.daprd.GetMetaSubscriptions(c, ctx)
 		assert.Len(c, subsInMeta, 1)
 	}, time.Second*5, time.Millisecond*10)
-	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE, subsInMeta[0].Type)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE.String(), subsInMeta[0].Type)
 
 	h.sub.Publish(t, ctx, subscriber.PublishRequest{
 		Daprd:      h.daprd,
