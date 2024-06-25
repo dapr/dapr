@@ -265,7 +265,7 @@ type HTTPMonitoringConfig struct {
 	excludeVerbs bool
 }
 
-func NewHTTPMonitoringConfig(pathMatching []string, legacy bool, excludeVerbs bool) HTTPMonitoringConfig {
+func NewHTTPMonitoringConfig(pathMatching []string, legacy, excludeVerbs bool) HTTPMonitoringConfig {
 	return HTTPMonitoringConfig{
 		pathMatching: pathMatching,
 		legacy:       legacy,

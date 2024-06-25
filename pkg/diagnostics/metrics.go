@@ -45,7 +45,11 @@ var (
 )
 
 // InitMetrics initializes metrics.
-func InitMetrics(appID, namespace string, rules []config.MetricsRule, httpConfig HTTPMonitoringConfig) error {
+func InitMetrics(appID, namespace string, metricSpec config.MetricSpec) error {
+	if err := InitGlobals(metricSpec); err != nil {
+		return err
+	}
+
 	if err := DefaultMonitoring.Init(appID); err != nil {
 		return err
 	}
@@ -54,6 +58,11 @@ func InitMetrics(appID, namespace string, rules []config.MetricsRule, httpConfig
 		return err
 	}
 
+	httpConfig := NewHTTPMonitoringConfig(
+		metricSpec.GetHTTPPathMatching(),
+		metricSpec.GetHTTPIncreasedCardinality(log),
+		metricSpec.GetHTTPExcludeVerbs(),
+	)
 	if err := DefaultHTTPMonitoring.Init(appID, httpConfig); err != nil {
 		return err
 	}
@@ -72,5 +81,5 @@ func InitMetrics(appID, namespace string, rules []config.MetricsRule, httpConfig
 
 	// Set reporting period of views
 	view.SetReportingPeriod(DefaultReportingPeriod)
-	return utils.CreateRulesMap(rules)
+	return utils.CreateRulesMap(metricSpec.Rules)
 }

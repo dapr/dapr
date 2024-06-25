@@ -215,6 +215,9 @@ type MetricSpec struct {
 	HTTP *MetricHTTP `json:"http,omitempty"`
 	// +optional
 	Rules []MetricsRule `json:"rules,omitempty"`
+	// Latency distribution buckets. If not set, the default buckets are used.
+	// +optional
+	LatencyDistributionBuckets []int `json:"latencyDistributionBuckets,omitempty"`
 }
 
 // MetricHTTP defines configuration for metrics for the HTTP server
@@ -229,9 +232,6 @@ type MetricHTTP struct {
 	// If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
 	// +optional
 	ExcludeVerbs *bool `json:"excludeVerbs,omitempty"`
-	// Latency distribution buckets. If not set, the default buckets are used.
-	// +optional
-	LatencyDistributionBuckets []int `json:"latencyDistributionBuckets,omitempty"`
 }
 
 // MetricsRule defines configuration options for a metric.

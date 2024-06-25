@@ -59,13 +59,9 @@ metadata:
   name: lowcardinality
 spec:
   metrics:
+    latencyDistributionBuckets: [5, 50, 500, 5000]
     http:
       increasedCardinality: false
-      latencyDistributionBuckets:
-        - 5
-        - 50
-        - 500
-        - 5000
 `),
 	)
 
@@ -90,6 +86,7 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 		}
 		sort.Slice(httpServerLatencyBuckets, func(i, j int) bool { return httpServerLatencyBuckets[i] < httpServerLatencyBuckets[j] })
 		expected := []float64{5, 50, 500, 5_000}
-		assert.Equal(t, expected, httpServerLatencyBuckets)
+		// remove last one as that is the upper limit
+		assert.Equal(t, expected, httpServerLatencyBuckets[:len(httpServerLatencyBuckets)-1])
 	})
 }

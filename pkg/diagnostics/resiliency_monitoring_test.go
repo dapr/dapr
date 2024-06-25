@@ -12,6 +12,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
+	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
@@ -185,8 +186,8 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			config := diag.NewHTTPMonitoringConfig(nil, false, false)
-			require.NoError(t, diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil, config))
+			config := newTestMetricSpecConfig(false, false)
+			require.NoError(t, diag.InitMetrics(test.appID, "fakeRuntimeNamespace", config))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
@@ -272,8 +273,8 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			config := diag.NewHTTPMonitoringConfig(nil, false, false)
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, config))
+			config := newTestMetricSpecConfig(false, false)
+			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", config))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			require.NoError(t, err)
@@ -299,6 +300,17 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			}
 		})
 	}
+}
+
+func newTestMetricSpecConfig(legacy, excludeVerbs bool) daprGlobalConfig.MetricSpec {
+	metricSpec := daprGlobalConfig.MetricSpec{
+		Enabled: ptr.Of(true),
+		HTTP: &daprGlobalConfig.MetricHTTP{
+			ExcludeVerbs:         ptr.Of(excludeVerbs),
+			IncreasedCardinality: ptr.Of(legacy),
+		},
+	}
+	return metricSpec
 }
 
 func TestResiliencyActivationsCountMonitoring(t *testing.T) {
@@ -441,8 +453,8 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			config := diag.NewHTTPMonitoringConfig(nil, false, false)
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, config))
+			config := newTestMetricSpecConfig(false, false)
+			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", config))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyActivationViewName)
 			require.NoError(t, err)
@@ -499,8 +511,8 @@ func createDefaultTestResiliency(resiliencyName string, resiliencyNamespace stri
 func TestResiliencyLoadedMonitoring(t *testing.T) {
 	t.Run(resiliencyLoadedViewName, func(t *testing.T) {
 		cleanupRegisteredViews()
-		config := diag.NewHTTPMonitoringConfig(nil, false, false)
-		require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, config))
+		config := newTestMetricSpecConfig(false, false)
+		require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", config))
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)
