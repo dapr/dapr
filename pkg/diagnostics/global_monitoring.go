@@ -19,7 +19,6 @@ import (
 	"go.opencensus.io/stats/view"
 
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/kit/logger"
 )
 
 var (
@@ -50,7 +49,6 @@ func SetLatencyDistribution(aggregation *view.Aggregation) error {
 	if latencyDistribution != nil {
 		return nil
 	}
-	log := logger.NewLogger("latencyDistributionOnce")
 	setupLatencyDistributionOnce.Do(func() {
 		// If we're passing in an explicit aggregation, use that.  This is the happy
 		// path for InitMetrics in a typical startup sequence.
@@ -66,7 +64,6 @@ func SetLatencyDistribution(aggregation *view.Aggregation) error {
 }
 
 func InitGlobals(metricSpec config.MetricSpec) error {
-	log := logger.NewLogger("global")
 	if err := SetLatencyDistribution(metricSpec.GetLatencyDistribution(log)); err != nil {
 		return err
 	}

@@ -2,6 +2,7 @@ package diagnostics
 
 import (
 	"context"
+	"github.com/dapr/dapr/pkg/config"
 	"testing"
 	"time"
 
@@ -15,9 +16,13 @@ const (
 
 func componentsMetrics() *componentMetrics {
 	c := newComponentMetrics()
-	c.Init("test", "default")
+	_ = c.Init("test", "default")
 
 	return c
+}
+
+func init() {
+	_ = InitGlobals(config.MetricSpec{})
 }
 
 func TestPubSub(t *testing.T) {

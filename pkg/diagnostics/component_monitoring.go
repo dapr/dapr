@@ -9,7 +9,6 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
@@ -166,10 +165,6 @@ func (c *componentMetrics) Init(appID, namespace string) error {
 	c.appID = appID
 	c.enabled = true
 	c.namespace = namespace
-
-	if err := InitGlobals(config.MetricSpec{}); err != nil {
-		return err
-	}
 
 	return view.Register(
 		diagUtils.NewMeasureView(c.pubsubIngressLatency, []tag.Key{appIDKey, componentKey, namespaceKey, processStatusKey, topicKey, statusKey}, latencyDistribution),

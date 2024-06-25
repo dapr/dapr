@@ -248,10 +248,6 @@ func (h *httpMetrics) Init(appID string, pmConfig *config.PathMatching, legacy b
 	h.enabled = true
 	h.legacy = legacy
 
-	if err := InitGlobals(config.MetricSpec{}); err != nil {
-		return err
-	}
-
 	if pmConfig != nil {
 		h.ingress = newPathMatching(pmConfig.IngressPaths, legacy)
 		h.egress = newPathMatching(pmConfig.EgressPaths, legacy)

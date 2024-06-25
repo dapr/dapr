@@ -9,7 +9,6 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/security/spiffe"
 )
@@ -213,10 +212,6 @@ func newServiceMetrics() *serviceMetrics {
 func (s *serviceMetrics) Init(appID string) error {
 	s.appID = appID
 	s.enabled = true
-
-	if err := InitGlobals(config.MetricSpec{}); err != nil {
-		return err
-	}
 
 	return view.Register(
 		diagUtils.NewMeasureView(s.componentLoaded, []tag.Key{appIDKey}, view.Count()),
