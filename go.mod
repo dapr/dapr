@@ -12,7 +12,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.2.1
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.13.0-rc.2.0.20240412003851-16fef4140184
+	github.com/dapr/components-contrib v1.13.0
 	github.com/dapr/kit v0.13.1-0.20240306152601-e33fbab74548
 	github.com/evanphx/json-patch/v5 v5.8.1
 	github.com/go-chi/chi/v5 v5.0.11
