@@ -24,7 +24,6 @@ import (
 	"go.opencensus.io/tag"
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
-	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/responsewriter"
 	"github.com/dapr/kit/logger"
@@ -69,8 +68,7 @@ type httpMetrics struct {
 	// Enable legacy metrics, which includes the full path
 	legacy bool
 
-	ingress *pathMatching
-	egress  *pathMatching
+	pathMatcher *pathMatching
 }
 
 func newHTTPMetrics() *httpMetrics {
@@ -133,12 +131,12 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 		return
 	}
 
-	matchedPath, ok := h.egress.matchPath(path)
+	matchedPath, ok := h.pathMatcher.match(path)
 	if ok {
 		path = matchedPath
 	}
 
-	if h.legacy || h.egress.enabled() {
+	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
@@ -174,12 +172,12 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 		return
 	}
 
-	matchedPath, ok := h.ingress.matchPath(path)
+	matchedPath, ok := h.pathMatcher.match(path)
 	if ok {
 		path = matchedPath
 	}
 
-	if h.legacy || h.ingress.enabled() {
+	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method),
@@ -197,12 +195,12 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 		return
 	}
 
-	matchedPath, ok := h.ingress.matchPath(path)
+	matchedPath, ok := h.pathMatcher.match(path)
 	if ok {
 		path = matchedPath
 	}
 
-	if h.legacy || h.ingress.enabled() {
+	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
@@ -249,14 +247,13 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		h.healthProbeRoundTripLatency.M(elapsed))
 }
 
-func (h *httpMetrics) Init(appID string, config *config.PathMatching, legacy bool) error {
+func (h *httpMetrics) Init(appID string, paths []string, legacy bool) error {
 	h.appID = appID
 	h.enabled = true
 	h.legacy = legacy
 
-	if config != nil {
-		h.ingress = newPathMatching(config.IngressPaths, legacy)
-		h.egress = newPathMatching(config.EgressPaths, legacy)
+	if paths != nil {
+		h.pathMatcher = newPathMatching(paths, legacy)
 	}
 
 	tags := []tag.Key{appIDKey}
@@ -269,10 +266,8 @@ func (h *httpMetrics) Init(appID string, config *config.PathMatching, legacy boo
 	} else {
 		serverTags = []tag.Key{appIDKey, httpMethodKey, httpStatusCodeKey}
 		clientTags = []tag.Key{appIDKey, httpStatusCodeKey}
-		if h.ingress.enabled() {
+		if h.pathMatcher.enabled() {
 			serverTags = append(serverTags, httpPathKey)
-		}
-		if h.egress.enabled() {
 			clientTags = append(clientTags, httpPathKey, httpMethodKey)
 		}
 	}
@@ -309,7 +304,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		}
 
 		var path string
-		if h.legacy || h.egress.enabled() {
+		if h.legacy || h.pathMatcher.enabled() {
 			path = h.convertPathToMetricLabel(r.URL.Path)
 		}
 
@@ -325,7 +320,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		respSize := int64(rw.Size())
 
 		var method string
-		if h.legacy || h.egress.enabled() {
+		if h.legacy || h.pathMatcher.enabled() {
 			method = r.Method
 		} else {
 			// Check if the context contains a MethodName method
