@@ -21,13 +21,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -79,8 +77,7 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 		var httpServerLatencyBuckets []float64
 		for k := range metrics {
 			if strings.HasPrefix(k, "dapr_http_server_latency_bucket") && strings.Contains(k, "app_id:myapp") && strings.Contains(k, "status:200") {
-				bucket, err := getBucketFromKey(k)
-				require.NoError(t, err)
+				bucket := getBucketFromKey(t, k)
 				httpServerLatencyBuckets = append(httpServerLatencyBuckets, bucket)
 			}
 		}
