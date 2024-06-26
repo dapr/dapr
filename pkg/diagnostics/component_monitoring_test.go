@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 const (
@@ -15,7 +17,7 @@ const (
 
 func componentsMetrics() *componentMetrics {
 	c := newComponentMetrics()
-	c.Init("test", "default")
+	_ = c.Init("test", "default", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log))
 
 	return c
 }

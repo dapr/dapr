@@ -12,11 +12,11 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.13.0-rc.2.0.20240625140521-7619e752365d
 	github.com/dapr/kit v0.13.1-0.20240523225705-106329e5839f
-	github.com/diagridio/go-etcd-cron v0.0.0-20240607140704-5021035ec727
-	github.com/evanphx/json-patch/v5 v5.8.1
+	github.com/diagridio/go-etcd-cron v0.1.0
+	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
-	github.com/go-logr/logr v1.4.1
+	github.com/go-logr/logr v1.4.2
 	github.com/golang/mock v1.6.0
 	github.com/golang/protobuf v1.5.4
 	github.com/google/cel-go v0.18.2
@@ -39,7 +39,7 @@ require (
 	github.com/microsoft/durabletask-go v0.4.1-0.20240122160106-fb5c4c05729d
 	github.com/mitchellh/mapstructure v1.5.1-0.20220423185008-bf980b35cac4
 	github.com/phayes/freeport v0.0.0-20220201140144-74d24b5ae9f5
-	github.com/prometheus/client_golang v1.17.0
+	github.com/prometheus/client_golang v1.18.0
 	github.com/prometheus/client_model v0.5.0
 	github.com/prometheus/common v0.45.0
 	github.com/redis/go-redis/v9 v9.2.1
@@ -49,8 +49,8 @@ require (
 	github.com/spiffe/go-spiffe/v2 v2.1.7
 	github.com/stretchr/testify v1.9.0
 	github.com/valyala/fasthttp v1.51.0
-	go.etcd.io/etcd/api/v3 v3.5.13
-	go.etcd.io/etcd/client/v3 v3.5.13
+	go.etcd.io/etcd/api/v3 v3.5.14
+	go.etcd.io/etcd/client/v3 v3.5.14
 	go.etcd.io/etcd/server/v3 v3.5.13
 	go.mongodb.org/mongo-driver v1.12.1
 	go.opencensus.io v0.24.0
@@ -63,26 +63,26 @@ require (
 	go.opentelemetry.io/otel/trace v1.26.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/ratelimit v0.3.0
-	golang.org/x/crypto v0.22.0
-	golang.org/x/exp v0.0.0-20240119083558-1b970713d09a
-	golang.org/x/net v0.24.0
-	golang.org/x/sync v0.6.0
-	google.golang.org/genproto/googleapis/api v0.0.0-20240318140521-94a12d6c2237
-	google.golang.org/genproto/googleapis/rpc v0.0.0-20240401170217-c3f982113cda
-	google.golang.org/grpc v1.63.0
-	google.golang.org/protobuf v1.33.0
+	golang.org/x/crypto v0.24.0
+	golang.org/x/exp v0.0.0-20240613232115-7f521ea00fb8
+	golang.org/x/net v0.26.0
+	golang.org/x/sync v0.7.0
+	google.golang.org/genproto/googleapis/api v0.0.0-20240624140628-dc46fd24d27d
+	google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d
+	google.golang.org/grpc v1.64.0
+	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v3 v3.0.1
-	k8s.io/api v0.28.4
-	k8s.io/apiextensions-apiserver v0.28.4
-	k8s.io/apimachinery v0.28.4
-	k8s.io/cli-runtime v0.28.4
-	k8s.io/client-go v0.28.4
-	k8s.io/code-generator v0.28.4
+	k8s.io/api v0.30.2
+	k8s.io/apiextensions-apiserver v0.30.2
+	k8s.io/apimachinery v0.30.2
+	k8s.io/cli-runtime v0.30.2
+	k8s.io/client-go v0.30.2
+	k8s.io/code-generator v0.30.2
 	k8s.io/klog v1.0.0
-	k8s.io/metrics v0.26.3
-	k8s.io/utils v0.0.0-20240310230437-4693a0247e57
+	k8s.io/metrics v0.30.2
+	k8s.io/utils v0.0.0-20240502163921-fe8a2dddb1d0
 	modernc.org/sqlite v1.28.0
-	sigs.k8s.io/controller-runtime v0.16.3
+	sigs.k8s.io/controller-runtime v0.18.4
 	sigs.k8s.io/yaml v1.4.0
 )
 
@@ -117,6 +117,7 @@ require (
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azblob v1.3.2 // indirect
 	github.com/Azure/azure-sdk-for-go/sdk/storage/azqueue v1.0.0 // indirect
 	github.com/Azure/go-amqp v1.0.5 // indirect
+	github.com/Azure/go-ansiterm v0.0.0-20210617225240-d185dfc1b5a1 // indirect
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
 	github.com/DataDog/zstd v1.5.2 // indirect
 	github.com/IBM/sarama v1.42.2 // indirect
@@ -328,6 +329,7 @@ require (
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
 	github.com/mitchellh/reflectwalk v1.0.2 // indirect
 	github.com/moby/spdystream v0.2.0 // indirect
+	github.com/moby/term v0.0.0-20221205130635-1aeaba878587 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/monochromegane/go-gitignore v0.0.0-20200626010858-205db1a8cc00 // indirect
@@ -336,6 +338,7 @@ require (
 	github.com/mschoch/smat v0.2.0 // indirect
 	github.com/mtibben/percent v0.2.1 // indirect
 	github.com/munnerz/goautoneg v0.0.0-20191010083416-a7dc8b61c822 // indirect
+	github.com/mxk/go-flowrate v0.0.0-20140419014527-cca7078d478f // indirect
 	github.com/natefinch/lumberjack v2.0.0+incompatible // indirect
 	github.com/nats-io/nats.go v1.28.0 // indirect
 	github.com/nats-io/nkeys v0.4.6 // indirect
@@ -406,7 +409,7 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.2 // indirect
 	github.com/zeebo/errs v1.3.0 // indirect
 	go.etcd.io/bbolt v1.3.9 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.5.13 // indirect
+	go.etcd.io/etcd/client/pkg/v3 v3.5.14 // indirect
 	go.etcd.io/etcd/client/v2 v2.305.13 // indirect
 	go.etcd.io/etcd/pkg/v3 v3.5.13 // indirect
 	go.etcd.io/etcd/raft/v3 v3.5.13 // indirect
@@ -419,13 +422,13 @@ require (
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
 	golang.org/x/arch v0.3.0 // indirect
-	golang.org/x/mod v0.14.0 // indirect
+	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
-	golang.org/x/sys v0.19.0 // indirect
-	golang.org/x/term v0.19.0 // indirect
-	golang.org/x/text v0.14.0 // indirect
+	golang.org/x/sys v0.21.0 // indirect
+	golang.org/x/term v0.21.0 // indirect
+	golang.org/x/text v0.16.0 // indirect
 	golang.org/x/time v0.5.0 // indirect
-	golang.org/x/tools v0.17.0 // indirect
+	golang.org/x/tools v0.22.0 // indirect
 	gomodules.xyz/jsonpatch/v2 v2.4.0 // indirect
 	google.golang.org/api v0.169.0 // indirect
 	google.golang.org/appengine v1.6.8 // indirect
@@ -444,10 +447,9 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
-	k8s.io/component-base v0.28.4 // indirect
-	k8s.io/gengo v0.0.0-20230829151522-9cce18d56c01 // indirect
-	k8s.io/klog/v2 v2.110.1 // indirect
-	k8s.io/kube-openapi v0.0.0-20231113174909-778a5567bc1e // indirect
+	k8s.io/gengo/v2 v2.0.0-20240228010128-51d4e06bde70 // indirect
+	k8s.io/klog/v2 v2.120.1 // indirect
+	k8s.io/kube-openapi v0.0.0-20240228011516-70dd3763d340 // indirect
 	lukechampine.com/uint128 v1.3.0 // indirect
 	modernc.org/cc/v3 v3.41.0 // indirect
 	modernc.org/ccgo/v3 v3.16.15 // indirect
