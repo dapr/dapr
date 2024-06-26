@@ -14,7 +14,6 @@ limitations under the License.
 package daprd
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -358,11 +357,6 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context, opts ...func(*metrics
 	resp, err := d.httpClient.Do(req)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// read resp.Body to variable
-	body, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	resp.Body = io.NopCloser(bytes.NewReader(body))
 
 	// Extract the metrics
 	parser := expfmt.TextParser{}
