@@ -327,12 +327,7 @@ func (d *Daprd) ProfilePort() int {
 	return d.profilePort
 }
 
-type MetricBucket struct {
-	UpperBound      float64
-	CumulativeCount uint64
-}
-
-// Returns a subset of metrics scraped from the metrics endpoint
+// Metrics Returns a subset of metrics scraped from the metrics endpoint
 func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
 
