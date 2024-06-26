@@ -219,7 +219,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		host := b.daprd1.GRPCAddress()
 		conn, err := grpc.DialContext(ctx, host, //nolint:staticcheck
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
+			grpc.WithBlock(), //nolint:staticcheck
 		)
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -263,7 +263,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		host := b.daprd1.GRPCAddress()
 		conn, err := grpc.DialContext(ctx, host, //nolint:staticcheck
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
-			grpc.WithBlock(),
+			grpc.WithBlock(), //nolint:staticcheck
 		)
 		require.NoError(t, err)
 		t.Cleanup(func() { require.NoError(t, conn.Close()) })

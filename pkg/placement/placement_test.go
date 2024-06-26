@@ -94,7 +94,7 @@ func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.T
 			return tcpConn, nil
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 
