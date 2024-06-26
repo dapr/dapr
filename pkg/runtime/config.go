@@ -97,6 +97,7 @@ type Config struct {
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
 	RemindersService              string
+	SchedulerAddress              []string
 	DaprAPIListenAddresses        string
 	AppHealthProbeInterval        int
 	AppHealthProbeTimeout         int
@@ -129,6 +130,7 @@ type internalConfig struct {
 	mode                         modes.DaprMode
 	actorsService                string
 	remindersService             string
+	schedulerAddress             []string
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
 	kubernetes                   configmodes.KubernetesConfig
@@ -148,6 +150,10 @@ type internalConfig struct {
 
 func (i internalConfig) ActorsEnabled() bool {
 	return i.actorsService != ""
+}
+
+func (i internalConfig) SchedulerEnabled() bool {
+	return len(i.schedulerAddress) > 0
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.
@@ -230,13 +236,17 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 
 	// Initialize metrics only if MetricSpec is enabled.
 	metricsSpec := globalConfig.GetMetricsSpec()
+	httpConfig := diag.NewHTTPMonitoringConfig(
+		metricsSpec.GetHTTPPathMatching(),
+		metricsSpec.GetHTTPIncreasedCardinality(log),
+		metricsSpec.GetHTTPExcludeVerbs(),
+	)
 	if metricsSpec.GetEnabled() {
 		err = diag.InitMetrics(
 			intc.id,
 			namespace,
 			metricsSpec.Rules,
-			metricsSpec.GetHTTPPathMatching(),
-			metricsSpec.GetHTTPIncreasedCardinality(),
+			httpConfig,
 		)
 		if err != nil {
 			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
@@ -306,6 +316,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		blockShutdownDuration:     c.DaprBlockShutdownDuration,
 		actorsService:             c.ActorsService,
 		remindersService:          c.RemindersService,
+		schedulerAddress:          c.SchedulerAddress,
 		publicListenAddress:       c.DaprPublicListenAddress,
 		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
 	}

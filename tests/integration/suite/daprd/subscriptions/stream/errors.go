@@ -73,7 +73,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	_, err = stream.Recv()
 	s, ok := status.FromError(err)
 	require.True(t, ok)
-	assert.Contains(t, s.Message(), "pubsubName name is required")
+	assert.Contains(t, s.Message(), "pubsubName is required")
 	require.NoError(t, stream.CloseSend())
 
 	stream, err = client.SubscribeTopicEventsAlpha1(ctx)
@@ -118,7 +118,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	_, err = streamDupe.Recv()
 	s, ok = status.FromError(err)
 	require.True(t, ok)
-	assert.Contains(t, s.Message(), `already subscribed to pubsub "mypub" topic "a"`)
+	assert.Contains(t, s.Message(), `streamer already subscribed to pubsub "mypub" topic "a"`)
 
 	streamDoubleInit, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)

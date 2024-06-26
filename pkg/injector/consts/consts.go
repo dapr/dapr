@@ -43,6 +43,7 @@ const (
 	ComponentsUDSVolumeName        = "dapr-components-unix-domain-socket"   // Name of the Unix domain socket volume for components.
 	ComponentsUDSMountPathEnvVar   = "DAPR_COMPONENT_SOCKETS_FOLDER"
 	ComponentsUDSDefaultFolder     = "/tmp/dapr-components-sockets"
+	SchedulerHostAddressEnvVar     = "DAPR_SCHEDULER_HOST_ADDRESS"
 
 	ModeKubernetes = modes.KubernetesMode // KubernetesMode is a Kubernetes Dapr mode.
 	ModeStandalone = modes.StandaloneMode // StandaloneMode is a Standalone Dapr mode.

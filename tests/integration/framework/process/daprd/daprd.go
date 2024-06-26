@@ -147,6 +147,9 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.blockShutdownDuration != nil {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
+	if len(opts.schedulerAddresses) > 0 {
+		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
+	}
 	if opts.controlPlaneTrustDomain != nil {
 		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
 	}
@@ -229,6 +232,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 
 	case "grpc":
 		assert.Eventually(t, func() bool {
+			//nolint:staticcheck
 			conn, err := grpc.Dial(d.AppAddress(),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock())
@@ -248,6 +252,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, d.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
@@ -388,13 +393,29 @@ func (d *Daprd) GetMetaRegistedComponents(t assert.TestingT, ctx context.Context
 	return d.meta(t, ctx).RegisteredComponents
 }
 
-func (d *Daprd) GetMetaSubscriptions(t assert.TestingT, ctx context.Context) []any {
+func (d *Daprd) GetMetaSubscriptions(t assert.TestingT, ctx context.Context) []MetadataResponsePubsubSubscription {
 	return d.meta(t, ctx).Subscriptions
 }
 
+// metaResponse is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
 type metaResponse struct {
-	RegisteredComponents []*rtv1.RegisteredComponents `json:"components,omitempty"`
-	Subscriptions        []any                        `json:"subscriptions,omitempty"`
+	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
+	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
+}
+
+// MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
+type MetadataResponsePubsubSubscription struct {
+	PubsubName      string                                   `json:"pubsubname"`
+	Topic           string                                   `json:"topic"`
+	Metadata        map[string]string                        `json:"metadata,omitempty"`
+	Rules           []MetadataResponsePubsubSubscriptionRule `json:"rules,omitempty"`
+	DeadLetterTopic string                                   `json:"deadLetterTopic"`
+	Type            string                                   `json:"type"`
+}
+
+type MetadataResponsePubsubSubscriptionRule struct {
+	Match string `json:"match,omitempty"`
+	Path  string `json:"path,omitempty"`
 }
 
 func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {

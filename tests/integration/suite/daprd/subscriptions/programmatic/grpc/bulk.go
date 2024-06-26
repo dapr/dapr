@@ -16,6 +16,7 @@ package grpc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -87,6 +88,18 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
 
 	client := b.daprd.GRPCClient(t, ctx)
+
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		subsInMeta = b.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 2)
+	}, time.Second*2, time.Millisecond*10)
+	assert.ElementsMatch(t, []daprd.MetadataResponsePubsubSubscription{
+		{PubsubName: "mypub", Topic: "a", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/a"}}, Type: rtv1.PubsubSubscriptionType_PROGRAMMATIC.String()},
+		{PubsubName: "mypub", Topic: "b", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/b"}}, Type: rtv1.PubsubSubscriptionType_PROGRAMMATIC.String()},
+	},
+		subsInMeta,
+	)
 
 	// TODO: @joshvanl: add support for bulk publish to in-memory pubsub.
 	resp, err := client.BulkPublishEventAlpha1(ctx, &rtv1.BulkPublishRequest{

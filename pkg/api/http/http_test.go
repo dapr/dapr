@@ -59,6 +59,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/middleware"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
+	outboxfake "github.com/dapr/dapr/pkg/outbox/fake"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -168,10 +169,10 @@ func TestPubSubEndpoints(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.universal.CompStore().AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("pubsubname", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errorpubsub", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotfound", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotallowed", &runtimePubsub.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
@@ -347,10 +348,10 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.universal.CompStore().AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("pubsubname", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errorpubsub", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotfound", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotallowed", &runtimePubsub.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
@@ -1746,17 +1747,15 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		},
 	}))
 	require.NoError(t, compStore.CommitPendingComponent())
-	compStore.SetSubscriptions([]runtimePubsub.Subscription{
-		{
-			PubsubName:      "test",
-			Topic:           "topic",
-			DeadLetterTopic: "dead",
-			Metadata:        map[string]string{},
-			Rules: []*runtimePubsub.Rule{
-				{
-					Match: &expr.Expr{},
-					Path:  "path",
-				},
+	compStore.SetProgramaticSubscriptions(runtimePubsub.Subscription{
+		PubsubName:      "test",
+		Topic:           "topic",
+		DeadLetterTopic: "dead",
+		Metadata:        map[string]string{},
+		Rules: []*runtimePubsub.Rule{
+			{
+				Match: &expr.Expr{},
+				Path:  "path",
 			},
 		},
 	})
@@ -1821,7 +1820,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
-	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"RUNNING","activeActors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"hostReady":true}}`
+	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead","type":"PROGRAMMATIC"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"RUNNING","activeActors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"hostReady":true}}`
 
 	t.Run("Get Metadata", func(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", "v1.0/metadata", nil, nil)
@@ -3238,6 +3237,7 @@ func TestV1StateEndpoints(t *testing.T) {
 			Resiliency: rc,
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
@@ -4396,6 +4396,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}

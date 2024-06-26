@@ -124,6 +124,10 @@ func (m *MockServer) OnBulkTopicEventAlpha1(ctx context.Context, in *runtimev1pb
 	return nil, m.Error
 }
 
+func (m *MockServer) OnJobEventAlpha1(ctx context.Context, request *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+	return nil, nil
+}
+
 func (m *MockServer) HealthCheck(ctx context.Context, in *emptypb.Empty) (*runtimev1pb.HealthCheckResponse, error) {
 	return &runtimev1pb.HealthCheckResponse{}, m.Error
 }

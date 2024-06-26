@@ -244,6 +244,7 @@ func (n *failover) getLeader(t *testing.T, ctx context.Context, skip int) int {
 		}
 
 		host := n.placements[j].Address()
+		//nolint:staticcheck
 		conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)

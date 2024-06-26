@@ -112,7 +112,10 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 
 	meta, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
-	require.Len(t, meta.GetSubscriptions(), 1)
+	subs := meta.GetSubscriptions()
+	require.Len(t, subs, 1)
+
+	assert.Equal(t, rtv1.PubsubSubscriptionType_DECLARATIVE, subs[0].GetType())
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypubsub", Topic: "a", Data: []byte(`{"status": "completed"}`),

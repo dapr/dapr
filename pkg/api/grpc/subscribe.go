@@ -14,6 +14,11 @@ limitations under the License.
 package grpc
 
 import (
+	"errors"
+
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
@@ -24,19 +29,71 @@ func (a *api) SubscribeTopicEventsAlpha1(stream runtimev1pb.Dapr_SubscribeTopicE
 	errCh := make(chan error, 2)
 	subDone := make(chan struct{})
 	a.wg.Add(2)
+
 	go func() {
-		errCh <- a.processor.PubSub().Streamer().Subscribe(stream)
-		close(subDone)
-		a.wg.Done()
-	}()
-	go func() {
+		defer a.wg.Done()
+
 		select {
 		case <-a.closeCh:
 		case <-subDone:
 		}
 		errCh <- nil
-		a.wg.Done()
+	}()
+
+	go func() {
+		defer a.wg.Done()
+		errCh <- a.streamSubscribe(stream, errCh, subDone)
 	}()
 
 	return <-errCh
+}
+
+func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1Server, errCh chan error, subDone chan struct{}) error {
+	defer close(subDone)
+
+	ireq, err := stream.Recv()
+	if err != nil {
+		return err
+	}
+
+	req := ireq.GetInitialRequest()
+
+	if req == nil {
+		return errors.New("initial request is required")
+	}
+
+	if len(req.GetPubsubName()) == 0 {
+		return errors.New("pubsubName is required")
+	}
+
+	if len(req.GetTopic()) == 0 {
+		return errors.New("topic is required")
+	}
+
+	key := a.pubsubAdapterStreamer.StreamerKey(req.GetPubsubName(), req.GetTopic())
+	err = a.Universal.CompStore().AddStreamSubscription(&subapi.Subscription{
+		ObjectMeta: metav1.ObjectMeta{Name: key},
+		Spec: subapi.SubscriptionSpec{
+			Pubsubname:      req.GetPubsubName(),
+			Topic:           req.GetTopic(),
+			Metadata:        req.GetMetadata(),
+			DeadLetterTopic: req.GetDeadLetterTopic(),
+			Routes:          subapi.Routes{Default: "/"},
+		},
+	})
+	if err != nil {
+		return err
+	}
+
+	if err := a.processor.Subscriber().StartStreamerSubscription(key); err != nil {
+		a.Universal.CompStore().DeleteStreamSubscription(key)
+		return err
+	}
+
+	defer func() {
+		a.processor.Subscriber().StopStreamerSubscription(req.GetPubsubName(), key)
+		a.Universal.CompStore().DeleteStreamSubscription(key)
+	}()
+
+	return a.pubsubAdapterStreamer.Subscribe(stream, req)
 }

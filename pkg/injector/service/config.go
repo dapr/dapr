@@ -43,11 +43,13 @@ type Config struct {
 	ReadOnlyRootFilesystem            string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
 	EnableK8sDownwardAPIs             string `envconfig:"ENABLE_K8S_DOWNWARD_APIS"`
 	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
+	SchedulerEnabled                  string `envconfig:"SCHEDULER_ENABLED"`
 
 	TrustAnchorsFile        string `envconfig:"DAPR_TRUST_ANCHORS_FILE"`
 	ControlPlaneTrustDomain string `envconfig:"DAPR_CONTROL_PLANE_TRUST_DOMAIN"`
 	SentryAddress           string `envconfig:"DAPR_SENTRY_ADDRESS"`
 
+	parsedSchedulerEnabled           bool
 	parsedActorsEnabled              bool
 	parsedActorsService              patcher.Service
 	parsedRemindersService           patcher.Service
@@ -148,6 +150,10 @@ func (c Config) GetRemindersService() (string, patcher.Service, bool) {
 	return c.RemindersServiceName, c.parsedRemindersService, true
 }
 
+func (c Config) GetSchedulerEnabled() bool {
+	return c.parsedSchedulerEnabled
+}
+
 func (c *Config) parse() (err error) {
 	// If there's no configuration for the actors service, use the traditional placement
 	if c.ActorsServiceName == "" {
@@ -172,6 +178,7 @@ func (c *Config) parse() (err error) {
 	c.parseTolerationsJSON()
 
 	// Set some booleans
+	c.parsedSchedulerEnabled = isTruthyDefaultTrue(c.SchedulerEnabled)
 	c.parsedActorsEnabled = isTruthyDefaultTrue(c.ActorsEnabled)
 	c.parsedRunAsNonRoot = isTruthyDefaultTrue(c.RunAsNonRoot)
 	c.parsedReadOnlyRootFilesystem = isTruthyDefaultTrue(c.ReadOnlyRootFilesystem)

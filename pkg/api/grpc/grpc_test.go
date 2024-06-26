@@ -64,6 +64,7 @@ import (
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	outboxfake "github.com/dapr/dapr/pkg/outbox/fake"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -188,6 +189,10 @@ func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalIn
 		WithContentType("text/plain")
 	defer resp.Close()
 	return resp.ProtoWithData()
+}
+
+func (m *mockGRPCAPI) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
+	return new(emptypb.Empty), nil
 }
 
 func (m *mockGRPCAPI) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequest) (*emptypb.Empty, error) {
@@ -336,7 +341,7 @@ func startDaprAPIServer(testAPIServer *api, token string) (*grpc.Server, *bufcon
 func createTestClient(lis *bufconn.Listener) *grpc.ClientConn {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
-	conn, err := grpc.DialContext(
+	conn, err := grpc.DialContext( //nolint:staticcheck
 		ctx, "bufnet",
 		grpc.WithContextDialer(func(ctx context.Context, _ string) (net.Conn, error) {
 			return lis.DialContext(ctx)
@@ -2379,7 +2384,7 @@ func TestPublishTopic(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	srv.Universal.CompStore().AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
+	srv.Universal.CompStore().AddPubSub("pubsub", &runtimePubsub.PubsubItem{Component: &mock})
 
 	server, lis := startTestServerAPI(srv)
 	defer server.Stop()
@@ -2575,7 +2580,7 @@ func TestBulkPublish(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	fakeAPI.Universal.CompStore().AddPubSub("pubsub", compstore.PubsubItem{Component: &mock})
+	fakeAPI.Universal.CompStore().AddPubSub("pubsub", &runtimePubsub.PubsubItem{Component: &mock})
 
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -2753,6 +2758,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -3308,6 +3314,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 			Resiliency: res,
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
 	}
 	server, lis := startDaprAPIServer(fakeAPI, "")
 	defer server.Stop()
@@ -4149,17 +4156,15 @@ func TestMetadata(t *testing.T) {
 		},
 	}))
 	require.NoError(t, compStore.CommitPendingComponent())
-	compStore.SetSubscriptions([]runtimePubsub.Subscription{
-		{
-			PubsubName:      "test",
-			Topic:           "topic",
-			DeadLetterTopic: "dead",
-			Metadata:        map[string]string{},
-			Rules: []*runtimePubsub.Rule{
-				{
-					Match: &expr.Expr{},
-					Path:  "path",
-				},
+	compStore.SetProgramaticSubscriptions(runtimePubsub.Subscription{
+		PubsubName:      "test",
+		Topic:           "topic",
+		DeadLetterTopic: "dead",
+		Metadata:        map[string]string{},
+		Rules: []*runtimePubsub.Rule{
+			{
+				Match: &expr.Expr{},
+				Path:  "path",
 			},
 		},
 	})
@@ -4243,7 +4248,7 @@ func TestMetadata(t *testing.T) {
 		bytes, err := json.Marshal(res)
 		require.NoError(t, err)
 
-		expectedResponse := `{"id":"fakeAPI","active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"registered_components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended_metadata":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead"}],"http_endpoints":[{"name":"MockHTTPEndpoint"}],"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true}}`
+		expectedResponse := `{"id":"fakeAPI","active_actors_count":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"registered_components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended_metadata":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsub_name":"test","topic":"topic","rules":{"rules":[{"path":"path"}]},"dead_letter_topic":"dead","type":2}],"http_endpoints":[{"name":"MockHTTPEndpoint"}],"app_connection_properties":{"port":5000,"protocol":"grpc","channel_address":"1.2.3.4","max_concurrency":10,"health":{"health_probe_interval":"10s","health_probe_timeout":"5s","health_threshold":3}},"runtime_version":"edge","actor_runtime":{"runtime_status":2,"active_actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"host_ready":true}}`
 		assert.Equal(t, expectedResponse, string(bytes))
 	})
 }

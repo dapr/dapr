@@ -89,7 +89,7 @@ func (m *mtls) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	host := m.place.Address()
-
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), sec.GRPCDialOptionMTLS(placeID))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -145,7 +145,7 @@ func establishStream(t *testing.T, ctx context.Context, client v1pb.PlacementCli
 
 		err = stream.Send(firstMessage)
 		return err == nil
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 
 	_, err = stream.Recv()
 
