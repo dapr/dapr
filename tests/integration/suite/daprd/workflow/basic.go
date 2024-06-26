@@ -84,7 +84,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	conn, err := grpc.DialContext(ctx, //nolint:staticcheck
 		b.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
