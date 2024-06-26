@@ -62,6 +62,10 @@ func (m *MockManager) SetFields(interface{}) error {
 	return nil
 }
 
+func (m *MockManager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
+	return nil
+}
+
 func (m *MockManager) AddMetricsExtraHandler(path string, handler http.Handler) error {
 	return nil
 }

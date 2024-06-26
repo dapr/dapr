@@ -751,7 +751,7 @@ func (s *proxyTestSuite) getServerClientConn() (conn *grpc.ClientConn, teardown 
 			s.serverListener.Addr().String(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
-			grpc.WithBlock(),
+			grpc.WithBlock(), //nolint:staticcheck
 			grpc.WithStreamInterceptor(createGrpcStreamingChaosInterceptor(s.service.simulateConnectionFailures, codes.Unavailable)),
 		)
 		if err != nil {
