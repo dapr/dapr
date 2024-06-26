@@ -15,12 +15,10 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/dapr/dapr/cmd/scheduler/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
-	"github.com/dapr/dapr/pkg/health"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -111,14 +109,6 @@ func Run() {
 			}
 
 			return server.Run(ctx)
-		},
-		func(ctx context.Context) error {
-			healthzServer := health.NewServer(health.Options{Log: log})
-			healthzServer.Ready()
-			if healthzErr := healthzServer.Run(ctx, opts.HealthzListenAddress, opts.HealthzPort); healthzErr != nil {
-				return fmt.Errorf("failed to start healthz server: %w", healthzErr)
-			}
-			return nil
 		},
 	).Run(ctx)
 	if err != nil {
