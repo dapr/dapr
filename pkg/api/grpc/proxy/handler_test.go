@@ -41,6 +41,7 @@ import (
 
 	codec "github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	pb "github.com/dapr/dapr/pkg/api/grpc/proxy/testservice"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
@@ -66,12 +67,14 @@ const (
 const (
 	serviceInvocationRequestSentName  = "runtime/service_invocation/req_sent_total"
 	serviceInvocationResponseRecvName = "runtime/service_invocation/res_recv_total"
+	serviceInvocationRecvLatencyMs    = "runtime/service_invocation/res_recv_latency_ms"
 )
 
 func metricsCleanup() {
 	diag.CleanupRegisteredViews(
 		serviceInvocationRequestSentName,
-		serviceInvocationResponseRecvName)
+		serviceInvocationResponseRecvName,
+		serviceInvocationRecvLatencyMs)
 }
 
 var testLogger = logger.NewLogger("proxy-test")
@@ -697,7 +700,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 func setupMetrics(s *proxyTestSuite) {
 	s.T().Helper()
 	metricsCleanup()
-	s.Require().NoError(diag.DefaultMonitoring.Init(testAppID))
+	s.Require().NoError(diag.DefaultMonitoring.Init(testAppID, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(logger.NewLogger("debug"))))
 }
 
 func (s *proxyTestSuite) initServer() {
@@ -748,7 +751,7 @@ func (s *proxyTestSuite) getServerClientConn() (conn *grpc.ClientConn, teardown 
 			s.serverListener.Addr().String(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithDefaultCallOptions(grpc.CallContentSubtype((&codec.Proxy{}).Name())),
-			grpc.WithBlock(),
+			grpc.WithBlock(), //nolint:staticcheck
 			grpc.WithStreamInterceptor(createGrpcStreamingChaosInterceptor(s.service.simulateConnectionFailures, codes.Unavailable)),
 		)
 		if err != nil {

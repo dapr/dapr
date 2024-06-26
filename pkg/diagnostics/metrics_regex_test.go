@@ -5,34 +5,43 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
 	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestRegexRulesSingle(t *testing.T) {
 	const statName = "test_stat_regex"
 	methodKey := tag.MustNewKey("method")
 	testStat := stats.Int64(statName, "Stat used in unit test", stats.UnitDimensionless)
-	httpConfig := NewHTTPMonitoringConfig(nil, false, true)
 
-	InitMetrics("testAppId2", "", []config.MetricsRule{
-		{
-			Name: statName,
-			Labels: []config.MetricLabel{
-				{
-					Name: methodKey.Name(),
-					Regex: map[string]string{
-						"/orders/TEST":      "/orders/.+",
-						"/lightsabers/TEST": "/lightsabers/.+",
+	metricSpec := config.MetricSpec{
+		Enabled: ptr.Of(true),
+		HTTP: &config.MetricHTTP{
+			ExcludeVerbs: ptr.Of(true),
+		},
+		Rules: []config.MetricsRule{
+			{
+				Name: statName,
+				Labels: []config.MetricLabel{
+					{
+						Name: methodKey.Name(),
+						Regex: map[string]string{
+							"/orders/TEST":      "/orders/.+",
+							"/lightsabers/TEST": "/lightsabers/.+",
+						},
 					},
 				},
 			},
 		},
-	}, httpConfig)
+	}
+
+	require.NoError(t, diagUtils.CreateRulesMap(metricSpec.Rules))
 
 	t.Run("single regex rule applied", func(t *testing.T) {
 		view.Register(
@@ -63,7 +72,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		})
 
 		s := newGRPCMetrics()
-		s.Init("test")
+		s.Init("test", nil)
 
 		stats.RecordWithTags(context.Background(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/siths/123"),
@@ -86,7 +95,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		})
 
 		s := newGRPCMetrics()
-		s.Init("test")
+		s.Init("test", nil)
 
 		stats.RecordWithTags(context.Background(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123"),

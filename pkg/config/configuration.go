@@ -24,6 +24,7 @@ import (
 
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
+	"go.opencensus.io/stats/view"
 	yaml "gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -253,9 +254,11 @@ func (o OtelSpec) GetIsSecure() bool {
 // MetricSpec configuration for metrics.
 type MetricSpec struct {
 	// Defaults to true
-	Enabled *bool         `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	HTTP    *MetricHTTP   `json:"http,omitempty" yaml:"http,omitempty"`
-	Rules   []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
+	Enabled *bool       `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	HTTP    *MetricHTTP `json:"http,omitempty" yaml:"http,omitempty"`
+	// Latency distribution buckets. If not set, the default buckets are used.
+	LatencyDistributionBuckets *[]int        `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
+	Rules                      []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
 }
 
 // GetEnabled returns true if metrics are enabled.
@@ -273,6 +276,24 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 		return true
 	}
 	return *m.HTTP.IncreasedCardinality
+}
+
+// GetLatencyDistribution returns a *view.Aggregration to be used for latency histograms
+func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation {
+	defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
+	log.Infof("metric spec: %v", m)
+	if m.LatencyDistributionBuckets == nil || len(*m.LatencyDistributionBuckets) == 0 {
+		// The default is defaultLatencyDistribution
+		log.Infof("Using default latency distribution buckets: %v", defaultLatencyDistribution)
+		return view.Distribution(defaultLatencyDistribution...)
+	}
+	log.Infof("Using custom latency distribution buckets: %v", *m.LatencyDistributionBuckets)
+	buckets := make([]float64, len(*m.LatencyDistributionBuckets))
+	for i, v := range *m.LatencyDistributionBuckets {
+		buckets[i] = float64(v)
+	}
+
+	return view.Distribution(buckets...)
 }
 
 // GetHTTPExcludeVerbs returns true if exclude verbs is enabled for HTTP metrics
@@ -708,6 +729,10 @@ func (c *Configuration) sortMetricsSpec() {
 
 	if c.Spec.MetricsSpec.HTTP != nil {
 		c.Spec.MetricSpec.HTTP = c.Spec.MetricsSpec.HTTP
+	}
+
+	if c.Spec.MetricsSpec.LatencyDistributionBuckets != nil {
+		c.Spec.MetricSpec.LatencyDistributionBuckets = c.Spec.MetricsSpec.LatencyDistributionBuckets
 	}
 }
 
