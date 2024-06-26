@@ -20,6 +20,7 @@ import (
 	"github.com/dapr/dapr/cmd/scheduler/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/healthz"
+	healthzserver "github.com/dapr/dapr/pkg/healthz/server"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
@@ -78,6 +79,11 @@ func Run() {
 	}
 
 	err = concurrency.NewRunnerManager(
+		healthzserver.New(healthzserver.Options{
+			Log:     log,
+			Port:    opts.HealthzPort,
+			Healthz: healthz,
+		}).Start,
 		metricsExporter.Start,
 		secProvider.Run,
 		func(ctx context.Context) error {
