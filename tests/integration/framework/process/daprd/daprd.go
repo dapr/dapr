@@ -332,24 +332,9 @@ type MetricBucket struct {
 	CumulativeCount uint64
 }
 
-type metricsOptions struct {
-	includeBuckets bool
-}
-
-func WithIncludeBuckets() func(metricsOptions *metricsOptions) {
-	return func(m *metricsOptions) {
-		m.includeBuckets = true
-	}
-}
-
 // Returns a subset of metrics scraped from the metrics endpoint
-func (d *Daprd) Metrics(t *testing.T, ctx context.Context, opts ...func(*metricsOptions)) map[string]float64 {
+func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
-
-	curOpts := metricsOptions{}
-	for _, o := range opts {
-		o(&curOpts)
-	}
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()), nil)
 	require.NoError(t, err)
@@ -372,18 +357,24 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context, opts ...func(*metrics
 			for _, l := range m.GetLabel() {
 				labels += "|" + l.GetName() + ":" + l.GetValue()
 			}
-			metrics[metricName+labels] = m.GetCounter().GetValue()
-
-			if curOpts.includeBuckets {
-				h := m.GetHistogram()
-				if h == nil {
-					continue
-				}
-				for _, b := range h.GetBucket() {
-					bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.FormatUint(uint64(b.GetUpperBound()), 10)
-					metrics[bucketKey] = float64(b.GetCumulativeCount())
-				}
+			if counter := m.GetCounter(); counter != nil {
+				metrics[metricName+labels] = counter.GetValue()
+				continue
 			}
+			if gauge := m.GetGauge(); gauge != nil {
+				metrics[metricName+labels] = gauge.GetValue()
+				continue
+			}
+			h := m.GetHistogram()
+			if h == nil {
+				continue
+			}
+			for _, b := range h.GetBucket() {
+				bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.FormatUint(uint64(b.GetUpperBound()), 10)
+				metrics[bucketKey] = float64(b.GetCumulativeCount())
+			}
+			metrics[metricName+"_count"+labels] = float64(h.GetSampleCount())
+			metrics[metricName+"_sum"+labels] = h.GetSampleSum()
 		}
 	}
 

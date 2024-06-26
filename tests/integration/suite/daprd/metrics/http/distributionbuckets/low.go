@@ -16,6 +16,7 @@ package distributionbuckets
 import (
 	"context"
 	"fmt"
+	"github.com/stretchr/testify/require"
 	"net/http"
 	"sort"
 	"strings"
@@ -73,7 +74,7 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("service invocation", func(t *testing.T) {
 		l.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
-		metrics := l.daprd.Metrics(t, ctx, daprd.WithIncludeBuckets())
+		metrics := l.daprd.Metrics(t, ctx)
 		var httpServerLatencyBuckets []float64
 		for k := range metrics {
 			if strings.HasPrefix(k, "dapr_http_server_latency_bucket") && strings.Contains(k, "app_id:myapp") && strings.Contains(k, "status:200") {
@@ -81,9 +82,11 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
 				httpServerLatencyBuckets = append(httpServerLatencyBuckets, bucket)
 			}
 		}
+		require.NotEmpty(t, httpServerLatencyBuckets)
 		sort.Slice(httpServerLatencyBuckets, func(i, j int) bool { return httpServerLatencyBuckets[i] < httpServerLatencyBuckets[j] })
 		expected := []float64{5, 50, 500, 5_000}
-		// remove last one as that is the upper limit
+
+		// remove last one as that is the upper limit (like math.MaxInt64)
 		assert.Equal(t, expected, httpServerLatencyBuckets[:len(httpServerLatencyBuckets)-1])
 	})
 }
