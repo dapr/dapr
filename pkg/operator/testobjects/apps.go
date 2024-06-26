@@ -2,6 +2,7 @@ package testobjects
 
 import (
 	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	corev1 "k8s.io/api/core/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -142,4 +143,90 @@ func GetStatefulSet(appID string, daprEnabled string, withOpts ...resourceOptsFu
 	opts.updateMetadata(&statefulset.ObjectMeta)
 
 	return statefulset
+}
+
+func GetJob(appID string, daprEnabled string, withOpts ...resourceOptsFunc) *batchv1.Job {
+	podTemplateSpec := corev1.PodTemplateSpec{
+		ObjectMeta: getPodMetadata(appID, daprEnabled),
+	}
+
+	opts := getOptsOrDefaults(withOpts)
+
+	job := &batchv1.Job{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name:      opts.name,
+			Namespace: opts.namespace,
+		},
+
+		Spec: batchv1.JobSpec{
+			Template: podTemplateSpec,
+			Selector: &metaV1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "test",
+				},
+			},
+		},
+	}
+	opts.updateMetadata(&job.ObjectMeta)
+
+	return job
+}
+
+func GetCronJob(appID string, daprEnabled string, withOpts ...resourceOptsFunc) *batchv1.CronJob {
+	podTemplateSpec := corev1.PodTemplateSpec{
+		ObjectMeta: getPodMetadata(appID, daprEnabled),
+	}
+
+	opts := getOptsOrDefaults(withOpts)
+
+	cronJob := &batchv1.CronJob{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name:      opts.name,
+			Namespace: opts.namespace,
+		},
+
+		Spec: batchv1.CronJobSpec{
+			JobTemplate: batchv1.JobTemplateSpec{
+				ObjectMeta: getPodMetadata(appID, daprEnabled),
+				Spec: batchv1.JobSpec{
+					Selector: &metaV1.LabelSelector{
+						MatchLabels: map[string]string{
+							"app": "test",
+						},
+					},
+					Template: podTemplateSpec,
+				},
+			},
+		},
+	}
+	opts.updateMetadata(&cronJob.ObjectMeta)
+
+	return cronJob
+}
+
+func GetDaemonSet(appID string, daprEnabled string, withOpts ...resourceOptsFunc) *appsv1.DaemonSet {
+	podTemplateSpec := corev1.PodTemplateSpec{
+		ObjectMeta: getPodMetadata(appID, daprEnabled),
+	}
+
+	opts := getOptsOrDefaults(withOpts)
+
+	daemonSet := &appsv1.DaemonSet{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name:      opts.name,
+			Namespace: opts.namespace,
+		},
+
+		Spec: appsv1.DaemonSetSpec{
+			Template: podTemplateSpec,
+			Selector: &metaV1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "test",
+				},
+			},
+		},
+	}
+	opts.updateMetadata(&daemonSet.ObjectMeta)
+
+	return daemonSet
 }

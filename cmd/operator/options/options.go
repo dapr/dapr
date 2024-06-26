@@ -18,7 +18,10 @@ import (
 	"strings"
 	"time"
 
+	appsv1 "k8s.io/api/apps/v1"
+	batchv1 "k8s.io/api/batch/v1"
 	"k8s.io/klog"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/metrics"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
@@ -58,6 +61,7 @@ type Options struct {
 	HealthzListenAddress               string
 	WebhookServerPort                  int
 	WebhookServerListenAddress         string
+	AllowedServiceResources            []client.Object
 }
 
 func New() *Options {
@@ -94,6 +98,8 @@ func New() *Options {
 	opts.Metrics = metrics.DefaultMetricOptions()
 	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
+	allowedServiceResources := flag.String("allowed-service-resources", "", "Allowed Service Creation Resources")
+
 	flag.Parse()
 
 	wilc := strings.ToLower(opts.watchdogIntervalStr)
@@ -113,6 +119,31 @@ func New() *Options {
 			opts.WatchdogInterval = dur
 		}
 	}
+
+	// check and set allowedServiceResources
+	if *allowedServiceResources == "" {
+		opts.AllowedServiceResources = []client.Object{}
+		return &opts
+	}
+	resourceStrs := strings.Split(*allowedServiceResources, ",")
+	resourceSet := make(map[client.Object]struct{}, len(resourceStrs))
+	for _, resource := range resourceStrs {
+		switch resource {
+		case "CronJob":
+			resourceSet[&batchv1.CronJob{}] = struct{}{}
+		case "Job":
+			resourceSet[&batchv1.Job{}] = struct{}{}
+		case "DaemonSet":
+			resourceSet[&appsv1.DaemonSet{}] = struct{}{}
+		default:
+			log.Errorf("unsupported k8s resource [%v] for service creation", resource)
+		}
+	}
+	resources := make([]client.Object, 0, len(resourceSet))
+	for resource := range resourceSet {
+		resources = append(resources, resource)
+	}
+	opts.AllowedServiceResources = resources
 
 	return &opts
 }
