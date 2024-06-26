@@ -322,6 +322,13 @@ spec:
                           description: If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
                           type: boolean
                     type: object
+                  latencyDistributionBuckets:
+                    description: 'If a list of integers is specified, use
+                      these values for latency distribution buckets instead
+                      of the default values.'
+                    items:
+                      type: integer
+                    type: array
                   rules:
                     items:
                       description: MetricsRule defines configuration options for a
