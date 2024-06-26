@@ -97,6 +97,7 @@ func New(opts Options) (*Server, error) {
 		connectionPool: internal.NewPool(),
 		readyCh:        make(chan struct{}),
 		closeCh:        make(chan struct{}),
+		healthTarget:   healthz.New().AddTarget(),
 	}, nil
 }
 
