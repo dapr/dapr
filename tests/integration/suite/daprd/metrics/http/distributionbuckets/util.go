@@ -14,10 +14,11 @@ limitations under the License.
 package distributionbuckets
 
 import (
-	"github.com/stretchr/testify/require"
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/stretchr/testify/require"
 )
 
 func getBucketFromKey(t *testing.T, k string) float64 {
