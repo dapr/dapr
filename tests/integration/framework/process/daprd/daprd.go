@@ -327,7 +327,7 @@ func (d *Daprd) ProfilePort() int {
 	return d.profilePort
 }
 
-// Returns a subset of metrics scraped from the metrics endpoint
+// Metrics Returns a subset of metrics scraped from the metrics endpoint
 func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
 
@@ -347,11 +347,29 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	metrics := make(map[string]float64)
 	for _, mf := range metricFamilies {
 		for _, m := range mf.GetMetric() {
-			key := mf.GetName()
+			metricName := mf.GetName()
+			labels := ""
 			for _, l := range m.GetLabel() {
-				key += "|" + l.GetName() + ":" + l.GetValue()
+				labels += "|" + l.GetName() + ":" + l.GetValue()
 			}
-			metrics[key] = m.GetCounter().GetValue()
+			if counter := m.GetCounter(); counter != nil {
+				metrics[metricName+labels] = counter.GetValue()
+				continue
+			}
+			if gauge := m.GetGauge(); gauge != nil {
+				metrics[metricName+labels] = gauge.GetValue()
+				continue
+			}
+			h := m.GetHistogram()
+			if h == nil {
+				continue
+			}
+			for _, b := range h.GetBucket() {
+				bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.FormatUint(uint64(b.GetUpperBound()), 10)
+				metrics[bucketKey] = float64(b.GetCumulativeCount())
+			}
+			metrics[metricName+"_count"+labels] = float64(h.GetSampleCount())
+			metrics[metricName+"_sum"+labels] = h.GetSampleSum()
 		}
 	}
 
