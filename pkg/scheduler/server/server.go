@@ -26,6 +26,7 @@ import (
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/server/authz"
@@ -38,6 +39,7 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
+	Healthz                 healthz.Healthz
 	Security                security.Handler
 	ListenAddress           string
 	Port                    int
@@ -66,6 +68,8 @@ type Server struct {
 	config         *embed.Config
 	cron           etcdcron.Interface
 	connectionPool *internal.Pool // Connection pool for sidecars
+
+	healthTarget healthz.Target
 
 	wg      sync.WaitGroup
 	running atomic.Bool
@@ -117,10 +121,12 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) runServer(ctx context.Context) error {
+	defer s.healthTarget.NotReady()
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.listenAddress, s.port))
 	if err != nil {
 		return fmt.Errorf("could not listen on port %d: %w", s.port, err)
 	}
+	s.healthTarget.Ready()
 
 	log.Infof("Dapr Scheduler listening on: %s:%d", s.listenAddress, s.port)
 
