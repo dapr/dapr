@@ -360,7 +360,8 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context, opts ...func(*metrics
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
 	// read resp.Body to variable
-	body, _ := io.ReadAll(resp.Body)
+	body, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
 	resp.Body = io.NopCloser(bytes.NewReader(body))
 
 	// Extract the metrics
