@@ -11,7 +11,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"go.opencensus.io/stats/view"
+
+	"github.com/dapr/dapr/pkg/config"
 )
+
+func cleanupHTTPViews() {
+	CleanupRegisteredViews(
+		"http/server/latency",
+		"http/client/roundtrip_latency",
+		"http/healthprobes/roundtrip_latency",
+	)
+}
 
 func TestHTTPMiddleware(t *testing.T) {
 	requestBody := "fake_requestDaprBody"
@@ -21,8 +31,9 @@ func TestHTTPMiddleware(t *testing.T) {
 
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
+	t.Cleanup(cleanupHTTPViews)
 	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
-	testHTTP.Init("fakeID", configHTTP)
+	require.NoError(t, testHTTP.Init("fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 
 	handler := testHTTP.HTTPMiddleware(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(100 * time.Millisecond)
@@ -70,8 +81,10 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 	// create test httpMetrics
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
+	CleanupRegisteredViews()
 	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
-	testHTTP.Init("fakeID", configHTTP)
+	t.Cleanup(cleanupHTTPViews)
+	require.NoError(t, testHTTP.Init("fakeID", configHTTP, config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 	v := view.Find("http/server/request_count")
 	views := []*view.View{v}
 	view.Unregister(views...)
@@ -93,7 +106,8 @@ func TestHTTPMiddlewareWhenMetricsDisabled(t *testing.T) {
 func TestHTTPMetricsPathMatchingNotEnabled(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	testHTTP.enabled = false
-	testHTTP.Init("fakeID", HTTPMonitoringConfig{})
+	t.Cleanup(cleanupHTTPViews)
+	testHTTP.Init("fakeID", HTTPMonitoringConfig{}, nil)
 	matchedPath, ok := testHTTP.pathMatcher.match("/orders")
 	require.False(t, ok)
 	require.Equal(t, "", matchedPath)
@@ -109,7 +123,8 @@ func TestHTTPMetricsPathMatchingLegacyIncreasedCardinality(t *testing.T) {
 		"/v1/orders/{orderID}/items/{itemID}",
 	}
 	configHTTP := NewHTTPMonitoringConfig(paths, true, false)
-	testHTTP.Init("fakeID", configHTTP)
+	t.Cleanup(cleanupHTTPViews)
+	testHTTP.Init("fakeID", configHTTP, nil)
 
 	// act & assert
 
@@ -157,7 +172,8 @@ func TestHTTPMetricsPathMatchingLowCardinality(t *testing.T) {
 		"/",
 	}
 	configHTTP := NewHTTPMonitoringConfig(paths, false, false)
-	testHTTP.Init("fakeID", configHTTP)
+	t.Cleanup(cleanupHTTPViews)
+	testHTTP.Init("fakeID", configHTTP, nil)
 
 	// act & assert
 
@@ -207,14 +223,16 @@ func TestHTTPMetricsPathMatchingLowCardinalityRootPathRegister(t *testing.T) {
 
 	// 1 - Root path not registered fallback to ""
 	paths1 := []string{"/v1/orders/{orderID}"}
-	testHTTP.Init("fakeID", HTTPMonitoringConfig{paths1, false, false})
+	cleanupHTTPViews()
+	testHTTP.Init("fakeID", HTTPMonitoringConfig{paths1, false, false}, nil)
 	matchedPath, ok := testHTTP.pathMatcher.match("/thispathdoesnotexist")
 	require.True(t, ok)
 	require.Equal(t, "", matchedPath)
 
 	// 2 - Root path registered fallback to "/"
+	cleanupHTTPViews()
 	paths2 := []string{"/v1/orders/{orderID}", "/"}
-	testHTTP.Init("fakeID", HTTPMonitoringConfig{paths2, false, false})
+	testHTTP.Init("fakeID", HTTPMonitoringConfig{paths2, false, false}, nil)
 	matchedPath, ok = testHTTP.pathMatcher.match("/thispathdoesnotexist")
 	require.True(t, ok)
 	require.Equal(t, "/", matchedPath)
@@ -223,7 +241,7 @@ func TestHTTPMetricsPathMatchingLowCardinalityRootPathRegister(t *testing.T) {
 func TestGetMetricsMethod(t *testing.T) {
 	testHTTP := newHTTPMetrics()
 	configHTTP := NewHTTPMonitoringConfig(nil, false, false)
-	testHTTP.Init("fakeID", configHTTP)
+	testHTTP.Init("fakeID", configHTTP, nil)
 	assert.Equal(t, "GET", testHTTP.getMetricsMethod("GET"))
 	assert.Equal(t, "POST", testHTTP.getMetricsMethod("POST"))
 	assert.Equal(t, "PUT", testHTTP.getMetricsMethod("PUT"))
@@ -238,8 +256,9 @@ func TestGetMetricsMethod(t *testing.T) {
 
 func TestGetMetricsMethodExcludeVerbs(t *testing.T) {
 	testHTTP := newHTTPMetrics()
+	t.Cleanup(cleanupHTTPViews)
 	configHTTP := NewHTTPMonitoringConfig(nil, false, true)
-	testHTTP.Init("fakeID", configHTTP)
+	testHTTP.Init("fakeID", configHTTP, nil)
 	assert.Equal(t, "", testHTTP.getMetricsMethod("GET"))
 	assert.Equal(t, "", testHTTP.getMetricsMethod("POST"))
 	assert.Equal(t, "", testHTTP.getMetricsMethod("PUT"))

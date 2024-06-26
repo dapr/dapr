@@ -40,12 +40,6 @@ var (
 	log = logger.NewLogger("dapr.runtime.diagnostics")
 )
 
-var (
-	// <<10 -> KBs; <<20 -> MBs; <<30 -> GBs
-	defaultSizeDistribution    = view.Distribution(1<<10, 2<<10, 4<<10, 16<<10, 64<<10, 256<<10, 1<<20, 4<<20, 16<<20, 64<<20, 256<<20, 1<<30, 4<<30)
-	defaultLatencyDistribution = view.Distribution(1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000)
-)
-
 type httpMetrics struct {
 	serverRequestBytes  *stats.Int64Measure
 	serverResponseBytes *stats.Int64Measure
@@ -59,7 +53,7 @@ type httpMetrics struct {
 	clientCompletedCount   *stats.Int64Measure
 
 	healthProbeCompletedCount   *stats.Int64Measure
-	healthProbeRoundTripLatency *stats.Float64Measure
+	healthProbeRoundtripLatency *stats.Float64Measure
 
 	appID   string
 	enabled bool
@@ -114,7 +108,7 @@ func newHTTPMetrics() *httpMetrics {
 			"http/healthprobes/completed_count",
 			"Count of completed health probes",
 			stats.UnitDimensionless),
-		healthProbeRoundTripLatency: stats.Float64(
+		healthProbeRoundtripLatency: stats.Float64(
 			"http/healthprobes/roundtrip_latency",
 			"Time between first byte of health probes headers sent to last byte of response received, or terminal error",
 			stats.UnitMilliseconds),
@@ -261,8 +255,8 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		h.healthProbeCompletedCount.M(1))
 	stats.RecordWithTags(
 		ctx,
-		diagUtils.WithTags(h.healthProbeRoundTripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
-		h.healthProbeRoundTripLatency.M(elapsed))
+		diagUtils.WithTags(h.healthProbeRoundtripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
+		h.healthProbeRoundtripLatency.M(elapsed))
 }
 
 type HTTPMonitoringConfig struct {
@@ -271,7 +265,7 @@ type HTTPMonitoringConfig struct {
 	excludeVerbs bool
 }
 
-func NewHTTPMonitoringConfig(pathMatching []string, legacy bool, excludeVerbs bool) HTTPMonitoringConfig {
+func NewHTTPMonitoringConfig(pathMatching []string, legacy, excludeVerbs bool) HTTPMonitoringConfig {
 	return HTTPMonitoringConfig{
 		pathMatching: pathMatching,
 		legacy:       legacy,
@@ -279,7 +273,7 @@ func NewHTTPMonitoringConfig(pathMatching []string, legacy bool, excludeVerbs bo
 	}
 }
 
-func (h *httpMetrics) Init(appID string, config HTTPMonitoringConfig) error {
+func (h *httpMetrics) Init(appID string, config HTTPMonitoringConfig, latencyDistribution *view.Aggregation) error {
 	h.appID = appID
 	h.enabled = true
 	h.legacy = config.legacy
@@ -297,13 +291,13 @@ func (h *httpMetrics) Init(appID string, config HTTPMonitoringConfig) error {
 	views := []*view.View{
 		diagUtils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution),
-		diagUtils.NewMeasureView(h.serverLatency, serverTags, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.serverLatency, serverTags, latencyDistribution),
 		diagUtils.NewMeasureView(h.serverRequestCount, serverTags, view.Count()),
 		diagUtils.NewMeasureView(h.clientSentBytes, clientTags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
-		diagUtils.NewMeasureView(h.clientRoundtripLatency, clientTags, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.clientRoundtripLatency, clientTags, latencyDistribution),
 		diagUtils.NewMeasureView(h.clientCompletedCount, clientTags, view.Count()),
-		diagUtils.NewMeasureView(h.healthProbeRoundTripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.healthProbeRoundtripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, latencyDistribution),
 		diagUtils.NewMeasureView(h.healthProbeCompletedCount, []tag.Key{appIDKey, httpStatusCodeKey}, view.Count()),
 	}
 
