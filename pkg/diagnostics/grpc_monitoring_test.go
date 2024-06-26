@@ -24,10 +24,15 @@ import (
 	grpcMetadata "google.golang.org/grpc/metadata"
 
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
+	"github.com/dapr/dapr/pkg/config"
 )
 
 type fakeProxyStream struct {
 	appID string
+}
+
+func cleanupGrpcViews() {
+	CleanupRegisteredViews("grpc.io/server/server_latency", "grpc.io/client/roundtrip_latency", "grpc.io/healthprobes/roundtrip_latency")
 }
 
 func (f *fakeProxyStream) Context() context.Context {
@@ -63,7 +68,8 @@ func (f *fakeProxyStream) RecvMsg(m interface{}) error {
 func TestStreamingServerInterceptor(t *testing.T) {
 	t.Run("not a proxy request, do not run pipeline", func(t *testing.T) {
 		m := newGRPCMetrics()
-		m.Init("test")
+		t.Cleanup(cleanupGrpcViews)
+		require.NoError(t, m.Init("test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 
 		i := m.StreamingServerInterceptor()
 		s := &fakeProxyStream{}
@@ -85,7 +91,8 @@ func TestStreamingServerInterceptor(t *testing.T) {
 
 	t.Run("proxy request, run pipeline", func(t *testing.T) {
 		m := newGRPCMetrics()
-		m.Init("test")
+		t.Cleanup(cleanupGrpcViews)
+		require.NoError(t, m.Init("test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 
 		i := m.StreamingServerInterceptor()
 		s := &fakeProxyStream{
@@ -117,7 +124,8 @@ func TestStreamingServerInterceptor(t *testing.T) {
 func TestStreamingClientInterceptor(t *testing.T) {
 	t.Run("not a proxy request, do not run pipeline", func(t *testing.T) {
 		m := newGRPCMetrics()
-		m.Init("test")
+		t.Cleanup(cleanupGrpcViews)
+		require.NoError(t, m.Init("test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 
 		i := m.StreamingClientInterceptor()
 		s := &fakeProxyStream{}
@@ -139,7 +147,8 @@ func TestStreamingClientInterceptor(t *testing.T) {
 
 	t.Run("proxy request, run pipeline", func(t *testing.T) {
 		m := newGRPCMetrics()
-		m.Init("test")
+		t.Cleanup(cleanupGrpcViews)
+		require.NoError(t, m.Init("test", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log)))
 
 		i := m.StreamingClientInterceptor()
 		s := &fakeProxyStream{

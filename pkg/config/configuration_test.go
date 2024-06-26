@@ -23,6 +23,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opencensus.io/stats/view"
 	"golang.org/x/exp/maps"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
@@ -628,6 +629,36 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 			},
 		}
 		assert.False(t, m.GetHTTPIncreasedCardinality(log))
+	})
+}
+
+func TestMetricsGetHTTPLatencyDistributionBuckets(t *testing.T) {
+	log := logger.NewLogger("test")
+	log.SetOutput(io.Discard)
+
+	defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
+	latencyDistribution := view.Distribution(defaultLatencyDistribution...)
+	t.Run("no http configuration, returns default latency distribution buckets", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: nil,
+		}
+		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
+	})
+
+	t.Run("nil value, returns latency distribution buckets", func(t *testing.T) {
+		m := MetricSpec{
+			LatencyDistributionBuckets: nil,
+		}
+		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
+	})
+
+	customLatencyDistribution := []float64{1, 2, 3}
+	latencyDistribution = view.Distribution(customLatencyDistribution...)
+	t.Run("value is set to list of integers", func(t *testing.T) {
+		m := MetricSpec{
+			LatencyDistributionBuckets: ptr.Of([]int{1, 2, 3}),
+		}
+		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
 	})
 }
 

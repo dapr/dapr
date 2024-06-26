@@ -215,6 +215,12 @@ type MetricSpec struct {
 	HTTP *MetricHTTP `json:"http,omitempty"`
 	// +optional
 	Rules []MetricsRule `json:"rules,omitempty"`
+	// The LatencyDistributionBuckets variable specifies the latency distribution buckets (in milliseconds) used for
+	// histograms in the application. If this variable is not set or left empty, the application will default to using the standard histogram buckets.
+	// The default histogram latency buckets (in milliseconds) are as follows:
+	//    1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1,000, 2,000, 5,000, 10,000, 20,000, 50,000, 100,000.
+	// +optional
+	LatencyDistributionBuckets *[]int `json:"latencyDistributionBuckets,omitempty"`
 }
 
 // MetricHTTP defines configuration for metrics for the HTTP server
