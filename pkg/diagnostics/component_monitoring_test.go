@@ -17,13 +17,9 @@ const (
 
 func componentsMetrics() *componentMetrics {
 	c := newComponentMetrics()
-	_ = c.Init("test", "default")
+	_ = c.Init("test", "default", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log))
 
 	return c
-}
-
-func init() {
-	_ = InitGlobals(config.MetricSpec{})
 }
 
 func TestPubSub(t *testing.T) {

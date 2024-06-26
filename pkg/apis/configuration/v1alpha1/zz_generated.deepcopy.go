@@ -515,8 +515,12 @@ func (in *MetricSpec) DeepCopyInto(out *MetricSpec) {
 	}
 	if in.LatencyDistributionBuckets != nil {
 		in, out := &in.LatencyDistributionBuckets, &out.LatencyDistributionBuckets
-		*out = make([]int, len(*in))
-		copy(*out, *in)
+		*out = new([]int)
+		if **in != nil {
+			in, out := *in, *out
+			*out = make([]int, len(*in))
+			copy(*out, *in)
+		}
 	}
 }
 

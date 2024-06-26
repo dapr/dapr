@@ -186,8 +186,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			config := newTestMetricSpecConfig(false, false)
-			require.NoError(t, diag.InitMetrics(test.appID, "fakeRuntimeNamespace", config))
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(test.appID))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
@@ -273,8 +272,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			config := newTestMetricSpecConfig(false, false)
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", config))
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			require.NoError(t, err)
@@ -453,8 +451,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			config := newTestMetricSpecConfig(false, false)
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", config))
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyActivationViewName)
 			require.NoError(t, err)
@@ -511,8 +508,7 @@ func createDefaultTestResiliency(resiliencyName string, resiliencyNamespace stri
 func TestResiliencyLoadedMonitoring(t *testing.T) {
 	t.Run(resiliencyLoadedViewName, func(t *testing.T) {
 		cleanupRegisteredViews()
-		config := newTestMetricSpecConfig(false, false)
-		require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", config))
+		require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)

@@ -161,7 +161,7 @@ func newComponentMetrics() *componentMetrics {
 }
 
 // Init registers the component metrics views.
-func (c *componentMetrics) Init(appID, namespace string) error {
+func (c *componentMetrics) Init(appID, namespace string, latencyDistribution *view.Aggregation) error {
 	c.appID = appID
 	c.enabled = true
 	c.namespace = namespace

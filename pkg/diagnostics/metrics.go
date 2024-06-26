@@ -44,17 +44,17 @@ var (
 	DefaultWorkflowMonitoring = newWorkflowMetrics()
 )
 
+// <<10 -> KBs; <<20 -> MBs; <<30 -> GBs
+var defaultSizeDistribution = view.Distribution(1<<10, 2<<10, 4<<10, 16<<10, 64<<10, 256<<10, 1<<20, 4<<20, 16<<20, 64<<20, 256<<20, 1<<30, 4<<30)
+
 // InitMetrics initializes metrics.
 func InitMetrics(appID, namespace string, metricSpec config.MetricSpec) error {
-	if err := InitGlobals(metricSpec); err != nil {
+	latencyDistribution := metricSpec.GetLatencyDistribution(log)
+	if err := DefaultMonitoring.Init(appID, latencyDistribution); err != nil {
 		return err
 	}
 
-	if err := DefaultMonitoring.Init(appID); err != nil {
-		return err
-	}
-
-	if err := DefaultGRPCMonitoring.Init(appID); err != nil {
+	if err := DefaultGRPCMonitoring.Init(appID, latencyDistribution); err != nil {
 		return err
 	}
 
@@ -63,11 +63,11 @@ func InitMetrics(appID, namespace string, metricSpec config.MetricSpec) error {
 		metricSpec.GetHTTPIncreasedCardinality(log),
 		metricSpec.GetHTTPExcludeVerbs(),
 	)
-	if err := DefaultHTTPMonitoring.Init(appID, httpConfig); err != nil {
+	if err := DefaultHTTPMonitoring.Init(appID, httpConfig, latencyDistribution); err != nil {
 		return err
 	}
 
-	if err := DefaultComponentMonitoring.Init(appID, namespace); err != nil {
+	if err := DefaultComponentMonitoring.Init(appID, namespace, latencyDistribution); err != nil {
 		return err
 	}
 
@@ -75,7 +75,7 @@ func InitMetrics(appID, namespace string, metricSpec config.MetricSpec) error {
 		return err
 	}
 
-	if err := DefaultWorkflowMonitoring.Init(appID, namespace); err != nil {
+	if err := DefaultWorkflowMonitoring.Init(appID, namespace, latencyDistribution); err != nil {
 		return err
 	}
 

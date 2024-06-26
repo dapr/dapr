@@ -273,7 +273,7 @@ func NewHTTPMonitoringConfig(pathMatching []string, legacy, excludeVerbs bool) H
 	}
 }
 
-func (h *httpMetrics) Init(appID string, config HTTPMonitoringConfig) error {
+func (h *httpMetrics) Init(appID string, config HTTPMonitoringConfig, latencyDistribution *view.Aggregation) error {
 	h.appID = appID
 	h.enabled = true
 	h.legacy = config.legacy

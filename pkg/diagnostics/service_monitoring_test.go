@@ -4,13 +4,15 @@ import (
 	"testing"
 	"time"
 
+	"github.com/dapr/dapr/pkg/config"
+
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
 )
 
 func servicesMetrics() *serviceMetrics {
 	s := newServiceMetrics()
-	s.Init("testAppId")
+	_ = s.Init("testAppId", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log))
 
 	return s
 }

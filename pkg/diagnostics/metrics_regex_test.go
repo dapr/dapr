@@ -41,7 +41,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		},
 	}
 
-	require.NoError(t, InitMetrics("testAppId2", "", metricSpec))
+	require.NoError(t, diagUtils.CreateRulesMap(metricSpec.Rules))
 
 	t.Run("single regex rule applied", func(t *testing.T) {
 		view.Register(
@@ -72,7 +72,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		})
 
 		s := newGRPCMetrics()
-		s.Init("test")
+		s.Init("test", nil)
 
 		stats.RecordWithTags(context.Background(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/siths/123"),
@@ -95,7 +95,7 @@ func TestRegexRulesSingle(t *testing.T) {
 		})
 
 		s := newGRPCMetrics()
-		s.Init("test")
+		s.Init("test", nil)
 
 		stats.RecordWithTags(context.Background(),
 			diagUtils.WithTags(testStat.Name(), methodKey, "/orders/123"),
