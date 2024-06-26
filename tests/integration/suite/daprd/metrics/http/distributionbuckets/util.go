@@ -6,7 +6,7 @@ import (
 	"strings"
 )
 
-func getBucketFromKey(k string) (float64, error) {
+func getBucketFromKey(t *testing.T, k string) float64 {
 	// k = "a:b|le:5000"
 	keyParts := strings.Split(k, "|")
 	for _, k := range keyParts {
