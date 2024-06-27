@@ -41,6 +41,11 @@ const (
 	DaprAPIInvokeMethod               = "dapr.invoke_method"
 	DaprAPIActorTypeID                = "dapr.actor"
 
+	OtelSpanConvHTTPRequestMethodAttributeKey = "http.request.method"
+	OtelSpanConvServerAddressAttributeKey     = "server.address"
+	OtelSpanConvServerPortAttributeKey        = "server.port"
+	OtelSpanConvURLFullAttributeKey           = "url.full"
+
 	DaprAPIHTTPSpanAttrValue = "http"
 	DaprAPIGRPCSpanAttrValue = "grpc"
 
