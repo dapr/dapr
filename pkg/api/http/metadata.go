@@ -95,11 +95,13 @@ func (a *api) onGetMetadata() http.HandlerFunc {
 				if len(out.GetSubscriptions()) > 0 {
 					subs := make([]metadataResponsePubsubSubscription, len(out.GetSubscriptions()))
 					for i, v := range out.GetSubscriptions() {
+						// TODO: switch to runtimev1pb.PubsubSubscription. Rules becomes Rules.Rules
 						subs[i] = metadataResponsePubsubSubscription{
 							PubsubName:      v.GetPubsubName(),
 							Topic:           v.GetTopic(),
 							Metadata:        v.GetMetadata(),
 							DeadLetterTopic: v.GetDeadLetterTopic(),
+							Type:            v.GetType().String(),
 						}
 
 						if v.GetRules() != nil && len(v.GetRules().GetRules()) > 0 {
@@ -181,6 +183,7 @@ type metadataResponsePubsubSubscription struct {
 	Metadata        map[string]string                        `json:"metadata,omitempty"`
 	Rules           []metadataResponsePubsubSubscriptionRule `json:"rules,omitempty"`
 	DeadLetterTopic string                                   `json:"deadLetterTopic"`
+	Type            string                                   `json:"type"`
 }
 
 type metadataResponsePubsubSubscriptionRule struct {

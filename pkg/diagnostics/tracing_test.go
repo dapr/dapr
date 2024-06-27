@@ -252,10 +252,8 @@ func TestOtelConventionStrings(t *testing.T) {
 	assert.Equal(t, "db.name", diagConsts.DBNameSpanAttributeKey)
 	assert.Equal(t, "db.statement", diagConsts.DBStatementSpanAttributeKey)
 	assert.Equal(t, "db.connection_string", diagConsts.DBConnectionStringSpanAttributeKey)
-	assert.Equal(t, "topic", diagConsts.MessagingDestinationTopicKind)
 	assert.Equal(t, "messaging.system", diagConsts.MessagingSystemSpanAttributeKey)
-	assert.Equal(t, "messaging.destination", diagConsts.MessagingDestinationSpanAttributeKey)
-	assert.Equal(t, "messaging.destination_kind", diagConsts.MessagingDestinationKindSpanAttributeKey)
+	assert.Equal(t, "messaging.destination.name", diagConsts.MessagingDestinationSpanAttributeKey)
 	assert.Equal(t, "rpc.service", diagConsts.GrpcServiceSpanAttributeKey)
 	assert.Equal(t, "net.peer.name", diagConsts.NetPeerNameSpanAttributeKey)
 }

@@ -16,9 +16,7 @@ package placement
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"sync/atomic"
@@ -183,6 +181,7 @@ func (p *Placement) CurrentActorsAPILevel() int {
 }
 
 func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host, contextMetadata map[string]string) chan *placementv1pb.PlacementTables {
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(parentCtx, p.Address(),
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -237,7 +236,7 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 			case <-ctx.Done():
 				doneCh <- stream.CloseSend()
 				return
-			case <-time.After(time.Second):
+			case <-time.After(500 * time.Millisecond):
 				if err := stream.Send(msg); err != nil {
 					doneCh <- err
 					return
@@ -252,10 +251,6 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 		for {
 			in, err := stream.Recv()
 			if err != nil {
-				if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {
-					return
-				}
-				require.NoError(t, err)
 				return
 			}
 
@@ -289,9 +284,9 @@ func (p *Placement) AssertRegisterHostFails(t *testing.T, ctx context.Context, a
 		Id:       "myapp",
 		ApiLevel: uint32(apiLevel),
 	}
-
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, p.Address(),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)

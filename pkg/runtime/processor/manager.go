@@ -20,9 +20,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/components-contrib/bindings"
-	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/pkg/outbox"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 )
 
@@ -42,15 +40,16 @@ type SecretManager interface {
 	manager
 }
 
-type PubsubManager interface {
-	Publish(context.Context, *contribpubsub.PublishRequest) error
-	BulkPublish(context.Context, *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error)
-
-	StartSubscriptions(context.Context) error
-	StopSubscriptions(forever bool)
-	ReloadSubscriptions(context.Context) error
-	Outbox() outbox.Outbox
-	manager
+type SubscribeManager interface {
+	InitProgramaticSubscriptions(context.Context) error
+	StartAppSubscriptions() error
+	StopAppSubscriptions()
+	StopAllSubscriptionsForever()
+	ReloadDeclaredAppSubscription(name, pubsubName string) error
+	StartStreamerSubscription(key string) error
+	StopStreamerSubscription(pubsubName, key string)
+	ReloadPubSub(string) error
+	StopPubSub(string)
 }
 
 type BindingManager interface {
@@ -82,14 +81,14 @@ func (p *Processor) Secret() SecretManager {
 	return p.secret
 }
 
-func (p *Processor) PubSub() PubsubManager {
-	return p.pubsub
-}
-
 func (p *Processor) Binding() BindingManager {
 	return p.binding
 }
 
 func (p *Processor) WorkflowBackend() WorkflowBackendManager {
 	return p.workflowBackend
+}
+
+func (p *Processor) Subscriber() SubscribeManager {
+	return p.subscriber
 }

@@ -23,6 +23,7 @@ import (
 	grpc "google.golang.org/grpc"
 	codes "google.golang.org/grpc/codes"
 	status "google.golang.org/grpc/status"
+	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
 
 // This is a compile-time assertion to ensure that this generated file
@@ -31,9 +32,10 @@ import (
 const _ = grpc.SupportPackageIsVersion7
 
 const (
-	ServiceInvocation_CallActor_FullMethodName       = "/dapr.proto.internals.v1.ServiceInvocation/CallActor"
-	ServiceInvocation_CallLocal_FullMethodName       = "/dapr.proto.internals.v1.ServiceInvocation/CallLocal"
-	ServiceInvocation_CallLocalStream_FullMethodName = "/dapr.proto.internals.v1.ServiceInvocation/CallLocalStream"
+	ServiceInvocation_CallActor_FullMethodName         = "/dapr.proto.internals.v1.ServiceInvocation/CallActor"
+	ServiceInvocation_CallLocal_FullMethodName         = "/dapr.proto.internals.v1.ServiceInvocation/CallLocal"
+	ServiceInvocation_CallActorReminder_FullMethodName = "/dapr.proto.internals.v1.ServiceInvocation/CallActorReminder"
+	ServiceInvocation_CallLocalStream_FullMethodName   = "/dapr.proto.internals.v1.ServiceInvocation/CallLocalStream"
 )
 
 // ServiceInvocationClient is the client API for ServiceInvocation service.
@@ -44,6 +46,8 @@ type ServiceInvocationClient interface {
 	CallActor(ctx context.Context, in *InternalInvokeRequest, opts ...grpc.CallOption) (*InternalInvokeResponse, error)
 	// Invokes a method of the specific service.
 	CallLocal(ctx context.Context, in *InternalInvokeRequest, opts ...grpc.CallOption) (*InternalInvokeResponse, error)
+	// Invoke a remote internal actor reminder
+	CallActorReminder(ctx context.Context, in *Reminder, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Invokes a method of the specific service using a stream of data.
 	// Although this uses a bi-directional stream, it behaves as a "simple RPC" in which the caller sends the full request (chunked in multiple messages in the stream), then reads the full response (chunked in the stream).
 	// Each message in the stream contains a `InternalInvokeRequestStream` (for caller) or `InternalInvokeResponseStream` (for callee):
@@ -76,6 +80,15 @@ func (c *serviceInvocationClient) CallActor(ctx context.Context, in *InternalInv
 func (c *serviceInvocationClient) CallLocal(ctx context.Context, in *InternalInvokeRequest, opts ...grpc.CallOption) (*InternalInvokeResponse, error) {
 	out := new(InternalInvokeResponse)
 	err := c.cc.Invoke(ctx, ServiceInvocation_CallLocal_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *serviceInvocationClient) CallActorReminder(ctx context.Context, in *Reminder, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, ServiceInvocation_CallActorReminder_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -121,6 +134,8 @@ type ServiceInvocationServer interface {
 	CallActor(context.Context, *InternalInvokeRequest) (*InternalInvokeResponse, error)
 	// Invokes a method of the specific service.
 	CallLocal(context.Context, *InternalInvokeRequest) (*InternalInvokeResponse, error)
+	// Invoke a remote internal actor reminder
+	CallActorReminder(context.Context, *Reminder) (*emptypb.Empty, error)
 	// Invokes a method of the specific service using a stream of data.
 	// Although this uses a bi-directional stream, it behaves as a "simple RPC" in which the caller sends the full request (chunked in multiple messages in the stream), then reads the full response (chunked in the stream).
 	// Each message in the stream contains a `InternalInvokeRequestStream` (for caller) or `InternalInvokeResponseStream` (for callee):
@@ -142,6 +157,9 @@ func (UnimplementedServiceInvocationServer) CallActor(context.Context, *Internal
 }
 func (UnimplementedServiceInvocationServer) CallLocal(context.Context, *InternalInvokeRequest) (*InternalInvokeResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method CallLocal not implemented")
+}
+func (UnimplementedServiceInvocationServer) CallActorReminder(context.Context, *Reminder) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method CallActorReminder not implemented")
 }
 func (UnimplementedServiceInvocationServer) CallLocalStream(ServiceInvocation_CallLocalStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method CallLocalStream not implemented")
@@ -194,6 +212,24 @@ func _ServiceInvocation_CallLocal_Handler(srv interface{}, ctx context.Context, 
 	return interceptor(ctx, in, info, handler)
 }
 
+func _ServiceInvocation_CallActorReminder_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(Reminder)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(ServiceInvocationServer).CallActorReminder(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: ServiceInvocation_CallActorReminder_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(ServiceInvocationServer).CallActorReminder(ctx, req.(*Reminder))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _ServiceInvocation_CallLocalStream_Handler(srv interface{}, stream grpc.ServerStream) error {
 	return srv.(ServiceInvocationServer).CallLocalStream(&serviceInvocationCallLocalStreamServer{stream})
 }
@@ -234,6 +270,10 @@ var ServiceInvocation_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "CallLocal",
 			Handler:    _ServiceInvocation_CallLocal_Handler,
+		},
+		{
+			MethodName: "CallActorReminder",
+			Handler:    _ServiceInvocation_CallActorReminder_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

@@ -2,20 +2,31 @@ package pubsub
 
 import (
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"strings"
 
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/structpb"
+	"k8s.io/apimachinery/pkg/util/sets"
 
+	"github.com/dapr/components-contrib/contenttype"
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/kit/logger"
 )
 
@@ -27,6 +38,24 @@ const (
 
 	APIVersionV1alpha1 = "dapr.io/v1alpha1"
 	APIVersionV2alpha1 = "dapr.io/v2alpha1"
+
+	MetadataKeyPubSub = "pubsubName"
+)
+
+var (
+	// errUnexpectedEnvelopeData denotes that an unexpected data type was
+	// encountered when processing a cloud event's data property.
+	errUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
+
+	cloudEventDuplicateKeys = sets.NewString(
+		contribpubsub.IDField,
+		contribpubsub.SourceField,
+		contribpubsub.DataContentTypeField,
+		contribpubsub.TypeField,
+		contribpubsub.SpecVersionField,
+		contribpubsub.DataField,
+		contribpubsub.DataBase64Field,
+	)
 )
 
 type (
@@ -54,6 +83,15 @@ type (
 	RuleJSON struct {
 		Match string `json:"match"`
 		Path  string `json:"path"`
+	}
+
+	SubscribedMessage struct {
+		CloudEvent map[string]interface{}
+		Data       []byte
+		Topic      string
+		Metadata   map[string]string
+		Path       string
+		PubSub     string
 	}
 )
 
@@ -270,4 +308,174 @@ func CreateRoutingRule(match, path string) (*Rule, error) {
 		Match: e,
 		Path:  path,
 	}, nil
+}
+
+func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMessage, log logger.Logger, tracingSpec *config.TracingSpec) (*runtimev1pb.TopicEventRequest, trace.Span, error) {
+	cloudEvent := msg.CloudEvent
+
+	envelope := &runtimev1pb.TopicEventRequest{
+		Id:              ExtractCloudEventProperty(cloudEvent, contribpubsub.IDField),
+		Source:          ExtractCloudEventProperty(cloudEvent, contribpubsub.SourceField),
+		DataContentType: ExtractCloudEventProperty(cloudEvent, contribpubsub.DataContentTypeField),
+		Type:            ExtractCloudEventProperty(cloudEvent, contribpubsub.TypeField),
+		SpecVersion:     ExtractCloudEventProperty(cloudEvent, contribpubsub.SpecVersionField),
+		Topic:           msg.Topic,
+		PubsubName:      msg.Metadata[MetadataKeyPubSub],
+		Path:            msg.Path,
+	}
+
+	if data, ok := cloudEvent[contribpubsub.DataBase64Field]; ok && data != nil {
+		if dataAsString, ok := data.(string); ok {
+			decoded, decodeErr := base64.StdEncoding.DecodeString(dataAsString)
+			if decodeErr != nil {
+				log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
+
+				return nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(decodeErr))
+			}
+
+			envelope.Data = decoded
+		} else {
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
+			return nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(errUnexpectedEnvelopeData))
+		}
+	} else if data, ok := cloudEvent[contribpubsub.DataField]; ok && data != nil {
+		envelope.Data = nil
+
+		if contenttype.IsStringContentType(envelope.GetDataContentType()) {
+			switch v := data.(type) {
+			case string:
+				envelope.Data = []byte(v)
+			case []byte:
+				envelope.Data = v
+			default:
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
+				return nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(errUnexpectedEnvelopeData))
+			}
+		} else if contenttype.IsJSONContentType(envelope.GetDataContentType()) || contenttype.IsCloudEventContentType(envelope.GetDataContentType()) {
+			envelope.Data, _ = json.Marshal(data)
+		}
+	}
+
+	var span trace.Span
+	iTraceID := cloudEvent[contribpubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[contribpubsub.TraceIDField]
+	}
+	if iTraceID != nil {
+		if traceID, ok := iTraceID.(string); ok {
+			sc, _ := diag.SpanContextFromW3CString(traceID)
+			spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
+
+			// no ops if trace is off
+			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
+			// span is nil if tracing is disabled (sampling rate is 0)
+			if span != nil {
+				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+			}
+		} else {
+			log.Warnf("ignored non-string traceid value: %v", iTraceID)
+		}
+	}
+
+	extensions, extensionsErr := ExtractCloudEventExtensions(cloudEvent)
+	if extensionsErr != nil {
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
+		return nil, nil, extensionsErr
+	}
+	envelope.Extensions = extensions
+
+	return envelope, span, nil
+}
+
+func ExtractCloudEventProperty(cloudEvent map[string]any, property string) string {
+	if cloudEvent == nil {
+		return ""
+	}
+	iValue, ok := cloudEvent[property]
+	if ok {
+		if value, ok := iValue.(string); ok {
+			return value
+		}
+	}
+
+	return ""
+}
+
+func ExtractCloudEventExtensions(cloudEvent map[string]any) (*structpb.Struct, error) {
+	// Assemble Cloud Event Extensions:
+	// Create copy of the cloud event with duplicated data removed
+
+	extensions := make(map[string]any)
+	for key, value := range cloudEvent {
+		if !cloudEventDuplicateKeys.Has(key) {
+			extensions[key] = value
+		}
+	}
+	extensionsStruct := structpb.Struct{}
+	extensionBytes, jsonMarshalErr := json.Marshal(extensions)
+	if jsonMarshalErr != nil {
+		return &extensionsStruct, fmt.Errorf("error processing internal cloud event data: unable to marshal cloudEvent extensions: %s", jsonMarshalErr)
+	}
+
+	protoUnmarshalErr := protojson.Unmarshal(extensionBytes, &extensionsStruct)
+	if protoUnmarshalErr != nil {
+		return &extensionsStruct, fmt.Errorf("error processing internal cloud event data: unable to unmarshal cloudEvent extensions to proto struct: %s", protoUnmarshalErr)
+	}
+	return &extensionsStruct, nil
+}
+
+func FetchEntry(rawPayload bool, entry *contribpubsub.BulkMessageEntry, cloudEvent map[string]interface{}) (*runtimev1pb.TopicEventBulkRequestEntry, error) {
+	if rawPayload {
+		return &runtimev1pb.TopicEventBulkRequestEntry{
+			EntryId:     entry.EntryId,
+			Event:       &runtimev1pb.TopicEventBulkRequestEntry_Bytes{Bytes: entry.Event}, //nolint:nosnakecase
+			ContentType: entry.ContentType,
+			Metadata:    entry.Metadata,
+		}, nil
+	} else {
+		eventLocal, err := extractCloudEvent(cloudEvent)
+		if err != nil {
+			return nil, err
+		}
+		return &runtimev1pb.TopicEventBulkRequestEntry{
+			EntryId:     entry.EntryId,
+			Event:       &eventLocal,
+			ContentType: entry.ContentType,
+			Metadata:    entry.Metadata,
+		}, nil
+	}
+}
+
+func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
+	envelope := &runtimev1pb.TopicEventCERequest{
+		Id:              ExtractCloudEventProperty(event, contribpubsub.IDField),
+		Source:          ExtractCloudEventProperty(event, contribpubsub.SourceField),
+		DataContentType: ExtractCloudEventProperty(event, contribpubsub.DataContentTypeField),
+		Type:            ExtractCloudEventProperty(event, contribpubsub.TypeField),
+		SpecVersion:     ExtractCloudEventProperty(event, contribpubsub.SpecVersionField),
+	}
+
+	if data, ok := event[contribpubsub.DataField]; ok && data != nil {
+		envelope.Data = nil
+
+		if contenttype.IsStringContentType(envelope.GetDataContentType()) {
+			switch v := data.(type) {
+			case string:
+				envelope.Data = []byte(v)
+			case []byte:
+				envelope.Data = v
+			default:
+				return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, errUnexpectedEnvelopeData //nolint:nosnakecase
+			}
+		} else if contenttype.IsJSONContentType(envelope.GetDataContentType()) || contenttype.IsCloudEventContentType(envelope.GetDataContentType()) {
+			envelope.Data, _ = json.Marshal(data)
+		}
+	}
+	extensions, extensionsErr := ExtractCloudEventExtensions(event)
+	if extensionsErr != nil {
+		return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, extensionsErr
+	}
+	envelope.Extensions = extensions
+	return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{CloudEvent: envelope}, nil //nolint:nosnakecase
 }

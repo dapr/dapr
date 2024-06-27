@@ -19,6 +19,7 @@ import (
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -40,6 +41,7 @@ type OptionsReloaderDisk struct {
 	ComponentStore *compstore.ComponentStore
 	Authorizer     *authorizer.Authorizer
 	Processor      *processor.Processor
+	Healthz        healthz.Healthz
 }
 
 type OptionsReloaderOperator struct {
@@ -50,6 +52,7 @@ type OptionsReloaderOperator struct {
 	ComponentStore *compstore.ComponentStore
 	Authorizer     *authorizer.Authorizer
 	Processor      *processor.Processor
+	Healthz        healthz.Healthz
 }
 
 type Reloader struct {
@@ -60,6 +63,11 @@ type Reloader struct {
 }
 
 func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
+	isEnabled := opts.Config.IsFeatureEnabled(config.HotReload)
+	if !isEnabled {
+		return &Reloader{isEnabled: false}, nil
+	}
+
 	loader, err := disk.New(disk.Options{
 		AppID:          opts.AppID,
 		Dirs:           opts.Dirs,
@@ -70,23 +78,31 @@ func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
 	}
 
 	return &Reloader{
-		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
+		isEnabled: isEnabled,
 		loader:    loader,
 		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
 			Processor:  opts.Processor,
 			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
 		}),
 		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
-			Loader:    loader,
-			CompStore: opts.ComponentStore,
-			Processor: opts.Processor,
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
 		}),
 	}, nil
 }
 
 func NewOperator(opts OptionsReloaderOperator) *Reloader {
+	isEnabled := opts.Config.IsFeatureEnabled(config.HotReload)
+	if !isEnabled {
+		return &Reloader{isEnabled: false}
+	}
+
 	loader := operator.New(operator.Options{
 		PodName:        opts.PodName,
 		Namespace:      opts.Namespace,
@@ -95,18 +111,21 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 	})
 
 	return &Reloader{
-		isEnabled: opts.Config.IsFeatureEnabled(config.HotReload),
+		isEnabled: isEnabled,
 		loader:    loader,
 		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
 			Processor:  opts.Processor,
 			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
 		}),
 		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
-			Loader:    loader,
-			CompStore: opts.ComponentStore,
-			Processor: opts.Processor,
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
 		}),
 	}
 }

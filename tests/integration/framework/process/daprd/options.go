@@ -23,6 +23,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
 )
 
@@ -60,6 +61,7 @@ type options struct {
 	gracefulShutdownSeconds *int
 	blockShutdownDuration   *string
 	controlPlaneTrustDomain *string
+	schedulerAddresses      []string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -228,6 +230,12 @@ func WithPlacementAddresses(addresses ...string) Option {
 	}
 }
 
+func WithSchedulerAddresses(addresses ...string) Option {
+	return func(o *options) {
+		o.schedulerAddresses = append(o.schedulerAddresses, addresses...)
+	}
+}
+
 func WithLogLevel(logLevel string) Option {
 	return func(o *options) {
 		o.logLevel = logLevel
@@ -286,4 +294,18 @@ func WithSocket(t *testing.T, socket *socket.Socket) Option {
 	return WithExecOptions(exec.WithEnvVars(t,
 		"DAPR_COMPONENTS_SOCKETS_FOLDER", socket.Directory(),
 	))
+}
+
+func WithAppAPIToken(t *testing.T, token string) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"APP_API_TOKEN", token,
+	))
+}
+
+func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
+	return func(o *options) {
+		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)))(o)
+		WithSentryAddress(sentry.Address())(o)
+		WithEnableMTLS(true)(o)
+	}
 }

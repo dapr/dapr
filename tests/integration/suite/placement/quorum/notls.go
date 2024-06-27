@@ -65,6 +65,8 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 	var stream v1pb.Placement_ReportDaprStatusClient
 
+	// Try connecting to each placement until one succeeds,
+	// indicating that a leader has been elected
 	j := -1
 	require.Eventually(t, func() bool {
 		j++
@@ -72,6 +74,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			j = 0
 		}
 		host := n.places[j].Address()
+		//nolint:staticcheck
 		conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
 			grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 		)

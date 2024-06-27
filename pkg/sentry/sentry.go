@@ -24,6 +24,7 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/sentry/config"
@@ -41,6 +42,11 @@ import (
 
 var log = logger.NewLogger("dapr.sentry")
 
+type Options struct {
+	Config  config.Config
+	Healthz healthz.Healthz
+}
+
 // CertificateAuthority is the interface for the Sentry Certificate Authority.
 // Starts the Sentry gRPC server and signs workload certificates.
 type CertificateAuthority interface {
@@ -48,41 +54,31 @@ type CertificateAuthority interface {
 }
 
 type sentry struct {
-	conf    config.Config
+	runners *concurrency.RunnerManager
 	running atomic.Bool
 }
 
 // New returns a new Sentry Certificate Authority instance.
-func New(conf config.Config) CertificateAuthority {
-	return &sentry{
-		conf: conf,
-	}
-}
-
-// Start the server in background.
-func (s *sentry) Start(parentCtx context.Context) error {
-	ctx, cancel := context.WithCancel(parentCtx)
-	defer cancel()
-
-	// If the server is already running, return an error
-	if !s.running.CompareAndSwap(false, true) {
-		return errors.New("CertificateAuthority server is already running")
-	}
-
-	ns := security.CurrentNamespace()
-
-	camngr, err := ca.New(ctx, s.conf)
+func New(ctx context.Context, opts Options) (CertificateAuthority, error) {
+	vals, err := buildValidators(opts)
 	if err != nil {
-		return fmt.Errorf("error creating CA: %w", err)
+		return nil, err
+	}
+
+	camngr, err := ca.New(ctx, opts.Config)
+	if err != nil {
+		return nil, fmt.Errorf("error creating CA: %w", err)
 	}
 	log.Info("CA certificate key pair ready")
 
-	provider, err := security.New(ctx, security.Options{
-		ControlPlaneTrustDomain: s.conf.TrustDomain,
+	ns := security.CurrentNamespace()
+	sec, err := security.New(ctx, security.Options{
+		ControlPlaneTrustDomain: opts.Config.TrustDomain,
 		ControlPlaneNamespace:   ns,
 		AppID:                   "dapr-sentry",
 		TrustAnchors:            camngr.TrustAnchors(),
 		MTLSEnabled:             true,
+		Healthz:                 opts.Healthz,
 		// Override the request source to our in memory CA since _we_ are sentry!
 		OverrideCertRequestFn: func(ctx context.Context, csrDER []byte) ([]*x509.Certificate, error) {
 			csr, csrErr := x509.ParseCertificateRequest(csrDER)
@@ -93,7 +89,7 @@ func (s *sentry) Start(parentCtx context.Context) error {
 			certs, csrErr := camngr.SignIdentity(ctx, &ca.SignRequest{
 				PublicKey:          csr.PublicKey.(crypto.PublicKey),
 				SignatureAlgorithm: csr.SignatureAlgorithm,
-				TrustDomain:        s.conf.TrustDomain,
+				TrustDomain:        opts.Config.TrustDomain,
 				Namespace:          ns,
 				AppID:              "dapr-sentry",
 			})
@@ -105,52 +101,54 @@ func (s *sentry) Start(parentCtx context.Context) error {
 		},
 	})
 	if err != nil {
-		return fmt.Errorf("error creating security: %s", err)
-	}
-
-	vals, err := s.getValidators(ctx)
-	if err != nil {
-		return err
+		return nil, fmt.Errorf("error creating security: %s", err)
 	}
 
 	// Start all background processes
 	runners := concurrency.NewRunnerManager(
-		provider.Run,
-		func(ctx context.Context) error {
-			sec, secErr := provider.Handler(ctx)
-			if secErr != nil {
-				return secErr
-			}
-
-			return server.Start(ctx, server.Options{
-				Port:             s.conf.Port,
-				Security:         sec,
-				Validators:       vals,
-				DefaultValidator: s.conf.DefaultValidator,
-				CA:               camngr,
-			})
-		},
+		sec.Run,
+		server.New(server.Options{
+			Port:             opts.Config.Port,
+			Security:         sec,
+			Validators:       vals,
+			DefaultValidator: opts.Config.DefaultValidator,
+			CA:               camngr,
+			Healthz:          opts.Healthz,
+		}).Start,
 	)
 	for name, val := range vals {
 		log.Infof("Using validator '%s'", strings.ToLower(name.String()))
-		runners.Add(val.Start)
+		if err := runners.Add(val.Start); err != nil {
+			return nil, err
+		}
 	}
 
-	err = runners.Run(ctx)
-	if err != nil {
-		log.Fatalf("Error running Sentry: %v", err)
+	return &sentry{
+		runners: runners,
+	}, nil
+}
+
+// Start the server.
+func (s *sentry) Start(ctx context.Context) error {
+	// If the server is already running, return an error
+	if !s.running.CompareAndSwap(false, true) {
+		return errors.New("CertificateAuthority server is already running")
+	}
+
+	if err := s.runners.Run(ctx); err != nil {
+		return fmt.Errorf("error running Sentry: %v", err)
 	}
 
 	return nil
 }
 
-func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, error) {
-	validators := make(map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, len(s.conf.Validators))
+func buildValidators(opts Options) (map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, error) {
+	validators := make(map[sentryv1pb.SignCertificateRequest_TokenValidator]validator.Validator, len(opts.Config.Validators))
 
-	for validatorID, opts := range s.conf.Validators {
+	for validatorID, val := range opts.Config.Validators {
 		switch validatorID {
 		case sentryv1pb.SignCertificateRequest_KUBERNETES:
-			td, err := spiffeid.TrustDomainFromString(s.conf.TrustDomain)
+			td, err := spiffeid.TrustDomainFromString(opts.Config.TrustDomain)
 			if err != nil {
 				return nil, err
 			}
@@ -158,10 +156,11 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 			if err != nil {
 				return nil, err
 			}
-			val, err := validatorKube.New(ctx, validatorKube.Options{
+			val, err := validatorKube.New(validatorKube.Options{
 				RestConfig:     utils.GetConfig(),
 				SentryID:       sentryID,
 				ControlPlaneNS: security.CurrentNamespace(),
+				Healthz:        opts.Healthz,
 			})
 			if err != nil {
 				return nil, err
@@ -174,7 +173,7 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 			validators[validatorID] = validatorInsecure.New()
 
 		case sentryv1pb.SignCertificateRequest_JWKS:
-			td, err := spiffeid.TrustDomainFromString(s.conf.TrustDomain)
+			td, err := spiffeid.TrustDomainFromString(opts.Config.TrustDomain)
 			if err != nil {
 				return nil, err
 			}
@@ -184,12 +183,13 @@ func (s *sentry) getValidators(ctx context.Context) (map[sentryv1pb.SignCertific
 			}
 			obj := validatorJWKS.Options{
 				SentryID: sentryID,
+				Healthz:  opts.Healthz,
 			}
-			err = decodeOptions(&obj, opts)
+			err = decodeOptions(&obj, val)
 			if err != nil {
 				return nil, fmt.Errorf("failed to decode validator options: %w", err)
 			}
-			val, err := validatorJWKS.New(ctx, obj)
+			val, err := validatorJWKS.New(obj)
 			if err != nil {
 				return nil, err
 			}

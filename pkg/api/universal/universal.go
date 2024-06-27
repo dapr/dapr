@@ -23,12 +23,14 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/logger"
 )
 
 type Options struct {
 	AppID                       string
+	Namespace                   string
 	Logger                      logger.Logger
 	Resiliency                  resiliency.Provider
 	Actors                      actors.ActorRuntime
@@ -39,11 +41,13 @@ type Options struct {
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
 	WorkflowEngine              *wfengine.WorkflowEngine
+	SchedulerClients            *clients.Clients
 }
 
 // Universal contains the implementation of gRPC APIs that are also used by the HTTP server.
 type Universal struct {
 	appID                       string
+	namespace                   string
 	logger                      logger.Logger
 	resiliency                  resiliency.Provider
 	actors                      actors.ActorRuntime
@@ -54,6 +58,7 @@ type Universal struct {
 	appConnectionConfig         config.AppConnectionConfig
 	globalConfig                *config.Configuration
 	workflowEngine              *wfengine.WorkflowEngine
+	schedulerClients            *clients.Clients
 
 	extendedMetadataLock sync.RWMutex
 	actorsLock           sync.RWMutex
@@ -64,6 +69,7 @@ type Universal struct {
 func New(opts Options) *Universal {
 	return &Universal{
 		appID:                       opts.AppID,
+		namespace:                   opts.Namespace,
 		logger:                      opts.Logger,
 		resiliency:                  opts.Resiliency,
 		actors:                      opts.Actors,
@@ -75,11 +81,16 @@ func New(opts Options) *Universal {
 		globalConfig:                opts.GlobalConfig,
 		workflowEngine:              opts.WorkflowEngine,
 		actorsReadyCh:               make(chan struct{}),
+		schedulerClients:            opts.SchedulerClients,
 	}
 }
 
 func (a *Universal) AppID() string {
 	return a.appID
+}
+
+func (a *Universal) Namespace() string {
+	return a.namespace
 }
 
 func (a *Universal) Resiliency() resiliency.Provider {

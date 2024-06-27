@@ -25,6 +25,7 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/metadata"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/placement"
 	"github.com/dapr/dapr/pkg/security"
 )
@@ -164,6 +165,7 @@ func testSecurity(t *testing.T) security.Handler {
 		OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
 			return []*x509.Certificate{nil}, nil
 		},
+		Healthz: healthz.New(),
 	})
 	require.NoError(t, err)
 	go secP.Run(context.Background())

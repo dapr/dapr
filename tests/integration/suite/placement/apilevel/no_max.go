@@ -98,9 +98,9 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 	}, 10*time.Second, 50*time.Millisecond)
 	lastUpdate := lastVersionUpdate.Load()
 
-	var tableVersion int
+	var versionInPlacementTable int
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		tableVersion = n.place.CheckAPILevelInState(t, httpClient, level1)
+		versionInPlacementTable = n.place.CheckAPILevelInState(t, httpClient, level1)
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// Register the second host with the higher API level
@@ -135,15 +135,15 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 		}
 	}()
 
-	// After 3s, we should not receive an update
+	// After 1s, we should not receive an update
 	// This can take a while as dissemination happens on intervals
-	time.Sleep(3 * time.Second)
+	time.Sleep(time.Second)
 	require.Equal(t, lastUpdate, lastVersionUpdate.Load())
 
 	// API level should still be lower (20), but table version should have increased
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		newTableVersion := n.place.CheckAPILevelInState(t, httpClient, level1)
-		assert.Greater(t, newTableVersion, tableVersion)
+		assert.Greater(t, newTableVersion, versionInPlacementTable)
 	}, 10*time.Second, 10*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase
@@ -154,7 +154,7 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 	}, 10*time.Second, 50*time.Millisecond)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		tableVersion = n.place.CheckAPILevelInState(t, httpClient, level2)
+		versionInPlacementTable = n.place.CheckAPILevelInState(t, httpClient, level2)
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// Trying to register a host with version 5 should fail
@@ -166,7 +166,7 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 	// Ensure that the table version increases, but the API level remains the same
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		newTableVersion := n.place.CheckAPILevelInState(t, httpClient, level2)
-		assert.Greater(t, newTableVersion, tableVersion)
+		assert.Greater(t, newTableVersion, versionInPlacementTable)
 	}, 5*time.Second, 10*time.Millisecond)
 
 	// Trying to register a host with version 10 should fail

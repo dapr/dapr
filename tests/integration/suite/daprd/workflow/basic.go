@@ -49,7 +49,6 @@ func init() {
 	suite.Register(new(basic))
 }
 
-// metrics tests daprd metrics
 type basic struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
@@ -65,7 +64,6 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	b.place = placement.New(t)
 	b.daprd = daprd.New(t,
-		daprd.WithAppID("myapp"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithPlacementAddresses(b.place.Address()),
@@ -83,10 +81,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	b.httpClient = util.HTTPClient(t)
 
-	conn, err := grpc.DialContext(ctx,
+	conn, err := grpc.DialContext(ctx, //nolint:staticcheck
 		b.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -199,7 +197,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("purge", func(t *testing.T) {
-		delayTime := 4 * time.Second
 		r := task.NewTaskRegistry()
 		r.AddOrchestratorN("Root", func(ctx *task.OrchestrationContext) (any, error) {
 			ctx.CallSubOrchestrator("L1", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_L1")).Await(nil)
@@ -210,7 +207,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return nil, nil
 		})
 		r.AddOrchestratorN("L2", func(ctx *task.OrchestrationContext) (any, error) {
-			ctx.CreateTimer(delayTime).Await(nil)
+			ctx.CreateTimer(2 * time.Second).Await(nil)
 			return nil, nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)

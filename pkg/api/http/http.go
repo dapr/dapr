@@ -45,8 +45,10 @@ import (
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/outbox"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -59,8 +61,6 @@ import (
 type API interface {
 	APIEndpoints() []endpoints.Endpoint
 	PublicEndpoints() []endpoints.Endpoint
-	MarkStatusAsReady()
-	MarkStatusAsOutboundReady()
 }
 
 type api struct {
@@ -70,11 +70,13 @@ type api struct {
 	directMessaging       invokev1.DirectMessaging
 	channels              *channels.Channels
 	pubsubAdapter         runtimePubsub.Adapter
+	outbox                outbox.Outbox
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-	readyStatus           bool
-	outboundReadyStatus   bool
+	metricSpec            *config.MetricSpec
 	tracingSpec           config.TracingSpec
 	maxRequestBodySize    int64 // In bytes
+	healthz               healthz.Healthz
+	outboundHealthz       healthz.Healthz
 }
 
 const (
@@ -111,10 +113,14 @@ type APIOpts struct {
 	Universal             *universal.Universal
 	Channels              *channels.Channels
 	DirectMessaging       invokev1.DirectMessaging
-	PubsubAdapter         runtimePubsub.Adapter
+	PubSubAdapter         runtimePubsub.Adapter
+	Outbox                outbox.Outbox
 	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec           config.TracingSpec
+	MetricSpec            *config.MetricSpec
 	MaxRequestBodySize    int64 // In bytes
+	Healthz               healthz.Healthz
+	OutboundHealthz       healthz.Healthz
 }
 
 // NewAPI returns a new API.
@@ -123,10 +129,14 @@ func NewAPI(opts APIOpts) API {
 		universal:             opts.Universal,
 		channels:              opts.Channels,
 		directMessaging:       opts.DirectMessaging,
-		pubsubAdapter:         opts.PubsubAdapter,
+		pubsubAdapter:         opts.PubSubAdapter,
+		outbox:                opts.Outbox,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
+		metricSpec:            opts.MetricSpec,
 		maxRequestBodySize:    opts.MaxRequestBodySize,
+		healthz:               opts.Healthz,
+		outboundHealthz:       opts.OutboundHealthz,
 	}
 
 	metadataEndpoints := api.constructMetadataEndpoints()
@@ -146,6 +156,7 @@ func NewAPI(opts APIOpts) API {
 	api.endpoints = append(api.endpoints, healthEndpoints...)
 	api.endpoints = append(api.endpoints, api.constructDistributedLockEndpoints()...)
 	api.endpoints = append(api.endpoints, api.constructWorkflowEndpoints()...)
+	api.endpoints = append(api.endpoints, api.constructJobsEndpoints()...)
 
 	api.publicEndpoints = append(api.publicEndpoints, metadataEndpoints...)
 	api.publicEndpoints = append(api.publicEndpoints, healthEndpoints...)
@@ -161,16 +172,6 @@ func (a *api) APIEndpoints() []endpoints.Endpoint {
 // PublicEndpoints returns the list of registered endpoints.
 func (a *api) PublicEndpoints() []endpoints.Endpoint {
 	return a.publicEndpoints
-}
-
-// MarkStatusAsReady marks the ready status of dapr.
-func (a *api) MarkStatusAsReady() {
-	a.readyStatus = true
-}
-
-// MarkStatusAsOutboundReady marks the ready status of dapr for outbound traffic.
-func (a *api) MarkStatusAsOutboundReady() {
-	a.outboundReadyStatus = true
 }
 
 var endpointGroupStateV1 = &endpoints.EndpointGroup{
@@ -258,7 +259,6 @@ func (a *api) constructStateEndpoints() []endpoints.Endpoint {
 func appendPubSubSpanAttributes(r *nethttp.Request, m map[string]string) {
 	m[diagConsts.MessagingSystemSpanAttributeKey] = "pubsub"
 	m[diagConsts.MessagingDestinationSpanAttributeKey] = chi.URLParam(r, "topic")
-	m[diagConsts.MessagingDestinationKindSpanAttributeKey] = diagConsts.MessagingDestinationTopicKind
 }
 
 func (a *api) constructPubSubEndpoints() []endpoints.Endpoint {
@@ -1574,11 +1574,11 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		}
 	}
 
-	outboxEnabled := a.pubsubAdapter.Outbox().Enabled(storeName)
+	outboxEnabled := a.outbox.Enabled(storeName)
 	if outboxEnabled {
 		span := diagUtils.SpanFromContext(reqCtx)
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
-		ops, err := a.pubsubAdapter.Outbox().PublishInternal(reqCtx, storeName, operations, a.universal.AppID(), corID, traceState)
+		ops, err := a.outbox.PublishInternal(reqCtx, storeName, operations, a.universal.AppID(), corID, traceState)
 		if err != nil {
 			nerr := apierrors.PubSubOutbox(a.universal.AppID(), err)
 			universalFastHTTPErrorResponder(reqCtx, nerr)

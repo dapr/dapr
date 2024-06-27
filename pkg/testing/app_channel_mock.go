@@ -28,6 +28,10 @@ type FailingAppChannel struct {
 	KeyFunc func(req *invokev1.InvokeMethodRequest) string
 }
 
+func (f *FailingAppChannel) TriggerJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	return nil, nil
+}
+
 func (f *FailingAppChannel) GetAppConfig(_ context.Context, appID string) (*config.ApplicationConfig, error) {
 	return nil, nil
 }

@@ -22,8 +22,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/acl"
+	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -297,6 +299,19 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, messages.ErrActorInvoke.WithFormat(err)
 	}
 	return res, nil
+}
+
+// CallActorReminder invokes an internal virtual actor.
+func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
+	return nil, a.Actors().ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
+		Name:      in.GetName(),
+		ActorType: in.GetActorType(),
+		ActorID:   in.GetActorId(),
+		Data:      in.GetData(),
+		DueTime:   in.GetDueTime(),
+		Period:    in.GetPeriod(),
+		TTL:       in.GetExpirationTime().String(),
+	})
 }
 
 // Used by CallLocal and CallLocalStream to check the request against the access control list

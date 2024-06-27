@@ -185,7 +185,7 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil, false))
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(test.appID))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
@@ -271,7 +271,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false))
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			require.NoError(t, err)
@@ -407,7 +407,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 					})
 				}
 				// let the circuit breaker to go to half open state (5x cb timeout) and then return success to close it
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(1000 * time.Millisecond)
 				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 				policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
@@ -439,7 +439,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false))
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyActivationViewName)
 			require.NoError(t, err)
@@ -496,7 +496,7 @@ func createDefaultTestResiliency(resiliencyName string, resiliencyNamespace stri
 func TestResiliencyLoadedMonitoring(t *testing.T) {
 	t.Run(resiliencyLoadedViewName, func(t *testing.T) {
 		cleanupRegisteredViews()
-		require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil, false))
+		require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)

@@ -1,6 +1,6 @@
 module build-tools
 
-go 1.22
+go 1.22.3
 
 require (
 	github.com/google/go-containerregistry v0.11.1-0.20220802162123-c1f9836a4fa9
@@ -15,8 +15,8 @@ require (
 	github.com/containerd/stargz-snapshotter/estargz v0.12.0 // indirect
 	github.com/davecgh/go-spew v1.1.1 // indirect
 	github.com/docker/cli v20.10.17+incompatible // indirect
-	github.com/docker/distribution v2.8.1+incompatible // indirect
-	github.com/docker/docker v20.10.17+incompatible // indirect
+	github.com/docker/distribution v2.8.2-beta.1+incompatible // indirect
+	github.com/docker/docker v24.0.9+incompatible // indirect
 	github.com/docker/docker-credential-helpers v0.6.4 // indirect
 	github.com/inconshreveable/mousetrap v1.1.0 // indirect
 	github.com/klauspost/compress v1.15.8 // indirect

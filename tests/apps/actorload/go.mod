@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/actorload
 
-go 1.22
+go 1.22.3
 
 require (
 	fortio.org/fortio v1.6.8
@@ -25,6 +25,6 @@ require (
 	github.com/prometheus/procfs v0.7.3 // indirect
 	go.opentelemetry.io/otel/sdk v1.7.0 // indirect
 	go.opentelemetry.io/otel/trace v1.7.0 // indirect
-	golang.org/x/sys v0.10.0 // indirect
-	google.golang.org/protobuf v1.26.0 // indirect
+	golang.org/x/sys v0.15.0 // indirect
+	google.golang.org/protobuf v1.33.0 // indirect
 )
