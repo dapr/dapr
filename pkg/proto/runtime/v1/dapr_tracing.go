@@ -29,14 +29,12 @@ func (x *PublishEventRequest) AppendSpanAttributes(rpcMethod string, m map[strin
 	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
 	m[diagConsts.MessagingSystemSpanAttributeKey] = diagConsts.PubsubBuildingBlockType
 	m[diagConsts.MessagingDestinationSpanAttributeKey] = x.GetTopic()
-	m[diagConsts.MessagingDestinationKindSpanAttributeKey] = diagConsts.MessagingDestinationTopicKind
 }
 
 func (x *BulkPublishRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
 	m[diagConsts.MessagingSystemSpanAttributeKey] = diagConsts.PubsubBuildingBlockType
 	m[diagConsts.MessagingDestinationSpanAttributeKey] = x.GetTopic()
-	m[diagConsts.MessagingDestinationKindSpanAttributeKey] = diagConsts.MessagingDestinationTopicKind
 }
 
 func (x *InvokeBindingRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
