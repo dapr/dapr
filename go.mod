@@ -466,6 +466,9 @@ replace (
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 )
 
+// pinning needed to keep a compatible version with contrib
+replace github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos => github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.6
+
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24

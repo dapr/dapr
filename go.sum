@@ -73,8 +73,8 @@ github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.5.2 h1:FDif4R1+UUR+00q6wquyX
 github.com/Azure/azure-sdk-for-go/sdk/azidentity v1.5.2/go.mod h1:aiYBYui4BJ/BJCAIKs92XiPyQfTaBWqvHujDwKb6CBU=
 github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v1.1.0 h1:AdaGDU3FgoUC2tsd3vsd9JblRrpFLUsS38yh1eLYfwM=
 github.com/Azure/azure-sdk-for-go/sdk/data/azappconfig v1.1.0/go.mod h1:6tpINME7dnF7bLlb8Ubj6FtM9CFZrCn7aT02pcYrklM=
-github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v1.0.1 h1:qHihI/zqrModLU8vFbOzOHjw/HeYX/dNd8kE86zvOtU=
-github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v1.0.1/go.mod h1:7LBWaO4KRASAo9VpfhpxQKkdY6PBwkv9UDKzL9Sajuw=
+github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.6 h1:oBqQLSI1pZwGOdXJAoJJSzmff9tlfD4KroVfjQQmd0g=
+github.com/Azure/azure-sdk-for-go/sdk/data/azcosmos v0.3.6/go.mod h1:Beh5cHIXJ0oWEDWk9lNFtuklCojLLQ5hl+LqSNTTs0I=
 github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.1.0 h1:ONYihl/vbwtVAmEmqoVDCGyhad2CIMN2kg3BO8Y5cFk=
 github.com/Azure/azure-sdk-for-go/sdk/data/aztables v1.1.0/go.mod h1:PMB5kQ1apg/irrvpPryVdchapVIYP+VV9iHJQ2CHwG8=
 github.com/Azure/azure-sdk-for-go/sdk/internal v1.7.0 h1:rTfKOCZGy5ViVrlA74ZPE99a+SgoEE2K/yg3RyW9dFA=
