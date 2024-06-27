@@ -110,6 +110,7 @@ func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[strin
 	t.Helper()
 
 	if len(expLines) == 0 {
+		go io.Copy(io.Discard, reader)
 		l.done.Add(1)
 		return expLines
 	}
