@@ -32,6 +32,7 @@ func BuildAll(t *testing.T) {
 	t.Helper()
 
 	binaryNames := []string{"daprd", "placement", "sentry", "operator", "injector", "scheduler"}
+	previousBinaryNames := []string{"daprd", "placement", "sentry", "operator", "injector"}
 
 	t.Logf("Building binaries: %v", binaryNames)
 
@@ -42,6 +43,8 @@ func BuildAll(t *testing.T) {
 			defer wg.Done()
 			BuildLocal(t, name)
 		}(name)
+	}
+	for _, name := range previousBinaryNames {
 		go func(name string) {
 			defer wg.Done()
 			BuildPrevious(t, name)
