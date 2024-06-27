@@ -17,8 +17,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
+	"github.com/golang/protobuf/proto"
 	grpcretry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
+	"google.golang.org/grpc/status"
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/internal/loader"
@@ -46,6 +49,13 @@ func (s *subscriptions) Load(ctx context.Context) ([]subapi.Subscription, error)
 		Namespace: s.namespace,
 		PodName:   s.podName,
 	}, grpcretry.WithMax(operatorMaxRetries), grpcretry.WithPerRetryTimeout(operatorCallTimeout))
+
+	// Ignore proto marshal nil errors from older gRPC servers.
+	status, ok := status.FromError(err)
+	if ok && strings.HasSuffix(status.Message(), proto.ErrNil.Error()) {
+		return nil, nil
+	}
+
 	if err != nil {
 		return nil, err
 	}

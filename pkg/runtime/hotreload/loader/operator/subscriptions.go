@@ -17,6 +17,10 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
+
+	"github.com/golang/protobuf/proto"
+	"google.golang.org/grpc/status"
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -36,6 +40,13 @@ func (s *subscriptions) list(ctx context.Context, opclient operatorpb.OperatorCl
 		Namespace: ns,
 		PodName:   podName,
 	})
+
+	// Ignore proto marshal nil errors from older gRPC servers.
+	status, ok := status.FromError(err)
+	if ok && strings.HasSuffix(status.Message(), proto.ErrNil.Error()) {
+		return nil, nil
+	}
+
 	if err != nil {
 		return nil, err
 	}
