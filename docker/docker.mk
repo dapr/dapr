@@ -365,9 +365,9 @@ ifeq ($(WINDOWS_VERSION),)
 endif
 
 docker-windows-base-build: check-windows-version
-	$(DOCKER) build --output type=docker --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
-	$(DOCKER) build --output type=docker --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-php-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-php-base:$(WINDOWS_VERSION)
-	$(DOCKER) build --output type=docker --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-python-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-python-base:$(WINDOWS_VERSION)
+	$(DOCKER) build type=docker --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
+	$(DOCKER) build type=docker --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-php-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-php-base:$(WINDOWS_VERSION)
+	$(DOCKER) build type=docker --build-arg WINDOWS_VERSION=$(WINDOWS_VERSION) -f $(DOCKERFILE_DIR)/$(DOCKERFILE)-python-base $(DOCKERFILE_DIR) -t $(DAPR_REGISTRY)/windows-python-base:$(WINDOWS_VERSION)
 
 docker-windows-base-push: check-windows-version
 	$(DOCKER) push $(DAPR_REGISTRY)/windows-base:$(WINDOWS_VERSION)
