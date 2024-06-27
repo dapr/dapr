@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -38,6 +39,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	rtmock "github.com/dapr/dapr/pkg/runtime/mock"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/security/fake"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -62,6 +64,7 @@ func newTestProcWithID(id string) (*Processor, *registry.Registry) {
 		GRPC:           nil,
 		Channels:       new(channels.Channels),
 		GlobalConfig:   new(config.Configuration),
+		Security:       fake.New(),
 	}), reg
 }
 
@@ -452,4 +455,10 @@ func TestMetadataClientID(t *testing.T) {
 			t.Error("Timed out waiting for clientID for Standalone Mode test")
 		}
 	})
+}
+
+func TestProcessNoWorkflow(t *testing.T) {
+	proc, _ := newTestProc()
+	_, ok := proc.managers[components.CategoryWorkflow]
+	require.False(t, ok, "workflow cannot be registered as user facing component")
 }

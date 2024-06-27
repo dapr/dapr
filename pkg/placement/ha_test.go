@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/security/fake"
 	daprtesting "github.com/dapr/dapr/pkg/testing"
@@ -35,19 +36,22 @@ func TestPlacementHA(t *testing.T) {
 	// Note that ports below are unused (i.e. no service is started on those ports), they are just used as identifiers with the IP address
 	testMembers := []*raft.DaprHostMember{
 		{
-			Name:     "127.0.0.1:3031",
-			AppID:    "testmember1",
-			Entities: []string{"red"},
+			Name:      "127.0.0.1:3031",
+			Namespace: "ns1",
+			AppID:     "testmember1",
+			Entities:  []string{"red"},
 		},
 		{
-			Name:     "127.0.0.1:3032",
-			AppID:    "testmember2",
-			Entities: []string{"blue"},
+			Name:      "127.0.0.1:3032",
+			Namespace: "ns1",
+			AppID:     "testmember2",
+			Entities:  []string{"blue"},
 		},
 		{
-			Name:     "127.0.0.1:3033",
-			AppID:    "testmember3",
-			Entities: []string{"red", "blue"},
+			Name:      "127.0.0.1:3033",
+			Namespace: "ns2",
+			AppID:     "testmember3",
+			Entities:  []string{"red", "blue"},
 		},
 	}
 
@@ -212,6 +216,7 @@ func TestPlacementHA(t *testing.T) {
 	t.Run("state is preserved", func(t *testing.T) {
 		for _, srv := range raftServers {
 			if srv != nil {
+				retrieveValidState(t, srv, testMembers[0])
 				retrieveValidState(t, srv, testMembers[1])
 			}
 		}
@@ -289,14 +294,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 		Peers:        peers,
 		LogStorePath: "",
 		Clock:        clock,
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	stopped := make(chan struct{})
-	go func() {
-		defer close(stopped)
-		require.NoError(t, srv.StartRaft(ctx, fake.New(), &hcraft.Config{
+		Config: &hcraft.Config{
 			ProtocolVersion:    hcraft.ProtocolVersionMax,
 			HeartbeatTimeout:   2 * time.Second,
 			ElectionTimeout:    2 * time.Second,
@@ -308,7 +306,17 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 			SnapshotThreshold:  8192,
 			LeaderLeaseTimeout: time.Second,
 			BatchApplyCh:       true,
-		}))
+		},
+		Security: fake.New(),
+		Healthz:  healthz.New(),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		require.NoError(t, srv.StartRaft(ctx))
 	}()
 
 	ready := make(chan struct{})
@@ -368,19 +376,28 @@ func findLeader(t *testing.T, raftServers []*raft.Server) int {
 		}
 
 		return true
-	}, time.Second*10, time.Second, "no leader elected")
+	}, time.Second*30, time.Second, "no leader elected")
 	return n
 }
 
 func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMember) {
+	t.Helper()
+
 	var actual *raft.DaprHostMember
 	assert.Eventuallyf(t, func() bool {
 		state := srv.FSM().State()
 		assert.NotNil(t, state)
-		var found bool
-		actual, found = state.Members()[expect.Name]
-		return found && expect.Name == actual.Name &&
-			expect.AppID == actual.AppID
+		var ok bool
+		state.ForEachHostInNamespace(expect.Namespace, func(member *raft.DaprHostMember) bool {
+			if member.Name == expect.Name {
+				actual = member
+				ok = true
+			}
+			return true
+		})
+
+		return ok && expect.Name == actual.Name &&
+			expect.AppID == actual.AppID && expect.Namespace == actual.Namespace
 	}, time.Second*5, time.Millisecond*300, "%v != %v", expect, actual)
 	require.NotNil(t, actual)
 	assert.EqualValues(t, expect.Entities, actual.Entities)

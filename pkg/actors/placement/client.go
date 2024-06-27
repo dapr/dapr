@@ -18,7 +18,9 @@ import (
 	"sync"
 
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/metadata"
 
+	"github.com/dapr/dapr/pkg/placement"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
@@ -54,7 +56,7 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 		return err
 	}
 
-	conn, err := grpc.DialContext(ctx, serverAddr, opts...)
+	conn, err := grpc.DialContext(ctx, serverAddr, opts...) //nolint:staticcheck
 	if err != nil {
 		if conn != nil {
 			conn.Close()
@@ -63,6 +65,7 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 	}
 
 	client := v1pb.NewPlacementClient(conn)
+	ctx = metadata.AppendToOutgoingContext(ctx, placement.GRPCContextKeyAcceptVNodes, "false")
 	stream, err := client.ReportDaprStatus(ctx)
 	if err != nil {
 		if conn != nil {
@@ -104,7 +107,7 @@ func (c *placementClient) disconnect() {
 	c.disconnectFn(noop)
 }
 
-// disonnectFn disconnects from the current server providing a way to run a function inside the lock in case of new disconnection occurs.
+// disconnectFn disconnects from the current server providing a way to run a function inside the lock in case of new disconnection occurs.
 // the function will not be executed in case of the stream is already disconnected.
 func (c *placementClient) disconnectFn(insideLockFn func()) {
 	c.streamConnectedCond.L.Lock()
@@ -150,7 +153,7 @@ func (c *placementClient) recv() (*v1pb.PlacementOrder, error) {
 	return stream.Recv() // cannot recv in parallel
 }
 
-// sned is a convenient way of invoking send providing thread-safe guarantees with `CloseSend` operations.
+// send is a convenient way of invoking send providing thread-safe guarantees with `CloseSend` operations.
 func (c *placementClient) send(host *v1pb.Host) error {
 	c.streamConnectedCond.L.Lock()
 	stream := c.clientStream

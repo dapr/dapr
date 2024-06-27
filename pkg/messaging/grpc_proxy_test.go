@@ -29,10 +29,11 @@ import (
 	"github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 func connectionFn(ctx context.Context, address, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(bool), error) {
-	conn, err := grpc.Dial(id,
+	conn, err := grpc.Dial(id, //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			// Don't actually connect to anything
@@ -187,14 +188,19 @@ func TestIntercept(t *testing.T) {
 			}, nil
 		})
 
+		t.Setenv(securityConsts.AppAPITokenEnvVar, "token1")
+
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
 		proxy := p.(*proxy)
-		_, conn, _, teardown, err := proxy.intercept(ctx, "/test")
+		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
 
 		require.NoError(t, err)
 		assert.NotNil(t, conn)
 		assert.Equal(t, "a", conn.Target())
+
+		md, _ := metadata.FromOutgoingContext(ctx)
+		assert.Equal(t, "token1", md[securityConsts.APITokenHeader][0])
 	})
 
 	t.Run("proxy to a remote app", func(t *testing.T) {
@@ -215,6 +221,8 @@ func TestIntercept(t *testing.T) {
 			}, nil
 		})
 
+		t.Setenv(securityConsts.AppAPITokenEnvVar, "token1")
+
 		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"b"}})
 		proxy := p.(*proxy)
 		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
@@ -228,6 +236,7 @@ func TestIntercept(t *testing.T) {
 		assert.Equal(t, "b", md["a"][0])
 		assert.Equal(t, "a", md[invokev1.CallerIDHeader][0])
 		assert.Equal(t, "b", md[invokev1.CalleeIDHeader][0])
+		assert.NotContains(t, md, securityConsts.APITokenHeader)
 	})
 
 	t.Run("access policies applied", func(t *testing.T) {

@@ -79,7 +79,7 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
-		assert.Len(t, resp.GetRegisteredComponents(), 1)
+		assert.Empty(t, resp.GetRegisteredComponents())
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
 	})
@@ -105,8 +105,8 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 2)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, resp.GetRegisteredComponents(), 1)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -134,8 +134,8 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 3)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")
@@ -160,6 +160,7 @@ spec:
     - name: path
       value: '%[1]s'
 ---
+apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: crypto2
@@ -173,8 +174,8 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 4)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, resp.GetRegisteredComponents(), 3)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")
@@ -191,6 +192,7 @@ spec:
   type: state.in-memory
   version: v1
 ---
+apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: crypto3
@@ -206,15 +208,14 @@ spec:
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "crypto1", Type: "crypto.dapr.localstorage", Version: "v1"},
 				{Name: "crypto3", Type: "crypto.dapr.localstorage", Version: "v1"},
 				{
 					Name: "crypto2", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecrypt(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -226,8 +227,8 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 3)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
+		}, time.Second*5, time.Millisecond*10)
 		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "2.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -242,13 +243,12 @@ spec:
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "crypto1", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			}, resp.GetRegisteredComponents())
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
 		c.encryptDecryptFail(t, ctx, client, "crypto2")
@@ -257,6 +257,7 @@ spec:
 
 	t.Run("recreating crypto component should make it available again", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(c.resDir, "1.yaml"), []byte(fmt.Sprintf(`
+apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
   name: crypto2
@@ -271,8 +272,8 @@ spec:
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 			require.NoError(t, err)
-			assert.Len(c, resp.GetRegisteredComponents(), 3)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, resp.GetRegisteredComponents(), 2)
+		}, time.Second*5, time.Millisecond*10)
 
 		c.encryptDecryptFail(t, ctx, client, "crypto1")
 		c.encryptDecrypt(t, ctx, client, "crypto2")

@@ -21,8 +21,10 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	admissionv1 "k8s.io/api/admission/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,13 +33,13 @@ import (
 	"k8s.io/client-go/kubernetes"
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
 	"github.com/dapr/kit/logger"
 )
 
 const (
-	port                                      = 4000
 	getKubernetesServiceAccountTimeoutSeconds = 10
 	systemGroup                               = "system:masters"
 	serviceAccountUserInfoPrefix              = "system:serviceaccount:"
@@ -56,21 +58,22 @@ var AllowedServiceAccountInfos = []string{
 }
 
 type (
-	signDaprdCertificateFn func(ctx context.Context, namespace string) (cert []byte, key []byte, err error)
-	currentTrustAnchorsFn  func() (ca []byte, err error)
+	currentTrustAnchorsFn func(context.Context) (ca []byte, err error)
 )
 
 // Injector is the interface for the Dapr runtime sidecar injection component.
 type Injector interface {
-	Run(context.Context, *tls.Config, signDaprdCertificateFn, currentTrustAnchorsFn) error
-	Ready(context.Context) error
+	Run(context.Context, *tls.Config, spiffeid.ID, currentTrustAnchorsFn) error
 }
 
 type Options struct {
-	AuthUIDs   []string
-	Config     Config
-	DaprClient scheme.Interface
-	KubeClient kubernetes.Interface
+	AuthUIDs      []string
+	Config        Config
+	DaprClient    scheme.Interface
+	KubeClient    kubernetes.Interface
+	Port          int
+	ListenAddress string
+	Healthz       healthz.Healthz
 
 	ControlPlaneNamespace   string
 	ControlPlaneTrustDomain string
@@ -84,13 +87,15 @@ type injector struct {
 	daprClient   scheme.Interface
 	authUIDs     []string
 
+	port                    int
 	controlPlaneNamespace   string
 	controlPlaneTrustDomain string
 	currentTrustAnchors     currentTrustAnchorsFn
-	signDaprdCertificate    signDaprdCertificateFn
+	sentrySPIFFEID          spiffeid.ID
 
+	htarget              healthz.Target
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
-	ready                chan struct{}
+	running              atomic.Bool
 }
 
 // errorToAdmissionResponse is a helper function to create an AdmissionResponse
@@ -134,11 +139,12 @@ func NewInjector(opts Options) (Injector, error) {
 
 	i := &injector{
 		config: opts.Config,
+		port:   opts.Port,
 		deserializer: serializer.NewCodecFactory(
 			runtime.NewScheme(),
 		).UniversalDeserializer(),
 		server: &http.Server{
-			Addr:              fmt.Sprintf(":%d", port),
+			Addr:              fmt.Sprintf("%s:%d", opts.ListenAddress, opts.Port),
 			Handler:           mux,
 			ReadHeaderTimeout: 10 * time.Second,
 		},
@@ -147,7 +153,7 @@ func NewInjector(opts Options) (Injector, error) {
 		authUIDs:                opts.AuthUIDs,
 		controlPlaneNamespace:   opts.ControlPlaneNamespace,
 		controlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
-		ready:                   make(chan struct{}),
+		htarget:                 opts.Healthz.AddTarget(),
 	}
 
 	matcher, err := createNamespaceNameMatcher(opts.Config.AllowedServiceAccountsPrefixNames)
@@ -213,23 +219,24 @@ func getServiceAccount(ctx context.Context, kubeClient kubernetes.Interface, all
 	return allowedUids, nil
 }
 
-func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, signDaprdFn signDaprdCertificateFn, currentTrustAnchors currentTrustAnchorsFn) error {
-	select {
-	case <-i.ready:
+func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spiffeid.ID, currentTrustAnchors currentTrustAnchorsFn) error {
+	if !i.running.CompareAndSwap(false, true) {
 		return errors.New("injector already running")
-	default:
-		// Nop
 	}
 
-	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", i.server.Addr)
-
 	i.currentTrustAnchors = currentTrustAnchors
-	i.signDaprdCertificate = signDaprdFn
-	i.server.TLSConfig = tlsConfig
+	i.sentrySPIFFEID = sentryID
+
+	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", i.port), tlsConfig)
+	if err != nil {
+		return fmt.Errorf("error while starting injector: %w", err)
+	}
+
+	log.Infof("Sidecar injector is listening on %s, patching Dapr-enabled pods", ln.Addr())
 
 	errCh := make(chan error, 1)
 	go func() {
-		err := i.server.ListenAndServeTLS("", "")
+		err := i.server.Serve(ln)
 		if !errors.Is(err, http.ErrServerClosed) {
 			errCh <- fmt.Errorf("sidecar injector error: %w", err)
 			return
@@ -237,7 +244,7 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, signDaprdFn s
 		errCh <- nil
 	}()
 
-	close(i.ready)
+	i.htarget.Ready()
 
 	select {
 	case <-ctx.Done():
@@ -250,14 +257,5 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, signDaprdFn s
 		return <-errCh
 	case err := <-errCh:
 		return err
-	}
-}
-
-func (i *injector) Ready(ctx context.Context) error {
-	select {
-	case <-i.ready:
-		return nil
-	case <-ctx.Done():
-		return errors.New("timed out waiting for injector to become ready")
 	}
 }

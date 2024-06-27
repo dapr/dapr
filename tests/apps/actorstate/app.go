@@ -71,7 +71,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 func actorStateHandlerGRPC(w http.ResponseWriter, r *http.Request) {
 	daprAddress := fmt.Sprintf("localhost:%d", daprGRPCPort)
-	conn, err := grpc.DialContext(r.Context(), daprAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.DialContext(r.Context(), daprAddress, grpc.WithTransportCredentials(insecure.NewCredentials())) //nolint:staticcheck
 	if err != nil {
 		log.Printf("gRPC dapr connection failed %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
@@ -189,13 +189,11 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(struct {
 		Entities                []string `json:"entities,omitempty"`
 		ActorIdleTimeout        string   `json:"actorIdleTimeout,omitempty"`
-		ActorScanInterval       string   `json:"actorScanInterval,omitempty"`
 		DrainOngoingCallTimeout string   `json:"drainOngoingCallTimeout,omitempty"`
 		DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 	}{
 		Entities:                []string{"httpMyActorType", "grpcMyActorType"},
 		ActorIdleTimeout:        "30s",
-		ActorScanInterval:       "10s",
 		DrainOngoingCallTimeout: "20s",
 		DrainRebalancedActors:   true,
 	})

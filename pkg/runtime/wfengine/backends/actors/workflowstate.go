@@ -16,6 +16,7 @@ limitations under the License.
 package actors
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -180,6 +181,78 @@ func (s *workflowState) String() string {
 		s.inboxAddedCount, s.inboxRemovedCount,
 		s.historyAddedCount, s.historyRemovedCount,
 		s.config.String())
+}
+
+// EncodeWorkflowState encodes the workflow state into a byte array.
+// It only encodes the inbox, history, and custom status.
+func (s *workflowState) EncodeWorkflowState() ([]byte, error) {
+	// Encode history events
+	encodedHistory := make([][]byte, len(s.History))
+	for i, event := range s.History {
+		encodedEvent, err := backend.MarshalHistoryEvent(event)
+		if err != nil {
+			return nil, err
+		}
+		encodedHistory[i] = encodedEvent
+	}
+	encodedInbox := make([][]byte, len(s.Inbox))
+	for i, event := range s.Inbox {
+		encodedEvent, err := backend.MarshalHistoryEvent(event)
+		if err != nil {
+			return nil, err
+		}
+		encodedInbox[i] = encodedEvent
+	}
+
+	// Encode workflowState
+	encodedState, err := actors.EncodeInternalActorData(&struct {
+		Inbox        [][]byte
+		History      [][]byte
+		CustomStatus string
+	}{
+		Inbox:        encodedInbox,
+		History:      encodedHistory,
+		CustomStatus: s.CustomStatus,
+	})
+	if err != nil {
+		return nil, err
+	}
+	return encodedState, nil
+}
+
+// DecodeWorkflowState decodes the workflow state from a byte array encoded using `EncodeWorkflowState`.
+// It only decodes the inbox, history, and custom status.
+func (s *workflowState) DecodeWorkflowState(encodedState []byte) error {
+	// Decode workflowState
+	var decodedState struct {
+		Inbox        [][]byte
+		History      [][]byte
+		CustomStatus string
+	}
+	err := actors.DecodeInternalActorData(bytes.NewReader(encodedState), &decodedState)
+	if err != nil {
+		return err
+	}
+
+	// Decode history events
+	s.History = make([]*backend.HistoryEvent, len(decodedState.History))
+	for i, encodedEvent := range decodedState.History {
+		event, err := backend.UnmarshalHistoryEvent(encodedEvent)
+		if err != nil {
+			return err
+		}
+		s.History[i] = event
+	}
+	s.Inbox = make([]*backend.HistoryEvent, len(decodedState.Inbox))
+	for i, encodedEvent := range decodedState.Inbox {
+		event, err := backend.UnmarshalHistoryEvent(encodedEvent)
+		if err != nil {
+			return err
+		}
+		s.Inbox[i] = event
+	}
+	s.CustomStatus = decodedState.CustomStatus
+	return nil
 }
 
 func addStateOperations(req *actors.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent, addedCount int, removedCount int) error {

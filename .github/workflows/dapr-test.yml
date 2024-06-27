@@ -55,12 +55,17 @@ env:
   AZURE_ARM_REGIONS: "eastus"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
+  # Name of the Azure Key Vault resource used in tests
+  # The credentials defined in AZURE_CREDENTIALS must have permissions to perform operations in this vault
+  AZURE_KEY_VAULT_NAME: "dapre2ekv"
   # Whether to collect TCP dumps
   TCP_DUMPS: "false"
+  # Additional build tags for Dapr
+  DAPR_GO_BUILD_TAGS: "subtlecrypto,wfbackendsqlite"
   # Useful for upgrade/downgrade/compatibility tests
   # TODO: Make this auto-populated based on GitHub's releases.
-  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.12.0"
-  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.11.4"
+  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.13.0"
+  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.12.5"
 
 jobs:
   deploy-infrastructure:
@@ -282,7 +287,7 @@ jobs:
       - name: Login to cache registry for Windows
         if: runner.os == 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
         run: |
-          $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken)
+          $accessToken = (az acr login  -n ${{ env.DAPR_CACHE_REGISTRY }} --expose-token --query accessToken --output tsv)
           docker login ${{ env.DAPR_CACHE_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
       - name: Login to cache registry for Linux or Mac
         if: runner.os != 'Windows' && env.CHECKOUT_REPO != '' && env.DAPR_CACHE_REGISTRY != ''
@@ -310,7 +315,6 @@ jobs:
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-E2E-${TEST_PREFIX}" >> $GITHUB_ENV
           echo "WINDOWS_VERSION=${{ matrix.windows_version }}" >> $GITHUB_ENV
-          echo "DAPR_GO_BUILD_TAGS=wfbackendsqlite" >> $GITHUB_ENV
         shell: bash
       - name: Build Dapr and its Docker images
         if: env.TEST_PREFIX != ''
@@ -331,7 +335,7 @@ jobs:
       - name: Login to Azure Container Registry for Windows
         if: runner.os == 'Windows' && env.TEST_PREFIX != ''
         run: |
-          $accessToken = (az acr login  -n ${{ env.DAPR_REGISTRY }} --expose-token --query accessToken)
+          $accessToken = (az acr login  -n ${{ env.DAPR_REGISTRY }} --expose-token --query accessToken --output tsv)
           docker login ${{ env.DAPR_REGISTRY }} -u 00000000-0000-0000-0000-000000000000 -p $accessToken
       - name: Login to Azure Container Registry for Linux or Mac
         if: runner.os != 'Windows' && env.TEST_PREFIX != ''
@@ -494,6 +498,8 @@ jobs:
         shell: bash
       - name: Setup for cloud resources
         if: env.TEST_PREFIX != '' && env.TEST_CLOUD_ENV != ''
+        env:
+          AZURE_CREDENTIALS: ${{ secrets.AZURE_CREDENTIALS }}
         run: ./tests/test-infra/setup_${{ env.TEST_CLOUD_ENV }}.sh
         shell: bash
       - name: Preparing AKS cluster for test

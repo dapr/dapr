@@ -129,7 +129,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	client := util.HTTPClient(t)
 
 	t.Run("expect 1 component to be loaded", func(t *testing.T) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 2)
+		assert.Len(t, util.GetMetaComponents(t, ctx, client, h.daprd.HTTPPort()), 1)
 		h.expectBinding(t, 0, "binding1")
 	})
 
@@ -150,8 +150,8 @@ spec:
     value: "input"
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 3)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
+		}, time.Second*5, time.Millisecond*10)
 		h.expectBindings(t, []bindingPair{
 			{0, "binding1"},
 			{1, "binding2"},
@@ -188,8 +188,8 @@ spec:
     value: "input"
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 4)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 3)
+		}, time.Second*5, time.Millisecond*10)
 		h.expectBindings(t, []bindingPair{
 			{0, "binding1"},
 			{1, "binding2"},
@@ -213,8 +213,8 @@ spec:
     value: "input"
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 3)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
+		}, time.Second*5, time.Millisecond*10)
 		h.registered[0].Store(false)
 		h.expectBindings(t, []bindingPair{
 			{1, "binding2"},
@@ -226,8 +226,8 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(h.resDir, "1.yaml")))
 		require.NoError(t, os.Remove(filepath.Join(h.resDir, "2.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Empty(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()))
+		}, time.Second*5, time.Millisecond*10)
 		h.registered[1].Store(false)
 		h.registered[2].Store(false)
 		// Sleep to ensure binding is not triggered.
@@ -251,8 +251,8 @@ spec:
     value: "input"
 `), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 2)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(c, ctx, client, h.daprd.HTTPPort()), 1)
+		}, time.Second*5, time.Millisecond*10)
 		h.expectBinding(t, 0, "binding1")
 	})
 }

@@ -27,6 +27,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/utils/clock"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -41,8 +42,9 @@ const (
 
 	commandTimeout = 1 * time.Second
 
-	nameResolveRetryInterval = 2 * time.Second
-	nameResolveMaxRetry      = 120
+	nameResolveRetryInterval                = 2 * time.Second
+	nameResolveMaxRetry                     = 120
+	NoVirtualNodesInPlacementTablesAPILevel = 20
 )
 
 // PeerInfo represents raft peer node information.
@@ -73,15 +75,23 @@ type Server struct {
 
 	raftLogStorePath string
 
-	clock clock.Clock
+	sec     security.Provider
+	htarget healthz.Target
+	clock   clock.Clock
 }
 
 type Options struct {
-	ID           string
-	InMem        bool
-	Peers        []PeerInfo
-	LogStorePath string
-	Clock        clock.Clock
+	ID                string
+	InMem             bool
+	Peers             []PeerInfo
+	LogStorePath      string
+	Clock             clock.Clock
+	ReplicationFactor int64
+	MinAPILevel       uint32
+	MaxAPILevel       uint32
+	Healthz           healthz.Healthz
+	Security          security.Provider
+	Config            *raft.Config
 }
 
 // New creates Raft server node.
@@ -104,6 +114,14 @@ func New(opts Options) *Server {
 		raftLogStorePath: opts.LogStorePath,
 		clock:            cl,
 		raftReady:        make(chan struct{}),
+		htarget:          opts.Healthz.AddTarget(),
+		sec:              opts.Security,
+		config:           opts.Config,
+		fsm: newFSM(DaprHostMemberStateConfig{
+			replicationFactor: opts.ReplicationFactor,
+			minAPILevel:       opts.MinAPILevel,
+			maxAPILevel:       opts.MaxAPILevel,
+		}),
 	}
 }
 
@@ -141,19 +159,22 @@ func (s *spiffeStreamLayer) Dial(address raft.ServerAddress, timeout time.Durati
 
 // StartRaft starts Raft node with Raft protocol configuration. if config is nil,
 // the default config will be used.
-func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *raft.Config) error {
+func (s *Server) StartRaft(ctx context.Context) error {
+	sec, err := s.sec.Handler(ctx)
+	if err != nil {
+		return err
+	}
+
 	// If we have an unclean exit then attempt to close the Raft store.
 	defer func() {
 		s.lock.RLock()
 		defer s.lock.RUnlock()
 		if s.raft == nil && s.raftStore != nil {
-			if err := s.raftStore.Close(); err != nil {
-				logging.Errorf("failed to close log storage: %v", err)
+			if rerr := s.raftStore.Close(); rerr != nil {
+				logging.Errorf("failed to close log storage: %v", rerr)
 			}
 		}
 	}()
-
-	s.fsm = newFSM()
 
 	addr, err := s.tryResolveRaftAdvertiseAddr(ctx, s.raftBind)
 	if err != nil {
@@ -210,22 +231,35 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 	}
 
 	// Setup Raft configuration.
-	if config == nil {
+	if s.config == nil {
 		// Set default configuration for raft
-		s.config = &raft.Config{
-			ProtocolVersion:    raft.ProtocolVersionMax,
-			HeartbeatTimeout:   1000 * time.Millisecond,
-			ElectionTimeout:    1000 * time.Millisecond,
-			CommitTimeout:      50 * time.Millisecond,
-			MaxAppendEntries:   64,
-			ShutdownOnRemove:   true,
-			TrailingLogs:       10240,
-			SnapshotInterval:   120 * time.Second,
-			SnapshotThreshold:  8192,
-			LeaderLeaseTimeout: 500 * time.Millisecond,
+		if len(s.peers) == 1 {
+			s.config = &raft.Config{
+				ProtocolVersion:    raft.ProtocolVersionMax,
+				HeartbeatTimeout:   5 * time.Millisecond,
+				ElectionTimeout:    5 * time.Millisecond,
+				CommitTimeout:      5 * time.Millisecond,
+				MaxAppendEntries:   64,
+				ShutdownOnRemove:   true,
+				TrailingLogs:       500,
+				SnapshotInterval:   60 * time.Second,
+				SnapshotThreshold:  1000,
+				LeaderLeaseTimeout: 5 * time.Millisecond,
+			}
+		} else {
+			s.config = &raft.Config{
+				ProtocolVersion:    raft.ProtocolVersionMax,
+				HeartbeatTimeout:   2 * time.Second,
+				ElectionTimeout:    2 * time.Second,
+				CommitTimeout:      100 * time.Millisecond,
+				MaxAppendEntries:   64,
+				ShutdownOnRemove:   true,
+				TrailingLogs:       1000,
+				SnapshotInterval:   30 * time.Second,
+				SnapshotThreshold:  2000,
+				LeaderLeaseTimeout: 2 * time.Second,
+			}
 		}
-	} else {
-		s.config = config
 	}
 
 	// Use LoggerAdapter to integrate with Dapr logger. Log level relies on placement log level.
@@ -254,6 +288,7 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 		return err
 	}
 	close(s.raftReady)
+	s.htarget.Ready()
 
 	logging.Infof("Raft server is starting on %s...", s.raftBind)
 	<-ctx.Done()

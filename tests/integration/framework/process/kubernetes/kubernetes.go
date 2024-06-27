@@ -18,8 +18,10 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -34,6 +36,7 @@ import (
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/informer"
+	cryptopem "github.com/dapr/kit/crypto/pem"
 )
 
 const (
@@ -72,6 +75,22 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 		w.Write([]byte(apisDiscovery))
 	})
 
+	handler.HandleFunc("/apis/dapr.io/v1alpha1", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(apisDaprV1alpha1))
+	})
+
+	handler.HandleFunc("/apis/dapr.io/v2alpha1", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(apisDaprV2alpha1))
+	})
+
+	handler.HandleFunc("/apis/apps/v1", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(apisAppsV1))
+	})
+
+	handler.HandleFunc("/api/v1", func(w http.ResponseWriter, r *http.Request) {
+		w.Write([]byte(apiV1))
+	})
+
 	for crdName, crd := range parseCRDs(t) {
 		handler.HandleFunc("/apis/apiextensions.k8s.io/v1/customresourcedefinitions/"+crdName, func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("Content-Type", "application/json")
@@ -85,17 +104,41 @@ func New(t *testing.T, fopts ...Option) *Kubernetes {
 		handler.HandleFunc(path, informer.Handler(t, handle))
 	}
 
+	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusNotFound)
+	})
+
 	// We need to run the Kubernetes API server with TLS so that HTTP/2.0 is
 	// enabled, which is required for informers.
 	pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
 	require.NoError(t, err)
 	bundle, err := ca.GenerateBundle(pk, "kubernetes.integration.dapr.io", time.Second*5, nil)
 	require.NoError(t, err)
+	leafpk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+	require.NoError(t, err)
+	leafCert := &x509.Certificate{
+		SerialNumber:       big.NewInt(1),
+		NotBefore:          time.Now(),
+		NotAfter:           time.Now().Add(time.Minute * 5),
+		KeyUsage:           x509.KeyUsageDigitalSignature | x509.KeyUsageKeyEncipherment,
+		ExtKeyUsage:        []x509.ExtKeyUsage{x509.ExtKeyUsageServerAuth},
+		DNSNames:           []string{"cluster.local"},
+		SignatureAlgorithm: x509.ECDSAWithSHA256,
+	}
+	leafCertDER, err := x509.CreateCertificate(rand.Reader, leafCert, bundle.IssChain[0], leafpk.Public(), bundle.IssKey)
+	require.NoError(t, err)
+	leafCert, err = x509.ParseCertificate(leafCertDER)
+	require.NoError(t, err)
+
+	chainPEM, err := cryptopem.EncodeX509Chain(append([]*x509.Certificate{leafCert}, bundle.IssChain...))
+	require.NoError(t, err)
+	keyPEM, err := cryptopem.EncodePrivateKey(leafpk)
+	require.NoError(t, err)
 
 	return &Kubernetes{
 		http: prochttp.New(t,
 			prochttp.WithHandler(handler),
-			prochttp.WithMTLS(t, bundle.TrustAnchors, bundle.IssChainPEM, bundle.IssKeyPEM),
+			prochttp.WithMTLS(t, bundle.TrustAnchors, chainPEM, keyPEM),
 		),
 		bundle:   bundle,
 		informer: informer,

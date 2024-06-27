@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/pkg/security/pem"
 	"github.com/dapr/dapr/pkg/sentry/config"
+	"github.com/dapr/kit/crypto/pem"
 )
 
 func TestNew(t *testing.T) {
@@ -171,7 +171,7 @@ func TestSignIdentity(t *testing.T) {
 			Namespace:          "my-test-namespace",
 			AppID:              "my-app-id",
 			DNS:                []string{"my-app-id.my-test-namespace.svc.cluster.local", "example.com"},
-		}, false)
+		})
 		require.NoError(t, err)
 
 		require.Len(t, clientCert, 3)

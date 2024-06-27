@@ -19,6 +19,7 @@ import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "dapr/proto/common/v1/common.proto";
+import "dapr/proto/runtime/v1/appcallback.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -57,6 +58,10 @@ service Dapr {
 
   // Bulk Publishes multiple events to the specified topic.
   rpc BulkPublishEventAlpha1(BulkPublishRequest) returns (BulkPublishResponse) {}
+
+  // SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
+  // events from it.
+  rpc SubscribeTopicEventsAlpha1(stream SubscribeTopicEventsRequestAlpha1) returns (stream TopicEventRequest) {}
 
   // Invokes binding data to specific output bindings
   rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
@@ -188,6 +193,15 @@ service Dapr {
   rpc RaiseEventWorkflowBeta1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
   // Shutdown the sidecar
   rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
+
+  // Create and schedule a job
+  rpc ScheduleJobAlpha1(ScheduleJobRequest) returns (ScheduleJobResponse) {}
+
+  // Gets a scheduled job
+  rpc GetJobAlpha1(GetJobRequest) returns (GetJobResponse) {}
+
+  // Delete a job
+  rpc DeleteJobAlpha1(DeleteJobRequest) returns (DeleteJobResponse) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -411,6 +425,47 @@ message BulkPublishResponseFailedEntry {
   string error = 2;
 }
 
+// SubscribeTopicEventsRequestAlpha1 is a message containing the details for
+// subscribing to a topic via streaming.
+// The first message must always be the initial request. All subsequent
+// messages must be event responses.
+message SubscribeTopicEventsRequestAlpha1 {
+  oneof subscribe_topic_events_request_type {
+    SubscribeTopicEventsInitialRequestAlpha1 initial_request = 1;
+    SubscribeTopicEventsResponseAlpha1 event_response = 2;
+  }
+}
+
+// SubscribeTopicEventsInitialRequestAlpha1 is the initial message containing the
+// details for subscribing to a topic via streaming.
+message SubscribeTopicEventsInitialRequestAlpha1 {
+  // The name of the pubsub component
+  string pubsub_name = 1;
+
+  // The pubsub topic
+  string topic = 2;
+
+  // The metadata passing to pub components
+  //
+  // metadata property:
+  // - key : the key of the message.
+  map<string, string> metadata = 3;
+
+  // dead_letter_topic is the topic to which messages that fail to be processed
+  // are sent.
+  optional string dead_letter_topic = 4;
+}
+
+// SubscribeTopicEventsResponseAlpha1 is a message containing the result of a
+// subscription to a topic.
+message SubscribeTopicEventsResponseAlpha1 {
+  // id is the unique identifier for the subscription request.
+  string id = 1;
+
+  // status is the result of the subscription request.
+  TopicEventResponse status = 2;
+}
+
 // InvokeBindingRequest is the message to send data to output bindings
 message InvokeBindingRequest {
   // The name of the output binding to invoke.
@@ -504,45 +559,45 @@ message ExecuteStateTransactionRequest {
 
 // RegisterActorTimerRequest is the message to register a timer for an actor of a given type and id.
 message RegisterActorTimerRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
-  string due_time = 4;
+  string due_time = 4 [json_name = "dueTime"];
   string period = 5;
   string callback = 6;
-  bytes  data = 7;
+  bytes data = 7;
   string ttl = 8;
 }
 
 // UnregisterActorTimerRequest is the message to unregister an actor timer
 message UnregisterActorTimerRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
 }
 
 // RegisterActorReminderRequest is the message to register a reminder for an actor of a given type and id.
 message RegisterActorReminderRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
-  string due_time = 4;
+  string due_time = 4 [json_name = "dueTime"];
   string period = 5;
-  bytes  data = 6;
+  bytes data = 6;
   string ttl = 7;
 }
 
 // UnregisterActorReminderRequest is the message to unregister an actor reminder.
 message UnregisterActorReminderRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
 }
 
 // GetActorStateRequest is the message to get key-value states from specific actor.
 message GetActorStateRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string key = 3;
 }
 
@@ -556,8 +611,8 @@ message GetActorStateResponse {
 
 // ExecuteActorStateTransactionRequest is the message to execute multiple operations on a specified actor.
 message ExecuteActorStateTransactionRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   repeated TransactionalActorStateOperation operations = 3;
 }
 
@@ -575,8 +630,8 @@ message TransactionalActorStateOperation {
 
 // InvokeActorRequest is the message to call an actor.
 message InvokeActorRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string method = 3;
   bytes  data = 4;
   map<string, string> metadata = 5;
@@ -605,6 +660,7 @@ message GetMetadataResponse {
   string runtime_version = 8 [json_name = "runtimeVersion"];
   repeated string enabled_features = 9 [json_name = "enabledFeatures"];
   ActorRuntime actor_runtime = 10 [json_name = "actorRuntime"];
+  //TODO: Cassie: probably add scheduler runtime status
 }
 
 message ActorRuntime {
@@ -665,6 +721,19 @@ message PubsubSubscription {
   map<string,string> metadata = 3 [json_name = "metadata"];
   PubsubSubscriptionRules rules = 4 [json_name = "rules"];
   string dead_letter_topic = 5 [json_name = "deadLetterTopic"];
+  PubsubSubscriptionType type = 6 [json_name = "type"];
+}
+
+// PubsubSubscriptionType indicates the type of subscription
+enum PubsubSubscriptionType {
+  // UNKNOWN is the default value for the subscription type.
+  UNKNOWN = 0;
+  // Declarative subscription (k8s CRD)
+  DECLARATIVE = 1;
+  // Programmatically created subscription
+  PROGRAMMATIC = 2;
+  // Bidirectional Streaming subscription
+  STREAMING = 3;
 }
 
 message PubsubSubscriptionRules {
@@ -1106,5 +1175,60 @@ message PurgeWorkflowRequest {
 
 // ShutdownRequest is the request for Shutdown.
 message ShutdownRequest {
+  // Empty
+}
+
+// Job is the definition of a job.
+message Job {
+  // The unique name for the job.
+  string name = 1;
+
+  // The schedule for the job.
+  optional string schedule = 2;
+
+  // Optional: jobs with fixed repeat counts (accounting for Actor Reminders).
+  optional uint32 repeats = 3;
+
+  // Optional: sets time at which or time interval before the callback is invoked for the first time.
+  optional string due_time = 4;
+
+  // Optional: Time To Live to allow for auto deletes (accounting for Actor Reminders).
+  optional string ttl = 5;
+
+  // Job data.
+  google.protobuf.Any data = 6;
+}
+
+// ScheduleJobRequest is the message to create/schedule the job.
+message ScheduleJobRequest {
+  // The job details.
+  Job job = 1;
+}
+
+// ScheduleJobResponse is the message response to create/schedule the job.
+message ScheduleJobResponse {
+  // Empty
+}
+
+// GetJobRequest is the message to retrieve a job.
+message GetJobRequest {
+  // The name of the job.
+  string name = 1;
+}
+
+// GetJobResponse is the message's response for a job retrieved.
+message GetJobResponse {
+  // The job details.
+  Job job = 1;
+}
+
+// DeleteJobRequest is the message to delete the job by name.
+message DeleteJobRequest {
+  // The name of the job.
+  string name = 1;
+}
+
+// DeleteJobResponse is the message response to delete the job by name.
+message DeleteJobResponse {
   // Empty
 }

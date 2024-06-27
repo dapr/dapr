@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -35,29 +36,67 @@ func init() {
 
 // daprd tests that Dapr responds to healthz requests.
 type daprd struct {
-	proc *procdaprd.Daprd
+	proc     *procdaprd.Daprd
+	procmtls *procdaprd.Daprd
+	sentry   *procsentry.Sentry
 }
 
 func (d *daprd) Setup(t *testing.T) []framework.Option {
+	d.sentry = procsentry.New(t)
 	d.proc = procdaprd.New(t)
+	d.procmtls = procdaprd.New(t, procdaprd.WithSentry(t, d.sentry))
 	return []framework.Option{
-		framework.WithProcesses(d.proc),
+		framework.WithProcesses(d.proc, d.procmtls),
 	}
 }
 
 func (d *daprd) Run(t *testing.T, ctx context.Context) {
-	d.proc.WaitUntilRunning(t, ctx)
+	client := util.HTTPClient(t)
 
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/healthz", d.proc.PublicPort())
-	httpClient := util.HTTPClient(t)
+	t.Run("default", func(t *testing.T) {
+		d.proc.WaitUntilTCPReady(t, ctx)
 
-	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
-		require.NoError(t, err)
+		for _, port := range []int{d.proc.PublicPort(), d.proc.HTTPPort()} {
+			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/healthz", port)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+			require.NoError(t, err)
 
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
-		return resp.StatusCode == http.StatusNoContent
-	}, time.Second*10, 100*time.Millisecond)
+			assert.Eventually(t, func() bool {
+				resp, err := client.Do(req)
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+				return resp.StatusCode == http.StatusNoContent
+			}, time.Second*10, 10*time.Millisecond)
+		}
+	})
+
+	t.Run("mtls", func(t *testing.T) {
+		for _, port := range []int{d.procmtls.PublicPort(), d.procmtls.HTTPPort()} {
+			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/healthz", port)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+			require.NoError(t, err)
+			//nolint:bodyclose
+			_, err = client.Do(req)
+			require.Error(t, err)
+			assert.Regexp(t, "No connection|connection refused", err.Error())
+		}
+
+		d.sentry.Run(t, ctx)
+		t.Cleanup(func() { d.sentry.Cleanup(t) })
+
+		for _, port := range []int{d.procmtls.PublicPort(), d.procmtls.HTTPPort()} {
+			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/healthz", port)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
+			require.NoError(t, err)
+
+			//nolint:testifylint
+			assert.EventuallyWithT(t, func(t *assert.CollectT) {
+				resp, err := client.Do(req)
+				if assert.NoError(t, err) {
+					_ = assert.NoError(t, resp.Body.Close()) &&
+						assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+				}
+			}, time.Second*10, 10*time.Millisecond)
+		}
+	})
 }

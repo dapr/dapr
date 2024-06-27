@@ -56,7 +56,7 @@ func (p *protobufFormat) Setup(t *testing.T) []framework.Option {
 	}
 
 	// Init placement with minimum API level of 20
-	p.place = placement.New(t, placement.WithMinAPILevel(20))
+	p.place = placement.New(t, placement.WithMaxAPILevel(-1), placement.WithMinAPILevel(20))
 
 	// Create a SQLite database and ensure state tables exist
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -75,10 +75,8 @@ INSERT INTO state VALUES
 	p.srv = prochttp.New(t, prochttp.WithHandler(p.handler.NewHandler()))
 	p.daprd = daprd.New(t,
 		daprd.WithResourceFiles(p.db.GetComponent(t)),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(p.place.Port())),
+		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(p.place.Port())),
 		daprd.WithAppPort(p.srv.Port()),
-		// Daprd is super noisy in debug mode when connecting to placement.
-		daprd.WithLogLevel("info"),
 	)
 
 	return []framework.Option{
@@ -108,7 +106,7 @@ func (p *protobufFormat) Run(t *testing.T, ctx context.Context) {
 	storeReminder(t, ctx, baseURL, client)
 
 	// Check the data in the SQLite database
-	// The value must be base64-encoded, and after being decoded it should begin with `\0pb`, which indicates it was serialized as JSON
+	// The value must be base64-encoded, and after being decoded it should begin with `\0pb`, which indicates it was serialized as protobuf
 	storedVal := loadRemindersFromDB(t, ctx, p.db.GetConnection(t))
 	storedValBytes, err := base64.StdEncoding.DecodeString(storedVal)
 	require.NoErrorf(t, err, "Failed to decode value from base64: '%v'", storedVal)

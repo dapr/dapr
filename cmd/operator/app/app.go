@@ -16,6 +16,8 @@ package app
 import (
 	"github.com/dapr/dapr/cmd/operator/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
+	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/healthz/server"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/operator"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
@@ -37,7 +39,14 @@ func Run() {
 	log.Infof("Starting Dapr Operator -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
-	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
+	healthz := healthz.New()
+	metricsExporter := metrics.New(metrics.Options{
+		Log:       log,
+		Enabled:   opts.Metrics.Enabled(),
+		Namespace: metrics.DefaultMetricNamespace,
+		Port:      opts.Metrics.Port(),
+		Healthz:   healthz,
+	})
 
 	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
@@ -56,15 +65,23 @@ func Run() {
 		WatchdogInterval:                    opts.WatchdogInterval,
 		WatchdogCanPatchPodLabels:           opts.WatchdogCanPatchPodLabels,
 		APIPort:                             opts.APIPort,
-		HealthzPort:                         opts.HealthzPort,
+		APIListenAddress:                    opts.APIListenAddress,
+		WebhookServerPort:                   opts.WebhookServerPort,
+		WebhookServerListenAddress:          opts.WebhookServerListenAddress,
+		Healthz:                             healthz,
 	})
 	if err != nil {
 		log.Fatalf("error creating operator: %v", err)
 	}
 
 	err = concurrency.NewRunnerManager(
-		metricsExporter.Run,
-		op.Run,
+		metricsExporter.Start,
+		op.Start,
+		server.New(server.Options{
+			Log:     log,
+			Port:    opts.HealthzPort,
+			Healthz: healthz,
+		}).Start,
 	).Run(ctx)
 	if err != nil {
 		log.Fatalf("error running operator: %v", err)

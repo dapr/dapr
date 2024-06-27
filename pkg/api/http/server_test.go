@@ -33,7 +33,6 @@ import (
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/cors"
-	httpMiddleware "github.com/dapr/dapr/pkg/middleware/http"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -434,13 +433,13 @@ func TestClose(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		serverConfig := ServerConfig{
-			AppID:                "test",
-			HostAddress:          "127.0.0.1",
-			Port:                 port,
-			APIListenAddresses:   []string{"127.0.0.1"},
-			MaxRequestBodySizeMB: 4,
-			ReadBufferSizeKB:     4,
-			EnableAPILogging:     true,
+			AppID:              "test",
+			HostAddress:        "127.0.0.1",
+			Port:               port,
+			APIListenAddresses: []string{"127.0.0.1"},
+			MaxRequestBodySize: 4 << 20,
+			ReadBufferSize:     4 << 10,
+			EnableAPILogging:   true,
 		}
 		a := &api{}
 		server := NewServer(NewServerOpts{
@@ -448,7 +447,7 @@ func TestClose(t *testing.T) {
 			Config:      serverConfig,
 			TracingSpec: config.TracingSpec{},
 			MetricSpec:  config.MetricSpec{},
-			Pipeline:    httpMiddleware.Pipeline{},
+			Middleware:  func(n http.Handler) http.Handler { return n },
 			APISpec:     config.APISpec{},
 		})
 		require.NoError(t, server.StartNonBlocking())
@@ -460,13 +459,13 @@ func TestClose(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		serverConfig := ServerConfig{
-			AppID:                "test",
-			HostAddress:          "127.0.0.1",
-			Port:                 port,
-			APIListenAddresses:   []string{"127.0.0.1"},
-			MaxRequestBodySizeMB: 4,
-			ReadBufferSizeKB:     4,
-			EnableAPILogging:     false,
+			AppID:              "test",
+			HostAddress:        "127.0.0.1",
+			Port:               port,
+			APIListenAddresses: []string{"127.0.0.1"},
+			MaxRequestBodySize: 4 << 20,
+			ReadBufferSize:     4 << 10,
+			EnableAPILogging:   false,
 		}
 		a := &api{}
 		server := NewServer(NewServerOpts{
@@ -474,7 +473,7 @@ func TestClose(t *testing.T) {
 			Config:      serverConfig,
 			TracingSpec: config.TracingSpec{},
 			MetricSpec:  config.MetricSpec{},
-			Pipeline:    httpMiddleware.Pipeline{},
+			Middleware:  func(n http.Handler) http.Handler { return n },
 			APISpec:     config.APISpec{},
 		})
 		require.NoError(t, server.StartNonBlocking())

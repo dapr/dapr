@@ -98,7 +98,7 @@ scopes:
 func (o *basic) Run(t *testing.T, ctx context.Context) {
 	o.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, o.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, o.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock()) //nolint:staticcheck
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -120,5 +120,5 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 		o.lock.Lock()
 		defer o.lock.Unlock()
 		return string(o.msg) == "2"
-	}, time.Second*5, time.Millisecond*100, "failed to receive message in time")
+	}, time.Second*5, time.Millisecond*10, "failed to receive message in time")
 }

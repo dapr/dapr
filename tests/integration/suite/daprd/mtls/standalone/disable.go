@@ -15,6 +15,8 @@ package standalone
 
 import (
 	"context"
+	"runtime"
+	"strings"
 	"testing"
 	"time"
 
@@ -25,11 +27,13 @@ import (
 	"google.golang.org/grpc/connectivity"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	procplacement "github.com/dapr/dapr/tests/integration/framework/process/placement"
-	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -39,43 +43,48 @@ func init() {
 
 // disable tests standalone with mTLS disabled.
 type disable struct {
-	daprd        *procdaprd.Daprd
-	sentry       *procsentry.Sentry
-	placement    *procplacement.Placement
+	daprd        *daprd.Daprd
+	sentry       *sentry.Sentry
+	placement    *placement.Placement
+	scheduler    *scheduler.Scheduler
 	trustAnchors []byte
 }
 
 func (e *disable) Setup(t *testing.T) []framework.Option {
-	e.sentry = procsentry.New(t)
+	e.sentry = sentry.New(t)
 	e.trustAnchors = e.sentry.CABundle().TrustAnchors
 
-	e.placement = procplacement.New(t,
-		procplacement.WithEnableTLS(false),
-		procplacement.WithSentryAddress(e.sentry.Address()),
+	e.placement = placement.New(t,
+		placement.WithEnableTLS(false),
+		placement.WithSentryAddress(e.sentry.Address()),
 	)
 
-	e.daprd = procdaprd.New(t,
-		procdaprd.WithAppID("my-app"),
-		procdaprd.WithMode("standalone"),
-		procdaprd.WithSentryAddress(e.sentry.Address()),
-		procdaprd.WithPlacementAddresses(e.placement.Address()),
+	e.scheduler = scheduler.New(t)
+
+	e.daprd = daprd.New(t,
+		daprd.WithAppID("my-app"),
+		daprd.WithMode("standalone"),
+		daprd.WithSentryAddress(e.sentry.Address()),
+		daprd.WithPlacementAddresses(e.placement.Address()),
+		daprd.WithSchedulerAddresses(e.scheduler.Address()),
 
 		// Disable mTLS
-		procdaprd.WithEnableMTLS(false),
+		daprd.WithEnableMTLS(false),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(e.sentry, e.placement, e.daprd),
+		framework.WithProcesses(e.sentry, e.placement, e.scheduler, e.daprd),
 	}
 }
 
 func (e *disable) Run(t *testing.T, ctx context.Context) {
 	e.placement.WaitUntilRunning(t, ctx)
+	e.scheduler.WaitUntilRunning(t, ctx)
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("trying plain text connection to Dapr API should succeed", func(t *testing.T) {
-		conn, err := grpc.DialContext(ctx, e.daprd.InternalGRPCAddress(),
-			grpc.WithReturnConnectionError(),
+		conn, err := grpc.DialContext(ctx, e.daprd.InternalGRPCAddress(), //nolint:staticcheck
+			grpc.WithReturnConnectionError(), //nolint:staticcheck
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 		require.NoError(t, err)
@@ -94,6 +103,7 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 			TrustAnchors:            e.trustAnchors,
 			AppID:                   "another-app",
 			MTLSEnabled:             true,
+			Healthz:                 healthz.New(),
 		})
 		require.NoError(t, err)
 
@@ -118,10 +128,17 @@ func (e *disable) Run(t *testing.T, ctx context.Context) {
 		myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "my-app")
 		require.NoError(t, err)
 
-		gctx, gcancel := context.WithTimeout(ctx, time.Second)
-		t.Cleanup(gcancel)
-		_, err = grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID),
-			grpc.WithReturnConnectionError())
+		assert.Eventually(t, func() bool {
+			gctx, gcancel := context.WithTimeout(ctx, time.Second)
+			t.Cleanup(gcancel)
+			_, err = grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID), //nolint:staticcheck
+				grpc.WithReturnConnectionError()) //nolint:staticcheck
+			require.Error(t, err)
+			if runtime.GOOS == "windows" {
+				return !strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host.")
+			}
+			return true
+		}, 5*time.Second, 10*time.Millisecond)
 		require.ErrorContains(t, err, "tls: first record does not look like a TLS handshake")
 	})
 }

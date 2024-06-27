@@ -37,11 +37,13 @@ const (
 	UserContainerAppProtocolName   = "APP_PROTOCOL"                         // Name of the variable exposed to the app containing the app protocol.
 	UserContainerDaprHTTPPortName  = "DAPR_HTTP_PORT"                       // Name of the variable exposed to the app containing the Dapr HTTP port.
 	UserContainerDaprGRPCPortName  = "DAPR_GRPC_PORT"                       // Name of the variable exposed to the app containing the Dapr gRPC port.
+	DaprContainerHostIP            = "DAPR_HOST_IP"                         // Name of the variable injected in the daprd container containing the pod's IP
 	TokenVolumeKubernetesMountPath = "/var/run/secrets/dapr.io/sentrytoken" /* #nosec */ // Mount path for the Kubernetes service account volume with the sentry token.
 	TokenVolumeName                = "dapr-identity-token"                  /* #nosec */ // Name of the volume with the service account token for daprd.
 	ComponentsUDSVolumeName        = "dapr-components-unix-domain-socket"   // Name of the Unix domain socket volume for components.
 	ComponentsUDSMountPathEnvVar   = "DAPR_COMPONENT_SOCKETS_FOLDER"
 	ComponentsUDSDefaultFolder     = "/tmp/dapr-components-sockets"
+	SchedulerHostAddressEnvVar     = "DAPR_SCHEDULER_HOST_ADDRESS"
 
 	ModeKubernetes = modes.KubernetesMode // KubernetesMode is a Kubernetes Dapr mode.
 	ModeStandalone = modes.StandaloneMode // StandaloneMode is a Standalone Dapr mode.

@@ -17,12 +17,13 @@ import (
 	"context"
 	"fmt"
 	"sync"
-	"sync/atomic"
 	"time"
 
 	"k8s.io/utils/clock"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/healthz"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -39,30 +40,29 @@ type Options[T differ.Resource] struct {
 	CompStore  *compstore.ComponentStore
 	Processor  *processor.Processor
 	Authorizer *authorizer.Authorizer
+	Healthz    healthz.Healthz
 }
 
 type Reconciler[T differ.Resource] struct {
 	kind    string
 	manager manager[T]
+	htarget healthz.Target
 
-	closeCh chan struct{}
-	closed  atomic.Bool
-	wg      sync.WaitGroup
-	clock   clock.WithTicker
+	clock clock.WithTicker
 }
 
 type manager[T differ.Resource] interface {
 	loader.Loader[T]
 	update(context.Context, T)
-	delete(T)
+	delete(context.Context, T)
 }
 
-func NewComponent(opts Options[componentsapi.Component]) *Reconciler[componentsapi.Component] {
-	return &Reconciler[componentsapi.Component]{
+func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
+	return &Reconciler[compapi.Component]{
 		clock:   clock.RealClock{},
-		closeCh: make(chan struct{}),
-		kind:    componentsapi.Kind,
-		manager: &component{
+		kind:    compapi.Kind,
+		htarget: opts.Healthz.AddTarget(),
+		manager: &components{
 			Loader: opts.Loader.Components(),
 			store:  opts.CompStore,
 			proc:   opts.Processor,
@@ -71,30 +71,31 @@ func NewComponent(opts Options[componentsapi.Component]) *Reconciler[componentsa
 	}
 }
 
+func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subscription] {
+	return &Reconciler[subapi.Subscription]{
+		clock:   clock.RealClock{},
+		kind:    subapi.Kind,
+		htarget: opts.Healthz.AddTarget(),
+		manager: &subscriptions{
+			Loader: opts.Loader.Subscriptions(),
+			store:  opts.CompStore,
+			proc:   opts.Processor,
+		},
+	}
+}
+
 func (r *Reconciler[T]) Run(ctx context.Context) error {
-	r.wg.Add(1)
-	defer r.wg.Done()
-
-	stream, err := r.manager.Stream(ctx)
+	conn, err := r.manager.Stream(ctx)
 	if err != nil {
-		return fmt.Errorf("error starting component stream: %w", err)
+		return fmt.Errorf("error running component stream: %w", err)
 	}
 
-	r.watchForEvents(ctx, stream)
+	r.htarget.Ready()
 
-	return nil
+	return r.watchForEvents(ctx, conn)
 }
 
-func (r *Reconciler[T]) Close() error {
-	defer r.wg.Wait()
-	if r.closed.CompareAndSwap(false, true) {
-		close(r.closeCh)
-	}
-
-	return nil
-}
-
-func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loader.Event[T]) {
+func (r *Reconciler[T]) watchForEvents(ctx context.Context, conn *loader.StreamConn[T]) error {
 	log.Infof("Starting to watch %s updates", r.kind)
 
 	ticker := r.clock.NewTicker(time.Second * 60)
@@ -106,9 +107,7 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loade
 	for {
 		select {
 		case <-ctx.Done():
-			return
-		case <-r.closeCh:
-			return
+			return nil
 		case <-ticker.C():
 			log.Debugf("Running scheduled %s reconcile", r.kind)
 			resources, err := r.manager.List(ctx)
@@ -117,18 +116,25 @@ func (r *Reconciler[T]) watchForEvents(ctx context.Context, stream <-chan *loade
 				continue
 			}
 
-			if err := r.reconcile(ctx, differ.Diff(resources)); err != nil {
-				log.Errorf("Error reconciling %s: %s", r.kind, err)
+			r.reconcile(ctx, differ.Diff(resources))
+		case <-conn.ReconcileCh:
+			log.Debugf("Reconciling all %s", r.kind)
+			resources, err := r.manager.List(ctx)
+			if err != nil {
+				log.Errorf("Error listing %s: %s", r.kind, err)
+				continue
 			}
-		case event := <-stream:
+
+			r.reconcile(ctx, differ.Diff(resources))
+		case event := <-conn.EventCh:
 			r.handleEvent(ctx, event)
 		}
 	}
 }
 
-func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) error {
+func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T]) {
 	if result == nil {
-		return nil
+		return
 	}
 
 	var wg sync.WaitGroup
@@ -150,10 +156,9 @@ func (r *Reconciler[T]) reconcile(ctx context.Context, result *differ.Result[T])
 				})
 			}(resource, group.eventType)
 		}
+
 		wg.Wait()
 	}
-
-	return nil
 }
 
 func (r *Reconciler[T]) handleEvent(ctx context.Context, event *loader.Event[T]) {
@@ -168,6 +173,6 @@ func (r *Reconciler[T]) handleEvent(ctx context.Context, event *loader.Event[T])
 		r.manager.update(ctx, event.Resource)
 	case operatorpb.ResourceEventType_DELETED:
 		log.Infof("Received %s deletion, closing: %s", r.kind, event.Resource.LogName())
-		r.manager.delete(event.Resource)
+		r.manager.delete(ctx, event.Resource)
 	}
 }

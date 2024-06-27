@@ -24,6 +24,7 @@ import (
 
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"github.com/spf13/cast"
+	"go.opencensus.io/stats/view"
 	yaml "gopkg.in/yaml.v3"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
@@ -32,6 +33,7 @@ import (
 	env "github.com/dapr/dapr/pkg/config/env"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -42,8 +44,13 @@ type Feature string
 const (
 	// Enables support for setting TTL on Actor state keys.
 	ActorStateTTL Feature = "ActorStateTTL"
-	// Enables support for hot reloading of Daprd Components and HTTPEndpoints.
+
+	// Enables support for hot reloading of Daprd Components.
 	HotReload Feature = "HotReload"
+
+	// Enables support for using the Scheduler control plane service
+	// for Actor Reminders.
+	SchedulerReminders Feature = "SchedulerReminders"
 )
 
 // end feature flags section
@@ -220,9 +227,9 @@ type SelectorField struct {
 
 type TracingSpec struct {
 	SamplingRate string      `json:"samplingRate,omitempty" yaml:"samplingRate,omitempty"`
-	Stdout       bool        `json:"stdout,omitempty"       yaml:"stdout,omitempty"`
-	Zipkin       *ZipkinSpec `json:"zipkin,omitempty"       yaml:"zipkin,omitempty"`
-	Otel         *OtelSpec   `json:"otel,omitempty"         yaml:"otel,omitempty"`
+	Stdout       bool        `json:"stdout,omitempty" yaml:"stdout,omitempty"`
+	Zipkin       *ZipkinSpec `json:"zipkin,omitempty" yaml:"zipkin,omitempty"`
+	Otel         *OtelSpec   `json:"otel,omitempty" yaml:"otel,omitempty"`
 }
 
 // ZipkinSpec defines Zipkin exporter configurations.
@@ -232,7 +239,7 @@ type ZipkinSpec struct {
 
 // OtelSpec defines Otel exporter configurations.
 type OtelSpec struct {
-	Protocol        string `json:"protocol,omitempty"        yaml:"protocol,omitempty"`
+	Protocol        string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
 	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
 	// Defaults to true
 	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
@@ -247,8 +254,11 @@ func (o OtelSpec) GetIsSecure() bool {
 // MetricSpec configuration for metrics.
 type MetricSpec struct {
 	// Defaults to true
-	Enabled *bool         `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	Rules   []MetricsRule `json:"rules,omitempty"   yaml:"rules,omitempty"`
+	Enabled *bool       `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	HTTP    *MetricHTTP `json:"http,omitempty" yaml:"http,omitempty"`
+	// Latency distribution buckets. If not set, the default buckets are used.
+	LatencyDistributionBuckets *[]int        `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
+	Rules                      []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
 }
 
 // GetEnabled returns true if metrics are enabled.
@@ -257,7 +267,67 @@ func (m MetricSpec) GetEnabled() bool {
 	return m.Enabled == nil || *m.Enabled
 }
 
-// MetricsRu le defines configuration options for a metric.
+// GetHTTPIncreasedCardinality returns true if increased cardinality is enabled for HTTP metrics
+func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
+	if m.HTTP == nil || m.HTTP.IncreasedCardinality == nil {
+		// The default is true in Dapr 1.13, but will be changed to false in 1.15+
+		// TODO: [MetricsCardinality] Change default in 1.15+
+		log.Warn("The default value for 'spec.metric.http.increasedCardinality' will change to 'false' in Dapr 1.15 or later")
+		return true
+	}
+	return *m.HTTP.IncreasedCardinality
+}
+
+// GetLatencyDistribution returns a *view.Aggregration to be used for latency histograms
+func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation {
+	defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
+	log.Infof("metric spec: %v", m)
+	if m.LatencyDistributionBuckets == nil || len(*m.LatencyDistributionBuckets) == 0 {
+		// The default is defaultLatencyDistribution
+		log.Infof("Using default latency distribution buckets: %v", defaultLatencyDistribution)
+		return view.Distribution(defaultLatencyDistribution...)
+	}
+	log.Infof("Using custom latency distribution buckets: %v", *m.LatencyDistributionBuckets)
+	buckets := make([]float64, len(*m.LatencyDistributionBuckets))
+	for i, v := range *m.LatencyDistributionBuckets {
+		buckets[i] = float64(v)
+	}
+
+	return view.Distribution(buckets...)
+}
+
+// GetHTTPExcludeVerbs returns true if exclude verbs is enabled for HTTP metrics
+func (m MetricSpec) GetHTTPExcludeVerbs() bool {
+	if m.HTTP == nil || m.HTTP.ExcludeVerbs == nil {
+		// The default is false
+		return false
+	}
+	return *m.HTTP.ExcludeVerbs
+}
+
+// GetHTTPPathMatching returns the path matching configuration for HTTP metrics
+func (m MetricSpec) GetHTTPPathMatching() []string {
+	if m.HTTP == nil {
+		return nil
+	}
+	return m.HTTP.PathMatching
+}
+
+// MetricHTTP defines configuration for metrics for the HTTP server
+type MetricHTTP struct {
+	// If false, metrics for the HTTP server are collected with increased cardinality.
+	// The default is true in Dapr 1.13, but will be changed to false in 1.15+
+	// TODO: [MetricsCardinality] Change default in 1.15+
+	// +optional
+	IncreasedCardinality *bool `json:"increasedCardinality,omitempty" yaml:"increasedCardinality,omitempty"`
+	// +optional
+	PathMatching []string `json:"pathMatching,omitempty" yaml:"pathMatching,omitempty"`
+	// If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
+	// +optional
+	ExcludeVerbs *bool `json:"excludeVerbs,omitempty" yaml:"excludeVerbs,omitempty"`
+}
+
+// MetricsRule defines configuration options for a metric.
 type MetricsRule struct {
 	Name   string        `json:"name,omitempty"   yaml:"name,omitempty"`
 	Labels []MetricLabel `json:"labels,omitempty" yaml:"labels,omitempty"`
@@ -271,18 +341,18 @@ type MetricLabel struct {
 
 // AppPolicySpec defines the policy data structure for each app.
 type AppPolicySpec struct {
-	AppName             string         `json:"appId,omitempty"         yaml:"appId,omitempty"`
+	AppName             string         `json:"appId,omitempty" yaml:"appId,omitempty"`
 	DefaultAction       string         `json:"defaultAction,omitempty" yaml:"defaultAction,omitempty"`
-	TrustDomain         string         `json:"trustDomain,omitempty"   yaml:"trustDomain,omitempty"`
-	Namespace           string         `json:"namespace,omitempty"     yaml:"namespace,omitempty"`
-	AppOperationActions []AppOperation `json:"operations,omitempty"    yaml:"operations,omitempty"`
+	TrustDomain         string         `json:"trustDomain,omitempty" yaml:"trustDomain,omitempty"`
+	Namespace           string         `json:"namespace,omitempty" yaml:"namespace,omitempty"`
+	AppOperationActions []AppOperation `json:"operations,omitempty" yaml:"operations,omitempty"`
 }
 
 // AppOperation defines the data structure for each app operation.
 type AppOperation struct {
-	Operation string   `json:"name,omitempty"     yaml:"name,omitempty"`
+	Operation string   `json:"name,omitempty" yaml:"name,omitempty"`
 	HTTPVerb  []string `json:"httpVerb,omitempty" yaml:"httpVerb,omitempty"`
-	Action    string   `json:"action,omitempty"   yaml:"action,omitempty"`
+	Action    string   `json:"action,omitempty" yaml:"action,omitempty"`
 }
 
 // AccessControlSpec is the spec object in ConfigurationSpec.
@@ -645,14 +715,24 @@ func (c *Configuration) String() string {
 
 // Apply .metrics if set. If not, retain .metric.
 func (c *Configuration) sortMetricsSpec() {
-	if c.Spec.MetricsSpec != nil {
-		if c.Spec.MetricsSpec.Enabled != nil {
-			c.Spec.MetricSpec.Enabled = c.Spec.MetricsSpec.Enabled
-		}
+	if c.Spec.MetricsSpec == nil {
+		return
+	}
 
-		if len(c.Spec.MetricsSpec.Rules) > 0 {
-			c.Spec.MetricSpec.Rules = c.Spec.MetricsSpec.Rules
-		}
+	if c.Spec.MetricsSpec.Enabled != nil {
+		c.Spec.MetricSpec.Enabled = c.Spec.MetricsSpec.Enabled
+	}
+
+	if len(c.Spec.MetricsSpec.Rules) > 0 {
+		c.Spec.MetricSpec.Rules = c.Spec.MetricsSpec.Rules
+	}
+
+	if c.Spec.MetricsSpec.HTTP != nil {
+		c.Spec.MetricSpec.HTTP = c.Spec.MetricsSpec.HTTP
+	}
+
+	if c.Spec.MetricsSpec.LatencyDistributionBuckets != nil {
+		c.Spec.MetricSpec.LatencyDistributionBuckets = c.Spec.MetricsSpec.LatencyDistributionBuckets
 	}
 }
 

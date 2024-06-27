@@ -19,8 +19,10 @@ import (
 	"errors"
 	"io"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -83,12 +85,10 @@ func New(t *testing.T, fopts ...Option) *LogLine {
 func (l *LogLine) Run(t *testing.T, ctx context.Context) {
 	go func() {
 		res := l.checkOut(t, ctx, l.stdoutLineContains, l.stdoutExp, l.stdout)
-		l.done.Add(1)
 		l.outCheck <- res
 	}()
 	go func() {
 		res := l.checkOut(t, ctx, l.stderrLinContains, l.stderrExp, l.stderr)
-		l.done.Add(1)
 		l.outCheck <- res
 	}()
 }
@@ -101,13 +101,18 @@ func (l *LogLine) Cleanup(t *testing.T) {
 	close(l.closeCh)
 	for i := 0; i < 2; i++ {
 		for expLine := range <-l.outCheck {
-			assert.Fail(t, "expected to log line: "+expLine)
+			assert.Fail(t, "expected to log line", expLine)
 		}
 	}
 }
 
 func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[string]bool, closer io.WriteCloser, reader io.Reader) map[string]bool {
 	t.Helper()
+
+	if len(expLines) == 0 {
+		l.done.Add(1)
+		return expLines
+	}
 
 	go func() {
 		select {
@@ -117,10 +122,12 @@ func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[strin
 		}
 	}()
 
+	var once sync.Once
+
 	breader := bufio.NewReader(reader)
 	for {
 		if len(expLines) == 0 {
-			break
+			once.Do(func() { l.done.Add(1) })
 		}
 
 		line, _, err := breader.ReadLine()
@@ -145,4 +152,8 @@ func (l *LogLine) Stdout() io.WriteCloser {
 
 func (l *LogLine) Stderr() io.WriteCloser {
 	return l.stderrExp
+}
+
+func (l *LogLine) EventuallyFoundAll(t *testing.T) {
+	assert.Eventually(t, l.FoundAll, time.Second*7, time.Millisecond*10)
 }

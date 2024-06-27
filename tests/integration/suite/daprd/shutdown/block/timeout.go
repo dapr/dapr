@@ -18,14 +18,14 @@ import (
 	"io"
 	"net/http"
 	"runtime"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
+	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -42,9 +42,11 @@ func init() {
 // timeout tests Daprd's --dapr-block-shutdown-seconds, ensuring shutdown
 // procedure will begin when seconds is reached when app still reports healthy.
 type timeout struct {
-	daprd   *daprd.Daprd
-	logline *logline.LogLine
-	routeCh chan struct{}
+	daprd       *daprd.Daprd
+	logline     *logline.LogLine
+	routeCh     chan struct{}
+	listening   atomic.Bool
+	bindingChan chan struct{}
 }
 
 func (i *timeout) Setup(t *testing.T) []framework.Option {
@@ -53,6 +55,7 @@ func (i *timeout) Setup(t *testing.T) []framework.Option {
 	}
 
 	i.routeCh = make(chan struct{}, 1)
+	i.bindingChan = make(chan struct{})
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/subscribe", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
@@ -64,6 +67,13 @@ func (i *timeout) Setup(t *testing.T) []framework.Option {
 	handler.HandleFunc("/route", func(w http.ResponseWriter, r *http.Request) {
 		i.routeCh <- struct{}{}
 	})
+	handler.HandleFunc("/binding", func(w http.ResponseWriter, r *http.Request) {
+		if i.listening.Load() {
+			i.listening.Store(false)
+			i.bindingChan <- struct{}{}
+		}
+	})
+
 	app := prochttp.New(t,
 		prochttp.WithHandler(handler),
 	)
@@ -92,6 +102,27 @@ metadata:
 spec:
   type: pubsub.in-memory
   version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: 'binding'
+spec:
+  type: bindings.cron
+  version: v1
+  metadata:
+  - name: schedule
+    value: "@every 100ms"
+  - name: direction
+    value: "input"
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: 'mystore'
+spec:
+  type: state.in-memory
+  version: v1
 `))
 
 	return []framework.Option{
@@ -103,12 +134,16 @@ func (i *timeout) Run(t *testing.T, ctx context.Context) {
 	i.daprd.Run(t, ctx)
 	i.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, i.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	client := i.daprd.GRPCClient(t, ctx)
 
-	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+		//nolint:testifylint
+		assert.NoError(c, err)
+		assert.Len(c, resp.GetSubscriptions(), 1)
+	}, time.Second*5, time.Millisecond*10)
+
+	_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "foo",
 		Topic:      "topic",
 		Data:       []byte(`{"status":"completed"}`),
@@ -120,25 +155,75 @@ func (i *timeout) Run(t *testing.T, ctx context.Context) {
 		assert.Fail(t, "pubsub message should have been sent to subscriber")
 	}
 
+	i.listening.Store(true)
+	select {
+	case <-i.bindingChan:
+	case <-time.After(time.Second * 5):
+		assert.Fail(t, "timed out waiting for binding event")
+	}
+
+	_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
+		StoreName: "mystore",
+		States: []*commonv1.StateItem{
+			{
+				Key:   "key",
+				Value: []byte("value"),
+			},
+		},
+	})
+	require.NoError(t, err)
+	resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
+		StoreName: "mystore",
+		Key:       "key",
+	})
+	require.NoError(t, err)
+	assert.Equal(t, "value", string(resp.GetData()))
+
 	daprdStopped := make(chan struct{})
 	go func() {
 		i.daprd.Cleanup(t)
 		close(daprdStopped)
 	}()
 
-	t.Run("daprd APIs should still be available during blocked shutdown", func(t *testing.T) {
-		time.Sleep(time.Second)
+	t.Run("daprd APIs should still be available during blocked shutdown, except input bindings and subscriptions", func(t *testing.T) {
+		time.Sleep(time.Second / 2)
+
+		i.listening.Store(true)
+		select {
+		case <-i.bindingChan:
+			assert.Fail(t, "binding event should not have been sent to subscriber")
+		case <-time.After(time.Second / 2):
+		}
+
 		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 			PubsubName: "foo",
 			Topic:      "topic",
 			Data:       []byte(`{"status":"completed"}`),
 		})
 		require.NoError(t, err)
+
 		select {
 		case <-i.routeCh:
-		case <-ctx.Done():
-			assert.Fail(t, "pubsub message should have been sent to subscriber")
+			assert.Fail(t, "pubsub message should not have been sent to subscriber")
+		case <-time.After(time.Second / 2):
 		}
+
+		_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
+			StoreName: "mystore",
+			States: []*commonv1.StateItem{
+				{
+					Key:   "key",
+					Value: []byte("value2"),
+				},
+			},
+		})
+		require.NoError(t, err)
+		resp, err = client.GetState(ctx, &rtv1.GetStateRequest{
+			StoreName: "mystore",
+			Key:       "key",
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "value2", string(resp.GetData()))
 	})
 
 	t.Run("daprd APIs are no longer available when past blocked shutdown", func(t *testing.T) {
@@ -147,6 +232,22 @@ func (i *timeout) Run(t *testing.T, ctx context.Context) {
 			PubsubName: "foo",
 			Topic:      "topic",
 			Data:       []byte(`{"status":"completed"}`),
+		})
+		require.Error(t, err)
+
+		_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
+			StoreName: "mystore",
+			States: []*commonv1.StateItem{
+				{
+					Key:   "key",
+					Value: []byte("value3"),
+				},
+			},
+		})
+		require.Error(t, err)
+		_, err = client.GetState(ctx, &rtv1.GetStateRequest{
+			StoreName: "mystore",
+			Key:       "key",
 		})
 		require.Error(t, err)
 	})

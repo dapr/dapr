@@ -21,6 +21,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/kit/ptr"
@@ -53,9 +54,9 @@ func Test_toInternal(t *testing.T) {
 	assert.Equal(t, 1, intc.appConnectionConfig.MaxConcurrency)
 	assert.True(t, intc.mTLSEnabled)
 	assert.Equal(t, "localhost:5052", intc.sentryServiceAddress)
-	assert.Equal(t, 4, intc.maxRequestBodySize)
+	assert.Equal(t, 4<<20, intc.maxRequestBodySize)
+	assert.Equal(t, 4<<10, intc.readBufferSize)
 	assert.Equal(t, "", intc.unixDomainSocket)
-	assert.Equal(t, 4, intc.readBufferSize)
 	assert.Equal(t, time.Second, intc.gracefulShutdownDuration)
 	assert.Equal(t, nilDuration, intc.blockShutdownDuration)
 	assert.Equal(t, ptr.Of(true), intc.enableAPILogging)
@@ -90,14 +91,15 @@ func defaultTestConfig() Config {
 		AppMaxConcurrency:            1,
 		EnableMTLS:                   true,
 		SentryAddress:                "localhost:5052",
-		DaprHTTPMaxRequestSize:       4,
+		MaxRequestSize:               4 << 20,
+		ReadBufferSize:               4 << 10,
 		UnixDomainSocket:             "",
-		DaprHTTPReadBufferSize:       4,
 		DaprGracefulShutdownSeconds:  1,
 		EnableAPILogging:             ptr.Of(true),
 		DisableBuiltinK8sSecretStore: true,
 		AppChannelAddress:            "1.1.1.1",
 		Registry:                     registry.NewOptions(),
-		Metrics:                      &metrics.Options{MetricsEnabled: false},
+		Metrics:                      metrics.Options{Enabled: false, Healthz: healthz.New()},
+		Healthz:                      healthz.New(),
 	}
 }

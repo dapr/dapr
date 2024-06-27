@@ -79,7 +79,7 @@ func (s *secret) Setup(t *testing.T) []framework.Option {
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(s.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
-		daprd.WithExecOptions(exec.WithEnvVars(
+		daprd.WithExecOptions(exec.WithEnvVars(t,
 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
 			"FOO_SEC_1", "bar1",
 			"FOO_SEC_2", "bar2",
@@ -104,7 +104,7 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 1)
+		assert.Empty(t, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()))
 		s.readExpectError(t, ctx, "123", "SEC_1", http.StatusInternalServerError)
 	})
 
@@ -125,13 +125,12 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 2)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 1)
+		}, time.Second*5, time.Millisecond*10)
 		resp := util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort())
-		require.Len(t, resp, 2)
+		require.Len(t, resp, 1)
 
 		assert.ElementsMatch(t, resp, []*rtpbv1.RegisteredComponents{
-			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 			{Name: "123", Type: "secretstores.local.env", Version: "v1"},
 		})
 
@@ -190,13 +189,12 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp2, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 4)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 3)
+		}, time.Second*5, time.Millisecond*10)
 		resp := util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort())
-		require.Len(t, resp, 4)
+		require.Len(t, resp, 3)
 
 		assert.ElementsMatch(t, []*rtpbv1.RegisteredComponents{
-			{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 			{Name: "123", Type: "secretstores.local.env", Version: "v1"},
 			{Name: "abc", Type: "secretstores.local.file", Version: "v1"},
 			{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
@@ -233,12 +231,11 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "123", Type: "secretstores.local.env", Version: "v1"},
 				{Name: "abc", Type: "secretstores.local.env", Version: "v1"},
 				{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.read(t, ctx, "123", "SEC_1", "bar1")
 		s.read(t, ctx, "123", "SEC_2", "bar2")
@@ -315,13 +312,12 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "123", Type: "secretstores.local.file", Version: "v1"},
 				{Name: "abc", Type: "secretstores.local.file", Version: "v1"},
 				{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
 				{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.read(t, ctx, "123", "1-sec-1", "foo")
 		s.read(t, ctx, "123", "1-sec-2", "bar")
@@ -363,13 +359,12 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c, []*rtpbv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{Name: "123", Type: "secretstores.local.file", Version: "v1"},
 				{Name: "bar", Type: "secretstores.local.file", Version: "v1"},
 				{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
 				{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.read(t, ctx, "123", "1-sec-1", "foo")
 		s.read(t, ctx, "123", "1-sec-2", "bar")
@@ -403,16 +398,15 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 			resp := util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
 			assert.ElementsMatch(c,
 				[]*rtpbv1.RegisteredComponents{
-					{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 					{Name: "123", Type: "secretstores.local.file", Version: "v1"},
 					{Name: "xyz", Type: "secretstores.local.env", Version: "v1"},
 					{Name: "foo", Type: "secretstores.local.env", Version: "v1"},
 					{
 						Name: "bar", Type: "state.in-memory", Version: "v1",
-						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+						Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 					},
 				}, resp)
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.read(t, ctx, "123", "1-sec-1", "foo")
 		s.read(t, ctx, "123", "1-sec-2", "bar")
@@ -440,15 +434,14 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp := util.GetMetaComponents(c, ctx, s.client, s.daprd.HTTPPort())
-			assert.Len(c, resp, 2)
+			assert.Len(c, resp, 1)
 			assert.ElementsMatch(c, resp, []*rtpbv1.RegisteredComponents{
-				{Name: "dapr", Type: "workflow.dapr", Version: "v1"},
 				{
 					Name: "bar", Type: "state.in-memory", Version: "v1",
-					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
+					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 				},
 			})
-		}, time.Second*5, time.Millisecond*100)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.readExpectError(t, ctx, "123", "1-sec-1", http.StatusInternalServerError)
 		s.readExpectError(t, ctx, "xyz", "SEC_1", http.StatusInternalServerError)
@@ -473,8 +466,8 @@ func (s *secret) Run(t *testing.T, ctx context.Context) {
 		s.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &comp1, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 3)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, util.GetMetaComponents(t, ctx, s.client, s.daprd.HTTPPort()), 2)
+		}, time.Second*5, time.Millisecond*10)
 
 		s.read(t, ctx, "123", "SEC_1", "bar1")
 		s.read(t, ctx, "123", "SEC_2", "bar2")

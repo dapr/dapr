@@ -19,7 +19,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"strconv"
 	"sync"
 	"sync/atomic"
@@ -29,6 +28,7 @@ import (
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
+	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/emptypb"
 
@@ -51,19 +51,23 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/outbox"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/dapr/pkg/runtime/channels"
+	"github.com/dapr/dapr/pkg/runtime/processor"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
-	kiterrors "github.com/dapr/kit/errors"
 	"github.com/dapr/kit/logger"
 )
 
-const daprHTTPStatusHeader = "dapr-http-status"
+const (
+	daprHTTPStatusHeader = "dapr-http-status"
+	metadataPrefix       = "metadata."
+)
 
 // API is the gRPC interface for the Dapr gRPC API. It implements both the internal and external proto definitions.
 type API interface {
@@ -85,9 +89,12 @@ type api struct {
 	directMessaging       invokev1.DirectMessaging
 	channels              *channels.Channels
 	pubsubAdapter         runtimePubsub.Adapter
+	pubsubAdapterStreamer runtimePubsub.AdapterStreamer
+	outbox                outbox.Outbox
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
+	processor             *processor.Processor
 	closed                atomic.Bool
 	closeCh               chan struct{}
 	wg                    sync.WaitGroup
@@ -98,11 +105,14 @@ type APIOpts struct {
 	Universal             *universal.Universal
 	Logger                logger.Logger
 	Channels              *channels.Channels
-	PubsubAdapter         runtimePubsub.Adapter
+	PubSubAdapter         runtimePubsub.Adapter
+	PubSubAdapterStreamer runtimePubsub.AdapterStreamer
+	Outbox                outbox.Outbox
 	DirectMessaging       invokev1.DirectMessaging
 	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec           config.TracingSpec
 	AccessControlList     *config.AccessControlList
+	Processor             *processor.Processor
 }
 
 // NewAPI returns a new gRPC API.
@@ -113,44 +123,45 @@ func NewAPI(opts APIOpts) API {
 		logger:                opts.Logger,
 		directMessaging:       opts.DirectMessaging,
 		channels:              opts.Channels,
-		pubsubAdapter:         opts.PubsubAdapter,
+		pubsubAdapter:         opts.PubSubAdapter,
+		pubsubAdapterStreamer: opts.PubSubAdapterStreamer,
+		outbox:                opts.Outbox,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
+		processor:             opts.Processor,
 		closeCh:               make(chan struct{}),
 	}
 }
 
-// validateAndGetPubsbuAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
+// validateAndGetPubsubAndTopic validates the request parameters and returns the pubsub interface, pubsub name, topic name, rawPayload metadata if set
 // or an error.
 func (a *api) validateAndGetPubsubAndTopic(pubsubName, topic string, reqMeta map[string]string) (pubsub.PubSub, string, string, bool, error) {
 	var err error
-	pubsubType := string(contribMetadata.PubSubType)
-
 	if a.pubsubAdapter == nil {
-		err = apierrors.NotConfigured(pubsubName, pubsubType, reqMeta, codes.FailedPrecondition, http.StatusBadRequest, "ERR_PUBSUB_NOT_CONFIGURED", kiterrors.CodePrefixPubSub+kiterrors.CodeNotConfigured)
+		err = apierrors.PubSub(pubsubName).WithMetadata(nil).NotConfigured()
 		return nil, "", "", false, err
 	}
 
 	if pubsubName == "" {
-		err = apierrors.PubSubNameEmpty(pubsubName, pubsubType, reqMeta)
+		err = apierrors.PubSub(pubsubName).WithMetadata(reqMeta).NameEmpty()
 		return nil, "", "", false, err
 	}
 
 	thepubsub, ok := a.Universal.CompStore().GetPubSub(pubsubName)
 	if !ok {
-		err = apierrors.NotFound(pubsubName, pubsubType, reqMeta, codes.InvalidArgument, http.StatusNotFound, "ERR_PUBSUB_NOT_FOUND", kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound)
+		err = apierrors.PubSub(pubsubName).WithMetadata(nil).NotFound()
 		return nil, "", "", false, err
 	}
 
 	if topic == "" {
-		err = apierrors.PubSubTopicEmpty(pubsubName, pubsubType, reqMeta)
+		err = apierrors.PubSub(pubsubName).WithMetadata(reqMeta).TopicEmpty()
 		return nil, "", "", false, err
 	}
 
 	rawPayload, metaErr := contribMetadata.IsRawPayload(reqMeta)
 	if metaErr != nil {
-		err = apierrors.PubSubMetadataDeserialize(pubsubName, pubsubType, reqMeta, metaErr)
+		err = apierrors.PubSub(pubsubName).WithMetadata(reqMeta).DeserializeError(metaErr)
 		return nil, "", "", false, err
 	}
 
@@ -185,7 +196,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 			Pubsub:          in.GetPubsubName(),
 		}, in.GetMetadata())
 		if err != nil {
-			nerr := apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID(), "error": err.Error()})
+			nerr := apierrors.PubSub(pubsubName).WithAppError(
+				a.AppID(), err,
+			).CloudEventCreation()
 			apiServerLogger.Debug(nerr)
 			return &emptypb.Empty{}, nerr
 		}
@@ -195,7 +208,9 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 		data, err = json.Marshal(envelope)
 		if err != nil {
-			err = apierrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID()})
+			err = apierrors.PubSub(pubsubName).WithAppError(
+				a.AppID(), nil,
+			).WithTopic(topic).MarshalEnvelope()
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
@@ -219,11 +234,11 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 		switch {
 		case errors.As(err, &runtimePubsub.NotAllowedError{}):
-			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.AppID(), err)
+			nerr = apierrors.PubSub(pubsubName).PublishForbidden(topic, a.AppID(), err)
 		case errors.As(err, &runtimePubsub.NotFoundError{}):
-			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).TestNotFound(topic, err)
 		default:
-			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).PublishMessage(topic, err)
 		}
 
 		apiServerLogger.Debug(nerr)
@@ -350,7 +365,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 	spanMap := map[int]otelTrace.Span{}
 	// closeChildSpans method is called on every respond() call in all return paths in the following block of code.
-	closeChildSpans := func(ctx context.Context, err error) {
+	closeChildSpans := func(_ context.Context, err error) {
 		for _, span := range spanMap {
 			diag.UpdateSpanStatusFromGRPCError(span, err)
 			span.End()
@@ -364,7 +379,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 	for i, entry := range in.GetEntries() {
 		// Validate entry_id
 		if _, ok := entryIdSet[entry.GetEntryId()]; ok || entry.GetEntryId() == "" {
-			err := apierrors.PubSubMarshalEvents(pubsubName, string(contribMetadata.PubSubType), topic, map[string]string{"appID": a.AppID(), "error": "entryId is duplicated or not present for entry"})
+			err := apierrors.PubSub(pubsubName).WithAppError(
+				a.AppID(), errors.New("entryId is duplicated or not present for entry"),
+			).WithTopic(topic).MarshalEvents()
 			apiServerLogger.Debug(err)
 			return &runtimev1pb.BulkPublishResponse{}, err
 		}
@@ -397,7 +414,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
 			if err != nil {
-				nerr := apierrors.PubSubCloudEventCreation(pubsubName, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID(), "err": err.Error()})
+				nerr := apierrors.PubSub(pubsubName).WithAppError(
+					a.AppID(), err,
+				).CloudEventCreation()
 				apiServerLogger.Debug(nerr)
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
@@ -407,7 +426,9 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 
 			entries[i].Event, err = json.Marshal(envelope)
 			if err != nil {
-				nerr := apierrors.PubSubMarshalEnvelope(pubsubName, topic, string(contribMetadata.PubSubType), map[string]string{"appID": a.AppID(), "err": err.Error()})
+				nerr := apierrors.PubSub(pubsubName).WithAppError(
+					a.AppID(), err,
+				).WithTopic(topic).MarshalEnvelope()
 				apiServerLogger.Debug(nerr)
 				closeChildSpans(ctx, nerr)
 				return &runtimev1pb.BulkPublishResponse{}, nerr
@@ -445,11 +466,11 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		// On error, the response will be empty.
 		switch {
 		case errors.As(err, &runtimePubsub.NotAllowedError{}):
-			nerr = apierrors.PubSubPublishForbidden(pubsubName, string(contribMetadata.PubSubType), topic, a.AppID(), err)
+			nerr = apierrors.PubSub(pubsubName).PublishForbidden(topic, a.AppID(), err)
 		case errors.As(err, &runtimePubsub.NotFoundError{}):
-			nerr = apierrors.PubSubTestNotFound(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).TestNotFound(topic, err)
 		default:
-			nerr = apierrors.PubSubPublishMessage(pubsubName, string(contribMetadata.PubSubType), topic, err)
+			nerr = apierrors.PubSub(pubsubName).PublishMessage(topic, err)
 		}
 
 		apiServerLogger.Debug(nerr)
@@ -495,6 +516,13 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 
 	diag.DefaultComponentMonitoring.OutputBindingEvent(context.Background(), in.GetName(), in.GetOperation(), err == nil, elapsed)
 
+	// Some bindings have metadata in the response even in case of error
+	if resp != nil {
+		for k, v := range resp.Metadata {
+			grpc.SetHeader(ctx, grpcMetadata.Pairs(metadataPrefix+k, v))
+		}
+	}
+
 	if err != nil {
 		err = status.Errorf(codes.Internal, messages.ErrInvokeOutputBinding, in.GetName(), err.Error())
 		apiServerLogger.Debug(err)
@@ -505,6 +533,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		r.Data = resp.Data
 		r.Metadata = resp.Metadata
 	}
+
 	return r, nil
 }
 
@@ -850,7 +879,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 
 	transactionalStore, ok := store.(state.TransactionalStore)
 	if !ok || !state.FeatureTransactional.IsPresent(store.Features()) {
-		err := apierrors.StateStoreTransactionsNotSupported(in.GetStoreName())
+		err := apierrors.StateStore(in.GetStoreName()).TransactionsNotSupported()
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
@@ -915,7 +944,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	if maxMulti, ok := store.(state.TransactionalStoreMultiMaxSize); ok {
 		max := maxMulti.MultiMaxSize()
 		if max > 0 && len(operations) > max {
-			err := apierrors.StateStoreTooManyTransactionalOps(in.GetStoreName(), len(operations), max)
+			err := apierrors.StateStore(in.GetStoreName()).TooManyTransactionalOps(len(operations), max)
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
@@ -939,18 +968,18 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		}
 	}
 
-	outboxEnabled := a.pubsubAdapter.Outbox().Enabled(in.GetStoreName())
+	outboxEnabled := a.outbox.Enabled(in.GetStoreName())
 	if outboxEnabled {
 		span := diagUtils.SpanFromContext(ctx)
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
-		trs, err := a.pubsubAdapter.Outbox().PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), corID, traceState)
+		ops, err := a.outbox.PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), corID, traceState)
 		if err != nil {
-			nerr := apierrors.PubSubOubox(a.AppID(), err)
+			nerr := apierrors.PubSubOutbox(a.AppID(), err)
 			apiServerLogger.Debug(nerr)
 			return &emptypb.Empty{}, nerr
 		}
 
-		operations = append(operations, trs...)
+		operations = ops
 	}
 
 	start := time.Now()
@@ -976,97 +1005,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	return &emptypb.Empty{}, nil
 }
 
-func (a *api) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.CreateTimerRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-		DueTime:   in.GetDueTime(),
-		Period:    in.GetPeriod(),
-		TTL:       in.GetTtl(),
-		Callback:  in.GetCallback(),
-	}
-
-	if in.GetData() != nil {
-		j, err := json.Marshal(in.GetData())
-		if err != nil {
-			return &emptypb.Empty{}, err
-		}
-		req.Data = j
-	}
-	err := a.Universal.Actors().CreateTimer(ctx, req)
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.DeleteTimerRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-	}
-
-	err := a.Universal.Actors().DeleteTimer(ctx, req)
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.CreateReminderRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-		DueTime:   in.GetDueTime(),
-		Period:    in.GetPeriod(),
-		TTL:       in.GetTtl(),
-	}
-
-	if in.GetData() != nil {
-		j, err := json.Marshal(in.GetData())
-		if err != nil {
-			return &emptypb.Empty{}, err
-		}
-		req.Data = j
-	}
-	err := a.Universal.Actors().CreateReminder(ctx, req)
-	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
-		return nil, messages.ErrActorReminderOpActorNotHosted
-	}
-	return &emptypb.Empty{}, err
-}
-
-func (a *api) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
-		return &emptypb.Empty{}, err
-	}
-
-	req := &actors.DeleteReminderRequest{
-		Name:      in.GetName(),
-		ActorID:   in.GetActorId(),
-		ActorType: in.GetActorType(),
-	}
-
-	err := a.Universal.Actors().DeleteReminder(ctx, req)
-	if err != nil && errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-		apiServerLogger.Debug(messages.ErrActorReminderOpActorNotHosted)
-		return nil, messages.ErrActorReminderOpActorNotHosted
-	}
-	return &emptypb.Empty{}, err
-}
-
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
+	err := a.Universal.ActorReadinessCheck(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1080,7 +1021,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	})
 
 	if !hosted {
-		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		err = messages.ErrActorInstanceMissing
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1093,7 +1034,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 
 	resp, err := a.Universal.Actors().GetState(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateGet, err))
+		err = messages.ErrActorStateGet.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1105,7 +1046,8 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 }
 
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
-	if err := a.actorReadinessCheck(ctx); err != nil {
+	err := a.Universal.ActorReadinessCheck(ctx)
+	if err != nil {
 		return nil, err
 	}
 
@@ -1142,9 +1084,9 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 			}
 
 		default:
-			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, op.GetOperationType())
+			err = status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, op.GetOperationType())
 			apiServerLogger.Debug(err)
-			return &emptypb.Empty{}, err
+			return nil, err
 		}
 
 		actorOps = append(actorOps, actorOp)
@@ -1156,9 +1098,9 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 	})
 
 	if !hosted {
-		err := status.Errorf(codes.Internal, messages.ErrActorInstanceMissing)
+		err = messages.ErrActorInstanceMissing
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	req := actors.TransactionalRequest{
@@ -1167,11 +1109,11 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		Operations: actorOps,
 	}
 
-	err := a.Universal.Actors().TransactionalStateOperation(ctx, &req)
+	err = a.Universal.Actors().TransactionalStateOperation(ctx, &req)
 	if err != nil {
-		err = status.Errorf(codes.Internal, fmt.Sprintf(messages.ErrActorStateTransactionSave, err))
+		err = messages.ErrActorStateTransactionSave.WithFormat(err)
 		apiServerLogger.Debug(err)
-		return &emptypb.Empty{}, err
+		return nil, err
 	}
 
 	return &emptypb.Empty{}, nil
@@ -1180,24 +1122,13 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	response := &runtimev1pb.InvokeActorResponse{}
 
-	if err := a.actorReadinessCheck(ctx); err != nil {
+	if err := a.Universal.ActorReadinessCheck(ctx); err != nil {
 		return response, err
 	}
 
 	policyDef := a.Universal.Resiliency().ActorPreLockPolicy(in.GetActorType(), in.GetActorId())
 
-	reqMetadata := make(map[string][]string, len(in.GetMetadata()))
-	for k, v := range in.GetMetadata() {
-		reqMetadata[k] = []string{v}
-	}
-	req := invokev1.NewInvokeMethodRequest(in.GetMethod()).
-		WithActor(in.GetActorType(), in.GetActorId()).
-		WithRawDataBytes(in.GetData()).
-		WithMetadata(reqMetadata)
-	if policyDef != nil {
-		req.WithReplay(policyDef.HasRetries())
-	}
-	defer req.Close()
+	req := in.ToInternalInvokeRequest()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
@@ -1206,42 +1137,20 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	// should technically wait forever on the locking mechanism. If we timeout while
 	// waiting for the lock, we can also create a queue of calls that will try and continue
 	// after the timeout.
-	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
-		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
-			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
-		},
-	)
-	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
+	res, err := policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
 		return a.Universal.Actors().Call(ctx, req)
 	})
 	if err != nil && !actorerrors.Is(err) {
-		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
+		err = messages.ErrActorInvoke.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return response, err
 	}
 
-	if resp == nil {
-		resp = invokev1.NewInvokeMethodResponse(500, "Blank request", nil)
-	}
-	defer resp.Close()
-
-	response.Data, err = resp.RawDataFull()
-	if err != nil {
-		return nil, fmt.Errorf("failed to read response data: %w", err)
+	if res != nil {
+		response.Data = res.GetMessage().GetData().GetValue()
 	}
 	return response, nil
-}
-
-// This function makes sure that the actor subsystem is ready.
-func (a *api) actorReadinessCheck(ctx context.Context) error {
-	a.Universal.WaitForActorsReady(ctx)
-
-	if a.Universal.Actors() == nil {
-		apiServerLogger.Debug(messages.ErrActorRuntimeNotFound)
-		return messages.ErrActorRuntimeNotFound
-	}
-
-	return nil
 }
 
 func stringValueOrEmpty(value *string) string {

@@ -35,7 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/dapr/dapr/tests/util"
+	cryptotest "github.com/dapr/kit/crypto/test"
 	kitUtils "github.com/dapr/kit/utils"
 	apiv1 "k8s.io/api/core/v1"
 )
@@ -81,7 +81,7 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("service_invocation")
 	utils.InitHTTPClient(false)
 
-	pki, err := util.GenPKIError(util.PKIOptions{
+	pki, err := cryptotest.GenPKIError(cryptotest.PKIOptions{
 		LeafDNS: "service-invocation-external",
 	})
 	if err != nil {
@@ -1493,8 +1493,7 @@ func TestNegativeCases(t *testing.T) {
 				// TODO: This doesn't return as an error, it should be handled more gracefully in dapr
 				require.False(t, testResults.MainCallSuccessful)
 				require.Equal(t, 500, status)
-				require.Contains(t, string(testResults.RawBody), "failed to invoke")
-				require.Contains(t, string(testResults.RawBody), "missing-service-0")
+				require.Contains(t, string(testResults.RawBody), "failed to resolve address for 'missing-service-0-dapr.dapr-tests.svc.cluster.local'")
 				require.Nil(t, err)
 			})
 
@@ -1517,8 +1516,7 @@ func TestNegativeCases(t *testing.T) {
 				require.Nil(t, testResults.RawBody)
 				require.Nil(t, err)
 				require.NotNil(t, testResults.RawError)
-				require.Contains(t, testResults.RawError, "failed to invoke")
-				require.Contains(t, testResults.RawError, "missing-service-0")
+				require.Contains(t, testResults.RawError, "failed to resolve address for 'missing-service-0-dapr.dapr-tests.svc.cluster.local'")
 			})
 
 			t.Run("service_timeout_http", func(t *testing.T) {

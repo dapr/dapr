@@ -27,7 +27,7 @@ const ActorAPILevel = 20
 type apiLevelFeature uint32
 
 const (
-	// Enables serializing reminders as protobuf rather than JSON in the pkg/actors/reminders package
+	// APILevelFeatureRemindersProtobuf Enables serializing reminders as protobuf rather than JSON in the pkg/actors/reminders package
 	// When serialized as protobuf, reminders have the "\0pb" prefix
 	// Note this only control serializations; when un-serializing, legacy JSON is always supported as fallback
 	APILevelFeatureRemindersProtobuf apiLevelFeature = 20

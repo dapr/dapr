@@ -75,9 +75,9 @@ func TestMain(m *testing.M) {
 
 func createConnection(t *testing.T) *grpc.ClientConn {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	conn, err := grpc.DialContext(ctx, "localhost:9998",
+	conn, err := grpc.DialContext(ctx, "localhost:9998", //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
 	cancel()
 	require.NoError(t, err, "failed to connect to gRPC server")
@@ -93,11 +93,11 @@ func TestInvokeMethod(t *testing.T) {
 	conn := createConnection(t)
 	defer closeConnection(t, conn)
 	c := Channel{
-		baseAddress:          "localhost:9998",
-		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		conn:                 conn,
-		appMetadataToken:     "token1",
-		maxRequestBodySizeMB: 4,
+		baseAddress:        "localhost:9998",
+		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
+		conn:               conn,
+		appMetadataToken:   "token1",
+		maxRequestBodySize: 4 << 20,
 	}
 	ctx := context.Background()
 
@@ -139,11 +139,11 @@ func TestInvokeMethod(t *testing.T) {
 func TestHealthProbe(t *testing.T) {
 	conn := createConnection(t)
 	c := Channel{
-		baseAddress:          "localhost:9998",
-		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		conn:                 conn,
-		appMetadataToken:     "token1",
-		maxRequestBodySizeMB: 4,
+		baseAddress:        "localhost:9998",
+		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
+		conn:               conn,
+		appMetadataToken:   "token1",
+		maxRequestBodySize: 4 << 20,
 	}
 	ctx := context.Background()
 

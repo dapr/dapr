@@ -33,6 +33,7 @@ import (
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
+	"github.com/dapr/dapr/pkg/healthz"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -183,9 +184,10 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 		ControlPlaneTrustDomain: "test.example.com",
 		ControlPlaneNamespace:   "default",
 		MTLSEnabled:             false,
-		OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
+		OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
 			return []*x509.Certificate{nil}, nil
 		},
+		Healthz: healthz.New(),
 	})
 	require.NoError(t, err)
 	go secP.Run(context.Background())

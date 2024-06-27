@@ -14,12 +14,17 @@ limitations under the License.
 package options
 
 import (
+	"fmt"
+	"math"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
+	"k8s.io/apimachinery/pkg/api/resource"
 
+	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/cors"
@@ -31,56 +36,67 @@ import (
 )
 
 type Options struct {
-	AppID                        string
-	ComponentsPath               string
-	ControlPlaneAddress          string
-	ControlPlaneTrustDomain      string
-	ControlPlaneNamespace        string
-	SentryAddress                string
-	TrustAnchors                 []byte
-	AllowedOrigins               string
-	EnableProfiling              bool
-	AppMaxConcurrency            int
-	EnableMTLS                   bool
-	AppSSL                       bool
-	DaprHTTPMaxRequestSize       int
-	ResourcesPath                []string
-	AppProtocol                  string
-	EnableAPILogging             *bool
-	RuntimeVersion               bool
-	BuildInfo                    bool
-	WaitCommand                  bool
-	DaprHTTPPort                 string
-	DaprAPIGRPCPort              string
-	ProfilePort                  string
-	DaprInternalGRPCPort         string
-	DaprPublicPort               string
-	AppPort                      string
-	DaprGracefulShutdownSeconds  int
-	DaprBlockShutdownDuration    *time.Duration
-	ActorsService                string
-	RemindersService             string
-	DaprAPIListenAddresses       string
-	AppHealthProbeInterval       int
-	AppHealthProbeTimeout        int
-	AppHealthThreshold           int
-	EnableAppHealthCheck         bool
-	Mode                         string
-	Config                       []string
-	UnixDomainSocket             string
-	DaprHTTPReadBufferSize       int
-	DisableBuiltinK8sSecretStore bool
-	AppHealthCheckPath           string
-	AppChannelAddress            string
-	Logger                       logger.Options
-	Metrics                      *metrics.Options
+	AppID                         string
+	ComponentsPath                string
+	ControlPlaneAddress           string
+	ControlPlaneTrustDomain       string
+	ControlPlaneNamespace         string
+	SentryAddress                 string
+	TrustAnchors                  []byte
+	AllowedOrigins                string
+	EnableProfiling               bool
+	AppMaxConcurrency             int
+	EnableMTLS                    bool
+	AppSSL                        bool
+	MaxRequestSize                int // In bytes
+	ResourcesPath                 []string
+	AppProtocol                   string
+	EnableAPILogging              *bool
+	RuntimeVersion                bool
+	BuildInfo                     bool
+	WaitCommand                   bool
+	DaprHTTPPort                  string
+	DaprAPIGRPCPort               string
+	ProfilePort                   string
+	DaprInternalGRPCPort          string
+	DaprInternalGRPCListenAddress string
+	DaprPublicPort                string
+	DaprPublicListenAddress       string
+	AppPort                       string
+	DaprGracefulShutdownSeconds   int
+	DaprBlockShutdownDuration     *time.Duration
+	ActorsService                 string
+	RemindersService              string
+	SchedulerAddress              []string
+	DaprAPIListenAddresses        string
+	AppHealthProbeInterval        int
+	AppHealthProbeTimeout         int
+	AppHealthThreshold            int
+	EnableAppHealthCheck          bool
+	Mode                          string
+	Config                        []string
+	UnixDomainSocket              string
+	ReadBufferSize                int // In bytes
+	DisableBuiltinK8sSecretStore  bool
+	AppHealthCheckPath            string
+	AppChannelAddress             string
+	Logger                        logger.Options
+	Metrics                       *metrics.FlagOptions
 }
 
-func New(origArgs []string) *Options {
+func New(origArgs []string) (*Options, error) {
 	opts := Options{
 		EnableAPILogging:          new(bool),
 		DaprBlockShutdownDuration: new(time.Duration),
+		MaxRequestSize:            runtime.DefaultMaxRequestBodySize,
+		ReadBufferSize:            runtime.DefaultReadBufferSize,
 	}
+	var (
+		maxRequestSizeMB int
+		maxBodySize      string
+		readBufferSizeKB int
+		readBufferSize   string
+	)
 
 	// We are using pflag to parse the CLI flags
 	// pflag is a drop-in replacement for the standard library's "flag" package, however…
@@ -105,8 +121,10 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.DaprHTTPPort, "dapr-http-port", strconv.Itoa(runtime.DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
 	fs.StringVar(&opts.DaprAPIListenAddresses, "dapr-listen-addresses", runtime.DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
 	fs.StringVar(&opts.DaprPublicPort, "dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
+	fs.StringVar(&opts.DaprPublicListenAddress, "dapr-public-listen-address", "", "Public listen address for Dapr Health and Metadata")
 	fs.StringVar(&opts.DaprAPIGRPCPort, "dapr-grpc-port", strconv.Itoa(runtime.DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	fs.StringVar(&opts.DaprInternalGRPCPort, "dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
+	fs.StringVar(&opts.DaprInternalGRPCListenAddress, "dapr-internal-grpc-listen-address", "", "gRPC listen address for the Dapr Internal API")
 	fs.StringVar(&opts.AppPort, "app-port", "", "The port the application is listening on")
 	fs.StringVar(&opts.ProfilePort, "profile-port", strconv.Itoa(runtime.DefaultProfilePort), "The port for the profile server")
 	fs.StringVar(&opts.AppProtocol, "app-protocol", string(protocol.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
@@ -128,9 +146,13 @@ func New(origArgs []string) *Options {
 	fs.BoolVar(&opts.EnableMTLS, "enable-mtls", false, "Enables automatic mTLS for daprd-to-daprd communication channels")
 	fs.BoolVar(&opts.AppSSL, "app-ssl", false, "Sets the URI scheme of the app to https and attempts a TLS connection")
 	fs.MarkDeprecated("app-ssl", "use '--app-protocol https|grpcs'")
-	fs.IntVar(&opts.DaprHTTPMaxRequestSize, "dapr-http-max-request-size", runtime.DefaultMaxRequestBodySize, "Increasing max size of request body in MB to handle uploading of big files")
+	fs.IntVar(&maxRequestSizeMB, "dapr-http-max-request-size", runtime.DefaultMaxRequestBodySize>>20, "Max size of request body in MB")
+	fs.MarkDeprecated("dapr-http-max-request-size", "use '--max-body-size "+strconv.Itoa(runtime.DefaultMaxRequestBodySize>>20)+"Mi'")
+	fs.StringVar(&maxBodySize, "max-body-size", strconv.Itoa(runtime.DefaultMaxRequestBodySize>>20)+"Mi", "Max size of request body for the Dapr HTTP and gRPC servers, as a resource quantity")
+	fs.IntVar(&readBufferSizeKB, "dapr-http-read-buffer-size", runtime.DefaultReadBufferSize>>10, "Max size of read buffer, in KB (also used to handle request headers)")
+	fs.MarkDeprecated("dapr-http-read-buffer-size", "use '--read-buffer-size "+strconv.Itoa(runtime.DefaultReadBufferSize>>10)+"Ki'")
+	fs.StringVar(&readBufferSize, "read-buffer-size", strconv.Itoa(runtime.DefaultReadBufferSize>>10)+"Ki", "Max size of read buffer, as a resource quantity (also used to handle request headers)")
 	fs.StringVar(&opts.UnixDomainSocket, "unix-domain-socket", "", "Path to a unix domain socket dir mount. If specified, Dapr API servers will use Unix Domain Sockets")
-	fs.IntVar(&opts.DaprHTTPReadBufferSize, "dapr-http-read-buffer-size", runtime.DefaultReadBufferSize, "Increasing max size of read buffer in KB to handle sending multi-KB headers")
 	fs.IntVar(&opts.DaprGracefulShutdownSeconds, "dapr-graceful-shutdown-seconds", int(runtime.DefaultGracefulShutdownDuration/time.Second), "Graceful shutdown time in seconds")
 	fs.DurationVar(opts.DaprBlockShutdownDuration, "dapr-block-shutdown-duration", 0, "If enabled, will block graceful shutdown after terminate signal is received until either the given duration has elapsed or the app reports unhealthy. Disabled by default")
 	fs.BoolVar(opts.EnableAPILogging, "enable-api-logging", false, "Enable API logging for API calls")
@@ -146,6 +168,7 @@ func New(origArgs []string) *Options {
 	// --placement-host-address is a legacy (but not deprecated) flag that is translated to the actors-service flag
 	var placementServiceHostAddr string
 	fs.StringVar(&placementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers (overrides actors-service)")
+	fs.StringSliceVar(&opts.SchedulerAddress, "scheduler-host-address", nil, "Addresses of the Scheduler service instance(s), as comma separated host:port pairs")
 	fs.StringVar(&opts.ActorsService, "actors-service", "", "Type and address of the actors service, in the format 'type:address'")
 	fs.StringVar(&opts.RemindersService, "reminders-service", "", "Type and address of the reminders service, in the format 'type:address'")
 
@@ -153,7 +176,7 @@ func New(origArgs []string) *Options {
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
-	opts.Metrics = metrics.DefaultMetricOptions()
+	opts.Metrics = metrics.DefaultFlagOptions()
 	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
 	// Ignore errors; flagset is set for ExitOnError
@@ -168,6 +191,44 @@ func New(origArgs []string) *Options {
 	// If placement-host-address is set, that always takes priority over actors-service
 	if placementServiceHostAddr != "" {
 		opts.ActorsService = "placement:" + placementServiceHostAddr
+	}
+
+	// Max body size
+	// max-body-size has priority over dapr-http-max-request-size
+	if fs.Changed("max-body-size") {
+		q, err := resource.ParseQuantity(maxBodySize)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for 'max-body-size' option: %w", err)
+		}
+		opts.MaxRequestSize, err = getQuantityBytes(q)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for 'max-body-size' option: %w", err)
+		}
+	} else if fs.Changed("dapr-http-max-request-size") {
+		if maxRequestSizeMB > 0 {
+			opts.MaxRequestSize = maxRequestSizeMB << 20
+		} else {
+			opts.MaxRequestSize = maxRequestSizeMB
+		}
+	}
+
+	// Read buffer size
+	// read-buffer-size has priority over dapr-http-read-buffer-size
+	if fs.Changed("read-buffer-size") {
+		q, err := resource.ParseQuantity(readBufferSize)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for 'read-buffer-size' option: %w", err)
+		}
+		opts.ReadBufferSize, err = getQuantityBytes(q)
+		if err != nil {
+			return nil, fmt.Errorf("invalid value for 'read-buffer-size' option: %w", err)
+		}
+	} else if fs.Changed("dapr-http-read-buffer-size") {
+		if readBufferSizeKB > 0 {
+			opts.ReadBufferSize = readBufferSizeKB << 10
+		} else {
+			opts.ReadBufferSize = readBufferSizeKB
+		}
 	}
 
 	opts.TrustAnchors = []byte(os.Getenv(consts.TrustAnchorsEnvVar))
@@ -190,5 +251,26 @@ func New(origArgs []string) *Options {
 		opts.DaprBlockShutdownDuration = nil
 	}
 
-	return &opts
+	if !fs.Changed("scheduler-host-address") {
+		addr, ok := os.LookupEnv(consts.SchedulerHostAddressEnvVar)
+		if ok {
+			opts.SchedulerAddress = strings.Split(addr, ",")
+		}
+	}
+
+	return &opts, nil
+}
+
+// getQuantityBytes returns the number of bytes in the quantity.
+func getQuantityBytes(q resource.Quantity) (int, error) {
+	if q.IsZero() {
+		return 0, nil
+	}
+
+	val, ok := q.AsInt64()
+	if !ok || (buildinfo.PtrSize == 32 && val > math.MaxInt32) {
+		return 0, fmt.Errorf("cannot get bytes from resource quantity value '%v'", q)
+	}
+
+	return int(val), nil
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/api/universal"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	dapr_testing "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
@@ -84,20 +85,24 @@ func TestClose(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		serverConfig := ServerConfig{
-			AppID:                "test",
-			HostAddress:          "127.0.0.1",
-			Port:                 port,
-			APIListenAddresses:   []string{"127.0.0.1"},
-			NameSpace:            "test",
-			TrustDomain:          "test",
-			MaxRequestBodySizeMB: 4,
-			ReadBufferSizeKB:     4,
-			EnableAPILogging:     true,
+			AppID:              "test",
+			HostAddress:        "127.0.0.1",
+			Port:               port,
+			APIListenAddresses: []string{"127.0.0.1"},
+			NameSpace:          "test",
+			TrustDomain:        "test",
+			MaxRequestBodySize: 4 << 20,
+			ReadBufferSize:     4 << 10,
+			EnableAPILogging:   true,
 		}
 		a := &api{Universal: universal.New(universal.Options{
 			CompStore: compstore.New(),
 		}), closeCh: make(chan struct{})}
-		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
+		server := NewAPIServer(Options{
+			API:     a,
+			Config:  serverConfig,
+			Healthz: healthz.New(),
+		})
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		require.NoError(t, server.Close())
@@ -107,20 +112,24 @@ func TestClose(t *testing.T) {
 		port, err := freeport.GetFreePort()
 		require.NoError(t, err)
 		serverConfig := ServerConfig{
-			AppID:                "test",
-			HostAddress:          "127.0.0.1",
-			Port:                 port,
-			APIListenAddresses:   []string{"127.0.0.1"},
-			NameSpace:            "test",
-			TrustDomain:          "test",
-			MaxRequestBodySizeMB: 4,
-			ReadBufferSizeKB:     4,
-			EnableAPILogging:     false,
+			AppID:              "test",
+			HostAddress:        "127.0.0.1",
+			Port:               port,
+			APIListenAddresses: []string{"127.0.0.1"},
+			NameSpace:          "test",
+			TrustDomain:        "test",
+			MaxRequestBodySize: 4 << 20,
+			ReadBufferSize:     4 << 10,
+			EnableAPILogging:   false,
 		}
 		a := &api{Universal: universal.New(universal.Options{
 			CompStore: compstore.New(),
 		}), closeCh: make(chan struct{})}
-		server := NewAPIServer(a, serverConfig, config.TracingSpec{}, config.MetricSpec{}, config.APISpec{}, nil, nil)
+		server := NewAPIServer(Options{
+			API:     a,
+			Config:  serverConfig,
+			Healthz: healthz.New(),
+		})
 		require.NoError(t, server.StartNonBlocking())
 		dapr_testing.WaitForListeningAddress(t, 5*time.Second, fmt.Sprintf("127.0.0.1:%d", port))
 		require.NoError(t, server.Close())

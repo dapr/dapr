@@ -79,6 +79,9 @@ func TestState(t *testing.T) {
 	ctx := context.Background()
 
 	externalURL := tr.Platform.AcquireAppExternalURL("hotreloading-state")
+	// Wait for app to be available.
+	_, err = utils.HTTPGetNTimes(externalURL, 60)
+	require.NoError(t, err)
 
 	const connectionString = `"host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"`
 
@@ -111,13 +114,13 @@ func TestState(t *testing.T) {
 		}, &client.CreateOptions{}))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
+			url := fmt.Sprintf("%s/test/http/save/hotreloading-state", externalURL)
 			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgYmFyCg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
 		}, 30*time.Second, 500*time.Millisecond)
 
-		url := fmt.Sprintf("http://%s/test/http/get/hotreloading-state", externalURL)
+		url := fmt.Sprintf("%s/test/http/get/hotreloading-state", externalURL)
 		resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, code)
@@ -135,7 +138,7 @@ func TestState(t *testing.T) {
 		require.NoError(t, cl.Update(ctx, &comp))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
+			url := fmt.Sprintf("%s/test/http/save/hotreloading-state", externalURL)
 			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"xyz"}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusBadRequest, code)
@@ -156,13 +159,13 @@ func TestState(t *testing.T) {
 		require.NoError(t, cl.Update(ctx, &comp))
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
+			url := fmt.Sprintf("%s/test/http/save/hotreloading-state", externalURL)
 			_, status, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgeHl6Cg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusNoContent, status)
 		}, 30*time.Second, 500*time.Millisecond)
 
-		url := fmt.Sprintf("http://%s/test/http/get/hotreloading-state", externalURL)
+		url := fmt.Sprintf("%s/test/http/get/hotreloading-state", externalURL)
 		resp, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo"}]}`))
 		assert.NoError(t, err)
 		assert.Equal(t, http.StatusOK, code)
@@ -178,7 +181,7 @@ func TestState(t *testing.T) {
 		}, &client.DeleteOptions{})
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			url := fmt.Sprintf("http://%s/test/http/save/hotreloading-state", externalURL)
+			url := fmt.Sprintf("%s/test/http/save/hotreloading-state", externalURL)
 			_, code, err := utils.HTTPPostWithStatus(url, []byte(`{"states":[{"key":"foo","value":{"data":"LXcgYmFyCg=="}}]}`))
 			assert.NoError(c, err)
 			assert.Equal(c, http.StatusInternalServerError, code)

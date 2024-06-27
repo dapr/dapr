@@ -208,18 +208,6 @@ func TestBulkPubsubPublishGrpcPerformance(t *testing.T) {
 				OutputFortio(bulkResult).
 				Flush()
 
-			report := perf.NewTestReport(
-				[]perf.TestResult{baselineResult, bulkResult},
-				"Pubsub Bulk Publish Grpc",
-				sidecarUsage,
-				appUsage)
-			report.SetTotalRestartCount(restarts)
-			err = utils.UploadAzureBlob(report)
-
-			if err != nil {
-				t.Error(err)
-			}
-
 			require.Equal(t, 0, bulkResult.RetCodes.Num400)
 			require.Equal(t, 0, bulkResult.RetCodes.Num500)
 			require.Equal(t, 0, restarts)

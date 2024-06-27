@@ -24,9 +24,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials/insecure"
 
+	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -102,6 +101,14 @@ metadata:
 spec:
   type: pubsub.in-memory
   version: v1
+---
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: mystore
+spec:
+  type: state.in-memory
+  version: v1
 `))
 
 	return []framework.Option{
@@ -113,12 +120,16 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 	h.daprd.Run(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, h.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	client := rtv1.NewDaprClient(conn)
+	client := h.daprd.GRPCClient(t, ctx)
 
-	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+		//nolint:testifylint
+		assert.NoError(c, err)
+		assert.Len(c, resp.GetSubscriptions(), 1)
+	}, time.Second*5, time.Millisecond*10)
+
+	_, err := client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "foo",
 		Topic:      "topic",
 		Data:       []byte(`{"status":"completed"}`),
@@ -139,7 +150,7 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 	healthzCalled := h.healthzCalled.Load()
 	assert.Eventually(t, func() bool {
 		return h.healthzCalled.Load() > healthzCalled
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "foo",
@@ -149,9 +160,16 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	select {
 	case <-h.routeCh:
-	case <-ctx.Done():
-		assert.Fail(t, "pubsub did not send message to subscriber")
+		assert.Fail(t, "pubsub should not have sent message to subscriber")
+	case <-time.After(time.Second):
 	}
+	_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
+		StoreName: "mystore",
+		States: []*commonv1.StateItem{
+			{Key: "key", Value: []byte("value")},
+		},
+	})
+	require.NoError(t, err)
 
 	healthzCalled = h.healthzCalled.Load()
 	h.appHealth.Store(false)
@@ -159,7 +177,7 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		return h.healthzCalled.Load() > healthzCalled
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
@@ -169,7 +187,14 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 		})
 		//nolint:testifylint
 		assert.Error(c, err)
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
+	_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{
+		StoreName: "mystore",
+		States: []*commonv1.StateItem{
+			{Key: "key", Value: []byte("value2")},
+		},
+	})
+	require.Error(t, err)
 
 	select {
 	case <-daprdStopped:

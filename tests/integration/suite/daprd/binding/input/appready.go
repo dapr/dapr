@@ -110,17 +110,17 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
 		assert.Len(c, resp.GetRegisteredComponents(), 1)
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 
 	called := a.healthCalled.Load()
-	require.Eventually(t, func() bool { return a.healthCalled.Load() > called }, time.Second*5, time.Millisecond*100)
+	require.Eventually(t, func() bool { return a.healthCalled.Load() > called }, time.Second*5, time.Millisecond*10)
 
 	assert.Eventually(t, func() bool {
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusInternalServerError
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*5, 10*time.Millisecond)
 
 	time.Sleep(time.Second * 2)
 	assert.Equal(t, int64(0), a.bindingCalled.Load())
@@ -132,11 +132,11 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusOK
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*5, 10*time.Millisecond)
 
 	assert.Eventually(t, func() bool {
 		return a.bindingCalled.Load() > 0
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*5, 10*time.Millisecond)
 
 	// Should stop calling binding when app becomes unhealthy
 	a.appHealthy.Store(false)
@@ -145,7 +145,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusInternalServerError
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*5, 10*time.Millisecond)
 	called = a.bindingCalled.Load()
 	time.Sleep(time.Second * 2)
 	assert.Equal(t, called, a.bindingCalled.Load())

@@ -29,6 +29,7 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -153,6 +154,24 @@ func TestLoadSavedState(t *testing.T) {
 	}
 }
 
+func TestDecodeEncodedState(t *testing.T) {
+	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
+	wfstate.AddToInbox(&backend.HistoryEvent{EventId: int32(1)})
+	runtimeState := backend.NewOrchestrationRuntimeState(testAppID, nil)
+	err := runtimeState.AddEvent(&backend.HistoryEvent{EventId: int32(2)})
+	require.NoError(t, err)
+	wfstate.ApplyRuntimeStateChanges(runtimeState)
+	wfstate.CustomStatus = "test-status"
+	encodedState, err := wfstate.EncodeWorkflowState()
+	require.NoError(t, err)
+	decodedState := NewWorkflowState(NewActorsBackendConfig(testAppID))
+	err = decodedState.DecodeWorkflowState(encodedState)
+	require.NoError(t, err)
+	assert.Equal(t, wfstate.Inbox[0].GetEventId(), decodedState.Inbox[0].GetEventId())
+	assert.Equal(t, wfstate.History[0].GetEventId(), decodedState.History[0].GetEventId())
+	assert.Equal(t, wfstate.CustomStatus, decodedState.CustomStatus)
+}
+
 func TestResetLoadedState(t *testing.T) {
 	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
 
@@ -188,6 +207,18 @@ func TestResetLoadedState(t *testing.T) {
 	upsertCount, deleteCount := countOperations(t, req)
 	assert.Equal(t, 2, upsertCount)  // metadata + customStatus
 	assert.Equal(t, 15, deleteCount) // all history and inbox records are deleted
+}
+
+func TestInvalidStart(t *testing.T) {
+	be, err := NewActorBackend(wfbackend.Metadata{}, nil)
+	require.NoError(t, err)
+	require.NotNil(t, be)
+
+	err = be.Start(context.TODO())
+	require.Error(t, err)
+
+	err = be.Start(context.TODO())
+	require.Error(t, err)
 }
 
 func getActorRuntime(t *testing.T) actors.Actors {

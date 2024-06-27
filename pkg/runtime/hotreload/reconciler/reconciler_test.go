@@ -26,6 +26,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
@@ -36,7 +37,7 @@ import (
 func Test_Run(t *testing.T) {
 	t.Run("should reconcile when ticker reaches 60 seconds", func(t *testing.T) {
 		compLoader := fake.NewFake[componentsapi.Component]()
-		loader := fake.New().WithComponent(compLoader)
+		loader := fake.New().WithComponents(compLoader)
 
 		var listCalled atomic.Int32
 		compLoader.WithList(func(context.Context) (*differ.LocalRemoteResources[componentsapi.Component], error) {
@@ -44,16 +45,18 @@ func Test_Run(t *testing.T) {
 			return nil, nil
 		})
 
-		r := NewComponent(Options[componentsapi.Component]{
+		r := NewComponents(Options[componentsapi.Component]{
 			Loader:    loader,
 			CompStore: compstore.New(),
+			Healthz:   healthz.New(),
 		})
 		fakeClock := clocktesting.NewFakeClock(time.Now())
 		r.clock = fakeClock
 
 		errCh := make(chan error)
+		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
-			errCh <- r.Run(context.Background())
+			errCh <- r.Run(ctx)
 		}()
 
 		assert.Eventually(t, fakeClock.HasWaiters, time.Second*3, time.Millisecond*100)
@@ -66,8 +69,7 @@ func Test_Run(t *testing.T) {
 			return listCalled.Load() == 1
 		}, time.Second*3, time.Millisecond*100)
 
-		require.NoError(t, r.Close())
-
+		cancel()
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)
@@ -80,13 +82,17 @@ func Test_Run(t *testing.T) {
 		compLoader := fake.NewFake[componentsapi.Component]()
 
 		compCh := make(chan *loader.Event[componentsapi.Component])
-		compLoader.WithStream(func(context.Context) (<-chan *loader.Event[componentsapi.Component], error) {
-			return compCh, nil
+		compLoader.WithStream(func(context.Context) (*loader.StreamConn[componentsapi.Component], error) {
+			return &loader.StreamConn[componentsapi.Component]{
+				EventCh:     compCh,
+				ReconcileCh: make(chan struct{}),
+			}, nil
 		})
 
-		r := NewComponent(Options[componentsapi.Component]{
-			Loader:    fake.New().WithComponent(compLoader),
+		r := NewComponents(Options[componentsapi.Component]{
+			Loader:    fake.New().WithComponents(compLoader),
 			CompStore: compstore.New(),
+			Healthz:   healthz.New(),
 		})
 		fakeClock := clocktesting.NewFakeClock(time.Now())
 		r.clock = fakeClock
@@ -95,7 +101,7 @@ func Test_Run(t *testing.T) {
 		mngr.Loader = compLoader
 		updateCh := make(chan componentsapi.Component)
 		deleteCh := make(chan componentsapi.Component)
-		mngr.deleteFn = func(c componentsapi.Component) {
+		mngr.deleteFn = func(_ context.Context, c componentsapi.Component) {
 			deleteCh <- c
 		}
 		mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
@@ -105,8 +111,9 @@ func Test_Run(t *testing.T) {
 		r.manager = mngr
 
 		errCh := make(chan error)
+		ctx, cancel := context.WithCancel(context.Background())
 		go func() {
-			errCh <- r.Run(context.Background())
+			errCh <- r.Run(ctx)
 		}()
 
 		comp1 := componentsapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
@@ -159,8 +166,123 @@ func Test_Run(t *testing.T) {
 			t.Error("did not get event in time")
 		}
 
-		require.NoError(t, r.Close())
-		require.NoError(t, <-errCh)
+		cancel()
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second * 3):
+			t.Error("reconciler did not return in time")
+		}
+	})
+
+	t.Run("should reconcile when receive event from reconcile channel", func(t *testing.T) {
+		compLoader := fake.NewFake[componentsapi.Component]()
+
+		recCh := make(chan struct{})
+		compLoader.WithStream(func(context.Context) (*loader.StreamConn[componentsapi.Component], error) {
+			return &loader.StreamConn[componentsapi.Component]{
+				EventCh:     make(chan *loader.Event[componentsapi.Component]),
+				ReconcileCh: recCh,
+			}, nil
+		})
+
+		r := NewComponents(Options[componentsapi.Component]{
+			Loader:    fake.New().WithComponents(compLoader),
+			CompStore: compstore.New(),
+			Healthz:   healthz.New(),
+		})
+		fakeClock := clocktesting.NewFakeClock(time.Now())
+		r.clock = fakeClock
+
+		mngr := newFakeManager()
+		mngr.Loader = compLoader
+		updateCh := make(chan componentsapi.Component)
+		deleteCh := make(chan componentsapi.Component)
+		mngr.deleteFn = func(_ context.Context, c componentsapi.Component) {
+			deleteCh <- c
+		}
+		mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
+			updateCh <- c
+		}
+
+		r.manager = mngr
+
+		errCh := make(chan error)
+		ctx, cancel := context.WithCancel(context.Background())
+		go func() {
+			errCh <- r.Run(ctx)
+		}()
+
+		comp1 := componentsapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
+		compLoader.WithList(func(context.Context) (*differ.LocalRemoteResources[componentsapi.Component], error) {
+			return &differ.LocalRemoteResources[componentsapi.Component]{
+				Local:  []componentsapi.Component{},
+				Remote: []componentsapi.Component{comp1},
+			}, nil
+		})
+
+		select {
+		case recCh <- struct{}{}:
+		case <-time.After(time.Second * 3):
+			t.Error("reconciler did not return in time")
+		}
+
+		select {
+		case e := <-updateCh:
+			assert.Equal(t, comp1, e)
+		case <-time.After(time.Second * 3):
+			t.Error("did not get event in time")
+		}
+
+		comp2 := comp1.DeepCopy()
+		comp2.Spec = componentsapi.ComponentSpec{Version: "123"}
+		compLoader.WithList(func(context.Context) (*differ.LocalRemoteResources[componentsapi.Component], error) {
+			return &differ.LocalRemoteResources[componentsapi.Component]{
+				Local:  []componentsapi.Component{comp1},
+				Remote: []componentsapi.Component{*comp2},
+			}, nil
+		})
+
+		select {
+		case recCh <- struct{}{}:
+		case <-time.After(time.Second * 3):
+			t.Error("reconciler did not return in time")
+		}
+
+		select {
+		case e := <-updateCh:
+			assert.Equal(t, *comp2, e)
+		case <-time.After(time.Second * 3):
+			t.Error("did not get event in time")
+		}
+
+		compLoader.WithList(func(context.Context) (*differ.LocalRemoteResources[componentsapi.Component], error) {
+			return &differ.LocalRemoteResources[componentsapi.Component]{
+				Local:  []componentsapi.Component{*comp2},
+				Remote: []componentsapi.Component{},
+			}, nil
+		})
+
+		select {
+		case recCh <- struct{}{}:
+		case <-time.After(time.Second * 3):
+			t.Error("reconciler did not return in time")
+		}
+
+		select {
+		case e := <-deleteCh:
+			assert.Equal(t, *comp2, e)
+		case <-time.After(time.Second * 3):
+			t.Error("did not get event in time")
+		}
+
+		cancel()
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second * 3):
+			t.Error("reconciler did not return in time")
+		}
 	})
 }
 
@@ -180,7 +302,7 @@ func Test_reconcile(t *testing.T) {
 
 	eventCh := make(chan componentsapi.Component)
 	mngr := newFakeManager()
-	mngr.deleteFn = func(c componentsapi.Component) {
+	mngr.deleteFn = func(_ context.Context, c componentsapi.Component) {
 		eventCh <- c
 	}
 	mngr.updateFn = func(_ context.Context, c componentsapi.Component) {
@@ -192,9 +314,10 @@ func Test_reconcile(t *testing.T) {
 	}
 
 	t.Run("events should be sent in the correct grouped order", func(t *testing.T) {
-		errCh := make(chan error)
+		recDone := make(chan struct{})
 		go func() {
-			errCh <- r.reconcile(context.Background(), &differ.Result[componentsapi.Component]{
+			defer close(recDone)
+			r.reconcile(context.Background(), &differ.Result[componentsapi.Component]{
 				Deleted: deleted,
 				Updated: updated,
 				Created: created,
@@ -235,8 +358,7 @@ func Test_reconcile(t *testing.T) {
 		assert.ElementsMatch(t, created, got)
 
 		select {
-		case err := <-errCh:
-			require.NoError(t, err)
+		case <-recDone:
 		case <-time.After(time.Second * 3):
 			t.Error("did not get reconcile return in time")
 		}
@@ -249,7 +371,7 @@ func Test_handleEvent(t *testing.T) {
 	updateCalled, deleteCalled := 0, 0
 	comp1 := componentsapi.Component{ObjectMeta: metav1.ObjectMeta{Name: "foo"}}
 
-	mngr.deleteFn = func(c componentsapi.Component) {
+	mngr.deleteFn = func(_ context.Context, c componentsapi.Component) {
 		assert.Equal(t, comp1, c)
 		deleteCalled++
 	}
@@ -288,15 +410,13 @@ func Test_handleEvent(t *testing.T) {
 type fakeManager struct {
 	loader.Loader[componentsapi.Component]
 	updateFn func(context.Context, componentsapi.Component)
-	deleteFn func(componentsapi.Component)
+	deleteFn func(context.Context, componentsapi.Component)
 }
 
 func newFakeManager() *fakeManager {
 	return &fakeManager{
-		updateFn: func(context.Context, componentsapi.Component) {
-		},
-		deleteFn: func(componentsapi.Component) {
-		},
+		updateFn: func(context.Context, componentsapi.Component) {},
+		deleteFn: func(context.Context, componentsapi.Component) {},
 	}
 }
 
@@ -306,6 +426,6 @@ func (f *fakeManager) update(ctx context.Context, comp componentsapi.Component) 
 }
 
 //nolint:unused
-func (f *fakeManager) delete(comp componentsapi.Component) {
-	f.deleteFn(comp)
+func (f *fakeManager) delete(ctx context.Context, comp componentsapi.Component) {
+	f.deleteFn(ctx, comp)
 }

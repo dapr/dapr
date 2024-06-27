@@ -16,207 +16,216 @@ package raft
 import (
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func TestNewDaprHostMemberState(t *testing.T) {
 	// act
-	s := newDaprHostMemberState()
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 
-	// assert
-	assert.Equal(t, uint64(0), s.Index())
-	assert.Empty(t, s.Members())
-	assert.Empty(t, s.hashingTableMap())
+	require.Equal(t, uint64(0), s.Index())
+	require.Equal(t, 0, s.NamespaceCount())
+	require.Equal(t, 0, s.MemberCount())
 }
 
 func TestClone(t *testing.T) {
 	// arrange
-	s := newDaprHostMemberState()
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	s.upsertMember(&DaprHostMember{
-		Name:     "127.0.0.1:8080",
-		AppID:    "FakeID",
-		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		Name:      "127.0.0.1:8080",
+		Namespace: "ns1",
+		AppID:     "FakeID",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo"},
 	})
 
 	// act
 	newState := s.clone()
 
-	// assert
-	assert.NotSame(t, s, newState)
-	assert.Nil(t, newState.hashingTableMap())
-	assert.Equal(t, s.Index(), newState.Index())
-	assert.EqualValues(t, s.Members(), newState.Members())
+	require.NotSame(t, s, newState)
+	table, err := newState.hashingTableMap("ns1")
+	require.NoError(t, err)
+	require.Nil(t, table)
+	require.Equal(t, s.Index(), newState.Index())
+
+	members, err := s.members("ns1")
+	require.NoError(t, err)
+	clonedMembers, err := newState.members("ns1")
+	require.NoError(t, err)
+	require.EqualValues(t, members, clonedMembers)
 }
 
-func TestUpsertMember(t *testing.T) {
-	// arrange
-	s := newDaprHostMemberState()
-
-	t.Run("add new actor member", func(t *testing.T) {
-		// act
-		updated := s.upsertMember(&DaprHostMember{
-			Name:      "127.0.0.1:8080",
-			AppID:     "FakeID",
-			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
-			UpdatedAt: 1,
-		})
-
-		// assert
-		assert.Len(t, s.Members(), 1)
-		assert.Len(t, s.hashingTableMap(), 2)
-		assert.True(t, updated)
+func TestUpsertRemoveMembers(t *testing.T) {
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
 	})
+	hostMember := &DaprHostMember{
+		Name:      "127.0.0.1:8080",
+		Namespace: "ns1",
+		AppID:     "FakeID",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo"},
+		UpdatedAt: 1,
+	}
 
-	t.Run("no hashing table update required", func(t *testing.T) {
-		// act
-		updated := s.upsertMember(&DaprHostMember{
-			Name:      "127.0.0.1:8081",
-			AppID:     "FakeID_2",
-			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
-			UpdatedAt: 1,
-		})
+	updated := s.upsertMember(hostMember)
 
-		// assert
-		assert.Len(t, s.Members(), 2)
-		assert.Len(t, s.hashingTableMap(), 2)
-		assert.True(t, updated)
+	m, err := s.members("ns1")
+	require.NoError(t, err)
+	ht, err := s.hashingTableMap("ns1")
+	require.NoError(t, err)
+	require.Len(t, m, 1)
+	require.Len(t, m["127.0.0.1:8080"].Entities, 2)
+	require.Len(t, ht, 2)
+	require.True(t, updated)
 
-		// act
-		updated = s.upsertMember(&DaprHostMember{
-			Name:      "127.0.0.1:8081",
-			AppID:     "FakeID_2",
-			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
-			UpdatedAt: 2,
-		})
+	// An existing host starts serving new actor types
+	hostMember.Entities = []string{"actorTypeThree"}
+	updated = s.upsertMember(hostMember)
 
-		// assert
-		assert.False(t, updated)
+	require.True(t, updated)
+
+	m, err = s.members("ns1")
+	require.NoError(t, err)
+	require.Len(t, m, 1)
+	require.Len(t, m["127.0.0.1:8080"].Entities, 1)
+
+	ht, err = s.hashingTableMap("ns1")
+	require.NoError(t, err)
+	require.Len(t, ht, 1)
+
+	updated = s.removeMember(hostMember)
+
+	m, err = s.members("ns1")
+	require.NoError(t, err)
+	require.Empty(t, m)
+	require.True(t, updated)
+
+	ht, err = s.hashingTableMap("ns1")
+	require.NoError(t, err)
+	require.Empty(t, ht)
+
+	updated = s.removeMember(&DaprHostMember{
+		Name: "127.0.0.1:8080",
 	})
-
-	t.Run("non actor host", func(t *testing.T) {
-		testMember := &DaprHostMember{
-			Name:      "127.0.0.1:8080",
-			AppID:     "FakeID",
-			Entities:  []string{},
-			UpdatedAt: 100,
-		}
-
-		// act
-		updated := s.upsertMember(testMember)
-		// assert
-		assert.False(t, updated)
-	})
-
-	t.Run("update existing actor member", func(t *testing.T) {
-		testMember := &DaprHostMember{
-			Name:      "127.0.0.1:8080",
-			AppID:     "FakeID",
-			Entities:  []string{"actorTypeThree"},
-			UpdatedAt: 100,
-		}
-
-		// act
-		//
-		// this tries to update the existing actor members.
-		// it will delete empty consistent hashing table.
-		updated := s.upsertMember(testMember)
-
-		// assert
-		assert.Len(t, s.Members(), 2)
-		assert.True(t, updated)
-		assert.Len(t, s.Members()[testMember.Name].Entities, 1)
-		assert.Len(t, s.hashingTableMap(), 3, "this doesn't delete empty consistent hashing table")
-	})
+	require.False(t, updated)
 }
 
-func TestRemoveMember(t *testing.T) {
-	// arrange
-	s := newDaprHostMemberState()
-
-	t.Run("remove member and clean up consistent hashing table", func(t *testing.T) {
-		// act
-		updated := s.upsertMember(&DaprHostMember{
-			Name:     "127.0.0.1:8080",
-			AppID:    "FakeID",
-			Entities: []string{"actorTypeOne", "actorTypeTwo"},
-		})
-
-		// assert
-		assert.Len(t, s.Members(), 1)
-		assert.True(t, updated)
-		assert.Len(t, s.hashingTableMap(), 2)
-
-		// act
-		updated = s.removeMember(&DaprHostMember{
-			Name: "127.0.0.1:8080",
-		})
-
-		// assert
-		assert.Empty(t, s.Members())
-		assert.True(t, updated)
-		assert.Empty(t, s.hashingTableMap())
+func TestUpsertMemberNoHashingTable(t *testing.T) {
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
 	})
 
-	t.Run("no table update required", func(t *testing.T) {
-		// act
-		updated := s.removeMember(&DaprHostMember{
-			Name: "127.0.0.1:8080",
-		})
-
-		// assert
-		assert.Empty(t, s.Members())
-		assert.False(t, updated)
-		assert.Empty(t, s.hashingTableMap())
+	updated := s.upsertMember(&DaprHostMember{
+		Name:      "127.0.0.1:8081",
+		Namespace: "ns1",
+		AppID:     "FakeID_2",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo", "actorTypeThree"},
+		UpdatedAt: 1,
 	})
+
+	m, err := s.members("ns1")
+	require.NoError(t, err)
+	ht, err := s.hashingTableMap("ns1")
+	require.NoError(t, err)
+	require.Len(t, m, 1)
+	require.Len(t, ht, 3)
+	require.True(t, updated)
+
+	updated = s.upsertMember(&DaprHostMember{
+		Name:      "127.0.0.1:8081",
+		Namespace: "ns1",
+		AppID:     "FakeID_2",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo", "actorTypeThree"},
+		UpdatedAt: 2,
+	})
+
+	require.False(t, updated)
+}
+
+func TestUpsertMemberNonActorHost(t *testing.T) {
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
+
+	testMember := &DaprHostMember{
+		Name:      "127.0.0.1:8080",
+		Namespace: "ns1",
+		AppID:     "FakeID",
+		Entities:  []string{},
+		UpdatedAt: 100,
+	}
+
+	// act
+	updated := s.upsertMember(testMember)
+	require.False(t, updated)
 }
 
 func TestUpdateHashingTable(t *testing.T) {
 	// each subtest has dependency on the state
 
 	// arrange
-	s := newDaprHostMemberState()
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 
 	t.Run("add new hashing table per actor types", func(t *testing.T) {
 		testMember := &DaprHostMember{
-			Name:     "127.0.0.1:8080",
-			AppID:    "FakeID",
-			Entities: []string{"actorTypeOne", "actorTypeTwo"},
+			Name:      "127.0.0.1:8080",
+			Namespace: "ns1",
+			AppID:     "FakeID",
+			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
 		}
 
 		// act
 		s.updateHashingTables(testMember)
 
-		assert.Len(t, s.hashingTableMap(), 2)
-		for _, ent := range testMember.Entities {
-			assert.NotNil(t, s.hashingTableMap()[ent])
-		}
+		ht, err := s.hashingTableMap("ns1")
+		require.NoError(t, err)
+		require.Len(t, ht, 2)
+		require.NotNil(t, ht["actorTypeOne"])
+		require.NotNil(t, ht["actorTypeTwo"])
 	})
 
 	t.Run("update new hashing table per actor types", func(t *testing.T) {
 		testMember := &DaprHostMember{
-			Name:     "127.0.0.1:8080",
-			AppID:    "FakeID",
-			Entities: []string{"actorTypeOne", "actorTypeTwo", "actorTypeThree"},
+			Name:      "127.0.0.1:8081",
+			Namespace: "ns1",
+			AppID:     "FakeID",
+			Entities:  []string{"actorTypeOne", "actorTypeTwo", "actorTypeThree"},
 		}
 
-		// act
 		s.updateHashingTables(testMember)
 
-		assert.Len(t, s.hashingTableMap(), 3)
-		for _, ent := range testMember.Entities {
-			assert.NotNil(t, s.hashingTableMap()[ent])
-		}
+		ht, err := s.hashingTableMap("ns1")
+		require.NoError(t, err)
+		require.Len(t, ht, 3)
+		require.NotNil(t, ht["actorTypeOne"])
+		require.NotNil(t, ht["actorTypeTwo"])
+		require.NotNil(t, ht["actorTypeThree"])
 	})
 }
 
 func TestRemoveHashingTable(t *testing.T) {
-	// each subtest has dependency on the state
-
-	// arrange
 	testMember := &DaprHostMember{
-		Name:     "fakeName",
-		AppID:    "fakeID",
-		Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		Name:      "fakeName",
+		Namespace: "ns1",
+		AppID:     "fakeID",
+		Entities:  []string{"actorTypeOne", "actorTypeTwo"},
 	}
 
 	testcases := []struct {
@@ -227,51 +236,165 @@ func TestRemoveHashingTable(t *testing.T) {
 		{"127.0.0.1:8081", 0},
 	}
 
-	s := newDaprHostMemberState()
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
 	for _, tc := range testcases {
 		testMember.Name = tc.name
 		s.updateHashingTables(testMember)
 	}
 
-	// act
 	for _, tc := range testcases {
 		t.Run("remove host "+tc.name, func(t *testing.T) {
 			testMember.Name = tc.name
 			s.removeHashingTables(testMember)
 
-			assert.Len(t, s.hashingTableMap(), tc.totalTable)
+			ht, err := s.hashingTableMap("ns1")
+			require.NoError(t, err)
+			require.Len(t, ht, tc.totalTable)
 		})
 	}
 }
 
 func TestRestoreHashingTables(t *testing.T) {
-	// arrange
 	testnames := []string{
 		"127.0.0.1:8080",
 		"127.0.0.1:8081",
 	}
 
-	s := &DaprHostMemberState{
-		data: DaprHostMemberStateData{
-			Index:           0,
-			Members:         map[string]*DaprHostMember{},
-			hashingTableMap: nil,
-		},
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
+
+	s.data.Namespace = make(map[string]*daprNamespace)
+	s.data.Namespace["ns1"] = &daprNamespace{
+		Members: make(map[string]*DaprHostMember),
 	}
+
 	for _, tn := range testnames {
 		s.lock.Lock()
-		s.data.Members[tn] = &DaprHostMember{
-			Name:     tn,
-			AppID:    "fakeID",
-			Entities: []string{"actorTypeOne", "actorTypeTwo"},
+		s.data.Namespace["ns1"].Members[tn] = &DaprHostMember{
+			Name:      tn,
+			Namespace: "ns1",
+			AppID:     "fakeID",
+			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
 		}
 		s.lock.Unlock()
 	}
-	assert.Empty(t, s.hashingTableMap())
+	ht, err := s.hashingTableMap("ns1")
+	require.NoError(t, err)
+	require.Empty(t, ht)
 
-	// act
 	s.restoreHashingTables()
 
-	// assert
-	assert.Len(t, s.hashingTableMap(), 2)
+	ht, err = s.hashingTableMap("ns1")
+	require.NoError(t, err)
+	require.Len(t, ht, 2)
+}
+
+func TestUpdateAPILevel(t *testing.T) {
+	t.Run("no min nor max api levels arguments", func(t *testing.T) {
+		s := newDaprHostMemberState(DaprHostMemberStateConfig{
+			replicationFactor: 10,
+		})
+		m1 := &DaprHostMember{
+			Name:      "127.0.0.1:8080",
+			Namespace: "ns1",
+			AppID:     "FakeID1",
+			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
+			UpdatedAt: 1,
+			APILevel:  10,
+		}
+		m2 := &DaprHostMember{
+			Name:      "127.0.0.1:8081",
+			Namespace: "ns1",
+			AppID:     "FakeID2",
+			Entities:  []string{"actorTypeThree", "actorTypeFour"},
+			UpdatedAt: 2,
+			APILevel:  20,
+		}
+		m3 := &DaprHostMember{
+			Name:      "127.0.0.1:8082",
+			Namespace: "ns2",
+			AppID:     "FakeID3",
+			Entities:  []string{"actorTypeFive"},
+			UpdatedAt: 3,
+			APILevel:  30,
+		}
+
+		s.upsertMember(m1)
+		require.Equal(t, uint32(10), s.data.APILevel)
+
+		s.upsertMember(m2)
+		require.Equal(t, uint32(10), s.data.APILevel)
+
+		s.upsertMember(m3)
+		require.Equal(t, uint32(10), s.data.APILevel)
+
+		s.removeMember(m1)
+		require.Equal(t, uint32(20), s.data.APILevel)
+
+		s.removeMember(m2)
+		require.Equal(t, uint32(30), s.data.APILevel)
+
+		// TODO @elena - do we want to keep the cluster's last known api level, when all members are removed?
+		// That's what we do currently, but I wonder why it's the case
+		s.removeMember(m3)
+		require.Equal(t, uint32(30), s.data.APILevel)
+	})
+
+	t.Run("min api levels set", func(t *testing.T) {
+		s := newDaprHostMemberState(DaprHostMemberStateConfig{
+			replicationFactor: 10,
+			minAPILevel:       20,
+			maxAPILevel:       100,
+		})
+		m1 := &DaprHostMember{
+			Name:      "127.0.0.1:8080",
+			Namespace: "ns1",
+			AppID:     "FakeID1",
+			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
+			UpdatedAt: 1,
+			APILevel:  10,
+		}
+		m2 := &DaprHostMember{
+			Name:      "127.0.0.1:8081",
+			Namespace: "ns2",
+			AppID:     "FakeID1",
+			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
+			UpdatedAt: 2,
+			APILevel:  30,
+		}
+
+		s.upsertMember(m1)
+		require.Equal(t, uint32(20), s.data.APILevel)
+
+		s.upsertMember(m2)
+		require.Equal(t, uint32(20), s.data.APILevel)
+
+		s.removeMember(m1)
+		require.Equal(t, uint32(30), s.data.APILevel)
+	})
+
+	t.Run("max api levels set", func(t *testing.T) {
+		s := newDaprHostMemberState(DaprHostMemberStateConfig{
+			replicationFactor: 10,
+			minAPILevel:       0,
+			maxAPILevel:       20,
+		})
+		s.upsertMember(&DaprHostMember{
+			Name:      "127.0.0.1:8080",
+			Namespace: "ns1",
+			AppID:     "FakeID1",
+			Entities:  []string{"actorTypeOne", "actorTypeTwo"},
+			UpdatedAt: 1,
+			APILevel:  30,
+		})
+
+		require.Equal(t, uint32(20), s.data.APILevel)
+	})
 }

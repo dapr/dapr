@@ -121,6 +121,7 @@ func serviceDiscovery(reflectClientFactory func(string) (reflectServiceClient, f
 		if err != nil {
 			return nil, fmt.Errorf("unable to list services: %w", err)
 		}
+		//nolint:staticcheck
 		dialer := socketDialer(socket, grpc.WithBlock(), grpc.FailOnNonTempDialError(true))
 
 		componentName := removeExt(f.Name())
@@ -162,7 +163,7 @@ func Discover(ctx context.Context) error {
 		conn, err := SocketDial(
 			ctx,
 			socket,
-			grpc.WithBlock(),
+			grpc.WithBlock(), //nolint:staticcheck
 		)
 		if err != nil {
 			return nil, nil, err

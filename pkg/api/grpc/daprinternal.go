@@ -22,8 +22,10 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/acl"
+	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -42,7 +44,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 		return nil, status.Error(codes.Internal, messages.ErrChannelNotFound)
 	}
 
-	req, err := invokev1.InternalInvokeRequest(in)
+	req, err := invokev1.FromInternalInvokeRequest(in)
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
@@ -102,7 +104,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	// Create the request object
 	// The "rawData" of the object will be a pipe to which content is added chunk-by-chunk
 	pr, pw := io.Pipe()
-	req, err := invokev1.InternalInvokeRequest(chunk.GetRequest())
+	req, err := invokev1.FromInternalInvokeRequest(chunk.GetRequest())
 	if err != nil {
 		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
 	}
@@ -281,34 +283,35 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 
 // CallActor invokes a virtual actor.
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	req, err := invokev1.InternalInvokeRequest(in)
-	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
-	}
-	defer req.Close()
-
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
-	resp, err := a.Actors().Call(ctx, req)
+	res, err := a.Actors().Call(ctx, in)
 	if err != nil {
-		// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
 		actorErr, isActorErr := actorerrors.As(err)
-		if resp != nil && isActorErr {
-			defer resp.Close()
-			r, eErr := resp.ProtoWithData()
-			if eErr == nil {
-				r.Message.Data = &anypb.Any{
-					Value: actorErr.Body(),
-				}
-				r.Headers = actorErr.Headers()
+		if res != nil && isActorErr {
+			// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
+			res.Message.Data = &anypb.Any{
+				Value: actorErr.Body(),
 			}
-			return r, eErr
+			res.Headers = actorErr.Headers()
+			return res, nil
 		}
 
-		err = status.Errorf(codes.Internal, messages.ErrActorInvoke, err)
-		return nil, err
+		return nil, messages.ErrActorInvoke.WithFormat(err)
 	}
-	defer resp.Close()
-	return resp.ProtoWithData()
+	return res, nil
+}
+
+// CallActorReminder invokes an internal virtual actor.
+func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
+	return nil, a.Actors().ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
+		Name:      in.GetName(),
+		ActorType: in.GetActorType(),
+		ActorID:   in.GetActorId(),
+		Data:      in.GetData(),
+		DueTime:   in.GetDueTime(),
+		Period:    in.GetPeriod(),
+		TTL:       in.GetExpirationTime().String(),
+	})
 }
 
 // Used by CallLocal and CallLocalStream to check the request against the access control list

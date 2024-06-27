@@ -14,5 +14,5 @@ limitations under the License.
 package binding
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/binding/intput"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload/operator/binding/input"
 )

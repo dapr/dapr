@@ -1,0 +1,30 @@
+apiVersion: dapr.io/v1alpha1
+kind: Component
+metadata:
+  name: jwks
+spec:
+  type: crypto.dapr.jwks
+  version: v1
+  metadata:
+    - name: jwks
+      value: |
+        {
+          "keys": [
+            {
+              "kid": "rsakey",
+              "kty": "RSA",
+              "n": "3I2mdIK4mRRu-ywMrYjUZzBxt0NlAVLrMhGlaJsby7PWTMiLpZVip4SBD9GwnCU0TGFD7k2-7tfs0y9U6WV7MwgCjc9m_DUUGbE-kKjEU7JYkLzYlndys-6xuhD4Jf1hu9AZVdfXftpWSy_NNg6fVwTH4nckOAbOSL1hXToOYWQcDDW95Rhw3U4z04PqssEpRKn5KGBuTahNNNiZcWns99pChpLTxgdm93LjMBI1KCGBpOaz7fcQJ9V3c6rSwMKyY3IPm1LwS6PIs7xb2ZJ0Eb8A6MtCkGhgNsodpkxhqKbqtxI-KqTuZy9g4jb8WKjJq9lB9q-HPHoQqIEDom6P8w",
+              "e": "AQAB",
+              "d": "sEksVg4yPHEfr_VqgL5Qf9Yx3nio4CEFyvRd0LnBwtUQojjdndFElH8NpbZGQthd7_sCkBRmW4QNUFORvCgYDBcH649uUoKeeVa5mmi62-c-cRnwyHvbG8TbG8z6e2sG1lakGYA3R7Z-qQQhM2cGp0gz-Gigc4PFGFD-5MRFwEMHP2fy-1PEp2dKBiT3sl2yo4IjMPRWMWh1e_2xnvFXYSGCx1-1qyD_VpCCpL7-kuTWCZFOx8Cq_EpZiX7ovDVBEb0JlrT3srXAApkEE42YYFnl3TejlgZOy00gv7qe-6WB17lBM_2_eFd5lidJzVS4riJxZaBNJeW0sg_SusYAEQ",
+              "p": "9LOms8fd0FVwh2CyScxBWz5Pg7gVtlCm6qD2ZKDZL84FDD_BVyy5LQm9lV4kTcE3TyWH6dHeGmJ4g3WFpuY4xusuU8rdVUOv-dpcLoW4gJnQ4saqKdi3uU5TmzqCqvzNXSoECvy5APXK-Lh01c5fgrmeRzYUEJN2hgxxaL6HJBk",
+              "q": "5ryRKJpzsZD2B1xbnbUeRLTjBRqOIqFsVuF0lMi7SMZ24IsKIfa9CeBCfGIFlIwGe-jIbozL2lrIsw3Q3jZHcwIVq9q1s9voZeW4Z7cylCBs9Lq5199b5-6-QueDK4Fksg5uQsDY2Jleamm53L4CMIjmBRaVEUMW7jRfxNQJdes"
+            },
+            {
+              "kid": "symmetrickey",
+              "kty": "oct",
+              "k": "RjJPhQzsDB5dvjQZ-85l_D_SBXWCBFx7IVsesenVvts"
+            }
+          ]
+        }
+scopes:
+  - cryptoapp

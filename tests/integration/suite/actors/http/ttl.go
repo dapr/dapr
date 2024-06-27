@@ -114,7 +114,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			require.NoError(c, resp.Body.Close())
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
 		}
-	}, time.Second*20, time.Millisecond*100, "actor not ready")
+	}, time.Second*20, time.Millisecond*10, "actor not ready")
 
 	now := time.Now()
 
@@ -181,6 +181,6 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			require.NoError(c, resp.Body.Close())
 			assert.Empty(c, string(body))
 			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 10*time.Millisecond)
 	})
 }

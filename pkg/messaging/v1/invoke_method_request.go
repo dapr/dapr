@@ -66,8 +66,8 @@ func FromInvokeRequestMessage(pb *commonv1pb.InvokeRequest) *InvokeMethodRequest
 	}
 }
 
-// InternalInvokeRequest creates InvokeMethodRequest object from InternalInvokeRequest pb object.
-func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMethodRequest, error) {
+// FromInternalInvokeRequest creates InvokeMethodRequest object from FromInternalInvokeRequest pb object.
+func FromInternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMethodRequest, error) {
 	req := &InvokeMethodRequest{r: pb}
 	if pb.GetMessage() == nil {
 		return nil, errors.New("field Message is nil")
@@ -84,19 +84,19 @@ func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMeth
 
 // WithMetadata sets metadata.
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
-	imr.r.Metadata = metadataToInternalMetadata(md)
+	imr.r.Metadata = internalv1pb.MetadataToInternalMetadata(md)
 	return imr
 }
 
-// WithHTTPHeaders sets HTTP request headers.
+// WithHTTPHeaders sets metadata from HTTP request headers.
 func (imr *InvokeMethodRequest) WithHTTPHeaders(header http.Header) *InvokeMethodRequest {
-	imr.r.Metadata = httpHeadersToInternalMetadata(header)
+	imr.r.Metadata = internalv1pb.HTTPHeadersToInternalMetadata(header)
 	return imr
 }
 
-// WithFastHTTPHeaders sets fasthttp request headers.
+// WithFastHTTPHeaders sets metadata from fasthttp request headers.
 func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHeader) *InvokeMethodRequest {
-	imr.r.Metadata = fasthttpHeadersToInternalMetadata(header)
+	imr.r.Metadata = internalv1pb.FastHTTPHeadersToInternalMetadata(header)
 	return imr
 }
 
@@ -159,6 +159,12 @@ func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring strin
 // WithCustomHTTPMetadata applies a metadata map to a InvokeMethodRequest.
 func (imr *InvokeMethodRequest) WithCustomHTTPMetadata(md map[string]string) *InvokeMethodRequest {
 	for k, v := range md {
+		if strings.EqualFold(k, ContentLengthHeader) {
+			// There is no use of the original payload's content-length because
+			// the entire data is already in the cloud event.
+			continue
+		}
+
 		if imr.r.GetMetadata() == nil {
 			imr.r.Metadata = make(map[string]*internalv1pb.ListStringValue)
 		}
@@ -267,7 +273,7 @@ func (imr *InvokeMethodRequest) ResetMessageData() {
 	imr.r.GetMessage().GetData().Reset()
 }
 
-// ContenType returns the content type of the message.
+// ContentType returns the content type of the message.
 func (imr *InvokeMethodRequest) ContentType() string {
 	m := imr.r.GetMessage()
 	if m == nil {
@@ -324,7 +330,7 @@ func (imr *InvokeMethodRequest) AddMetadata(md map[string][]string) {
 		return
 	}
 
-	for key, val := range metadataToInternalMetadata(md) {
+	for key, val := range internalv1pb.MetadataToInternalMetadata(md) {
 		// We're only adding new values, not overwriting existing
 		if _, ok := imr.r.GetMetadata()[key]; !ok {
 			imr.r.Metadata[key] = val

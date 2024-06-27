@@ -150,6 +150,8 @@ spec:
         # Configuration for injected sidecars
         - name: SIDECAR_RUN_AS_NON_ROOT
           value: {{ .Values.sidecarRunAsNonRoot | toString | toYaml }}
+        - name: ENABLE_K8S_DOWNWARD_APIS
+          value: {{ .Values.enableK8sDownwardAPIs | toString | toYaml }}
         - name: SIDECAR_DROP_ALL_CAPABILITIES
           value: {{ .Values.sidecarDropALLCapabilities | toString | toYaml }}
         - name: SIDECAR_READ_ONLY_ROOT_FILESYSTEM
@@ -261,7 +263,7 @@ spec:
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-{{ include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 }}
+{{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:
@@ -270,5 +272,9 @@ spec:
 {{- if .Values.global.tolerations }}
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
+{{- end }}
+{{- if .Values.global.priorityClassName }}
+      priorityClassName:
+{{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}
 {{- end }}
