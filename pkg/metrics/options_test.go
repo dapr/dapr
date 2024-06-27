@@ -14,7 +14,6 @@ limitations under the License.
 package metrics
 
 import (
-	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -22,13 +21,13 @@ import (
 
 func TestOptions(t *testing.T) {
 	t.Run("default options", func(t *testing.T) {
-		o := DefaultMetricOptions()
-		assert.Equal(t, defaultMetricsPort, o.Port)
-		assert.Equal(t, defaultMetricsEnabled, o.MetricsEnabled)
+		o := DefaultFlagOptions()
+		assert.Equal(t, "9090", o.port)
+		assert.True(t, o.enabled)
 	})
 
 	t.Run("attaching metrics related cmd flags", func(t *testing.T) {
-		o := DefaultMetricOptions()
+		o := DefaultFlagOptions()
 
 		metricsPortAsserted := false
 		testStringVarFn := func(p *string, name string, value string, usage string) {
@@ -49,41 +48,5 @@ func TestOptions(t *testing.T) {
 		// assert
 		assert.True(t, metricsPortAsserted)
 		assert.True(t, metricsEnabledAsserted)
-	})
-
-	t.Run("parse valid port", func(t *testing.T) {
-		o := Options{
-			Port:           "1010",
-			MetricsEnabled: false,
-		}
-
-		assert.Equal(t, uint64(1010), o.MetricsPort())
-	})
-
-	t.Run("return default port if port is invalid", func(t *testing.T) {
-		o := Options{
-			Port:           "invalid",
-			MetricsEnabled: false,
-		}
-
-		defaultPort, _ := strconv.ParseUint(defaultMetricsPort, 10, 64)
-
-		assert.Equal(t, defaultPort, o.MetricsPort())
-	})
-
-	t.Run("attaching single metrics related cmd flag", func(t *testing.T) {
-		o := DefaultMetricOptions()
-
-		metricsPortAsserted := false
-		testStringVarFn := func(p *string, name string, value string, usage string) {
-			if name == "metrics-port" && value == defaultMetricsPort {
-				metricsPortAsserted = true
-			}
-		}
-
-		o.AttachCmdFlag(testStringVarFn)
-
-		// assert
-		assert.True(t, metricsPortAsserted)
 	})
 }

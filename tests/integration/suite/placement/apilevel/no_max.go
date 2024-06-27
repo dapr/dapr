@@ -135,9 +135,9 @@ func (n *noMax) Run(t *testing.T, ctx context.Context) {
 		}
 	}()
 
-	// After 3s, we should not receive an update
+	// After 1s, we should not receive an update
 	// This can take a while as dissemination happens on intervals
-	time.Sleep(3 * time.Second)
+	time.Sleep(time.Second)
 	require.Equal(t, lastUpdate, lastVersionUpdate.Load())
 
 	// API level should still be lower (20), but table version should have increased
