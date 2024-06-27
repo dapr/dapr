@@ -26,6 +26,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/differ"
@@ -47,6 +48,7 @@ func Test_Run(t *testing.T) {
 		r := NewComponents(Options[componentsapi.Component]{
 			Loader:    loader,
 			CompStore: compstore.New(),
+			Healthz:   healthz.New(),
 		})
 		fakeClock := clocktesting.NewFakeClock(time.Now())
 		r.clock = fakeClock
@@ -90,6 +92,7 @@ func Test_Run(t *testing.T) {
 		r := NewComponents(Options[componentsapi.Component]{
 			Loader:    fake.New().WithComponents(compLoader),
 			CompStore: compstore.New(),
+			Healthz:   healthz.New(),
 		})
 		fakeClock := clocktesting.NewFakeClock(time.Now())
 		r.clock = fakeClock
@@ -186,6 +189,7 @@ func Test_Run(t *testing.T) {
 		r := NewComponents(Options[componentsapi.Component]{
 			Loader:    fake.New().WithComponents(compLoader),
 			CompStore: compstore.New(),
+			Healthz:   healthz.New(),
 		})
 		fakeClock := clocktesting.NewFakeClock(time.Now())
 		r.clock = fakeClock

@@ -23,6 +23,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	"github.com/dapr/dapr/pkg/sentry/server/validator/internal"
@@ -43,6 +44,8 @@ type Options struct {
 	MinRefreshInterval time.Duration `mapstructure:"minRefreshInterval"`
 	// Timeout for network requests.
 	RequestTimeout time.Duration `mapstructure:"requestTimeout"`
+	// Healthz controls the healthz endpoint for the JWKS cache.
+	Healthz healthz.Healthz
 }
 
 // jwks implements the validator.Interface.
@@ -53,9 +56,10 @@ type Options struct {
 type jwks struct {
 	sentryAudience string
 	cache          *jwkscache.JWKSCache
+	htarget        healthz.Target
 }
 
-func New(ctx context.Context, opts Options) (validator.Validator, error) {
+func New(opts Options) (validator.Validator, error) {
 	cache := jwkscache.NewJWKSCache(opts.Source, log)
 
 	// Set options
@@ -72,10 +76,19 @@ func New(ctx context.Context, opts Options) (validator.Validator, error) {
 	return &jwks{
 		sentryAudience: opts.SentryID.String(),
 		cache:          cache,
+		htarget:        opts.Healthz.AddTarget(),
 	}, nil
 }
 
 func (j *jwks) Start(ctx context.Context) error {
+	defer j.htarget.NotReady()
+	go func() {
+		if err := j.cache.WaitForCacheReady(ctx); err != nil {
+			return
+		}
+		j.htarget.Ready()
+	}()
+
 	// Start the cache. Note this is a blocking call
 	err := j.cache.Start(ctx)
 	if err != nil {
