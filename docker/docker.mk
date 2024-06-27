@@ -120,26 +120,26 @@ docker-build: check-docker-env check-arch
 	$(info Building $(DOCKER_IMAGE):$(DAPR_TAG) docker images ...)
 ifeq ($(TARGET_ARCH),$(TARGET_ARCH_LOCAL))
 ifeq ($(ONLY_DAPR_IMAGE),true)
-	DOCKER_BUILDKIT=1 $(DOCKER) build --output type=docker --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
+	$(DOCKER) build --output type=docker --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
 else
 	$(DOCKER) build --output type=docker --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) build --output type=docker --build-arg PKG_FILES=daprd $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build --output type=docker --build-arg PKG_FILES=daprd $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) build --output type=docker --build-arg PKG_FILES=placement $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build --output type=docker --build-arg PKG_FILES=placement $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) build --output type=docker --build-arg PKG_FILES=sentry $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build --output type=docker --build-arg PKG_FILES=sentry $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) build --output type=docker --build-arg PKG_FILES=operator $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build --output type=docker --build-arg PKG_FILES=operator $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) build --output type=docker --build-arg PKG_FILES=injector $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build --output type=docker --build-arg PKG_FILES=injector $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) build --output type=docker --build-arg PKG_FILES=scheduler $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build --output type=docker --build-arg PKG_FILES=scheduler $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 endif
 else
@@ -149,24 +149,24 @@ else
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) buildx build --build-arg PKG_FILES=* $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG) --provenance=false
 else
-	DOCKER_BUILDKIT=1 $(DOCKER) buildx build --build-arg PKG_FILES=* $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG) --provenance=false
+	$(DOCKER) buildx build --build-arg PKG_FILES=* $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG) --provenance=false
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) buildx build --build-arg PKG_FILES=daprd $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
+		$(DOCKER) buildx build --build-arg PKG_FILES=daprd $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) buildx build --build-arg PKG_FILES=placement $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
+		$(DOCKER) buildx build --build-arg PKG_FILES=placement $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) buildx build --build-arg PKG_FILES=sentry $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
+		$(DOCKER) buildx build --build-arg PKG_FILES=sentry $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) buildx build --build-arg PKG_FILES=operator $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
+		$(DOCKER) buildx build --build-arg PKG_FILES=operator $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) buildx build --build-arg PKG_FILES=injector $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
+		$(DOCKER) buildx build --build-arg PKG_FILES=injector $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
 	fi
 	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
-		DOCKER_BUILDKIT=1 $(DOCKER) buildx build --build-arg PKG_FILES=scheduler $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
+		$(DOCKER) buildx build --build-arg PKG_FILES=scheduler $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
 	fi
 endif
 endif
