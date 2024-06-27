@@ -61,6 +61,7 @@ type options struct {
 	blockShutdownDuration   *string
 	controlPlaneTrustDomain *string
 	schedulerAddresses      []string
+	trustAnchorsFile        *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -299,4 +300,10 @@ func WithAppAPIToken(t *testing.T, token string) Option {
 	return WithExecOptions(exec.WithEnvVars(t,
 		"APP_API_TOKEN", token,
 	))
+}
+
+func WithTrustAnchorsFile(file string) Option {
+	return func(o *options) {
+		o.trustAnchorsFile = &file
+	}
 }

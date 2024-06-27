@@ -96,26 +96,42 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 		"-listen-address=127.0.0.1",
 	}
 
+	var issuerCredPath string
+	if opts.issuerCredentialsPath != nil {
+		issuerCredPath = *opts.issuerCredentialsPath
+	} else {
+		issuerCredPath = t.TempDir()
+	}
+
+	var bundle *ca.Bundle
+	if opts.bundle != nil {
+		bundle = opts.bundle
+	} else {
+		rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+		b, err := ca.GenerateBundle(rootKey, "integration.test.dapr.io", time.Second*5, nil)
+		require.NoError(t, err)
+		bundle = &b
+	}
+
 	if opts.writeBundle {
-		tmpDir := t.TempDir()
-		caPath := filepath.Join(tmpDir, "ca.crt")
-		issuerKeyPath := filepath.Join(tmpDir, "issuer.key")
-		issuerCertPath := filepath.Join(tmpDir, "issuer.crt")
+		caPath := filepath.Join(issuerCredPath, "ca.crt")
+		issuerKeyPath := filepath.Join(issuerCredPath, "issuer.key")
+		issuerCertPath := filepath.Join(issuerCredPath, "issuer.crt")
 
 		for _, pair := range []struct {
 			path string
 			data []byte
 		}{
-			{caPath, opts.bundle.TrustAnchors},
-			{issuerKeyPath, opts.bundle.IssKeyPEM},
-			{issuerCertPath, opts.bundle.IssChainPEM},
+			{caPath, bundle.TrustAnchors},
+			{issuerKeyPath, bundle.IssKeyPEM},
+			{issuerCertPath, bundle.IssChainPEM},
 		} {
 			require.NoError(t, os.WriteFile(pair.path, pair.data, 0o600))
 		}
-		args = append(args, "-issuer-credentials="+tmpDir)
-	} else {
-		args = append(args, "-issuer-credentials="+t.TempDir())
 	}
+
+	args = append(args, "-issuer-credentials="+issuerCredPath)
 
 	if opts.kubeconfig != nil {
 		args = append(args, "-kubeconfig="+*opts.kubeconfig)
@@ -140,7 +156,7 @@ func New(t *testing.T, fopts ...Option) *Sentry {
 	return &Sentry{
 		exec:        exec.New(t, binary.EnvValue("sentry"), args, opts.execOpts...),
 		ports:       fp,
-		bundle:      opts.bundle,
+		bundle:      bundle,
 		port:        opts.port,
 		metricsPort: opts.metricsPort,
 		healthzPort: opts.healthzPort,
@@ -227,7 +243,7 @@ func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *g
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(
 		ctx,
-		fmt.Sprintf("127.0.0.1:%d", s.Port()),
+		fmt.Sprintf("localhost:%d", s.Port()),
 		grpc.WithTransportCredentials(transportCredentials),
 		grpc.WithReturnConnectionError(), //nolint:staticcheck
 		grpc.WithBlock(),                 //nolint:staticcheck

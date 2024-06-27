@@ -119,6 +119,7 @@ func Run() {
 		ControlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
 		ControlPlaneNamespace:   opts.ControlPlaneNamespace,
 		TrustAnchors:            opts.TrustAnchors,
+		TrustAnchorsFile:        opts.TrustAnchorsFile,
 		AppID:                   opts.AppID,
 		MTLSEnabled:             opts.EnableMTLS,
 		Mode:                    modes.DaprMode(opts.Mode),
