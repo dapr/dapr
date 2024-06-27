@@ -29,11 +29,11 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -94,7 +94,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.place.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	daprdURL := fmt.Sprintf("http://%s/v1.0/actors/myactortype/myactorid", b.daprd.HTTPAddress())
 
