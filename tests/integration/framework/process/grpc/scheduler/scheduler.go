@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/security"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
@@ -56,6 +57,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 				TrustAnchors:            opts.sentry.CABundle().TrustAnchors,
 				AppID:                   "dapr-scheduler",
 				MTLSEnabled:             true,
+				Healthz:                 healthz.New(),
 			})
 			require.NoError(t, err)
 
