@@ -12,6 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/security/fake"
 	daprtesting "github.com/dapr/dapr/pkg/testing"
@@ -293,14 +294,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 		Peers:        peers,
 		LogStorePath: "",
 		Clock:        clock,
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-
-	stopped := make(chan struct{})
-	go func() {
-		defer close(stopped)
-		require.NoError(t, srv.StartRaft(ctx, fake.New(), &hcraft.Config{
+		Config: &hcraft.Config{
 			ProtocolVersion:    hcraft.ProtocolVersionMax,
 			HeartbeatTimeout:   2 * time.Second,
 			ElectionTimeout:    2 * time.Second,
@@ -312,7 +306,17 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 			SnapshotThreshold:  8192,
 			LeaderLeaseTimeout: time.Second,
 			BatchApplyCh:       true,
-		}))
+		},
+		Security: fake.New(),
+		Healthz:  healthz.New(),
+	})
+
+	ctx, cancel := context.WithCancel(context.Background())
+
+	stopped := make(chan struct{})
+	go func() {
+		defer close(stopped)
+		require.NoError(t, srv.StartRaft(ctx))
 	}()
 
 	ready := make(chan struct{})

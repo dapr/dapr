@@ -56,7 +56,7 @@ func (a *api) constructHealthzEndpoints() []endpoints.Endpoint {
 }
 
 func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
-	if !a.readyStatus {
+	if !a.healthz.IsReady() {
 		msg := messages.ErrHealthNotReady
 		respondWithError(w, msg)
 		log.Debug(msg)
@@ -77,7 +77,7 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 }
 
 func (a *api) onGetOutboundHealthz(w http.ResponseWriter, r *http.Request) {
-	if !a.outboundReadyStatus {
+	if !a.outboundHealthz.IsReady() {
 		msg := messages.ErrOutboundHealthNotReady
 		respondWithError(w, msg)
 		log.Debug(msg)

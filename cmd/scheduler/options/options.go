@@ -52,7 +52,7 @@ type Options struct {
 	EtcdCompactionRetention string
 
 	Logger  logger.Options
-	Metrics *metrics.Options
+	Metrics *metrics.FlagOptions
 
 	taFile string
 }
@@ -89,7 +89,7 @@ func New(origArgs []string) (*Options, error) {
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
-	opts.Metrics = metrics.DefaultMetricOptions()
+	opts.Metrics = metrics.DefaultFlagOptions()
 	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
 	_ = fs.Parse(origArgs)
