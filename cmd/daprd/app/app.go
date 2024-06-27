@@ -36,6 +36,8 @@ import (
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	wfbeLoader "github.com/dapr/dapr/pkg/components/wfbackend"
 	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
+	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/security"
@@ -114,6 +116,7 @@ func Run() {
 		WithWorkflowBackends(wfbeLoader.DefaultRegistry)
 
 	ctx := signals.Context()
+	healthz := healthz.New()
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           opts.SentryAddress,
 		ControlPlaneTrustDomain: opts.ControlPlaneTrustDomain,
@@ -122,6 +125,7 @@ func Run() {
 		AppID:                   opts.AppID,
 		MTLSEnabled:             opts.EnableMTLS,
 		Mode:                    modes.DaprMode(opts.Mode),
+		Healthz:                 healthz,
 	})
 	if err != nil {
 		log.Fatal(err)
@@ -172,11 +176,18 @@ func Run() {
 				AppChannelAddress:             opts.AppChannelAddress,
 				EnableAPILogging:              opts.EnableAPILogging,
 				Config:                        opts.Config,
-				Metrics:                       opts.Metrics,
-				AppSSL:                        opts.AppSSL,
-				ComponentsPath:                opts.ComponentsPath,
-				Registry:                      reg,
-				Security:                      sec,
+				Metrics: metrics.Options{
+					Enabled:   opts.Metrics.Enabled(),
+					Log:       log,
+					Port:      opts.Metrics.Port(),
+					Namespace: metrics.DefaultMetricNamespace,
+					Healthz:   healthz,
+				},
+				AppSSL:         opts.AppSSL,
+				ComponentsPath: opts.ComponentsPath,
+				Registry:       reg,
+				Security:       sec,
+				Healthz:        healthz,
 			})
 			if rerr != nil {
 				return rerr

@@ -78,8 +78,8 @@ func New() *Fake {
 		currentTrustAnchorsFn: func(context.Context) ([]byte, error) {
 			return []byte{}, nil
 		},
-		watchTrustAnchorsFn: func(context.Context, chan<- []byte) {
-			return
+		watchTrustAnchorsFn: func(ctx context.Context, _ chan<- []byte) {
+			<-ctx.Done()
 		},
 		netListenerIDFn: func(l net.Listener, _ spiffeid.ID) net.Listener {
 			return l
