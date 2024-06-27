@@ -31,7 +31,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -90,8 +89,7 @@ func (i *ignoreerrors) Setup(t *testing.T) []framework.Option {
 func (i *ignoreerrors) Run(t *testing.T, ctx context.Context) {
 	i.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
-	assert.Empty(t, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()))
+	assert.Empty(t, i.daprd.GetMetaRegisteredComponents(t, ctx))
 
 	t.Run("adding a component should become available", func(t *testing.T) {
 		newComp := compapi.Component{
@@ -102,7 +100,7 @@ func (i *ignoreerrors) Run(t *testing.T, ctx context.Context) {
 		i.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			assert.Len(t, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1)
+			assert.Len(t, i.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)
 	})
 
@@ -114,7 +112,7 @@ func (i *ignoreerrors) Run(t *testing.T, ctx context.Context) {
 		i.operator.SetComponents(upComp)
 		i.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &upComp, EventType: operatorv1.ResourceEventType_UPDATED})
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			assert.Empty(t, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()))
+			assert.Empty(t, i.daprd.GetMetaRegisteredComponents(t, ctx))
 		}, time.Second*5, time.Millisecond*10)
 	})
 
@@ -126,7 +124,7 @@ func (i *ignoreerrors) Run(t *testing.T, ctx context.Context) {
 		i.operator.SetComponents(newComp)
 		i.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp, EventType: operatorv1.ResourceEventType_UPDATED})
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			assert.Len(t, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1)
+			assert.Len(t, i.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)
 	})
 
