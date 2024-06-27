@@ -116,6 +116,7 @@ func (e *env) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 			gctx, gcancel := context.WithTimeout(ctx, time.Second/4)
 			defer gcancel()
+			//nolint:staticcheck
 			_, err := grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithReturnConnectionError(),
@@ -130,6 +131,7 @@ func (e *env) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("trying mTLS connection to Dapr API with same trust anchor should succeed", func(t *testing.T) {
 		sec := securityFromSentry(t, e.sentry1)
+		//nolint:staticcheck
 		conn, err := grpc.DialContext(ctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID),
 			grpc.WithReturnConnectionError())
 		require.NoError(t, err)
@@ -144,6 +146,7 @@ func (e *env) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 			gctx, gcancel := context.WithTimeout(ctx, time.Second/4)
 			defer gcancel()
+			//nolint:staticcheck
 			_, err := grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(),
 				sec.GRPCDialOptionMTLS(myAppID),
 				grpc.WithReturnConnectionError(),
@@ -161,6 +164,7 @@ func (e *env) Run(t *testing.T, ctx context.Context) {
 		// Eventually, the connection should succeed because the target Daprd
 		// accepts the new CA.
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
+			//nolint:staticcheck
 			conn, err := grpc.DialContext(ctx, e.daprd.InternalGRPCAddress(),
 				sec.GRPCDialOptionMTLS(myAppID),
 				grpc.WithReturnConnectionError())

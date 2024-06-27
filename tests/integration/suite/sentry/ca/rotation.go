@@ -88,6 +88,7 @@ func (r *rotation) Run(t *testing.T, ctx context.Context) {
 	t.Run("sentry should be serving on bundle 1 trust anchors", func(t *testing.T) {
 		x509bundle, err := x509bundle.Parse(sentryID.TrustDomain(), r.bundle1.TrustAnchors)
 		require.NoError(t, err)
+		//nolint:staticcheck
 		conn, err := grpc.DialContext(ctx,
 			fmt.Sprintf("localhost:%d", r.sentry.Port()),
 			grpc.WithTransportCredentials(
@@ -110,7 +111,7 @@ func (r *rotation) Run(t *testing.T, ctx context.Context) {
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 			sctx, cancel := context.WithTimeout(ctx, time.Second/4)
 			defer cancel()
-
+			//nolint:staticcheck
 			conn, err := grpc.DialContext(sctx,
 				fmt.Sprintf("localhost:%d", r.sentry.Port()),
 				grpc.WithTransportCredentials(
