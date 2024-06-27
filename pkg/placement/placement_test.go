@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/placement/tests"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -41,21 +42,23 @@ const testStreamSendLatency = time.Second
 func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
 
+	port, err := freeport.GetFreePort()
+	require.NoError(t, err)
+
 	testServer := NewPlacementService(PlacementServiceOpts{
 		RaftNode:    raftServer,
 		SecProvider: securityfake.New(),
+		Port:        port,
+		Healthz:     healthz.New(),
 	})
 	clock := clocktesting.NewFakeClock(time.Now())
 	testServer.clock = clock
-
-	port, err := freeport.GetFreePort()
-	require.NoError(t, err)
 
 	serverStopped := make(chan struct{})
 	ctx, cancel := context.WithCancel(context.Background())
 	go func() {
 		defer close(serverStopped)
-		err := testServer.Run(ctx, "127.0.0.1", strconv.Itoa(port))
+		err := testServer.Start(ctx)
 		if !errors.Is(err, grpc.ErrServerStopped) {
 			require.NoError(t, err)
 		}
