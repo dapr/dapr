@@ -1,0 +1,13 @@
+diff --git a/tests/integration/suite/daprd/pubsub/grpc/errors.go b/tests/integration/suite/daprd/pubsub/grpc/errors.go
+index 56e8595b9..49804ca70 100644
+--- a/tests/integration/suite/daprd/pubsub/grpc/errors.go
++++ b/tests/integration/suite/daprd/pubsub/grpc/errors.go
+@@ -217,7 +217,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
+ 			}
+ 		}
+ 		require.NotNil(t, errInfo, "ErrorInfo should be present")
+-		require.Equal(t, kiterrors.CodePrefixPubSub+"TOPIC"+apierrors.PostFixNameEmpty, errInfo.GetReason())
++		require.Equal(t, "DAPR_PUBSUB_TOPIC_NAME_EMPTY", errInfo.GetReason())
+ 		require.Equal(t, "dapr.io", errInfo.GetDomain())
+ 		require.Nil(t, errInfo.GetMetadata())
+ 
