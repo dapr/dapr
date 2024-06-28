@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
 	grpcretry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"google.golang.org/grpc/status"
 
@@ -52,7 +51,7 @@ func (s *subscriptions) Load(ctx context.Context) ([]subapi.Subscription, error)
 
 	// Ignore proto marshal nil errors from older gRPC servers.
 	status, ok := status.FromError(err)
-	if ok && strings.HasSuffix(status.Message(), proto.ErrNil.Error()) {
+	if ok && strings.HasSuffix(status.Message(), "Marshal called with nil") {
 		return nil, nil
 	}
 

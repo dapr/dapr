@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/golang/protobuf/proto"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -44,7 +43,7 @@ func (s *subscriptions) list(ctx context.Context, opclient operatorpb.OperatorCl
 
 	// Ignore proto marshal nil errors from older gRPC servers.
 	status, ok := status.FromError(err)
-	if ok && strings.HasSuffix(status.Message(), proto.ErrNil.Error()) {
+	if ok && strings.HasSuffix(status.Message(), "Marshal called with nil") {
 		return nil, nil
 	}
 
@@ -96,7 +95,6 @@ func (s *subscriptions) establish(ctx context.Context, opclient operatorpb.Opera
 		Namespace: ns,
 		PodName:   podName,
 	})
-
 	if err != nil {
 		return err
 	}
