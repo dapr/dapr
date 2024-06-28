@@ -39,7 +39,7 @@ BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)
 DOCKER_OUTPUT_TYPE?=--output type=docker
 ifeq ($(TARGET_OS), windows)
   # Docker CLI on Windows does not support "--output"
-  DOCKER_OUTPUT_TYPE=""
+  DOCKER_OUTPUT_TYPE=
   DOCKERFILE?=Dockerfile-windows
   BIN_PATH := $(BIN_PATH)/release
 else ifeq ($(origin DEBUG), undefined)
