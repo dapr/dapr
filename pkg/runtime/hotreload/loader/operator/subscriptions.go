@@ -20,6 +20,7 @@ import (
 	"strings"
 
 	"github.com/golang/protobuf/proto"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
@@ -63,8 +64,17 @@ func (s *subscriptions) close() error {
 }
 
 //nolint:unused
-func (s *subscriptions) recv() (*loader.Event[subapi.Subscription], error) {
+func (s *subscriptions) recv(ctx context.Context) (*loader.Event[subapi.Subscription], error) {
 	event, err := s.Operator_SubscriptionUpdateClient.Recv()
+
+	// Ignore servers which don't implement the subscription update stream.
+	status, ok := status.FromError(err)
+	if ok && status.Code() == codes.Unimplemented {
+		log.Warn("Subscription HotReloading is not supported by the Dapr control plane. Subscription updates will not be Hot Reloaded.")
+		<-ctx.Done()
+		return nil, ctx.Err()
+	}
+
 	if err != nil {
 		return nil, err
 	}
@@ -86,6 +96,7 @@ func (s *subscriptions) establish(ctx context.Context, opclient operatorpb.Opera
 		Namespace: ns,
 		PodName:   podName,
 	})
+
 	if err != nil {
 		return err
 	}
