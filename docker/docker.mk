@@ -35,7 +35,11 @@ DAPR_SCHEDULER_IMAGE_NAME?=scheduler
 # build docker image for linux
 BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)
 
+# Important to avoid using oci images on local dev.
+DOCKER_OUTPUT_TYPE?=--output type=docker
 ifeq ($(TARGET_OS), windows)
+  # Docker CLI on Windows does not support "--output"
+  DOCKER_OUTPUT_TYPE=""
   DOCKERFILE?=Dockerfile-windows
   BIN_PATH := $(BIN_PATH)/release
 else ifeq ($(origin DEBUG), undefined)
@@ -120,26 +124,26 @@ docker-build: check-docker-env check-arch
 	$(info Building $(DOCKER_IMAGE):$(DAPR_TAG) docker images ...)
 ifeq ($(TARGET_ARCH),$(TARGET_ARCH_LOCAL))
 ifeq ($(ONLY_DAPR_IMAGE),true)
-	$(DOCKER) build --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
+	$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
 else
-	$(DOCKER) build --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
+	$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=daprd $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=daprd $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=placement $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=placement $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=sentry $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=sentry $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=operator $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=operator $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=injector $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=injector $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=scheduler $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=scheduler $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 endif
 else
