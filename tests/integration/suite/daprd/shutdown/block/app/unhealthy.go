@@ -113,7 +113,7 @@ spec:
 func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 	u.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, u.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock()) //nolint:staticcheck
+	conn, err := grpc.DialContext(ctx, u.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)

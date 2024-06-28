@@ -48,7 +48,6 @@ func (n *nomtls) Run(t *testing.T, ctx context.Context) {
 	n.place.WaitUntilRunning(t, ctx)
 
 	host := n.place.Address()
-	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, host, grpc.WithBlock(), grpc.WithReturnConnectionError(),
 		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 	)

@@ -40,7 +40,7 @@ func GetGRPCClient(daprPort int) runtimev1pb.DaprClient {
 	start := time.Now()
 	for retries := 10; retries > 0; retries-- {
 		var err error
-		//nolint:staticcheck
+
 		grpcConn, err = grpc.Dial(url,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),

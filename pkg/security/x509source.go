@@ -281,7 +281,7 @@ func (x *x509source) requestFromSentry(ctx context.Context, csrDER []byte) ([]*x
 	if err != nil {
 		return nil, fmt.Errorf("error creating tls config: %w", err)
 	}
-	//nolint:staticcheck
+
 	conn, err := grpc.DialContext(ctx,
 		x.sentryAddress,
 		grpc.WithTransportCredentials(credentials.NewTLS(tlsConfig)),

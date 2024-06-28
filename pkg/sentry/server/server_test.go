@@ -332,7 +332,7 @@ func TestRun(t *testing.T) {
 				return err == nil
 			}, time.Second, 10*time.Millisecond)
 
-			conn, err := grpc.DialContext(ctx, fmt.Sprintf(":%d", port), grpc.WithTransportCredentials(insecure.NewCredentials())) //nolint:staticcheck
+			conn, err := grpc.DialContext(ctx, fmt.Sprintf(":%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
 			require.NoError(t, err)
 			t.Cleanup(func() {
 				require.NoError(t, conn.Close())

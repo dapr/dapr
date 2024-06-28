@@ -93,7 +93,6 @@ func (e *enable) Run(t *testing.T, ctx context.Context) {
 	t.Run("trying plain text connection to Dapr API should fail", func(t *testing.T) {
 		gctx, gcancel := context.WithTimeout(ctx, time.Second)
 		t.Cleanup(gcancel)
-		//nolint:staticcheck
 		_, err := grpc.DialContext(gctx, e.daprd.InternalGRPCAddress(),
 			grpc.WithReturnConnectionError(),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -134,7 +133,6 @@ func (e *enable) Run(t *testing.T, ctx context.Context) {
 
 		myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "my-app")
 		require.NoError(t, err)
-		//nolint:staticcheck
 		conn, err := grpc.DialContext(ctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID),
 			grpc.WithReturnConnectionError())
 		require.NoError(t, err)

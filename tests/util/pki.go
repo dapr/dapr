@@ -154,7 +154,7 @@ func (p PKI) ClientGRPCCtx(t *testing.T) context.Context {
 	go func() {
 		server.Serve(lis)
 	}()
-	conn, err := grpc.DialContext(context.Background(), lis.Addr().String(), //nolint:staticcheck
+	conn, err := grpc.DialContext(context.Background(), lis.Addr().String(),
 		grpc.WithTransportCredentials(grpccredentials.MTLSClientCredentials(clientSVID, clientSVID, tlsconfig.AuthorizeAny())),
 	)
 	require.NoError(t, err)

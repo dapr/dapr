@@ -347,9 +347,8 @@ func (h *httpServer) WaitForActorsReady(ctx context.Context) error {
 
 func (i *rebalancing) getPlacementStream(t *testing.T, ctx context.Context) placementv1pb.Placement_ReportDaprStatusClient {
 	// Establish a connection with placement
-	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(i.place.Port()),
-		grpc.WithBlock(), //nolint:staticcheck
+		grpc.WithBlock(),
 		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 	)
 	require.NoError(t, err)

@@ -168,7 +168,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 }
 
 func getOperatorClient(address string) operatorv1pb.OperatorClient {
-	conn, _ := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials())) //nolint:staticcheck
+	conn, _ := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	return operatorv1pb.NewOperatorClient(conn)
 }
 
