@@ -24,8 +24,8 @@ import (
 
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -56,7 +56,7 @@ func (n *withMin) Run(t *testing.T, ctx context.Context) {
 		level2 = 30
 	)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	n.place.WaitUntilRunning(t, ctx)
 

@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -50,7 +50,7 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 
 	reqURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", s.scheduler.HealthzPort())
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)

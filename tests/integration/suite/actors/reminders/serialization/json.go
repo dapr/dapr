@@ -26,11 +26,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -87,7 +87,7 @@ func (j *jsonFormat) Run(t *testing.T, ctx context.Context) {
 	err := j.handler.WaitForActorsReady(ctx)
 	require.NoError(t, err)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	baseURL := fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/myactorid", j.daprd.HTTPPort())
 
 	// Invoke an actor to confirm everything is ready to go

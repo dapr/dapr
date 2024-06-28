@@ -11,22 +11,44 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package file
 
 import (
 	"crypto/rand"
 	"math/big"
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 )
 
-// RandomString generates a random string of length n.
-func RandomString(t *testing.T, n int) string {
-	t.Helper()
+func Names(t *testing.T, num int) []string {
+	require.GreaterOrEqual(t, num, 1)
 
+	names := make([]string, num)
+	for i := 0; i < num; i++ {
+		names[i] = name(t)
+	}
+
+	return names
+}
+
+func Paths(t *testing.T, num int) []string {
+	require.GreaterOrEqual(t, num, 1)
+
+	dir := t.TempDir()
+	names := make([]string, num)
+	for i := 0; i < num; i++ {
+		names[i] = filepath.Join(dir, name(t))
+	}
+
+	return names
+}
+
+func name(t *testing.T) string {
 	const letters = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
-	bytes := make([]byte, n)
+
+	bytes := make([]byte, 10)
 	_, err := rand.Read(bytes)
 	require.NoError(t, err)
 

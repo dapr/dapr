@@ -27,8 +27,8 @@ import (
 	"golang.org/x/net/http2"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -51,7 +51,7 @@ func (h *httpServer) Setup(t *testing.T) []framework.Option {
 func (h *httpServer) Run(t *testing.T, ctx context.Context) {
 	h.proc.WaitUntilRunning(t, ctx)
 
-	h1Client := util.HTTPClient(t)
+	h1Client := client.HTTP(t)
 	h2cClient := &http.Client{
 		Transport: &http2.Transport{
 			// Allow http2.Transport to use protocol "http"

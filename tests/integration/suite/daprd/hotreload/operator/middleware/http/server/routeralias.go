@@ -31,12 +31,12 @@ import (
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -139,7 +139,7 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 	r.daprd1.WaitUntilAppHealth(t, ctx)
 	r.daprd2.WaitUntilAppHealth(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	r.doReq(t, ctx, client, "helloworld", "daprd1:/abc")
 
 	comp1 := compapi.Component{
