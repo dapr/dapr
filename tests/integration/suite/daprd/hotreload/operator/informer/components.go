@@ -37,7 +37,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
 )
@@ -122,11 +121,9 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.daprd1.WaitUntilRunning(t, ctx)
 	c.daprd2.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
-
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd1.HTTPPort()))
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd2.HTTPPort()))
+		assert.Empty(t, c.daprd1.GetMetaRegisteredComponents(t, ctx))
+		assert.Empty(t, c.daprd2.GetMetaRegisteredComponents(t, ctx))
 	})
 
 	t.Run("adding a component should become available", func(t *testing.T) {
@@ -141,19 +138,16 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 		c.store.Add(&comp)
 		c.kubeapi.Informer().Add(t, &comp)
 
-		require.EventuallyWithT(t, func(ct *assert.CollectT) {
-			assert.Len(ct, util.GetMetaComponents(ct, ctx, client, c.daprd1.HTTPPort()), 1)
-			assert.Len(ct, util.GetMetaComponents(ct, ctx, client, c.daprd2.HTTPPort()), 1)
-		}, time.Second*10, time.Millisecond*10)
-
 		exp := []*rtv1.RegisteredComponents{
 			{
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 			},
 		}
-		assert.ElementsMatch(t, exp, util.GetMetaComponents(t, ctx, client, c.daprd1.HTTPPort()))
-		assert.ElementsMatch(t, exp, util.GetMetaComponents(t, ctx, client, c.daprd2.HTTPPort()))
+		require.EventuallyWithT(t, func(ct *assert.CollectT) {
+			assert.ElementsMatch(ct, exp, c.daprd1.GetMetaRegisteredComponents(ct, ctx))
+			assert.ElementsMatch(ct, exp, c.daprd2.GetMetaRegisteredComponents(ct, ctx))
+		}, time.Second*20, time.Millisecond*10)
 	})
 
 	dir := filepath.Join(t.TempDir(), "db.sqlite")
@@ -188,8 +182,8 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 					Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "ACTOR"},
 				},
 			}
-			assert.ElementsMatch(ct, exp, util.GetMetaComponents(ct, ctx, client, c.daprd1.HTTPPort()))
-			assert.ElementsMatch(ct, exp, util.GetMetaComponents(ct, ctx, client, c.daprd2.HTTPPort()))
+			assert.ElementsMatch(ct, exp, c.daprd1.GetMetaRegisteredComponents(ct, ctx))
+			assert.ElementsMatch(ct, exp, c.daprd2.GetMetaRegisteredComponents(ct, ctx))
 		}, time.Second*20, time.Millisecond*10)
 	})
 
@@ -198,8 +192,8 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 		c.kubeapi.Informer().Delete(t, &comp)
 
 		require.EventuallyWithT(t, func(ct *assert.CollectT) {
-			assert.Empty(ct, util.GetMetaComponents(ct, ctx, client, c.daprd1.HTTPPort()))
-			assert.Empty(ct, util.GetMetaComponents(ct, ctx, client, c.daprd2.HTTPPort()))
+			assert.Empty(ct, c.daprd1.GetMetaRegisteredComponents(ct, ctx))
+			assert.Empty(ct, c.daprd2.GetMetaRegisteredComponents(ct, ctx))
 		}, time.Second*20, time.Millisecond*10)
 	})
 }

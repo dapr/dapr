@@ -24,9 +24,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procinjector "github.com/dapr/dapr/tests/integration/framework/process/injector"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -57,7 +57,7 @@ func (i *injector) Setup(t *testing.T) []framework.Option {
 func (i *injector) Run(t *testing.T, ctx context.Context) {
 	i.injector.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 	reqURL := fmt.Sprintf("http://localhost:%d/healthz", i.injector.HealthzPort())
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)

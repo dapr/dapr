@@ -28,9 +28,9 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -99,15 +99,15 @@ spec:
 func (a *appready) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 
-	client := a.daprd.GRPCClient(t, ctx)
-	httpClient := util.HTTPClient(t)
+	gclient := a.daprd.GRPCClient(t, ctx)
+	httpClient := client.HTTP(t)
 
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", a.daprd.HTTPPort(), a.daprd.AppID())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+		resp, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
 		assert.Len(c, resp.GetRegisteredComponents(), 1)
 	}, time.Second*5, time.Millisecond*10)
@@ -128,7 +128,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 	a.appHealthy.Store(true)
 
 	assert.Eventually(t, func() bool {
-		resp, err := util.HTTPClient(t).Do(req)
+		resp, err := client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusOK

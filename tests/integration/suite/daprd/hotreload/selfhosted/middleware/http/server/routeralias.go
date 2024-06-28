@@ -27,9 +27,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -124,7 +124,7 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 	r.daprd1.WaitUntilAppHealth(t, ctx)
 	r.daprd2.WaitUntilAppHealth(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	r.doReq(t, ctx, client, "helloworld", "daprd1:/abc")
 
 	require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "res.yaml"), []byte(

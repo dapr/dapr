@@ -27,12 +27,15 @@ import (
 	"time"
 
 	fuzz "github.com/google/gofuzz"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/file"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -53,7 +56,9 @@ func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 	const numTests = 1000
 
 	takenNames := make(map[string]bool)
-	f.secretStoreName = util.RandomString(t, 10)
+	uid, err := uuid.NewRandom()
+	require.NoError(t, err)
+	f.secretStoreName = uid.String()
 
 	f.values = make(map[string]string)
 	for i := 0; i < numTests; i++ {
@@ -72,7 +77,7 @@ func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 		takenNames[key] = true
 	}
 
-	secretFileName := util.FileNames(t, 1)[0]
+	secretFileName := file.Paths(t, 1)[0]
 
 	file, err := os.Create(secretFileName)
 	require.NoError(t, err)
@@ -103,13 +108,13 @@ spec:
 func (f *fuzzsecret) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, util.GetMetaComponents(c, ctx, client, f.daprd.HTTPPort()), 1)
+		assert.Len(c, f.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 	}, time.Second*20, time.Millisecond*10)
 
-	pt := util.NewParallel(t)
+	pt := parallel.New(t)
 	for key, value := range f.values {
 		key := key
 		value := value

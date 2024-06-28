@@ -96,7 +96,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.daprd.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, h.daprd.GetMetaRegistedComponents(t, ctx), 2)
+		assert.Len(c, h.daprd.GetMetaRegisteredComponents(t, ctx), 2)
 		assert.Empty(c, h.daprd.GetMetaSubscriptions(t, ctx))
 	}, time.Second*5, time.Millisecond*10)
 
@@ -203,7 +203,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		EventType: operatorv1.ResourceEventType_DELETED,
 	})
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, h.daprd.GetMetaRegistedComponents(t, ctx), 1)
+		assert.Len(c, h.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)
 	h.sub.ExpectPublishError(t, ctx, newReq(h.daprd, "pubsub0", "d"))
 	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd, "pubsub1", "c"))
@@ -213,7 +213,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		EventType: operatorv1.ResourceEventType_DELETED,
 	})
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, h.daprd.GetMetaRegistedComponents(t, ctx))
+		assert.Empty(c, h.daprd.GetMetaRegisteredComponents(t, ctx))
 	}, time.Second*5, time.Millisecond*10)
 	h.sub.ExpectPublishError(t, ctx, newReq(h.daprd, "pubsub0", "d"))
 	h.sub.ExpectPublishError(t, ctx, newReq(h.daprd, "pubsub1", "c"))
