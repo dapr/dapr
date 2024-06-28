@@ -91,6 +91,7 @@ const (
 	Dapr_ScheduleJobAlpha1_FullMethodName              = "/dapr.proto.runtime.v1.Dapr/ScheduleJobAlpha1"
 	Dapr_GetJobAlpha1_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/GetJobAlpha1"
 	Dapr_DeleteJobAlpha1_FullMethodName                = "/dapr.proto.runtime.v1.Dapr/DeleteJobAlpha1"
+	Dapr_ConverseAlpha1_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ConverseAlpha1"
 )
 
 // DaprClient is the client API for Dapr service.
@@ -215,6 +216,8 @@ type DaprClient interface {
 	GetJobAlpha1(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
 	// Delete a job
 	DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
+	// ConverseAlpha1 do conversation.
+	ConverseAlpha1(ctx context.Context, in *ConversationAlpha1Request, opts ...grpc.CallOption) (*ConversationAlpha1Response, error)
 }
 
 type daprClient struct {
@@ -859,6 +862,15 @@ func (c *daprClient) DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, 
 	return out, nil
 }
 
+func (c *daprClient) ConverseAlpha1(ctx context.Context, in *ConversationAlpha1Request, opts ...grpc.CallOption) (*ConversationAlpha1Response, error) {
+	out := new(ConversationAlpha1Response)
+	err := c.cc.Invoke(ctx, Dapr_ConverseAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaprServer is the server API for Dapr service.
 // All implementations should embed UnimplementedDaprServer
 // for forward compatibility
@@ -981,6 +993,8 @@ type DaprServer interface {
 	GetJobAlpha1(context.Context, *GetJobRequest) (*GetJobResponse, error)
 	// Delete a job
 	DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
+	// ConverseAlpha1 do conversation.
+	ConverseAlpha1(context.Context, *ConversationAlpha1Request) (*ConversationAlpha1Response, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -1160,6 +1174,9 @@ func (UnimplementedDaprServer) GetJobAlpha1(context.Context, *GetJobRequest) (*G
 }
 func (UnimplementedDaprServer) DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteJobAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationAlpha1Request) (*ConversationAlpha1Response, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ConverseAlpha1 not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -2247,6 +2264,24 @@ func _Dapr_DeleteJobAlpha1_Handler(srv interface{}, ctx context.Context, dec fun
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_ConverseAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ConversationAlpha1Request)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ConverseAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_ConverseAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ConverseAlpha1(ctx, req.(*ConversationAlpha1Request))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Dapr_ServiceDesc is the grpc.ServiceDesc for Dapr service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2465,6 +2500,10 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteJobAlpha1",
 			Handler:    _Dapr_DeleteJobAlpha1_Handler,
+		},
+		{
+			MethodName: "ConverseAlpha1",
+			Handler:    _Dapr_ConverseAlpha1_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

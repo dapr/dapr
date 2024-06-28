@@ -202,6 +202,9 @@ service Dapr {
 
   // Delete a job
   rpc DeleteJobAlpha1(DeleteJobRequest) returns (DeleteJobResponse) {}
+
+  // ConverseAlpha1 do conversation.
+  rpc ConverseAlpha1(ConversationAlpha1Request) returns (ConversationAlpha1Response);
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -1231,4 +1234,32 @@ message DeleteJobRequest {
 // DeleteJobResponse is the message response to delete the job by name.
 message DeleteJobResponse {
   // Empty
+}
+// ConversationAlpha1Request is the request object for Conversation.
+message ConversationAlpha1Request {
+  // Endpoint for the model service.
+  string endpoint = 1;
+
+  // Name of the model.
+  string model_name = 2;
+
+  // Inputs for the conversation, support multiple input in one time.
+  map<string, string> inputs = 3;
+
+  // Parameters for all custom fields.
+  map<string, string> parameters = 4;
+}
+
+// ConversationAlpha1Result is the result for one input.
+message ConversationAlpha1Result {
+  // Result for the one conversation input.
+  string result = 1;
+  // Parameters for all custom fields.
+  map<string, string> parameters = 2;
+}
+
+// ConversationAlpha1Response is the response for Conversation.
+message ConversationAlpha1Response {
+  // An array of results.
+  repeated ConversationAlpha1Result outputs = 1;
 }
