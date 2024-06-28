@@ -36,16 +36,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(retryfilter))
+	suite.Register(new(retryfilterhttp))
 }
 
-type retryfilter struct {
+type retryfilterhttp struct {
 	daprd1   *daprd.Daprd
 	daprd2   *daprd.Daprd
 	counters sync.Map
 }
 
-func (d *retryfilter) Setup(t *testing.T) []framework.Option {
+func (d *retryfilterhttp) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(r.Method))
@@ -70,7 +70,8 @@ func (d *retryfilter) Setup(t *testing.T) []framework.Option {
 
 		respStatusCode, err := strconv.Atoi(string(body))
 		if (err != nil) || (respStatusCode < 100) || (respStatusCode >= 600) {
-			// Trying to write a bad status code will cause app to crash.
+			// Trying to write a bad status code forces a 500 anyway.
+			// So we simply pick one status code for these cases.
 			w.WriteHeader(http.StatusBadRequest)
 			return
 		}
@@ -111,7 +112,7 @@ spec:
 	}
 }
 
-func (d *retryfilter) getCount(key string) int {
+func (d *retryfilterhttp) getCount(key string) int {
 	c, ok := d.counters.Load(key)
 	if !ok {
 		return 0
@@ -120,7 +121,7 @@ func (d *retryfilter) getCount(key string) int {
 	return int(c.(*atomic.Int32).Load())
 }
 
-func (d *retryfilter) Run(t *testing.T, ctx context.Context) {
+func (d *retryfilterhttp) Run(t *testing.T, ctx context.Context) {
 	d.daprd1.WaitUntilRunning(t, ctx)
 	d.daprd2.WaitUntilRunning(t, ctx)
 
