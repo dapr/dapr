@@ -423,7 +423,7 @@ func (r *Resiliency) decodePolicies(c *resiliencyV1alpha.Resiliency) (err error)
 				r.log.Warnf("Attempted override of %s did not meet minimum retry count, resetting to 3.", name)
 				rc.MaxRetries = 3
 			}
-			filter, err := ParseStatusCodeFilter(t.RetryOnCodes, t.NoRetryOnCodes)
+			filter, err := ParseStatusCodeFilter(t.RetryOnCodes)
 			if err != nil {
 				return err
 			}

@@ -65,13 +65,7 @@ spec:
                         policy:
                           type: string
                         retryOnCodes:
-                          type: array
-                          items:
-                            type: string
-                        noRetryOnCodes:
-                          type: array
-                          items:
-                            type: string
+                          type: string
                       type: object
                     type: object
                   timeouts:

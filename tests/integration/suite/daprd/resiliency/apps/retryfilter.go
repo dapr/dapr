@@ -94,12 +94,7 @@ spec:
         policy: constant
         duration: 100ms
         maxRetries: 3
-        retryOnCodes:
-          - "505"
-          - "2"
-          - "invalid"
-          - "501-503,509"
-          - "546,547"
+        retryOnCodes: "505,2,501-503,509,546,547"
 `
 	d.daprd1 = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
