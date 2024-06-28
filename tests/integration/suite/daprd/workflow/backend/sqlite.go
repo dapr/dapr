@@ -29,7 +29,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -67,7 +66,7 @@ spec:
 func (s *sqlite) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
-	comps := util.GetMetaComponents(t, ctx, util.HTTPClient(t), s.daprd.HTTPPort())
+	comps := s.daprd.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{Name: "wfbackend", Type: "workflowbackend.sqlite", Version: "v1"},
 	}, comps)

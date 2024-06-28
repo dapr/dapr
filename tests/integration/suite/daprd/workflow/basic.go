@@ -38,10 +38,10 @@ import (
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -79,7 +79,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.place.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
 
-	b.httpClient = util.HTTPClient(t)
+	b.httpClient = fclient.HTTP(t)
 
 	conn, err := grpc.DialContext(ctx, //nolint:staticcheck
 		b.daprd.GRPCAddress(),

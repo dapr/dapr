@@ -25,9 +25,9 @@ import (
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -59,7 +59,7 @@ func (c *contentlength) Run(t *testing.T, ctx context.Context) {
 	c.daprd1.WaitUntilRunning(t, ctx)
 	c.daprd2.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	url := fmt.Sprintf("http://%s/v1.0/invoke/%s/method/hi", c.daprd1.HTTPAddress(), c.daprd2.AppID())
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader("helloworld"))

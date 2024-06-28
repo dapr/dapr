@@ -98,7 +98,7 @@ func (i *inflight) Setup(t *testing.T) []framework.Option {
 func (i *inflight) Run(t *testing.T, ctx context.Context) {
 	i.daprd.WaitUntilRunning(t, ctx)
 
-	assert.Len(t, i.daprd.GetMetaRegistedComponents(t, ctx), 1)
+	assert.Len(t, i.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 	assert.Empty(t, i.daprd.GetMetaSubscriptions(t, ctx))
 
 	sub := subapi.Subscription{

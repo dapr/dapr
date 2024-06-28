@@ -29,8 +29,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -104,7 +104,7 @@ auth:
 func (e *encryption) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 	postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/mystore", e.daprd.HTTPPort())
 	getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/mystore/key1", e.daprd.HTTPPort())
 
