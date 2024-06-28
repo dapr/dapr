@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -143,9 +142,7 @@ func (a *actorstate) Run(t *testing.T, ctx context.Context) {
 	a.daprdUpdate.WaitUntilRunning(t, ctx)
 	a.daprdDelete.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
-
-	require.Empty(t, util.GetMetaComponents(t, ctx, httpClient, a.daprdCreate.HTTPPort()))
+	require.Empty(t, a.daprdCreate.GetMetaRegisteredComponents(t, ctx))
 	require.NoError(t, os.WriteFile(filepath.Join(a.resDirCreate, "state.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -160,7 +157,7 @@ spec:
 `), 0o600))
 	a.loglineCreate.EventuallyFoundAll(t)
 
-	comps := util.GetMetaComponents(t, ctx, httpClient, a.daprdUpdate.HTTPPort())
+	comps := a.daprdUpdate.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
@@ -182,7 +179,7 @@ spec:
 `), 0o600))
 	a.loglineUpdate.EventuallyFoundAll(t)
 
-	comps = util.GetMetaComponents(t, ctx, httpClient, a.daprdDelete.HTTPPort())
+	comps = a.daprdDelete.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",

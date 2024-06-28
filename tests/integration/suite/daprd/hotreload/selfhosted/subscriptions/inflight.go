@@ -93,7 +93,7 @@ spec:
 func (i *inflight) Run(t *testing.T, ctx context.Context) {
 	i.daprd.WaitUntilRunning(t, ctx)
 
-	assert.Len(t, i.daprd.GetMetaRegistedComponents(t, ctx), 1)
+	assert.Len(t, i.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 	assert.Empty(t, i.daprd.GetMetaSubscriptions(t, ctx))
 
 	require.NoError(t, os.WriteFile(filepath.Join(i.dir, "sub.yaml"), []byte(`

@@ -24,9 +24,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -77,7 +77,7 @@ func (d *defaulttimeout) Run(t *testing.T, ctx context.Context) {
 	d.daprd1.WaitUntilRunning(t, ctx)
 	d.daprd2.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/test", d.daprd1.HTTPPort(), d.daprd2.AppID())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)

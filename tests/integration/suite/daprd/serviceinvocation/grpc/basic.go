@@ -33,8 +33,8 @@ import (
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -281,7 +281,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "application/json", resp.GetContentType())
 	})
 
-	pt := util.NewParallel(t)
+	pt := parallel.New(t)
 	for i := 0; i < 100; i++ {
 		pt.Add(func(c *assert.CollectT) {
 			host := b.daprd1.GRPCAddress()
