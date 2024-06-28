@@ -22,7 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/net/nettest"
 
-	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/dapr/tests/integration/framework/file"
 )
 
 // Socket is a helper to create a temporary directory hosting unix socket files
@@ -46,7 +46,7 @@ func New(t *testing.T) *Socket {
 	tmp, err := nettest.LocalPath()
 	require.NoError(t, err)
 
-	socketDir := filepath.Join(tmp, util.RandomString(t, 4))
+	socketDir := filepath.Join(tmp, file.Names(t, 1)[0])
 	require.NoError(t, os.MkdirAll(socketDir, 0o700))
 	t.Cleanup(func() { require.NoError(t, os.RemoveAll(tmp)) })
 
@@ -60,7 +60,7 @@ func (s *Socket) Directory() string {
 }
 
 func (s *Socket) File(t *testing.T) *File {
-	socketFile := util.RandomString(t, 8)
+	socketFile := file.Names(t, 1)[0]
 	return &File{
 		name:     socketFile,
 		filename: filepath.Join(s.dir, socketFile+".sock"),

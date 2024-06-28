@@ -30,9 +30,9 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -146,7 +146,7 @@ func (o *projection) Run(t *testing.T, ctx context.Context) {
 	b, err := json.Marshal(&tr)
 	require.NoError(t, err)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, bytes.NewReader(b))
 	require.NoError(t, err)

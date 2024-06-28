@@ -31,8 +31,8 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -65,7 +65,7 @@ func (e *expiry) Run(t *testing.T, ctx context.Context) {
 	e.notGiven.WaitUntilRunning(t, ctx)
 	e.given.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	testExpiry := func(proc *procsentry.Sentry, expTime time.Time) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/metrics", proc.MetricsPort()), nil)
