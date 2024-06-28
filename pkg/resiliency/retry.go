@@ -19,8 +19,11 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
 )
+
+var retrylog = logger.NewLogger("dapr.resiliency.retry")
 
 type CodeError struct {
 	StatusCode int32
@@ -112,7 +115,9 @@ func (f StatusCodeFilter) parsePatterns(patterns []string) ([]codeRange, error) 
 			}
 			parsedPattern, err := compilePattern(p)
 			if err != nil {
-				return nil, fmt.Errorf("failed to compile pattern '%s', %w", item, err)
+				retrylog.Warnf("Invalid retry filter pattern is ignored: %s %v", p, err)
+				// bad patterns are also ignored.
+				continue
 			}
 			parsedPatterns = append(parsedPatterns, parsedPattern)
 		}
