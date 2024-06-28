@@ -32,12 +32,12 @@ github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.14.0 h1:dEopBSOSjB5f
 github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.14.0/go.mod h1:qDSbb0fgIfFNjZrNTPtS5MOMScAGyQtn1KlSvoOdqYw=
 github.com/cloudevents/sdk-go/v2 v2.15.2 h1:54+I5xQEnI73RBhWHxbI1XJcqOFOVJN85vb41+8mHUc=
 github.com/cloudevents/sdk-go/v2 v2.15.2/go.mod h1:lL7kSWAE/V8VI4Wh0jbL2v/jvqsm6tjmaQBSvxcv4uE=
-github.com/dapr-sandbox/components-go-sdk v0.0.0-20221213200551-bd485eb929ff h1:NnHsBy0rW6n0/TKwjJmT/tA9ezxFmz64XnACslceRHk=
-github.com/dapr-sandbox/components-go-sdk v0.0.0-20221213200551-bd485eb929ff/go.mod h1:gK31Fk/lEYg0sCaoxFhPyBL54N5AOeeWfeZFl36P2Ko=
+github.com/dapr-sandbox/components-go-sdk v0.3.0 h1:7DsxemJJJFotacO45+7T78StDNzjhwpw6ZaC9vECdI8=
+github.com/dapr-sandbox/components-go-sdk v0.3.0/go.mod h1:70KOCt1mkmvoua4yaggYFGd24Sibxmr6+rKHyBgv0cg=
 github.com/dapr/components-contrib v1.13.3 h1:WNUdmvmeiO1do+whTExg3W5HQtuCVGz60RLxnhN1V7A=
 github.com/dapr/components-contrib v1.13.3/go.mod h1:Bz5icSNaguspAaxsJ3PRWT/QY4tA9+6IS2URFVu7d/0=
-github.com/dapr/dapr v1.9.4-0.20221212235750-ac9256f214e0 h1:Y3WZ1lgR7vBXowF6xbBo1lSEsW2aiXN7U9gRhz8rQcM=
-github.com/dapr/dapr v1.9.4-0.20221212235750-ac9256f214e0/go.mod h1:chJw8EsdwW+Z0E2e0XJN2JzVO5FgUkMkYCYrRKTIqGc=
+github.com/dapr/dapr v1.11.0-rc.10.0.20230627234936-6a8ff83285b8 h1:NNj9iGmrfL9QTEllC6fHXyHRqMuTnRww0UnkJEsSABI=
+github.com/dapr/dapr v1.11.0-rc.10.0.20230627234936-6a8ff83285b8/go.mod h1:73vwvD4sjr+pE6Urxg3bZEb5URTr5yrvBFdK+LEbn+o=
 github.com/dapr/kit v0.13.2 h1:Ne+cWKn+LzEPZHvpsmHCAx5zieMqsC5WBJe8EuEpaBg=
 github.com/dapr/kit v0.13.2/go.mod h1:YI7Pof1HAmMws7D3UCg0xoKwk1F8NmGNJqx5lhB+538=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=

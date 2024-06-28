@@ -3,7 +3,7 @@ module github.com/dapr/dapr/tests/apps/kafka-bindings
 go 1.21
 
 require (
-	github.com/dapr-sandbox/components-go-sdk v0.0.0-20221213200551-bd485eb929ff
+	github.com/dapr-sandbox/components-go-sdk v0.3.0
 	github.com/dapr/components-contrib v1.13.3
 	github.com/dapr/kit v0.13.2
 )
@@ -26,7 +26,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.2.1 // indirect
 	github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.14.0 // indirect
 	github.com/cloudevents/sdk-go/v2 v2.15.2 // indirect
-	github.com/dapr/dapr v1.9.4-0.20221212235750-ac9256f214e0 // indirect
+	github.com/dapr/dapr v1.11.0-rc.10.0.20230627234936-6a8ff83285b8 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
 	github.com/eapache/go-resiliency v1.5.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect

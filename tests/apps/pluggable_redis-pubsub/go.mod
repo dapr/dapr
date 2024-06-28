@@ -3,7 +3,7 @@ module github.com/dapr/dapr/tests/apps/pluggable_redis-pubsub
 go 1.21
 
 require (
-	github.com/dapr-sandbox/components-go-sdk v0.0.0-20221213200551-bd485eb929ff
+	github.com/dapr-sandbox/components-go-sdk v0.3.0
 	github.com/dapr/components-contrib v1.13.3
 	github.com/dapr/kit v0.13.2
 )
@@ -12,7 +12,7 @@ require (
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.14.0 // indirect
 	github.com/cloudevents/sdk-go/v2 v2.15.2 // indirect
-	github.com/dapr/dapr v1.9.4-0.20221212235750-ac9256f214e0 // indirect
+	github.com/dapr/dapr v1.11.0-rc.10.0.20230627234936-6a8ff83285b8 // indirect
 	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
 	github.com/gogo/protobuf v1.3.2 // indirect
