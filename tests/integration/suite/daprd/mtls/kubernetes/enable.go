@@ -133,7 +133,6 @@ func (e *enable) Run(t *testing.T, ctx context.Context) {
 
 		myAppID, err := spiffeid.FromSegments(spiffeid.RequireTrustDomainFromString("public"), "ns", "default", "my-app")
 		require.NoError(t, err)
-
 		conn, err := grpc.DialContext(ctx, e.daprd.InternalGRPCAddress(), sec.GRPCDialOptionMTLS(myAppID),
 			grpc.WithReturnConnectionError())
 		require.NoError(t, err)
