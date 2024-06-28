@@ -26,7 +26,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -68,9 +67,7 @@ spec:
 func (s *scopes) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
-
-	assert.Empty(t, util.GetMetaComponents(t, ctx, client, s.daprd.HTTPPort()))
+	assert.Empty(t, s.daprd.GetMetaRegisteredComponents(t, ctx))
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -82,7 +79,7 @@ spec:
  version: v1
 `), 0o600))
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 1)
+		assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
@@ -97,7 +94,7 @@ scopes:
 - not-my-app-id
 `), 0o600))
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()))
+		assert.Empty(c, s.daprd.GetMetaRegisteredComponents(c, ctx))
 	}, time.Second*5, time.Millisecond*10)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(
@@ -114,7 +111,7 @@ scopes:
 - '%s'
 `, s.daprd.AppID())), 0o600))
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 1)
+		assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
@@ -129,7 +126,7 @@ scopes:
 - not-my-app-id
 `), 0o600))
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Empty(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()))
+		assert.Empty(c, s.daprd.GetMetaRegisteredComponents(c, ctx))
 	}, time.Second*5, time.Millisecond*10)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
@@ -142,6 +139,6 @@ spec:
  version: v1
 `), 0o600))
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, util.GetMetaComponents(c, ctx, client, s.daprd.HTTPPort()), 1)
+		assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)
 }

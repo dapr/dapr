@@ -27,9 +27,9 @@ import (
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -62,7 +62,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 	e.scheduler.WaitUntilRunning(t, ctx)
 	e.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	// Covers apierrors.Empty() job name is empty
 	t.Run("schedule is empty", func(t *testing.T) {

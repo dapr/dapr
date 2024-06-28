@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
 )
@@ -124,8 +123,6 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.daprd1.WaitUntilRunning(t, ctx)
 	c.daprd2.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
-
 	comp := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "Component"},
 		ObjectMeta: metav1.ObjectMeta{Name: "123", Namespace: "default"},
@@ -135,8 +132,8 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.kubeapi.Informer().Add(t, &comp)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, c.daprd1.GetMetaRegistedComponents(t, ctx), 1)
-		assert.Len(t, c.daprd2.GetMetaRegistedComponents(t, ctx), 1)
+		assert.Len(t, c.daprd1.GetMetaRegisteredComponents(t, ctx), 1)
+		assert.Len(t, c.daprd2.GetMetaRegisteredComponents(t, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	c.operator1.Cleanup(t)
@@ -146,8 +143,8 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator2.WaitUntilRunning(t, ctx)
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd1.HTTPPort()))
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, c.daprd2.HTTPPort()))
+		assert.Empty(t, c.daprd1.GetMetaRegisteredComponents(t, ctx))
+		assert.Empty(t, c.daprd2.GetMetaRegisteredComponents(t, ctx))
 	}, time.Second*10, time.Millisecond*10)
 
 	c.operator2.Cleanup(t)
@@ -156,8 +153,8 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator3.Run(t, ctx)
 	c.operator3.WaitUntilRunning(t, ctx)
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd1.HTTPPort()), 1)
-		assert.Len(t, util.GetMetaComponents(t, ctx, client, c.daprd2.HTTPPort()), 1)
+		assert.Len(t, c.daprd1.GetMetaRegisteredComponents(t, ctx), 1)
+		assert.Len(t, c.daprd2.GetMetaRegisteredComponents(t, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
 	c.operator3.Cleanup(t)

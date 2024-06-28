@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package util
+package parallel
 
 import (
 	"os"
@@ -23,17 +23,17 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// ParallelTest is a helper for running tests in parallel without having to
-// create new Go test functions.
-type ParallelTest struct {
+// Test is a helper for running tests in parallel without having to create new
+// Go test functions.
+type Test struct {
 	lock sync.Mutex
 	fns  []func(*assert.CollectT)
 }
 
-// NewParallel creates a new ParallelTest.
+// New creates a new Test.
 // Tests are executed during given test's cleanup.
-func NewParallel(t *testing.T, fns ...func(*assert.CollectT)) *ParallelTest {
-	p := &ParallelTest{
+func New(t *testing.T, fns ...func(*assert.CollectT)) *Test {
+	p := &Test{
 		fns: fns,
 	}
 	t.Cleanup(func() {
@@ -77,15 +77,15 @@ func NewParallel(t *testing.T, fns ...func(*assert.CollectT)) *ParallelTest {
 	return p
 }
 
-func (p *ParallelTest) worker(jobs <-chan func()) {
+func (t *Test) worker(jobs <-chan func()) {
 	for j := range jobs {
 		j()
 	}
 }
 
 // Add adds a test function to be executed in parallel.
-func (p *ParallelTest) Add(fn func(*assert.CollectT)) {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-	p.fns = append(p.fns, fn)
+func (t *Test) Add(fn func(*assert.CollectT)) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	t.fns = append(t.fns, fn)
 }

@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -173,9 +172,7 @@ func (w *workflowbackend) Run(t *testing.T, ctx context.Context) {
 	w.daprdUpdate.WaitUntilRunning(t, ctx)
 	w.daprdDelete.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
-
-	comps := util.GetMetaComponents(t, ctx, httpClient, w.daprdCreate.HTTPPort())
+	comps := w.daprdCreate.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
@@ -191,7 +188,7 @@ func (w *workflowbackend) Run(t *testing.T, ctx context.Context) {
 	w.operatorCreate.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &actorsComp, EventType: operatorv1.ResourceEventType_CREATED})
 	w.loglineCreate.EventuallyFoundAll(t)
 
-	comps = util.GetMetaComponents(t, ctx, httpClient, w.daprdUpdate.HTTPPort())
+	comps = w.daprdUpdate.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
 		{
@@ -208,7 +205,7 @@ func (w *workflowbackend) Run(t *testing.T, ctx context.Context) {
 	w.operatorUpdate.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &sqliteComp, EventType: operatorv1.ResourceEventType_UPDATED})
 	w.loglineUpdate.EventuallyFoundAll(t)
 
-	comps = util.GetMetaComponents(t, ctx, httpClient, w.daprdDelete.HTTPPort())
+	comps = w.daprdDelete.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
 		{

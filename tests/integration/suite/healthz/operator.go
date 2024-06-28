@@ -25,11 +25,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	procoperator "github.com/dapr/dapr/tests/integration/framework/process/operator"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -70,7 +70,7 @@ func (o *operator) Run(t *testing.T, ctx context.Context) {
 	o.sentry.WaitUntilRunning(t, ctx)
 	o.proc.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 	reqURL := fmt.Sprintf("http://localhost:%d/healthz", o.proc.HealthzPort())
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
