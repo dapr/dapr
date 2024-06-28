@@ -2,7 +2,7 @@ module github.com/dapr/dapr
 
 go 1.21
 
-toolchain go1.21.4
+toolchain go1.21.9
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
