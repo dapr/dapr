@@ -5,11 +5,12 @@ go 1.21
 require (
 	github.com/dapr/dapr v0.0.0-00010101000000-000000000000
 	github.com/gorilla/mux v1.8.1
-	google.golang.org/grpc v1.63.0
+	google.golang.org/grpc v1.60.1
 	google.golang.org/grpc/examples v0.0.0-20230224211313-3775f633ce20
 )
 
 require (
+	github.com/golang/protobuf v1.5.4 // indirect
 	github.com/google/uuid v1.6.0 // indirect
 	go.opentelemetry.io/otel v1.24.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect

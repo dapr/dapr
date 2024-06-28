@@ -4,12 +4,13 @@ go 1.21
 
 require (
 	github.com/dapr/dapr v1.7.4
-	google.golang.org/grpc v1.63.0
+	google.golang.org/grpc v1.60.1
 	google.golang.org/grpc/examples v0.0.0-20230224211313-3775f633ce20
 	google.golang.org/protobuf v1.33.0
 )
 
 require (
+	github.com/golang/protobuf v1.5.4 // indirect
 	go.opentelemetry.io/otel v1.24.0 // indirect
 	go.opentelemetry.io/otel/trace v1.24.0 // indirect
 	golang.org/x/net v0.25.0 // indirect
