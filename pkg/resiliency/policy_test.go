@@ -272,8 +272,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 		name         string
 		maxCalls     int32
 		returnedCode int32
-		retryOn      []string
-		ignoreOn     []string
+		retryOn      string
 		maxRetries   int64
 		expected     int32
 	}{
@@ -281,23 +280,15 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 			name:         "Retries succeed",
 			maxCalls:     5,
 			returnedCode: 500,
-			retryOn:      []string{"500-599"},
+			retryOn:      "500-599",
 			maxRetries:   6,
 			expected:     6,
-		},
-		{
-			name:         "Retries code ignored",
-			maxCalls:     5,
-			returnedCode: 500,
-			ignoreOn:     []string{"500-599"},
-			maxRetries:   6,
-			expected:     1,
 		},
 		{
 			name:         "Retries code not in retry list",
 			maxCalls:     5,
 			returnedCode: 500,
-			retryOn:      []string{"400-499"},
+			retryOn:      "400-499",
 			maxRetries:   6,
 			expected:     1,
 		},
@@ -319,7 +310,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 				return struct{}{}, nil
 			}
 
-			filter, err := ParseStatusCodeFilter(test.retryOn, test.ignoreOn)
+			filter, err := ParseStatusCodeFilter(test.retryOn)
 			require.NoError(t, err)
 			policy := NewRunner[struct{}](context.Background(), &PolicyDefinition{
 				log:  testLog,

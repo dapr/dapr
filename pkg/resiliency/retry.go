@@ -14,16 +14,12 @@ limitations under the License.
 package resiliency
 
 import (
-	"errors"
 	"fmt"
 	"strconv"
 	"strings"
 
-	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
 )
-
-var retrylog = logger.NewLogger("dapr.resiliency.retry")
 
 type CodeError struct {
 	StatusCode int32
@@ -77,13 +73,10 @@ func NewStatusCodeFilter() StatusCodeFilter {
 	return StatusCodeFilter{defaultRetry: true}
 }
 
-func ParseStatusCodeFilter(retryOnPatterns []string, noRetryOnPatterns []string) (StatusCodeFilter, error) {
+func ParseStatusCodeFilter(retryOnPatterns string) (StatusCodeFilter, error) {
 	filter := NewStatusCodeFilter()
-	if len(retryOnPatterns) != 0 && len(noRetryOnPatterns) != 0 {
-		return filter, errors.New("retryOnCodes and noRetryOnCodes cannot be used together")
-	}
 	// if retryOn is set, parse retry on patterns and set default retry to false
-	if len(retryOnPatterns) != 0 {
+	if retryOnPatterns != "" {
 		parsedPatterns, err := filter.parsePatterns(retryOnPatterns)
 		if err != nil {
 			return filter, err
@@ -91,36 +84,22 @@ func ParseStatusCodeFilter(retryOnPatterns []string, noRetryOnPatterns []string)
 		filter.retryOnPatterns = parsedPatterns
 		filter.defaultRetry = false
 	}
-	// if noRetryOn is set, parse no retry on patterns and set default retry to true
-	if len(noRetryOnPatterns) != 0 {
-		parsedPatterns, err := filter.parsePatterns(noRetryOnPatterns)
-		if err != nil {
-			return filter, err
-		}
-		filter.noRetryOnPatterns = parsedPatterns
-		filter.defaultRetry = true
-	}
 	return filter, nil
 }
 
-func (f StatusCodeFilter) parsePatterns(patterns []string) ([]codeRange, error) {
+func (f StatusCodeFilter) parsePatterns(patterns string) ([]codeRange, error) {
 	parsedPatterns := make([]codeRange, 0, len(patterns))
-	for _, item := range patterns {
-		// one item can contain multiple patterns separated by comma
-		splitted := strings.Split(item, ",")
-		for _, p := range splitted {
-			// make sure empty patterns are ignored
-			if len(p) == 0 {
-				continue
-			}
-			parsedPattern, err := compilePattern(p)
-			if err != nil {
-				retrylog.Warnf("Invalid retry filter pattern is ignored: %s %v", p, err)
-				// bad patterns are also ignored.
-				continue
-			}
-			parsedPatterns = append(parsedPatterns, parsedPattern)
+	splitted := strings.Split(patterns, ",")
+	for _, p := range splitted {
+		// make sure empty patterns are ignored
+		if len(p) == 0 {
+			continue
 		}
+		parsedPattern, err := compilePattern(p)
+		if err != nil {
+			return nil, err
+		}
+		parsedPatterns = append(parsedPatterns, parsedPattern)
 	}
 	return parsedPatterns, nil
 }
