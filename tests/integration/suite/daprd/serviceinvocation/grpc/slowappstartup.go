@@ -88,7 +88,6 @@ func (s *slowappstartup) Setup(t *testing.T) []framework.Option {
 func (s *slowappstartup) Run(t *testing.T, ctx context.Context) {
 	s.daprd.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilAppHealth(t, ctx)
-
 	conn, err := grpc.DialContext(ctx, s.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
