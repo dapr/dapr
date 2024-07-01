@@ -23,7 +23,7 @@ webhookService:
   type: ClusterIP
   annotations: {}
 
-runAsNonRoot: false
+runAsNonRoot: true
 
 serviceReconciler:
   enabled: true
