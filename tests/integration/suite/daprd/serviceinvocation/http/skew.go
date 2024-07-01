@@ -23,9 +23,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -61,7 +61,7 @@ func (s *skew) Run(t *testing.T, ctx context.Context) {
 	s.daprd1.WaitUntilRunning(t, ctx)
 	s.daprd2.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	for _, url := range []string{
 		fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", s.daprd1.HTTPPort(), s.daprd2.AppID()),
