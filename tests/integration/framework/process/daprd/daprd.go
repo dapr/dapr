@@ -420,10 +420,15 @@ func (d *Daprd) GetMetaSubscriptions(t assert.TestingT, ctx context.Context) []M
 	return d.meta(t, ctx).Subscriptions
 }
 
+func (d *Daprd) GetMetaHTTPEndpoints(t assert.TestingT, ctx context.Context) []*rtv1.MetadataHTTPEndpoint {
+	return d.meta(t, ctx).HTTPEndpoints
+}
+
 // metaResponse is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
 type metaResponse struct {
 	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
 	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
+	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
