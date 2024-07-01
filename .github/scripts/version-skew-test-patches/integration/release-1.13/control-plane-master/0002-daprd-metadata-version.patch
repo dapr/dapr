@@ -7,12 +7,12 @@ index 419a7ceed..d8605df75 100644
  
  	require.Equal(t, appID, bodyMap["id"])
 -	require.Equal(t, "edge", bodyMap["runtimeVersion"])
-+	require.Equal(t, "1.13.0", bodyMap["runtimeVersion"])
++	require.Equal(t, "1.13.4", bodyMap["runtimeVersion"])
  
  	extended, ok := bodyMap["extended"].(map[string]interface{})
  	require.True(t, ok)
 -	require.Equal(t, "edge", extended["daprRuntimeVersion"])
-+	require.Equal(t, "1.13.0", extended["daprRuntimeVersion"])
++	require.Equal(t, "1.13.4", extended["daprRuntimeVersion"])
  
  	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
  	require.True(t, ok)

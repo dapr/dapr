@@ -1,0 +1,66 @@
+diff --git a/tests/integration/suite/daprd/resources/namespace/set/unique.go b/tests/integration/suite/daprd/resources/namespace/set/unique.go
+index f4af38b29..5bf29cfbd 100644
+--- a/tests/integration/suite/daprd/resources/namespace/set/unique.go
++++ b/tests/integration/suite/daprd/resources/namespace/set/unique.go
+@@ -37,7 +37,7 @@ type unique struct {
+ 
+ func (u *unique) Setup(t *testing.T) []framework.Option {
+ 	u.logline = logline.New(t, logline.WithStdoutLineContains(
+-		`Fatal error from runtime: failed to load components: duplicate definition of component name abc (pubsub.in-memory/v1) with existing abc (state.in-memory/v1)\nduplicate definition of component name 123 (state.in-memory/v1) with existing 123 (state.in-memory/v1)\nduplicate definition of component name 123 (pubsub.in-memory/v1) with existing 123 (state.in-memory/v1)`,
++		`Fatal error from runtime: failed to load components: duplicate definition of Component name abc (pubsub.in-memory/v1) with existing abc (state.in-memory/v1)\nduplicate definition of Component name 123 (state.in-memory/v1) with existing 123 (state.in-memory/v1)\nduplicate definition of Component name 123 (pubsub.in-memory/v1) with existing 123 (state.in-memory/v1)`,
+ 	))
+ 
+ 	u.daprd = daprd.New(t, daprd.WithResourceFiles(`
+diff --git a/tests/integration/suite/daprd/resources/namespace/unset/unique.go b/tests/integration/suite/daprd/resources/namespace/unset/unique.go
+index 41133ac39..74539e52b 100644
+--- a/tests/integration/suite/daprd/resources/namespace/unset/unique.go
++++ b/tests/integration/suite/daprd/resources/namespace/unset/unique.go
+@@ -39,7 +39,7 @@ type unique struct {
+ 
+ func (u *unique) Setup(t *testing.T) []framework.Option {
+ 	u.logline = logline.New(t, logline.WithStdoutLineContains(
+-		`Fatal error from runtime: failed to load components: duplicate definition of component name abc (pubsub.in-memory/v1) with existing abc (state.in-memory/v1)\nduplicate definition of component name abc (state.in-memory/v1) with existing abc (state.in-memory/v1)\nduplicate definition of component name 123 (state.in-memory/v1) with existing 123 (state.in-memory/v1)\nduplicate definition of component name 123 (pubsub.in-memory/v1) with existing 123 (state.in-memory/v1)`,
++		`Fatal error from runtime: failed to load components: duplicate definition of Component name abc (pubsub.in-memory/v1) with existing abc (state.in-memory/v1)\nduplicate definition of Component name abc (state.in-memory/v1) with existing abc (state.in-memory/v1)\nduplicate definition of Component name 123 (state.in-memory/v1) with existing 123 (state.in-memory/v1)\nduplicate definition of Component name 123 (pubsub.in-memory/v1) with existing 123 (state.in-memory/v1)`,
+ 	))
+ 
+ 	u.daprd = daprd.New(t, daprd.WithResourceFiles(`
+diff --git a/tests/integration/suite/daprd/resources/uniquename.go b/tests/integration/suite/daprd/resources/uniquename.go
+index 157e3588f..40f992b8e 100644
+--- a/tests/integration/suite/daprd/resources/uniquename.go
++++ b/tests/integration/suite/daprd/resources/uniquename.go
+@@ -48,7 +48,7 @@ func (u *uniquename) Setup(t *testing.T) []framework.Option {
+ 
+ 	u.logline = logline.New(t,
+ 		logline.WithStdoutLineContains(
+-			"Fatal error from runtime: failed to load components: duplicate definition of component name foo (state.in-memory/v1) with existing foo (secretstores.local.file/v1)",
++			"Fatal error from runtime: failed to load components: duplicate definition of Component name foo (state.in-memory/v1) with existing foo (secretstores.local.file/v1)",
+ 		),
+ 	)
+ 
+diff --git a/tests/integration/suite/daprd/hotreload/selfhosted/namespace/set.go b/tests/integration/suite/daprd/hotreload/selfhosted/namespace/set.go
+index 1e2639533..e3cdba8b9 100644
+--- a/tests/integration/suite/daprd/hotreload/selfhosted/namespace/set.go
++++ b/tests/integration/suite/daprd/hotreload/selfhosted/namespace/set.go
+@@ -57,7 +57,7 @@ spec:
+ 	s.resDir = t.TempDir()
+ 
+ 	s.logline = logline.New(t, logline.WithStdoutLineContains(
+-		`"Fatal error from runtime: failed to load resources from disk: duplicate definition of component name foo (state.in-memory/v1) with existing foo (pubsub.in-memory/v1)"`,
++		`"Fatal error from runtime: failed to load resources from disk: duplicate definition of Component name foo (state.in-memory/v1) with existing foo (pubsub.in-memory/v1)"`,
+ 	))
+ 
+ 	s.daprd = daprd.New(t,
+diff --git a/tests/integration/suite/daprd/hotreload/selfhosted/namespace/unset.go b/tests/integration/suite/daprd/hotreload/selfhosted/namespace/unset.go
+index 7bf49f964..097da7d9e 100644
+--- a/tests/integration/suite/daprd/hotreload/selfhosted/namespace/unset.go
++++ b/tests/integration/suite/daprd/hotreload/selfhosted/namespace/unset.go
+@@ -57,7 +57,7 @@ spec:
+ 	u.resDir = t.TempDir()
+ 
+ 	u.logline = logline.New(t, logline.WithStdoutLineContains(
+-		`Fatal error from runtime: failed to load resources from disk: duplicate definition of component name foo (pubsub.in-memory/v1) with existing foo (state.in-memory/v1)\nduplicate definition of component name foo (state.in-memory/v1) with existing foo (state.in-memory/v1)`,
++		`Fatal error from runtime: failed to load resources from disk: duplicate definition of Component name foo (pubsub.in-memory/v1) with existing foo (state.in-memory/v1)\nduplicate definition of Component name foo (state.in-memory/v1) with existing foo (state.in-memory/v1)`,
+ 	))
+ 
+ 	u.daprd = daprd.New(t,
+
