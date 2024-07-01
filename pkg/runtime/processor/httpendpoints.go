@@ -115,10 +115,19 @@ func (p *Processor) processHTTPEndpointSecrets(ctx context.Context, endpoint *ht
 
 			switch np.Name {
 			case root:
+				if endpoint.Spec.ClientTLS.RootCA == nil {
+					continue
+				}
 				endpoint.Spec.ClientTLS.RootCA.Value = dv
 			case clientCert:
+				if endpoint.Spec.ClientTLS.Certificate == nil {
+					endpoint.Spec.ClientTLS.Certificate = new(commonapi.TLSDocument)
+				}
 				endpoint.Spec.ClientTLS.Certificate.Value = dv
 			case clientKey:
+				if endpoint.Spec.ClientTLS.PrivateKey == nil {
+					endpoint.Spec.ClientTLS.PrivateKey = new(commonapi.TLSDocument)
+				}
 				endpoint.Spec.ClientTLS.PrivateKey.Value = dv
 			}
 		}
