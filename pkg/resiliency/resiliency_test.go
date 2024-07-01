@@ -322,6 +322,29 @@ func TestParseMaxRetries(t *testing.T) {
 	assert.Equal(t, int64(-1), r.retries["missingMaxRetries"].MaxRetries)
 }
 
+func TestParseRetryWithFilter(t *testing.T) {
+	configs := LoadLocalResiliency(log, "appC", "./testdata")
+	require.NotNil(t, configs)
+	require.Len(t, configs, 1)
+	require.NotNil(t, configs[0])
+
+	r := FromConfigurations(log, configs[0])
+	require.NotEmpty(t, r.retries)
+	require.NotNil(t, r.retries["noRetry"])
+	require.NotNil(t, r.retries["retryForever"])
+	require.NotNil(t, r.retries["missingMaxRetries"])
+	require.NotNil(t, r.retries["important"])
+	require.NotNil(t, r.retries["withFilter"])
+
+	// important does not have a filter, so should default to true
+	assert.True(t, r.retries["important"].StatusCodeNeedRetry(500))
+	assert.True(t, r.retries["important"].StatusCodeNeedRetry(400))
+	// withFilter has a filter, should return true for 500 and false for anything else
+	assert.True(t, r.retries["withFilter"].StatusCodeNeedRetry(500))
+	assert.False(t, r.retries["withFilter"].StatusCodeNeedRetry(501))
+	assert.False(t, r.retries["withFilter"].StatusCodeNeedRetry(400))
+}
+
 func TestResiliencyScopeIsRespected(t *testing.T) {
 	port, _ := freeport.GetFreePort()
 	lis, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))

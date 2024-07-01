@@ -64,6 +64,8 @@ spec:
                           type: integer
                         policy:
                           type: string
+                        retryOnCodes:
+                          type: string
                       type: object
                     type: object
                   timeouts:
