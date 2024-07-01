@@ -17,7 +17,6 @@ service:
 
 ports:
   protocol: TCP
-  apiPort: 50005
   raftRPCPort: 8201
 
 scaleZero: false

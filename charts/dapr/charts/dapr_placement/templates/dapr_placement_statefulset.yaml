@@ -97,7 +97,7 @@ spec:
   {{- end }}
 {{- end }}
         ports:
-          - containerPort: {{ .Values.ports.apiPort }}
+          - containerPort: {{ .Values.global.placement.apiPort }}
             name: api
           - containerPort: {{ .Values.ports.raftRPCPort }}
             name: raft-node

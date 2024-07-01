@@ -133,10 +133,10 @@ spec:
           value: {{ with .Values.global.mtls.sentryAddress }}{{ . }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}
 {{- if .Values.global.ha.enabled }}
         - name: DAPR_PLACEMENT_ADDRESS
-          value: "dapr-placement-server-0.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50006,dapr-placement-server-1.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50006,dapr-placement-server-2.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50006"
+          value: "dapr-placement-server-0.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.global.placement.apiPort }},dapr-placement-server-1.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.global.placement.apiPort }},dapr-placement-server-2.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.global.placement.apiPort }}"
 {{- else }}
         - name: DAPR_PLACEMENT_ADDRESS
-          value: "dapr-placement-server-0.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50005"
+          value: "dapr-placement-server-0.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:{{ .Values.global.placement.apiPort }}"
 {{- end }}
         {{- range $name, $value := .Values.extraEnvVars }}
         - name: {{ $name | toYaml }}
