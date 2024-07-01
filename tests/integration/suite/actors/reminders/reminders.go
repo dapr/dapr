@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,13 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package actors
+package reminders
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/grpc"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/healthz"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/http"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/metadata"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/serialization"
 )

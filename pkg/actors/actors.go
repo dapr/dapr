@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 	"sync"
@@ -63,6 +64,11 @@ const (
 
 	errStateStoreNotFound      = "actors: state store does not exist or incorrectly configured"
 	errStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
+
+	envKeyHealthFailureThreshold = "DAPR_EXPERIMENTAL_ACTOR_HEALTH_FAILURE_THRESHOLD"
+	envKeyUnhealthyInterval      = "DAPR_EXPERIMENTAL_ACTOR_HEALTH_UNHEALTHY_INTERVAL"
+	envKeyHealthyInterval        = "DAPR_EXPERIMENTAL_ACTOR_HEALTH_HEALTHY_INTERVAL"
+	envKeyRequestTimeout         = "DAPR_EXPERIMENTAL_ACTOR_HEALTH_REQUEST_TIMEOUT"
 )
 
 var (
@@ -322,15 +328,62 @@ func (a *actorsRuntime) getAppHealthChecker() (*health.Checker, error) {
 		return nil, nil
 	}
 
+	envParseInt := func(key string, defaultI int) (int, error) {
+		env, ok := os.LookupEnv(key)
+		if !ok {
+			return defaultI, nil
+		}
+
+		val, err := strconv.Atoi(env)
+		if err != nil {
+			return -1, fmt.Errorf("failed to parse %s: %w", key, err)
+		}
+
+		return val, nil
+	}
+
+	envParseDuration := func(key string, defaultI time.Duration) (time.Duration, error) {
+		env, ok := os.LookupEnv(key)
+		if !ok {
+			return defaultI, nil
+		}
+
+		val, err := time.ParseDuration(env)
+		if err != nil {
+			return -1, fmt.Errorf("failed to parse %s: %w", key, err)
+		}
+		return val, nil
+	}
+
+	failureThreshold, err := envParseInt(envKeyHealthFailureThreshold, 4)
+	if err != nil {
+		return nil, err
+	}
+
+	healthyInterval, err := envParseDuration(envKeyHealthyInterval, time.Second*5)
+	if err != nil {
+		return nil, err
+	}
+
+	unhealthyInterval, err := envParseDuration(envKeyUnhealthyInterval, time.Second/2)
+	if err != nil {
+		return nil, err
+	}
+
+	requestTimeout, err := envParseDuration(envKeyRequestTimeout, time.Second*2)
+	if err != nil {
+		return nil, err
+	}
+
 	// Be careful to configure healthz endpoint option. If app healthz returns unhealthy status, Dapr will
 	// disconnect from placement to remove the node from consistent hashing ring.
 	// i.e if app is busy state, the healthz status would be flaky, which leads to frequent
 	// actor rebalancing. It will impact the entire service.
 	return a.getAppHealthCheckerWithOptions(
-		health.WithFailureThreshold(4),
-		health.WithHealthyStateInterval(5*time.Second),
-		health.WithUnHealthyStateInterval(time.Second/2),
-		health.WithRequestTimeout(2*time.Second),
+		health.WithFailureThreshold(failureThreshold),
+		health.WithHealthyStateInterval(healthyInterval),
+		health.WithUnHealthyStateInterval(unhealthyInterval),
+		health.WithRequestTimeout(requestTimeout),
 		health.WithHTTPClient(a.actorsConfig.HealthHTTPClient),
 	)
 }
