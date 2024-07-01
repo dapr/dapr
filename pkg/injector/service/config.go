@@ -36,6 +36,7 @@ type Config struct {
 	IgnoreEntrypointTolerations       string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
 	ActorsEnabled                     string `envconfig:"ACTORS_ENABLED"`
 	ActorsServiceName                 string `envconfig:"ACTORS_SERVICE_NAME"`
+	PlacementServiceAddress           string `envconfig:"DAPR_PLACEMENT_ADDRESS"`
 	ActorsServiceAddress              string `envconfig:"ACTORS_SERVICE_ADDRESS"`
 	RemindersServiceName              string `envconfig:"REMINDERS_SERVICE_NAME"`
 	RemindersServiceAddress           string `envconfig:"REMINDERS_SERVICE_ADDRESS"`

@@ -269,6 +269,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		p.streamConnPool.delete(daprStream)
 	}()
 
+	log.Infof("New connection from %s in namespace %s", firstMessage.GetId(), namespace)
 	for p.hasLeadership.Load() {
 		var req *placementv1pb.Host
 		if firstMessage != nil {
@@ -350,7 +351,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		}
 	}
 
-	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
+	return status.Errorf(codes.FailedPrecondition, "node id=%s is not a leader. Only the leader can serve requests", p.raftNode.GetID())
 }
 
 func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatusServer) (*spiffe.Parsed, error) {

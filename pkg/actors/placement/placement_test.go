@@ -67,7 +67,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	cleanup := make([]func(), testServerCount)
 
 	for i := 0; i < testServerCount; i++ {
-		address[i], testSrv[i], cleanup[i] = newTestServer()
+		address[i], testSrv[i], cleanup[i] = newTestServer(fmt.Sprintf("id%d", i))
 	}
 
 	var apiLevel atomic.Uint32
@@ -126,7 +126,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 
 func TestAppHealthyStatus(t *testing.T) {
 	// arrange
-	address, testSrv, cleanup := newTestServer()
+	address, testSrv, cleanup := newTestServer("id1")
 
 	// set leader
 	testSrv.setLeader(true)
@@ -567,8 +567,8 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 	})
 }
 
-func newTestServer() (conn string, srv *testServer, cleanup func()) {
-	srv = &testServer{}
+func newTestServer(id string) (conn string, srv *testServer, cleanup func()) {
+	srv = &testServer{id: id}
 	conn, cleanup = newTestServerWithOpts(func(s *grpc.Server) {
 		srv.isGracefulShutdown.Store(false)
 		srv.setLeader(false)
@@ -602,6 +602,7 @@ func newTestServerWithOpts(useGrpcServer ...func(*grpc.Server)) (string, func())
 }
 
 type testServer struct {
+	id                 string
 	isLeader           atomic.Bool
 	recvCount          atomic.Int32
 	recvError          error
@@ -611,7 +612,7 @@ type testServer struct {
 func (s *testServer) ReportDaprStatus(srv placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
 	for {
 		if !s.isLeader.Load() {
-			return status.Error(codes.FailedPrecondition, "only leader can serve the request")
+			return status.Error(codes.FailedPrecondition, fmt.Sprintf("node id=%s is not a leader. Only the leader can serve requests", s.id))
 		}
 
 		_, err := srv.Recv()
