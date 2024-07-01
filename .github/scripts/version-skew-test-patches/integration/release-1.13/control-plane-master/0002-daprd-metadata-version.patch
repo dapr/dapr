@@ -19,7 +19,7 @@ index 419a7ceed..189a7b7ca 100644
  
  	require.Equal(t, appID, bodyMap["id"])
 -	require.Equal(t, "edge", bodyMap["runtimeVersion"])
-+	assert.Truef(t, strings.HasSuffix(bodyMap["runtimeVersion"], "1.13."),
++	assert.Truef(t, strings.HasSuffix(bodyMap["runtimeVersion"].(string), "1.13."),
 +		"expected runtimeVersion to have version 1.13.x (actual: %s)", bodyMap["runtimeVersion"])
  
  	extended, ok := bodyMap["extended"].(map[string]interface{})
