@@ -1,0 +1,26 @@
+diff --git a/tests/integration/suite/daprd/shutdown/block/app/pubsub/bulk.go b/tests/integration/suite/daprd/shutdown/block/app/pubsub/bulk.go
+index 53ee19ca6..af9575c19 100644
+--- a/tests/integration/suite/daprd/shutdown/block/app/pubsub/bulk.go
++++ b/tests/integration/suite/daprd/shutdown/block/app/pubsub/bulk.go
+@@ -166,7 +166,7 @@ LOOP:
+ 	close(b.returnPublish)
+ 
+ 	egressMetric := fmt.Sprintf("dapr_component_pubsub_egress_bulk_count|app_id:%s|component:foo|namespace:|success:true|topic:abc", b.daprd.AppID())
+-	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:foo|namespace:|process_status:success|topic:abc", b.daprd.AppID())
++	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:foo|namespace:|process_status:success|status:success|topic:abc", b.daprd.AppID())
+ 
+ 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+ 		metrics := b.daprd.Metrics(t, ctx)
+diff --git a/tests/integration/suite/daprd/shutdown/block/app/pubsub/single.go b/tests/integration/suite/daprd/shutdown/block/app/pubsub/single.go
+index 42a4d92d3..1aec4074b 100644
+--- a/tests/integration/suite/daprd/shutdown/block/app/pubsub/single.go
++++ b/tests/integration/suite/daprd/shutdown/block/app/pubsub/single.go
+@@ -158,7 +158,7 @@ LOOP:
+ 	close(s.returnPublish)
+ 
+ 	egressMetric := fmt.Sprintf("dapr_component_pubsub_egress_count|app_id:%s|component:foo|namespace:|success:true|topic:abc", s.daprd.AppID())
+-	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:foo|namespace:|process_status:success|topic:abc", s.daprd.AppID())
++	ingressMetric := fmt.Sprintf("dapr_component_pubsub_ingress_count|app_id:%s|component:foo|namespace:|process_status:success|status:success|topic:abc", s.daprd.AppID())
+ 
+ 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+ 		metrics := s.daprd.Metrics(t, ctx)
