@@ -49,7 +49,6 @@ func init() {
 
 type pki struct {
 	daprd *daprd.Daprd
-	srv   *prochttp.HTTP
 }
 
 func (p *pki) Setup(t *testing.T) []framework.Option {
@@ -161,5 +160,6 @@ func (p *pki) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 	assert.Contains(t, string(body), "tls: failed to verify certificate: x509: certificate signed by unknown authority")
 }
