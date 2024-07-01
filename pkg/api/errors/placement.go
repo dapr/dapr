@@ -26,7 +26,6 @@ const (
 	PlacementServiceClosed         = "CLOSED"
 	PlacementServiceAlreadyRunning = "ALREADY_RUNNING"
 
-	//todo - Remove this placeholder. Use kiterrors prefix instead.
 	CodePrefixPlacement = "DAPR_PLACEMENT_"
 )
 
@@ -34,7 +33,7 @@ func PlacementServiceIsClosedOnRun(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.Unavailable,
 		http.StatusExpectationFailed,
-		fmt.Sprintf("Placement service unavailable: %s", msg),
+		fmt.Sprintln(msg),
 		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
@@ -44,7 +43,7 @@ func PlacementServiceIsAlreadyRunning(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.AlreadyExists,
 		http.StatusExpectationFailed,
-		fmt.Sprintf("Placement service already running: %s", msg),
+		fmt.Sprintln(msg),
 		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
@@ -54,7 +53,7 @@ func PlacementServiceContextError(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.Unknown,
 		http.StatusExpectationFailed,
-		fmt.Sprintf("Placement service encountered a context error: %s", msg),
+		fmt.Sprintln(msg),
 		CodePrefixPlacement+kiterrors.CodePostfixGetStateFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixGetStateFailed, nil).
 		Build()
@@ -64,7 +63,7 @@ func PlacementServiceInternalError(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusExpectationFailed,
-		fmt.Sprintf("Placement service encountered an internal error: %s", msg),
+		fmt.Sprintln(msg),
 		CodePrefixPlacement+kiterrors.CodePostfixGetStateFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixGetStateFailed, nil).
 		Build()
@@ -74,7 +73,7 @@ func PlacementServiceUnAuthenticated(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.Unauthenticated,
 		http.StatusExpectationFailed,
-		fmt.Sprintf("Placement service encountered an authentication error: %s", msg),
+		fmt.Sprintln(msg),
 		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
@@ -84,7 +83,7 @@ func PlacementServicePermissionDenied(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.PermissionDenied,
 		http.StatusExpectationFailed,
-		fmt.Sprintf("Placement service encountered an permission error: %s", msg),
+		fmt.Sprintln(msg),
 		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
@@ -94,7 +93,17 @@ func PlacementServiceFailedPrecondition(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.FailedPrecondition,
 		http.StatusExpectationFailed,
-		fmt.Sprintf("Placement service encountered an precondition error: %s", msg),
+		fmt.Sprintln(msg),
+		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
+	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
+		Build()
+}
+
+func PlacementServiceFailedTableUpdate(msg string) error {
+	return kiterrors.NewBuilder(
+		codes.Internal,
+		http.StatusExpectationFailed,
+		fmt.Sprintln(msg),
 		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
