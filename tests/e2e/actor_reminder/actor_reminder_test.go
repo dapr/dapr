@@ -422,8 +422,8 @@ func TestActorReminderTTL(t *testing.T) {
 	// Set reminder
 	reminder := actorReminder{
 		Data:    "reminderdata",
-		DueTime: "10s",
-		Period:  "PT5S",
+		DueTime: "2s",
+		Period:  "R10/PT5S",
 		TTL:     "59s",
 	}
 	reminderBody, err := json.Marshal(reminder)

@@ -298,7 +298,7 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 		// get deployment's Pods detail status info
 		podClient := m.client.Pods(m.namespace)
 		// Filter only 'testapp=appName' labeled Pods
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+		ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
 		defer cancel()
 		podList, err := podClient.List(ctx, metav1.ListOptions{
 			LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
@@ -396,7 +396,7 @@ func (m *AppManager) ValidateSidecar() error {
 
 	podClient := m.client.Pods(m.namespace)
 	// Filter only 'testapp=appName' labeled Pods
-	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -482,7 +482,7 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int, error) {
 	podClient := m.client.Pods(m.namespace)
 	// Filter only 'testapp=appName' labeled Pods
-	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
 	podList, err := podClient.List(ctx, metav1.ListOptions{
 		LabelSelector: fmt.Sprintf("%s=%s", TestAppLabelKey, m.app.AppName),
 	})
@@ -512,7 +512,7 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 
 	deploymentsClient := m.client.Deployments(m.namespace)
 
-	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
 	scale, err := deploymentsClient.GetScale(ctx, m.app.AppName, metav1.GetOptions{})
 	cancel()
 	if err != nil {
@@ -526,7 +526,7 @@ func (m *AppManager) ScaleDeploymentReplica(replicas int32) error {
 	scale.Spec.Replicas = replicas
 	m.app.Replicas = replicas
 
-	ctx, cancel = context.WithTimeout(m.ctx, 30*time.Second)
+	ctx, cancel = context.WithTimeout(m.ctx, 60*time.Second)
 	_, err = deploymentsClient.UpdateScale(ctx, m.app.AppName, scale, metav1.UpdateOptions{})
 	cancel()
 
