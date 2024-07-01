@@ -164,7 +164,7 @@ spec:
         - "--mode=kubernetes"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
-          runAsUser: 0
+          runAsUser: {{ .Values.runAsNonRoot }}
 {{- end }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:

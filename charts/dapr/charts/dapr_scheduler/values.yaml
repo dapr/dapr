@@ -52,7 +52,7 @@ debug:
   port: 40000
   initialDelaySeconds: 30000
 
-runAsNonRoot: true
+runAsNonRoot: false
 resources: {}
 
 extraEnvVars: {}
