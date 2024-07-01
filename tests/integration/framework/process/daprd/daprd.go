@@ -402,3 +402,56 @@ func (d *Daprd) http2xx(t *testing.T, ctx context.Context, method, path string, 
 	require.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code")
 	require.Less(t, resp.StatusCode, 300, "expected 2xx status code")
 }
+
+func (d *Daprd) GetMetaRegisteredComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {
+	return d.meta(t, ctx).RegisteredComponents
+}
+
+func (d *Daprd) GetMetaSubscriptions(t assert.TestingT, ctx context.Context) []MetadataResponsePubsubSubscription {
+	return d.meta(t, ctx).Subscriptions
+}
+
+func (d *Daprd) GetMetaHTTPEndpoints(t assert.TestingT, ctx context.Context) []*rtv1.MetadataHTTPEndpoint {
+	return d.meta(t, ctx).HTTPEndpoints
+}
+
+// metaResponse is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
+type metaResponse struct {
+	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
+	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
+	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
+}
+
+// MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
+type MetadataResponsePubsubSubscription struct {
+	PubsubName      string                                   `json:"pubsubname"`
+	Topic           string                                   `json:"topic"`
+	Metadata        map[string]string                        `json:"metadata,omitempty"`
+	Rules           []MetadataResponsePubsubSubscriptionRule `json:"rules,omitempty"`
+	DeadLetterTopic string                                   `json:"deadLetterTopic"`
+	Type            string                                   `json:"type"`
+}
+
+type MetadataResponsePubsubSubscriptionRule struct {
+	Match string `json:"match,omitempty"`
+	Path  string `json:"path,omitempty"`
+}
+
+func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {
+	url := fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	//nolint:testifylint
+	if !assert.NoError(t, err) {
+		return metaResponse{}
+	}
+
+	var meta metaResponse
+	resp, err := d.httpClient.Do(req)
+	//nolint:testifylint
+	if assert.NoError(t, err) {
+		defer resp.Body.Close()
+		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
+	}
+
+	return meta
+}
