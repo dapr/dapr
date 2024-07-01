@@ -37,13 +37,16 @@ func BuildAll(t *testing.T) {
 	t.Logf("Building binaries: %v", binaryNames)
 
 	var wg sync.WaitGroup
-	wg.Add(len(binaryNames) * 2)
+	wg.Add(len(binaryNames))
 	for _, name := range binaryNames {
 		go func(name string) {
 			defer wg.Done()
 			BuildLocal(t, name)
 		}(name)
 	}
+	wg.Wait()
+
+	wg.Add(len(previousBinaryNames))
 	for _, name := range previousBinaryNames {
 		go func(name string) {
 			defer wg.Done()
@@ -79,6 +82,7 @@ func BuildLocal(t *testing.T, name string) {
 			outputBinPath: binPath,
 		})
 		require.NoError(t, os.Setenv(EnvKey(name), binPath))
+		t.Logf("Built %q binary to: %q", name, binPath)
 	} else {
 		t.Logf("%q set, using %q pre-built binary", EnvKey(name), EnvValue(name))
 	}
@@ -108,6 +112,7 @@ func BuildPrevious(t *testing.T, name string) {
 				mainLocation:  name,
 				outputBinPath: filepath.Join(os.TempDir(), "dapr_integration_tests/"+name+"-"+v),
 			})
+			t.Logf("Built previous binary: [%q] %q", v, name)
 		}(v)
 	}
 }
