@@ -20,6 +20,11 @@ type MockAppChannel struct {
 	mutex            sync.Mutex
 }
 
+// TriggerJob - TODO implement
+func (_m *MockAppChannel) TriggerJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+	return nil, nil
+}
+
 // GetAppConfig provides a mock function with given fields:
 func (_m *MockAppChannel) GetAppConfig(_ context.Context, _ string) (*config.ApplicationConfig, error) {
 	ret := _m.Called()

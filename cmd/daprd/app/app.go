@@ -139,6 +139,7 @@ func Run() {
 				AppID:                         opts.AppID,
 				ActorsService:                 opts.ActorsService,
 				RemindersService:              opts.RemindersService,
+				SchedulerAddress:              opts.SchedulerAddress,
 				AllowedOrigins:                opts.AllowedOrigins,
 				ResourcesPath:                 opts.ResourcesPath,
 				ControlPlaneAddress:           opts.ControlPlaneAddress,

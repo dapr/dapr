@@ -273,7 +273,8 @@ func isControlPlaneService(id string) bool {
 	case "operator",
 		"placement",
 		"injector",
-		"sentry":
+		"sentry",
+		"scheduler":
 		return true
 	default:
 		return false

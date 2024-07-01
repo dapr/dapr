@@ -253,21 +253,18 @@ spec:
                       the HTTP server
                     properties:
                       increasedCardinality:
-                        description: |-
-                          If false (the default), metrics for the HTTP server are collected with increased cardinality.
+                        description: 'If true, metrics for the HTTP server are collected
+                          with increased cardinality. The default is true in Dapr 1.13,
+                          but will be changed to false in 1.15+'
                         type: boolean
                       pathMatching:
                         description: PathMatching defines the path matching configuration for HTTP server metrics.
-                        properties:
-                          ingress:
-                            type: array
-                            items:
-                              type: string
-                          egress:
-                            type: array
-                            items:
-                              type: string
-                        type: object
+                        type: array
+                        items:
+                          type: string
+                      excludeVerbs:
+                        description: If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
+                        type: boolean
                     type: object
                   rules:
                     items:
@@ -318,17 +315,20 @@ spec:
                         type: boolean
                       pathMatching:
                         description: PathMatching defines the path matching configuration for HTTP server metrics.
-                        properties:
-                          ingress:
-                            type: array
-                            items:
-                              type: string
-                          egress:
-                            type: array
-                            items:
-                              type: string
-                        type: object
+                        type: array
+                        items:
+                          type: string
+                      excludeVerbs:
+                          description: If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
+                          type: boolean
                     type: object
+                  latencyDistributionBuckets:
+                    description: 'If a list of integers is specified, use
+                      these values for latency distribution buckets instead
+                      of the default values.'
+                    items:
+                      type: integer
+                    type: array
                   rules:
                     items:
                       description: MetricsRule defines configuration options for a

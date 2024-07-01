@@ -89,12 +89,12 @@ func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.T
 	defer cancel()
 	tcpConn, err := net.Dial("tcp", serverAddress)
 	require.NoError(t, err)
-	conn, err := grpc.DialContext(ctx, "",
+	conn, err := grpc.DialContext(ctx, "", //nolint:staticcheck
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return tcpConn, nil
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 

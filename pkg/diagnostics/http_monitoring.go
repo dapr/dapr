@@ -23,8 +23,6 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	"github.com/dapr/dapr/pkg/api/http/endpoints"
-	"github.com/dapr/dapr/pkg/config"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/responsewriter"
 	"github.com/dapr/kit/logger"
@@ -42,12 +40,6 @@ var (
 	log = logger.NewLogger("dapr.runtime.diagnostics")
 )
 
-var (
-	// <<10 -> KBs; <<20 -> MBs; <<30 -> GBs
-	defaultSizeDistribution    = view.Distribution(1<<10, 2<<10, 4<<10, 16<<10, 64<<10, 256<<10, 1<<20, 4<<20, 16<<20, 64<<20, 256<<20, 1<<30, 4<<30)
-	defaultLatencyDistribution = view.Distribution(1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000)
-)
-
 type httpMetrics struct {
 	serverRequestBytes  *stats.Int64Measure
 	serverResponseBytes *stats.Int64Measure
@@ -61,7 +53,7 @@ type httpMetrics struct {
 	clientCompletedCount   *stats.Int64Measure
 
 	healthProbeCompletedCount   *stats.Int64Measure
-	healthProbeRoundTripLatency *stats.Float64Measure
+	healthProbeRoundtripLatency *stats.Float64Measure
 
 	appID   string
 	enabled bool
@@ -69,8 +61,9 @@ type httpMetrics struct {
 	// Enable legacy metrics, which includes the full path
 	legacy bool
 
-	ingress *pathMatching
-	egress  *pathMatching
+	excludeVerbs bool
+
+	pathMatcher *pathMatching
 }
 
 func newHTTPMetrics() *httpMetrics {
@@ -115,7 +108,7 @@ func newHTTPMetrics() *httpMetrics {
 			"http/healthprobes/completed_count",
 			"Count of completed health probes",
 			stats.UnitDimensionless),
-		healthProbeRoundTripLatency: stats.Float64(
+		healthProbeRoundtripLatency: stats.Float64(
 			"http/healthprobes/roundtrip_latency",
 			"Time between first byte of health probes headers sent to last byte of response received, or terminal error",
 			stats.UnitMilliseconds),
@@ -128,17 +121,38 @@ func (h *httpMetrics) IsEnabled() bool {
 	return h != nil && h.enabled
 }
 
+func (h *httpMetrics) getMetricsPath(path string) string {
+	if _, ok := diagUtils.StaticPaths[path]; ok {
+		return path
+	}
+	if matchedPath, ok := h.pathMatcher.match(path); ok {
+		return matchedPath
+	}
+	if !h.legacy {
+		return ""
+	}
+	return path
+}
+
+func (h *httpMetrics) getMetricsMethod(method string) string {
+	if h.excludeVerbs {
+		return ""
+	}
+	if _, ok := diagUtils.ValidHTTPVerbs[method]; !ok {
+		return "UNKNOWN"
+	}
+	return method
+}
+
 func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, status string, reqContentSize, resContentSize int64, elapsed float64) {
 	if !h.IsEnabled() {
 		return
 	}
 
-	matchedPath, ok := h.egress.matchPath(path)
-	if ok {
-		path = matchedPath
-	}
+	path = h.getMetricsPath(path)
+	method = h.getMetricsMethod(method)
 
-	if h.legacy || h.egress.enabled() {
+	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
@@ -154,11 +168,11 @@ func (h *httpMetrics) ServerRequestCompleted(ctx context.Context, method, path, 
 	} else {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.serverRequestCount.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
 			h.serverRequestCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.serverLatency.Name(), appIDKey, h.appID, httpMethodKey, method, httpPathKey, path, httpStatusCodeKey, status),
 			h.serverLatency.M(elapsed))
 	}
 	stats.RecordWithTags(
@@ -174,12 +188,10 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 		return
 	}
 
-	matchedPath, ok := h.ingress.matchPath(path)
-	if ok {
-		path = matchedPath
-	}
+	path = h.getMetricsPath(path)
+	method = h.getMetricsMethod(method)
 
-	if h.legacy || h.ingress.enabled() {
+	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method),
@@ -187,7 +199,7 @@ func (h *httpMetrics) ClientRequestStarted(ctx context.Context, method, path str
 	} else {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID),
+			diagUtils.WithTags(h.clientSentBytes.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method),
 			h.clientSentBytes.M(contentSize))
 	}
 }
@@ -197,12 +209,10 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 		return
 	}
 
-	matchedPath, ok := h.ingress.matchPath(path)
-	if ok {
-		path = matchedPath
-	}
+	path = h.getMetricsPath(path)
+	method = h.getMetricsMethod(method)
 
-	if h.legacy || h.ingress.enabled() {
+	if h.legacy || h.pathMatcher.enabled() {
 		stats.RecordWithTags(
 			ctx,
 			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpPathKey, h.convertPathToMetricLabel(path), httpMethodKey, method, httpStatusCodeKey, status),
@@ -214,11 +224,11 @@ func (h *httpMetrics) ClientRequestCompleted(ctx context.Context, method, path, 
 	} else {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.clientCompletedCount.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientCompletedCount.M(1))
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
+			diagUtils.WithTags(h.clientRoundtripLatency.Name(), appIDKey, h.appID, httpPathKey, path, httpMethodKey, method, httpStatusCodeKey, status),
 			h.clientRoundtripLatency.M(elapsed))
 	}
 	stats.RecordWithTags(
@@ -245,48 +255,49 @@ func (h *httpMetrics) AppHealthProbeCompleted(ctx context.Context, status string
 		h.healthProbeCompletedCount.M(1))
 	stats.RecordWithTags(
 		ctx,
-		diagUtils.WithTags(h.healthProbeRoundTripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
-		h.healthProbeRoundTripLatency.M(elapsed))
+		diagUtils.WithTags(h.healthProbeRoundtripLatency.Name(), appIDKey, h.appID, httpStatusCodeKey, status),
+		h.healthProbeRoundtripLatency.M(elapsed))
 }
 
-func (h *httpMetrics) Init(appID string, config *config.PathMatching, legacy bool) error {
+type HTTPMonitoringConfig struct {
+	pathMatching []string
+	legacy       bool
+	excludeVerbs bool
+}
+
+func NewHTTPMonitoringConfig(pathMatching []string, legacy, excludeVerbs bool) HTTPMonitoringConfig {
+	return HTTPMonitoringConfig{
+		pathMatching: pathMatching,
+		legacy:       legacy,
+		excludeVerbs: excludeVerbs,
+	}
+}
+
+func (h *httpMetrics) Init(appID string, config HTTPMonitoringConfig, latencyDistribution *view.Aggregation) error {
 	h.appID = appID
 	h.enabled = true
-	h.legacy = legacy
+	h.legacy = config.legacy
+	h.excludeVerbs = config.excludeVerbs
 
-	if config != nil {
-		h.ingress = newPathMatching(config.IngressPaths, legacy)
-		h.egress = newPathMatching(config.EgressPaths, legacy)
+	if config.pathMatching != nil {
+		h.pathMatcher = newPathMatching(config.pathMatching, config.legacy)
 	}
 
 	tags := []tag.Key{appIDKey}
 
-	// In legacy mode, we are aggregating based on the path too
-	var serverTags, clientTags []tag.Key
-	if h.legacy {
-		serverTags = []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
-		clientTags = []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
-	} else {
-		serverTags = []tag.Key{appIDKey, httpMethodKey, httpStatusCodeKey}
-		clientTags = []tag.Key{appIDKey, httpStatusCodeKey}
-		if h.ingress.enabled() {
-			serverTags = append(serverTags, httpPathKey)
-		}
-		if h.egress.enabled() {
-			clientTags = append(clientTags, httpPathKey, httpMethodKey)
-		}
-	}
+	serverTags := []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
+	clientTags := []tag.Key{appIDKey, httpMethodKey, httpPathKey, httpStatusCodeKey}
 
 	views := []*view.View{
 		diagUtils.NewMeasureView(h.serverRequestBytes, tags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.serverResponseBytes, tags, defaultSizeDistribution),
-		diagUtils.NewMeasureView(h.serverLatency, serverTags, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.serverLatency, serverTags, latencyDistribution),
 		diagUtils.NewMeasureView(h.serverRequestCount, serverTags, view.Count()),
 		diagUtils.NewMeasureView(h.clientSentBytes, clientTags, defaultSizeDistribution),
 		diagUtils.NewMeasureView(h.clientReceivedBytes, tags, defaultSizeDistribution),
-		diagUtils.NewMeasureView(h.clientRoundtripLatency, clientTags, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.clientRoundtripLatency, clientTags, latencyDistribution),
 		diagUtils.NewMeasureView(h.clientCompletedCount, clientTags, view.Count()),
-		diagUtils.NewMeasureView(h.healthProbeRoundTripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(h.healthProbeRoundtripLatency, []tag.Key{appIDKey, httpStatusCodeKey}, latencyDistribution),
 		diagUtils.NewMeasureView(h.healthProbeCompletedCount, []tag.Key{appIDKey, httpStatusCodeKey}, view.Count()),
 	}
 
@@ -309,7 +320,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		}
 
 		var path string
-		if h.legacy || h.egress.enabled() {
+		if h.legacy || h.pathMatcher.enabled() {
 			path = h.convertPathToMetricLabel(r.URL.Path)
 		}
 
@@ -324,19 +335,7 @@ func (h *httpMetrics) HTTPMiddleware(next http.Handler) http.Handler {
 		status := strconv.Itoa(rw.Status())
 		respSize := int64(rw.Size())
 
-		var method string
-		if h.legacy || h.egress.enabled() {
-			method = r.Method
-		} else {
-			// Check if the context contains a MethodName method
-			endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
-			method = endpointData.GetEndpointName()
-			if endpointData != nil && endpointData.Group != nil && endpointData.Group.MethodName != nil {
-				method = endpointData.Group.MethodName(r)
-			}
-		}
-
 		// Record the request
-		h.ServerRequestCompleted(r.Context(), method, path, status, reqContentSize, respSize, elapsed)
+		h.ServerRequestCompleted(r.Context(), h.getMetricsMethod(r.Method), path, status, reqContentSize, respSize, elapsed)
 	})
 }

@@ -15,6 +15,7 @@ package config
 
 import (
 	"bytes"
+	"io"
 	"os"
 	"reflect"
 	"sort"
@@ -22,9 +23,11 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opencensus.io/stats/view"
 	"golang.org/x/exp/maps"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
+	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -591,20 +594,23 @@ func TestSortMetrics(t *testing.T) {
 }
 
 func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
-	t.Run("no http configuration, returns false", func(t *testing.T) {
+	log := logger.NewLogger("test")
+	log.SetOutput(io.Discard)
+
+	t.Run("no http configuration, returns true", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: nil,
 		}
-		assert.False(t, m.GetHTTPIncreasedCardinality())
+		assert.True(t, m.GetHTTPIncreasedCardinality(log))
 	})
 
-	t.Run("nil value, returns false", func(t *testing.T) {
+	t.Run("nil value, returns true", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
 				IncreasedCardinality: nil,
 			},
 		}
-		assert.False(t, m.GetHTTPIncreasedCardinality())
+		assert.True(t, m.GetHTTPIncreasedCardinality(log))
 	})
 
 	t.Run("value is set to true", func(t *testing.T) {
@@ -613,7 +619,7 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 				IncreasedCardinality: ptr.Of(true),
 			},
 		}
-		assert.True(t, m.GetHTTPIncreasedCardinality())
+		assert.True(t, m.GetHTTPIncreasedCardinality(log))
 	})
 
 	t.Run("value is set to false", func(t *testing.T) {
@@ -622,7 +628,37 @@ func TestMetricsGetHTTPIncreasedCardinality(t *testing.T) {
 				IncreasedCardinality: ptr.Of(false),
 			},
 		}
-		assert.False(t, m.GetHTTPIncreasedCardinality())
+		assert.False(t, m.GetHTTPIncreasedCardinality(log))
+	})
+}
+
+func TestMetricsGetHTTPLatencyDistributionBuckets(t *testing.T) {
+	log := logger.NewLogger("test")
+	log.SetOutput(io.Discard)
+
+	defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
+	latencyDistribution := view.Distribution(defaultLatencyDistribution...)
+	t.Run("no http configuration, returns default latency distribution buckets", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: nil,
+		}
+		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
+	})
+
+	t.Run("nil value, returns latency distribution buckets", func(t *testing.T) {
+		m := MetricSpec{
+			LatencyDistributionBuckets: nil,
+		}
+		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
+	})
+
+	customLatencyDistribution := []float64{1, 2, 3}
+	latencyDistribution = view.Distribution(customLatencyDistribution...)
+	t.Run("value is set to list of integers", func(t *testing.T) {
+		m := MetricSpec{
+			LatencyDistributionBuckets: ptr.Of([]int{1, 2, 3}),
+		}
+		assert.Equal(t, latencyDistribution.Buckets, m.GetLatencyDistribution(log).Buckets)
 	})
 }
 
@@ -646,27 +682,46 @@ func TestMetricsGetHTTPPathMatching(t *testing.T) {
 	t.Run("config is enabled", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				PathMatching: &PathMatching{
-					IngressPaths: []string{"/resource/1"},
-					EgressPaths:  []string{"/resource/2"},
-				},
+				PathMatching: []string{"/resource/1"},
 			},
 		}
 		config := m.GetHTTPPathMatching()
-		assert.Equal(t, []string{"/resource/1"}, config.IngressPaths)
-		assert.Equal(t, []string{"/resource/2"}, config.EgressPaths)
+		assert.Equal(t, []string{"/resource/1"}, config)
+	})
+}
+
+func TestMetricsGetHTTPExcludeVerbs(t *testing.T) {
+	t.Run("no configuration, returns false", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: nil,
+		}
+		assert.False(t, m.GetHTTPExcludeVerbs())
 	})
 
-	t.Run("config is enabled with only ingress", func(t *testing.T) {
+	t.Run("nil value, returns false", func(t *testing.T) {
 		m := MetricSpec{
 			HTTP: &MetricHTTP{
-				PathMatching: &PathMatching{
-					IngressPaths: []string{"/resource/1"},
-				},
+				ExcludeVerbs: nil,
 			},
 		}
-		config := m.GetHTTPPathMatching()
-		assert.Equal(t, []string{"/resource/1"}, config.IngressPaths)
-		assert.Nil(t, config.EgressPaths)
+		assert.False(t, m.GetHTTPExcludeVerbs())
+	})
+
+	t.Run("config is enabled", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				ExcludeVerbs: ptr.Of(true),
+			},
+		}
+		assert.True(t, m.GetHTTPExcludeVerbs())
+	})
+
+	t.Run("config is disabled", func(t *testing.T) {
+		m := MetricSpec{
+			HTTP: &MetricHTTP{
+				ExcludeVerbs: ptr.Of(false),
+			},
+		}
+		assert.False(t, m.GetHTTPExcludeVerbs())
 	})
 }

@@ -71,7 +71,7 @@ func (g *GRPC) Port(t *testing.T) int {
 }
 
 func (g *GRPC) Address(t *testing.T) string {
-	return "localhost:" + strconv.Itoa(g.Port(t))
+	return "127.0.0.1:" + strconv.Itoa(g.Port(t))
 }
 
 func (g *GRPC) Run(t *testing.T, ctx context.Context) {

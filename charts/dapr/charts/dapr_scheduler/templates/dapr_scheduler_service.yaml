@@ -1,0 +1,31 @@
+{{- if (eq .Values.global.scheduler.enabled true) }}
+kind: Service
+apiVersion: v1
+metadata:
+  name: dapr-scheduler-server
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dapr-scheduler-server
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+{{- if .Values.service.annotations }}
+{{ toYaml .Values.service.annotations | indent 4}}
+{{- end }}
+spec:
+  selector:
+    app: dapr-scheduler-server
+  # scheduler must be able to resolve pod address to join initial cluster peers
+  # before POD is ready
+  publishNotReadyAddresses: true
+  ports:
+  - name: api
+    port: {{ .Values.ports.apiPort }}
+  - name: etcd-client
+    port: {{ .Values.ports.etcdGRPCClientPort }}
+  - name: etcd-httpclient
+    port: {{ .Values.ports.etcdHTTPClientPort }}
+  - name: etcd-peer
+    port: {{ .Values.ports.etcdGRPCPeerPort }}
+  clusterIP: None # make the service headless
+{{- end }}
