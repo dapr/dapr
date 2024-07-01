@@ -117,6 +117,10 @@ func WithSecretGet(t *testing.T, secret *corev1.Secret) Option {
 	return handleGetResource(t, "/api/v1", "secrets", secret.Namespace, secret.Name, secret)
 }
 
+func WithSecretList(t *testing.T, secrets *corev1.SecretList) Option {
+	return handleClusterListResource(t, "/api/v1/secrets", secrets)
+}
+
 func WithDaprResiliencyGet(t *testing.T, ns, name string, res *resapi.Resiliency) Option {
 	return handleGetResource(t, "/apis/dapr.io/v1alpha1", "resiliencies", ns, name, res)
 }
