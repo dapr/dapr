@@ -1237,8 +1237,14 @@ message DeleteJobResponse {
 }
 // ConversationAlpha1Request is the request object for Conversation.
 message ConversationAlpha1Request {
-  // Endpoint for the model service.
-  string endpoint = 1;
+  // Load balancing policy for the endpoint.
+  enum LoadBalancingPolicy {
+    // Round robin policy.
+    ROUNDROBIN = 0;
+  }
+
+  // Endpoints for the model service, co-work with load balanace policy.
+  repeated string endpoint = 1;
 
   // Name of the model.
   string model_name = 2;
@@ -1248,6 +1254,9 @@ message ConversationAlpha1Request {
 
   // Parameters for all custom fields.
   map<string, string> parameters = 4;
+
+  // Load balancing policy for endpoints.
+  LoadBalancingPolicy policy = 5;
 }
 
 // ConversationAlpha1Result is the result for one input.
