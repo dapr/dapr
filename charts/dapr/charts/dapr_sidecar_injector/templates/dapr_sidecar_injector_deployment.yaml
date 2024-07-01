@@ -131,6 +131,13 @@ spec:
           value: {{ .Values.global.mtls.controlPlaneTrustDomain | toYaml }}
         - name: DAPR_SENTRY_ADDRESS
           value: {{ with .Values.global.mtls.sentryAddress }}{{ . }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}
+{{- if .Values.global.ha.enabled }}
+        - name: DAPR_PLACEMENT_ADDRESS
+          value: "dapr-placement-server-0.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50006,dapr-placement-server-1.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50006,dapr-placement-server-2.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50006"
+{{- else }}
+        - name: DAPR_PLACEMENT_ADDRESS
+          value: "dapr-placement-server-0.dapr-placement-server.{{ .Release.Namespace }}.svc.cluster.local:50005"
+{{- end }}
         {{- range $name, $value := .Values.extraEnvVars }}
         - name: {{ $name | toYaml }}
           value: {{ $value | toString | toYaml }}

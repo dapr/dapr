@@ -14,6 +14,7 @@ limitations under the License.
 package patcher
 
 import (
+	"os"
 	"reflect"
 	"strconv"
 	"strings"
@@ -106,7 +107,7 @@ type SidecarConfig struct {
 	AppHealthProbeInterval              int32   `annotation:"dapr.io/app-health-probe-interval" default:"5"`  // In seconds
 	AppHealthProbeTimeout               int32   `annotation:"dapr.io/app-health-probe-timeout" default:"500"` // In milliseconds
 	AppHealthThreshold                  int32   `annotation:"dapr.io/app-health-threshold" default:"3"`
-	PlacementAddress                    string  `annotation:"dapr.io/placement-host-address"`
+	PlacementAddress                    string  `annotation:"dapr.io/placement-host-address" defaultFromEnv:"DAPR_PLACEMENT_ADDRESS"`
 	SchedulerAddress                    string  `annotation:"dapr.io/scheduler-host-address"`
 	PluggableComponents                 string  `annotation:"dapr.io/pluggable-components"`
 	PluggableComponentsSocketsFolder    string  `annotation:"dapr.io/pluggable-components-sockets-folder"`
@@ -137,12 +138,21 @@ func (c *SidecarConfig) setDefaultValues() {
 		fieldT := val.Type().Field(i)
 		fieldV := val.Field(i)
 		def := fieldT.Tag.Get("default")
-		if !fieldV.CanSet() || def == "" {
+		if fieldV.CanSet() && def != "" {
+			// Assign the default value
+			setValueFromString(fieldT.Type, fieldV, def, "")
 			continue
 		}
 
-		// Assign the default value
-		setValueFromString(fieldT.Type, fieldV, def, "")
+		defFromEnv := fieldT.Tag.Get("defaultFromEnv")
+		if fieldV.CanSet() && defFromEnv != "" {
+			envVal, ok := os.LookupEnv(defFromEnv)
+			if ok {
+				// Assign the default value
+				setValueFromString(fieldT.Type, fieldV, envVal, "")
+			}
+			continue
+		}
 	}
 }
 
