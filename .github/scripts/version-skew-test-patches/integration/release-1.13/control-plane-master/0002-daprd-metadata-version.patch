@@ -25,8 +25,8 @@ index 419a7ceed..189a7b7ca 100644
  	extended, ok := bodyMap["extended"].(map[string]interface{})
  	require.True(t, ok)
 -	require.Equal(t, "edge", extended["daprRuntimeVersion"])
-+	assert.Truef(t, strings.HasSuffix(bodyMap["daprRuntimeVersion"].(string), "1.13."),
-+		"expected daprRuntimeVersion to have version 1.13.x (actual: %s)", bodyMap["daprRuntimeVersion"])
++	assert.Truef(t, strings.HasSuffix(extended["daprRuntimeVersion"].(string), "1.13."),
++		"expected daprRuntimeVersion to have version 1.13.x (actual: %s)", extended["daprRuntimeVersion"])
  
  	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
  	require.True(t, ok)
