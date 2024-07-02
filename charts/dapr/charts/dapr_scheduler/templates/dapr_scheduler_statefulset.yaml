@@ -107,11 +107,11 @@ spec:
             name: etcd-httpclient
           - containerPort: {{ .Values.ports.etcdGRPCPeerPort }}
             name: etcd-peer
-{{- if eq .Values.global.prometheus.enabled true }}
+          {{- if eq .Values.global.prometheus.enabled true }}
           - name: metrics
             containerPort: {{ .Values.global.prometheus.port }}
             protocol: TCP
-{{- end }}
+          {{- end }}
         command:
 {{- if eq .Values.debug.enabled false }}
         - "/scheduler"
@@ -248,7 +248,7 @@ spec:
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 }}
+        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:
