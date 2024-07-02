@@ -81,7 +81,7 @@ jobs:
           version: ${{ env.GOLANGCILINT_VER }}
           skip-cache: true
           only-new-issues: true
-          args: --build-tags allcomponents
+          args: --build-tags allcomponents --timeout 15m
       - name: Run go mod tidy check diff
         run: make modtidy check-diff
       - name: Check for retracted dependencies
