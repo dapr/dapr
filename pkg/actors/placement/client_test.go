@@ -53,7 +53,7 @@ func TestConnectToServer(t *testing.T) {
 		require.Error(t, client.connectToServer(context.Background(), conn))
 	})
 	t.Run("when connectToServer succeeds it should broadcast that a new connection is alive", func(t *testing.T) {
-		conn, _, cleanup := newTestServer() // do not register the placement stream server
+		conn, _, cleanup := newTestServer("id1") // do not register the placement stream server
 		defer cleanup()
 
 		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, testSecurity(t)))
@@ -73,7 +73,7 @@ func TestConnectToServer(t *testing.T) {
 	})
 
 	t.Run("when connectToServer succeeds it should correctly set the stream metadata", func(t *testing.T) {
-		conn, _, cleanup := newTestServer() // do not register the placement stream server
+		conn, _, cleanup := newTestServer("id1") // do not register the placement stream server
 		defer cleanup()
 
 		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, testSecurity(t)))
@@ -128,7 +128,7 @@ func TestDisconnect(t *testing.T) {
 		assert.False(t, called)
 	})
 	t.Run("disconnectFn should broadcast not connected when disconnected and should drain and execute func inside lock", func(t *testing.T) {
-		conn, _, cleanup := newTestServer() // do not register the placement stream server
+		conn, _, cleanup := newTestServer("id1") // do not register the placement stream server
 		defer cleanup()
 
 		client := newPlacementClient(getGrpcOptsGetter([]string{conn}, testSecurity(t)))

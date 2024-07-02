@@ -72,6 +72,9 @@ global:
     # If empty, uses the built-in reminders capabilities in Dapr sidecars
     serviceName: ""
 
+  placement:
+    apiPort: 50005
+
   scheduler:
     # Enables scheduler functionality in the cluster
     enabled: true

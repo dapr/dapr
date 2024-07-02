@@ -350,7 +350,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		}
 	}
 
-	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
+	return status.Errorf(codes.FailedPrecondition, "node id=%s is not a leader. Only the leader can serve requests", p.raftNode.GetID())
 }
 
 func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatusServer) (*spiffe.Parsed, error) {

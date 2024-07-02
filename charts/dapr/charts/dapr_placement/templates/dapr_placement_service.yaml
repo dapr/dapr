@@ -20,7 +20,7 @@ spec:
   publishNotReadyAddresses: true
   ports:
   - name: api
-    port: {{ .Values.ports.apiPort }}
+    port: {{ .Values.global.placement.apiPort }}
   - name: raft-node
     port: {{ .Values.ports.raftRPCPort }}
   clusterIP: None
