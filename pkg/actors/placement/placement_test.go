@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -67,7 +68,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	cleanup := make([]func(), testServerCount)
 
 	for i := 0; i < testServerCount; i++ {
-		address[i], testSrv[i], cleanup[i] = newTestServer(fmt.Sprintf("id%d", i))
+		address[i], testSrv[i], cleanup[i] = newTestServer("id" + strconv.Itoa(i))
 	}
 
 	var apiLevel atomic.Uint32
