@@ -179,7 +179,7 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 	}); err != nil {
 		// TODO: add job to a queue or something to try later this should be
 		// another long running go routine that accepts this job on a channel
-		log.Debugf("Error sending job to connection stream: %s", err)
+		log.Debugf("Error sending job %s to connection stream: %s", req.GetName()[idx+2:], err)
 	}
 
 	return true
