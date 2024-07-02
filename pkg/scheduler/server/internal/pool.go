@@ -32,11 +32,10 @@ var log = logger.NewLogger("dapr.runtime.scheduler")
 type Pool struct {
 	nsPool map[string]*namespacedPool
 
-	lock                  sync.RWMutex
-	wg                    sync.WaitGroup
-	closeCh               chan struct{}
-	running               atomic.Bool
-	issueSendingJobToDapr atomic.Bool
+	lock    sync.RWMutex
+	wg      sync.WaitGroup
+	closeCh chan struct{}
+	running atomic.Bool
 }
 
 type namespacedPool struct {
@@ -186,9 +185,8 @@ func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, error) {
 		// no connections available for namespace
 		// TODO: add a dead-letter go routine and log once, but
 		// don't err and spam users if the job can't be sent back
-		if p.issueSendingJobToDapr.CompareAndSwap(false, true) {
-			log.Debug("No daprd connections available to send triggered job back to for namespace/appID: ", meta.GetNamespace(), meta.GetAppId())
-		}
+		log.Debug("No daprd connections available to send triggered job back to for namespace/appID: ", meta.GetNamespace(), meta.GetAppId())
+
 		return nil, nil
 	}
 
