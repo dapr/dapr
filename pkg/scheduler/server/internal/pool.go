@@ -185,7 +185,7 @@ func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, error) {
 		// no connections available for namespace
 		// TODO: add a dead-letter go routine and log once, but
 		// don't err and spam users if the job can't be sent back
-		log.Debug("No daprd connections available to send triggered job back to for namespace/appID: ", meta.GetNamespace(), meta.GetAppId())
+		log.Debugf("No daprd connections available to send triggered job back to for namespace: %s, %+v", meta.GetNamespace(), meta)
 
 		return nil, nil
 	}
