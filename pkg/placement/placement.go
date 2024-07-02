@@ -269,7 +269,6 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		p.streamConnPool.delete(daprStream)
 	}()
 
-	log.Infof("New connection from %s in namespace %s", firstMessage.GetId(), namespace)
 	for p.hasLeadership.Load() {
 		var req *placementv1pb.Host
 		if firstMessage != nil {
