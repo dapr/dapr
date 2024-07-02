@@ -82,9 +82,9 @@ spec:
 	i.scheduler = scheduler.New(t)
 	i.place = placement.New(t)
 
-	i.daprdsNum = 10
+	i.daprdsNum = 4
 	i.actorTypesNum = 2
-	i.actorIDsNum = 50
+	i.actorIDsNum = 25
 	i.daprds = make([]*daprd.Daprd, i.daprdsNum)
 	i.actorDaprds = make([]actordaprd, i.daprdsNum)
 	procs := make([]process.Interface, i.daprdsNum*2+2)
