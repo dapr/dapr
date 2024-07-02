@@ -26,7 +26,10 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.scheduler")
+var (
+	issueSendingJobToDapr = atomic.Bool{}
+	log                   = logger.NewLogger("dapr.runtime.scheduler")
+)
 
 // Pool represents a connection pool for namespace/appID separation of sidecars to schedulers.
 type Pool struct {
@@ -182,7 +185,13 @@ func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, error) {
 
 	nsPool, ok := p.nsPool[meta.GetNamespace()]
 	if !ok {
-		return nil, fmt.Errorf("no connections available for namespace: %s", meta.GetNamespace())
+		// no connections available for namespace
+		// TODO: add a dead-letter go routine and log once, but
+		// don't err and spam users if the job can't be sent back
+		if issueSendingJobToDapr.CompareAndSwap(false, true) {
+			log.Warn("No daprd connections available to send triggered job back to")
+		}
+		return nil, nil
 	}
 
 	idx := nsPool.idx.Add(1)
