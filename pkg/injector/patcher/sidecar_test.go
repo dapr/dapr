@@ -14,6 +14,7 @@ limitations under the License.
 package patcher
 
 import (
+	"os"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -25,6 +26,34 @@ import (
 
 func TestSidecarConfigInit(t *testing.T) {
 	c := NewSidecarConfig(&corev1.Pod{})
+
+	// Ensure default values are set (and that those without a default value are zero)
+	// Check properties of supported kinds: bools, strings, ints
+	assert.Equal(t, "", c.Config)
+	assert.Equal(t, "info", c.LogLevel)
+	assert.Equal(t, int32(0), c.AppPort)
+	assert.Equal(t, int32(9090), c.SidecarMetricsPort)
+	assert.False(t, c.EnableProfiling)
+	assert.True(t, c.EnableMetrics)
+
+	// These properties don't have an annotation but should have a default value anyways
+	assert.Equal(t, injectorConsts.ModeKubernetes, c.Mode)
+	assert.Equal(t, int32(3500), c.SidecarHTTPPort)
+	assert.Equal(t, int32(50001), c.SidecarAPIGRPCPort)
+
+	// Nullable properties
+	assert.Nil(t, c.EnableAPILogging)
+}
+
+func TestSidecarConfigInitWithEnv(t *testing.T) {
+	// Set environment variables for the test
+	os.Setenv("DAPR_PLACEMENT_ADDRESS", "test-placement-address")
+	defer os.Unsetenv("DAPR_PLACEMENT_ADDRESS")
+
+	c := NewSidecarConfig(&corev1.Pod{})
+
+	// Ensure the environment variable default value is set
+	assert.Equal(t, "test-placement-address", c.PlacementAddress)
 
 	// Ensure default values are set (and that those without a default value are zero)
 	// Check properties of supported kinds: bools, strings, ints
