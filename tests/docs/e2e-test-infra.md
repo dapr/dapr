@@ -32,9 +32,9 @@ Steps to fix it:
 - Click on `New client secret`, paste the JSON payload into the description and keep the recommended expiration of 180 days.
 - Don't close the window yet. Now, open a text editor and compose the following JSON payload (single line):
 ```json
-{ "clientId": "<already present>", "clientSecret": "PASTE CLIENT SECRET GOES HERE", "subscriptionId": "<already present>", "tenantId": "<already present>" }
+{ "clientId": "<already present>", "clientSecret": "PASTE CLIENT SECRET HERE", "subscriptionId": "<already present>", "tenantId": "<already present>" }
 ```
-- Click on the clipboard icon next to the value of the secret on Azure Portal and paste it in `PASTE CLIENT SECRET GOES HERE`.
+- Click on the clipboard icon next to the value of the secret on Azure Portal and paste it in `PASTE CLIENT SECRET HERE`.
 - Now, let's set the JSON payload as a GitHub secret here: https://github.com/dapr/dapr/settings/secrets/actions/AZURE_CREDENTIALS
 - Copy-and-paste the JSON payload from above into the text box. Keep it as a single line.
 - Finally, click on `Update secret`
