@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.22.3
+go 1.22.4
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -10,7 +10,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.14.0-rc.2
+	github.com/dapr/components-contrib v1.14.0-rc.3
 	github.com/dapr/kit v0.13.1-0.20240523225705-106329e5839f
 	github.com/diagridio/go-etcd-cron v0.1.0
 	github.com/evanphx/json-patch/v5 v5.9.0

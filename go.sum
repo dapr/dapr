@@ -445,8 +445,8 @@ github.com/dancannon/gorethink v4.0.0+incompatible h1:KFV7Gha3AuqT+gr0B/eKvGhbjm
 github.com/dancannon/gorethink v4.0.0+incompatible/go.mod h1:BLvkat9KmZc1efyYwhz3WnybhRZtgF1K929FD8z1avU=
 github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuAyr0=
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
-github.com/dapr/components-contrib v1.14.0-rc.2 h1:0tOt2PVo5qJenMc+bCtNZ/rwASbK3jH+s50joimAawM=
-github.com/dapr/components-contrib v1.14.0-rc.2/go.mod h1:zYXRYVvFMCBTpE5VEIjC6JP40X1aInWR3KvE+CWI4Wk=
+github.com/dapr/components-contrib v1.14.0-rc.3 h1:OBb1z2i/PIcZlEI/cQofZ/o8PIeAJYRx25hmNWPKM1I=
+github.com/dapr/components-contrib v1.14.0-rc.3/go.mod h1:w8JfIhz5/4nIZx7JR3qVaLZHla8D0+DvbRCIPqJLQNc=
 github.com/dapr/kit v0.13.1-0.20240523225705-106329e5839f h1:X/QX+YP+2z/f5F5XGpUsZ7hfdwYTlcK6M3n7D/mkpcM=
 github.com/dapr/kit v0.13.1-0.20240523225705-106329e5839f/go.mod h1:LkPZyrSpa2xLBgYMwUhDbWZcZVt/WdL7FSPlN0PrSog=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
