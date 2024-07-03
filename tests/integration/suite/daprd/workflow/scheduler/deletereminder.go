@@ -97,13 +97,15 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 
 	r := task.NewTaskRegistry()
 	require.NoError(t, r.AddOrchestratorN("SingleActivity", func(c *task.OrchestrationContext) (any, error) {
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		if !assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 			//nolint:testifylint
-			if assert.NoError(c, err) {
-				assert.Len(c, kvs.Kvs, 1)
+			if assert.NoError(c, err, "failed to get jobs") {
+				assert.Lenf(c, kvs.Kvs, 1, "expected 1 job, got %d", len(kvs.Kvs))
 			}
-		}, 15*time.Second, 10*time.Millisecond)
+		}, 15*time.Second, 10*time.Millisecond) {
+			return nil, nil
+		}
 
 		name := string(kvs.Kvs[0].Key)
 		name = name[strings.LastIndex(name, "|")+1:]
