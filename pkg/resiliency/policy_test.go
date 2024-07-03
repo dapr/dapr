@@ -312,7 +312,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 					return struct{}{}, backoff.Permanent(fmt.Errorf("expected attempt in context to be %d but got %d", v, attempt))
 				}
 				if v <= maxCalls {
-					return struct{}{}, NewHTTPCodeError(test.returnedCode, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls))
+					return struct{}{}, NewCodeError(test.returnedCode, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls))
 				}
 				return struct{}{}, nil
 			}
