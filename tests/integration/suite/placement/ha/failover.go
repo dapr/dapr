@@ -273,7 +273,7 @@ func (n *failover) getLeader(t *testing.T, ctx context.Context, skip int) int {
 			return false
 		}
 		return true
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 
 	return j
 }
