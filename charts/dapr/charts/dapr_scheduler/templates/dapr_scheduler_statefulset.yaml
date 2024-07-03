@@ -164,7 +164,8 @@ spec:
         - "--mode=kubernetes"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
-          runAsNonRoot: {{ .Values.runAsNonRoot }}
+          runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+          fsGroup: {{ .Values.securityContext.fsGroup }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:
             add: ["SYS_PTRACE"]
