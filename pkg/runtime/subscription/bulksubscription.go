@@ -21,7 +21,6 @@ import (
 	"fmt"
 	nethttp "net/http"
 	"strings"
-	"sync"
 	"time"
 
 	"github.com/google/uuid"
@@ -62,7 +61,6 @@ type bulkSubscribedMessage struct {
 // bulkSubIngressDiagnostics holds diagnostics information for bulk subscribe
 // ingress.
 type bulkSubIngressDiagnostics struct {
-	lock           sync.Mutex
 	statusWiseDiag map[string]int64
 	elapsed        float64
 	retryReported  bool
@@ -182,9 +180,7 @@ func (s *Subscription) bulkSubscribeTopic(ctx context.Context, policyDef *resili
 				}
 				if contribpubsub.HasExpired(cloudEvent) {
 					log.Warnf("dropping expired pub/sub event %v as of %v", cloudEvent[contribpubsub.IDField], cloudEvent[contribpubsub.ExpirationField])
-					bulkSubDiag.lock.Lock()
 					bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)]++
-					bulkSubDiag.lock.Unlock()
 					if route.DeadLetterTopic != "" {
 						_ = s.sendToDeadLetter(ctx, psName, &contribpubsub.NewMessage{
 							Data:        message.Event,
@@ -259,9 +255,7 @@ func (s *Subscription) sendBulkToDLQIfConfigured(ctx context.Context, bulkSubCal
 		}
 	}
 	if !bscData.bulkSubDiag.retryReported {
-		bscData.bulkSubDiag.lock.Lock()
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(msg.Entries))
-		bscData.bulkSubDiag.lock.Unlock()
 	}
 	return errors.New("failed to send to DLQ as DLQ was not configured")
 }
@@ -280,9 +274,7 @@ func (s *Subscription) getRouteIfProcessable(ctx context.Context, bulkSubCallDat
 	if !shouldProcess {
 		// The event does not match any route specified so ignore it.
 		log.Warnf("No matching route for event in pubsub %s and topic %s; skipping", bscData.psName, bscData.topic)
-		bscData.bulkSubDiag.lock.Lock()
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)]++
-		bscData.bulkSubDiag.lock.Unlock()
 		if route.DeadLetterTopic != "" {
 			_ = s.sendToDeadLetter(ctx, bscData.psName, &contribpubsub.NewMessage{
 				Data:        message.Event,
@@ -355,9 +347,7 @@ func (s *Subscription) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDa
 				return nil
 			}
 		}
-		bscData.bulkSubDiag.lock.Lock()
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
-		bscData.bulkSubDiag.lock.Unlock()
 
 		for _, item := range rawMsgEntries {
 			addBulkResponseEntry(&bsrr.entries, item.EntryId, marshalErr)
@@ -398,9 +388,7 @@ func (s *Subscription) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDa
 	resp, err := s.channels.AppChannel().InvokeMethod(ctx, req, "")
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
-		bscData.bulkSubDiag.lock.Lock()
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
-		bscData.bulkSubDiag.lock.Unlock()
 		bscData.bulkSubDiag.elapsed = elapsed
 		populateBulkSubscribeResponsesWithError(psm, &bsrr.entries, err)
 		return fmt.Errorf("error from app channel while sending pub/sub event to app: %w", err)
@@ -420,9 +408,7 @@ func (s *Subscription) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDa
 		var appBulkResponse contribpubsub.AppBulkResponse
 		err = json.NewDecoder(resp.RawData()).Decode(&appBulkResponse)
 		if err != nil {
-			bscData.bulkSubDiag.lock.Lock()
 			bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
-			bscData.bulkSubDiag.lock.Unlock()
 			bscData.bulkSubDiag.elapsed = elapsed
 			populateBulkSubscribeResponsesWithError(psm, &bsrr.entries, err)
 			return fmt.Errorf("failed unmarshalling app response for bulk subscribe: %w", err)
@@ -436,23 +422,17 @@ func (s *Subscription) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDa
 					// When statusCode 2xx, Consider empty status field OR not receiving status for an item as retry
 					fallthrough
 				case contribpubsub.Retry:
-					bscData.bulkSubDiag.lock.Lock()
 					bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)]++
-					bscData.bulkSubDiag.lock.Unlock()
 					entryRespReceived[response.EntryId] = true
 					addBulkResponseEntry(&bsrr.entries, response.EntryId,
 						fmt.Errorf("RETRY required while processing bulk subscribe event for entry id: %v", response.EntryId))
 					hasAnyError = true
 				case contribpubsub.Success:
-					bscData.bulkSubDiag.lock.Lock()
 					bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Success)]++
-					bscData.bulkSubDiag.lock.Unlock()
 					entryRespReceived[response.EntryId] = true
 					addBulkResponseEntry(&bsrr.entries, response.EntryId, nil)
 				case contribpubsub.Drop:
-					bscData.bulkSubDiag.lock.Lock()
 					bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)]++
-					bscData.bulkSubDiag.lock.Unlock()
 					entryRespReceived[response.EntryId] = true
 					log.Warnf("DROP status returned from app while processing pub/sub event %v", response.EntryId)
 					addBulkResponseEntry(&bsrr.entries, response.EntryId, nil)
@@ -467,9 +447,7 @@ func (s *Subscription) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDa
 					}
 				default:
 					// Consider unknown status field as error and retry
-					bscData.bulkSubDiag.lock.Lock()
 					bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)]++
-					bscData.bulkSubDiag.lock.Unlock()
 					entryRespReceived[response.EntryId] = true
 					addBulkResponseEntry(&bsrr.entries, response.EntryId,
 						fmt.Errorf("unknown status returned from app while processing bulk subscribe event %v: %v", response.EntryId, response.Status))
@@ -486,14 +464,10 @@ func (s *Subscription) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDa
 					fmt.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.EntryId), //nolint:stylecheck
 				)
 				hasAnyError = true
-				bscData.bulkSubDiag.lock.Lock()
 				bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)]++
-				bscData.bulkSubDiag.lock.Unlock()
 			}
 		}
-		bscData.bulkSubDiag.lock.Lock()
 		bscData.bulkSubDiag.elapsed = elapsed
-		bscData.bulkSubDiag.lock.Unlock()
 		if hasAnyError {
 			//nolint:stylecheck
 			return errors.New("Few message(s) have failed during bulk subscribe operation")
@@ -507,10 +481,8 @@ func (s *Subscription) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDa
 		// When adding/removing an error here, check if that is also applicable to GRPC since there is a mapping between HTTP and GRPC errors:
 		// https://cloud.google.com/apis/design/errors#handling_errors
 		log.Errorf("Non-retriable error returned from app while processing bulk pub/sub event. status code returned: %v", statusCode)
-		bscData.bulkSubDiag.lock.Lock()
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)] += int64(len(rawMsgEntries))
 		bscData.bulkSubDiag.elapsed = elapsed
-		bscData.bulkSubDiag.lock.Unlock()
 		populateBulkSubscribeResponsesWithError(psm, &bsrr.entries, nil)
 		return nil
 	}
@@ -519,10 +491,8 @@ func (s *Subscription) publishBulkMessageHTTP(ctx context.Context, bulkSubCallDa
 	retriableErrorStr := fmt.Sprintf("Retriable error returned from app while processing bulk pub/sub event, topic: %v. status code returned: %v", psm.topic, statusCode)
 	retriableError := errors.New(retriableErrorStr)
 	log.Warn(retriableErrorStr)
-	bscData.bulkSubDiag.lock.Lock()
 	bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(rawMsgEntries))
 	bscData.bulkSubDiag.elapsed = elapsed
-	bscData.bulkSubDiag.lock.Unlock()
 	populateBulkSubscribeResponsesWithError(psm, &bsrr.entries, retriableError)
 	return retriableError
 }
@@ -538,9 +508,7 @@ func (s *Subscription) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDa
 		entry := pubSubMsg.entry
 		item, err := rtpubsub.FetchEntry(rawPayload, entry, psm.pubSubMessages[i].cloudEvent)
 		if err != nil {
-			bscData.bulkSubDiag.lock.Lock()
 			bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)]++
-			bscData.bulkSubDiag.lock.Unlock()
 			addBulkResponseEntry(bulkResponses, entry.EntryId, err)
 			continue
 		}
@@ -611,20 +579,16 @@ func (s *Subscription) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDa
 		if hasErrStatus && (errStatus.Code() == codes.Unimplemented) {
 			// DROP
 			log.Warnf("non-retriable error returned from app while processing bulk pub/sub event: %s", err)
-			bscData.bulkSubDiag.lock.Lock()
 			bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)] += int64(len(psm.pubSubMessages))
 			bscData.bulkSubDiag.elapsed = elapsed
-			bscData.bulkSubDiag.lock.Unlock()
 			populateBulkSubscribeResponsesWithError(psm, bulkResponses, nil)
 			return nil
 		}
 
 		err = fmt.Errorf("error returned from app while processing bulk pub/sub event: %w", err)
 		log.Debug(err)
-		bscData.bulkSubDiag.lock.Lock()
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(psm.pubSubMessages))
 		bscData.bulkSubDiag.elapsed = elapsed
-		bscData.bulkSubDiag.lock.Unlock()
 		populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
 		// on error from application, return error for redelivery of event
 		return err
@@ -638,24 +602,18 @@ func (s *Subscription) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDa
 			case runtimev1pb.TopicEventResponse_SUCCESS: //nolint:nosnakecase
 				// on uninitialized status, this is the case it defaults to as an uninitialized status defaults to 0 which is
 				// success from protobuf definition
-				bscData.bulkSubDiag.lock.Lock()
 				bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Success)] += 1
-				bscData.bulkSubDiag.lock.Unlock()
 				entryRespReceived[entryID] = true
 				addBulkResponseEntry(bulkResponses, entryID, nil)
 			case runtimev1pb.TopicEventResponse_RETRY: //nolint:nosnakecase
-				bscData.bulkSubDiag.lock.Lock()
 				bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += 1
-				bscData.bulkSubDiag.lock.Unlock()
 				entryRespReceived[entryID] = true
 				addBulkResponseEntry(bulkResponses, entryID,
 					fmt.Errorf("RETRY status returned from app while processing pub/sub event for entry id: %v", entryID))
 				hasAnyError = true
 			case runtimev1pb.TopicEventResponse_DROP: //nolint:nosnakecase
 				log.Warnf("DROP status returned from app while processing pub/sub event for entry id: %v", entryID)
-				bscData.bulkSubDiag.lock.Lock()
 				bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)] += 1
-				bscData.bulkSubDiag.lock.Unlock()
 				entryRespReceived[entryID] = true
 				addBulkResponseEntry(bulkResponses, entryID, nil)
 				if deadLetterTopic != "" {
@@ -669,9 +627,7 @@ func (s *Subscription) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDa
 				}
 			default:
 				// Consider unknown status field as error and retry
-				bscData.bulkSubDiag.lock.Lock()
 				bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += 1
-				bscData.bulkSubDiag.lock.Unlock()
 				entryRespReceived[entryID] = true
 				addBulkResponseEntry(bulkResponses, entryID,
 					fmt.Errorf("unknown status returned from app while processing pub/sub event  for entry id %v: %v", entryID, response.GetStatus()))
@@ -688,9 +644,7 @@ func (s *Subscription) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDa
 				fmt.Errorf("Response not received, RETRY required while processing bulk subscribe event for entry id: %v", item.entry.EntryId), //nolint:stylecheck
 			)
 			hasAnyError = true
-			bscData.bulkSubDiag.lock.Lock()
 			bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += 1
-			bscData.bulkSubDiag.lock.Unlock()
 		}
 	}
 	bscData.bulkSubDiag.elapsed = elapsed
@@ -731,12 +685,10 @@ func (s *Subscription) sendBulkToDeadLetter(ctx context.Context,
 		}
 		data = data[:n]
 	}
-	bscData.bulkSubDiag.lock.Lock()
 	bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Drop)] += int64(len(data))
 	if bscData.bulkSubDiag.retryReported {
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] -= int64(len(data))
 	}
-	bscData.bulkSubDiag.lock.Unlock()
 	req := &contribpubsub.BulkPublishRequest{
 		Entries:    data,
 		PubsubName: bscData.psName,
@@ -844,11 +796,12 @@ func newBulkSubIngressDiagnostics() bulkSubIngressDiagnostics {
 	statusWiseCountDiag[string(contribpubsub.Success)] = 0
 	statusWiseCountDiag[string(contribpubsub.Drop)] = 0
 	statusWiseCountDiag[string(contribpubsub.Retry)] = 0
-	return bulkSubIngressDiagnostics{
+	bulkSubDiag := bulkSubIngressDiagnostics{
 		statusWiseDiag: statusWiseCountDiag,
 		elapsed:        0,
 		retryReported:  false,
 	}
+	return bulkSubDiag
 }
 
 func reportBulkSubDiagnostics(ctx context.Context, topic string, bulkSubDiag *bulkSubIngressDiagnostics) {
