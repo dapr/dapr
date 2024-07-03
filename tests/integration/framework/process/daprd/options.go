@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -99,7 +100,8 @@ func WithExit1() Option {
 	return WithExecOptions(
 		exec.WithExitCode(1),
 		exec.WithRunError(func(t *testing.T, err error) {
-			require.ErrorContains(t, err, "exit status 1")
+			//nolint:testifylint
+			assert.ErrorContains(t, err, "exit status 1")
 		}),
 	)
 }
