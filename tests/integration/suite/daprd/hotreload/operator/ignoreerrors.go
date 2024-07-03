@@ -41,6 +41,7 @@ func init() {
 type ignoreerrors struct {
 	daprd    *daprd.Daprd
 	operator *operator.Operator
+	logline  *logline.LogLine
 }
 
 func (i *ignoreerrors) Setup(t *testing.T) []framework.Option {
@@ -57,7 +58,7 @@ func (i *ignoreerrors) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 
-	logline := logline.New(t,
+	i.logline = logline.New(t,
 		logline.WithStdoutLineContains(
 			"Failed to init component a (state.sqlite/v1): [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): missing connection string",
 			"Ignoring error processing component: process component a error: [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): [INIT_COMPONENT_FAILURE]: initialization error occurred for a (state.sqlite/v1): missing connection string",
@@ -72,17 +73,12 @@ func (i *ignoreerrors) Setup(t *testing.T) []framework.Option {
 		daprd.WithSentryAddress(sentry.Address()),
 		daprd.WithControlPlaneAddress(i.operator.Address(t)),
 		daprd.WithDisableK8sSecretStore(true),
-		daprd.WithExecOptions(
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
-			exec.WithExitCode(1),
-			exec.WithStdout(logline.Stdout()),
-		),
+		daprd.WithExit1(),
+		daprd.WithLogLineStdout(i.logline),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, i.operator, logline, i.daprd),
+		framework.WithProcesses(sentry, i.operator, i.logline, i.daprd),
 	}
 }
 
@@ -135,5 +131,6 @@ func (i *ignoreerrors) Run(t *testing.T, ctx context.Context) {
 		}
 		i.operator.SetComponents(upComp)
 		i.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &upComp, EventType: operatorv1.ResourceEventType_UPDATED})
+		i.logline.EventuallyFoundAll(t)
 	})
 }
