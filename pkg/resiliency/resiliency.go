@@ -292,7 +292,7 @@ func FromConfigurations(log logger.Logger, c ...*resiliencyV1alpha.Resiliency) *
 		log.Infof("Loading Resiliency configuration: %s", config.Name)
 		log.Debugf("Resiliency configuration (%s): %+v", config.Name, config)
 		if err := r.DecodeConfiguration(config); err != nil {
-			log.Errorf("Could not read resiliency policy %s: %w", &config.ObjectMeta.Name, err)
+			log.Errorf("Could not read resiliency policy %s: %v", config.ObjectMeta.Name, err)
 			continue
 		}
 		diag.DefaultResiliencyMonitoring.PolicyLoaded(config.Name, config.Namespace)
@@ -422,14 +422,14 @@ func (r *Resiliency) decodePolicies(c *resiliencyV1alpha.Resiliency) (err error)
 				r.log.Warnf("Attempted override of %s did not meet minimum retry count, resetting to 3.", name)
 				rc.MaxRetries = 3
 			}
-			filter, err := ParseStatusCodeFilter(t.RetryOnCodes)
+			filter, err := ParseRetryConditionFilter(t.Conditions)
 			if err != nil {
 				return err
 			}
 
 			r.retries[name] = &Retry{
-				Config:           rc,
-				StatusCodeFilter: filter,
+				Config:               rc,
+				RetryConditionFilter: filter,
 			}
 		} else {
 			r.log.Warnf("Attempted to override protected policy %s which is not allowed. Ignoring provided policy and using default.", name)

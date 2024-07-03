@@ -51,11 +51,16 @@ type Policies struct {
 }
 
 type Retry struct {
-	Policy       string `json:"policy,omitempty" yaml:"policy,omitempty"`
-	Duration     string `json:"duration,omitempty" yaml:"duration,omitempty"`
-	MaxInterval  string `json:"maxInterval,omitempty" yaml:"maxInterval,omitempty"`
-	MaxRetries   *int   `json:"maxRetries,omitempty" yaml:"maxRetries,omitempty"`
-	RetryOnCodes string `json:"retryOnCodes,omitempty" yaml:"retryOnCodes,omitempty"`
+	Policy      string           `json:"policy,omitempty" yaml:"policy,omitempty"`
+	Duration    string           `json:"duration,omitempty" yaml:"duration,omitempty"`
+	MaxInterval string           `json:"maxInterval,omitempty" yaml:"maxInterval,omitempty"`
+	MaxRetries  *int             `json:"maxRetries,omitempty" yaml:"maxRetries,omitempty"`
+	Conditions  *RetryConditions `json:"conditions,omitempty" yaml:"conditions,omitempty"`
+}
+
+type RetryConditions struct {
+	HTTPStatusCodes string `json:"httpStatusCodes,omitempty" yaml:"httpStatusCodes,omitempty"`
+	GRPCStatusCodes string `json:"gRPCStatusCodes,omitempty" yaml:"gRPCStatusCodes,omitempty"`
 }
 
 type CircuitBreaker struct {

@@ -337,12 +337,12 @@ func TestParseRetryWithFilter(t *testing.T) {
 	require.NotNil(t, r.retries["withFilter"])
 
 	// important does not have a filter, so should default to true
-	assert.True(t, r.retries["important"].StatusCodeNeedRetry(500))
-	assert.True(t, r.retries["important"].StatusCodeNeedRetry(400))
+	assert.True(t, r.retries["important"].statusCodeNeedRetry(500))
+	assert.True(t, r.retries["important"].statusCodeNeedRetry(400))
 	// withFilter has a filter, should return true for 500 and false for anything else
-	assert.True(t, r.retries["withFilter"].StatusCodeNeedRetry(500))
-	assert.False(t, r.retries["withFilter"].StatusCodeNeedRetry(501))
-	assert.False(t, r.retries["withFilter"].StatusCodeNeedRetry(400))
+	assert.True(t, r.retries["withFilter"].statusCodeNeedRetry(500))
+	assert.False(t, r.retries["withFilter"].statusCodeNeedRetry(501))
+	assert.False(t, r.retries["withFilter"].statusCodeNeedRetry(400))
 }
 
 func TestResiliencyScopeIsRespected(t *testing.T) {

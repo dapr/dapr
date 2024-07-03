@@ -593,7 +593,7 @@ func (s *Subscription) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDa
 
 		// return error status code for resiliency to decide on retry
 		if hasErrStatus {
-			return resiliency.NewCodeError(int32(errStatus.Code()), err)
+			return resiliency.NewGRPCCodeError(int32(errStatus.Code()), err)
 		}
 
 		// on error from application, return error for redelivery of event
