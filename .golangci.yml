@@ -21,7 +21,7 @@ run:
   # default value is empty list, but next dirs are always skipped independently
   # from this option's value:
   # third_party$, testdata$, examples$, Godeps$, builtin$
-  skip-dirs:
+  issues.exclude-dirs:
     - ^pkg.*client.*clientset.*versioned.*
     - ^pkg.*client.*informers.*externalversions.*
     - ^pkg.*proto.*
@@ -33,11 +33,11 @@ run:
   # skip-files:
   #  - ".*\\.my\\.go$"
   #  - lib/bad.go
-  
+
 # output configuration options
 output:
   # colored-line-number|line-number|json|tab|checkstyle, default is "colored-line-number"
-  format: tab
+  formats: tab
 
   # print lines of code with issue, default is true
   print-issued-lines: true
@@ -71,9 +71,6 @@ linters-settings:
     statements: 40
 
   govet:
-    # report about shadowed variables
-    check-shadowing: true
-
     # settings per analyzer
     settings:
       printf: # analyzer name, run `go tool vet help` to see all analyzers
@@ -86,6 +83,7 @@ linters-settings:
     # enable or disable analyzers by name
     enable:
       - atomicalign
+      - shadow
     enable-all: false
     disable:
       - shadow
@@ -109,9 +107,6 @@ linters-settings:
   gocognit:
     # minimal code complexity to report, 30 by default (but we recommend 10-20)
     min-complexity: 10
-  maligned:
-    # print struct with more effective memory layout or not, false by default
-    suggest-new: true
   dupl:
     # tokens count to trigger issue, 150 by default
     threshold: 100
@@ -124,6 +119,10 @@ linters-settings:
     rules:
       master:
         deny:
+        - pkg: "github.com/golang-jwt/jwt/v5"
+          desc: "must use github.com/lestrrat-go/jwx/v2/jwt"
+        - pkg: "github.com/golang-jwt/jwt/v4"
+          desc: "must use github.com/lestrrat-go/jwx/v2/jwt"
         - pkg: "github.com/Sirupsen/logrus"
           desc: "must use github.com/dapr/kit/logger"
         - pkg: "github.com/agrea/ptr"
@@ -273,9 +272,7 @@ linters:
   enable-all: true
   disable:
     # TODO Enforce the below linters later
-    - nosnakecase
     - musttag
-    - dupl
     - errcheck
     - funlen
     - gochecknoglobals
@@ -283,28 +280,24 @@ linters:
     - gocyclo
     - gocognit
     - godox
-    - interfacer
     - lll
-    - maligned
-    - scopelint
     - unparam
     - wsl
+    - mnd
     - gomnd
     - testpackage
-    - goerr113
+    - err113
     - nestif
     - nlreturn
     - exhaustive
     - exhaustruct
     - noctx
     - gci
-    - golint
     - tparallel
     - paralleltest
     - wrapcheck
     - tagliatelle
     - ireturn
-    - exhaustivestruct
     - errchkjson
     - contextcheck
     - gomoddirectives
@@ -313,7 +306,6 @@ linters:
     - varnamelen
     - errorlint
     - forcetypeassert
-    - ifshort
     - maintidx
     - nilnil
     - predeclared
@@ -326,8 +318,5 @@ linters:
     - asasalint
     - rowserrcheck
     - sqlclosecheck
-    - structcheck
-    - varcheck
-    - deadcode
     - inamedparam
     - tagalign
