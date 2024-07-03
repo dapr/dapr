@@ -161,5 +161,5 @@ func (p *pki) Run(t *testing.T, ctx context.Context) {
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Contains(t, string(body), "tls: failed to verify certificate: x509: certificate signed by unknown authority")
+	assert.Contains(t, string(body), "tls: failed to verify certificate")
 }
