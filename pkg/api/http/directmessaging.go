@@ -195,7 +195,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		} else if resStatus.GetCode() < 200 || resStatus.GetCode() > 399 {
 			msg, _ := rResp.RawDataFull()
 			// Returning a `codeError` here will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned.
-			return rResp, resiliency.NewHTTPCodeError(resStatus.GetCode(), codeError{
+			return rResp, resiliency.NewCodeError(resStatus.GetCode(), codeError{
 				headers:     rResp.Headers(),
 				statusCode:  int(resStatus.GetCode()),
 				msg:         msg,

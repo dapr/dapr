@@ -267,7 +267,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			if errors.Is(err, errRetryOnStreamingRPC) {
 				err = backoff.Permanent(errRetryOnStreamingRPC)
 			} else if code, ok := status.FromError(err); ok {
-				err = resiliency.NewGRPCCodeError(int32(code.Code()), err)
+				err = resiliency.NewCodeError(int32(code.Code()), err)
 			}
 			return nil, err
 		}

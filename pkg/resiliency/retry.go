@@ -50,24 +50,8 @@ func (ce CodeError) Unwrap() error {
 	return ce.err
 }
 
-func NewHTTPCodeError(statusCode int32, err error) CodeError {
-	return CodeError{
-		StatusCode:    statusCode,
-		retryScenario: retryScenarioHTTPInvoke,
-		err:           err,
-	}
-}
-
-func NewGRPCCodeError(statusCode int32, err error) CodeError {
-	return CodeError{
-		StatusCode:    statusCode,
-		retryScenario: retryScenarioGRPCInvoke,
-		err:           err,
-	}
-}
-
-// NewCodeErrorAutoDetect is used when the statusCode can be either HTTP or gRPC
-func NewCodeErrorAutoDetect(statusCode int32, err error) CodeError {
+// NewCodeError is used when the statusCode can be either HTTP or gRPC
+func NewCodeError(statusCode int32, err error) CodeError {
 	return CodeError{
 		StatusCode:    statusCode,
 		retryScenario: detectErrorProto(statusCode),
