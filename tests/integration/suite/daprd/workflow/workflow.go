@@ -15,4 +15,5 @@ package workflow
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/backend"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler"
 )
