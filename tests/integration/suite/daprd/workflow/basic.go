@@ -111,7 +111,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return fmt.Sprintf("Hello, %s!", name), nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
 		id := api.InstanceID(b.startWorkflow(ctx, t, "SingleActivity", "Dapr"))
@@ -151,7 +151,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		})
 
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
 		id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
@@ -211,7 +211,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return nil, nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
 		// Run the orchestration, which will block waiting for external events
@@ -255,7 +255,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return fmt.Sprintf("Hello, %s!", input), nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
 		id := api.InstanceID(b.startWorkflow(ctx, t, "root", "Dapr"))
