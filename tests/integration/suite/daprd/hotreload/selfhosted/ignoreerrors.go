@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -66,13 +65,8 @@ spec:
 	i.daprd = daprd.New(t,
 		daprd.WithConfigs(configFile),
 		daprd.WithResourcesDir(i.resDir),
-		daprd.WithExecOptions(
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
-			exec.WithExitCode(1),
-			exec.WithStdout(i.logline.Stdout()),
-		),
+		daprd.WithExit1(),
+		daprd.WithLogLineStdout(i.logline),
 	)
 
 	return []framework.Option{
