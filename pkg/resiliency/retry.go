@@ -34,7 +34,6 @@ type retryScenario int
 const (
 	retryScenarioHTTPInvoke retryScenario = iota
 	retryScenarioGRPCInvoke
-	// add more retry scenarios here.
 )
 
 type CodeError struct {
