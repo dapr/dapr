@@ -30,8 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/file"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -67,7 +69,7 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 		fz.Fuzz(&c.secretStoreNames[i])
 	}
 
-	secretFileNames := util.FileNames(t, numTests)
+	secretFileNames := file.Paths(t, numTests)
 	files := make([]string, numTests)
 	for i, secretFileName := range secretFileNames {
 		require.NoError(t, os.WriteFile(secretFileName, []byte("{}"), 0o600))
@@ -100,9 +102,9 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
-	pt := util.NewParallel(t)
+	pt := parallel.New(t)
 	for _, secretStoreName := range c.secretStoreNames {
 		secretStoreName := secretStoreName
 		pt.Add(func(t *assert.CollectT) {

@@ -15,12 +15,12 @@ package app
 
 import (
 	"context"
-	"fmt"
 	"os"
 
 	"github.com/dapr/dapr/cmd/scheduler/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
-	"github.com/dapr/dapr/pkg/health"
+	"github.com/dapr/dapr/pkg/healthz"
+	healthzserver "github.com/dapr/dapr/pkg/healthz/server"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
@@ -49,7 +49,15 @@ func Run() {
 	log.Infof("Starting Dapr Scheduler Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
-	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
+	healthz := healthz.New()
+
+	metricsExporter := metrics.New(metrics.Options{
+		Log:       log,
+		Enabled:   opts.Metrics.Enabled(),
+		Namespace: metrics.DefaultMetricNamespace,
+		Port:      opts.Metrics.Port(),
+		Healthz:   healthz,
+	})
 
 	if merr := monitoring.InitMetrics(); merr != nil {
 		log.Fatal(merr)
@@ -64,13 +72,19 @@ func Run() {
 		AppID:                   appID,
 		MTLSEnabled:             opts.TLSEnabled,
 		Mode:                    modes.DaprMode(opts.Mode),
+		Healthz:                 healthz,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	err = concurrency.NewRunnerManager(
-		metricsExporter.Run,
+		healthzserver.New(healthzserver.Options{
+			Log:     log,
+			Port:    opts.HealthzPort,
+			Healthz: healthz,
+		}).Start,
+		metricsExporter.Start,
 		secProvider.Run,
 		func(ctx context.Context) error {
 			secHandler, serr := secProvider.Handler(ctx)
@@ -83,6 +97,7 @@ func Run() {
 				ListenAddress: opts.ListenAddress,
 				Mode:          modes.DaprMode(opts.Mode),
 				Security:      secHandler,
+				Healthz:       healthz,
 
 				DataDir:                 opts.EtcdDataDir,
 				ReplicaCount:            opts.ReplicaCount,
@@ -100,14 +115,6 @@ func Run() {
 			}
 
 			return server.Run(ctx)
-		},
-		func(ctx context.Context) error {
-			healthzServer := health.NewServer(health.Options{Log: log})
-			healthzServer.Ready()
-			if healthzErr := healthzServer.Run(ctx, opts.HealthzListenAddress, opts.HealthzPort); healthzErr != nil {
-				return fmt.Errorf("failed to start healthz server: %w", healthzErr)
-			}
-			return nil
 		},
 	).Run(ctx)
 	if err != nil {

@@ -27,9 +27,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -157,9 +158,9 @@ func (f *fuzzhttp) Run(t *testing.T, ctx context.Context) {
 	f.daprd1.WaitUntilRunning(t, ctx)
 	f.daprd2.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
-	pt := util.NewParallel(t)
+	pt := parallel.New(t)
 
 	for i := 0; i < len(f.methods); i++ {
 		method := f.methods[i]

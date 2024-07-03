@@ -36,10 +36,10 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Sentry struct {
@@ -159,7 +159,7 @@ func (s *Sentry) Cleanup(t *testing.T) {
 }
 
 func (s *Sentry) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", s.healthzPort), nil)
 	require.NoError(t, err)
 
