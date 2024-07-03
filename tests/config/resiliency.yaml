@@ -18,8 +18,8 @@ spec:
         duration: 10ms
         maxRetries: 5
         conditions:
-          httpStatusCode: "500"
-          gRPCStatusCode: "2"
+          httpStatusCodes: "500"
+          gRPCStatusCodes: "2"
 
     circuitBreakers:
       simpleCB:
