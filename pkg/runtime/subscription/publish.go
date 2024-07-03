@@ -126,7 +126,8 @@ func (s *Subscription) publishMessageHTTP(ctx context.Context, msg *rtpubsub.Sub
 	errMsg := fmt.Sprintf("retriable error returned from app while processing pub/sub event %v, topic: %v, body: %s. status code returned: %v", cloudEvent[contribpubsub.IDField], cloudEvent[contribpubsub.TopicField], body, statusCode)
 	log.Warnf(errMsg)
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
-	return rterrors.NewRetriable(errors.New(errMsg))
+	// return error status code for resiliency to decide on retry
+	return resiliency.NewHTTPCodeError(int32(statusCode), rterrors.NewRetriable(errors.New(errMsg)))
 }
 
 func (s *Subscription) publishMessageGRPC(ctx context.Context, msg *rtpubsub.SubscribedMessage) error {
@@ -169,6 +170,11 @@ func (s *Subscription) publishMessageGRPC(ctx context.Context, msg *rtpubsub.Sub
 		err = fmt.Errorf("error returned from app while processing pub/sub event %v: %w", cloudEvent[contribpubsub.IDField], rterrors.NewRetriable(err))
 		log.Debug(err)
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
+
+		// return error status code for resiliency to decide on retry
+		if hasErrStatus {
+			return resiliency.NewGRPCCodeError(int32(errStatus.Code()), err)
+		}
 
 		// on error from application, return error for redelivery of event
 		return err

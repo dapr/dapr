@@ -54,7 +54,7 @@ func (d *retryfiltergrpc) Setup(t *testing.T) []framework.Option {
 			return nil, status.Error(codes.InvalidArgument, "key is empty")
 		}
 
-		dataStr := string(in.Data.Value)
+		dataStr := string(in.GetData().GetValue())
 		responseStatusCode, err := strconv.Atoi(dataStr)
 		if err != nil {
 			return nil, status.Error(codes.InvalidArgument, err.Error())
@@ -77,9 +77,11 @@ spec:
     retries:
       DefaultAppRetryPolicy:
         policy: constant
-        duration: 100ms
+        duration: 10ms
         maxRetries: 3
-        retryOnCodes: "1,2,5-7"
+        conditions:
+          gRPCStatusCodes: 1,2,5-7
+          httpStatusCodes: 500-599
 `
 	srv := newGRPCServer(t, onInvoke)
 	d.daprd1 = daprd.New(t,
@@ -120,22 +122,28 @@ func (d *retryfiltergrpc) Run(t *testing.T, ctx context.Context) {
 		expectRetries      bool
 	}{
 		{
-			title:              "success not in filter list",
+			title:              "success not in filter list 0",
 			statusCode:         0,
 			expectedStatusCode: 0,
 			expectRetries:      false,
 		},
 		{
-			title:              "error code not in filter list",
+			title:              "error code not in filter list 14",
 			statusCode:         14,
 			expectedStatusCode: 14,
 			expectRetries:      false,
 		},
 		{
-			title:              "error code in filter list",
+			title:              "error code in filter list 1",
 			statusCode:         1,
 			expectedStatusCode: 1,
 			expectRetries:      true,
+		},
+		{
+			title:              "invalid status code 20",
+			statusCode:         20,
+			expectedStatusCode: 20,
+			expectRetries:      false,
 		},
 	}
 
@@ -149,7 +157,6 @@ func (d *retryfiltergrpc) Run(t *testing.T, ctx context.Context) {
 
 	for _, scenario := range scenarios {
 		t.Run(scenario.title, func(t *testing.T) {
-
 			key := uuid.NewString()
 			statusCodeStr := strconv.Itoa(scenario.statusCode)
 			ctxWithMetadata := metadata.AppendToOutgoingContext(

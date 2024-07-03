@@ -69,11 +69,8 @@ func (d *retryfilterhttp) Setup(t *testing.T) []framework.Option {
 		counter.Add(1)
 
 		respStatusCode, err := strconv.Atoi(string(body))
-		if (err != nil) || (respStatusCode < 100) || (respStatusCode >= 600) {
-			// Trying to write a bad status code forces a 500 anyway.
-			// So we simply pick one status code for these cases.
-			w.WriteHeader(http.StatusBadRequest)
-			return
+		if err != nil {
+			respStatusCode = 204
 		}
 
 		w.Header().Set("content-type", "text/plain")
@@ -93,9 +90,11 @@ spec:
     retries:
       DefaultAppRetryPolicy:
         policy: constant
-        duration: 100ms
+        duration: 10ms
         maxRetries: 3
-        retryOnCodes: "505,2,501-503,509,546,547"
+        conditions:
+          httpStatusCodes: "100,101,102,200,304,403,505,501-503,509,546,547"
+          gRPCStatusCodes: "1-5"
 `
 	d.daprd1 = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
@@ -132,33 +131,63 @@ func (d *retryfilterhttp) Run(t *testing.T, ctx context.Context) {
 		expectRetries      bool
 	}{
 		{
-			title:              "success status not in filter list",
+			title:              "success status in filter list",
 			statusCode:         200,
 			expectedStatusCode: 200,
 			expectRetries:      false,
 		},
 		{
-			title:              "error status not in filter list",
-			statusCode:         403,
-			expectedStatusCode: 403,
+			title:              "success status not in filter list",
+			statusCode:         204,
+			expectedStatusCode: 204,
 			expectRetries:      false,
 		},
 		{
-			title:              "invalid status not in filter list",
+			title:              "error status not in filter list 404",
+			statusCode:         404,
+			expectedStatusCode: 404,
+			expectRetries:      false,
+		},
+		{
+			title:              "invalid status not in filter list 0",
 			statusCode:         0,
-			expectedStatusCode: 400, // this tests's default error
-			expectRetries:      false,
+			expectedStatusCode: 500,
+			expectRetries:      true, // this is retried because there is not a valid code to compare against
 		},
 		{
-			title:              "invalid status in filter list",
-			statusCode:         2,
-			expectedStatusCode: 400, // this tests's default error
-			expectRetries:      false,
+			title:              "status in filter list 100",
+			statusCode:         100,
+			expectedStatusCode: 200,
+			expectRetries:      false, // success status code
 		},
 		{
-			title:              "status in filter list",
+			title:              "status in filter list 101",
+			statusCode:         101,
+			expectedStatusCode: 101,
+			expectRetries:      true,
+		},
+		{
+			title:              "status in filter list 102",
+			statusCode:         102,
+			expectedStatusCode: 200,
+			expectRetries:      false, // not considered an error
+		},
+		{
+			title:              "status in filter list 304",
+			statusCode:         304,
+			expectedStatusCode: 304,
+			expectRetries:      false, // not considered an error
+		},
+		{
+			title:              "status in filter list 505",
 			statusCode:         505,
 			expectedStatusCode: 505,
+			expectRetries:      true,
+		},
+		{
+			title:              "status in filter list 403",
+			statusCode:         403,
+			expectedStatusCode: 403,
 			expectRetries:      true,
 		},
 		{

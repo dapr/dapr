@@ -220,7 +220,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				}
 				var cErr CodeError
 				if errors.As(rErr, &cErr) {
-					if def.r.StatusCodeNeedRetry(cErr.StatusCode) {
+					if def.r.statusCodeNeedRetry(cErr.StatusCode) {
 						return rRes, rErr
 					} else {
 						return rRes, backoff.Permanent(rErr)

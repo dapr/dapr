@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 
+	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
@@ -40,7 +41,7 @@ func ExampleNewRunnerWithOptions_accumulator() {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(retry.Config{MaxRetries: 6}, NewStatusCodeFilter()),
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionFilter()),
 	}
 
 	// Handler function
@@ -82,7 +83,7 @@ func ExampleNewRunnerWithOptions_disposer() {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(retry.Config{MaxRetries: 6}, NewStatusCodeFilter()),
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionFilter()),
 	}
 
 	// Handler function
@@ -141,7 +142,7 @@ func TestPolicy(t *testing.T) {
 		"empty": {},
 		"all": {
 			t:  10 * time.Millisecond,
-			r:  NewRetry(retryValue, NewStatusCodeFilter()),
+			r:  NewRetry(retryValue, NewRetryConditionFilter()),
 			cb: &cbValue,
 		},
 		"nil policy": nil,
@@ -256,7 +257,7 @@ func TestPolicyRetry(t *testing.T) {
 				log:  testLog,
 				name: "retry",
 				t:    10 * time.Millisecond,
-				r:    NewRetry(retry.Config{MaxRetries: test.maxRetries}, NewStatusCodeFilter()),
+				r:    NewRetry(retry.Config{MaxRetries: test.maxRetries}, NewRetryConditionFilter()),
 			})
 			_, err := policy(fn)
 			if err != nil {
@@ -272,7 +273,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 		name         string
 		maxCalls     int32
 		returnedCode int32
-		retryOn      string
+		conditions   *resiliencyV1alpha.RetryConditions
 		maxRetries   int64
 		expected     int32
 	}{
@@ -280,17 +281,23 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 			name:         "Retries succeed",
 			maxCalls:     5,
 			returnedCode: 500,
-			retryOn:      "500-599",
-			maxRetries:   6,
-			expected:     6,
+			conditions: &resiliencyV1alpha.RetryConditions{
+				HTTPStatusCodes: "500-599",
+				GRPCStatusCodes: "",
+			},
+			maxRetries: 6,
+			expected:   6,
 		},
 		{
 			name:         "Retries code not in retry list",
 			maxCalls:     5,
 			returnedCode: 500,
-			retryOn:      "400-499",
-			maxRetries:   6,
-			expected:     1,
+			conditions: &resiliencyV1alpha.RetryConditions{
+				HTTPStatusCodes: "400-499",
+				GRPCStatusCodes: "",
+			},
+			maxRetries: 6,
+			expected:   1,
 		},
 	}
 
@@ -305,12 +312,12 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 					return struct{}{}, backoff.Permanent(fmt.Errorf("expected attempt in context to be %d but got %d", v, attempt))
 				}
 				if v <= maxCalls {
-					return struct{}{}, NewCodeError(test.returnedCode, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls))
+					return struct{}{}, NewHTTPCodeError(test.returnedCode, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls))
 				}
 				return struct{}{}, nil
 			}
 
-			filter, err := ParseStatusCodeFilter(test.retryOn)
+			filter, err := ParseRetryConditionFilter(test.conditions)
 			require.NoError(t, err)
 			policy := NewRunner[struct{}](context.Background(), &PolicyDefinition{
 				log:  testLog,
@@ -353,7 +360,7 @@ func TestPolicyAccumulator(t *testing.T) {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(retry.Config{MaxRetries: 6}, NewStatusCodeFilter()),
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionFilter()),
 	}
 	var accumulatorCalled int
 	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
@@ -397,7 +404,7 @@ func TestPolicyDisposer(t *testing.T) {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(retry.Config{MaxRetries: 5}, NewStatusCodeFilter()),
+		r:    NewRetry(retry.Config{MaxRetries: 5}, NewRetryConditionFilter()),
 	}
 	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
 		Disposer: func(i int32) {

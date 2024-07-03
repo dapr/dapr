@@ -17,7 +17,9 @@ spec:
         policy: constant
         duration: 10ms
         maxRetries: 5
-        retryOnCodes: "500,2"
+        conditions:
+          httpStatusCode: "500"
+          gRPCStatusCode: "2"
 
     circuitBreakers:
       simpleCB:

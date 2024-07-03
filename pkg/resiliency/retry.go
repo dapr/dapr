@@ -18,12 +18,29 @@ import (
 	"strconv"
 	"strings"
 
+	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/kit/retry"
 )
 
+var (
+	// Reference: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status
+	validHTTPStatusCodeRange = codeRange{100, 599}
+	// Reference: https://grpc.io/docs/guides/status-codes/
+	validGRPCStatusCodeRange = codeRange{0, 16}
+)
+
+type retryScenario int
+
+const (
+	retryScenarioHTTPInvoke retryScenario = iota
+	retryScenarioGRPCInvoke
+	// add more retry scenarios here.
+)
+
 type CodeError struct {
-	StatusCode int32
-	err        error
+	StatusCode    int32
+	retryScenario retryScenario
+	err           error
 }
 
 func (ce CodeError) Error() string {
@@ -34,29 +51,37 @@ func (ce CodeError) Unwrap() error {
 	return ce.err
 }
 
-func NewCodeError(statusCode int32, err error) CodeError {
+func NewHTTPCodeError(statusCode int32, err error) CodeError {
 	return CodeError{
-		StatusCode: statusCode,
-		err:        err,
+		StatusCode:    statusCode,
+		retryScenario: retryScenarioHTTPInvoke,
+		err:           err,
+	}
+}
+
+func NewGRPCCodeError(statusCode int32, err error) CodeError {
+	return CodeError{
+		StatusCode:    statusCode,
+		retryScenario: retryScenarioGRPCInvoke,
+		err:           err,
 	}
 }
 
 type Retry struct {
 	retry.Config
-	StatusCodeFilter
+	RetryConditionFilter
 }
 
-func NewRetry(retryConfig retry.Config, statusCodeFilter StatusCodeFilter) *Retry {
+func NewRetry(retryConfig retry.Config, statusCodeFilter RetryConditionFilter) *Retry {
 	return &Retry{
-		Config:           retryConfig,
-		StatusCodeFilter: statusCodeFilter,
+		Config:               retryConfig,
+		RetryConditionFilter: statusCodeFilter,
 	}
 }
 
-type StatusCodeFilter struct {
-	retryOnPatterns   []codeRange
-	noRetryOnPatterns []codeRange
-	defaultRetry      bool
+type RetryConditionFilter struct {
+	httpStatusCodes []codeRange
+	gRPCStatusCodes []codeRange
 }
 
 // codeRange represents a range of status codes from start to end.
@@ -65,29 +90,71 @@ type codeRange struct {
 	end   int32
 }
 
-func (cr codeRange) MatchCode(c int32) bool {
+func (cr codeRange) matchCode(c int32) bool {
 	return cr.start <= c && c <= cr.end
 }
 
-func NewStatusCodeFilter() StatusCodeFilter {
-	return StatusCodeFilter{defaultRetry: true}
+func NewRetryConditionFilter() RetryConditionFilter {
+	return RetryConditionFilter{}
 }
 
-func ParseStatusCodeFilter(retryOnPatterns string) (StatusCodeFilter, error) {
-	filter := NewStatusCodeFilter()
-	// if retryOn is set, parse retry on patterns and set default retry to false
-	if retryOnPatterns != "" {
-		parsedPatterns, err := filter.parsePatterns(retryOnPatterns)
+func ParseRetryConditionFilter(conditions *resiliencyV1alpha.RetryConditions) (RetryConditionFilter, error) {
+	filter := NewRetryConditionFilter()
+	if conditions != nil {
+		httpStatusCodes, err := parsePatterns(conditions.HTTPStatusCodes, validHTTPStatusCodeRange)
 		if err != nil {
 			return filter, err
 		}
-		filter.retryOnPatterns = parsedPatterns
-		filter.defaultRetry = false
+		gRPCStatusCodes, err := parsePatterns(conditions.GRPCStatusCodes, validGRPCStatusCodeRange)
+		if err != nil {
+			return filter, err
+		}
+		// Only set in the end, to make sure all attributes are correct.
+		filter.httpStatusCodes = httpStatusCodes
+		filter.gRPCStatusCodes = gRPCStatusCodes
 	}
 	return filter, nil
 }
 
-func (f StatusCodeFilter) parsePatterns(patterns string) ([]codeRange, error) {
+func (f RetryConditionFilter) statusCodeNeedRetry(statusCode int32) bool {
+	if validGRPCStatusCodeRange.matchCode(statusCode) {
+		return mustRetryStatusCode(statusCode, f.gRPCStatusCodes)
+	} else if validHTTPStatusCodeRange.matchCode(statusCode) {
+		return mustRetryStatusCode(statusCode, f.httpStatusCodes)
+	}
+	return false
+}
+
+func (f RetryConditionFilter) ErrorNeedRetry(codeError CodeError) bool {
+	switch codeError.retryScenario {
+	case retryScenarioGRPCInvoke:
+		return mustRetryStatusCode(codeError.StatusCode, f.gRPCStatusCodes)
+	case retryScenarioHTTPInvoke:
+		return mustRetryStatusCode(codeError.StatusCode, f.httpStatusCodes)
+	}
+	return false
+}
+
+func mustRetryStatusCode(statusCode int32, ranges []codeRange) bool {
+	if ranges == nil {
+		return true
+	}
+
+	// Check retriable codes (allowlist)
+	for _, r := range ranges {
+		if r.matchCode(statusCode) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func parsePatterns(patterns string, validRange codeRange) ([]codeRange, error) {
+	if patterns == "" {
+		return nil, nil
+	}
+
 	parsedPatterns := make([]codeRange, 0, len(patterns))
 	splitted := strings.Split(patterns, ",")
 	for _, p := range splitted {
@@ -95,7 +162,7 @@ func (f StatusCodeFilter) parsePatterns(patterns string) ([]codeRange, error) {
 		if len(p) == 0 {
 			continue
 		}
-		parsedPattern, err := compilePattern(p)
+		parsedPattern, err := compilePattern(p, validRange)
 		if err != nil {
 			return nil, err
 		}
@@ -104,46 +171,32 @@ func (f StatusCodeFilter) parsePatterns(patterns string) ([]codeRange, error) {
 	return parsedPatterns, nil
 }
 
-func (f StatusCodeFilter) StatusCodeNeedRetry(statusCode int32) bool {
-	// Check retriable codes (allowlist)
-	for _, pattern := range f.retryOnPatterns {
-		if pattern.MatchCode(statusCode) {
-			return true
-		}
-	}
-
-	// Check none retriable codes (denylist)
-	for _, pattern := range f.noRetryOnPatterns {
-		if pattern.MatchCode(statusCode) {
-			return false
-		}
-	}
-
-	return f.defaultRetry
-}
-
-func compilePattern(pattern string) (codeRange, error) {
+func compilePattern(pattern string, validRange codeRange) (codeRange, error) {
 	patterns := strings.Split(pattern, "-")
 	if len(patterns) > 2 {
 		return codeRange{}, fmt.Errorf("invalid pattern %s, more than one '-' exists", pattern)
 	}
 	// empty string is not allowed by strconv.Atoi, so we do not need to check empty string here
-	start, err := strconv.Atoi(patterns[0])
+	startint, err := strconv.Atoi(patterns[0])
 	if err != nil {
 		return codeRange{}, fmt.Errorf("failed to parse start code %s from pattern %s to int, %w", patterns[0], pattern, err)
 	}
-	if !validCode(start) {
+	//nolint:gosec
+	start := int32(startint)
+	if !validRange.matchCode(start) {
 		return codeRange{}, fmt.Errorf("invalid pattern %s, start code %d is not valid", pattern, start)
 	}
 
-	end := start
+	endint := startint
 	if len(patterns) == 2 {
-		end, err = strconv.Atoi(patterns[1])
+		endint, err = strconv.Atoi(patterns[1])
 		if err != nil {
 			return codeRange{}, fmt.Errorf("failed to parse end code %s from pattern %s to int, %w", patterns[1], pattern, err)
 		}
 	}
-	if !validCode(end) {
+	//nolint:gosec
+	end := int32(endint)
+	if !validRange.matchCode(end) {
 		return codeRange{}, fmt.Errorf("invalid pattern %s, end code %d is not valid", pattern, end)
 	}
 
@@ -151,13 +204,5 @@ func compilePattern(pattern string) (codeRange, error) {
 		return codeRange{}, fmt.Errorf("invalid pattern %s, start value should not bigger than end value", pattern)
 	}
 
-	//nolint:gosec
-	return codeRange{start: int32(start), end: int32(end)}, nil
-}
-
-// validCode checks if the code is valid.
-// For grpc, the code should be less than 100.
-// For http, the code should be 100 - 599.
-func validCode(code int) bool {
-	return code < 600
+	return codeRange{start: start, end: end}, nil
 }

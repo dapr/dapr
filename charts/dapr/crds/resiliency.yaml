@@ -64,8 +64,12 @@ spec:
                           type: integer
                         policy:
                           type: string
-                        retryOnCodes:
-                          type: string
+                        conditions:
+                          httpStatusCodes:
+                            type: string
+                          gRPCStatusCodes:
+                            type: string
+                          type: object
                       type: object
                     type: object
                   timeouts:
