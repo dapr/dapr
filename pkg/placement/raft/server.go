@@ -345,6 +345,10 @@ func (s *Server) raftStorePath() string {
 	return s.raftLogStorePath
 }
 
+func (s *Server) GetID() string {
+	return s.id
+}
+
 // FSM returns fsm.
 func (s *Server) FSM() *FSM {
 	return s.fsm
