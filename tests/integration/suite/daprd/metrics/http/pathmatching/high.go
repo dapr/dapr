@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -98,9 +99,11 @@ func (h *highCardinality) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("service invocation - no match", func(t *testing.T) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/items/123")
-		metrics := h.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/items/123|status:200"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/healthz|status:204"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/items/123|status:200"]))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := h.daprd.Metrics(t, ctx)
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/items/123|status:200"]))
+			assert.Equal(c, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/healthz|status:204"]))
+			assert.Equal(c, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/items/123|status:200"]))
+		}, time.Second*10, time.Millisecond*10)
 	})
 }
