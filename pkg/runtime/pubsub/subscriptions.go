@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -127,7 +128,7 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 	switch resp.Status().GetCode() {
 	case http.StatusOK:
 		err = json.NewDecoder(resp.RawData()).Decode(&subscriptionItems)
-		if err != nil {
+		if err != nil && !errors.Is(err, io.EOF) {
 			err = fmt.Errorf(deserializeTopicsError, err)
 			log.Error(err)
 			return nil, err
