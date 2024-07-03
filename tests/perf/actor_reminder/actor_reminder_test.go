@@ -57,7 +57,7 @@ const (
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
-	dueTime          = 160
+	dueTime          = 190
 	dueTimeScheduler = 110
 )
 
