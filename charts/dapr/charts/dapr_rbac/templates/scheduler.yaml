@@ -40,9 +40,9 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 subjects:
-  - kind: ServiceAccount
-    name: dapr-scheduler
-    namespace: {{ .Release.Namespace }}
+- kind: ServiceAccount
+  name: dapr-scheduler
+  namespace: {{ .Release.Namespace }}
 roleRef:
   apiGroup: rbac.authorization.k8s.io
 {{- if eq .Values.global.rbac.namespaced true }}
