@@ -14,7 +14,6 @@ limitations under the License.
 package errors
 
 import (
-	"fmt"
 	"net/http"
 
 	"google.golang.org/grpc/codes"
@@ -33,7 +32,7 @@ func PlacementServiceIsClosedOnRun(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.Unavailable,
 		http.StatusExpectationFailed,
-		fmt.Sprintln(msg),
+		msg,
 		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
@@ -43,7 +42,7 @@ func PlacementServiceIsAlreadyRunning(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.AlreadyExists,
 		http.StatusExpectationFailed,
-		fmt.Sprintln(msg),
+		msg,
 		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
@@ -53,7 +52,7 @@ func PlacementServiceContextError(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.Unknown,
 		http.StatusExpectationFailed,
-		fmt.Sprintln(msg),
+		msg,
 		CodePrefixPlacement+kiterrors.CodePostfixGetStateFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixGetStateFailed, nil).
 		Build()
@@ -63,7 +62,7 @@ func PlacementServiceInternalError(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusExpectationFailed,
-		fmt.Sprintln(msg),
+		msg,
 		CodePrefixPlacement+kiterrors.CodePostfixGetStateFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixGetStateFailed, nil).
 		Build()
@@ -73,7 +72,7 @@ func PlacementServiceUnAuthenticated(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.Unauthenticated,
 		http.StatusExpectationFailed,
-		fmt.Sprintln(msg),
+		msg,
 		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
@@ -83,7 +82,7 @@ func PlacementServicePermissionDenied(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.PermissionDenied,
 		http.StatusExpectationFailed,
-		fmt.Sprintln(msg),
+		msg,
 		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
@@ -93,7 +92,7 @@ func PlacementServiceFailedPrecondition(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.FailedPrecondition,
 		http.StatusExpectationFailed,
-		fmt.Sprintln(msg),
+		msg,
 		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
@@ -103,7 +102,7 @@ func PlacementServiceFailedTableUpdate(msg string) error {
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusExpectationFailed,
-		fmt.Sprintln(msg),
+		msg,
 		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
