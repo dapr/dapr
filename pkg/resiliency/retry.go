@@ -66,6 +66,15 @@ func NewGRPCCodeError(statusCode int32, err error) CodeError {
 	}
 }
 
+// NewCodeErrorAutoDetect is used when the statusCode can be either HTTP or gRPC
+func NewCodeErrorAutoDetect(statusCode int32, err error) CodeError {
+	return CodeError{
+		StatusCode:    statusCode,
+		retryScenario: detectErrorProto(statusCode),
+		err:           err,
+	}
+}
+
 type Retry struct {
 	retry.Config
 	RetryConditionFilter
@@ -132,6 +141,14 @@ func (f RetryConditionFilter) ErrorNeedRetry(codeError CodeError) bool {
 		return mustRetryStatusCode(codeError.StatusCode, f.httpStatusCodes)
 	}
 	return false
+}
+
+func detectErrorProto(statusCode int32) retryScenario {
+	if validHTTPStatusCodeRange.matchCode(statusCode) {
+		return retryScenarioHTTPInvoke
+	}
+
+	return retryScenarioGRPCInvoke
 }
 
 func mustRetryStatusCode(statusCode int32, ranges []codeRange) bool {
