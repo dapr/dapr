@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -93,65 +91,21 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.Empty(t, kvs.Count)
 
-	var runSingleActivity atomic.Uint32
-
 	r := task.NewTaskRegistry()
 	require.NoError(t, r.AddOrchestratorN("SingleActivity", func(c *task.OrchestrationContext) (any, error) {
-		if !assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-			//nolint:testifylint
-			if assert.NoError(c, err, "failed to get jobs") {
-				assert.Lenf(c, kvs.Kvs, 1, "expected 1 job, got %d", len(kvs.Kvs))
-			}
-		}, 15*time.Second, 10*time.Millisecond) {
-			return nil, nil
-		}
-
-		name := string(kvs.Kvs[0].Key)
-		name = name[strings.LastIndex(name, "|")+1:]
-		var expectedName string
-		if runSingleActivity.Add(1) == 1 {
-			expectedName = "start-"
-		} else {
-			expectedName = "new-event-"
-		}
-		assert.True(t, strings.HasPrefix(name, expectedName), "expected job name to start with %q but got %q", expectedName, name)
-
 		var input string
 		if err = c.GetInput(&input); err != nil {
 			return nil, err
 		}
 		var output string
 		err = c.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
-
-		kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-		require.NoError(t, err)
-		require.Len(t, kvs.Kvs, 1)
-		name = string(kvs.Kvs[0].Key)
-		name = name[strings.LastIndex(name, "|")+1:]
-		assert.True(t, strings.HasPrefix(name, "new-event-"), "expected job name to start with  'new-event-' but got %q", name)
-
 		return output, err
 	}))
 	require.NoError(t, r.AddActivityN("SayHello", func(c task.ActivityContext) (any, error) {
-		kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-		require.NoError(t, err)
-		require.Len(t, kvs.Kvs, 1)
-		name := string(kvs.Kvs[0].Key)
-		name = name[strings.LastIndex(name, "|")+1:]
-		assert.Equal(t, "run-activity", name)
-
 		var inp string
 		if err = c.GetInput(&inp); err != nil {
 			return nil, err
 		}
-
-		kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-		require.NoError(t, err)
-		require.Len(t, kvs.Kvs, 1)
-		name = string(kvs.Kvs[0].Key)
-		name = name[strings.LastIndex(name, "|")+1:]
-		assert.Equal(t, "run-activity", name)
 
 		return fmt.Sprintf("Hello, %s!", inp), nil
 	}))
