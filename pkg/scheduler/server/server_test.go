@@ -20,6 +20,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 )
 
@@ -81,6 +82,7 @@ func TestServerConf(t *testing.T) {
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
+			Healthz:                 healthz.New(),
 		}
 
 		s, err := New(opts)
@@ -123,6 +125,7 @@ func TestServerConf(t *testing.T) {
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
+			Healthz:                 healthz.New(),
 		}
 
 		s, err := New(opts)
@@ -166,6 +169,7 @@ func TestServerConf(t *testing.T) {
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
+			Healthz:                 healthz.New(),
 		}
 
 		s, err := New(opts)
