@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -84,8 +83,7 @@ spec:
 func (i *ignoreerrors) Run(t *testing.T, ctx context.Context) {
 	i.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
-	assert.Empty(t, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()))
+	assert.Empty(t, i.daprd.GetMetaRegisteredComponents(t, ctx))
 
 	t.Run("adding components should become available", func(t *testing.T) {
 		require.NoError(t, os.WriteFile(filepath.Join(i.resDir, "1.yaml"), []byte(`
@@ -98,7 +96,7 @@ spec:
  version: v1
 `), 0o600))
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			assert.Len(t, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1)
+			assert.Len(t, i.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)
 	})
 
@@ -114,7 +112,7 @@ spec:
  ignoreErrors: true
 `), 0o600))
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			assert.Empty(t, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()))
+			assert.Empty(t, i.daprd.GetMetaRegisteredComponents(t, ctx))
 		}, time.Second*5, time.Millisecond*10)
 	})
 
@@ -129,7 +127,7 @@ spec:
  version: v1
 `), 0o600))
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
-			assert.Len(t, util.GetMetaComponents(t, ctx, client, i.daprd.HTTPPort()), 1)
+			assert.Len(t, i.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 		}, time.Second*5, time.Millisecond*10)
 	})
 

@@ -30,10 +30,10 @@ import (
 
 	componentspubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/pubsub"
 	inmemory "github.com/dapr/dapr/tests/integration/framework/process/pubsub/in-memory"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 	kiterrors "github.com/dapr/kit/errors"
 )
@@ -115,7 +115,7 @@ spec:
 func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	// Covers apierrors.PubSubNotFound()
 	t.Run("pubsub doesn't exist", func(t *testing.T) {

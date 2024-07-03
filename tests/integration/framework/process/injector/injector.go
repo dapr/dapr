@@ -28,11 +28,11 @@ import (
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
 
 	"github.com/dapr/dapr/tests/integration/framework/binary"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Injector struct {
@@ -127,7 +127,7 @@ func (i *Injector) Cleanup(t *testing.T) {
 }
 
 func (i *Injector) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	//nolint:testifylint
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", i.healthzPort), nil)

@@ -26,9 +26,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -108,7 +109,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.daprd1.WaitUntilRunning(t, ctx)
 	b.daprd2.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	t.Run("invoke url", func(t *testing.T) {
 		doReq := func(method, url string, headers map[string]string) (int, string) {
@@ -165,7 +166,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader("hello"))
 		require.NoError(t, err)
 		req.Header.Set("foo", "bar")
-		resp, err := util.HTTPClient(t).Do(req)
+		resp, err := client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		require.NoError(t, resp.Body.Close())
@@ -175,7 +176,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/doesntexist", b.daprd1.HTTPPort(), b.daprd2.AppID())
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 		require.NoError(t, err)
-		resp, err := util.HTTPClient(t).Do(req)
+		resp, err := client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		require.NoError(t, resp.Body.Close())
@@ -185,7 +186,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s", b.daprd1.HTTPPort(), b.daprd2.AppID())
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 		require.NoError(t, err)
-		resp, err := util.HTTPClient(t).Do(req)
+		resp, err := client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		require.NoError(t, resp.Body.Close())
@@ -194,7 +195,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		req, err = http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 		require.NoError(t, err)
 		req.Header.Set("dapr-app-id", b.daprd2.AppID())
-		resp, err = util.HTTPClient(t).Do(req)
+		resp, err = client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 		require.NoError(t, resp.Body.Close())
@@ -204,7 +205,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/multiple/segments", b.daprd1.HTTPPort(), b.daprd2.AppID())
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 		require.NoError(t, err)
-		resp, err := util.HTTPClient(t).Do(req)
+		resp, err := client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
@@ -213,8 +214,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "ok", string(body))
 	})
 
-	client := util.HTTPClient(t)
-	pt := util.NewParallel(t)
+	client := client.HTTP(t)
+	pt := parallel.New(t)
 	for i := 0; i < 100; i++ {
 		pt.Add(func(t *assert.CollectT) {
 			u := uuid.New().String()

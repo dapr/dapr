@@ -37,11 +37,11 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Daprd struct {
@@ -163,7 +163,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		ports:            fp,
-		httpClient:       util.HTTPClient(t),
+		httpClient:       client.HTTP(t),
 		appHTTP:          appHTTP,
 		appID:            opts.appID,
 		namespace:        ns,
@@ -202,7 +202,7 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
@@ -218,7 +218,7 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 	switch d.appProtocol {
 	case "http":
-		client := util.HTTPClient(t)
+		client := client.HTTP(t)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
 		require.NoError(t, err)
 		assert.Eventually(t, func() bool {
@@ -407,7 +407,7 @@ func (d *Daprd) http2xx(t *testing.T, ctx context.Context, method, path string, 
 	require.Less(t, resp.StatusCode, 300, "expected 2xx status code")
 }
 
-func (d *Daprd) GetMetaRegistedComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {
+func (d *Daprd) GetMetaRegisteredComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {
 	return d.meta(t, ctx).RegisteredComponents
 }
 
@@ -415,10 +415,15 @@ func (d *Daprd) GetMetaSubscriptions(t assert.TestingT, ctx context.Context) []M
 	return d.meta(t, ctx).Subscriptions
 }
 
+func (d *Daprd) GetMetaHTTPEndpoints(t assert.TestingT, ctx context.Context) []*rtv1.MetadataHTTPEndpoint {
+	return d.meta(t, ctx).HTTPEndpoints
+}
+
 // metaResponse is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
 type metaResponse struct {
 	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
 	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
+	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
 }
 
 // MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format

@@ -86,7 +86,7 @@ spec:
 func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	g.daprd.WaitUntilRunning(t, ctx)
 
-	assert.Len(t, g.daprd.GetMetaRegistedComponents(t, ctx), 2)
+	assert.Len(t, g.daprd.GetMetaRegisteredComponents(t, ctx), 2)
 	assert.Empty(t, g.daprd.GetMetaSubscriptions(t, ctx))
 
 	newReq := func(pubsub, topic string) *rtv1.PublishEventRequest {
@@ -276,7 +276,7 @@ spec:
 
 	require.NoError(t, os.Remove(filepath.Join(g.resDir2, "pubsub.yaml")))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, g.daprd.GetMetaRegistedComponents(t, ctx), 1)
+		assert.Len(c, g.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)
 	g.sub.ExpectPublishReceive(t, ctx, g.daprd, newReq("pubsub0", "d"))
 	g.sub.ExpectPublishError(t, ctx, g.daprd, newReq("pubsub1", "c"))
