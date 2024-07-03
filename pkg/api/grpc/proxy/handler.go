@@ -144,7 +144,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			pr.dispose()
 		},
 	})
-	var requestStartedAt time.Time
+	var requestStartedAt atomic.Value
 	pr, cErr := policyRunner(func(ctx context.Context) (*proxyRunner, error) {
 		// Get the current iteration count
 		iter := counter.Add(1)
@@ -165,7 +165,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		// Do not "defer clientCancel()" yet, in case we need to proxy a stream
 		clientCtx, clientCancel := context.WithCancel(outgoingCtx)
 
-		requestStartedAt = time.Now()
+		requestStartedAt.Store(time.Now())
 		if grpcDestinationAppID != "" {
 			if isStream {
 				diagnostics.DefaultMonitoring.ServiceInvocationStreamingRequestSent(grpcDestinationAppID)
@@ -190,7 +190,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 				// if we could not reconnect just create the response metrics for the connection error
 				if !reconnectionSucceeded && grpcDestinationAppID != "" {
 					if !isStream {
-						diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, int32(code), requestStartedAt)
+						diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, int32(code), requestStartedAt.Load().(time.Time))
 					} else {
 						diagnostics.DefaultMonitoring.ServiceInvocationStreamingResponseReceived(grpcDestinationAppID, int32(code))
 					}
@@ -253,7 +253,7 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		err = pr.run()
 		if grpcDestinationAppID != "" {
 			code := status.Code(err)
-			diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, int32(code), requestStartedAt)
+			diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, int32(code), requestStartedAt.Load().(time.Time))
 		}
 
 		if err != nil {

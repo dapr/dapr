@@ -306,64 +306,16 @@ release-flavor: build archive-flavor
 ################################################################################
 .PHONY: test
 test: test-deps
-	CGO_ENABLED=$(CGO) \
+	CGO_ENABLED=1 \
 		gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_unit.json \
 			--format pkgname-and-test-fails \
 			-- \
 				./pkg/... ./utils/... ./cmd/... \
-				$(COVERAGE_OPTS) --tags=unit,allcomponents
+				$(COVERAGE_OPTS) --race --count 1 --tags=unit,allcomponents
 	CGO_ENABLED=$(CGO) \
 		go test --tags=allcomponents ./tests/...
 
-################################################################################
-# Target: test-race                                                            #
-################################################################################
-# Note that we are expliciting maintaining an allow-list of packages that should be tested
-# with "-race", as many packags aren't passing those tests yet.
-# Eventually, the goal is to be able to have all packages pass tests with "-race"
-# Note: CGO is required for tests with "-race"
-TEST_WITH_RACE=./pkg/acl/... \
-./pkg/actors \
-./pkg/apis/... \
-./pkg/apphealth/... \
-./pkg/buildinfo/... \
-./pkg/channel/... \
-./pkg/client/... \
-./pkg/components/... \
-./pkg/config/... \
-./pkg/cors/... \
-./pkg/diagnostics/... \
-./pkg/encryption/... \
-./pkg/expr/... \
-./pkg/grpc/... \
-./pkg/health/... \
-./pkg/http/... \
-./pkg/httpendpoint/... \
-./pkg/injector/... \
-./pkg/messages/... \
-./pkg/messaging/... \
-./pkg/metrics/... \
-./pkg/middleware/... \
-./pkg/modes/... \
-./pkg/operator/... \
-./pkg/outbox/... \
-./pkg/placement/... \
-./pkg/proto/... \
-./pkg/retry/... \
-./pkg/resiliency/... \
-./pkg/runtime/... \
-./pkg/scheduler/... \
-./pkg/scopes/... \
-./pkg/security/... \
-./pkg/sentry/... \
-./pkg/validation/... \
-./utils/...
-
-.PHONY: test-race
-test-race:
-	CGO_ENABLED=1 echo "$(TEST_WITH_RACE)" | xargs \
-		go test -tags="allcomponents unit" -race
 
 ################################################################################
 # Target: test-integration                                                     #
