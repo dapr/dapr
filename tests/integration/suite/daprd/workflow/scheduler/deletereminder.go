@@ -97,9 +97,11 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 
 	r := task.NewTaskRegistry()
 	require.NoError(t, r.AddOrchestratorN("SingleActivity", func(c *task.OrchestrationContext) (any, error) {
-		kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-		require.NoError(t, err)
-		require.Len(t, kvs.Kvs, 1)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+			require.NoError(t, err)
+			assert.Len(c, kvs.Kvs, 1)
+		}, 5*time.Second, 10*time.Millisecond)
 
 		name := string(kvs.Kvs[0].Key)
 		name = name[strings.LastIndex(name, "|")+1:]
