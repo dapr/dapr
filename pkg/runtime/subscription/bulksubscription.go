@@ -62,7 +62,7 @@ type bulkSubscribedMessage struct {
 // bulkSubIngressDiagnostics holds diagnostics information for bulk subscribe
 // ingress.
 type bulkSubIngressDiagnostics struct {
-	lock           sync.RWMutex
+	lock           sync.Mutex
 	statusWiseDiag map[string]int64
 	elapsed        float64
 	retryReported  bool
@@ -844,12 +844,11 @@ func newBulkSubIngressDiagnostics() bulkSubIngressDiagnostics {
 	statusWiseCountDiag[string(contribpubsub.Success)] = 0
 	statusWiseCountDiag[string(contribpubsub.Drop)] = 0
 	statusWiseCountDiag[string(contribpubsub.Retry)] = 0
-	bulkSubDiag := bulkSubIngressDiagnostics{
+	return bulkSubIngressDiagnostics{
 		statusWiseDiag: statusWiseCountDiag,
 		elapsed:        0,
 		retryReported:  false,
 	}
-	return bulkSubDiag
 }
 
 func reportBulkSubDiagnostics(ctx context.Context, topic string, bulkSubDiag *bulkSubIngressDiagnostics) {

@@ -99,8 +99,10 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, r.AddOrchestratorN("SingleActivity", func(c *task.OrchestrationContext) (any, error) {
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-			require.NoError(t, err)
-			assert.Len(c, kvs.Kvs, 1)
+			//nolint:testifylint
+			if assert.NoError(c, err) {
+				assert.Len(c, kvs.Kvs, 1)
+			}
 		}, 5*time.Second, 10*time.Millisecond)
 
 		name := string(kvs.Kvs[0].Key)
