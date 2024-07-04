@@ -244,8 +244,6 @@ func (abe *ActorBackend) GetOrchestrationMetadata(ctx context.Context, id api.In
 func (abe *ActorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	wfLogger.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
-	// Sending false signals the waiting activity actor to abort the activity execution.
-	fmt.Println("\n\n---AbandonActivityWorkItem", wi.InstanceID)
 	actorId, ok := wi.Properties["ActorID"].(string)
 	if !ok {
 		return errors.New("failed to get actor id from activity work item properties")
@@ -259,11 +257,14 @@ func (abe *ActorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backen
 	dataEnc, err := json.Marshal(ActivityResult{
 		ActivityEvent: protoEvent,
 		Success:       false,
+		Properties:    wi.Properties,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 
+	// Schedule a reminder that with trigger on the activity actor,
+	// signalling it to retry the activity.
 	return abe.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: abe.config.activityActorType,
 		ActorID:   actorId,
@@ -314,9 +315,6 @@ func (abe *ActorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.In
 
 // CompleteActivityWorkItem implements backend.Backend
 func (abe *ActorBackend) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
-	// Sending true signals the waiting activity actor to complete the execution normally.
-	fmt.Println("\n\n---CompleteActivityWorkItem", wi.InstanceID)
-
 	actorId, ok := wi.Properties["ActorID"].(string)
 	if !ok {
 		return errors.New("failed to get actor id from activity work item properties")
@@ -336,7 +334,9 @@ func (abe *ActorBackend) CompleteActivityWorkItem(ctx context.Context, wi *backe
 		ActivityEvent: protoEvent,
 		ResultEvent:   protoResult,
 		Success:       true,
+		Properties:    wi.Properties,
 	})
+
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
