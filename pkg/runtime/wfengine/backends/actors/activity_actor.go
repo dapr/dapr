@@ -31,7 +31,6 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 var ErrDuplicateInvocation = errors.New("duplicate invocation")
@@ -56,6 +55,12 @@ type ActivityRequest struct {
 
 type activityState struct {
 	EventPayload []byte
+}
+
+type ActivityResult struct {
+	ActivityEvent []byte
+	Success       bool
+	ResultEvent   []byte
 }
 
 // activityScheduler is a func interface for pushing activity work items into the backend
@@ -96,7 +101,7 @@ func NewActivityActor(scheduler activityScheduler, backendConfig actorsBackendCo
 // activity logic directly, InvokeMethod creates a reminder that executes the activity logic. InvokeMethod
 // returns immediately after creating the reminder, enabling the workflow to continue processing other events
 // in parallel.
-func (a *activityActor) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest, md map[string][]string) ([]byte, error) {
+func (a *activityActor) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, md map[string][]string) ([]byte, error) {
 	wfLogger.Debugf("Activity actor '%s': invoking method '%s'", req.GetActor().GetActorId(), req.GetMessage().GetMethod())
 
 	var ar ActivityRequest
@@ -156,7 +161,10 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 		SequenceNumber: int64(taskEvent.GetEventId()),
 		InstanceID:     api.InstanceID(workflowID),
 		NewEvent:       taskEvent,
-		Properties:     make(map[string]interface{}),
+		Properties: map[string]interface{}{
+			"ActorID":   a.actorID,
+			"StartTime": time.Now(),
+		},
 	}
 
 	switch reminder.Name {
@@ -164,11 +172,11 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 		timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
 		defer cancelTimeout()
 
-		err = a.executeActivity(timeoutCtx, reminder.ActorID, reminder.Name, wi)
+		err = a.executeActivity(timeoutCtx, reminder, wi)
 	case "run-activity-sync":
 		err = a.executeActivitySync(ctx, reminder, wi)
 	default:
-		panic(fmt.Sprintf("unexpected reminder name: %s", reminder.Name))
+		return fmt.Errorf("unknown reminder name: %s", reminder.Name)
 	}
 
 	var recoverableErr *recoverableError
@@ -193,13 +201,13 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 	}
 }
 
-func (a *activityActor) executeActivity(ctx context.Context, actorID string, name string, wi *backend.ActivityWorkItem) error {
+func (a *activityActor) executeActivity(ctx context.Context, reminder actors.InternalActorReminder, wi *backend.ActivityWorkItem) error {
 	// Executing activity code is a one-way operation. We must wait for the app code to report its completion, which
 	// will trigger this callback channel.
 	// TODO: Need to come up with a design for timeouts. Some activities may need to run for hours but we also need
 	//       to handle the case where the app crashes and never responds to the workflow. It may be necessary to
 	//       introduce some kind of heartbeat protocol to help identify such cases.
-	wfLogger.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", actorID, name, wi.InstanceID)
+	wfLogger.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", reminder.ActorID, reminder.Name, wi.InstanceID)
 	err := a.scheduler(ctx, wi)
 	if errors.Is(err, context.DeadlineExceeded) {
 		return newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
@@ -217,62 +225,58 @@ func (a *activityActor) executeActivity(ctx context.Context, actorID string, nam
 }
 
 func (a *activityActor) executeActivitySync(ctx context.Context, reminder actors.InternalActorReminder, wi *backend.ActivityWorkItem) error {
-	// Activity execution started
-	//	start := time.Now()
+	var activityResult ActivityResult
+	err := json.Unmarshal(reminder.Data, &activityResult)
+	if err != nil {
+		return fmt.Errorf("error unmarshaling reminder json %v", err)
+	}
+
+	taskEvent, err := backend.UnmarshalHistoryEvent(activityResult.ActivityEvent)
+	if err != nil {
+		return err
+	}
+
+	activityName := ""
+	if ts := taskEvent.GetTaskScheduled(); ts != nil {
+		activityName = ts.GetName()
+	} else {
+		return fmt.Errorf("invalid activity task event: '%s'", wi.NewEvent.String())
+	}
+
 	executionStatus := ""
-	// TODO: Do elapsed time calculation
-	elapsed := float64(0)
 	// Record metrics on exit
 	defer func() {
 		if executionStatus != "" {
-			// TODO: @joshvanl
-			//diag.DefaultWorkflowMonitoring.ActivityExecutionEvent(ctx, activityName, executionStatus, elapsed)
-			diag.DefaultWorkflowMonitoring.ActivityExecutionEvent(ctx, "", executionStatus, elapsed)
+			startTime, ok := wi.Properties["StartTime"].(time.Time)
+			if !ok {
+				wfLogger.Error("StartTime for activity id %d was not set correctly or the type assertion failed: %s", wi.InstanceID, wi.Properties["StartTime"])
+				return
+			}
+			elapsed := time.Since(startTime).Seconds()
+			diag.DefaultWorkflowMonitoring.ActivityExecutionEvent(ctx, activityName, executionStatus, elapsed)
 		}
 	}()
 
-	//loop:
-	//	for {
-	//		t := time.NewTimer(10 * time.Minute)
-	//		select {
-	//		case <-ctx.Done():
-	//			if !t.Stop() {
-	//				<-t.C
-	//			}
-	//			// Activity execution failed with recoverable error
-	//			elapsed = diag.ElapsedSince(start)
-	//			executionStatus = diag.StatusRecoverable
-	//			return ctx.Err() // will be retried
-	//		case <-t.C:
-	//			if deadline, ok := ctx.Deadline(); ok {
-	//				wfLogger.Warnf("Activity actor '%s': '%s' is still running - will keep waiting until '%v'", a.actorID, name, deadline)
-	//			} else {
-	//				wfLogger.Warnf("Activity actor '%s': '%s' is still running - will keep waiting indefinitely", a.actorID, name)
-	//			}
-	//		case completed := <-callback:
-	//			if !t.Stop() {
-	//				<-t.C
-	//			}
-	// Activity execution completed
-	//elapsed = diag.ElapsedSince(start)
-
-	if !bytes.Equal(reminder.Data, []byte(`"completed"`)) {
+	if !activityResult.Success {
 		// Activity execution failed with recoverable error
 		executionStatus = diag.StatusRecoverable
 		return newRecoverableError(errExecutionAborted) // AbandonActivityWorkItem was called
 	}
 
-	wfLogger.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, reminder.Name)
+	wfLogger.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, activityName)
+
+	resultEvent, err := backend.UnmarshalHistoryEvent(activityResult.ResultEvent)
+	if err != nil {
+		return fmt.Errorf("error unmarshaling result event %v", err)
+	}
 
 	// publish the result back to the workflow actor as a new event to be processed
-	resultData, err := backend.MarshalHistoryEvent(wi.Result)
-
+	resultData, err := backend.MarshalHistoryEvent(resultEvent)
 	if err != nil {
 		// Returning non-recoverable error
 		executionStatus = diag.StatusFailed
 		return err
 	}
-
 	req := internalsv1pb.
 		NewInternalInvokeRequest(AddWorkflowEventMethod).
 		WithActor(a.config.workflowActorType, string(wi.InstanceID)).
@@ -296,6 +300,13 @@ func (a *activityActor) executeActivitySync(ctx context.Context, reminder actors
 	}
 
 	return nil
+}
+func (a *activityActor) getWorkflowID() (string, error) {
+	endIndex := strings.Index(a.actorID, "::")
+	if endIndex < 0 {
+		return "", fmt.Errorf("invalid activity actor ID: '%s'", a.actorID)
+	}
+	return a.actorID[0:endIndex], nil
 }
 
 // InvokeTimer implements actors.InternalActor

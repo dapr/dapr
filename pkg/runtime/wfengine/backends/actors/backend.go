@@ -241,15 +241,33 @@ func (abe *ActorBackend) GetOrchestrationMetadata(ctx context.Context, id api.In
 
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow activity execution pipeline.
-func (a *ActorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (abe *ActorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	wfLogger.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
 	// Sending false signals the waiting activity actor to abort the activity execution.
-	fmt.Printf(">>%s\n", wi.InstanceID)
-	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
-		ActorType: a.config.activityActorType,
-		ActorID:   string(wi.InstanceID),
-		Data:      []byte(`"failed"`),
+	fmt.Println("\n\n---AbandonActivityWorkItem", wi.InstanceID)
+	actorId, ok := wi.Properties["ActorID"].(string)
+	if !ok {
+		return errors.New("failed to get actor id from activity work item properties")
+	}
+
+	protoEvent, err := backend.MarshalHistoryEvent(wi.NewEvent)
+	if err != nil {
+		return err
+	}
+
+	dataEnc, err := json.Marshal(ActivityResult{
+		ActivityEvent: protoEvent,
+		Success:       false,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to encode data as JSON: %w", err)
+	}
+
+	return abe.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
+		ActorType: abe.config.activityActorType,
+		ActorID:   actorId,
+		Data:      dataEnc,
 		DueTime:   "0s",
 		Name:      "run-activity-sync",
 	})
@@ -257,18 +275,14 @@ func (a *ActorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backend.
 
 // AbandonOrchestrationWorkItem implements backend.Backend. It gets called by durabletask-go when there is
 // an unexpected failure in the workflow orchestration execution pipeline.
-func (a *ActorBackend) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (abe *ActorBackend) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 	wfLogger.Warnf("%s: aborting workflow execution", wi.InstanceID)
 
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
-	fmt.Printf(">>%s\n", wi.InstanceID)
-	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
-		ActorType: a.config.activityActorType,
-		ActorID:   string(wi.InstanceID),
-		Data:      []byte(`"failed"`),
-		DueTime:   "0s",
-		Name:      "run-activity-sync",
-	})
+	if channel, ok := wi.Properties[CallbackChannelProperty]; ok {
+		channel.(chan bool) <- false
+	}
+	return nil
 }
 
 // AddNewOrchestrationEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
@@ -299,29 +313,48 @@ func (abe *ActorBackend) AddNewOrchestrationEvent(ctx context.Context, id api.In
 }
 
 // CompleteActivityWorkItem implements backend.Backend
-func (a *ActorBackend) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
+func (abe *ActorBackend) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	// Sending true signals the waiting activity actor to complete the execution normally.
-	fmt.Printf(">>%s\n", wi.InstanceID)
-	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
-		ActorType: a.config.activityActorType,
-		ActorID:   string(wi.InstanceID),
-		Data:      []byte(`"completed"`),
+	fmt.Println("\n\n---CompleteActivityWorkItem", wi.InstanceID)
+
+	actorId, ok := wi.Properties["ActorID"].(string)
+	if !ok {
+		return errors.New("failed to get actor id from activity work item properties")
+	}
+
+	protoEvent, err := backend.MarshalHistoryEvent(wi.NewEvent)
+	if err != nil {
+		return err
+	}
+
+	protoResult, err := backend.MarshalHistoryEvent(wi.Result)
+	if err != nil {
+		return err
+	}
+
+	dataEnc, err := json.Marshal(ActivityResult{
+		ActivityEvent: protoEvent,
+		ResultEvent:   protoResult,
+		Success:       true,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to encode data as JSON: %w", err)
+	}
+
+	return abe.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
+		ActorType: abe.config.activityActorType,
+		ActorID:   actorId,
+		Data:      dataEnc,
 		DueTime:   "0s",
 		Name:      "run-activity-sync",
 	})
 }
 
 // CompleteOrchestrationWorkItem implements backend.Backend
-func (a *ActorBackend) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+func (abe *ActorBackend) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 	// Sending true signals the waiting workflow actor to complete the execution normally.
-	fmt.Printf(">>%s\n", wi.InstanceID)
-	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
-		ActorType: a.config.activityActorType,
-		ActorID:   string(wi.InstanceID),
-		Data:      []byte(`"completed"`),
-		DueTime:   "0s",
-		Name:      "run-activity-sync",
-	})
+	wi.Properties[CallbackChannelProperty].(chan bool) <- true
+	return nil
 }
 
 // CreateTaskHub implements backend.Backend
