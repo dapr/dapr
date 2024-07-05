@@ -1,3 +1,17 @@
+/*
+Copyright 2024 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+	http://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
 package actors
 
 import (
@@ -10,7 +24,6 @@ import (
 )
 
 func TestWorkflowStateSerialization(t *testing.T) {
-
 	time1 := time.Now()
 	time2 := time.Now().Add(3 * time.Hour).Add(3 * time.Minute)
 
@@ -33,15 +46,14 @@ func TestWorkflowStateSerialization(t *testing.T) {
 	err = decoded.DecodeWorkflowState(encoded)
 	require.NoError(t, err)
 
-	require.Equal(t, 1, len(decoded.Inbox))
-	require.Equal(t, decoded.Inbox[0].EventId, int32(-1))
-	require.Equal(t, decoded.Inbox[0].Timestamp, timestamppb.New(time1))
+	require.Len(t, decoded.Inbox, 1)
+	require.Equal(t, int32(-1), decoded.Inbox[0].GetEventId())
+	require.Equal(t, timestamppb.New(time1), decoded.Inbox[0].GetTimestamp())
 
-	require.Equal(t, 1, len(decoded.History))
-	require.Equal(t, decoded.History[0].EventId, int32(2))
-	require.Equal(t, decoded.History[0].Timestamp, timestamppb.New(time2))
+	require.Len(t, decoded.History, 1)
+	require.Equal(t, int32(2), decoded.History[0].GetEventId())
+	require.Equal(t, timestamppb.New(time2), decoded.History[0].GetTimestamp())
 
 	require.Equal(t, wfs.CustomStatus, decoded.CustomStatus)
 	require.Equal(t, wfs.Generation, decoded.Generation)
-
 }
