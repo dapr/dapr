@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/placement/hashing"
@@ -70,6 +71,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 		address[i], testSrv[i], cleanup[i] = newTestServer()
 	}
 
+	appHealthyCh := make(chan bool)
 	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
@@ -81,7 +83,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 			PodName:          "testPodName",
 			HostedActorTypes: internal.NewHostedActors([]string{"actorOne", "actorTwo"}),
 		},
-		AppHealthFn: func(ctx context.Context) <-chan bool { return nil },
+		AppHealthFn: func(ctx context.Context) <-chan bool { return appHealthyCh },
 		Security:    testSecurity(t),
 		Resiliency:  resiliency.New(logger.NewLogger("test")),
 		APILevel:    &apiLevel,
@@ -93,27 +95,31 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 
 		// act
 		require.NoError(t, testPlacement.Start(context.Background()))
-		time.Sleep(statusReportHeartbeatInterval * 3)
-		assert.Equal(t, leaderServer[0], testPlacement.serverIndex.Load())
-		assert.GreaterOrEqual(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load(), int32(2))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, leaderServer[0], testPlacement.serverIndex.Load())
+		}, time.Second*5, 10*time.Millisecond)
+		appHealthyCh <- true
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.GreaterOrEqual(c, testSrv[testPlacement.serverIndex.Load()].recvCount.Load(), int32(1))
+		}, time.Second*5, 10*time.Millisecond)
 	})
 
 	t.Run("shutdown leader and find the next leader", func(t *testing.T) {
 		// shutdown server
 		cleanup[leaderServer[0]]()
 
-		time.Sleep(statusReportHeartbeatInterval)
-
 		// set the second leader
 		testSrv[leaderServer[1]].setLeader(true)
 
 		// wait until placement connect to the second leader node
-		time.Sleep(statusReportHeartbeatInterval * 3)
-		assert.Equal(t, leaderServer[1], testPlacement.serverIndex.Load())
-		assert.GreaterOrEqual(t, testSrv[testPlacement.serverIndex.Load()].recvCount.Load(), int32(1))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, leaderServer[1], testPlacement.serverIndex.Load())
+			assert.GreaterOrEqual(c, testSrv[testPlacement.serverIndex.Load()].recvCount.Load(), int32(1))
+		}, time.Second*5, 10*time.Millisecond)
 	})
 
 	// tear down
+	close(appHealthyCh)
 	require.NoError(t, testPlacement.Close())
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
 		assert.True(t, testSrv[testPlacement.serverIndex.Load()].isGracefulShutdown.Load())
@@ -133,6 +139,8 @@ func TestAppHealthyStatus(t *testing.T) {
 
 	appHealthCh := make(chan bool)
 
+	fakeClock := clocktesting.NewFakeClock(time.Now())
+
 	var apiLevel atomic.Uint32
 	apiLevel.Store(1)
 	testPlacement := NewActorPlacement(internal.ActorsProviderOptions{
@@ -150,18 +158,39 @@ func TestAppHealthyStatus(t *testing.T) {
 		APILevel:    &apiLevel,
 	}).(*actorPlacement)
 
+	testPlacement.clock = fakeClock
+
 	// act
 	require.NoError(t, testPlacement.Start(context.Background()))
 
 	// wait until client sends heartbeat to the test server
-	time.Sleep(statusReportHeartbeatInterval * 3)
-	oldCount := testSrv.recvCount.Load()
-	assert.GreaterOrEqual(t, oldCount, int32(2), "client must send at least twice")
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		oldCount := testSrv.recvCount.Load()
+		assert.Equal(c, int32(1), oldCount, "client must send at least once")
+	}, time.Second*5, 10*time.Millisecond)
 
 	// Mark app unhealthy
 	appHealthCh <- false
-	time.Sleep(statusReportHeartbeatInterval * 2)
-	assert.LessOrEqual(t, testSrv.recvCount.Load(), oldCount+1, "no more +1 heartbeat because app is unhealthy")
+	oldCount := testSrv.recvCount.Load()
+	assert.Equal(t, int32(1), oldCount, "client must not sent heartbeat")
+
+	// Mark app healthy
+	appHealthCh <- true
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		oldCount = testSrv.recvCount.Load()
+		assert.GreaterOrEqual(c, oldCount, int32(2), "client must send second heartbeat")
+	}, time.Second*5, 10*time.Millisecond)
+
+	// Heartbeat should be sent every 5 minutes
+	oldCount = testSrv.recvCount.Load()
+	require.True(t, fakeClock.HasWaiters())
+	fakeClock.Step(4 * time.Minute)
+	assert.GreaterOrEqual(t, oldCount, testSrv.recvCount.Load(), "should not send heartbeat before 5 minutes")
+	fakeClock.Step(1 * time.Minute)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		oldCount = testSrv.recvCount.Load()
+		assert.GreaterOrEqual(c, oldCount+1, testSrv.recvCount.Load(), "should send heartbeat after 5 minutes")
+	}, time.Second*5, 10*time.Millisecond)
 
 	// clean up
 	close(appHealthCh)

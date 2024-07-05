@@ -21,20 +21,14 @@ import (
 
 type options struct {
 	subscribe     string
-	config        string
 	initialHealth bool
 	handlerFuncs  []http.Option
+	actorTypes    []string
 }
 
 func WithSubscribe(subscribe string) Option {
 	return func(o *options) {
 		o.subscribe = subscribe
-	}
-}
-
-func WithConfig(config string) Option {
-	return func(o *options) {
-		o.config = config
 	}
 }
 
@@ -47,5 +41,13 @@ func WithHandlerFunc(path string, fn nethttp.HandlerFunc) Option {
 func WithInitialHealth(initialHealth bool) Option {
 	return func(o *options) {
 		o.initialHealth = initialHealth
+	}
+}
+
+func WithActorTypes(actorTypes ...string) Option {
+	return func(o *options) {
+		for _, actorType := range actorTypes {
+			o.actorTypes = append(o.actorTypes, `"`+actorType+`"`)
+		}
 	}
 }

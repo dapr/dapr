@@ -27,6 +27,7 @@ import (
 	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -34,7 +35,6 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
-
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -51,7 +51,8 @@ const (
 	// Minimum and maximum reconnection intervals
 	placementReconnectMinInterval = 1 * time.Second
 	placementReconnectMaxInterval = 30 * time.Second
-	statusReportHeartbeatInterval = 1 * time.Second
+	// TODO: remove as unnecessary.
+	statusReportHeartbeatInterval = 5 * time.Minute
 
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 )
@@ -93,6 +94,9 @@ type actorPlacement struct {
 	appHealthFn internal.AppHealthFn
 	// appHealthy contains the result of the app health checks.
 	appHealthy atomic.Bool
+	// reportCh is the channel to notify placement of host. Used when app health
+	// changes or type is added.
+	reportCh chan struct{}
 	// afterTableUpdateFn is the function invoked after table updates,
 	// such as draining actors and resetting reminders.
 	afterTableUpdateFn func()
@@ -106,6 +110,8 @@ type actorPlacement struct {
 	shutdownConnLoop sync.WaitGroup
 	// closeCh is the channel to close the placement service.
 	closeCh chan struct{}
+
+	clock clock.Clock
 
 	resiliency resiliency.Provider
 
@@ -130,6 +136,8 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		resiliency:        opts.Resiliency,
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
 		namespace:         opts.Namespace,
+		reportCh:          make(chan struct{}),
+		clock:             clock.RealClock{},
 	}
 }
 
@@ -154,6 +162,14 @@ func (p *actorPlacement) AddHostedActorType(actorType string, idleTimeout time.D
 	}
 
 	p.actorTypes = append(p.actorTypes, actorType)
+
+	if p.client.isConnected() {
+		select {
+		case p.reportCh <- struct{}{}:
+		case <-p.closeCh:
+		}
+	}
+
 	return nil
 }
 
@@ -191,6 +207,11 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 
 		for healthy := range ch {
 			p.appHealthy.Store(healthy)
+			select {
+			case p.reportCh <- struct{}{}:
+			case <-p.closeCh:
+				return
+			}
 		}
 	}()
 
@@ -208,6 +229,11 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				break
 			}
 			p.establishStreamConn(ctx)
+			select {
+			case p.reportCh <- struct{}{}:
+			case <-p.closeCh:
+				return
+			}
 		}
 	}()
 
@@ -291,10 +317,14 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 			// No delay if stream connection is not alive.
 			if p.client.isConnected() {
 				diag.DefaultMonitoring.ActorStatusReported("send")
+				timer := p.clock.NewTimer(statusReportHeartbeatInterval)
 				select {
-				case <-time.After(statusReportHeartbeatInterval):
+				case <-timer.C():
+				case <-p.reportCh:
 				case <-p.closeCh:
 				}
+
+				timer.Stop()
 			}
 		}
 	}()
