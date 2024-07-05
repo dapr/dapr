@@ -136,7 +136,7 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		resiliency:        opts.Resiliency,
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
 		namespace:         opts.Namespace,
-		reportCh:          make(chan struct{}),
+		reportCh:          make(chan struct{}, 10),
 		clock:             clock.RealClock{},
 	}
 }
@@ -163,11 +163,9 @@ func (p *actorPlacement) AddHostedActorType(actorType string, idleTimeout time.D
 
 	p.actorTypes = append(p.actorTypes, actorType)
 
-	if p.client.isConnected() {
-		select {
-		case p.reportCh <- struct{}{}:
-		case <-p.closeCh:
-		}
+	select {
+	case p.reportCh <- struct{}{}:
+	case <-p.closeCh:
 	}
 
 	return nil
