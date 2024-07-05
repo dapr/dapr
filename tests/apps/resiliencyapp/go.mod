@@ -5,7 +5,7 @@ go 1.22.4
 require (
 	github.com/dapr/dapr v0.0.0
 	github.com/gorilla/mux v1.8.1
-	google.golang.org/grpc v1.64.0
+	google.golang.org/grpc v1.65.0
 	google.golang.org/grpc/examples v0.0.0-20230224211313-3775f633ce20
 	google.golang.org/protobuf v1.34.2
 )
