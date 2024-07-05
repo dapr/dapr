@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 
 	"github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/crypto/spiffe"
@@ -108,11 +109,15 @@ type Options struct {
 	// SentryTokenFile is an optional file containing the token to authenticate
 	// to sentry.
 	SentryTokenFile *string
+
+	// Healthz is used to signal the health of the security provider.
+	Healthz healthz.Healthz
 }
 
 type provider struct {
 	sec     *security
 	running atomic.Bool
+	htarget healthz.Target
 	readyCh chan struct{}
 }
 
@@ -130,6 +135,8 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	if len(opts.ControlPlaneTrustDomain) == 0 {
 		return nil, errors.New("control plane trust domain is required")
 	}
+
+	htarget := opts.Healthz.AddTarget()
 
 	cptd, err := spiffeid.TrustDomainFromString(opts.ControlPlaneTrustDomain)
 	if err != nil {
@@ -178,6 +185,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	}
 
 	return &provider{
+		htarget: htarget,
 		readyCh: make(chan struct{}),
 		sec: &security{
 			trustAnchors:            trustAnchors,
@@ -192,6 +200,7 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 // Run is a blocking function which starts the security provider, handling
 // rotation of credentials.
 func (p *provider) Run(ctx context.Context) error {
+	defer p.htarget.NotReady()
 	if !p.running.CompareAndSwap(false, true) {
 		return errors.New("security provider already started")
 	}
@@ -199,6 +208,7 @@ func (p *provider) Run(ctx context.Context) error {
 	// If spiffe has not been initialized, then just wait to exit.
 	if p.sec.spiffe == nil {
 		close(p.readyCh)
+		p.htarget.Ready()
 		<-ctx.Done()
 		return nil
 	}
@@ -212,6 +222,7 @@ func (p *provider) Run(ctx context.Context) error {
 			}
 			close(p.readyCh)
 			diagnostics.DefaultMonitoring.MTLSInitCompleted()
+			p.htarget.Ready()
 			<-ctx.Done()
 			return nil
 		},

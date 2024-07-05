@@ -28,9 +28,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Option func(*options)
@@ -129,7 +129,7 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 
 	return &Subscriber{
 		app:     app.New(t, appOpts...),
-		client:  util.HTTPClient(t),
+		client:  client.HTTP(t),
 		inCh:    inCh,
 		inBulk:  inBulk,
 		closeCh: closeCh,

@@ -23,6 +23,7 @@ import (
 
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/healthz"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -39,11 +40,13 @@ type Options[T differ.Resource] struct {
 	CompStore  *compstore.ComponentStore
 	Processor  *processor.Processor
 	Authorizer *authorizer.Authorizer
+	Healthz    healthz.Healthz
 }
 
 type Reconciler[T differ.Resource] struct {
 	kind    string
 	manager manager[T]
+	htarget healthz.Target
 
 	clock clock.WithTicker
 }
@@ -56,8 +59,9 @@ type manager[T differ.Resource] interface {
 
 func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Component] {
 	return &Reconciler[compapi.Component]{
-		clock: clock.RealClock{},
-		kind:  compapi.Kind,
+		clock:   clock.RealClock{},
+		kind:    compapi.Kind,
+		htarget: opts.Healthz.AddTarget(),
 		manager: &components{
 			Loader: opts.Loader.Components(),
 			store:  opts.CompStore,
@@ -69,8 +73,9 @@ func NewComponents(opts Options[compapi.Component]) *Reconciler[compapi.Componen
 
 func NewSubscriptions(opts Options[subapi.Subscription]) *Reconciler[subapi.Subscription] {
 	return &Reconciler[subapi.Subscription]{
-		clock: clock.RealClock{},
-		kind:  subapi.Kind,
+		clock:   clock.RealClock{},
+		kind:    subapi.Kind,
+		htarget: opts.Healthz.AddTarget(),
 		manager: &subscriptions{
 			Loader: opts.Loader.Subscriptions(),
 			store:  opts.CompStore,
@@ -84,6 +89,8 @@ func (r *Reconciler[T]) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("error running component stream: %w", err)
 	}
+
+	r.htarget.Ready()
 
 	return r.watchForEvents(ctx, conn)
 }

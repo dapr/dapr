@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package scheduler
 
 import (
 	"context"
@@ -27,31 +27,30 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/grpc/status"
-
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/client"
 	"github.com/microsoft/durabletask-go/task"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/status"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	frameworkclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(scheduler))
+	suite.Register(new(basic))
 }
 
-type scheduler struct {
+type basic struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
 	scheduler  *procscheduler.Scheduler
@@ -59,7 +58,7 @@ type scheduler struct {
 	grpcClient runtimev1pb.DaprClient
 }
 
-func (s *scheduler) Setup(t *testing.T) []framework.Option {
+func (b *basic) Setup(t *testing.T) []framework.Option {
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -82,42 +81,42 @@ spec:
 		w.Write([]byte(""))
 	})
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
-	s.place = placement.New(t)
-	s.scheduler = procscheduler.New(t)
-	s.daprd = daprd.New(t,
+	b.place = placement.New(t)
+	b.scheduler = procscheduler.New(t)
+	b.daprd = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
-		daprd.WithPlacementAddresses(s.place.Address()),
+		daprd.WithPlacementAddresses(b.place.Address()),
 		daprd.WithResourceFiles(db.GetComponent(t)),
-		daprd.WithSchedulerAddresses(s.scheduler.Address()),
+		daprd.WithSchedulerAddresses(b.scheduler.Address()),
 		daprd.WithConfigs(configFile),
 	)
 
 	daprd2 := daprd.New(t,
-		daprd.WithAppID(s.daprd.AppID()),
+		daprd.WithAppID(b.daprd.AppID()),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
-		daprd.WithPlacementAddresses(s.place.Address()),
+		daprd.WithPlacementAddresses(b.place.Address()),
 		daprd.WithResourceFiles(db.GetComponent(t)),
-		daprd.WithSchedulerAddresses(s.scheduler.Address()),
+		daprd.WithSchedulerAddresses(b.scheduler.Address()),
 		daprd.WithConfigs(configFile),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(db, s.scheduler, s.place, srv, daprd2, s.daprd),
+		framework.WithProcesses(db, b.scheduler, b.place, srv, daprd2, b.daprd),
 	}
 }
 
-func (s *scheduler) Run(t *testing.T, ctx context.Context) {
-	s.scheduler.WaitUntilRunning(t, ctx)
-	s.place.WaitUntilRunning(t, ctx)
-	s.daprd.WaitUntilRunning(t, ctx)
+func (b *basic) Run(t *testing.T, ctx context.Context) {
+	b.scheduler.WaitUntilRunning(t, ctx)
+	b.place.WaitUntilRunning(t, ctx)
+	b.daprd.WaitUntilRunning(t, ctx)
 
-	s.httpClient = util.HTTPClient(t)
+	b.httpClient = frameworkclient.HTTP(t)
 
-	s.grpcClient = s.daprd.GRPCClient(t, ctx)
+	b.grpcClient = b.daprd.GRPCClient(t, ctx)
 
-	backendClient := client.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+	backendClient := client.NewTaskHubGrpcClient(b.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 
 	t.Run("basic", func(t *testing.T) {
 		r := task.NewTaskRegistry()
@@ -138,10 +137,10 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 			return fmt.Sprintf("Hello, %s!", name), nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
-		id := api.InstanceID(s.startWorkflow(ctx, t, "SingleActivity", "Dapr"))
+		id := api.InstanceID(b.startWorkflow(ctx, t, "SingleActivity", "Dapr"))
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, metadata.IsComplete())
@@ -178,10 +177,10 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 		})
 
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
-		id := api.InstanceID(s.startWorkflow(ctx, t, "Root", ""))
+		id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
 
 		// Wait long enough to ensure all orchestrations have started (but not longer than the timer delay)
 		assert.Eventually(t, func() bool {
@@ -202,7 +201,7 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 		}, 2*time.Second, 10*time.Millisecond)
 
 		// Terminate the root orchestration
-		s.terminateWorkflow(t, ctx, string(id))
+		b.terminateWorkflow(t, ctx, string(id))
 
 		// Wait for the root orchestration to complete and verify its terminated status
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
@@ -238,18 +237,18 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 			return nil, nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
 		// Run the orchestration, which will block waiting for external events
-		id := api.InstanceID(s.startWorkflow(ctx, t, "Root", ""))
+		id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
 
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
 		require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
 
 		// Purge the root orchestration
-		s.purgeWorkflow(t, ctx, string(id))
+		b.purgeWorkflow(t, ctx, string(id))
 
 		// Verify that root Orchestration has been purged
 		_, err = backendClient.FetchOrchestrationMetadata(ctx, id)
@@ -282,10 +281,10 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 			return fmt.Sprintf("Hello, %s!", input), nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
-		id := api.InstanceID(s.startWorkflow(ctx, t, "root", "Dapr"))
+		id := api.InstanceID(b.startWorkflow(ctx, t, "root", "Dapr"))
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
 		assert.True(t, metadata.IsComplete())
@@ -293,9 +292,9 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 	})
 }
 
-func (s *scheduler) startWorkflow(ctx context.Context, t *testing.T, name string, input string) string {
+func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, input string) string {
 	// use http client to start the workflow
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", s.daprd.HTTPPort(), name)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", b.daprd.HTTPPort(), name)
 	data, err := json.Marshal(input)
 	require.NoError(t, err)
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
@@ -303,7 +302,7 @@ func (s *scheduler) startWorkflow(ctx context.Context, t *testing.T, name string
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, strings.NewReader(string(data)))
 	req.Header.Set("Content-Type", "application/json")
 	require.NoError(t, err)
-	resp, err := s.httpClient.Do(req)
+	resp, err := b.httpClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
@@ -317,28 +316,28 @@ func (s *scheduler) startWorkflow(ctx context.Context, t *testing.T, name string
 }
 
 // terminate workflow
-func (s *scheduler) terminateWorkflow(t *testing.T, ctx context.Context, instanceID string) {
+func (b *basic) terminateWorkflow(t *testing.T, ctx context.Context, instanceID string) {
 	// use http client to terminate the workflow
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", s.daprd.HTTPPort(), instanceID)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", b.daprd.HTTPPort(), instanceID)
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
 	require.NoError(t, err)
-	resp, err := s.httpClient.Do(req)
+	resp, err := b.httpClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)
 }
 
 // purge workflow
-func (s *scheduler) purgeWorkflow(t *testing.T, ctx context.Context, instanceID string) {
+func (b *basic) purgeWorkflow(t *testing.T, ctx context.Context, instanceID string) {
 	// use http client to purge the workflow
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", s.daprd.HTTPPort(), instanceID)
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", b.daprd.HTTPPort(), instanceID)
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
 	require.NoError(t, err)
-	resp, err := s.httpClient.Do(req)
+	resp, err := b.httpClient.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	require.Equal(t, http.StatusAccepted, resp.StatusCode)

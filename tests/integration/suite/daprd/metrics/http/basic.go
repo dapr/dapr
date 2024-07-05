@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -61,8 +62,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("service invocation", func(t *testing.T) {
 		b.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
-		metrics := b.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := b.daprd.Metrics(t, ctx)
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
+		}, time.Second*3, time.Millisecond*10)
 	})
 
 	t.Run("state stores", func(t *testing.T) {

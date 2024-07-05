@@ -26,6 +26,7 @@ import (
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/server/authz"
@@ -38,6 +39,7 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
+	Healthz                 healthz.Healthz
 	Security                security.Handler
 	ListenAddress           string
 	Port                    int
@@ -67,6 +69,9 @@ type Server struct {
 	cron           etcdcron.Interface
 	connectionPool *internal.Pool // Connection pool for sidecars
 
+	hzAPIServer healthz.Target
+	hzETCD      healthz.Target
+
 	wg      sync.WaitGroup
 	running atomic.Bool
 	readyCh chan struct{}
@@ -93,6 +98,8 @@ func New(opts Options) (*Server, error) {
 		connectionPool: internal.NewPool(),
 		readyCh:        make(chan struct{}),
 		closeCh:        make(chan struct{}),
+		hzAPIServer:    opts.Healthz.AddTarget(),
+		hzETCD:         opts.Healthz.AddTarget(),
 	}, nil
 }
 
@@ -117,6 +124,7 @@ func (s *Server) Run(ctx context.Context) error {
 }
 
 func (s *Server) runServer(ctx context.Context) error {
+	defer s.hzAPIServer.NotReady()
 	listener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", s.listenAddress, s.port))
 	if err != nil {
 		return fmt.Errorf("could not listen on port %d: %w", s.port, err)
@@ -126,6 +134,8 @@ func (s *Server) runServer(ctx context.Context) error {
 
 	srv := grpc.NewServer(s.sec.GRPCServerOptionMTLS())
 	schedulerv1pb.RegisterSchedulerServer(srv, s)
+
+	s.hzAPIServer.Ready()
 
 	return concurrency.NewRunnerManager(
 		func(ctx context.Context) error {
@@ -145,6 +155,8 @@ func (s *Server) runServer(ctx context.Context) error {
 }
 
 func (s *Server) runEtcdCron(ctx context.Context) error {
+	defer s.hzETCD.NotReady()
+
 	log.Info("Starting etcd")
 
 	etcd, err := embed.StartEtcd(s.config)
@@ -186,6 +198,8 @@ func (s *Server) runEtcdCron(ctx context.Context) error {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
 	}
 	close(s.readyCh)
+
+	s.hzETCD.Ready()
 
 	return concurrency.NewRunnerManager(
 		func(ctx context.Context) error {

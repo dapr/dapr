@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messaging"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -59,6 +60,27 @@ type Server interface {
 	StartNonBlocking() error
 }
 
+type Options struct {
+	API            API
+	Config         ServerConfig
+	TracingSpec    config.TracingSpec
+	MetricSpec     config.MetricSpec
+	APISpec        config.APISpec
+	Proxy          messaging.Proxy
+	WorkflowEngine *wfengine.WorkflowEngine
+	Healthz        healthz.Healthz
+}
+
+type OptionsInternal struct {
+	API         API
+	Config      ServerConfig
+	TracingSpec config.TracingSpec
+	MetricSpec  config.MetricSpec
+	Security    security.Handler
+	Proxy       messaging.Proxy
+	Healthz     healthz.Healthz
+}
+
 type server struct {
 	api            API
 	config         ServerConfig
@@ -75,6 +97,7 @@ type server struct {
 	workflowEngine *wfengine.WorkflowEngine
 	sec            security.Handler
 	wg             sync.WaitGroup
+	htarget        healthz.Target
 	closed         atomic.Bool
 	closeCh        chan struct{}
 }
@@ -86,26 +109,27 @@ var (
 )
 
 // NewAPIServer returns a new user facing gRPC API server.
-func NewAPIServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, apiSpec config.APISpec, proxy messaging.Proxy, workflowEngine *wfengine.WorkflowEngine) Server {
+func NewAPIServer(opts Options) Server {
 	apiServerInfoLogger.SetOutputLevel(logger.LogLevel("info"))
 	return &server{
-		api:            api,
-		config:         config,
-		tracingSpec:    tracingSpec,
-		metricSpec:     metricSpec,
+		api:            opts.API,
+		config:         opts.Config,
+		tracingSpec:    opts.TracingSpec,
+		metricSpec:     opts.MetricSpec,
 		kind:           apiServer,
 		logger:         apiServerLogger,
 		infoLogger:     apiServerInfoLogger,
 		authToken:      security.GetAPIToken(),
-		apiSpec:        apiSpec,
-		proxy:          proxy,
-		workflowEngine: workflowEngine,
+		apiSpec:        opts.APISpec,
+		proxy:          opts.Proxy,
+		workflowEngine: opts.WorkflowEngine,
+		htarget:        opts.Healthz.AddTarget(),
 		closeCh:        make(chan struct{}),
 	}
 }
 
 // NewInternalServer returns a new gRPC server for Dapr to Dapr communications.
-func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingSpec, metricSpec config.MetricSpec, sec security.Handler, proxy messaging.Proxy) Server {
+func NewInternalServer(opts OptionsInternal) Server {
 	// This is equivalent to "infinity" time (see: https://github.com/grpc/grpc-go/blob/master/internal/transport/defaults.go)
 	const infinity = time.Duration(math.MaxInt64)
 
@@ -132,15 +156,16 @@ func NewInternalServer(api API, config ServerConfig, tracingSpec config.TracingS
 		}),
 	}
 	return &server{
-		api:            api,
-		config:         config,
-		tracingSpec:    tracingSpec,
-		metricSpec:     metricSpec,
+		api:            opts.API,
+		config:         opts.Config,
+		tracingSpec:    opts.TracingSpec,
+		metricSpec:     opts.MetricSpec,
 		kind:           internalServer,
 		logger:         internalServerLogger,
 		grpcServerOpts: serverOpts,
-		proxy:          proxy,
-		sec:            sec,
+		proxy:          opts.Proxy,
+		sec:            opts.Security,
+		htarget:        opts.Healthz.AddTarget(),
 		closeCh:        make(chan struct{}),
 	}
 }
@@ -201,11 +226,16 @@ func (s *server) StartNonBlocking() error {
 			}
 		}(server, listener)
 	}
+
+	s.htarget.Ready()
 	return nil
 }
 
 func (s *server) Close() error {
 	defer s.wg.Wait()
+
+	s.htarget.NotReady()
+
 	if s.closed.CompareAndSwap(false, true) {
 		close(s.closeCh)
 	}

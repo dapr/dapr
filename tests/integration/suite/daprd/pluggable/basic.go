@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore"
 	"github.com/dapr/dapr/tests/integration/framework/process/statestore/inmemory"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -70,7 +69,7 @@ spec:
 func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.DaprGRPCClient(t, ctx, b.daprd.GRPCPort())
+	client := b.daprd.GRPCClient(t, ctx)
 
 	now := time.Now()
 	_, err := client.SaveState(ctx, &rtv1.SaveStateRequest{

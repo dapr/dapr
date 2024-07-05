@@ -29,12 +29,12 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -82,9 +82,9 @@ spec:
 	i.scheduler = scheduler.New(t)
 	i.place = placement.New(t)
 
-	i.daprdsNum = 10
+	i.daprdsNum = 4
 	i.actorTypesNum = 2
-	i.actorIDsNum = 50
+	i.actorIDsNum = 25
 	i.daprds = make([]*daprd.Daprd, i.daprdsNum)
 	i.actorDaprds = make([]actordaprd, i.daprdsNum)
 	procs := make([]process.Interface, i.daprdsNum*2+2)
@@ -161,7 +161,7 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 		i.daprds[x].WaitUntilRunning(t, ctx)
 	}
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	daprdURL := "http://" + i.daprds[0].HTTPAddress() + "/v1.0/actors/"
 	for x := 0; x < i.daprdsNum; x++ {

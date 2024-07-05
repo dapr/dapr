@@ -13,7 +13,9 @@ limitations under the License.
 
 package placement
 
-import "github.com/dapr/dapr/pkg/placement/raft"
+import (
+	"github.com/dapr/dapr/pkg/placement/raft"
+)
 
 type PlacementTables struct {
 	HostList     []HostInfo `json:"hostList,omitempty"`

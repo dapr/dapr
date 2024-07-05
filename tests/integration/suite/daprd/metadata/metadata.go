@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -67,7 +67,7 @@ spec:
 func (m *metadata) Run(t *testing.T, parentCtx context.Context) {
 	m.proc.WaitUntilRunning(t, parentCtx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	t.Run("test HTTP", func(t *testing.T) {
 		tests := map[string]string{

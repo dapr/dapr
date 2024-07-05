@@ -36,9 +36,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -222,7 +223,7 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 
 	t.Skip("TODO: @joshvanl skipping until pubsub publish is made stable")
 
-	pt := util.NewParallel(t)
+	pt := parallel.New(t)
 	for i := range f.pubSubs {
 		pubsubName := f.pubSubs[i].Name
 		for j := range f.pubSubs[i].Topics {
@@ -245,7 +246,7 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 					req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, bytes.NewReader(b))
 					require.NoError(col, err)
 					req.Header.Set("Content-Type", "application/json")
-					resp, err := util.HTTPClient(t).Do(req)
+					resp, err := client.HTTP(t).Do(req)
 					if errors.Is(err, context.DeadlineExceeded) {
 						// Only retry if we haven't exceeded the test timeout.
 						d, ok := ctx.Deadline()

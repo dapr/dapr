@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -51,7 +51,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/mystore", b.daprd.HTTPPort())
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	t.Run("bad json", func(t *testing.T) {
 		for _, body := range []string{
