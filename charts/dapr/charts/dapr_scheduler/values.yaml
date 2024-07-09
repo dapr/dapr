@@ -52,7 +52,10 @@ debug:
   port: 40000
   initialDelaySeconds: 30000
 
-runAsNonRoot: true
+securityContext:
+  runAsNonRoot: true
+  fsGroup: 65532
+
 resources: {}
 
 extraEnvVars: {}
