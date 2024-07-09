@@ -52,7 +52,7 @@ const (
 	placementReconnectMinInterval = 1 * time.Second
 	placementReconnectMaxInterval = 30 * time.Second
 	// TODO: remove as unnecessary.
-	statusReportHeartbeatInterval = 5 * time.Minute
+	statusReportHeartbeatInterval = 5 * time.Second
 
 	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 )
