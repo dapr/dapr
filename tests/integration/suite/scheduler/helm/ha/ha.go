@@ -39,7 +39,9 @@ func (b *helm) Setup(t *testing.T) []framework.Option {
 	b.helm = helmtpl.New(t,
 		helmtpl.WithGlobalValues("ha.enabled=true"),
 		helmtpl.WithShowOnlySchedulerSTS())
-	return nil
+return []framework.Option{
+		framework.WithProcesses(b.helm),
+	}
 }
 
 func (b *helm) Run(t *testing.T, ctx context.Context) {
