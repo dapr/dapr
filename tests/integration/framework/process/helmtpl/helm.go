@@ -16,8 +16,10 @@ package helmtpl
 import (
 	"bytes"
 	"context"
+	"os"
 	oexec "os/exec"
 	"path/filepath"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -51,6 +53,10 @@ func (h *Helm) Render(t *testing.T, ctx context.Context, fopts ...Option) []byte
 
 	for _, fopt := range fopts {
 		fopt(&opts)
+	}
+
+	if runtime.GOOS == "darwin" && os.Getenv("GITHUB_ACTIONS") == "true" {
+		t.Skip("Skipping helm tests on macos in Github Actions. As Helm is not present in the macos runner.")
 	}
 
 	args := []string{"template"}
