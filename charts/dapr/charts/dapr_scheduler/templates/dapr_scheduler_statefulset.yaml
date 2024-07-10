@@ -10,11 +10,11 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-  {{- if eq .Values.global.ha.enabled true }}
-  replicas: {{ include "dapr_scheduler.get-replicas-if-odd" .Values.ha.replicaCount | required "when in HA modes values set in dapr_scheduler chart in .Values.ha.replicaCount should be an odd number" }}
-  {{- else }}
-  replicas: {{include "dapr_scheduler.get-replicas-if-odd" .Values.replicaCount | required "values set in dapr_scheduler chart in .Values.replicaCount should be an odd number" }}
+  {{- $replicas := .Values.replicaCount }}
+  {{- if eq true .Values.global.ha.enabled .Values.ha }}
+  {{-   $replicas = max $replicas 3 }}
   {{- end }}
+  replicas: {{ include "dapr_scheduler.get-replicas-if-odd" $replicas | required "values set in dapr_scheduler chart in .Values.replicaCount should be an odd number" }}
   serviceName: dapr-scheduler-server
   podManagementPolicy: Parallel
   selector:

@@ -37,13 +37,14 @@ type exec struct {
 	lock sync.Mutex
 	cmd  *oexec.Cmd
 
-	args       []string
-	binPath    string
-	runErrorFn func(*testing.T, error)
-	exitCode   int
-	envs       map[string]string
-	stdoutpipe io.WriteCloser
-	stderrpipe io.WriteCloser
+	args              []string
+	binPath           string
+	runErrorFn        func(*testing.T, error)
+	exitCode          int
+	envs              map[string]string
+	stdoutpipe        io.WriteCloser
+	stderrpipe        io.WriteCloser
+	waitForCompletion bool
 }
 
 func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
@@ -75,13 +76,14 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 	}
 
 	return &exec{
-		binPath:    binPath,
-		args:       args,
-		envs:       opts.envs,
-		stdoutpipe: opts.stdout,
-		stderrpipe: opts.stderr,
-		runErrorFn: opts.runErrorFn,
-		exitCode:   opts.exitCode,
+		binPath:           binPath,
+		args:              args,
+		envs:              opts.envs,
+		stdoutpipe:        opts.stdout,
+		stderrpipe:        opts.stderr,
+		runErrorFn:        opts.runErrorFn,
+		exitCode:          opts.exitCode,
+		waitForCompletion: opts.waitForCompletion,
 	}
 }
 
@@ -106,6 +108,9 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 	}
 
 	require.NoError(t, e.cmd.Start())
+	if e.waitForCompletion {
+		e.checkExit(t, e.cmd.WaitDelay)
+	}
 }
 
 func (e *exec) Cleanup(t *testing.T) {
@@ -113,18 +118,28 @@ func (e *exec) Cleanup(t *testing.T) {
 	e.lock.Lock()
 	defer e.lock.Unlock()
 
-	kill.Kill(t, e.cmd)
-
-	e.checkExit(t)
+	if !e.waitForCompletion {
+		kill.Kill(t, e.cmd)
+		e.checkExit(t, 0)
+	}
 
 	require.NoError(t, e.stderrpipe.Close())
 	require.NoError(t, e.stdoutpipe.Close())
 }
 
-func (e *exec) checkExit(t *testing.T) {
+func (e *exec) checkExit(t *testing.T, timeout time.Duration) {
 	t.Helper()
 
 	t.Logf("waiting for %q process to exit", filepath.Base(e.binPath))
+
+	if e.waitForCompletion && timeout > 0 {
+		timer := time.NewTimer(timeout)
+		defer timer.Stop()
+		select {
+		case <-timer.C:
+			kill.Kill(t, e.cmd)
+		}
+	}
 
 	e.runErrorFn(t, e.cmd.Wait())
 	require.NotNil(t, e.cmd.ProcessState, "process state should not be nil")

@@ -24,9 +24,10 @@ type options struct {
 	stdout io.WriteCloser
 	stderr io.WriteCloser
 
-	runErrorFn func(*testing.T, error)
-	exitCode   int
-	envs       map[string]string
+	runErrorFn        func(*testing.T, error)
+	exitCode          int
+	envs              map[string]string
+	waitForCompletion bool
 }
 
 func WithStdout(stdout io.WriteCloser) Option {
@@ -64,5 +65,11 @@ func WithEnvVars(t *testing.T, envs ...string) Option {
 		for i := 0; i < len(envs); i += 2 {
 			o.envs[envs[i]] = envs[i+1]
 		}
+	}
+}
+
+func WaitForCompletion() Option {
+	return func(o *options) {
+		o.waitForCompletion = true
 	}
 }
