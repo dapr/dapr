@@ -11,29 +11,23 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package helmtpl
 
 import (
+	"bytes"
 	"context"
-	"fmt"
-	"github.com/dapr/dapr/pkg/healthz"
-	"github.com/dapr/dapr/pkg/modes"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
-	"github.com/dapr/dapr/pkg/security"
-	"github.com/dapr/dapr/tests/integration/framework/process"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/kit/ptr"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	"github.com/stretchr/testify/require"
-	"net/http"
-	"strconv"
+	oexec "os/exec"
+	"path/filepath"
 	"testing"
-	"time"
+
+	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/binary"
 )
 
-// Helm test helm chart template
+// Helm test helm chart template.  It is not really an integration test but this seems the best place to place it
 type Helm struct {
-	exec process.Interface
+	defaultOpts options
 }
 
 func New(t *testing.T, fopts ...Option) *Helm {
@@ -45,90 +39,46 @@ func New(t *testing.T, fopts ...Option) *Helm {
 		fopt(&opts)
 	}
 
-	args := opts.getHelmArgs()
-
 	return &Helm{
-		exec: exec.New(t,
-			"helm template", args,
-			append(
-				opts.execOpts,
-			)...,
-		),
+		defaultOpts: opts,
 	}
 }
 
-func (o *Helm) Run(t *testing.T, ctx context.Context) {
-	o.exec.Run(t, ctx)
-}
+func (h *Helm) Render(t *testing.T, ctx context.Context, fopts ...Option) []byte {
+	t.Helper()
 
-func (o *Operator) Cleanup(t *testing.T) {
-	o.exec.Cleanup(t)
-}
+	var opts options
 
-func (o *Operator) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := client.HTTP(t)
-	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", o.healthzPort), nil)
-		if err != nil {
-			return false
+	for _, fopt := range fopts {
+		fopt(&opts)
+	}
+
+	args := []string{"template"}
+	args = append(args, opts.getHelmArgs()...)
+	args = append(args, h.defaultOpts.getHelmArgs()...)
+
+	rootDir := binary.GetRootDir(t)
+	chartsPath := filepath.Join(rootDir, "charts", "dapr")
+
+	args = append(args, chartsPath)
+
+	var stdout, stderr bytes.Buffer
+
+	e := oexec.Command("helm", args...)
+	e.Stdout = &stdout
+	e.Stderr = &stderr
+	err := e.Run()
+	if opts.exitCode != nil {
+		require.Equal(t, *opts.exitCode, e.ProcessState.ExitCode())
+		if opts.exitErrorMsgRegexp != nil {
+			require.Regexp(t, opts.exitErrorMsgRegexp, stderr.String())
 		}
-		resp, err := client.Do(req)
-		if err != nil {
-			return false
-		}
-		defer resp.Body.Close()
-		return http.StatusOK == resp.StatusCode
-	}, time.Second*10, 10*time.Millisecond)
-}
-
-func (o *Operator) Port() int {
-	return o.port
-}
-
-func (o *Operator) Address() string {
-	return "localhost:" + strconv.Itoa(o.port)
-}
-
-func (o *Operator) MetricsPort() int {
-	return o.metricsPort
-}
-
-func (o *Operator) HealthzPort() int {
-	return o.healthzPort
-}
-
-func (o *Operator) Dial(t *testing.T, ctx context.Context, sentry *sentry.Sentry, appID string) operatorv1pb.OperatorClient {
-	sec, err := security.New(ctx, security.Options{
-		SentryAddress:           "localhost:" + strconv.Itoa(sentry.Port()),
-		ControlPlaneTrustDomain: "integration.test.dapr.io",
-		ControlPlaneNamespace:   o.namespace,
-		TrustAnchorsFile:        ptr.Of(sentry.TrustAnchorsFile(t)),
-		AppID:                   appID,
-		Mode:                    modes.StandaloneMode,
-		MTLSEnabled:             true,
-		Healthz:                 healthz.New(),
-	})
+		return nil
+	}
 	require.NoError(t, err)
-
-	errCh := make(chan error)
-	ctx, cancel := context.WithCancel(ctx)
-	go func() {
-		errCh <- sec.Run(ctx)
-	}()
-	t.Cleanup(func() {
-		cancel()
-		require.NoError(t, <-errCh)
-	})
-
-	sech, err := sec.Handler(ctx)
-	require.NoError(t, err)
-
-	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", o.namespace, "dapr-operator")
-	require.NoError(t, err)
-	//nolint:staticcheck
-	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(o.Port()), sech.GRPCDialOptionMTLS(id))
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-
-	return operatorv1pb.NewOperatorClient(conn)
+	return stdout.Bytes()
 }
+
+func (h *Helm) Run(t *testing.T, ctx context.Context) {}
+
+func (h *Helm) Cleanup(t *testing.T) {}

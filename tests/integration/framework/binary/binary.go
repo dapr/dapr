@@ -49,14 +49,19 @@ func BuildAll(t *testing.T) {
 	wg.Wait()
 }
 
+func GetRootDir(t *testing.T) string {
+	t.Helper()
+	_, tFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	return filepath.Join(filepath.Dir(tFile), "../../../..")
+}
+
 func Build(t *testing.T, name string) {
 	t.Helper()
 	if _, ok := os.LookupEnv(EnvKey(name)); !ok {
 		t.Logf("%q not set, building %q binary", EnvKey(name), name)
 
-		_, tfile, _, ok := runtime.Caller(0)
-		require.True(t, ok)
-		rootDir := filepath.Join(filepath.Dir(tfile), "../../../..")
+		rootDir := GetRootDir(t)
 
 		// Use a consistent temp dir for the binary so that the binary is cached on
 		// subsequent runs.

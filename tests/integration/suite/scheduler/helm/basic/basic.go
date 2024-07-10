@@ -11,20 +11,19 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package helm
+package basic
 
 import (
 	"context"
-	"encoding/json"
-	"github.com/dapr/dapr/tests/integration/framework/process/helmtpl"
-	"strings"
 	"testing"
-	"time"
 
-	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
+	"sigs.k8s.io/yaml"
+
+	appsv1 "k8s.io/api/apps/v1"
+
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/helmtpl"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -38,31 +37,23 @@ type helm struct {
 }
 
 func (b *helm) Setup(t *testing.T) []framework.Option {
-	b.helm = helmtpl.New(t)
+	b.helm = helmtpl.New(t,
+		helmtpl.WithGlobalValues("ha.enabled=false"),
+		helmtpl.WithShowOnlySchedulerSTS())
+	return nil
 }
 
 func (b *helm) Run(t *testing.T, ctx context.Context) {
-
-	t.Run("LIST", func(t *testing.T) {
-		var resp *operatorv1.ListComponentResponse
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			var err error
-			resp, err = client.ListComponents(ctx, &operatorv1.ListComponentsRequest{Namespace: "default"})
-			require.NoError(t, err)
-			assert.Len(c, resp.GetComponents(), 2)
-		}, time.Second*20, time.Millisecond*10)
-
-		b1, err := json.Marshal(b.comp1)
-		require.NoError(t, err)
-		b2, err := json.Marshal(b.comp2)
-		require.NoError(t, err)
-
-		if strings.Contains(string(resp.GetComponents()[0]), "mycomponent") {
-			assert.JSONEq(t, string(b1), string(resp.GetComponents()[0]))
-			assert.JSONEq(t, string(b2), string(resp.GetComponents()[1]))
-		} else {
-			assert.JSONEq(t, string(b1), string(resp.GetComponents()[1]))
-			assert.JSONEq(t, string(b2), string(resp.GetComponents()[0]))
-		}
+	t.Run("get_default_replicas", func(t *testing.T) {
+		ymlBytes := b.helm.Render(t, ctx)
+		var sts appsv1.StatefulSet
+		require.NoError(t, yaml.Unmarshal(ymlBytes, &sts))
+		require.Equal(t, int32(1), *sts.Spec.Replicas)
+	})
+	t.Run("get_error_message_if_replicas_even_value", func(t *testing.T) {
+		_ = b.helm.Render(t, ctx,
+			helmtpl.WithValues("dapr_scheduler.replicaCount=2"),
+			helmtpl.WithExitCode(1),
+			helmtpl.WithExitErrorMsgRegex(`should be an odd number`))
 	})
 }
