@@ -32,7 +32,7 @@ type options struct {
 	setJSONValue    string
 
 	// list of resources to show only
-	showOnly []stringgit a
+	showOnly []string
 
 	// if set we use the local buffer to read/write the stdout
 	// Note: we will not be using execOpts stdout if passed as an exec OptionFunc

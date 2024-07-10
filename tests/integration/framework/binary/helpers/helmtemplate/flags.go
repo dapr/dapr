@@ -1,4 +1,4 @@
-// part copied from: https://github.com/helm/helm/blob/main/cmd/helm/flags.go
+// section copied from: https://github.com/helm/helm/blob/2feac15cc3252c97c997be2ced1ab8afe314b429/cmd/helm/flags.go
 /*
 Copyright The Helm Authors.
 

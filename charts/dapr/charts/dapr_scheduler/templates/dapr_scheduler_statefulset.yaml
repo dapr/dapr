@@ -10,7 +10,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-  {{- $replicas := .Values.replicaCount }}
+  {{- $replicas := default 1 .Values.replicaCount }}
   {{- if eq true .Values.global.ha.enabled .Values.ha }}
   {{-   $replicas = max $replicas 3 }}
   {{- end }}
