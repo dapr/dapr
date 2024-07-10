@@ -1178,7 +1178,8 @@ message ShutdownRequest {
   // Empty
 }
 
-// Job is the definition of a job.
+// Job is the definition of a job. At least one of schedule or due_time must be
+// provided but can also be provided together.
 message Job {
   // The unique name for the job.
   string name = 1 [json_name = "name"];

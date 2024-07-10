@@ -6320,7 +6320,8 @@ func (*ShutdownRequest) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{90}
 }
 
-// Job is the definition of a job.
+// Job is the definition of a job. At least one of schedule or due_time must be
+// provided but can also be provided together.
 type Job struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -6353,13 +6354,13 @@ type Job struct {
 	// triggered. If not set, the job will run indefinitely or until expiration.
 	Repeats *uint32 `protobuf:"varint,3,opt,name=repeats,proto3,oneof" json:"repeats,omitempty"`
 	// due_time is the optional time at which the job should be active, or the
-	// "one shot" time if other scheduling type fields are not provided.
-	// Accepts a "point in time" string in the format of RFC3339, Go duration
-	// string (therefore calculated from now), or non-repeating ISO8601.
+	// "one shot" time if other scheduling type fields are not provided. Accepts
+	// a "point in time" string in the format of RFC3339, Go duration string
+	// (calculated from job creation time), or non-repeating ISO8601.
 	DueTime *string `protobuf:"bytes,4,opt,name=due_time,json=dueTime,proto3,oneof" json:"due_time,omitempty"`
-	// ttl is the optional time to live or expiration of the job.
-	// Accepts a "point in time" string in the format of RFC3339, Go duration
-	// string (therefore calculated from now), or non-repeating ISO8601.
+	// ttl is the optional time to live or expiration of the job. Accepts a
+	// "point in time" string in the format of RFC3339, Go duration string
+	// (calculated from job creation time), or non-repeating ISO8601.
 	Ttl *string `protobuf:"bytes,5,opt,name=ttl,proto3,oneof" json:"ttl,omitempty"`
 	// payload is the serialized job payload that will be sent to the recipient
 	// when the job is triggered.
