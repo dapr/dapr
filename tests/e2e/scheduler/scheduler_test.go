@@ -52,8 +52,8 @@ type triggeredJob struct {
 }
 
 type jobData struct {
-	DataType   string `json:"@type"`
-	Expression string `json:"expression"`
+	DataType string `json:"@type"`
+	Value    string `json:"value"`
 }
 
 type job struct {
@@ -107,8 +107,8 @@ func TestJobTriggered(t *testing.T) {
 	require.NoError(t, err)
 
 	data := jobData{
-		DataType:   "type.googleapis.com/google.type.Expr",
-		Expression: "expression",
+		DataType: "type.googleapis.com/google.type.StringValue",
+		Value:    "expression",
 	}
 
 	j := job{
