@@ -26,7 +26,7 @@ type Option func(*options)
 type options struct {
 	setValues       []string
 	setStringValues []string
-	setJsonValue    string
+	setJSONValue    string
 
 	// list of resources to show only
 	showOnly []string
@@ -42,8 +42,8 @@ func (o options) merge(other options) options {
 	for _, v := range other.setStringValues {
 		o.setStringValues = append(o.setStringValues, v)
 	}
-	if other.setJsonValue != "" {
-		o.setJsonValue = other.setJsonValue
+	if other.setJSONValue != "" {
+		o.setJSONValue = other.setJSONValue
 	}
 	for _, v := range other.showOnly {
 		o.showOnly = append(o.showOnly, v)
@@ -64,8 +64,8 @@ func (o options) getHelmArgs() (args []string) {
 	for _, v := range o.setStringValues {
 		args = append(args, "--set-string", v)
 	}
-	if o.setJsonValue != "" {
-		args = append(args, "--set-json", o.setJsonValue)
+	if o.setJSONValue != "" {
+		args = append(args, "--set-json", o.setJSONValue)
 	}
 	for _, v := range o.showOnly {
 		args = append(args, "--show-only", v)
@@ -94,9 +94,9 @@ func WithStringValues(values ...string) Option {
 	}
 }
 
-func WithJsonValue(jsonString string) Option {
+func WithJSONValue(jsonString string) Option {
 	return func(o *options) {
-		o.setJsonValue = jsonString
+		o.setJSONValue = jsonString
 	}
 }
 

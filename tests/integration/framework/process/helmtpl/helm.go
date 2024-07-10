@@ -54,8 +54,8 @@ func (h *Helm) Render(t *testing.T, ctx context.Context, fopts ...Option) []byte
 	}
 
 	args := []string{"template"}
+	opts = opts.merge(h.defaultOpts)
 	args = append(args, opts.getHelmArgs()...)
-	args = append(args, h.defaultOpts.getHelmArgs()...)
 
 	rootDir := binary.GetRootDir(t)
 	chartsPath := filepath.Join(rootDir, "charts", "dapr")

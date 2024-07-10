@@ -17,14 +17,13 @@ import (
 	"context"
 	"testing"
 
-	"sigs.k8s.io/yaml"
-
+	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
+	"sigs.k8s.io/yaml"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/helmtpl"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/require"
 )
 
 func init() {
