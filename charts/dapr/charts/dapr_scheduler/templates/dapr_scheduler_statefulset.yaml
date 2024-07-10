@@ -11,11 +11,9 @@ metadata:
     {{- end }}
 spec:
   {{- if eq .Values.global.ha.enabled true }}
-  {{-   include "dapr_scheduler.verify-replica-count-is-odd-number" .Values.ha.replicaCount | required "when in HA modes values set in scheduler chart in .Values.ha.replicaCount should be an odd number" | trimPrefix "true" }}
-  replicas: {{ .Values.ha.replicaCount }}
+  replicas: {{ include "dapr_scheduler.get-replicas-if-odd" .Values.ha.replicaCount | required "when in HA modes values set in dapr_scheduler chart in .Values.ha.replicaCount should be an odd number" }}
   {{- else }}
-  {{-   include "dapr_scheduler.verify-replica-count-is-odd-number" .Values.replicaCount | required "values set in scheduler chart in .Values.replicaCount should be an odd number" | trimPrefix "true" }}
-  replicas: {{ .Values.replicaCount }}
+  replicas: {{include "dapr_scheduler.get-replicas-if-odd" .Values.replicaCount | required "values set in dapr_scheduler chart in .Values.replicaCount should be an odd number" }}
   {{- end }}
   serviceName: dapr-scheduler-server
   podManagementPolicy: Parallel
