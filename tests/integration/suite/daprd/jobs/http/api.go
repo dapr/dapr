@@ -89,7 +89,7 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 
 	body := `{
 "schedule": "@every 1s",
-"repeats": 1,
+"repeats": 10,
 "data": {
 	"@type": "type.googleapis.com/google.protobuf.StringValue",
 	"value": "\"someData\""
@@ -104,6 +104,13 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())
 
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	require.NoError(t, err)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+
 	select {
 	case job := <-a.jobChan:
 		assert.NotNil(t, job)
@@ -115,4 +122,25 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 	case <-time.After(time.Second * 3):
 		assert.Fail(t, "timed out waiting for triggered job")
 	}
+
+	req, err = http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	require.NoError(t, err)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+
+	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	require.NoError(t, err)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+
+	req, err = http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
+	require.NoError(t, err)
+	resp, err = client.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
 }
