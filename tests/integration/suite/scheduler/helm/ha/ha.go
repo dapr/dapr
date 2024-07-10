@@ -31,7 +31,7 @@ func init() {
 }
 
 // basic tests the operator's ListCompontns API.
-type helm struct {
+type ha struct {
 	helm *helmtpl.Helm
 }
 
