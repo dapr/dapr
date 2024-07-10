@@ -52,6 +52,8 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
       containers:
       - name: dapr-scheduler-server
         livenessProbe:
@@ -168,7 +170,7 @@ spec:
         - "--mode=kubernetes"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
-          runAsNonRoot: {{ .Values.runAsNonRoot }}
+          runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:
             add: ["SYS_PTRACE"]

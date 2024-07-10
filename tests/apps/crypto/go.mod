@@ -1,6 +1,6 @@
 module github.com/dapr/dapr/tests/apps/crypto
 
-go 1.22.3
+go 1.22.5
 
 require (
 	github.com/dapr/go-sdk v1.8.0
