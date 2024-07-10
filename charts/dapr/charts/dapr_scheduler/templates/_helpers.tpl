@@ -82,4 +82,9 @@ Create etcd client http ports list dynamically based on replicaCount.
 {{- $etcdClientHttpPorts -}}
 {{- end -}}
 
-
+{{/*
+Verify Replicas Count is an odd number.
+*/}}
+{{- define "dapr_scheduler.verify-replica-count-is-odd-number" -}}
+{{-   if eq (mod . 2) 1 -}}true{{- else -}}{{- end -}}
+{{- end -}}

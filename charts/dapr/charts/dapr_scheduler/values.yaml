@@ -27,6 +27,9 @@ ports:
   etcdGRPCPeerPort: 2380
 
 replicaCount: 1
+ha:
+  # etcd should have an odd number of replicas https://etcd.io/docs/v3.3/faq/ to guarantee quorum
+  replicaCount: 3
 
 cluster:
   etcdDataDirPath: /var/run/data/dapr-scheduler

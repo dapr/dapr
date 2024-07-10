@@ -11,8 +11,10 @@ metadata:
     {{- end }}
 spec:
   {{- if eq .Values.global.ha.enabled true }}
-  replicas: {{ .Values.global.ha.replicaCount }}
+  {{-   include "dapr_scheduler.verify-replica-count-is-odd-number" .Values.ha.replicaCount | required "when in HA modes values set in scheduler chart in .Values.ha.replicaCount should be an odd number" }}
+  replicas: {{ .Values.ha.replicaCount }}
   {{- else }}
+  {{-   include "dapr_scheduler.verify-replica-count-is-odd-number" .Values.replicaCount | required "values set in scheduler chart in .Values.replicaCount should be an odd number" }}
   replicas: {{ .Values.replicaCount }}
   {{- end }}
   serviceName: dapr-scheduler-server
