@@ -64,7 +64,8 @@ func (h *heartbeat) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp := h.daprd.Metrics(t, ctx)
 		f := resp[fmt.Sprintf("dapr_runtime_actor_status_report_total|actor_type:|app_id:%s|operation:send", h.daprd.AppID())]
-		assert.Equal(c, 2, int(f))
+		// TODO: @joshvanl: change this to `Equal` 1 when heartbeat has been removed.
+		assert.GreaterOrEqual(c, int(f), 1)
 		for _, m := range []string{
 			"dapr_runtime_actor_table_operation_recv_total|actor_type:|app_id:%s|operation:update",
 			"dapr_runtime_actor_table_operation_recv_total|actor_type:|app_id:%s|operation:lock",
@@ -73,7 +74,8 @@ func (h *heartbeat) Run(t *testing.T, ctx context.Context) {
 			"dapr_runtime_actor_table_operation_recv_total|actor_type:|app_id:%s|operation:lock",
 		} {
 			f := resp[fmt.Sprintf(m, h.daprd.AppID())]
-			assert.Equal(c, 1, int(f))
+			// TODO: @joshvanl: change this to `Equal` 1 when heartbeat has been removed.
+			assert.GreaterOrEqual(c, int(f), 1)
 		}
 	}, 10*time.Second, 10*time.Millisecond)
 }
