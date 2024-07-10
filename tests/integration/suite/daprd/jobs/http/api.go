@@ -11,109 +11,106 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package appcallback
+package http
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
+	"fmt"
 	"io"
-	nethttp "net/http"
+	"net/http"
+	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 )
 
 func init() {
-	suite.Register(new(http))
+	suite.Register(new(api))
 }
 
-type http struct {
+type api struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
 	jobChan   chan *runtimev1pb.JobEventRequest
 }
 
-func (h *http) Setup(t *testing.T) []framework.Option {
-	h.scheduler = scheduler.New(t)
+func (a *api) Setup(t *testing.T) []framework.Option {
+	a.scheduler = scheduler.New(t)
 
-	h.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
+	a.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
 	srv := app.New(t,
-		app.WithHandlerFunc("/job/test", func(w nethttp.ResponseWriter, r *nethttp.Request) {
+		app.WithHandlerFunc("/job/test", func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
 			if err != nil {
-				nethttp.Error(w, "Error reading request body", nethttp.StatusInternalServerError)
+				http.Error(w, "Error reading request body", http.StatusInternalServerError)
 				return
 			}
 
 			var jobEventRequest runtimev1pb.JobEventRequest
 			if err := json.Unmarshal(body, &jobEventRequest.Data); err != nil {
-				nethttp.Error(w, "Error decoding JSON", nethttp.StatusBadRequest)
+				http.Error(w, "Error decoding JSON", http.StatusBadRequest)
 				return
 			}
 			jobEventRequest.Method = r.URL.String()
-			h.jobChan <- &jobEventRequest
+			a.jobChan <- &jobEventRequest
 
-			w.WriteHeader(nethttp.StatusOK)
+			w.WriteHeader(http.StatusOK)
 		}),
 	)
 
-	h.daprd = daprd.New(t,
-		daprd.WithSchedulerAddresses(h.scheduler.Address()),
+	a.daprd = daprd.New(t,
+		daprd.WithSchedulerAddresses(a.scheduler.Address()),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(h.scheduler, srv, h.daprd),
+		framework.WithProcesses(a.scheduler, srv, a.daprd),
 	}
 }
 
-func (h *http) Run(t *testing.T, ctx context.Context) {
-	h.scheduler.WaitUntilRunning(t, ctx)
-	h.daprd.WaitUntilRunning(t, ctx)
+func (a *api) Run(t *testing.T, ctx context.Context) {
+	a.scheduler.WaitUntilRunning(t, ctx)
+	a.daprd.WaitUntilRunning(t, ctx)
 
-	client := h.daprd.GRPCClient(t, ctx)
+	client := client.HTTP(t)
 
-	t.Run("app receives triggered job", func(t *testing.T) {
-		h.receiveJob(t, ctx, client)
-	})
-}
+	body := `{
+"schedule": "@every 1s",
+"repeats": 1,
+"data": {
+	"@type": "type.googleapis.com/google.protobuf.StringValue",
+	"value": "\"someData\""
+}}`
 
-func (h *http) receiveJob(t *testing.T, ctx context.Context, client runtimev1pb.DaprClient) {
-	t.Helper()
-
-	req := &runtimev1pb.ScheduleJobRequest{
-		Job: &runtimev1pb.Job{
-			Name:     "test",
-			Schedule: ptr.Of("@every 1s"),
-			Repeats:  ptr.Of(uint32(1)),
-			Data: &anypb.Any{
-				TypeUrl: "type.googleapis.com/google.type.Expr",
-				Value:   []byte(`{"expression": "val"}`),
-			},
-		},
-	}
-	_, err := client.ScheduleJobAlpha1(ctx, req)
+	url := fmt.Sprintf("http://%s/v1.0-alpha1/jobs/test", a.daprd.HTTPAddress())
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
 	require.NoError(t, err)
 
+	resp, err := client.Do(req)
+	require.NoError(t, err)
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+
 	select {
-	case job := <-h.jobChan:
+	case job := <-a.jobChan:
 		assert.NotNil(t, job)
 		assert.NotNil(t, job.GetData())
 		assert.Equal(t, "/job/test", job.GetMethod())
-		assert.Equal(t, `{"expression": "val"}`, string(job.GetData().GetValue()))
-		assert.Equal(t, "type.googleapis.com/google.type.Expr", job.GetData().GetTypeUrl())
+		assert.Equal(t, []byte(`"someData"`), bytes.TrimSpace(job.GetData().GetValue()))
+		assert.Equal(t, "type.googleapis.com/google.protobuf.StringValue", job.GetData().GetTypeUrl())
 
 	case <-time.After(time.Second * 3):
 		assert.Fail(t, "timed out waiting for triggered job")

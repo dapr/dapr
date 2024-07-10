@@ -23,12 +23,14 @@ import (
 )
 
 func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
+	return a.ScheduleJobRequestAlpha1(ctx, inReq.GetJob())
+}
+
+func (a *Universal) ScheduleJobRequestAlpha1(ctx context.Context, job *runtimev1pb.Job) (*runtimev1pb.ScheduleJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
 	}
-
-	job := inReq.GetJob()
 
 	if job == nil {
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Job", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
@@ -65,7 +67,7 @@ func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.Sc
 
 	_, err := a.schedulerClients.Next().ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
-		a.logger.Errorf("Error scheduling job %s due to: %s", inReq.GetJob().GetName(), err)
+		a.logger.Errorf("Error scheduling job %s due to: %s", job.GetName(), err)
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerScheduleJob(errMetadata, err)
 	}
 

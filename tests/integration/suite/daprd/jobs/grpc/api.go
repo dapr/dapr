@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package appcallback
+package grpc
 
 import (
 	"context"
@@ -35,10 +35,10 @@ import (
 )
 
 func init() {
-	suite.Register(new(grpc))
+	suite.Register(new(api))
 }
 
-type grpc struct {
+type api struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
 	jobChan   chan *runtimev1pb.JobEventRequest
@@ -49,33 +49,33 @@ type jobData struct {
 	Value   string `json:"value"`
 }
 
-func (g *grpc) Setup(t *testing.T) []framework.Option {
-	g.scheduler = scheduler.New(t)
+func (a *api) Setup(t *testing.T) []framework.Option {
+	a.scheduler = scheduler.New(t)
 
-	g.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
+	a.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
 	srv := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
-			g.jobChan <- in
+			a.jobChan <- in
 			return new(runtimev1pb.JobEventResponse), nil
 		}),
 	)
 
-	g.daprd = daprd.New(t,
-		daprd.WithSchedulerAddresses(g.scheduler.Address()),
+	a.daprd = daprd.New(t,
+		daprd.WithSchedulerAddresses(a.scheduler.Address()),
 		daprd.WithAppPort(srv.Port(t)),
 		daprd.WithAppProtocol("grpc"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(g.scheduler, srv, g.daprd),
+		framework.WithProcesses(a.scheduler, srv, a.daprd),
 	}
 }
 
-func (g *grpc) Run(t *testing.T, ctx context.Context) {
-	g.scheduler.WaitUntilRunning(t, ctx)
-	g.daprd.WaitUntilRunning(t, ctx)
+func (a *api) Run(t *testing.T, ctx context.Context) {
+	a.scheduler.WaitUntilRunning(t, ctx)
+	a.daprd.WaitUntilRunning(t, ctx)
 
-	client := g.daprd.GRPCClient(t, ctx)
+	client := a.daprd.GRPCClient(t, ctx)
 
 	t.Run("app receives triggered job", func(t *testing.T) {
 		req := &runtimev1pb.ScheduleJobRequest{
@@ -92,7 +92,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		select {
-		case job := <-g.jobChan:
+		case job := <-a.jobChan:
 			assert.NotNil(t, job)
 			assert.Equal(t, "job/test", job.GetMethod())
 
