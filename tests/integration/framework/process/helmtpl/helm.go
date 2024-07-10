@@ -29,7 +29,15 @@ import (
 
 // Helm test helm chart template.  It is not really an integration test but this seems the best place to place it
 type Helm struct {
-	defaultOpts options
+setValues       []string
+	setStringValues []string
+	setJSONValue    string
+
+	// list of resources to show only
+	showOnly []string
+
+	exitCode           *int
+	exitErrorMsgRegexp *regexp.Regexp
 }
 
 func New(t *testing.T, fopts ...Option) *Helm {
