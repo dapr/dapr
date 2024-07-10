@@ -83,7 +83,7 @@ Create etcd client http ports list dynamically based on replicaCount.
 {{- end -}}
 
 {{/*
-Verify Replicas Count is an odd number.
+Verify Replicas Count is an odd number.  This is piped into `required` function and will fail the helm rendering if the condition is not met (empty value).
 */}}
 {{- define "dapr_scheduler.verify-replica-count-is-odd-number" -}}
 {{-   if eq (mod . 2) 1 -}}true{{- else -}}{{- end -}}
