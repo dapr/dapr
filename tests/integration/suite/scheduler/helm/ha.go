@@ -69,4 +69,24 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
 		require.Equal(t, int32(3), *sts.Spec.Replicas)
 	})
+	t.Run("antiaffinity_should_be_present", func(t *testing.T) {
+		var sts appsv1.StatefulSet
+		require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
+		require.NotNil(t, sts.Spec.Template.Spec.Affinity)
+		require.NotNil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
+	})
+	t.Run("arg_replica_count_should_be_3", func(t *testing.T) {
+		var sts appsv1.StatefulSet
+		require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
+		var replicaArgFound bool
+		for i, e := range sts.Spec.Template.Spec.Containers[0].Args {
+			if e == "--replica-count" {
+				require.Greater(t, len(sts.Spec.Template.Spec.Containers[0].Args), i+1)
+				require.Equal(t, "3", sts.Spec.Template.Spec.Containers[0].Args[i+1])
+				replicaArgFound = true
+				break
+			}
+		}
+		require.True(t, replicaArgFound)
+	})
 }

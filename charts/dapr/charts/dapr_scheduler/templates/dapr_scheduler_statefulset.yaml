@@ -138,7 +138,7 @@ spec:
         - "--id"
         - "$(SCHEDULER_ID)"
         - "--replica-count"
-        - "{{ .Values.replicaCount }}"
+        - "{{ $replicas }}"
         - "--initial-cluster"
         - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
         - "--etcd-client-ports"
@@ -238,7 +238,7 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
-{{- if (gt (int .Values.replicaCount) 1) }}
+{{- if (gt (int $replicas) 1) }}
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
