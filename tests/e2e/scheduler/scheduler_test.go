@@ -107,7 +107,7 @@ func TestJobTriggered(t *testing.T) {
 	require.NoError(t, err)
 
 	data := jobData{
-		DataType: "type.googleapis.com/google.type.StringValue",
+		DataType: "type.googleapis.com/google.protobuf.StringValue",
 		Value:    "expression",
 	}
 
