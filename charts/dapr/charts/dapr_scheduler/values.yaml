@@ -27,7 +27,7 @@ ports:
   etcdGRPCPeerPort: 2380
 
 # etcd should have an odd number of replicas https://etcd.io/docs/v3.3/faq/ to guarantee quorum
-replicaCount: null
+replicaCount: 1
 ha: false
 
 cluster:

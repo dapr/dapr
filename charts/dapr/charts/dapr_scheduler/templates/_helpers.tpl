@@ -91,12 +91,13 @@ On success we return the replicas value passed.
 {{- end -}}
 
 {{/*
-Gets the number of replicas
+Gets the number of replicas. If global.ha.enabled is true, then the number of replicas is set to 3 but can be overridden by .Values.replicaCount if that is greater than 3.
+We also pass the value to the get-replicas-if-odd template to ensure that the number of replicas is an odd number.
 */}}
 {{- define "dapr_scheduler.get-replicas" -}}
-{{- $replicas := default 1 .Values.replicaCount }}
-{{- if eq true .Values.global.ha.enabled .Values.ha }}
-{{-   $replicas = max $replicas 3 }}
-{{- end }}
-{{- include "dapr_scheduler.get-replicas-if-odd" $replicas | required "values set in dapr_scheduler chart in .Values.replicaCount should be an odd number" }}
+{{-   $replicas := default 1 .Values.replicaCount }}
+{{-   if eq true .Values.global.ha.enabled .Values.ha }}
+{{-     $replicas = max $replicas 3 }}
+{{-   end }}
+{{-   include "dapr_scheduler.get-replicas-if-odd" $replicas | required "values set in dapr_scheduler chart in .Values.replicaCount should be an odd number" }}
 {{- end -}}
