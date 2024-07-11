@@ -40,8 +40,8 @@ type triggeredJob struct {
 }
 
 type jobData struct {
-	DataType   string `json:"@type"`
-	Expression string `json:"expression"`
+	DataType string `json:"@type"`
+	Value    string `json:"value"`
 }
 
 type job struct {
