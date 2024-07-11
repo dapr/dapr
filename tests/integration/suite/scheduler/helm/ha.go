@@ -24,7 +24,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/helm"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -34,50 +33,52 @@ func init() {
 
 // basic tests the operator's ListCompontns API.
 type ha struct {
-	helm    *helm.Helm
-	helmErr *helm.Helm
-
-	loglineHelmErr *logline.LogLine
+	helm           *helm.Helm
+	helmErr        *helm.Helm
+	helmNamespaced *helm.Helm
 }
 
 func (b *ha) Setup(t *testing.T) []framework.Option {
-	b.loglineHelmErr = logline.New(t, logline.WithStderrLineContains("should be an odd number"))
-
 	b.helm = helm.New(t,
 		helm.WithGlobalValues("ha.enabled=true"),
 		helm.WithShowOnlySchedulerSTS(),
 		helm.WithLocalBuffForStdout())
 
+	b.helmNamespaced = helm.New(t,
+		helm.WithGlobalValues("ha.enabled=true"),
+		helm.WithShowOnlySchedulerSTS(),
+		helm.WithLocalBuffForStdout(),
+		helm.WithNamespace("dapr-system"))
+
 	b.helmErr = helm.New(t,
 		helm.WithGlobalValues("ha.enabled=true"),
 		helm.WithValues("dapr_scheduler.replicaCount=4"),
+		helm.WithLocalBuffForStderr(),
 		helm.WithExecOptions(
 			exec.WithExitCode(1),
 			exec.WithRunError(func(t *testing.T, err error) {
 				require.ErrorContains(t, err, "exit status 1")
 			}),
-			exec.WithStderr(b.loglineHelmErr.Stderr())))
+		))
 
 	return []framework.Option{
-		framework.WithProcesses(b.loglineHelmErr, b.helm, b.helmErr),
+		framework.WithProcesses(b.helm, b.helmErr, b.helmNamespaced),
 	}
 }
 
 func (b *ha) Run(t *testing.T, ctx context.Context) {
+	// good path
+	var sts appsv1.StatefulSet
+	require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
+
 	t.Run("get_default_replicas", func(t *testing.T) {
-		var sts appsv1.StatefulSet
-		require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
 		require.Equal(t, int32(3), *sts.Spec.Replicas)
 	})
 	t.Run("pod_antiaffinity_should_be_present", func(t *testing.T) {
-		var sts appsv1.StatefulSet
-		require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
 		require.NotNil(t, sts.Spec.Template.Spec.Affinity)
 		require.NotNil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
 	})
 	t.Run("arg_replica_count_should_be_3", func(t *testing.T) {
-		var sts appsv1.StatefulSet
-		require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
 		var replicaArgFound bool
 		for i, e := range sts.Spec.Template.Spec.Containers[0].Args {
 			if e == "--replica-count" {
@@ -88,5 +89,44 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 			}
 		}
 		require.True(t, replicaArgFound)
+	})
+	t.Run("initial_cluster_has_all_instances_default", func(t *testing.T) {
+		for i, e := range sts.Spec.Template.Spec.Containers[0].Args {
+			if e == "--initial-cluster" {
+				require.Equal(t,
+					"dapr-scheduler-server-0=http://dapr-scheduler-server-0.dapr-scheduler-server.default.svc.cluster.local:2380,"+
+						"dapr-scheduler-server-1=http://dapr-scheduler-server-1.dapr-scheduler-server.default.svc.cluster.local:2380,"+
+						"dapr-scheduler-server-2=http://dapr-scheduler-server-2.dapr-scheduler-server.default.svc.cluster.local:2380", sts.Spec.Template.Spec.Containers[0].Args[i+1])
+			}
+		}
+	})
+	t.Run("etcd_client_ports_default", func(t *testing.T) {
+		for i, e := range sts.Spec.Template.Spec.Containers[0].Args {
+			if e == "--etcd-client-ports" {
+				require.Equal(t, "dapr-scheduler-server-0=2379,dapr-scheduler-server-1=2379,dapr-scheduler-server-2=2379", sts.Spec.Template.Spec.Containers[0].Args[i+1])
+			}
+			if e == "--etcd-client-http-ports" {
+				require.Equal(t, "dapr-scheduler-server-0=2330,dapr-scheduler-server-1=2330,dapr-scheduler-server-2=2330", sts.Spec.Template.Spec.Containers[0].Args[i+1])
+			}
+		}
+	})
+
+	// namespaced
+	t.Run("initial_cluster_has_all_instances_dapr_system_namespace", func(t *testing.T) {
+		var stsNamespaced appsv1.StatefulSet
+		require.NoError(t, yaml.Unmarshal(b.helmNamespaced.GetStdout(), &stsNamespaced))
+		for i, e := range stsNamespaced.Spec.Template.Spec.Containers[0].Args {
+			if e == "--initial-cluster" {
+				require.Equal(t,
+					"dapr-scheduler-server-0=http://dapr-scheduler-server-0.dapr-scheduler-server.dapr-system.svc.cluster.local:2380"+
+						",dapr-scheduler-server-1=http://dapr-scheduler-server-1.dapr-scheduler-server.dapr-system.svc.cluster.local:2380"+
+						",dapr-scheduler-server-2=http://dapr-scheduler-server-2.dapr-scheduler-server.dapr-system.svc.cluster.local:2380", stsNamespaced.Spec.Template.Spec.Containers[0].Args[i+1])
+			}
+		}
+	})
+
+	// bad path helmerr
+	t.Run("get_error_on_even_replicas", func(t *testing.T) {
+		require.Contains(t, string(b.helmErr.GetStderr()), "should be an odd number")
 	})
 }

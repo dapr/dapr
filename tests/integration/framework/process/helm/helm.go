@@ -36,6 +36,7 @@ func (b LocalBuf) Close() error {
 type Helm struct {
 	exec   process.Interface
 	stdout *LocalBuf
+	stderr *LocalBuf
 }
 
 func New(t *testing.T, fopts ...OptionFunc) *Helm {
@@ -46,6 +47,8 @@ func New(t *testing.T, fopts ...OptionFunc) *Helm {
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
+
+	// helm options (not all are available)
 	args := make([]string, 0, 2*(len(opts.setValues)+len(opts.setStringValues)+len(opts.showOnly)))
 	for _, v := range opts.setValues {
 		args = append(args, "--set", v)
@@ -59,10 +62,18 @@ func New(t *testing.T, fopts ...OptionFunc) *Helm {
 	for _, v := range opts.showOnly {
 		args = append(args, "--show-only", v)
 	}
-	var localBuf *LocalBuf
+	if opts.namespace != "" {
+		args = append(args, "--namespace", opts.namespace)
+	}
+
+	var localBufStdout, localBufStderr *LocalBuf
 	if opts.useLocalBuffForStdout {
-		localBuf = &LocalBuf{Buffer: &bytes.Buffer{}}
-		opts.execOpts = append(opts.execOpts, exec.WithStdout(localBuf))
+		localBufStdout = &LocalBuf{Buffer: &bytes.Buffer{}}
+		opts.execOpts = append(opts.execOpts, exec.WithStdout(localBufStdout))
+	}
+	if opts.useLocalBuffForStderr {
+		localBufStderr = &LocalBuf{Buffer: &bytes.Buffer{}}
+		opts.execOpts = append(opts.execOpts, exec.WithStderr(localBufStderr))
 	}
 	opts.execOpts = append(opts.execOpts, exec.WaitForCompletion())
 	rootDir := binary.GetRootDir(t)
@@ -71,7 +82,8 @@ func New(t *testing.T, fopts ...OptionFunc) *Helm {
 
 	return &Helm{
 		exec:   exec.New(t, binary.EnvValue("helmtemplate"), args, opts.execOpts...),
-		stdout: localBuf,
+		stdout: localBufStdout,
+		stderr: localBufStderr,
 	}
 }
 
@@ -84,5 +96,15 @@ func (h *Helm) Cleanup(t *testing.T) {
 }
 
 func (h *Helm) GetStdout() []byte {
-	return h.stdout.Bytes()
+	if h.stdout != nil {
+		return h.stdout.Bytes()
+	}
+	return nil
+}
+
+func (h *Helm) GetStderr() []byte {
+	if h.stderr != nil {
+		return h.stderr.Bytes()
+	}
+	return nil
 }

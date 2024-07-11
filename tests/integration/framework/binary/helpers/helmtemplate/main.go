@@ -71,6 +71,7 @@ func main() {
 	valueOpts := &values.Options{}
 	pf := pflag.NewFlagSet("helmtemplate", pflag.ContinueOnError)
 	addValueOptionsFlags(pf, valueOpts)
+	settings.AddFlags(pf)
 
 	var showFiles []string
 	pf.StringArrayVarP(&showFiles, "show-only", "s", []string{}, "only show manifests rendered from the given templates")

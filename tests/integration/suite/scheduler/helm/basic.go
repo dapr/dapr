@@ -24,7 +24,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/helm"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -36,13 +35,9 @@ func init() {
 type basic struct {
 	helm    *helm.Helm
 	helmErr *helm.Helm
-
-	loglineHelmErr *logline.LogLine
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	b.loglineHelmErr = logline.New(t, logline.WithStderrLineContains("should be an odd number"))
-
 	b.helm = helm.New(t,
 		helm.WithGlobalValues("ha.enabled=false"), // Not HA
 		helm.WithShowOnlySchedulerSTS(),
@@ -51,15 +46,16 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	b.helmErr = helm.New(t,
 		helm.WithGlobalValues("ha.enabled=false"), // Not HA
 		helm.WithValues("dapr_scheduler.replicaCount=4"),
+		helm.WithLocalBuffForStderr(),
 		helm.WithExecOptions(
 			exec.WithExitCode(1),
 			exec.WithRunError(func(t *testing.T, err error) {
 				require.ErrorContains(t, err, "exit status 1")
 			}),
-			exec.WithStderr(b.loglineHelmErr.Stderr())))
+		))
 
 	return []framework.Option{
-		framework.WithProcesses(b.loglineHelmErr, b.helm, b.helmErr),
+		framework.WithProcesses(b.helm, b.helmErr),
 	}
 }
 
@@ -68,6 +64,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		var sts appsv1.StatefulSet
 		require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
 		require.Equal(t, int32(1), *sts.Spec.Replicas) // single replica
+	})
+	t.Run("even_number_not_allowed", func(t *testing.T) {
+		require.Contains(t, string(b.helmErr.GetStderr()), "should be an odd number")
 	})
 	t.Run("pod_antiaffinity_should_NOT_be_present", func(t *testing.T) {
 		var sts appsv1.StatefulSet

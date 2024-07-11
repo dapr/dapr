@@ -29,7 +29,7 @@ Create initial cluster peer list dynamically based on replicaCount.
 {{- define "dapr_scheduler.initialcluster" -}}
 {{- $initialCluster := "" -}}
 {{- $namespace := .Release.Namespace -}}
-{{- $replicaCount := int .Values.replicaCount -}}
+{{- $replicaCount := include "dapr_scheduler.get-replicas" . | int -}}
 {{- range $i, $e := until $replicaCount -}}
 {{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
 {{- $svcName := printf "%s.dapr-scheduler-server.%s.svc.cluster.local" $instanceName $namespace -}}
@@ -48,7 +48,7 @@ Create etcd client ports list dynamically based on replicaCount.
 {{- define "dapr_scheduler.etcdclientports" -}}
 {{- $etcdClientPorts := "" -}}
 {{- $namespace := .Release.Namespace -}}
-{{- $replicaCount := int .Values.replicaCount -}}
+{{- $replicaCount := include "dapr_scheduler.get-replicas" . | int -}}
 {{- range $i, $e := until $replicaCount -}}
 {{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
 {{- $clientPort := int $.Values.ports.etcdGRPCClientPort -}}
@@ -68,7 +68,7 @@ Create etcd client http ports list dynamically based on replicaCount.
 {{- define "dapr_scheduler.etcdclienthttpports" -}}
 {{- $etcdClientHttpPorts := "" -}}
 {{- $namespace := .Release.Namespace -}}
-{{- $replicaCount := int .Values.replicaCount -}}
+{{- $replicaCount := include "dapr_scheduler.get-replicas" . | int -}}
 {{- range $i, $e := until $replicaCount -}}
 {{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
 {{- $clientPort := int $.Values.ports.etcdHTTPClientPort -}}
@@ -88,4 +88,15 @@ On success we return the replicas value passed.
 */}}
 {{- define "dapr_scheduler.get-replicas-if-odd" -}}
 {{-   if eq (mod . 2) 1 -}}{{ . }}{{- else -}}{{- end -}}
+{{- end -}}
+
+{{/*
+Gets the number of replicas
+*/}}
+{{- define "dapr_scheduler.get-replicas" -}}
+{{- $replicas := default 1 .Values.replicaCount }}
+{{- if eq true .Values.global.ha.enabled .Values.ha }}
+{{-   $replicas = max $replicas 3 }}
+{{- end }}
+{{- include "dapr_scheduler.get-replicas-if-odd" $replicas | required "values set in dapr_scheduler chart in .Values.replicaCount should be an odd number" }}
 {{- end -}}

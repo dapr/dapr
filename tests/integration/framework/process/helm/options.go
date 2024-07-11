@@ -37,6 +37,12 @@ type options struct {
 	// if set we use the local buffer to read/write the stdout
 	// Note: we will not be using execOpts stdout if passed as an exec OptionFunc
 	useLocalBuffForStdout bool
+
+	// if set we use the local buffer to read/write the stdout
+	// Note: we will not be using execOpts stdout if passed as an exec OptionFunc
+	useLocalBuffForStderr bool
+
+	namespace string
 }
 
 func WithExecOptions(execOptions ...exec.Option) OptionFunc {
@@ -48,6 +54,12 @@ func WithExecOptions(execOptions ...exec.Option) OptionFunc {
 func WithLocalBuffForStdout() OptionFunc {
 	return func(o *options) {
 		o.useLocalBuffForStdout = true
+	}
+}
+
+func WithLocalBuffForStderr() OptionFunc {
+	return func(o *options) {
+		o.useLocalBuffForStderr = true
 	}
 }
 
@@ -114,5 +126,11 @@ func WithShowOnly(chart, tplYamlFileName string) OptionFunc {
 			tplYamlFileName += ".yaml"
 		}
 		o.showOnly = append(o.showOnly, fmt.Sprintf("charts/%s/templates/%s", chart, tplYamlFileName))
+	}
+}
+
+func WithNamespace(namespace string) OptionFunc {
+	return func(o *options) {
+		o.namespace = namespace
 	}
 }

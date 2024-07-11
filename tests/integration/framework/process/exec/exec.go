@@ -138,6 +138,8 @@ func (e *exec) checkExit(t *testing.T, timeout time.Duration) {
 		select {
 		case <-timer.C:
 			kill.Kill(t, e.cmd)
+			require.NoError(t, e.stderrpipe.Close())
+			require.NoError(t, e.stdoutpipe.Close())
 		}
 	}
 
