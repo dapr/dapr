@@ -52,8 +52,8 @@ type triggeredJob struct {
 }
 
 type jobData struct {
-	DataType   string `json:"@type"`
-	Expression string `json:"expression"`
+	DataType string `json:"@type"`
+	Value    string `json:"value"`
 }
 
 type job struct {
@@ -107,8 +107,8 @@ func TestJobTriggered(t *testing.T) {
 	require.NoError(t, err)
 
 	data := jobData{
-		DataType:   "type.googleapis.com/google.type.Expr",
-		Expression: "expression",
+		DataType: "type.googleapis.com/google.protobuf.StringValue",
+		Value:    "expression",
 	}
 
 	j := job{
@@ -138,22 +138,18 @@ func TestJobTriggered(t *testing.T) {
 		}
 		wg.Wait()
 
-		assert.Eventually(t, func() bool {
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			log.Println("Checking the count of stored triggered jobs equals the scheduled count of jobs")
 			// Call the app endpoint to get triggered jobs
 			resp, err := utils.HTTPGet(fmt.Sprintf(getTriggeredJobsURLFormat, externalURL))
-			if err != nil {
-				return false
-			}
+			require.NoError(t, err)
 
 			var triggeredJobs []triggeredJob
 			err = json.Unmarshal([]byte(resp), &triggeredJobs)
-			if err != nil {
-				return false
-			}
+			require.NoError(t, err)
 
 			// Check if the length of triggeredJobs matches the expected length of scheduled jobs
-			return len(triggeredJobs) == numIterations*numJobsPerGoRoutine
+			assert.Equal(c, numIterations*numJobsPerGoRoutine, len(triggeredJobs))
 		}, 5*time.Second, 50*time.Millisecond)
 		t.Log("Done.")
 	})
