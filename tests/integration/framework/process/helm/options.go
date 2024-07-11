@@ -62,7 +62,6 @@ func WithGlobalValues(values ...string) OptionFunc {
 		for _, v := range values {
 			o.setValues = append(o.setValues, "global."+v)
 		}
-
 	}
 }
 

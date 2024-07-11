@@ -46,7 +46,7 @@ func New(t *testing.T, fopts ...OptionFunc) *Helm {
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
-	var args []string
+	args := make([]string, 0, 2*(len(opts.setValues)+len(opts.setStringValues)+len(opts.showOnly)))
 	for _, v := range opts.setValues {
 		args = append(args, "--set", v)
 	}
