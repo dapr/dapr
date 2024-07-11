@@ -64,12 +64,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		for _, body := range []string{
 			"",
 			"{}",
-			`["job": {}]`,
-			`"job": {}`,
-			`{"job"}`,
-			`{"job": {}}`,
-			`{"job": {"name": "test"}}`,
-			`{"job": {"schedule": "test", "repeats": -1}}`,
+			`[{}]`,
+			`{}`,
+			`{"name": "test"}`,
+			`{"schedule": "test", "repeats": -1}`,
 		} {
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 			require.NoError(t, err)
@@ -84,9 +82,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("good json", func(t *testing.T) {
 		for _, body := range []string{
-			`{"job": {"schedule": "@daily"}}`,
-			`{"job": {"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}}`,
-			`{"job": {"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": {"@type": "type.googleapis.com/google.protobuf.StringValue", "value": "Hello, World!"}}}`,
+			`{"schedule": "@daily"}`,
+			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`,
+			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": {"@type": "type.googleapis.com/google.protobuf.StringValue", "value": "Hello, World!"}}`,
 		} {
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 			require.NoError(t, err)

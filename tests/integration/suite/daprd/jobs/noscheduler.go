@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package api
+package jobs
 
 import (
 	"context"
@@ -50,8 +50,7 @@ func (b *noscheduler) Run(t *testing.T, ctx context.Context) {
 
 	client := b.daprd.GRPCClient(t, ctx)
 
-	// Is sidecar responding?
-	_, err := client.GetMetadata(ctx, &rtv1.GetMetadataRequest{})
+	_, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 
 	req := &rtv1.ScheduleJobRequest{
@@ -66,7 +65,6 @@ func (b *noscheduler) Run(t *testing.T, ctx context.Context) {
 	_, err = client.ScheduleJobAlpha1(ctx, req)
 	require.Error(t, err)
 
-	// Is sidecar still running?
-	_, err = client.GetMetadata(ctx, &rtv1.GetMetadataRequest{})
+	_, err = client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 }

@@ -17,12 +17,12 @@ import (
 	"context"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -76,7 +76,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty), errInfo.GetReason())
+		require.Equal(t, "SCHEDULER_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
@@ -99,7 +99,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), errInfo.GetReason())
+		assert.Equal(t, "SCHEDULER_JOB_NAME_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
@@ -122,7 +122,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty), errInfo.GetReason())
+		assert.Equal(t, "SCHEDULER_SCHEDULE_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
@@ -145,7 +145,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), errInfo.GetReason())
+		assert.Equal(t, "SCHEDULER_JOB_NAME_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
@@ -168,7 +168,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty), errInfo.GetReason())
+		assert.Equal(t, "SCHEDULER_JOB_NAME_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 }
