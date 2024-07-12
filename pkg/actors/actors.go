@@ -89,6 +89,7 @@ type ActorRuntime interface {
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
 	GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime
 	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error
+	UnregisterInternalActor(ctx context.Context, actorType string) error
 	Entities() []string
 }
 
@@ -1295,6 +1296,30 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 
 	if a.placementEnabled {
 		err := a.placement.AddHostedActorType(actorType, actorIdleTimeout)
+		if err != nil {
+			return fmt.Errorf("error updating hosted actor types: %w", err)
+		}
+	}
+	return nil
+}
+
+func (a *actorsRuntime) UnregisterInternalActor(ctx context.Context, actorType string) error {
+	if !a.haveCompatibleStorage() {
+		return fmt.Errorf("unable to register internal actor type '%s': %w", actorType, ErrIncompatibleStateStore)
+	}
+
+	// Call GetOrSet which returns "existing=true" if the actor type was already registered
+	_, existing := a.internalActorTypes.GetAndDel(actorType)
+	if !existing {
+		return nil
+	}
+
+	log.Debugf("UnRegistered internal actor type '%s'", actorType)
+
+	a.actorsConfig.Config.HostedActorTypes.RemoveActorType(actorType)
+
+	if a.placementEnabled {
+		err := a.placement.DeleteHostedActorType(actorType)
 		if err != nil {
 			return fmt.Errorf("error updating hosted actor types: %w", err)
 		}

@@ -59,6 +59,10 @@ func (*MockPlacement) AddHostedActorType(string, time.Duration) error {
 	return nil
 }
 
+func (*MockPlacement) DeleteHostedActorType(string) error {
+	return nil
+}
+
 func (p *MockPlacement) SetLookupActorResponse(req internal.LookupActorRequest, res internal.LookupActorResponse) {
 	p.lookupActorResponses[req.ActorKey()] = res
 }
@@ -131,6 +135,10 @@ func (_m *MockActors) Entities() []string {
 }
 
 func (_m *MockActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
+	return nil
+}
+
+func (_m *MockActors) UnregisterInternalActor(ctx context.Context, actorType string) error {
 	return nil
 }
 
@@ -371,6 +379,10 @@ func (f *FailingActors) Entities() []string {
 }
 
 func (f *FailingActors) RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error {
+	return nil
+}
+
+func (f *FailingActors) UnregisterInternalActor(ctx context.Context, actorType string) error {
 	return nil
 }
 

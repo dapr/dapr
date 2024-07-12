@@ -97,6 +97,13 @@ func (ha *hostedActors) AddActorType(actorType string, idleTimeout time.Duration
 	ha.lock.Unlock()
 }
 
+// RemoveActorType removes an actor type
+func (ha *hostedActors) RemoveActorType(actorType string) {
+	ha.lock.Lock()
+	delete(ha.actors, actorType)
+	ha.lock.Unlock()
+}
+
 // IsActorTypeHosted returns true if the actor type is hosted.
 func (ha *hostedActors) IsActorTypeHosted(actorType string) bool {
 	ha.lock.RLock()
