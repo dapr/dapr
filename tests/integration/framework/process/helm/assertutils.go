@@ -1,10 +1,10 @@
 package helm
 
 import (
-	"github.com/stretchr/testify/require"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func AssertArgsValue(t *testing.T, args []string, arg string, value string) {
