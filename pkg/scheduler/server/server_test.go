@@ -136,7 +136,7 @@ func TestServerConf(t *testing.T) {
 		config := s.config
 
 		assert.Equal(t, "id1=http://localhost:5001,id2=http://localhost:5002", config.InitialCluster)
-		assert.Equal(t, "./data-default-id2", config.Dir)
+		assert.Equal(t, "data/default-id2", config.Dir)
 
 		clientURL := url.URL{
 			Scheme: "http",

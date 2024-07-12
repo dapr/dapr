@@ -6320,7 +6320,8 @@ func (*ShutdownRequest) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{90}
 }
 
-// Job is the definition of a job.
+// Job is the definition of a job. At least one of schedule or due_time must be
+// provided but can also be provided together.
 type Job struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -6328,15 +6329,41 @@ type Job struct {
 
 	// The unique name for the job.
 	Name string `protobuf:"bytes,1,opt,name=name,proto3" json:"name,omitempty"`
-	// The schedule for the job.
+	// schedule is an optional schedule at which the job is to be run.
+	// Accepts both systemd timer style cron expressions, as well as human
+	// readable '@' prefixed period strings as defined below.
+	//
+	// Systemd timer style cron accepts 6 fields:
+	// seconds | minutes | hours | day of month | month        | day of week
+	// 0-59    | 0-59    | 0-23  | 1-31         | 1-12/jan-dec | 0-7/sun-sat
+	//
+	// "0 30 * * * *" - every hour on the half hour
+	// "0 15 3 * * *" - every day at 03:15
+	//
+	// Period string expressions:
+	// Entry                  | Description                                | Equivalent To
+	// -----                  | -----------                                | -------------
+	// @every <duration>      | Run every <duration> (e.g. '@every 1h30m') | N/A
+	// @yearly (or @annually) | Run once a year, midnight, Jan. 1st        | 0 0 0 1 1 *
+	// @monthly               | Run once a month, midnight, first of month | 0 0 0 1 * *
+	// @weekly                | Run once a week, midnight on Sunday        | 0 0 0 * * 0
+	// @daily (or @midnight)  | Run once a day, midnight                   | 0 0 0 * * *
+	// @hourly                | Run once an hour, beginning of hour        | 0 0 * * * *
 	Schedule *string `protobuf:"bytes,2,opt,name=schedule,proto3,oneof" json:"schedule,omitempty"`
-	// Optional: jobs with fixed repeat counts (accounting for Actor Reminders).
+	// repeats is the optional number of times in which the job should be
+	// triggered. If not set, the job will run indefinitely or until expiration.
 	Repeats *uint32 `protobuf:"varint,3,opt,name=repeats,proto3,oneof" json:"repeats,omitempty"`
-	// Optional: sets time at which or time interval before the callback is invoked for the first time.
+	// due_time is the optional time at which the job should be active, or the
+	// "one shot" time if other scheduling type fields are not provided. Accepts
+	// a "point in time" string in the format of RFC3339, Go duration string
+	// (calculated from job creation time), or non-repeating ISO8601.
 	DueTime *string `protobuf:"bytes,4,opt,name=due_time,json=dueTime,proto3,oneof" json:"due_time,omitempty"`
-	// Optional: Time To Live to allow for auto deletes (accounting for Actor Reminders).
+	// ttl is the optional time to live or expiration of the job. Accepts a
+	// "point in time" string in the format of RFC3339, Go duration string
+	// (calculated from job creation time), or non-repeating ISO8601.
 	Ttl *string `protobuf:"bytes,5,opt,name=ttl,proto3,oneof" json:"ttl,omitempty"`
-	// Job data.
+	// payload is the serialized job payload that will be sent to the recipient
+	// when the job is triggered.
 	Data *anypb.Any `protobuf:"bytes,6,opt,name=data,proto3" json:"data,omitempty"`
 }
 
