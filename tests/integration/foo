@@ -1,1 +1,0 @@
-{"name":"jobforjabba", "schedule":"@every 1m", "repeats":5, "data":{"@type":"type.googleapis.com/google.protobuf.StringValue", "value":"Running spice"}}
