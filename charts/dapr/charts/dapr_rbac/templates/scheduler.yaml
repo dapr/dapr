@@ -1,4 +1,3 @@
-{{- if or (eq .Values.global.scheduler.enabled true) (eq .Values.global.reminders.serviceName "scheduler") }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -8,9 +7,7 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
-{{- end }}
 ---
-{{- if or (eq .Values.global.scheduler.enabled true) (eq .Values.global.reminders.serviceName "scheduler") }}
 {{- if eq .Values.global.rbac.namespaced true }}
 kind: Role
 {{- else }}
@@ -24,9 +21,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 rules: []
-{{- end }}
 ---
-{{- if or (eq .Values.global.scheduler.enabled true) (eq .Values.global.reminders.serviceName "scheduler") }}
 {{- if eq .Values.global.rbac.namespaced true }}
 kind: RoleBinding
 {{- else }}
@@ -51,4 +46,3 @@ roleRef:
   kind: ClusterRole
 {{- end }}
   name: dapr-scheduler
-{{- end }}
