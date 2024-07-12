@@ -72,10 +72,6 @@ global:
     # If empty, uses the built-in reminders capabilities in Dapr sidecars
     serviceName: ""
 
-  scheduler:
-    # Enables scheduler functionality in the cluster
-    enabled: true
-
   daprControlPlaneOs: linux
   labels: {}
   seccompProfile: ""

@@ -119,7 +119,6 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.rbac.namespaced`                      | Removes cluster wide permissions where applicable                                                                                                                                                       | `false` |
 | `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts                                                                                                                                            | `false`                 |
 | `global.priorityClassName`                    | Adds `priorityClassName` to Dapr pods                                                                                                                                                                   | `""`                    |
-| `global.scheduler.enabled`                    | Enables the Dapr Scheduler building block. When "false", the Dapr Scheduler service is not installed, and attempting to schedule jobs in Dapr will fail.                                                | `true` |
 
 
 ### Dapr Operator options:

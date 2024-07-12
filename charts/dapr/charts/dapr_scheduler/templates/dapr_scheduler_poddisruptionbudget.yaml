@@ -1,4 +1,3 @@
-{{- if and (gt (include "dapr_scheduler.get-replicas" . | int) 1) (eq .Values.global.scheduler.enabled true) }}
 {{- if .Capabilities.APIVersions.Has "policy/v1" }}
 apiVersion: policy/v1
 {{- else }}
@@ -29,4 +28,3 @@ spec:
       {{- with .Values.global.labels }}
       {{- toYaml . | nindent 6 }}
       {{- end }}
-{{- end }}
