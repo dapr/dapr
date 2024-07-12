@@ -20,7 +20,7 @@ spec:
   publishNotReadyAddresses: true
   ports:
   - name: api
-    port: {{ .Values.ports.apiPort }}
+    port: 50006
   - name: etcd-client
     port: {{ .Values.ports.etcdGRPCClientPort }}
   - name: etcd-httpclient

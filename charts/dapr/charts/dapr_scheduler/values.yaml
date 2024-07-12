@@ -21,7 +21,6 @@ service:
 
 ports:
   protocol: TCP
-  apiPort: 50006
   etcdGRPCClientPort: 2379
   etcdHTTPClientPort: 2330
   etcdGRPCPeerPort: 2380

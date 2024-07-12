@@ -26,7 +26,9 @@ import (
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	admissionv1 "k8s.io/api/admission/v1"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/runtime/serializer"
@@ -36,6 +38,7 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -92,6 +95,7 @@ type injector struct {
 	controlPlaneTrustDomain string
 	currentTrustAnchors     currentTrustAnchorsFn
 	sentrySPIFFEID          spiffeid.ID
+	schedulerAddresses      []string
 
 	htarget              healthz.Target
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
@@ -226,6 +230,46 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spif
 
 	i.currentTrustAnchors = currentTrustAnchors
 	i.sentrySPIFFEID = sentryID
+
+	clusterDomain, err := utils.GetKubeClusterDomain()
+	if err != nil {
+		clusterDomain = utils.DefaultKubeClusterDomain
+	}
+
+	for {
+		var sched *appsv1.StatefulSet
+		sched, err = i.kubeClient.AppsV1().StatefulSets(i.controlPlaneNamespace).Get(ctx, "dapr-scheduler-server", metav1.GetOptions{})
+		if apierrors.IsNotFound(err) {
+			log.Warnf("%s/dapr-scheduler-server StatefulSet not found, retrying in 5 seconds", i.controlPlaneNamespace)
+			select {
+			case <-time.After(5 * time.Second):
+				continue
+			case <-ctx.Done():
+				return fmt.Errorf("%s/dapr-scheduler-server StatefulSet not found", i.controlPlaneNamespace)
+			}
+		}
+
+		if err != nil {
+			return fmt.Errorf("error getting dapr-scheduler-server StatefulSet: %w", err)
+		}
+
+		if sched.Spec.Replicas == nil {
+			return errors.New("dapr-scheduler-server StatefulSet has no replicas")
+		}
+
+		for n := range *sched.Spec.Replicas {
+			i.schedulerAddresses = append(i.schedulerAddresses, fmt.Sprintf(
+				"dapr-scheduler-server-%d.dapr-scheduler-server.%s.svc.%s:50006",
+				n, i.controlPlaneNamespace, clusterDomain,
+			))
+		}
+
+		break
+	}
+
+	if len(i.schedulerAddresses) > 0 {
+		log.Infof("Found dapr-scheduler-server StatefulSet with addresses: %s", strings.Join(i.schedulerAddresses, ","))
+	}
 
 	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", i.port), tlsConfig)
 	if err != nil {
