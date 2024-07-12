@@ -77,15 +77,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	t.Run("arg_replica_count_should_be_1", func(t *testing.T) {
 		var sts appsv1.StatefulSet
 		require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
-		var replicaArgFound bool
-		for i, e := range sts.Spec.Template.Spec.Containers[0].Args {
-			if e == "--replica-count" {
-				require.Greater(t, len(sts.Spec.Template.Spec.Containers[0].Args), i+1)
-				require.Equal(t, "1", sts.Spec.Template.Spec.Containers[0].Args[i+1])
-				replicaArgFound = true
-				break
-			}
-		}
-		require.True(t, replicaArgFound)
+		helm.RequireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--replica-count", "1")
 	})
 }

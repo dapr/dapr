@@ -54,7 +54,7 @@ import (
 var settings = cli.New()
 
 func ExitWithErr(err error) {
-	fmt.Fprintf(os.Stderr, "Error: %v\n", err)
+	fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
 	os.Exit(1)
 }
 

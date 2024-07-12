@@ -36,11 +36,18 @@ type ha struct {
 	helm           *helm.Helm
 	helmErr        *helm.Helm
 	helmNamespaced *helm.Helm
+	helmDisabled   *helm.Helm
 }
 
 func (b *ha) Setup(t *testing.T) []framework.Option {
 	b.helm = helm.New(t,
 		helm.WithGlobalValues("ha.enabled=true"),
+		helm.WithShowOnlySchedulerSTS(),
+		helm.WithLocalBuffForStdout())
+
+	b.helmDisabled = helm.New(t,
+		helm.WithGlobalValues("ha.enabled=true"),
+		helm.WithValues("dapr_scheduler.replicaCount=0"),
 		helm.WithShowOnlySchedulerSTS(),
 		helm.WithLocalBuffForStdout())
 
@@ -62,7 +69,7 @@ func (b *ha) Setup(t *testing.T) []framework.Option {
 		))
 
 	return []framework.Option{
-		framework.WithProcesses(b.helm, b.helmErr, b.helmNamespaced),
+		framework.WithProcesses(b.helm, b.helmErr, b.helmNamespaced, b.helmDisabled),
 	}
 }
 
@@ -79,54 +86,43 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
 	})
 	t.Run("arg_replica_count_should_be_3", func(t *testing.T) {
-		var replicaArgFound bool
-		for i, e := range sts.Spec.Template.Spec.Containers[0].Args {
-			if e == "--replica-count" {
-				require.Greater(t, len(sts.Spec.Template.Spec.Containers[0].Args), i+1)
-				require.Equal(t, "3", sts.Spec.Template.Spec.Containers[0].Args[i+1])
-				replicaArgFound = true
-				break
-			}
-		}
-		require.True(t, replicaArgFound)
+		helm.RequireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--replica-count", "3")
 	})
 	t.Run("initial_cluster_has_all_instances_default", func(t *testing.T) {
-		for i, e := range sts.Spec.Template.Spec.Containers[0].Args {
-			if e == "--initial-cluster" {
-				require.Equal(t,
-					"dapr-scheduler-server-0=http://dapr-scheduler-server-0.dapr-scheduler-server.default.svc.cluster.local:2380,"+
-						"dapr-scheduler-server-1=http://dapr-scheduler-server-1.dapr-scheduler-server.default.svc.cluster.local:2380,"+
-						"dapr-scheduler-server-2=http://dapr-scheduler-server-2.dapr-scheduler-server.default.svc.cluster.local:2380", sts.Spec.Template.Spec.Containers[0].Args[i+1])
-			}
-		}
+		helm.RequireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--initial-cluster",
+			"dapr-scheduler-server-0=http://dapr-scheduler-server-0.dapr-scheduler-server.default.svc.cluster.local:2380,"+
+				"dapr-scheduler-server-1=http://dapr-scheduler-server-1.dapr-scheduler-server.default.svc.cluster.local:2380,"+
+				"dapr-scheduler-server-2=http://dapr-scheduler-server-2.dapr-scheduler-server.default.svc.cluster.local:2380")
 	})
 	t.Run("etcd_client_ports_default", func(t *testing.T) {
-		for i, e := range sts.Spec.Template.Spec.Containers[0].Args {
-			if e == "--etcd-client-ports" {
-				require.Equal(t, "dapr-scheduler-server-0=2379,dapr-scheduler-server-1=2379,dapr-scheduler-server-2=2379", sts.Spec.Template.Spec.Containers[0].Args[i+1])
-			}
-			if e == "--etcd-client-http-ports" {
-				require.Equal(t, "dapr-scheduler-server-0=2330,dapr-scheduler-server-1=2330,dapr-scheduler-server-2=2330", sts.Spec.Template.Spec.Containers[0].Args[i+1])
-			}
-		}
+		helm.RequireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-client-ports", "dapr-scheduler-server-0=2379,dapr-scheduler-server-1=2379,dapr-scheduler-server-2=2379")
+		helm.RequireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-client-http-ports", "dapr-scheduler-server-0=2330,dapr-scheduler-server-1=2330,dapr-scheduler-server-2=2330")
 	})
 
 	// namespaced
 	t.Run("initial_cluster_has_all_instances_dapr_system_namespace", func(t *testing.T) {
 		var stsNamespaced appsv1.StatefulSet
 		require.NoError(t, yaml.Unmarshal(b.helmNamespaced.GetStdout(), &stsNamespaced))
-		for i, e := range stsNamespaced.Spec.Template.Spec.Containers[0].Args {
-			if e == "--initial-cluster" {
-				require.Equal(t,
-					"dapr-scheduler-server-0=http://dapr-scheduler-server-0.dapr-scheduler-server.dapr-system.svc.cluster.local:2380"+
-						",dapr-scheduler-server-1=http://dapr-scheduler-server-1.dapr-scheduler-server.dapr-system.svc.cluster.local:2380"+
-						",dapr-scheduler-server-2=http://dapr-scheduler-server-2.dapr-scheduler-server.dapr-system.svc.cluster.local:2380", stsNamespaced.Spec.Template.Spec.Containers[0].Args[i+1])
-			}
-		}
+		helm.RequireArgsValue(t, stsNamespaced.Spec.Template.Spec.Containers[0].Args, "--initial-cluster",
+			"dapr-scheduler-server-0=http://dapr-scheduler-server-0.dapr-scheduler-server.dapr-system.svc.cluster.local:2380,"+
+				"dapr-scheduler-server-1=http://dapr-scheduler-server-1.dapr-scheduler-server.dapr-system.svc.cluster.local:2380,"+
+				"dapr-scheduler-server-2=http://dapr-scheduler-server-2.dapr-scheduler-server.dapr-system.svc.cluster.local:2380")
 	})
 
 	// bad path helmerr
 	t.Run("get_error_on_even_replicas", func(t *testing.T) {
 		require.Contains(t, string(b.helmErr.GetStderr()), "should be an odd number")
+	})
+
+	// disabled scheduler (replica count 0)
+	t.Run("get_default_replicas_disabled", func(t *testing.T) {
+		var sts appsv1.StatefulSet
+		require.NoError(t, yaml.Unmarshal(b.helmDisabled.GetStdout(), &sts))
+		require.NotNil(t, *sts.Spec.Replicas)
+		require.Equal(t, int32(0), *sts.Spec.Replicas)
+		helm.RequireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--replica-count", "0")
+		helm.RequireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--initial-cluster", "")
+		helm.RequireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-client-ports", "")
+		helm.RequireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-client-http-ports", "")
 	})
 }
