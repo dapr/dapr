@@ -257,6 +257,8 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spif
 			return errors.New("dapr-scheduler-server StatefulSet has no replicas")
 		}
 
+		// TODO: remove nolint when golangci-lint is updated to support range over int/func
+		// nolint: typecheck // go 1.22 allows this but golangci-lint does not as it is experimental https://github.com/golangci/golangci-lint/issues/4627
 		for n := range *sched.Spec.Replicas {
 			i.schedulerAddresses = append(i.schedulerAddresses, fmt.Sprintf(
 				"dapr-scheduler-server-%d.dapr-scheduler-server.%s.svc.%s:50006",
