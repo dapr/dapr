@@ -34,14 +34,13 @@ import (
 	"bytes"
 	"context"
 	"fmt"
-	"helm.sh/helm/v3/pkg/releaseutil"
 	"os"
-	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
-	"syscall"
+
+	"helm.sh/helm/v3/pkg/releaseutil"
 
 	"github.com/spf13/pflag"
 	"helm.sh/helm/v3/pkg/action"
@@ -53,7 +52,7 @@ import (
 
 var settings = cli.New()
 
-func ExitWithErr(err error) {
+func exitWithErr(err error) {
 	fmt.Fprintf(os.Stderr, "Error: %s\n", err.Error())
 	os.Exit(1)
 }
@@ -77,96 +76,87 @@ func main() {
 	pf.StringArrayVarP(&showFiles, "show-only", "s", []string{}, "only show manifests rendered from the given templates")
 
 	if err := pf.Parse(os.Args[1:]); err != nil {
-		ExitWithErr(err)
+		exitWithErr(err)
 	}
 
 	_, chart, err := client.NameAndChart(pf.Args())
 	if err != nil {
-		ExitWithErr(err)
+		exitWithErr(err)
 	}
 	cp, err := client.ChartPathOptions.LocateChart(chart, settings)
 	if err != nil {
-		ExitWithErr(err)
+		exitWithErr(err)
 	}
 
 	vals, err := valueOpts.MergeValues(p)
 	if err != nil {
-		ExitWithErr(err)
+		exitWithErr(err)
 	}
 	chartRequested, err := loader.Load(cp)
 	if err != nil {
-		ExitWithErr(err)
+		exitWithErr(err)
 	}
 	client.Namespace = settings.Namespace()
-	// Create context and prepare the handle of SIGTERM
 	ctx := context.Background()
-	ctx, cancel := context.WithCancel(ctx)
-
-	// Set up channel on which to send signal notifications.
-	// We must use a buffered channel or risk missing the signal
-	// if we're not ready to receive when the signal is sent.
-	cSignal := make(chan os.Signal, 2)
-	signal.Notify(cSignal, os.Interrupt, syscall.SIGTERM)
-	go func() {
-		<-cSignal
-		cancel()
-	}()
 
 	rel, err := client.RunWithContext(ctx, chartRequested, vals)
 	if err != nil {
-		ExitWithErr(err)
+		exitWithErr(err)
 	}
-	if rel != nil {
-		var manifests bytes.Buffer
-		fmt.Fprintln(&manifests, strings.TrimSpace(rel.Manifest))
 
-		if len(showFiles) > 0 {
-			// This is necessary to ensure consistent manifest ordering when using --show-only
-			// with globs or directory names.
-			splitManifests := releaseutil.SplitManifests(manifests.String())
-			manifestsKeys := make([]string, 0, len(splitManifests))
-			for k := range splitManifests {
-				manifestsKeys = append(manifestsKeys, k)
-			}
-			sort.Sort(releaseutil.BySplitManifestsOrder(manifestsKeys))
+	if rel == nil {
+		return
+	}
 
-			manifestNameRegex := regexp.MustCompile("# Source: [^/]+/(.+)")
-			var manifestsToRender []string
-			for _, f := range showFiles {
-				missing := true
-				// Use linux-style filepath separators to unify user's input path
-				f = filepath.ToSlash(f)
-				for _, manifestKey := range manifestsKeys {
-					manifest := splitManifests[manifestKey]
-					submatch := manifestNameRegex.FindStringSubmatch(manifest)
-					if len(submatch) == 0 {
-						continue
-					}
-					manifestName := submatch[1]
-					// manifest.Name is rendered using linux-style filepath separators on Windows as
-					// well as macOS/linux.
-					manifestPathSplit := strings.Split(manifestName, "/")
-					// manifest.Path is connected using linux-style filepath separators on Windows as
-					// well as macOS/linux
-					manifestPath := strings.Join(manifestPathSplit, "/")
+	var manifests bytes.Buffer
+	fmt.Fprintln(&manifests, strings.TrimSpace(rel.Manifest))
 
-					// if the filepath provided matches a manifest path in the
-					// chart, render that manifest
-					if matched, _ := filepath.Match(f, manifestPath); !matched {
-						continue
-					}
-					manifestsToRender = append(manifestsToRender, manifest)
-					missing = false
-				}
-				if missing {
-					ExitWithErr(fmt.Errorf("could not find template %s in chart", f))
-				}
+	if len(showFiles) == 0 {
+		fmt.Fprintf(os.Stdout, "%s", manifests.String())
+		return
+	}
+
+	// This is necessary to ensure consistent manifest ordering when using --show-only
+	// with globs or directory names.
+	splitManifests := releaseutil.SplitManifests(manifests.String())
+	manifestsKeys := make([]string, 0, len(splitManifests))
+	for k := range splitManifests {
+		manifestsKeys = append(manifestsKeys, k)
+	}
+	sort.Sort(releaseutil.BySplitManifestsOrder(manifestsKeys))
+
+	manifestNameRegex := regexp.MustCompile("# Source: [^/]+/(.+)")
+	var manifestsToRender []string
+	for _, f := range showFiles {
+		missing := true
+		// Use linux-style filepath separators to unify user's input path
+		f = filepath.ToSlash(f)
+		for _, manifestKey := range manifestsKeys {
+			manifest := splitManifests[manifestKey]
+			submatch := manifestNameRegex.FindStringSubmatch(manifest)
+			if len(submatch) == 0 {
+				continue
 			}
-			for _, m := range manifestsToRender {
-				fmt.Fprintf(os.Stdout, "---\n%s\n", m)
+			manifestName := submatch[1]
+			// manifest.Name is rendered using linux-style filepath separators on Windows as
+			// well as macOS/linux.
+			manifestPathSplit := strings.Split(manifestName, "/")
+			// manifest.Path is connected using linux-style filepath separators on Windows as
+			// well as macOS/linux
+			manifestPath := strings.Join(manifestPathSplit, "/")
+
+			// if the filepath provided matches a manifest path in the
+			// chart, render that manifest
+			if matched, _ := filepath.Match(f, manifestPath); !matched {
+				continue
 			}
-		} else {
-			fmt.Fprintf(os.Stdout, "%s", manifests.String())
+			manifestsToRender = append(manifestsToRender, manifest)
+			missing = false
+		}
+		if missing {
+			exitWithErr(fmt.Errorf("could not find template %s in chart", f))
 		}
 	}
+
+	fmt.Fprintf(os.Stdout, "%s", strings.Join(manifestsToRender, "\n---\n"))
 }

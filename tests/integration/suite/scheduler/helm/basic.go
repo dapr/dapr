@@ -15,15 +15,17 @@ package helm
 
 import (
 	"context"
+	"io"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/helm"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -35,48 +37,51 @@ func init() {
 type basic struct {
 	helm    *helm.Helm
 	helmErr *helm.Helm
+
+	helmStdout io.ReadCloser
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
+	stdoutR, stdoutW := io.Pipe()
+	b.helmStdout = stdoutR
 	b.helm = helm.New(t,
 		helm.WithGlobalValues("ha.enabled=false"), // Not HA
 		helm.WithShowOnlySchedulerSTS(),
-		helm.WithLocalBuffForStdout())
+		helm.WithStdout(stdoutW),
+	)
 
-	b.helmErr = helm.New(t,
+	helmErrLogLine := logline.New(t,
+		logline.WithStderrLineContains("values set in dapr_scheduler chart in .Values.replicaCount should be an odd number"),
+	)
+	helmErr := helm.New(t,
 		helm.WithGlobalValues("ha.enabled=false"), // Not HA
 		helm.WithValues("dapr_scheduler.replicaCount=4"),
-		helm.WithLocalBuffForStderr(),
-		helm.WithExecOptions(
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
-			}),
-		))
+		helm.WithExit1(),
+		helm.WithStderr(helmErrLogLine.Stderr()),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(b.helm, b.helmErr),
+		framework.WithProcesses(b.helm, helmErrLogLine, helmErr),
 	}
 }
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
-	t.Run("get_default_replicas", func(t *testing.T) {
-		var sts appsv1.StatefulSet
-		require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
-		require.Equal(t, int32(1), *sts.Spec.Replicas) // single replica
-	})
-	t.Run("even_number_not_allowed", func(t *testing.T) {
-		require.Contains(t, string(b.helmErr.GetStderr()), "should be an odd number")
-	})
-	t.Run("pod_antiaffinity_should_NOT_be_present", func(t *testing.T) {
-		var sts appsv1.StatefulSet
-		require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
-		require.NotNil(t, sts.Spec.Template.Spec.Affinity)
-		require.Nil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
-	})
-	t.Run("arg_replica_count_should_be_1", func(t *testing.T) {
-		var sts appsv1.StatefulSet
-		require.NoError(t, yaml.Unmarshal(b.helm.GetStdout(), &sts))
-		helm.RequireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--replica-count", "1")
-	})
+	var sts appsv1.StatefulSet
+	bs, err := io.ReadAll(b.helmStdout)
+	require.NoError(t, err)
+	require.NoError(t, yaml.Unmarshal(bs, &sts))
+	require.Equal(t, int32(1), *sts.Spec.Replicas)
+	require.NotNil(t, sts.Spec.Template.Spec.Affinity)
+	require.Nil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
+
+	require.Greater(t, len(sts.Spec.Template.Spec.Containers), 0)
+	var found bool
+	for i, arg := range sts.Spec.Template.Spec.Containers[0].Args {
+		if arg == "--replica-count" {
+			found = true
+			require.Greater(t, len(sts.Spec.Template.Spec.Containers[0].Args), i+1)
+			assert.Equal(t, "1", sts.Spec.Template.Spec.Containers[0].Args[i+1])
+		}
+	}
+	assert.True(t, found, "arg --replica-count not found in %v", sts.Spec.Template.Spec.Containers[0].Args)
 }
