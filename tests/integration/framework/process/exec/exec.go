@@ -29,22 +29,23 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
+	"github.com/dapr/dapr/tests/integration/framework/tee"
 )
 
 type Option func(*options)
 
 type exec struct {
-	lock sync.Mutex
-	cmd  *oexec.Cmd
+	cmd *oexec.Cmd
 
-	args              []string
-	binPath           string
-	runErrorFn        func(*testing.T, error)
-	exitCode          int
-	envs              map[string]string
-	stdoutpipe        io.WriteCloser
-	stderrpipe        io.WriteCloser
-	waitForCompletion bool
+	args       []string
+	binPath    string
+	runErrorFn func(*testing.T, error)
+	exitCode   int
+	envs       map[string]string
+	stdoutpipe io.WriteCloser
+	stderrpipe io.WriteCloser
+
+	wg sync.WaitGroup
 }
 
 func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
@@ -57,8 +58,6 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 	}
 
 	opts := options{
-		stdout: iowriter.New(t, filepath.Base(binPath)),
-		stderr: iowriter.New(t, filepath.Base(binPath)),
 		runErrorFn: func(t *testing.T, err error) {
 			t.Helper()
 			if runtime.GOOS == "windows" {
@@ -76,29 +75,49 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 	}
 
 	return &exec{
-		binPath:           binPath,
-		args:              args,
-		envs:              opts.envs,
-		stdoutpipe:        opts.stdout,
-		stderrpipe:        opts.stderr,
-		runErrorFn:        opts.runErrorFn,
-		exitCode:          opts.exitCode,
-		waitForCompletion: opts.waitForCompletion,
+		binPath:    binPath,
+		args:       args,
+		envs:       opts.envs,
+		stdoutpipe: opts.stdout,
+		stderrpipe: opts.stderr,
+		runErrorFn: opts.runErrorFn,
+		exitCode:   opts.exitCode,
 	}
 }
 
 func (e *exec) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
-	e.lock.Lock()
-	defer e.lock.Unlock()
 
 	t.Logf("Running %q with args: %s %s", filepath.Base(e.binPath), e.binPath, strings.Join(e.args, " "))
 
 	//nolint:gosec
 	e.cmd = oexec.CommandContext(ctx, e.binPath, e.args...)
 
-	e.cmd.Stdout = e.stdoutpipe
-	e.cmd.Stderr = e.stderrpipe
+	stdoutPipe, err := e.cmd.StdoutPipe()
+	require.NoError(t, err)
+	stderrPipe, err := e.cmd.StderrPipe()
+	require.NoError(t, err)
+
+	stdoutpipe := tee.NewWriterCloser(
+		iowriter.New(t, filepath.Base(e.binPath)),
+		e.stdoutpipe,
+	)
+	stderrpipe := tee.NewWriterCloser(
+		iowriter.New(t, filepath.Base(e.binPath)),
+		e.stderrpipe,
+	)
+
+	e.wg.Add(2)
+	go func() {
+		defer e.wg.Done()
+		io.Copy(stdoutpipe, stdoutPipe)
+		require.NoError(t, stdoutpipe.Close())
+	}()
+	go func() {
+		defer e.wg.Done()
+		io.Copy(stderrpipe, stderrPipe)
+		require.NoError(t, stderrpipe.Close())
+	}()
 
 	// Wait for a few seconds before killing the process completely.
 	e.cmd.WaitDelay = time.Second * 5
@@ -108,40 +127,19 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 	}
 
 	require.NoError(t, e.cmd.Start())
-	if e.waitForCompletion {
-		e.checkExit(t, e.cmd.WaitDelay)
-	}
 }
 
 func (e *exec) Cleanup(t *testing.T) {
-	t.Helper()
-	e.lock.Lock()
-	defer e.lock.Unlock()
+	defer e.wg.Wait()
 
-	if !e.waitForCompletion {
-		kill.Kill(t, e.cmd)
-		e.checkExit(t, 0)
-	}
-
-	require.NoError(t, e.stderrpipe.Close())
-	require.NoError(t, e.stdoutpipe.Close())
+	kill.Kill(t, e.cmd)
+	e.checkExit(t)
 }
 
-func (e *exec) checkExit(t *testing.T, timeout time.Duration) {
+func (e *exec) checkExit(t *testing.T) {
 	t.Helper()
 
 	t.Logf("waiting for %q process to exit", filepath.Base(e.binPath))
-
-	if e.waitForCompletion && timeout > 0 {
-		timer := time.NewTimer(timeout)
-		defer timer.Stop()
-		select {
-		case <-timer.C:
-			kill.Kill(t, e.cmd)
-			require.NoError(t, e.stderrpipe.Close())
-			require.NoError(t, e.stdoutpipe.Close())
-		}
-	}
 
 	e.runErrorFn(t, e.cmd.Wait())
 	require.NotNil(t, e.cmd.ProcessState, "process state should not be nil")

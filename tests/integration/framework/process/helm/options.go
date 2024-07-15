@@ -15,7 +15,11 @@ package helm
 
 import (
 	"fmt"
+	"io"
 	"strings"
+	"testing"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
@@ -27,39 +31,26 @@ type OptionFunc func(*options)
 type options struct {
 	execOpts []exec.Option
 
+	stdout io.WriteCloser
+
 	setValues       []string
 	setStringValues []string
-	setJSONValue    string
+	setJSONValue    *string
 
 	// list of resources to show only
 	showOnly []string
 
-	// if set we use the local buffer to read/write the stdout
-	// Note: we will not be using execOpts stdout if passed as an exec OptionFunc
-	useLocalBuffForStdout bool
-
-	// if set we use the local buffer to read/write the stdout
-	// Note: we will not be using execOpts stdout if passed as an exec OptionFunc
-	useLocalBuffForStderr bool
-
-	namespace string
+	namespace *string
 }
 
-func WithExecOptions(execOptions ...exec.Option) OptionFunc {
+func WithExit1() OptionFunc {
 	return func(o *options) {
-		o.execOpts = append(o.execOpts, execOptions...)
-	}
-}
-
-func WithLocalBuffForStdout() OptionFunc {
-	return func(o *options) {
-		o.useLocalBuffForStdout = true
-	}
-}
-
-func WithLocalBuffForStderr() OptionFunc {
-	return func(o *options) {
-		o.useLocalBuffForStderr = true
+		o.execOpts = append(o.execOpts,
+			exec.WithExitCode(1),
+			exec.WithRunError(func(t *testing.T, err error) {
+				require.ErrorContains(t, err, "exit status 1")
+			}),
+		)
 	}
 }
 
@@ -85,7 +76,7 @@ func WithStringValues(values ...string) OptionFunc {
 
 func WithJSONValue(jsonString string) OptionFunc {
 	return func(o *options) {
-		o.setJSONValue = jsonString
+		o.setJSONValue = &jsonString
 	}
 }
 
@@ -131,6 +122,18 @@ func WithShowOnly(chart, tplYamlFileName string) OptionFunc {
 
 func WithNamespace(namespace string) OptionFunc {
 	return func(o *options) {
-		o.namespace = namespace
+		o.namespace = &namespace
+	}
+}
+
+func WithStdout(stdout io.WriteCloser) OptionFunc {
+	return func(o *options) {
+		o.execOpts = append(o.execOpts, exec.WithStdout(stdout))
+	}
+}
+
+func WithStderr(stderr io.WriteCloser) OptionFunc {
+	return func(o *options) {
+		o.execOpts = append(o.execOpts, exec.WithStderr(stderr))
 	}
 }

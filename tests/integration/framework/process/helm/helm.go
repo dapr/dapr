@@ -14,7 +14,6 @@ limitations under the License.
 package helm
 
 import (
-	"bytes"
 	"context"
 	"path/filepath"
 	"testing"
@@ -24,19 +23,9 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
-type LocalBuf struct {
-	*bytes.Buffer
-}
-
-func (b LocalBuf) Close() error {
-	return nil
-}
-
 // Helm test helm chart template.  It is not really an integration test but this seems the best place to place it
 type Helm struct {
-	exec   process.Interface
-	stdout *LocalBuf
-	stderr *LocalBuf
+	exec process.Interface
 }
 
 func New(t *testing.T, fopts ...OptionFunc) *Helm {
@@ -56,34 +45,25 @@ func New(t *testing.T, fopts ...OptionFunc) *Helm {
 	for _, v := range opts.setStringValues {
 		args = append(args, "--set-string", v)
 	}
-	if opts.setJSONValue != "" {
-		args = append(args, "--set-json", opts.setJSONValue)
+	if opts.setJSONValue != nil {
+		args = append(args, "--set-json", *opts.setJSONValue)
 	}
 	for _, v := range opts.showOnly {
 		args = append(args, "--show-only", v)
 	}
-	if opts.namespace != "" {
-		args = append(args, "--namespace", opts.namespace)
+	if opts.namespace != nil {
+		args = append(args, "--namespace", *opts.namespace)
 	}
 
-	var localBufStdout, localBufStderr *LocalBuf
-	if opts.useLocalBuffForStdout {
-		localBufStdout = &LocalBuf{Buffer: &bytes.Buffer{}}
-		opts.execOpts = append(opts.execOpts, exec.WithStdout(localBufStdout))
+	args = append(args, filepath.Join(binary.GetRootDir(t), "charts", "dapr"))
+
+	execOpts := opts.execOpts
+	if opts.stdout != nil {
+		execOpts = append(execOpts, exec.WithStdout(opts.stdout))
 	}
-	if opts.useLocalBuffForStderr {
-		localBufStderr = &LocalBuf{Buffer: &bytes.Buffer{}}
-		opts.execOpts = append(opts.execOpts, exec.WithStderr(localBufStderr))
-	}
-	opts.execOpts = append(opts.execOpts, exec.WaitForCompletion())
-	rootDir := binary.GetRootDir(t)
-	chartsPath := filepath.Join(rootDir, "charts", "dapr")
-	args = append(args, chartsPath)
 
 	return &Helm{
-		exec:   exec.New(t, binary.EnvValue("helmtemplate"), args, opts.execOpts...),
-		stdout: localBufStdout,
-		stderr: localBufStderr,
+		exec: exec.New(t, binary.EnvValue("helmtemplate"), args, execOpts...),
 	}
 }
 
@@ -93,18 +73,4 @@ func (h *Helm) Run(t *testing.T, ctx context.Context) {
 
 func (h *Helm) Cleanup(t *testing.T) {
 	h.exec.Cleanup(t)
-}
-
-func (h *Helm) GetStdout() []byte {
-	if h.stdout != nil {
-		return h.stdout.Bytes()
-	}
-	return nil
-}
-
-func (h *Helm) GetStderr() []byte {
-	if h.stderr != nil {
-		return h.stderr.Bytes()
-	}
-	return nil
 }
