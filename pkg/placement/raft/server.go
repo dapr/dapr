@@ -241,9 +241,9 @@ func (s *Server) StartRaft(ctx context.Context) error {
 				CommitTimeout:      5 * time.Millisecond,
 				MaxAppendEntries:   64,
 				ShutdownOnRemove:   true,
-				TrailingLogs:       500,
-				SnapshotInterval:   60 * time.Second,
-				SnapshotThreshold:  1000,
+				TrailingLogs:       10240,
+				SnapshotInterval:   120 * time.Second,
+				SnapshotThreshold:  8192,
 				LeaderLeaseTimeout: 5 * time.Millisecond,
 			}
 		} else {
@@ -254,9 +254,9 @@ func (s *Server) StartRaft(ctx context.Context) error {
 				CommitTimeout:      100 * time.Millisecond,
 				MaxAppendEntries:   64,
 				ShutdownOnRemove:   true,
-				TrailingLogs:       1000,
-				SnapshotInterval:   30 * time.Second,
-				SnapshotThreshold:  2000,
+				TrailingLogs:       10240,
+				SnapshotInterval:   120 * time.Second,
+				SnapshotThreshold:  8192,
 				LeaderLeaseTimeout: 2 * time.Second,
 			}
 		}
