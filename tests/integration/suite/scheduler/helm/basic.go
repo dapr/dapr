@@ -35,8 +35,7 @@ func init() {
 
 // basic tests the operator's ListCompontns API.
 type basic struct {
-	helm    *helm.Helm
-	helmErr *helm.Helm
+	helm *helm.Helm
 
 	helmStdout io.ReadCloser
 }
@@ -74,7 +73,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	require.NotNil(t, sts.Spec.Template.Spec.Affinity)
 	require.Nil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
 
-	require.Greater(t, len(sts.Spec.Template.Spec.Containers), 0)
+	require.NotEmpty(t, sts.Spec.Template.Spec.Containers)
 	var found bool
 	for i, arg := range sts.Spec.Template.Spec.Containers[0].Args {
 		if arg == "--replica-count" {

@@ -51,9 +51,9 @@ func (w *writerCloser) Write(p []byte) (n int, err error) {
 }
 
 func (w *writerCloser) Close() error {
-	var errs []error
-	for _, writer := range w.writers {
-		errs = append(errs, writer.Close())
+	errs := make([]error, len(w.writers))
+	for i, writer := range w.writers {
+		errs[i] = writer.Close()
 	}
 	return errors.Join(errs...)
 }
