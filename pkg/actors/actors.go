@@ -1305,16 +1305,16 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 
 func (a *actorsRuntime) UnregisterInternalActor(ctx context.Context, actorType string) error {
 	if !a.haveCompatibleStorage() {
-		return fmt.Errorf("unable to register internal actor type '%s': %w", actorType, ErrIncompatibleStateStore)
+		return fmt.Errorf("unable to unregister internal actor type '%s': %w", actorType, ErrIncompatibleStateStore)
 	}
 
-	// Call GetOrSet which returns "existing=true" if the actor type was already registered
+	// Call GetAndDel which returns "existing=true" if the actor type was already registered
 	_, existing := a.internalActorTypes.GetAndDel(actorType)
 	if !existing {
 		return nil
 	}
 
-	log.Debugf("UnRegistered internal actor type '%s'", actorType)
+	log.Debugf("Unregistered internal actor type '%s'", actorType)
 
 	a.actorsConfig.Config.HostedActorTypes.RemoveActorType(actorType)
 
