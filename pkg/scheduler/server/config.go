@@ -86,6 +86,13 @@ func config(opts Options) (*embed.Config, error) {
 			}}
 		}
 	default:
+
+		// If not listening on an IP interface or localhost, replace host name with
+		// 0.0.0.0 to listen on all interfaces.
+		if net.ParseIP(etcdURL) == nil && etcdURL != "localhost" {
+			etcdURL = "0.0.0.0"
+		}
+
 		config.Dir = filepath.Join(opts.DataDir, security.CurrentNamespace()+"-"+opts.EtcdID)
 
 		config.ListenPeerUrls = []url.URL{{
