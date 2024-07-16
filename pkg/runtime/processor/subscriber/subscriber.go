@@ -177,7 +177,7 @@ func (s *Subscriber) ReloadDeclaredAppSubscription(name, pubsubName string) erro
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if s.closed {
+	if !s.appSubActive || s.closed {
 		return nil
 	}
 

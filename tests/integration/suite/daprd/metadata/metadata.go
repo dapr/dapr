@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -37,9 +38,11 @@ func init() {
 // metadata tests Dapr's response to metadata API requests.
 type metadata struct {
 	proc *procdaprd.Daprd
+	app  *app.App
 }
 
 func (m *metadata) Setup(t *testing.T) []framework.Option {
+	m.app = app.New(t)
 	subComponentAndConfiguration := `
 apiVersion: dapr.io/v1alpha1
 kind: Component
@@ -58,9 +61,12 @@ spec:
   route: /B
   pubsubname: pubsub
 `
-	m.proc = procdaprd.New(t, procdaprd.WithResourceFiles(subComponentAndConfiguration))
+	m.proc = procdaprd.New(t,
+		procdaprd.WithResourceFiles(subComponentAndConfiguration),
+		procdaprd.WithAppPort(m.app.Port()),
+	)
 	return []framework.Option{
-		framework.WithProcesses(m.proc),
+		framework.WithProcesses(m.app, m.proc),
 	}
 }
 
@@ -86,7 +92,7 @@ func (m *metadata) Run(t *testing.T, parentCtx context.Context) {
 				require.NoError(t, err)
 				defer resp.Body.Close()
 
-				validateResponse(t, m.proc.AppID(), m.proc.AppPort(), resp.Body)
+				validateResponse(t, m.proc.AppID(), m.app.Port(), resp.Body)
 			})
 		}
 	})
