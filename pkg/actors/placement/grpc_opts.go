@@ -66,7 +66,7 @@ func getGrpcOptsGetter(servers []string, sec security.Handler) func() ([]grpc.Di
 
 		fmt.Printf(">>GOT SERVERS: %v\n", servers)
 		for _, server := range servers {
-			resp, err := net.LookupAddr(server)
+			resp, err := net.LookupAddr(strings.TrimSuffix(strings.TrimPrefix(server, "dns:///"), ":50005"))
 			if err != nil {
 				log.Errorf("failed to resolve address %s: %v", server, err)
 				continue
