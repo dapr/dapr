@@ -11,11 +11,30 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheduler
+package binary
 
-import (
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/authz"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/helm"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/quorum"
-)
+import "testing"
+
+type buildOpts struct {
+	getRootDirFunc func(t *testing.T) string
+	buildDir       string
+	tags           []string
+}
+
+func withRootDirFunc(f func(t *testing.T) string) func(*buildOpts) {
+	return func(o *buildOpts) {
+		o.getRootDirFunc = f
+	}
+}
+
+func withTags(tags ...string) func(*buildOpts) {
+	return func(o *buildOpts) {
+		o.tags = tags
+	}
+}
+
+func withBuildDir(dir string) func(*buildOpts) {
+	return func(o *buildOpts) {
+		o.buildDir = dir
+	}
+}
