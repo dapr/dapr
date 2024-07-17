@@ -271,6 +271,7 @@ func (abe *ActorBackend) AbandonActivityWorkItem(ctx context.Context, wi *backen
 		Data:      dataEnc,
 		DueTime:   "0s",
 		Name:      "run-activity-sync",
+		Period:    abe.activityActorOpts.reminderInterval.String(),
 	})
 }
 
