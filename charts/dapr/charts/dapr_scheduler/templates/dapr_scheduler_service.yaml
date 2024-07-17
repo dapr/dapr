@@ -1,3 +1,4 @@
+{{- if (eq .Values.global.scheduler.enabled true) }}
 kind: Service
 apiVersion: v1
 metadata:
@@ -27,3 +28,4 @@ spec:
   - name: etcd-peer
     port: {{ .Values.ports.etcdGRPCPeerPort }}
   clusterIP: None # make the service headless
+{{- end }}

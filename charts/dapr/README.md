@@ -119,7 +119,7 @@ The Helm chart has the follow configuration options that can be supplied:
 | `global.rbac.namespaced`                      | Removes cluster wide permissions where applicable                                                                                                                                                       | `false` |
 | `global.argoRolloutServiceReconciler.enabled` | Enable the service reconciler for Dapr-enabled Argo Rollouts                                                                                                                                            | `false`                 |
 | `global.priorityClassName`                    | Adds `priorityClassName` to Dapr pods                                                                                                                                                                   | `""`                    |
-
+| `global.scheduler.enabled`                   | Enables the Dapr Scheduler building block. When "false", the Dapr Scheduler service is not installed, and attempting to schedule jobs in Dapr will fail. | `true` |
 
 ### Dapr Operator options:
 | Parameter                                  | Description                                                                                                                                                                                   | Default     |
@@ -173,8 +173,6 @@ The Helm chart has the follow configuration options that can be supplied:
 ### Dapr Scheduler options:
 | Parameter                                     | Description                                                                                                                                                  | Default                                      |
 |-----------------------------------------------|--------------------------------------------------------------------------------------------------------------------------------------------------------------|----------------------------------------------|
-| `dapr_scheduler.ha`                           | If set to true, deploys the Scheduler service with 3 nodes (this can be overridden if `dapr_scheduler.replicaCount` is bigger).                              | `false`                                      |
-| `dapr_scheduler.replicaCount`                 | Number of replicas (should be an odd number of replicas for consensus as it depends on etcd https://etcd.io/docs/v3.3/faq/)                                  | `1`  (`3` on HA mode)                        |
 | `dapr_scheduler.logLevel`                     | Service Log level                                                                                                                                            | `info`                                       |
 | `dapr_scheduler.image.name`                   | Service docker image name (`global.registry/dapr_scheduler.image.name`)                                                                                      | `dapr`                                       |
 | `dapr_scheduler.cluster.etcdDataDirPath`      | Mount path for persistent volume for log store in unix-like system                                                                                           | `/var/run/data/dapr-scheduler/etcd-data-dir` |

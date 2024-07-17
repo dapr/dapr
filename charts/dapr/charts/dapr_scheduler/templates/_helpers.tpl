@@ -83,25 +83,12 @@ Create etcd client http ports list dynamically based on replicaCount.
 {{- end -}}
 
 {{/*
-Verify Replicas Count is an odd number.  This is piped into `required` function and will fail the helm rendering if the condition is not met (empty value).
-On success we return the replicas value passed.
-*/}}
-{{- define "dapr_scheduler.get-replicas-if-odd" -}}
-{{-   if eq (mod . 2) 1 -}}{{ . }}{{- else -}}{{- end -}}
-{{- end -}}
-
-{{/*
-Gets the number of replicas. If global.ha.enabled is true, then the number of replicas is set to 3 but can be overridden by .Values.replicaCount if that is greater than 3.
-We also pass the value to the get-replicas-if-odd template to ensure that the number of replicas is an odd number.
-We allow the value 0 to disable the scheduler.
+Gets the number of replicas. If global.ha.enabled is true, then 3. Otherwise, 1.
 */}}
 {{- define "dapr_scheduler.get-replicas" -}}
-{{-   $replicas := .Values.replicaCount | int }}
-{{-   if eq $replicas 0 }}0
-{{-   else }}
-{{-     if eq true .Values.global.ha.enabled .Values.ha }}
-{{-       $replicas = max $replicas 3 }}
-{{-     end }}
-{{-     include "dapr_scheduler.get-replicas-if-odd" $replicas | required "values set in dapr_scheduler chart in .Values.replicaCount should be an odd number" }}
+{{-   $replicas := 1 }}
+{{-   if eq true .Values.global.ha.enabled }}
+{{-       $replicas = 3 }}
 {{-   end }}
+{{-   $replicas }}
 {{- end -}}

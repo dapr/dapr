@@ -25,7 +25,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/helm"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -49,18 +48,8 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		helm.WithStdout(stdoutW),
 	)
 
-	helmErrLogLine := logline.New(t,
-		logline.WithStderrLineContains("values set in dapr_scheduler chart in .Values.replicaCount should be an odd number"),
-	)
-	helmErr := helm.New(t,
-		helm.WithGlobalValues("ha.enabled=false"), // Not HA
-		helm.WithValues("dapr_scheduler.replicaCount=4"),
-		helm.WithExit1(),
-		helm.WithStderr(helmErrLogLine.Stderr()),
-	)
-
 	return []framework.Option{
-		framework.WithProcesses(b.helm, helmErrLogLine, helmErr),
+		framework.WithProcesses(b.helm),
 	}
 }
 

@@ -1,3 +1,4 @@
+{{- if (eq .Values.global.scheduler.enabled true) }}
 apiVersion: v1
 kind: ServiceAccount
 metadata:
@@ -46,3 +47,4 @@ roleRef:
   kind: ClusterRole
 {{- end }}
   name: dapr-scheduler
+{{- end }}
