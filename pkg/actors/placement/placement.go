@@ -52,8 +52,6 @@ const (
 	placementReconnectMinInterval = 1 * time.Second
 	placementReconnectMaxInterval = 30 * time.Second
 	statusReportHeartbeatInterval = 1 * time.Second
-
-	grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
 )
 
 // actorPlacement maintains membership of actor instances and consistent hash

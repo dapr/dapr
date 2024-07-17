@@ -78,11 +78,11 @@ func getGrpcOptsGetter(servers []string, sec security.Handler) func() ([]grpc.Di
 			}
 		}
 
-		if len(servers) == 1 && strings.HasPrefix(servers[0], "dns:///") {
-			// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
-			// With round robin load balancer, Dapr can find the leader automatically.
-			opts = append(opts, grpc.WithDefaultServiceConfig(grpcServiceConfig))
-		}
+		//if len(servers) == 1 && strings.HasPrefix(servers[0], "dns:///") {
+		//	// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
+		//	// With round robin load balancer, Dapr can find the leader automatically.
+		//	opts = append(opts, grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`), grpc.WithDe
+		//}
 		cached = opts
 		return cached, nil
 	}
