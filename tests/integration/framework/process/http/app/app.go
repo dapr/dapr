@@ -78,3 +78,7 @@ func (a *App) Cleanup(t *testing.T) {
 func (a *App) Port() int {
 	return a.http.Port()
 }
+
+func (a *App) SetHealth(health bool) {
+	a.healthz.Store(health)
+}

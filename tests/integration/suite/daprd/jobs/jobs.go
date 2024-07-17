@@ -11,10 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheduler
+package jobs
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler/api"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler/appcallback"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/scheduler/streaming"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/grpc"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/http"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/streaming"
 )

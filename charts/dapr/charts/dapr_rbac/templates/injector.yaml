@@ -69,6 +69,9 @@ rules:
   - apiGroups: ["dapr.io"]
     resources: ["configurations"]
     verbs: [ "get" ]
+  - apiGroups: ["apps"]
+    resources: ["statefulsets"]
+    verbs: [ "get" ]
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

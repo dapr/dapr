@@ -10,7 +10,8 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  {{- $replicas := include "dapr_scheduler.get-replicas" . }}
+  replicas: {{ $replicas }}
   serviceName: dapr-scheduler-server
   podManagementPolicy: Parallel
   selector:
@@ -48,6 +49,8 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
       containers:
       - name: dapr-scheduler-server
         livenessProbe:
@@ -99,7 +102,7 @@ spec:
           {{- toYaml . | nindent 10 }}
         {{- end }}
         ports:
-          - containerPort: {{ .Values.ports.apiPort }}
+          - containerPort: 50006
             name: api
           - containerPort: {{ .Values.ports.etcdGRPCClientPort }}
             name: etcd-client
@@ -132,7 +135,7 @@ spec:
         - "--id"
         - "$(SCHEDULER_ID)"
         - "--replica-count"
-        - "{{ .Values.replicaCount }}"
+        - "{{ $replicas }}"
         - "--initial-cluster"
         - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
         - "--etcd-client-ports"
@@ -164,7 +167,7 @@ spec:
         - "--mode=kubernetes"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
-          runAsNonRoot: {{ .Values.runAsNonRoot }}
+          runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:
             add: ["SYS_PTRACE"]
@@ -232,7 +235,7 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
-{{- if (gt (int .Values.replicaCount) 1) }}
+{{- if (gt (int $replicas) 1) }}
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
