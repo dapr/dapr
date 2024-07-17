@@ -63,7 +63,7 @@ spec:
         policy: constant
         duration: 5s
         maxRetries: 3
-        conditions:
+        matching:
           httpStatusCodes: "500"
 
 

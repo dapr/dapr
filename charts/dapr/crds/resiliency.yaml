@@ -64,7 +64,7 @@ spec:
                           type: integer
                         policy:
                           type: string
-                        conditions:
+                        matching:
                           properties:
                             httpStatusCodes:
                               type: string

@@ -54,7 +54,7 @@ spec:
         policy: constant
         duration: 5s
         maxRetries: 3
-        conditions:
+        matching:
           httpStatusCodes: "500"
 
     # Circuit breakers are automatically instantiated per component, service endpoint, and application route.

@@ -92,7 +92,7 @@ spec:
         policy: constant
         duration: 10ms
         maxRetries: 3
-        conditions:
+        matching:
           httpStatusCodes: "100,101,102,200,304,403,505,501-503,509,546,547"
           gRPCStatusCodes: "1-5"
 `
