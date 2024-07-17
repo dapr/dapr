@@ -65,10 +65,11 @@ spec:
                         policy:
                           type: string
                         conditions:
-                          httpStatusCodes:
-                            type: string
-                          gRPCStatusCodes:
-                            type: string
+                          properties:
+                            httpStatusCodes:
+                              type: string
+                            gRPCStatusCodes:
+                              type: string
                           type: object
                       type: object
                     type: object
