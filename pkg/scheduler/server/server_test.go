@@ -15,6 +15,7 @@ package server
 
 import (
 	"net/url"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -136,7 +137,7 @@ func TestServerConf(t *testing.T) {
 		config := s.config
 
 		assert.Equal(t, "id1=http://localhost:5001,id2=http://localhost:5002", config.InitialCluster)
-		if runtime.OS() == "windows" {
+		if runtime.GOOS == "windows" {
 			assert.Equal(t, "data\\default-id2", config.Dir)
 		} else {
 			assert.Equal(t, "data/default-id2", config.Dir)
