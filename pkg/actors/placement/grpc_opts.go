@@ -15,6 +15,8 @@ package placement
 
 import (
 	"errors"
+	"fmt"
+	"net"
 	"strings"
 	"sync"
 
@@ -60,6 +62,16 @@ func getGrpcOptsGetter(servers []string, sec security.Handler) func() ([]grpc.Di
 				opts,
 				grpc.WithUnaryInterceptor(diag.DefaultGRPCMonitoring.UnaryClientInterceptor()),
 			)
+		}
+
+		fmt.Printf(">>GOT SERVERS: %v\n", servers)
+		for _, server := range servers {
+			resp, err := net.LookupAddr(server)
+			if err != nil {
+				log.Errorf("failed to resolve address %s: %v", server, err)
+				continue
+			}
+			fmt.Printf(">>GOT [%d] ADDRESSES: %v\n", len(resp), resp)
 		}
 
 		if len(servers) == 1 && strings.HasPrefix(servers[0], "dns:///") {
