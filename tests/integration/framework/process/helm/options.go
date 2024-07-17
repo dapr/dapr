@@ -19,7 +19,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/require"
+	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
@@ -48,7 +48,8 @@ func WithExit1() OptionFunc {
 		o.execOpts = append(o.execOpts,
 			exec.WithExitCode(1),
 			exec.WithRunError(func(t *testing.T, err error) {
-				require.ErrorContains(t, err, "exit status 1")
+				//nolint:testifylint
+				assert.ErrorContains(t, err, "exit status 1")
 			}),
 		)
 	}
