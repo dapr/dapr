@@ -18,6 +18,8 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
@@ -31,7 +33,17 @@ type Helm struct {
 func New(t *testing.T, fopts ...OptionFunc) *Helm {
 	t.Helper()
 
-	var opts options
+	opts := options{
+		// Since helmtemplate self exists, expect it to always run without error,
+		// even on windows.
+		execOpts: []exec.Option{
+			exec.WithRunError(func(t *testing.T, err error) {
+				t.Helper()
+				require.NoError(t, err, "expected helmtemplate to run without error")
+			}),
+			exec.WithExitCode(0),
+		},
+	}
 
 	for _, fopt := range fopts {
 		fopt(&opts)
