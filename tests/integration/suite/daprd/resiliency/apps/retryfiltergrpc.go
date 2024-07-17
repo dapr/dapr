@@ -79,7 +79,7 @@ spec:
         policy: constant
         duration: 10ms
         maxRetries: 3
-        conditions:
+        matching:
           gRPCStatusCodes: 1,2,5-7
           httpStatusCodes: 500-599
 `

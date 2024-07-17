@@ -51,15 +51,18 @@ type Policies struct {
 }
 
 type Retry struct {
-	Policy      string           `json:"policy,omitempty" yaml:"policy,omitempty"`
-	Duration    string           `json:"duration,omitempty" yaml:"duration,omitempty"`
-	MaxInterval string           `json:"maxInterval,omitempty" yaml:"maxInterval,omitempty"`
-	MaxRetries  *int             `json:"maxRetries,omitempty" yaml:"maxRetries,omitempty"`
-	Conditions  *RetryConditions `json:"conditions,omitempty" yaml:"conditions,omitempty"`
+	Policy      string         `json:"policy,omitempty" yaml:"policy,omitempty"`
+	Duration    string         `json:"duration,omitempty" yaml:"duration,omitempty"`
+	MaxInterval string         `json:"maxInterval,omitempty" yaml:"maxInterval,omitempty"`
+	MaxRetries  *int           `json:"maxRetries,omitempty" yaml:"maxRetries,omitempty"`
+	Matching    *RetryMatching `json:"matching,omitempty" yaml:"matching,omitempty"`
 }
 
-type RetryConditions struct {
+// RetryMatching represents the rules to trigger retry in specific scenarios.
+type RetryMatching struct {
+	// HTTPStatusCodes represents HTTP status codes to be retried.
 	HTTPStatusCodes string `json:"httpStatusCodes,omitempty" yaml:"httpStatusCodes,omitempty"`
+	// GRPCStatusCodes represents gRPC status codes to be retried.
 	GRPCStatusCodes string `json:"gRPCStatusCodes,omitempty" yaml:"gRPCStatusCodes,omitempty"`
 }
 

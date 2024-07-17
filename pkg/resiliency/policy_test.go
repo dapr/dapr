@@ -273,7 +273,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 		name         string
 		maxCalls     int32
 		returnedCode int32
-		conditions   *resiliencyV1alpha.RetryConditions
+		matching     *resiliencyV1alpha.RetryMatching
 		maxRetries   int64
 		expected     int32
 	}{
@@ -281,7 +281,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 			name:         "Retries succeed",
 			maxCalls:     5,
 			returnedCode: 500,
-			conditions: &resiliencyV1alpha.RetryConditions{
+			matching: &resiliencyV1alpha.RetryMatching{
 				HTTPStatusCodes: "500-599",
 				GRPCStatusCodes: "",
 			},
@@ -292,7 +292,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 			name:         "Retries code not in retry list",
 			maxCalls:     5,
 			returnedCode: 500,
-			conditions: &resiliencyV1alpha.RetryConditions{
+			matching: &resiliencyV1alpha.RetryMatching{
 				HTTPStatusCodes: "400-499",
 				GRPCStatusCodes: "",
 			},
@@ -317,7 +317,7 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 				return struct{}{}, nil
 			}
 
-			filter, err := ParseRetryConditionFilter(test.conditions)
+			filter, err := ParseRetryConditionFilter(test.matching)
 			require.NoError(t, err)
 			policy := NewRunner[struct{}](context.Background(), &PolicyDefinition{
 				log:  testLog,

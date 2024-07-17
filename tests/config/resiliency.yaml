@@ -17,7 +17,7 @@ spec:
         policy: constant
         duration: 10ms
         maxRetries: 5
-        conditions:
+        matching:
           httpStatusCodes: "500"
           gRPCStatusCodes: "2"
 
