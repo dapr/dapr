@@ -511,7 +511,6 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		if _, ok := req.Metadata[diag.TracestateHeader]; !ok {
 			if sc.TraceState().Len() > 0 {
 				req.Metadata[diag.TracestateHeader] = diag.TraceStateToW3CString(sc)
-
 			}
 		}
 	}
