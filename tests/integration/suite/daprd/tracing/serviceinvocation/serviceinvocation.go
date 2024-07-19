@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -44,17 +45,17 @@ type invoke struct {
 	daprd     *daprd.Daprd
 	grpcdaprd *daprd.Daprd
 
-	traceparent     bool
-	grpctracectxkey bool
+	traceparent     atomic.Bool
+	grpctracectxkey atomic.Bool
 }
 
 func (i *invoke) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		if tp := r.Header.Get("traceparent"); tp != "" {
-			i.traceparent = true
+			i.traceparent.Store(true)
 		} else {
-			i.traceparent = false
+			i.traceparent.Store(false)
 		}
 		w.Write([]byte(`OK`))
 	})
@@ -67,9 +68,9 @@ func (i *invoke) Setup(t *testing.T) []framework.Option {
 			case "test":
 				if md, ok := grpcMetadata.FromIncomingContext(ctx); ok {
 					if _, exists := md["grpc-trace-bin"]; exists {
-						i.grpctracectxkey = true
+						i.grpctracectxkey.Store(true)
 					} else {
-						i.grpctracectxkey = false
+						i.grpctracectxkey.Store(false)
 					}
 				}
 			}
@@ -102,7 +103,7 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer appresp.Body.Close()
 		assert.Equal(t, http.StatusOK, appresp.StatusCode)
-		assert.True(t, i.traceparent)
+		assert.True(t, i.traceparent.Load())
 
 		svcreq := runtime.InvokeServiceRequest{
 			Id: i.daprd.AppID(),
@@ -120,7 +121,7 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 		svcresp, err := client.InvokeService(ctx, &svcreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
-		assert.True(t, i.traceparent)
+		assert.True(t, i.traceparent.Load())
 
 		grpcappreq := runtime.InvokeServiceRequest{
 			Id: i.grpcdaprd.AppID(),
@@ -140,7 +141,7 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 		svcresp, err = grpcclient.InvokeService(ctx, &grpcappreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
-		assert.True(t, i.grpctracectxkey) // this is set for grpc, instead of traceparent
+		assert.True(t, i.grpctracectxkey.Load()) // this is set for grpc, instead of traceparent
 	})
 
 	t.Run("traceparent header provided", func(t *testing.T) {
@@ -156,7 +157,7 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer appresp.Body.Close()
 		assert.Equal(t, http.StatusOK, appresp.StatusCode)
-		assert.True(t, i.traceparent)
+		assert.True(t, i.traceparent.Load())
 
 		svcreq := runtime.InvokeServiceRequest{
 			Id: i.daprd.AppID(),
@@ -176,7 +177,7 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 		svcresp, err := client.InvokeService(ctx, &svcreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
-		assert.True(t, i.traceparent)
+		assert.True(t, i.traceparent.Load())
 
 		grpcappreq := runtime.InvokeServiceRequest{
 			Id: i.grpcdaprd.AppID(),
@@ -197,6 +198,6 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 		svcresp, err = grpcclient.InvokeService(ctx, &grpcappreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
-		assert.True(t, i.grpctracectxkey) // this is set for grpc, instead of traceparent
+		assert.True(t, i.grpctracectxkey.Load()) // this is set for grpc, instead of traceparent
 	})
 }

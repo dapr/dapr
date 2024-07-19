@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -40,16 +41,16 @@ type output struct {
 	httpapp *prochttp.HTTP
 	daprd   *daprd.Daprd
 
-	traceparentset bool
+	traceparent atomic.Bool
 }
 
 func (b *output) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 		if tp := r.Header.Get("traceparent"); tp != "" {
-			b.traceparentset = true
+			b.traceparent.Store(true)
 		} else {
-			b.traceparentset = false
+			b.traceparent.Store(false)
 		}
 
 		w.Write([]byte(`OK`))
@@ -91,7 +92,7 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.True(t, b.traceparentset)
+		assert.True(t, b.traceparent.Load())
 
 		invokereq := runtime.InvokeBindingRequest{
 			Name:      "http-binding-traceparent",
@@ -102,7 +103,7 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		invokeresp, err := client.InvokeBinding(ctx, &invokereq)
 		require.NoError(t, err)
 		require.NotNil(t, invokeresp)
-		assert.True(t, b.traceparentset)
+		assert.True(t, b.traceparent.Load())
 	})
 
 	t.Run("traceparent header provided", func(t *testing.T) {
@@ -119,7 +120,7 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.True(t, b.traceparentset)
+		assert.True(t, b.traceparent.Load())
 
 		invokereq := runtime.InvokeBindingRequest{
 			Name:      "http-binding-traceparent",
@@ -132,6 +133,6 @@ func (b *output) Run(t *testing.T, ctx context.Context) {
 		invokeresp, err := client.InvokeBinding(ctx, &invokereq)
 		require.NoError(t, err)
 		require.NotNil(t, invokeresp)
-		assert.True(t, b.traceparentset)
+		assert.True(t, b.traceparent.Load())
 	})
 }

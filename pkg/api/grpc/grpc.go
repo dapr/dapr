@@ -502,9 +502,10 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	}
 
 	// this is for the http binding, so dont need grpc-trace-bin
-	if span := diagUtils.SpanFromContext(ctx); span != nil {
-		sc := span.SpanContext()
-		tp := diag.SpanContextToW3CString(sc)
+	span := diagUtils.SpanFromContext(ctx)
+	sc := span.SpanContext()
+	tp := diag.SpanContextToW3CString(sc)
+	if span != nil {
 		if _, ok := req.Metadata[diag.TraceparentHeader]; !ok {
 			req.Metadata[diag.TraceparentHeader] = tp
 		}
