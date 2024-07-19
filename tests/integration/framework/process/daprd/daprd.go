@@ -412,6 +412,17 @@ func (d *Daprd) GetMetaSubscriptions(t assert.TestingT, ctx context.Context) []M
 	return d.meta(t, ctx).Subscriptions
 }
 
+func (d *Daprd) GetMetaSubscriptionsWithType(t assert.TestingT, ctx context.Context, subType string) []MetadataResponsePubsubSubscription {
+	subs := d.GetMetaSubscriptions(t, ctx)
+	var filteredSubs []MetadataResponsePubsubSubscription
+	for _, sub := range subs {
+		if sub.Type == subType {
+			filteredSubs = append(filteredSubs, sub)
+		}
+	}
+	return filteredSubs
+}
+
 func (d *Daprd) GetMetaHTTPEndpoints(t assert.TestingT, ctx context.Context) []*rtv1.MetadataHTTPEndpoint {
 	return d.meta(t, ctx).HTTPEndpoints
 }
