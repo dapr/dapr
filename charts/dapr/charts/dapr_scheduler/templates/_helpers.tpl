@@ -29,7 +29,7 @@ Create initial cluster peer list dynamically based on replicaCount.
 {{- define "dapr_scheduler.initialcluster" -}}
 {{- $initialCluster := "" -}}
 {{- $namespace := .Release.Namespace -}}
-{{- $replicaCount := int .Values.replicaCount -}}
+{{- $replicaCount := include "dapr_scheduler.get-replicas" . | int -}}
 {{- range $i, $e := until $replicaCount -}}
 {{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
 {{- $svcName := printf "%s.dapr-scheduler-server.%s.svc.cluster.local" $instanceName $namespace -}}
@@ -48,7 +48,7 @@ Create etcd client ports list dynamically based on replicaCount.
 {{- define "dapr_scheduler.etcdclientports" -}}
 {{- $etcdClientPorts := "" -}}
 {{- $namespace := .Release.Namespace -}}
-{{- $replicaCount := int .Values.replicaCount -}}
+{{- $replicaCount := include "dapr_scheduler.get-replicas" . | int -}}
 {{- range $i, $e := until $replicaCount -}}
 {{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
 {{- $clientPort := int $.Values.ports.etcdGRPCClientPort -}}
@@ -68,7 +68,7 @@ Create etcd client http ports list dynamically based on replicaCount.
 {{- define "dapr_scheduler.etcdclienthttpports" -}}
 {{- $etcdClientHttpPorts := "" -}}
 {{- $namespace := .Release.Namespace -}}
-{{- $replicaCount := int .Values.replicaCount -}}
+{{- $replicaCount := include "dapr_scheduler.get-replicas" . | int -}}
 {{- range $i, $e := until $replicaCount -}}
 {{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
 {{- $clientPort := int $.Values.ports.etcdHTTPClientPort -}}
@@ -82,4 +82,13 @@ Create etcd client http ports list dynamically based on replicaCount.
 {{- $etcdClientHttpPorts -}}
 {{- end -}}
 
-
+{{/*
+Gets the number of replicas. If global.ha.enabled is true, then 3. Otherwise, 1.
+*/}}
+{{- define "dapr_scheduler.get-replicas" -}}
+{{-   $replicas := 1 }}
+{{-   if eq true .Values.global.ha.enabled }}
+{{-       $replicas = 3 }}
+{{-   end }}
+{{-   $replicas }}
+{{- end -}}

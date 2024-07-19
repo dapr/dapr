@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -48,7 +49,6 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	)
 
 	// Keep DNS resolution outside of GetSidecarContainer for unit testing.
-	schedulerAddress := patcher.ServiceScheduler.Address(i.config.Namespace, i.config.KubeClusterDomain)
 	sentryAddress := patcher.ServiceSentry.Address(i.config.Namespace, i.config.KubeClusterDomain)
 	operatorAddress := patcher.ServiceAPI.Address(i.config.Namespace, i.config.KubeClusterDomain)
 
@@ -109,7 +109,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	}
 
 	if sidecar.SchedulerAddress == "" {
-		sidecar.SchedulerAddress = schedulerAddress
+		sidecar.SchedulerAddress = strings.Join(i.schedulerAddresses, ",")
 	}
 
 	// Default value for the sidecar image, which can be overridden by annotations

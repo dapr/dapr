@@ -26,6 +26,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	admissionregistrationv1 "k8s.io/api/admissionregistration/v1"
+	appsv1 "k8s.io/api/apps/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/client"
@@ -33,6 +35,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
+	"github.com/dapr/kit/ptr"
 )
 
 type Injector struct {
@@ -76,6 +79,14 @@ func New(t *testing.T, fopts ...Option) *Injector {
 		kubernetes.WithPath("/apis/admissionregistration.k8s.io/v1/mutatingwebhookconfigurations/dapr-sidecar-injector", func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Add("Content-Type", "application/json")
 			w.Write(mobj)
+		}),
+		kubernetes.WithStatefulSetGet(t, &appsv1.StatefulSet{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "dapr-scheduler-server", Namespace: *opts.namespace,
+			},
+			Spec: appsv1.StatefulSetSpec{
+				Replicas: ptr.Of(int32(1)),
+			},
 		}),
 	)
 

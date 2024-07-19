@@ -32,31 +32,62 @@ func BuildAll(t *testing.T) {
 	t.Helper()
 
 	binaryNames := []string{"daprd", "placement", "sentry", "operator", "injector", "scheduler"}
+	helperBinaryNames := []string{"helmtemplate"}
 
 	var wg sync.WaitGroup
 	wg.Add(len(binaryNames))
+	wg.Add(len(helperBinaryNames))
+	binaryBuildOpts := withTags("allcomponents", "wfbackendsqlite")
 	for _, name := range binaryNames {
 		if runtime.GOOS == "windows" {
-			Build(t, name)
+			Build(t, name, binaryBuildOpts)
 			wg.Done()
 		} else {
 			go func(name string) {
 				defer wg.Done()
-				Build(t, name)
+				Build(t, name, binaryBuildOpts)
+			}(name)
+		}
+	}
+	helpOpts := withRootDirFunc(GetHelperRootDir)
+	for _, name := range helperBinaryNames {
+		if runtime.GOOS == "windows" {
+			Build(t, name, helpOpts, withBuildDir(name))
+			wg.Done()
+		} else {
+			go func(name string) {
+				defer wg.Done()
+				Build(t, name, helpOpts, withBuildDir(name))
 			}(name)
 		}
 	}
 	wg.Wait()
 }
 
-func Build(t *testing.T, name string) {
+func GetRootDir(t *testing.T) string {
+	t.Helper()
+	_, tFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	return filepath.Join(filepath.Dir(tFile), "../../../..")
+}
+
+func GetHelperRootDir(t *testing.T) string {
+	t.Helper()
+	_, tFile, _, ok := runtime.Caller(0)
+	require.True(t, ok)
+	return filepath.Join(filepath.Dir(tFile), "./helpers")
+}
+
+func Build(t *testing.T, name string, bopts ...func(*buildOpts)) {
+	opts := buildOpts{getRootDirFunc: GetRootDir}
+	for _, o := range bopts {
+		o(&opts)
+	}
 	t.Helper()
 	if _, ok := os.LookupEnv(EnvKey(name)); !ok {
 		t.Logf("%q not set, building %q binary", EnvKey(name), name)
 
-		_, tfile, _, ok := runtime.Caller(0)
-		require.True(t, ok)
-		rootDir := filepath.Join(filepath.Dir(tfile), "../../../..")
+		rootDir := opts.getRootDirFunc(t)
 
 		// Use a consistent temp dir for the binary so that the binary is cached on
 		// subsequent runs.
@@ -76,7 +107,23 @@ func Build(t *testing.T, name string) {
 
 		t.Logf("Root dir: %q", rootDir)
 		t.Logf("Compiling %q binary to: %q", name, binPath)
-		cmd := exec.Command("go", "build", "-tags=allcomponents,wfbackendsqlite", "-v", "-o", binPath, "./cmd/"+name)
+
+		// get go build args
+		goBuildArgs := []string{"build"}
+		if opts.buildDir != "" {
+			goBuildArgs = append(goBuildArgs, "-C", opts.buildDir)
+		}
+		if len(opts.tags) > 0 {
+			goBuildArgs = append(goBuildArgs, "-tags="+strings.Join(opts.tags, ","))
+		}
+		goBuildArgs = append(goBuildArgs, "-v", "-o", binPath)
+		if opts.buildDir != "" {
+			goBuildArgs = append(goBuildArgs, ".")
+		} else {
+			goBuildArgs = append(goBuildArgs, "./cmd/"+name)
+		}
+
+		cmd := exec.Command("go", goBuildArgs...)
 		cmd.Dir = rootDir
 		cmd.Stdout = ioout
 		cmd.Stderr = ioerr
