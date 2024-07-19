@@ -261,6 +261,50 @@ func TestInternalActorDeactivation(t *testing.T) {
 	assert.Equal(t, 1, internalAct.Deactivated)
 }
 
+func TestInternalActorDynamicRegistration(t *testing.T) {
+	const (
+		testActorType = InternalActorTypePrefix + "test"
+		testActorID   = "foo"
+	)
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	internalActorsFactory := make(map[string]InternalActorFactory)
+	testActorRuntime, err := newTestActorsRuntimeWithInternalActors(internalActorsFactory)
+	require.NoError(t, err)
+
+	_, ok := testActorRuntime.getInternalActor(testActorType, testActorID)
+	require.False(t, ok)
+
+	_, err = testActorRuntime.Call(ctx,
+		internals.NewInternalInvokeRequest("Foo").
+			WithActor(testActorType, testActorID))
+	// actor is not registered yet, we shouldnt be able to interact with the actor
+	require.Error(t, err)
+
+	err = testActorRuntime.RegisterInternalActor(ctx, testActorType, func(actorType, actorID string, actors Actors) InternalActor {
+		return &mockInternalActor{
+			ActorID: actorID,
+		}
+	}, 0)
+	require.NoError(t, err)
+
+	_, err = testActorRuntime.Call(ctx,
+		internals.NewInternalInvokeRequest("Foo").
+			WithActor(testActorType, testActorID))
+	require.NoError(t, err)
+
+	err = testActorRuntime.UnregisterInternalActor(ctx, testActorType)
+	require.NoError(t, err)
+
+	_, err = testActorRuntime.Call(ctx,
+		internals.NewInternalInvokeRequest("Foo").
+			WithActor(testActorType, testActorID))
+	// now we shouldnt be able to interact with the actor
+	require.Error(t, err)
+}
+
 func decodeTestResponse(data io.Reader) (*invokeMethodCallInfo, error) {
 	info := new(invokeMethodCallInfo)
 	err := DecodeInternalActorData(data, info)

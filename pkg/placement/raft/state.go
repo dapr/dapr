@@ -200,7 +200,7 @@ func (s *DaprHostMemberState) MemberCountInNamespace(ns string) int {
 	return len(n.Members)
 }
 
-func (s *DaprHostMemberState) HasMember(ns string, new *placementv1pb.Host) bool {
+func (s *DaprHostMemberState) HasMember(ns, hostName, appID string) bool {
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
@@ -209,12 +209,12 @@ func (s *DaprHostMemberState) HasMember(ns string, new *placementv1pb.Host) bool
 		return false
 	}
 
-	m, ok := n.Members[new.GetName()]
+	m, ok := n.Members[hostName]
 	if !ok {
 		return false
 	}
 
-	return m.AppID == new.GetId() && m.Name == new.GetName()
+	return m.AppID == appID && m.Name == hostName
 }
 
 // UpsertRequired checks if the newly reported data matches the saved state, or needs to be updated
@@ -401,6 +401,10 @@ func (s *DaprHostMemberState) removeHashingTables(host *DaprHostMember) {
 // upsertMember upserts member host info to the FSM state and returns true
 // if the hashing table update happens.
 func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
+	if !s.isActorHost(host) {
+		return false
+	}
+
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
@@ -470,7 +474,10 @@ func (s *DaprHostMemberState) removeMember(host *DaprHostMember) bool {
 }
 
 func (s *DaprHostMemberState) isActorHost(host *DaprHostMember) bool {
-	return len(host.Entities) > 0
+	if len(host.Entities) == 0 && !s.HasMember(host.Namespace, host.Name, host.AppID) {
+		return false
+	}
+	return true
 }
 
 // caller should hold Lock.

@@ -174,6 +174,36 @@ func TestUpsertMemberNonActorHost(t *testing.T) {
 	require.False(t, updated)
 }
 
+func TestUpsertMemberEmptyEntities(t *testing.T) {
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
+
+	testMember := &DaprHostMember{
+		Name:      "127.0.0.1:8080",
+		Namespace: "ns1",
+		AppID:     "FakeID",
+		Entities:  []string{"a", "b"},
+		UpdatedAt: 100,
+	}
+
+	updated := s.upsertMember(testMember)
+	require.True(t, updated)
+
+	testMember = &DaprHostMember{
+		Name:      "127.0.0.1:8080",
+		Namespace: "ns1",
+		AppID:     "FakeID",
+		Entities:  []string{},
+		UpdatedAt: 100,
+	}
+
+	updated = s.upsertMember(testMember)
+	require.True(t, updated)
+}
+
 func TestUpdateHashingTable(t *testing.T) {
 	// each subtest has dependency on the state
 
