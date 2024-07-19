@@ -109,11 +109,11 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
         - name: dapr-trust-bundle
-          mountPath: /var/run/secrets/dapr.io/tls
+          mountPath: /run/secrets/dapr.io/tls
           readOnly: true
       {{- if .Values.global.mtls.mountSentryVolume }}
         - name: dapr-identity-token
-          mountPath: /var/run/secrets/dapr.io/sentrytoken
+          mountPath: /run/secrets/dapr.io/sentrytoken
           readOnly: true
       {{- end }}
       {{- if eq .Values.debug.enabled false }}
@@ -148,7 +148,7 @@ spec:
         - "--log-level"
         - "{{ .Values.logLevel }}"
         - "--trust-anchors-file"
-        - "/var/run/secrets/dapr.io/tls/ca.crt"
+        - "/run/secrets/dapr.io/tls/ca.crt"
 {{- if eq .Values.global.logAsJson true }}
         - "--log-as-json"
 {{- end }}

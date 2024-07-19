@@ -30,8 +30,6 @@ import (
 )
 
 const (
-	//nolint:gosec
-	defaultCredentialsPath   = "/var/run/dapr/credentials"
 	defaultHealthzPort       = 8080
 	defaultPlacementPort     = 50005
 	defaultReplicationFactor = 100

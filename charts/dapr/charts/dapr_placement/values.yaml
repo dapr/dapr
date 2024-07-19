@@ -28,7 +28,7 @@ minActorApiLevel: 0
 
 cluster:
   forceInMemoryLog: false
-  logStorePath: /var/run/dapr/raft-log
+  logStorePath: /var/lib/dapr/raft-log
   logStoreWinPath: C:\\raft-log
 
 volumeclaims:

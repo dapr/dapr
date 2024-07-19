@@ -126,7 +126,7 @@ spec:
         - {{ .Values.healthzPort | toString | toYaml }}
         env:
         - name: DAPR_TRUST_ANCHORS_FILE
-          value: /var/run/secrets/dapr.io/tls/ca.crt
+          value: /run/secrets/dapr.io/tls/ca.crt
         - name: DAPR_CONTROL_PLANE_TRUST_DOMAIN
           value: {{ .Values.global.mtls.controlPlaneTrustDomain | toYaml }}
         - name: DAPR_SENTRY_ADDRESS
@@ -207,11 +207,11 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
         - name: dapr-trust-bundle
-          mountPath: /var/run/secrets/dapr.io/tls
+          mountPath: /run/secrets/dapr.io/tls
           readOnly: true
       {{- if .Values.global.mtls.mountSentryVolume }}
         - name: dapr-identity-token
-          mountPath: /var/run/secrets/dapr.io/sentrytoken
+          mountPath: /run/secrets/dapr.io/sentrytoken
           readOnly: true
       {{- end }}
       {{- with .Values.global.extraVolumeMounts.injector }}

@@ -303,7 +303,7 @@ func TestPatching(t *testing.T) {
 
 				assert.Len(t, daprdContainer.VolumeMounts, 1)
 				assert.Equal(t, "dapr-identity-token", daprdContainer.VolumeMounts[0].Name)
-				assert.Equal(t, "/var/run/secrets/dapr.io/sentrytoken", daprdContainer.VolumeMounts[0].MountPath)
+				assert.Equal(t, "/run/secrets/dapr.io/sentrytoken", daprdContainer.VolumeMounts[0].MountPath)
 				assert.True(t, daprdContainer.VolumeMounts[0].ReadOnly)
 
 				assert.NotNil(t, daprdContainer.LivenessProbe)
@@ -366,11 +366,11 @@ func TestPatching(t *testing.T) {
 				daprdContainer := pod.Spec.Containers[1]
 				assert.Len(t, daprdContainer.VolumeMounts, 2)
 				assert.Equal(t, "dapr-unix-domain-socket", daprdContainer.VolumeMounts[0].Name)
-				assert.Equal(t, "/var/run/dapr-sockets", daprdContainer.VolumeMounts[0].MountPath)
+				assert.Equal(t, "/run/dapr-sockets", daprdContainer.VolumeMounts[0].MountPath)
 
 				// Ensure the CLI flag is set
 				args := strings.Join(daprdContainer.Args, " ")
-				assert.Contains(t, args, "--unix-domain-socket /var/run/dapr-sockets")
+				assert.Contains(t, args, "--unix-domain-socket /run/dapr-sockets")
 			},
 		},
 	}

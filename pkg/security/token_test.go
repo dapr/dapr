@@ -104,8 +104,8 @@ func TestGetKubernetesIdentityToken(t *testing.T) {
 				path  string
 				token *string
 			}{
-				{path: "/var/run/secrets/kubernetes.io/serviceaccount/token", token: test.kubeToken},
-				{path: "/var/run/secrets/dapr.io/sentrytoken/token", token: test.boundToken},
+				{path: "/run/secrets/kubernetes.io/serviceaccount/token", token: test.kubeToken},
+				{path: "/run/secrets/dapr.io/sentrytoken/token", token: test.boundToken},
 			} {
 				if tt.token != nil {
 					path := filepath.Join(rootFS, tt.path)

@@ -33,7 +33,7 @@ func TestAppFlag(t *testing.T) {
 	assert.EqualValues(t, false, opts.MetadataEnabled)
 	assert.EqualValues(t, 100, opts.ReplicationFactor)
 	assert.EqualValues(t, "localhost", opts.TrustDomain)
-	assert.EqualValues(t, "/var/run/secrets/dapr.io/tls/ca.crt", opts.TrustAnchorsFile)
+	assert.EqualValues(t, "/run/secrets/dapr.io/tls/ca.crt", opts.TrustAnchorsFile)
 	assert.EqualValues(t, "dapr-sentry.default.svc:443", opts.SentryAddress)
 	assert.EqualValues(t, "info", opts.Logger.OutputLevel)
 	assert.EqualValues(t, false, opts.Logger.JSONFormatEnabled)

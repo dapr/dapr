@@ -21,7 +21,7 @@ import (
 )
 
 const (
-	kubeTknPath = "/var/run/secrets/dapr.io/sentrytoken/token"
+	kubeTknPath = "/run/secrets/dapr.io/sentrytoken/token"
 )
 
 // used for testing.

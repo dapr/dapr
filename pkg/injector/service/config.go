@@ -65,7 +65,7 @@ func NewConfigWithDefaults() Config {
 	return Config{
 		SidecarImagePullPolicy:  "Always",
 		ControlPlaneTrustDomain: "cluster.local",
-		TrustAnchorsFile:        "/var/run/dapr.io/tls/ca.crt",
+		TrustAnchorsFile:        "/run/dapr.io/tls/ca.crt",
 	}
 }
 
