@@ -21,6 +21,8 @@ package actors
 import (
 	"context"
 	"errors"
+	"fmt"
+	"sync"
 	"time"
 
 	mock "github.com/stretchr/testify/mock"
@@ -45,6 +47,8 @@ type (
 type MockPlacement struct {
 	testAppID            string
 	lookupActorResponses map[string]internal.LookupActorResponse
+	actorTypesMu         sync.RWMutex
+	actorTypes           []string
 }
 
 func NewMockPlacement(testAppID string) internal.PlacementService {
@@ -54,13 +58,31 @@ func NewMockPlacement(testAppID string) internal.PlacementService {
 	}
 }
 
-// LookupActor implements internal.PlacementService
-func (*MockPlacement) AddHostedActorType(string, time.Duration) error {
+func (p *MockPlacement) AddHostedActorType(actorType string, idleTimeout time.Duration) error {
+	p.actorTypesMu.Lock()
+	defer p.actorTypesMu.Unlock()
+
+	for _, t := range p.actorTypes {
+		if t == actorType {
+			return fmt.Errorf("actor type %s already registered", actorType)
+		}
+	}
+
+	p.actorTypes = append(p.actorTypes, actorType)
 	return nil
 }
 
-func (*MockPlacement) DeleteHostedActorType(string) error {
-	return nil
+func (p *MockPlacement) DeleteHostedActorType(actorType string) error {
+	p.actorTypesMu.Lock()
+	defer p.actorTypesMu.Unlock()
+
+	for i, t := range p.actorTypes {
+		if t == actorType {
+			p.actorTypes = append(p.actorTypes[:i], p.actorTypes[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("actor type %s not found", actorType)
 }
 
 func (p *MockPlacement) SetLookupActorResponse(req internal.LookupActorRequest, res internal.LookupActorResponse) {
@@ -74,10 +96,16 @@ func (p *MockPlacement) LookupActor(ctx context.Context, req internal.LookupActo
 		return res, nil
 	}
 
-	return internal.LookupActorResponse{
-		Address: "localhost:5000",
-		AppID:   p.testAppID,
-	}, nil
+	for _, t := range p.actorTypes {
+		if t == req.ActorType {
+			return internal.LookupActorResponse{
+				Address: "localhost:5000",
+				AppID:   p.testAppID,
+			}, nil
+		}
+	}
+
+	return internal.LookupActorResponse{}, fmt.Errorf("actor not found %v", req.ActorKey())
 }
 
 // Start implements internal.PlacementService

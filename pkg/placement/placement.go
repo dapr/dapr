@@ -292,11 +292,13 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				}
 			}
 
-			// is this an existing member that reported actor types before but now it has unregistered all of them?
-			// This is the case when unregistering internal workflow actors
-			if len(req.GetEntities()) == 0 && !p.raftNode.FSM().State().HasMember(namespace, req) {
+			// Is this an existing member that reported actor types before,
+			// but now it unregistered all of them?
+			// (happens when unregistering internal workflow actors)
+			if len(req.GetEntities()) == 0 && !p.raftNode.FSM().State().HasMember(namespace, req.GetName(), req.GetId()) {
 				continue
 			}
+
 			isActorRuntime = true
 
 			now := p.clock.Now()
@@ -312,13 +314,17 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			// Upsert incoming member only if the existing member info
 			// doesn't match with the incoming member info.
 			if p.raftNode.FSM().State().UpsertRequired(namespace, req) {
+				entities := req.GetEntities()
+				if entities == nil {
+					entities = []string{}
+				}
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberUpsert,
 					host: raft.DaprHostMember{
 						Name:      req.GetName(),
 						AppID:     req.GetId(),
 						Namespace: namespace,
-						Entities:  req.GetEntities(),
+						Entities:  entities,
 						UpdatedAt: now.UnixNano(),
 						APILevel:  req.GetApiLevel(),
 					},
