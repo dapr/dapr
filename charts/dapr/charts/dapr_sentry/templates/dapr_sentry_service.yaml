@@ -7,9 +7,18 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
-  {{- if .Values.service.annotations }}
+{{- if or .Values.service.annotations .Values.global.prometheus.enabled }}
   annotations:
-  {{ toYaml .Values.service.annotations | indent 4}}
+    {{- if .Values.global.prometheus.enabled }}
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .Values.global.prometheus.port }}"
+    prometheus.io/path: "/"
+    {{- end }}
+  {{- if .Values.service.annotations }}
+    {{- range $key, $value := .Values.service.annotations }}
+      {{ $key }}: "{{ $value }}"
+    {{- end }}
+  {{- end }}
   {{- end }}
 spec:
   selector:
