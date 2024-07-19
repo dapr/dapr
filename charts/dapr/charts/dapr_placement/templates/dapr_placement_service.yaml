@@ -9,13 +9,17 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
-  {{- if or ( .Values.service.annotations ) ( eq .Values.global.prometheus.enabled true ) }}
+{{- if or .Values.service.annotations .Values.global.prometheus.enabled }}
   annotations:
-  {{ toYaml .Values.service.annotations | indent 4}}
-  {{- if eq .Values.global.prometheus.enabled true }}
-    prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
+    {{- if .Values.global.prometheus.enabled }}
+    prometheus.io/scrape: "true"
     prometheus.io/port: "{{ .Values.global.prometheus.port }}"
     prometheus.io/path: "/"
+    {{- end }}
+  {{- if .Values.service.annotations }}
+    {{- range $key, $value := .Values.service.annotations }}
+      {{ $key }}: "{{ $value }}"
+    {{- end }}
   {{- end }}
   {{- end }}
 spec:
