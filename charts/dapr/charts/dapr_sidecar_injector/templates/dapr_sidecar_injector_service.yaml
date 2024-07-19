@@ -8,9 +8,10 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
-{{- if .Values.service.annotations }}
-{{ toYaml .Values.service.annotations | indent 4}}
-{{- end }}
+  {{- if .Values.service.annotations }}
+  annotations:
+  {{ toYaml .Values.service.annotations | indent 4}}
+  {{- end }}
 spec:
   selector:
     app: dapr-sidecar-injector

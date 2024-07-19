@@ -7,9 +7,10 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
-{{- if .Values.apiService.annotations }}
-{{ toYaml .Values.apiService.annotations | indent 4}}
-{{- end }}
+  {{- if .Values.apiService.annotations }}
+  annotations:
+  {{ toYaml .Values.apiService.annotations | indent 4}}
+  {{- end }}
 spec:
   selector:
     app: dapr-operator
