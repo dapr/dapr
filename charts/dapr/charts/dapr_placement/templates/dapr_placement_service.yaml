@@ -9,9 +9,15 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
-{{- if .Values.service.annotations }}
-{{ toYaml .Values.service.annotations | indent 4}}
-{{- end }}
+  {{- if or ( .Values.service.annotations ) ( eq .Values.global.prometheus.enabled true ) }}
+  annotations:
+  {{ toYaml .Values.service.annotations | indent 4}}
+  {{- if eq .Values.global.prometheus.enabled true }}
+    prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
+    prometheus.io/port: "{{ .Values.global.prometheus.port }}"
+    prometheus.io/path: "/"
+  {{- end }}
+  {{- end }}
 spec:
   selector:
     app: dapr-placement-server
