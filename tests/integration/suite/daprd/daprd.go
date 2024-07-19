@@ -34,5 +34,6 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/state"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow"
 )
