@@ -117,6 +117,10 @@ func WithSecretGet(t *testing.T, secret *corev1.Secret) Option {
 	return handleGetResource(t, "/api/v1", "secrets", secret.Namespace, secret.Name, secret)
 }
 
+func WithStatefulSetGet(t *testing.T, statefulset *appsv1.StatefulSet) Option {
+	return handleGetResource(t, "/apis/apps/v1", "statefulsets", statefulset.Namespace, statefulset.Name, statefulset)
+}
+
 func WithSecretList(t *testing.T, secrets *corev1.SecretList) Option {
 	return handleClusterListResource(t, "/api/v1/secrets", secrets)
 }

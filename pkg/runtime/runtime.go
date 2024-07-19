@@ -210,26 +210,25 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:               runtimeConfig.id,
-		Namespace:        namespace,
-		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
-		SchedulerEnabled: len(runtimeConfig.schedulerAddress) > 0,
-		Registry:         runtimeConfig.registry,
-		ComponentStore:   compStore,
-		Meta:             meta,
-		GlobalConfig:     globalConfig,
-		Resiliency:       resiliencyProvider,
-		Mode:             runtimeConfig.mode,
-		PodName:          podName,
-		OperatorClient:   operatorClient,
-		GRPC:             grpc,
-		Channels:         channels,
-		MiddlewareHTTP:   httpMiddleware,
-		Security:         sec,
-		Outbox:           outbox,
-		Adapter:          pubsubAdapter,
-		AdapterStreamer:  pubsubAdapterStreamer,
+		ID:              runtimeConfig.id,
+		Namespace:       namespace,
+		IsHTTP:          runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:   len(runtimeConfig.actorsService) > 0,
+		Registry:        runtimeConfig.registry,
+		ComponentStore:  compStore,
+		Meta:            meta,
+		GlobalConfig:    globalConfig,
+		Resiliency:      resiliencyProvider,
+		Mode:            runtimeConfig.mode,
+		PodName:         podName,
+		OperatorClient:  operatorClient,
+		GRPC:            grpc,
+		Channels:        channels,
+		MiddlewareHTTP:  httpMiddleware,
+		Security:        sec,
+		Outbox:          outbox,
+		Adapter:         pubsubAdapter,
+		AdapterStreamer: pubsubAdapterStreamer,
 	})
 
 	var reloader *hotreload.Reloader
@@ -793,18 +792,20 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			a.appHealthReady = nil
 		}
 
-		// Start subscribing to topics and reading from input bindings
-		if err := a.processor.Subscriber().StartAppSubscriptions(); err != nil {
-			log.Warnf("failed to subscribe to topics: %s ", err)
-		}
-		err := a.processor.Binding().StartReadingFromBindings(ctx)
-		if err != nil {
-			log.Warnf("failed to read from bindings: %s ", err)
-		}
+		if a.channels.AppChannel() != nil {
+			// Start subscribing to topics and reading from input bindings
+			if err := a.processor.Subscriber().StartAppSubscriptions(); err != nil {
+				log.Warnf("failed to subscribe to topics: %s ", err)
+			}
+			err := a.processor.Binding().StartReadingFromBindings(ctx)
+			if err != nil {
+				log.Warnf("failed to read from bindings: %s ", err)
+			}
 
-		// Start subscribing to outbox topics
-		if err := a.outbox.SubscribeToInternalTopics(ctx, a.runtimeConfig.id); err != nil {
-			log.Warnf("failed to subscribe to outbox topics: %s", err)
+			// Start subscribing to outbox topics
+			if err := a.outbox.SubscribeToInternalTopics(ctx, a.runtimeConfig.id); err != nil {
+				log.Warnf("failed to subscribe to outbox topics: %s", err)
+			}
 		}
 
 		if a.runtimeConfig.SchedulerEnabled() {
