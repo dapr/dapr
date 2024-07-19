@@ -61,7 +61,7 @@ service Dapr {
 
   // SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
   // events from it.
-  rpc SubscribeTopicEventsAlpha1(stream SubscribeTopicEventsRequestAlpha1) returns (stream TopicEventRequest) {}
+  rpc SubscribeTopicEventsAlpha1(stream SubscribeTopicEventsRequestAlpha1) returns (stream SubscribeTopicEventsResponseAlpha1) {}
 
   // Invokes binding data to specific output bindings
   rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
@@ -428,17 +428,17 @@ message BulkPublishResponseFailedEntry {
 // SubscribeTopicEventsRequestAlpha1 is a message containing the details for
 // subscribing to a topic via streaming.
 // The first message must always be the initial request. All subsequent
-// messages must be event responses.
+// messages must be event processed responses.
 message SubscribeTopicEventsRequestAlpha1 {
   oneof subscribe_topic_events_request_type {
-    SubscribeTopicEventsInitialRequestAlpha1 initial_request = 1;
-    SubscribeTopicEventsResponseAlpha1 event_response = 2;
+    SubscribeTopicEventsRequestInitialAlpha1 initial_request = 1;
+    SubscribeTopicEventsRequestProcessedAlpha1 event_processed = 2;
   }
 }
 
-// SubscribeTopicEventsInitialRequestAlpha1 is the initial message containing the
-// details for subscribing to a topic via streaming.
-message SubscribeTopicEventsInitialRequestAlpha1 {
+// SubscribeTopicEventsRequestInitialAlpha1 is the initial message containing
+// the details for subscribing to a topic via streaming.
+message SubscribeTopicEventsRequestInitialAlpha1 {
   // The name of the pubsub component
   string pubsub_name = 1;
 
@@ -456,15 +456,30 @@ message SubscribeTopicEventsInitialRequestAlpha1 {
   optional string dead_letter_topic = 4;
 }
 
-// SubscribeTopicEventsResponseAlpha1 is a message containing the result of a
+// SubscribeTopicEventsRequestProcessedAlpha1 is the message containing the
 // subscription to a topic.
-message SubscribeTopicEventsResponseAlpha1 {
+message SubscribeTopicEventsRequestProcessedAlpha1 {
   // id is the unique identifier for the subscription request.
   string id = 1;
 
   // status is the result of the subscription request.
   TopicEventResponse status = 2;
 }
+
+
+// SubscribeTopicEventsResponseAlpha1 is a message returned from daprd
+// when subscribing to a topic via streaming.
+message SubscribeTopicEventsResponseAlpha1 {
+  oneof subscribe_topic_events_response_type {
+    SubscribeTopicEventsResponseInitialAlpha1 initial_response = 1;
+    TopicEventRequest event_message = 2;
+  }
+}
+
+// SubscribeTopicEventsResponseInitialAlpha1 is the initial response from daprd
+// when subscribing to a topic.
+message SubscribeTopicEventsResponseInitialAlpha1 {}
+
 
 // InvokeBindingRequest is the message to send data to output bindings
 message InvokeBindingRequest {
