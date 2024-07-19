@@ -16,6 +16,7 @@ package raft
 import (
 	"testing"
 
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/stretchr/testify/require"
 )
 
@@ -397,4 +398,205 @@ func TestUpdateAPILevel(t *testing.T) {
 
 		require.Equal(t, uint32(20), s.data.APILevel)
 	})
+}
+
+func TestDaprHostMemberState_UpsertRequired(t *testing.T) {
+	type fields struct {
+		data DaprHostMemberStateData
+	}
+	type args struct {
+		ns  string
+		new *placementv1pb.Host
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   bool
+	}{
+		{
+			name: "yes - basic",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  []string{"a", "b", "c"},
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  []string{"a", "b"},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "no - basic",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  []string{"a", "b"},
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  []string{"a", "b"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "yes - set empty",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  []string{"a", "b", "c"},
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  []string{},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "no - set empty",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  []string{},
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  []string{},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "no - set empty nil",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  []string{},
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  nil,
+				},
+			},
+			want: false,
+		},
+		{
+			name: "no - set empty nil 2",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  nil,
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  []string{},
+				},
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &DaprHostMemberState{
+				data: tt.fields.data,
+			}
+			if got := s.UpsertRequired(tt.args.ns, tt.args.new); got != tt.want {
+				t.Errorf("DaprHostMemberState.UpsertRequired() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

@@ -1037,7 +1037,7 @@ func (r *statestore) startReminder(reminder *internal.Reminder, stopChannel chan
 
 			_, exists := r.activeReminders.Load(reminderKey)
 			if !exists {
-				log.Error("Could not find active reminder with key: " + reminderKey)
+				log.Errorf("Could not find active reminder with key: %v", reminderKey)
 				nextTimer = nil
 				return
 			}
@@ -1067,7 +1067,7 @@ func (r *statestore) startReminder(reminder *internal.Reminder, stopChannel chan
 					eTag = track.Etag
 				}
 			} else {
-				log.Error("Could not find active reminder with key: %s", reminderKey)
+				log.Errorf("Could not find active reminder with key: %s", reminderKey)
 				nextTimer = nil
 				return
 			}

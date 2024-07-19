@@ -200,6 +200,23 @@ func (s *DaprHostMemberState) MemberCountInNamespace(ns string) int {
 	return len(n.Members)
 }
 
+func (s *DaprHostMemberState) HasMember(ns string, new *placementv1pb.Host) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	n, ok := s.data.Namespace[ns]
+	if !ok {
+		return false
+	}
+
+	m, ok := n.Members[new.GetName()]
+	if !ok {
+		return false
+	}
+
+	return m.AppID == new.GetId() && m.Name == new.GetName()
+}
+
 // UpsertRequired checks if the newly reported data matches the saved state, or needs to be updated
 func (s *DaprHostMemberState) UpsertRequired(ns string, new *placementv1pb.Host) bool {
 	s.lock.RLock()
@@ -210,8 +227,12 @@ func (s *DaprHostMemberState) UpsertRequired(ns string, new *placementv1pb.Host)
 		return true // If the member doesn't exist, we need to upsert
 	}
 	if m, ok := n.Members[new.GetName()]; ok {
+		newE := new.GetEntities()
+		if newE == nil {
+			newE = []string{}
+		}
 		// If all attributes match, no upsert is required
-		return !(m.AppID == new.GetId() && m.Name == new.GetName() && cmp.Equal(m.Entities, new.GetEntities()))
+		return !(m.AppID == new.GetId() && m.Name == new.GetName() && cmp.Equal(m.Entities, newE))
 	}
 
 	return true
@@ -349,6 +370,13 @@ func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
 
 		s.data.Namespace[host.Namespace].hashingTableMap[e].Add(host.Name, host.AppID, 0)
 	}
+	if len(host.Entities) == 0 {
+		if s.data.Namespace[host.Namespace].hashingTableMap != nil {
+			for _, v := range s.data.Namespace[host.Namespace].hashingTableMap {
+				_ = v.Remove(host.Name)
+			}
+		}
+	}
 }
 
 // removeHashingTables caller should hold Lock.
@@ -373,10 +401,6 @@ func (s *DaprHostMemberState) removeHashingTables(host *DaprHostMember) {
 // upsertMember upserts member host info to the FSM state and returns true
 // if the hashing table update happens.
 func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
-	if !s.isActorHost(host) {
-		return false
-	}
-
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
