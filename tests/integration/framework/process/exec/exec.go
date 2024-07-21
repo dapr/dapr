@@ -93,31 +93,37 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 	//nolint:gosec
 	e.cmd = oexec.CommandContext(ctx, e.binPath, e.args...)
 
-	stdoutPipe, err := e.cmd.StdoutPipe()
-	require.NoError(t, err)
-	stderrPipe, err := e.cmd.StderrPipe()
-	require.NoError(t, err)
+	for _, pipe := range []struct {
+		cmdPipeFn func() (io.ReadCloser, error)
+		procPipe  io.WriteCloser
+	}{
+		{cmdPipeFn: e.cmd.StdoutPipe, procPipe: e.stdoutpipe},
+		{cmdPipeFn: e.cmd.StderrPipe, procPipe: e.stderrpipe},
+	} {
+		cmdPipe, err := pipe.cmdPipeFn()
+		require.NoError(t, err)
 
-	stdoutpipe := tee.NewWriterCloser(
-		iowriter.New(t, filepath.Base(e.binPath)),
-		e.stdoutpipe,
-	)
-	stderrpipe := tee.NewWriterCloser(
-		iowriter.New(t, filepath.Base(e.binPath)),
-		e.stderrpipe,
-	)
+		pipe := tee.WriteCloser(
+			iowriter.New(t, filepath.Base(e.binPath)),
+			pipe.procPipe,
+		)
 
-	e.wg.Add(2)
-	go func() {
-		defer e.wg.Done()
-		io.Copy(stdoutpipe, stdoutPipe)
-		require.NoError(t, stdoutpipe.Close())
-	}()
-	go func() {
-		defer e.wg.Done()
-		io.Copy(stderrpipe, stderrPipe)
-		require.NoError(t, stderrpipe.Close())
-	}()
+		e.wg.Add(1)
+		pipeErrCh := make(chan error, 1)
+		go func() {
+			defer e.wg.Done()
+			io.Copy(pipe, cmdPipe)
+			pipeErrCh <- pipe.Close()
+		}()
+		t.Cleanup(func() {
+			select {
+			case err := <-pipeErrCh:
+				require.NoError(t, err)
+			case <-ctx.Done():
+				require.Fail(t, "context cancelled before exec pipe closed")
+			}
+		})
+	}
 
 	// Wait for a few seconds before killing the process completely.
 	e.cmd.WaitDelay = time.Second * 5

@@ -15,13 +15,14 @@ package helm
 
 import (
 	"fmt"
-	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/binary"
 )
 
 // OptionFunc is a function that configures the process.
@@ -29,30 +30,12 @@ type OptionFunc func(*options)
 
 // options contains the options for running helm in integration tests.
 type options struct {
-	execOpts []exec.Option
-
-	stdout io.WriteCloser
-
-	setValues       []string
-	setStringValues []string
-	setJSONValue    *string
+	setValues []string
 
 	// list of resources to show only
 	showOnly []string
 
 	namespace *string
-}
-
-func WithExit1() OptionFunc {
-	return func(o *options) {
-		o.execOpts = append(o.execOpts,
-			exec.WithExitCode(1),
-			exec.WithRunError(func(t *testing.T, err error) {
-				//nolint:testifylint
-				assert.ErrorContains(t, err, "exit status 1")
-			}),
-		)
-	}
 }
 
 func WithValues(values ...string) OptionFunc {
@@ -69,45 +52,30 @@ func WithGlobalValues(values ...string) OptionFunc {
 	}
 }
 
-func WithStringValues(values ...string) OptionFunc {
-	return func(o *options) {
-		o.setStringValues = values
-	}
-}
-
-func WithJSONValue(jsonString string) OptionFunc {
-	return func(o *options) {
-		o.setJSONValue = &jsonString
-	}
-}
-
 func WithShowOnlySchedulerSTS() OptionFunc {
 	return func(o *options) {
 		o.showOnly = append(o.showOnly, "charts/dapr_scheduler/templates/dapr_scheduler_statefulset.yaml")
 	}
 }
 
-func WithShowOnlySentryDeploy() OptionFunc {
+func WithShowOnlyServices(t *testing.T) OptionFunc {
 	return func(o *options) {
-		o.showOnly = append(o.showOnly, "charts/dapr_sentry/templates/dapr_sentry_deployment.yaml")
-	}
-}
+		require.NoError(t, filepath.Walk(
+			filepath.Join(binary.GetRootDir(t), "charts/dapr/charts"),
+			func(path string, info os.FileInfo, err error) error {
+				if err != nil {
+					return err
+				}
+				if info.IsDir() {
+					return nil
+				}
 
-func WithShowOnlyPlacementSTS() OptionFunc {
-	return func(o *options) {
-		o.showOnly = append(o.showOnly, "charts/dapr_placement/templates/dapr_placement_statefulset.yaml")
-	}
-}
-
-func WithShowOnlyOperatorDeploy() OptionFunc {
-	return func(o *options) {
-		o.showOnly = append(o.showOnly, "charts/dapr_operator/templates/dapr_operator_deployment.yaml")
-	}
-}
-
-func WithShowOnlySidecarInjectorDeploy() OptionFunc {
-	return func(o *options) {
-		o.showOnly = append(o.showOnly, "charts/dapr_sidecar_injector/templates/dapr_sidecar_injector_deployment.yaml")
+				if strings.HasSuffix(path, "service.yaml") {
+					o.showOnly = append(o.showOnly, strings.ReplaceAll(path, binary.GetRootDir(t)+"/charts/dapr/", ""))
+				}
+				return nil
+			},
+		))
 	}
 }
 
@@ -117,24 +85,12 @@ func WithShowOnly(chart, tplYamlFileName string) OptionFunc {
 		if !strings.HasSuffix(tplYamlFileName, ".yaml") {
 			tplYamlFileName += ".yaml"
 		}
-		o.showOnly = append(o.showOnly, fmt.Sprintf("charts/%s/templates/%s", chart, tplYamlFileName))
+		o.showOnly = append(o.showOnly, fmt.Sprintf("%s/templates/%s", chart, tplYamlFileName))
 	}
 }
 
 func WithNamespace(namespace string) OptionFunc {
 	return func(o *options) {
 		o.namespace = &namespace
-	}
-}
-
-func WithStdout(stdout io.WriteCloser) OptionFunc {
-	return func(o *options) {
-		o.execOpts = append(o.execOpts, exec.WithStdout(stdout))
-	}
-}
-
-func WithStderr(stderr io.WriteCloser) OptionFunc {
-	return func(o *options) {
-		o.execOpts = append(o.execOpts, exec.WithStderr(stderr))
 	}
 }

@@ -16,7 +16,7 @@ metadata:
     {{- end }}
   {{- if .Values.apiService.annotations }}
     {{- range $key, $value := .Values.apiService.annotations }}
-      {{ $key }}: "{{ $value }}"
+    {{ $key }}: "{{ $value }}"
     {{- end }}
   {{- end }}
   {{- end }}
@@ -49,6 +49,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 {{- if .Values.webhookService.annotations }}
+  annotations:
 {{ toYaml .Values.webhookService.annotations | indent 4}}
 {{- end }}
 spec:

@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -16,16 +16,18 @@ package tee
 import (
 	"errors"
 	"io"
+	"sync"
 )
 
-// writerCloser is a `tee` for multiple write closers.
-type writerCloser struct {
+// writecloser is a `tee` for multiple write closers.
+type writecloser struct {
+	lock    sync.Mutex
 	writers []io.WriteCloser
 }
 
-// NewWriterCloser creates a new `tee` for io.WriteClosers
-func NewWriterCloser(writers ...io.WriteCloser) io.WriteCloser {
-	w := new(writerCloser)
+// WriteCloser creates a new `tee` for io.WriteClosers.
+func WriteCloser(writers ...io.WriteCloser) io.WriteCloser {
+	w := new(writecloser)
 	for i := range writers {
 		if writers[i] != nil {
 			w.writers = append(w.writers, writers[i])
@@ -34,26 +36,44 @@ func NewWriterCloser(writers ...io.WriteCloser) io.WriteCloser {
 	return w
 }
 
-func (w *writerCloser) Write(p []byte) (n int, err error) {
+func (w *writecloser) Write(p []byte) (n int, err error) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
 	var errs []error
+
 	for _, writer := range w.writers {
-		written, err := writer.Write(p)
-		if err != nil {
-			errs = append(errs, err)
-			continue
-		}
-		if written != len(p) {
-			return written, errors.New("not all bytes written")
+		var n int
+		for {
+			written, err := writer.Write(p)
+			if err != nil {
+				errs = append(errs, err)
+				break
+			}
+
+			// Keep writing until all bytes are written to this writer.
+			n += written
+			if n == len(p) {
+				break
+			}
 		}
 	}
 
-	return len(p), errors.Join(errs...)
+	if err := errors.Join(errs...); err != nil {
+		return 0, err
+	}
+
+	return len(p), nil
 }
 
-func (w *writerCloser) Close() error {
+func (w *writecloser) Close() error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
 	errs := make([]error, len(w.writers))
 	for i, writer := range w.writers {
 		errs[i] = writer.Close()
 	}
+
 	return errors.Join(errs...)
 }
