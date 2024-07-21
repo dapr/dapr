@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,7 +46,8 @@ type exec struct {
 	stdoutpipe io.WriteCloser
 	stderrpipe io.WriteCloser
 
-	wg sync.WaitGroup
+	wg   sync.WaitGroup
+	once atomic.Bool
 }
 
 func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
@@ -93,6 +95,7 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 	//nolint:gosec
 	e.cmd = oexec.CommandContext(ctx, e.binPath, e.args...)
 
+	iow := iowriter.New(t, filepath.Base(e.binPath))
 	for _, pipe := range []struct {
 		cmdPipeFn func() (io.ReadCloser, error)
 		procPipe  io.WriteCloser
@@ -103,10 +106,7 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 		cmdPipe, err := pipe.cmdPipeFn()
 		require.NoError(t, err)
 
-		pipe := tee.WriteCloser(
-			iowriter.New(t, filepath.Base(e.binPath)),
-			pipe.procPipe,
-		)
+		pipe := tee.WriteCloser(iow, pipe.procPipe)
 
 		e.wg.Add(1)
 		pipeErrCh := make(chan error, 1)
@@ -136,7 +136,12 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 }
 
 func (e *exec) Cleanup(t *testing.T) {
-	defer e.wg.Wait()
+	e.wg.Add(1)
+	defer func() { e.wg.Done(); e.wg.Wait() }()
+
+	if !e.once.CompareAndSwap(false, true) {
+		return
+	}
 
 	kill.Kill(t, e.cmd)
 	e.checkExit(t)
