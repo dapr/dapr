@@ -33,5 +33,10 @@ spec:
     port: {{ .Values.ports.apiPort }}
   - name: raft-node
     port: {{ .Values.ports.raftRPCPort }}
+{{- if eq .Values.global.prometheus.enabled true }}
+  - name: metrics
+    containerPort: {{ .Values.global.prometheus.port }}
+    protocol: TCP
+{{- end}}
   clusterIP: None
 {{- end }}

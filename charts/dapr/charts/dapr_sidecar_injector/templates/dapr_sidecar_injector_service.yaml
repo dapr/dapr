@@ -30,4 +30,9 @@ spec:
     targetPort: https
     protocol: TCP
     name: https
+  {{- if eq .Values.global.prometheus.enabled true }}
+  - name: metrics
+    containerPort: {{ .Values.global.prometheus.port }}
+    protocol: TCP
+  {{- end}}
 {{- end }}

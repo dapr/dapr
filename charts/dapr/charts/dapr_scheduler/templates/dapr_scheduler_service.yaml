@@ -37,5 +37,10 @@ spec:
     port: {{ .Values.ports.etcdHTTPClientPort }}
   - name: etcd-peer
     port: {{ .Values.ports.etcdGRPCPeerPort }}
+  {{- if eq .Values.global.prometheus.enabled true }}
+  - name: metrics
+    containerPort: {{ .Values.global.prometheus.port }}
+    protocol: TCP
+  {{- end}}
   clusterIP: None # make the service headless
 {{- end }}

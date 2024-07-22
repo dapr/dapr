@@ -29,3 +29,8 @@ spec:
     port: {{ .Values.ports.port }}
     targetPort: {{ .Values.ports.targetPort }}
     name: grpc
+{{- if eq .Values.global.prometheus.enabled true }}
+  - name: metrics
+    containerPort: {{ .Values.global.prometheus.port }}
+    protocol: TCP
+{{- end}}
