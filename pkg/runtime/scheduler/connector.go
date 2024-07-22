@@ -67,7 +67,11 @@ func (c *connector) run(ctx context.Context) error {
 			channels: c.channels,
 		}).run(ctx)
 
-		log.Errorf("Scheduler stream disconnected: %s", err)
+		if err == nil {
+			log.Infof("Scheduler stream disconnected")
+		} else {
+			log.Errorf("Scheduler stream disconnected: %s", err)
+		}
 
 		if ctx.Err() != nil {
 			return ctx.Err()
