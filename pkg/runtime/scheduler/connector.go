@@ -70,7 +70,7 @@ func (c *connector) run(ctx context.Context) error {
 		if err == nil {
 			log.Infof("Scheduler stream disconnected")
 		} else {
-			log.Errorf("Scheduler stream disconnected: %s", err)
+			log.Errorf("Scheduler stream disconnected: %v", err)
 		}
 
 		if ctx.Err() != nil {
