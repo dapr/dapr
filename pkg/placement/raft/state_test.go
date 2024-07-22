@@ -16,8 +16,9 @@ package raft
 import (
 	"testing"
 
-	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/stretchr/testify/require"
+
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 func TestNewDaprHostMemberState(t *testing.T) {
@@ -627,6 +628,58 @@ func TestDaprHostMemberState_UpsertRequired(t *testing.T) {
 			if got := s.UpsertRequired(tt.args.ns, tt.args.new); got != tt.want {
 				t.Errorf("DaprHostMemberState.UpsertRequired() = %v, want %v", got, tt.want)
 			}
+		})
+	}
+}
+
+func TestHasMember(t *testing.T) {
+	// Initialize the state
+	state := &DaprHostMemberState{}
+	state.data.Namespace = make(map[string]*daprNamespace)
+
+	// Add a namespace and a member
+	state.data.Namespace["namespace1"] = &daprNamespace{
+		Members: map[string]*DaprHostMember{
+			"member1": {Name: "member1", AppID: "app1"},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		ns       string
+		host     *placementv1pb.Host
+		expected bool
+	}{
+		{
+			name:     "Namespace does not exist",
+			ns:       "nonexistent",
+			host:     &placementv1pb.Host{Name: "member1", Id: "app1"},
+			expected: false,
+		},
+		{
+			name:     "Member does not exist",
+			ns:       "namespace1",
+			host:     &placementv1pb.Host{Name: "member2", Id: "app1", Namespace: "ns1"},
+			expected: false,
+		},
+		{
+			name:     "Member exists with matching details",
+			ns:       "namespace1",
+			host:     &placementv1pb.Host{Name: "member1", Id: "app1", Namespace: "ns1"},
+			expected: true,
+		},
+		{
+			name:     "Member exists with non-matching details",
+			ns:       "namespace1",
+			host:     &placementv1pb.Host{Name: "member1", Id: "app2", Namespace: "ns1"},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := state.HasMember(tt.ns, tt.host.Name, tt.host.Id)
+			require.Equal(t, tt.expected, result)
 		})
 	}
 }

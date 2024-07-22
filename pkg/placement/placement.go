@@ -292,15 +292,14 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				}
 			}
 
-			if len(req.GetEntities()) == 0 {
-				// is this an existing member that reported actor types before but now it has unregistered all of them?
-				if !p.raftNode.FSM().State().HasMember(namespace, req.GetName(), req.GetId()) {
-					continue
-				}
-				isActorRuntime = true
-			} else {
-				isActorRuntime = true
+			// Is this an existing member that reported actor types before,
+			// but now it unregistered all of them?
+			// (happens when unregistering internal workflow actors)
+			if len(req.GetEntities()) == 0 && !p.raftNode.FSM().State().HasMember(namespace, req.GetName(), req.GetId()) {
+				continue
 			}
+
+			isActorRuntime = true
 
 			now := p.clock.Now()
 
