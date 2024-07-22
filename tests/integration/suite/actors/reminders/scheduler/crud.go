@@ -138,13 +138,14 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
+	last := c.methodcalled.Load()
 	time.Sleep(time.Second * 2)
 
-	last := c.methodcalled.Load()
-	assert.Eventually(t, func() bool {
+	assert.EventuallyWithT(t, func(ct *assert.CollectT) {
 		called := c.methodcalled.Load()
-		defer func() { last = called }()
-		return called == last
+		prevLast := last
+		last = called
+		assert.Equal(ct, int(prevLast), int(called))
 	}, time.Second*15, time.Second*2)
 
 	time.Sleep(time.Second)
