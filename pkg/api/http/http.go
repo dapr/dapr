@@ -1100,13 +1100,13 @@ func (a *api) onPublish(reqCtx *fasthttp.RequestCtx) {
 
 	if !rawPayload {
 		span := diagUtils.SpanFromContext(reqCtx)
-		corID, traceState := diag.TraceIDAndStateFromSpan(span)
+		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.universal.AppID(),
 			Topic:           topic,
 			DataContentType: contentType,
 			Data:            body,
-			TraceID:         corID,
+			TraceID:         traceID,
 			TraceState:      traceState,
 			Pubsub:          pubsubName,
 		}, metadata)
@@ -1254,7 +1254,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 	if !rawPayload {
 		for i := range entries {
 			childSpan := diag.StartProducerSpanChildFromParent(reqCtx, span)
-			corID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
+			traceID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
 			// For multiple events in a single bulk call traceParent is different for each event.
 			// Populate W3C traceparent to cloudevent envelope
 			spanMap[i] = childSpan
@@ -1265,7 +1265,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
-				TraceID:         corID,
+				TraceID:         traceID,
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
@@ -1577,8 +1577,8 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	outboxEnabled := a.outbox.Enabled(storeName)
 	if outboxEnabled {
 		span := diagUtils.SpanFromContext(reqCtx)
-		corID, traceState := diag.TraceIDAndStateFromSpan(span)
-		ops, err := a.outbox.PublishInternal(reqCtx, storeName, operations, a.universal.AppID(), corID, traceState)
+		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
+		ops, err := a.outbox.PublishInternal(reqCtx, storeName, operations, a.universal.AppID(), traceID, traceState)
 		if err != nil {
 			nerr := apierrors.PubSubOutbox(a.universal.AppID(), err)
 			universalFastHTTPErrorResponder(reqCtx, nerr)

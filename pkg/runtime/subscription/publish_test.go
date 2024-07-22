@@ -21,6 +21,7 @@ import (
 	"fmt"
 	"net/http"
 	"reflect"
+	"strconv"
 	"testing"
 
 	"github.com/phayes/freeport"
@@ -802,4 +803,66 @@ func TestOnNewPublishedMessageGRPC(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestTracingOnNewPublishedMessage(t *testing.T) {
+	t.Run("succeeded to publish message with TraceParent in metadata", func(t *testing.T) {
+		comp := &mockSubscribePubSub{}
+		require.NoError(t, comp.Init(context.Background(), contribpubsub.Metadata{}))
+
+		resp := contribpubsub.AppResponse{
+			Status: contribpubsub.Success,
+		}
+
+		respB, _ := json.Marshal(resp)
+		fakeResp := invokev1.NewInvokeMethodResponse(200, "OK", nil).
+			WithRawDataBytes(respB).
+			WithContentType("application/json")
+		defer fakeResp.Close()
+
+		for _, rawPayload := range []bool{false, true} {
+			mockAppChannel := new(channelt.MockAppChannel)
+			mockAppChannel.Init()
+			mockAppChannel.On("InvokeMethod", mock.MatchedBy(matchContextInterface), mock.Anything).Return(fakeResp, nil)
+
+			ps, err := New(Options{
+				Resiliency: resiliency.New(log),
+				IsHTTP:     true,
+				Channels:   new(channels.Channels).WithAppChannel(mockAppChannel),
+				PubSub:     &runtimePubsub.PubsubItem{Component: comp},
+				AppID:      TestRuntimeConfigID,
+				PubSubName: "testpubsub",
+				Topic:      "topic0",
+				Route: runtimePubsub.Subscription{
+					Metadata: map[string]string{"rawPayload": strconv.FormatBool(rawPayload)},
+					Rules: []*runtimePubsub.Rule{
+						{Path: "orders"},
+					},
+					DeadLetterTopic: "topic1",
+				},
+			})
+			require.NoError(t, err)
+			t.Cleanup(ps.Stop)
+
+			traceparent := "00-0af7651916cd43dd8448eb211c80319c-b9c7c989f97918e1-01"
+			err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
+				PubsubName: "testpubsub",
+				Topic:      "topic0",
+				Data:       []byte(`{"orderId":"1"}`),
+				Metadata:   map[string]string{"traceparent": traceparent},
+			})
+			require.NoError(t, err)
+			reqs := mockAppChannel.GetInvokedRequest()
+			reqMetadata := mockAppChannel.GetInvokedRequestMetadata()
+			mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
+			assert.Contains(t, reqMetadata["orders"]["traceparent"], traceparent)
+			if rawPayload {
+				assert.Contains(t, string(reqs["orders"]), `{"data_base64":"eyJvcmRlcklkIjoiMSJ9"`)
+				// traceparent also included as part of a CloudEvent
+				assert.Contains(t, string(reqs["orders"]), traceparent)
+			} else {
+				assert.Contains(t, string(reqs["orders"]), `{"orderId":"1"}`)
+			}
+		}
+	})
 }
