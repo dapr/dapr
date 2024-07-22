@@ -201,30 +201,30 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			placementTables, err := stream1.Recv()
+			placementTables, errR := stream1.Recv()
 			//nolint:testifylint
-			if !assert.NoError(c, err) {
+			if !assert.NoError(c, errR) {
 				_ = stream1.CloseSend()
 				return
 			}
 
-			if assert.Equal(c, "update", placementTables.Operation) {
-				assert.Len(c, placementTables.Tables.Entries, 1)
-				assert.Contains(c, placementTables.Tables.Entries, "actor1")
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
+				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1")
 			}
 		}, time.Second*15, time.Millisecond*10)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			placementTables, err := stream2.Recv()
+			placementTables, errR := stream2.Recv()
 			//nolint:testifylint
-			if !assert.NoError(c, err) {
+			if !assert.NoError(c, errR) {
 				_ = stream2.CloseSend()
 				return
 			}
 
-			if assert.Equal(c, "update", placementTables.Operation) {
-				assert.Len(c, placementTables.Tables.Entries, 1)
-				assert.Contains(c, placementTables.Tables.Entries, "actor1")
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
+				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1")
 			}
 		}, time.Second*15, time.Millisecond*10)
 
@@ -240,27 +240,27 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		err = stream1.Send(hostNoActors)
 		require.NoError(t, err)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			placementTables, err := stream1.Recv()
+			placementTables, errR := stream1.Recv()
 			//nolint:testifylint
-			if !assert.NoError(c, err) {
+			if !assert.NoError(c, errR) {
 				_ = stream1.CloseSend()
 				return
 			}
 
-			if assert.Equal(c, "update", placementTables.Operation) {
-				assert.Empty(c, placementTables.Tables.Entries)
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Empty(c, placementTables.GetTables().GetEntries())
 			}
 		}, time.Second*15, time.Millisecond*10)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			placementTables, err := stream2.Recv()
+			placementTables, errR := stream2.Recv()
 			//nolint:testifylint
-			if !assert.NoError(c, err) {
+			if !assert.NoError(c, errR) {
 				_ = stream2.CloseSend()
 				return
 			}
 
-			if assert.Equal(c, "update", placementTables.Operation) {
-				assert.Empty(c, placementTables.Tables.Entries)
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Empty(c, placementTables.GetTables().GetEntries())
 			}
 		}, time.Second*15, time.Millisecond*10)
 
@@ -268,7 +268,6 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			stream1.CloseSend()
 			stream2.CloseSend()
 		})
-
 	})
 
 	t.Run("deactivated actors are removed from the placement table if other actors are present in the namespace", func(t *testing.T) {
@@ -298,30 +297,30 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			placementTables, err := stream1.Recv()
+			placementTables, errR := stream1.Recv()
 			//nolint:testifylint
-			if !assert.NoError(c, err) {
+			if !assert.NoError(c, errR) {
 				_ = stream1.CloseSend()
 				return
 			}
 
-			if assert.Equal(c, "update", placementTables.Operation) {
-				assert.Len(c, placementTables.Tables.Entries, 3)
-				assert.Contains(c, placementTables.Tables.Entries, "actor1", "actor2", "actor3")
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Len(c, placementTables.GetTables().GetEntries(), 3)
+				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1", "actor2", "actor3")
 			}
 		}, time.Second*15, time.Millisecond*10)
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			placementTables, err := stream2.Recv()
+			placementTables, errR := stream2.Recv()
 			//nolint:testifylint
-			if !assert.NoError(c, err) {
+			if !assert.NoError(c, errR) {
 				_ = stream2.CloseSend()
 				return
 			}
 
-			if assert.Equal(c, "update", placementTables.Operation) {
-				assert.Len(c, placementTables.Tables.Entries, 3)
-				assert.Contains(c, placementTables.Tables.Entries, "actor1", "actor2", "actor3")
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Len(c, placementTables.GetTables().GetEntries(), 3)
+				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1", "actor2", "actor3")
 			}
 		}, time.Second*15, time.Millisecond*10)
 
@@ -337,29 +336,29 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		err = stream1.Send(hostNoActors)
 		require.NoError(t, err)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			placementTables, err := stream1.Recv()
+			placementTables, errR := stream1.Recv()
 			//nolint:testifylint
-			if !assert.NoError(c, err) {
+			if !assert.NoError(c, errR) {
 				_ = stream1.CloseSend()
 				return
 			}
 
-			if assert.Equal(c, "update", placementTables.Operation) {
-				assert.Len(c, placementTables.Tables.Entries, 2)
-				assert.Contains(c, placementTables.Tables.Entries, "actor2", "actor3")
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Len(c, placementTables.GetTables().GetEntries(), 2)
+				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor2", "actor3")
 			}
 		}, time.Second*15, time.Millisecond*10)
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			placementTables, err := stream2.Recv()
+			placementTables, errR := stream2.Recv()
 			//nolint:testifylint
-			if !assert.NoError(c, err) {
+			if !assert.NoError(c, errR) {
 				_ = stream2.CloseSend()
 				return
 			}
 
-			if assert.Equal(c, "update", placementTables.Operation) {
-				assert.Len(c, placementTables.Tables.Entries, 2)
-				assert.Contains(c, placementTables.Tables.Entries, "actor2", "actor3")
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Len(c, placementTables.GetTables().GetEntries(), 2)
+				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor2", "actor3")
 			}
 		}, time.Second*15, time.Millisecond*10)
 
@@ -367,7 +366,6 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			stream1.CloseSend()
 			stream2.CloseSend()
 		})
-
 	})
 
 	// old sidecars = pre 1.14
@@ -482,12 +480,12 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			}
 		}, 10*time.Second, 10*time.Millisecond)
 	})
-
 }
 
 func (n *notls) getStream(t *testing.T, ctx context.Context) v1pb.Placement_ReportDaprStatusClient {
 	t.Helper()
 
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, n.place.Address(),
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
