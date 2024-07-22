@@ -38,6 +38,12 @@ spec:
     targetPort: {{ .Values.ports.targetPort }}
     name: legacy
 {{ end }}
+{{- if eq .Values.global.prometheus.enabled true }}
+  - name: metrics
+    port: {{ .Values.global.prometheus.port }}
+    targetPort: {{ .Values.global.prometheus.port }}
+    protocol: TCP
+{{- end}}
 ---
 apiVersion: v1
 kind: Service
