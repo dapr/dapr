@@ -20,6 +20,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -172,6 +174,202 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 		}, 10*time.Second, 10*time.Millisecond)
 	})
 
+	t.Run("deactivated actors are removed from the placement table if no other actors in namespace", func(t *testing.T) {
+		host1 := &v1pb.Host{
+			Name:      "myapp1",
+			Namespace: "ns1",
+			Port:      1231,
+			Entities:  []string{"actor1"},
+			Id:        "myapp1",
+			ApiLevel:  uint32(20),
+		}
+		host2 := &v1pb.Host{
+			Name:      "myapp2",
+			Namespace: "ns1",
+			Port:      1232,
+			Entities:  []string{},
+			Id:        "myapp2",
+			ApiLevel:  uint32(20),
+		}
+
+		stream1 := n.getStream(t, ctx)
+		stream2 := n.getStream(t, ctx)
+
+		err := stream1.Send(host1)
+		require.NoError(t, err)
+		err = stream2.Send(host2)
+		require.NoError(t, err)
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			placementTables, err := stream1.Recv()
+			//nolint:testifylint
+			if !assert.NoError(c, err) {
+				_ = stream1.CloseSend()
+				return
+			}
+
+			if assert.Equal(c, "update", placementTables.Operation) {
+				assert.Len(c, placementTables.Tables.Entries, 1)
+				assert.Contains(c, placementTables.Tables.Entries, "actor1")
+			}
+		}, time.Second*15, time.Millisecond*10)
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			placementTables, err := stream2.Recv()
+			//nolint:testifylint
+			if !assert.NoError(c, err) {
+				_ = stream2.CloseSend()
+				return
+			}
+
+			if assert.Equal(c, "update", placementTables.Operation) {
+				assert.Len(c, placementTables.Tables.Entries, 1)
+				assert.Contains(c, placementTables.Tables.Entries, "actor1")
+			}
+		}, time.Second*15, time.Millisecond*10)
+
+		// Workflow actor has been unregistered, send an update to remove it from the placement table
+		hostNoActors := &v1pb.Host{
+			Name:      "myapp1",
+			Namespace: "ns1",
+			Port:      1231,
+			Entities:  []string{},
+			Id:        "myapp1",
+			ApiLevel:  uint32(20),
+		}
+		err = stream1.Send(hostNoActors)
+		require.NoError(t, err)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			placementTables, err := stream1.Recv()
+			//nolint:testifylint
+			if !assert.NoError(c, err) {
+				_ = stream1.CloseSend()
+				return
+			}
+
+			if assert.Equal(c, "update", placementTables.Operation) {
+				assert.Empty(c, placementTables.Tables.Entries)
+			}
+		}, time.Second*15, time.Millisecond*10)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			placementTables, err := stream2.Recv()
+			//nolint:testifylint
+			if !assert.NoError(c, err) {
+				_ = stream2.CloseSend()
+				return
+			}
+
+			if assert.Equal(c, "update", placementTables.Operation) {
+				assert.Empty(c, placementTables.Tables.Entries)
+			}
+		}, time.Second*15, time.Millisecond*10)
+
+		t.Cleanup(func() {
+			stream1.CloseSend()
+			stream2.CloseSend()
+		})
+
+	})
+
+	t.Run("deactivated actors are removed from the placement table if other actors are present in the namespace", func(t *testing.T) {
+		host1 := &v1pb.Host{
+			Name:      "myapp1",
+			Namespace: "ns1",
+			Port:      1231,
+			Entities:  []string{"actor1"},
+			Id:        "myapp1",
+			ApiLevel:  uint32(20),
+		}
+		host2 := &v1pb.Host{
+			Name:      "myapp2",
+			Namespace: "ns1",
+			Port:      1232,
+			Entities:  []string{"actor2", "actor3"},
+			Id:        "myapp2",
+			ApiLevel:  uint32(20),
+		}
+
+		stream1 := n.getStream(t, ctx)
+		stream2 := n.getStream(t, ctx)
+
+		err := stream1.Send(host1)
+		require.NoError(t, err)
+		err = stream2.Send(host2)
+		require.NoError(t, err)
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			placementTables, err := stream1.Recv()
+			//nolint:testifylint
+			if !assert.NoError(c, err) {
+				_ = stream1.CloseSend()
+				return
+			}
+
+			if assert.Equal(c, "update", placementTables.Operation) {
+				assert.Len(c, placementTables.Tables.Entries, 3)
+				assert.Contains(c, placementTables.Tables.Entries, "actor1", "actor2", "actor3")
+			}
+		}, time.Second*15, time.Millisecond*10)
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			placementTables, err := stream2.Recv()
+			//nolint:testifylint
+			if !assert.NoError(c, err) {
+				_ = stream2.CloseSend()
+				return
+			}
+
+			if assert.Equal(c, "update", placementTables.Operation) {
+				assert.Len(c, placementTables.Tables.Entries, 3)
+				assert.Contains(c, placementTables.Tables.Entries, "actor1", "actor2", "actor3")
+			}
+		}, time.Second*15, time.Millisecond*10)
+
+		// Workflow actor has been unregistered, send an update to remove it from the placement table
+		hostNoActors := &v1pb.Host{
+			Name:      "myapp1",
+			Namespace: "ns1",
+			Port:      1231,
+			Entities:  []string{},
+			Id:        "myapp1",
+			ApiLevel:  uint32(20),
+		}
+		err = stream1.Send(hostNoActors)
+		require.NoError(t, err)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			placementTables, err := stream1.Recv()
+			//nolint:testifylint
+			if !assert.NoError(c, err) {
+				_ = stream1.CloseSend()
+				return
+			}
+
+			if assert.Equal(c, "update", placementTables.Operation) {
+				assert.Len(c, placementTables.Tables.Entries, 2)
+				assert.Contains(c, placementTables.Tables.Entries, "actor2", "actor3")
+			}
+		}, time.Second*15, time.Millisecond*10)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			placementTables, err := stream2.Recv()
+			//nolint:testifylint
+			if !assert.NoError(c, err) {
+				_ = stream2.CloseSend()
+				return
+			}
+
+			if assert.Equal(c, "update", placementTables.Operation) {
+				assert.Len(c, placementTables.Tables.Entries, 2)
+				assert.Contains(c, placementTables.Tables.Entries, "actor2", "actor3")
+			}
+		}, time.Second*15, time.Millisecond*10)
+
+		t.Cleanup(func() {
+			stream1.CloseSend()
+			stream2.CloseSend()
+		})
+
+	})
+
 	// old sidecars = pre 1.14
 	t.Run("namespaces are disseminated properly when there are old sidecars in the cluster", func(t *testing.T) {
 		host1 := &v1pb.Host{
@@ -284,4 +482,21 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			}
 		}, 10*time.Second, 10*time.Millisecond)
 	})
+
+}
+
+func (n *notls) getStream(t *testing.T, ctx context.Context) v1pb.Placement_ReportDaprStatusClient {
+	t.Helper()
+
+	conn, err := grpc.DialContext(ctx, n.place.Address(),
+		grpc.WithBlock(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+	)
+	require.NoError(t, err)
+	client := v1pb.NewPlacementClient(conn)
+
+	stream, err := client.ReportDaprStatus(ctx)
+	require.NoError(t, err)
+
+	return stream
 }
