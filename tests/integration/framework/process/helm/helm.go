@@ -57,7 +57,7 @@ func New(t *testing.T, fopts ...OptionFunc) *Helm {
 		args = append(args, "--namespace", *opts.namespace)
 	}
 
-	args = append(args, filepath.Join(binary.GetRootDir(t), "charts/dapr"))
+	args = append(args, filepath.Join(binary.GetRootDir(t), "charts", "dapr"))
 
 	stdoutPipeR, stdoutPipeW := io.Pipe()
 	stderrPipeR, stderrPipeW := io.Pipe()
