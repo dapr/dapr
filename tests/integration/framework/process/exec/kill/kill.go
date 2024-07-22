@@ -25,7 +25,7 @@ func Kill(t *testing.T, cmd *exec.Cmd) {
 		return
 	}
 
-	t.Log("interrupting daprd process")
+	t.Logf("interrupting %s process", cmd.Path)
 
 	interrupt(t, cmd)
 }

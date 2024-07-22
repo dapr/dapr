@@ -40,7 +40,8 @@ func init() {
 }
 
 type basic struct {
-	daprd *procdaprd.Daprd
+	appTestCalled atomic.Int32
+	daprd         *procdaprd.Daprd
 }
 
 func (o *basic) Setup(t *testing.T) []framework.Option {
@@ -49,6 +50,7 @@ func (o *basic) Setup(t *testing.T) []framework.Option {
 		var msg atomic.Value
 
 		handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
+			o.appTestCalled.Add(1)
 			defer r.Body.Close()
 			b, err := io.ReadAll(r.Body)
 			if err != nil {
@@ -160,7 +162,7 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 	assert.Empty(t, string(body))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%v/getValue", o.daprd.AppPort()), nil)
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%v/getValue", o.daprd.AppPort(t)), nil)
 		require.NoError(c, err)
 		resp, err = httpClient.Do(req)
 		require.NoError(c, err)
@@ -178,4 +180,6 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, "myapp1", ce["outbox.cloudevent.myapp"])
 		assert.Contains(c, ce["id"], "outbox-")
 	}, time.Second*10, time.Millisecond*10)
+
+	assert.Equal(t, int32(1), o.appTestCalled.Load())
 }

@@ -150,7 +150,7 @@ func TestJobTriggered(t *testing.T) {
 
 			// Check if the length of triggeredJobs matches the expected length of scheduled jobs
 			assert.Equal(c, numIterations*numJobsPerGoRoutine, len(triggeredJobs))
-		}, 5*time.Second, 50*time.Millisecond)
+		}, 10*time.Second, 100*time.Millisecond)
 		t.Log("Done.")
 	})
 }

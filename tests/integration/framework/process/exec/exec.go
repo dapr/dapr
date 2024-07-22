@@ -29,13 +29,13 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
+	"github.com/dapr/dapr/tests/integration/framework/tee"
 )
 
 type Option func(*options)
 
 type exec struct {
-	lock sync.Mutex
-	cmd  *oexec.Cmd
+	cmd *oexec.Cmd
 
 	args       []string
 	binPath    string
@@ -44,6 +44,8 @@ type exec struct {
 	envs       map[string]string
 	stdoutpipe io.WriteCloser
 	stderrpipe io.WriteCloser
+
+	wg sync.WaitGroup
 }
 
 func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
@@ -56,8 +58,6 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 	}
 
 	opts := options{
-		stdout: iowriter.New(t, filepath.Base(binPath)),
-		stderr: iowriter.New(t, filepath.Base(binPath)),
 		runErrorFn: func(t *testing.T, err error) {
 			t.Helper()
 			if runtime.GOOS == "windows" {
@@ -87,16 +87,37 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 
 func (e *exec) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
-	e.lock.Lock()
-	defer e.lock.Unlock()
 
 	t.Logf("Running %q with args: %s %s", filepath.Base(e.binPath), e.binPath, strings.Join(e.args, " "))
 
 	//nolint:gosec
 	e.cmd = oexec.CommandContext(ctx, e.binPath, e.args...)
 
-	e.cmd.Stdout = e.stdoutpipe
-	e.cmd.Stderr = e.stderrpipe
+	stdoutPipe, err := e.cmd.StdoutPipe()
+	require.NoError(t, err)
+	stderrPipe, err := e.cmd.StderrPipe()
+	require.NoError(t, err)
+
+	stdoutpipe := tee.NewWriterCloser(
+		iowriter.New(t, filepath.Base(e.binPath)),
+		e.stdoutpipe,
+	)
+	stderrpipe := tee.NewWriterCloser(
+		iowriter.New(t, filepath.Base(e.binPath)),
+		e.stderrpipe,
+	)
+
+	e.wg.Add(2)
+	go func() {
+		defer e.wg.Done()
+		io.Copy(stdoutpipe, stdoutPipe)
+		require.NoError(t, stdoutpipe.Close())
+	}()
+	go func() {
+		defer e.wg.Done()
+		io.Copy(stderrpipe, stderrPipe)
+		require.NoError(t, stderrpipe.Close())
+	}()
 
 	// Wait for a few seconds before killing the process completely.
 	e.cmd.WaitDelay = time.Second * 5
@@ -109,16 +130,10 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 }
 
 func (e *exec) Cleanup(t *testing.T) {
-	t.Helper()
-	e.lock.Lock()
-	defer e.lock.Unlock()
+	defer e.wg.Wait()
 
 	kill.Kill(t, e.cmd)
-
 	e.checkExit(t)
-
-	require.NoError(t, e.stderrpipe.Close())
-	require.NoError(t, e.stdoutpipe.Close())
 }
 
 func (e *exec) checkExit(t *testing.T) {

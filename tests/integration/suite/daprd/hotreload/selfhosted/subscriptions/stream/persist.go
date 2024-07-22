@@ -110,11 +110,20 @@ spec:
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "b",
 			},
 		},
 	}))
+
+	resp, err := stream.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, p.daprd.GetMetaSubscriptions(c, ctx), 2)
 	}, time.Second*10, time.Millisecond*10)
@@ -124,11 +133,11 @@ spec:
 	require.NoError(t, err)
 	event, err := stream.Recv()
 	require.NoError(t, err)
-	assert.Equal(t, "b", event.GetTopic())
+	assert.Equal(t, "b", event.GetEventMessage().GetTopic())
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-				Id:     event.GetId(),
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     event.GetEventMessage().GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
 			},
 		},
