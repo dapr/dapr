@@ -70,14 +70,14 @@ func GetRootDir(t *testing.T) string {
 	require.True(t, ok)
 	dir, err := os.Getwd()
 	require.NoError(t, err)
-	fmt.Printf(">> DIR: %s\n", dir)
+	t.Logf(">> DIR: %s\n", dir)
 
 	fv := filepath.Join(filepath.Dir(tFile), "../../../..")
-	fmt.Printf(">> FV: %s\n", dir)
+	t.Logf(">> FV: %s\n", dir)
 	stat, err := os.Stat(fv)
-	fmt.Printf(">> STAT: %v ERROR:%v\n", stat, err)
+	t.Logf(">> STAT: %v ERROR:%v\n", stat, err)
 	if stat != nil {
-		fmt.Printf(">> STAT NAME\n", stat.Name())
+		t.Logf(">> STAT NAME\n", stat.Name())
 	}
 
 	return filepath.Join(filepath.Dir(tFile), "../../../..")
