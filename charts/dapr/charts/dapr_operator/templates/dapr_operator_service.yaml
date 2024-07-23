@@ -15,9 +15,7 @@ metadata:
     prometheus.io/path: "/"
     {{- end }}
   {{- if .Values.apiService.annotations }}
-    {{- range $key, $value := .Values.apiService.annotations }}
-      {{ $key }}: "{{ $value }}"
-    {{- end }}
+  {{- .Values.apiService.annotations | toYaml | nindent 4 }}
   {{- end }}
   {{- end }}
 spec:
@@ -55,6 +53,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 {{- if .Values.webhookService.annotations }}
+  annotations:
 {{ toYaml .Values.webhookService.annotations | indent 4}}
 {{- end }}
 spec:

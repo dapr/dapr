@@ -15,9 +15,7 @@ metadata:
     prometheus.io/path: "/"
     {{- end }}
   {{- if .Values.service.annotations }}
-    {{- range $key, $value := .Values.service.annotations }}
-      {{ $key }}: "{{ $value }}"
-    {{- end }}
+  {{- .Values.service.annotations | toYaml | nindent 4 }}
   {{- end }}
   {{- end }}
 spec:
