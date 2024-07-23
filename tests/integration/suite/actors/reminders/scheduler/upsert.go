@@ -28,17 +28,17 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
 func init() {
-	suite.Register(new(crud))
+	suite.Register(new(upsert))
 }
 
-type crud struct {
+type upsert struct {
 	place     *placement.Placement
 	scheduler *scheduler.Scheduler
 
@@ -46,7 +46,7 @@ type crud struct {
 	methodcalled atomic.Uint32
 }
 
-func (c *crud) Setup(t *testing.T) []framework.Option {
+func (u *upsert) Setup(t *testing.T) []framework.Option {
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -58,40 +58,35 @@ spec:
   - name: SchedulerReminders
     enabled: true`), 0o600))
 
-	handler := http.NewServeMux()
-	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
-		w.Write([]byte(`{"entities": ["myactortype"]}`))
-	})
-	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-	})
-	handler.HandleFunc("/actors/myactortype/myactorid/method/remind/xyz", func(_ http.ResponseWriter, r *http.Request) {
-		c.methodcalled.Add(1)
-	})
-	handler.HandleFunc("/actors/myactortype/myactorid/method/foo", func(http.ResponseWriter, *http.Request) {})
+	app := app.New(t,
+		app.WithConfig(`{"entities": ["myactortype"]}`),
+		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/xyz",
+			func(_ http.ResponseWriter, r *http.Request) { u.methodcalled.Add(1) }),
+		app.WithHandlerFunc("/actors/myactortype/myactorid/method/foo", func(http.ResponseWriter, *http.Request) {}),
+	)
 
-	c.scheduler = scheduler.New(t)
-	srv := prochttp.New(t, prochttp.WithHandler(handler))
-	c.place = placement.New(t)
-	c.daprd = daprd.New(t,
+	u.scheduler = scheduler.New(t)
+
+	u.place = placement.New(t)
+	u.daprd = daprd.New(t,
 		daprd.WithConfigs(configFile),
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(c.place.Address()),
-		daprd.WithSchedulerAddresses(c.scheduler.Address()),
-		daprd.WithAppPort(srv.Port()),
+		daprd.WithPlacementAddresses(u.place.Address()),
+		daprd.WithSchedulerAddresses(u.scheduler.Address()),
+		daprd.WithAppPort(app.Port()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(c.scheduler, c.place, srv, c.daprd),
+		framework.WithProcesses(u.scheduler, u.place, app, u.daprd),
 	}
 }
 
-func (c *crud) Run(t *testing.T, ctx context.Context) {
-	c.scheduler.WaitUntilRunning(t, ctx)
-	c.place.WaitUntilRunning(t, ctx)
-	c.daprd.WaitUntilRunning(t, ctx)
+func (u *upsert) Run(t *testing.T, ctx context.Context) {
+	u.scheduler.WaitUntilRunning(t, ctx)
+	u.place.WaitUntilRunning(t, ctx)
+	u.daprd.WaitUntilRunning(t, ctx)
 
-	gclient := c.daprd.GRPCClient(t, ctx)
+	gclient := u.daprd.GRPCClient(t, ctx)
 	_, err := gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "myactortype",
 		ActorId:   "myactorid",
@@ -101,7 +96,7 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	time.Sleep(time.Second * 2)
-	require.Equal(t, 0, int(c.methodcalled.Load()))
+	require.Equal(t, 0, int(u.methodcalled.Load()))
 
 	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "myactortype",
@@ -112,11 +107,11 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.Eventually(t, func() bool {
-		return c.methodcalled.Load() == 1
+		return u.methodcalled.Load() == 1
 	}, time.Second*5, time.Millisecond*10)
 
 	time.Sleep(time.Second * 2)
-	require.Equal(t, 1, int(c.methodcalled.Load()))
+	require.Equal(t, 1, int(u.methodcalled.Load()))
 
 	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "myactortype",
@@ -128,41 +123,6 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.Eventually(t, func() bool {
-		return c.methodcalled.Load() == 4
+		return u.methodcalled.Load() == 4
 	}, time.Second*5, time.Millisecond*10)
-
-	_, err = gclient.UnregisterActorReminder(ctx, &rtv1.UnregisterActorReminderRequest{
-		ActorType: "myactortype",
-		ActorId:   "myactorid",
-		Name:      "xyz",
-	})
-	require.NoError(t, err)
-
-	time.Sleep(time.Second * 2)
-
-	last := c.methodcalled.Load()
-	assert.Eventually(t, func() bool {
-		called := c.methodcalled.Load()
-		defer func() { last = called }()
-		return called == last
-	}, time.Second*15, time.Second*2)
-
-	time.Sleep(time.Second)
-	assert.Equal(t, last, c.methodcalled.Load())
-
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: "myactortype",
-		ActorId:   "myactorid",
-		Name:      "xyz",
-		DueTime:   time.Now().Format(time.RFC3339),
-	})
-	require.NoError(t, err)
-
-	last += 1
-	assert.Eventually(t, func() bool {
-		return c.methodcalled.Load() == last
-	}, time.Second*5, time.Millisecond*10)
-
-	time.Sleep(time.Second * 2)
-	assert.Equal(t, last, c.methodcalled.Load())
 }
