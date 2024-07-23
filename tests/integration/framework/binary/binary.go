@@ -77,7 +77,7 @@ func GetRootDir(t *testing.T) string {
 	stat, err := os.Stat(fv)
 	t.Logf(">> STAT: %v ERROR:%v\n", stat, err)
 	if stat != nil {
-		t.Logf(">> STAT NAME\n", stat.Name())
+		t.Logf(">> STAT NAME %s\n", stat.Name())
 	}
 
 	return filepath.Join(filepath.Dir(tFile), "../../../..")
