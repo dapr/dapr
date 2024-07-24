@@ -182,7 +182,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.RuntimeStatus)
 
-		// Wait for all L2 suborchestrations to complete
+		// Wait for all L2 sub	orchestrations to complete
 		orchIDs := []string{}
 		for i := 0; i < 5; i++ {
 			orchIDs = append(orchIDs, string(id)+"_L1_"+strconv.Itoa(i)+"_L2")

@@ -774,12 +774,10 @@ func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb
 	}
 	defer act.unlock()
 
-	msg := req.GetMessage()
-
 	policyDef := a.resiliency.ActorPostLockPolicy(act.actorType, act.actorID)
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
 	return policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
-		resData, err := internalAct.InvokeMethod(ctx, msg.GetMethod(), msg.GetData().GetValue(), md)
+		resData, err := internalAct.InvokeMethod(ctx, req, md)
 		if err != nil {
 			return nil, fmt.Errorf("error from internal actor: %w", err)
 		}

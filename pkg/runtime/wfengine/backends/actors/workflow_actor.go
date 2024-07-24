@@ -35,6 +35,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 const (
@@ -118,12 +119,12 @@ func NewWorkflowActor(scheduler workflowScheduler, config actorsBackendConfig, o
 }
 
 // InvokeMethod implements actors.InternalActor
-func (wf *workflowActor) InvokeMethod(ctx context.Context, methodName string, request []byte, metadata map[string][]string) (res []byte, err error) {
-	wfLogger.Debugf("Workflow actor '%s': invoking method '%s'", wf.actorID, methodName)
+func (wf *workflowActor) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest, metadata map[string][]string) (res []byte, err error) {
+	wfLogger.Debugf("Workflow actor '%s': invoking method '%s'", wf.actorID, req.GetMessage().GetMethod())
 
-	switch methodName {
+	switch req.GetMessage().GetMethod() {
 	case CreateWorkflowInstanceMethod:
-		err = wf.createWorkflowInstance(ctx, request)
+		err = wf.createWorkflowInstance(ctx, req.GetMessage().GetData().GetValue())
 	case GetWorkflowMetadataMethod:
 		var resAny any
 		resAny, err = wf.getWorkflowMetadata(ctx)
@@ -137,11 +138,11 @@ func (wf *workflowActor) InvokeMethod(ctx context.Context, methodName string, re
 			res, err = state.EncodeWorkflowState()
 		}
 	case AddWorkflowEventMethod:
-		err = wf.addWorkflowEvent(ctx, request)
+		err = wf.addWorkflowEvent(ctx, req.GetMessage().GetData().GetValue())
 	case PurgeWorkflowStateMethod:
 		err = wf.purgeWorkflowState(ctx)
 	default:
-		err = fmt.Errorf("no such method: %s", methodName)
+		err = fmt.Errorf("no such method: %s", req.GetMessage().GetMethod())
 	}
 
 	return res, err
