@@ -275,7 +275,26 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			req, err = firstMessage, nil
 			firstMessage = nil
 		} else {
-			req, err = stream.Recv()
+			errCh := make(chan error, 2)
+			receivedCh := make(chan struct{})
+
+			p.wg.Add(2)
+			go func() {
+				defer p.wg.Done()
+				var rerr error
+				req, rerr = stream.Recv()
+				close(receivedCh)
+				errCh <- rerr
+			}()
+			go func() {
+				defer p.wg.Done()
+				select {
+				case <-p.closedCh:
+					errCh <- errors.New("placement service is closed")
+				case <-receivedCh:
+				}
+			}()
+			err = <-errCh
 		}
 
 		switch err {
