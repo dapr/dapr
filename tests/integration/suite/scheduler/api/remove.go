@@ -113,7 +113,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, watch.Send(&schedulerv1.WatchJobsRequest{
 		WatchJobRequestType: &schedulerv1.WatchJobsRequest_Result{
 			Result: &schedulerv1.WatchJobsRequestResult{
-				Id: job.Id,
+				Id: job.GetId(),
 			},
 		},
 	}))
