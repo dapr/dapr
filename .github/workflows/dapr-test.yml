@@ -168,8 +168,8 @@ jobs:
                 location2=${REGION2} \
                 location3=${REGION3} \
                 dateTag="${DATE_TAG}" \
-                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
-                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
+                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID_EAST }}" \
+                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID_EAST }}" \
                 armDiagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_ARM_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
                 armDiagStorageResourceId="${{ secrets.AZURE_ARM_DIAG_STORAGE_ID }}" \
               && success=true \
