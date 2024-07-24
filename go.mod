@@ -12,7 +12,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.14.0-rc.4
 	github.com/dapr/kit v0.13.1-0.20240724000121-26b564d9d0f5
-	github.com/diagridio/go-etcd-cron v0.2.1
+	github.com/diagridio/go-etcd-cron v0.2.2
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
@@ -493,5 +493,3 @@ replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
-
-replace github.com/diagridio/go-etcd-cron => github.com/joshvanl/go-etcd-cron v0.0.0-20240724013448-56db9d13f905
