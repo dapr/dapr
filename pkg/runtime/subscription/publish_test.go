@@ -845,21 +845,24 @@ func TestTracingOnNewPublishedMessage(t *testing.T) {
 			t.Cleanup(ps.Stop)
 
 			traceparent := "00-0af7651916cd43dd8448eb211c80319c-b9c7c989f97918e1-01"
+			tracestate := "abc=xyz"
 			err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
 				PubsubName: "testpubsub",
 				Topic:      "topic0",
 				Data:       []byte(`{"orderId":"1"}`),
-				Metadata:   map[string]string{"traceparent": traceparent},
+				Metadata:   map[string]string{contribpubsub.TraceParentField: traceparent, contribpubsub.TraceStateField: tracestate},
 			})
 			require.NoError(t, err)
 			reqs := mockAppChannel.GetInvokedRequest()
 			reqMetadata := mockAppChannel.GetInvokedRequestMetadata()
 			mockAppChannel.AssertNumberOfCalls(t, "InvokeMethod", 1)
-			assert.Contains(t, reqMetadata["orders"]["traceparent"], traceparent)
+			assert.Contains(t, reqMetadata["orders"][contribpubsub.TraceParentField], traceparent)
+			assert.Contains(t, reqMetadata["orders"][contribpubsub.TraceStateField], tracestate)
 			if rawPayload {
 				assert.Contains(t, string(reqs["orders"]), `{"data_base64":"eyJvcmRlcklkIjoiMSJ9"`)
 				// traceparent also included as part of a CloudEvent
 				assert.Contains(t, string(reqs["orders"]), traceparent)
+				assert.Contains(t, string(reqs["orders"]), tracestate)
 			} else {
 				assert.Contains(t, string(reqs["orders"]), `{"orderId":"1"}`)
 			}

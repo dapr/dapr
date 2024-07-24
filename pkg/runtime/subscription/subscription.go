@@ -155,6 +155,9 @@ func New(opts Options) (*Subscription, error) {
 			if traceparent, ok := msg.Metadata[contribpubsub.TraceParentField]; ok {
 				cloudEvent[contribpubsub.TraceParentField] = traceparent
 			}
+			if tracestate, ok := msg.Metadata[contribpubsub.TraceStateField]; ok {
+				cloudEvent[contribpubsub.TraceStateField] = tracestate
+			}
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
 				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
@@ -195,6 +198,11 @@ func New(opts Options) (*Subscription, error) {
 				if traceparent, ok := msg.Metadata[contribpubsub.TraceParentField]; ok {
 					cloudEvent[contribpubsub.TraceIDField] = traceparent
 					cloudEvent[contribpubsub.TraceParentField] = traceparent
+				}
+			}
+			if _, ok := cloudEvent[contribpubsub.TraceStateField]; !ok {
+				if tracestate, ok := msg.Metadata[contribpubsub.TraceStateField]; ok {
+					cloudEvent[contribpubsub.TraceStateField] = tracestate
 				}
 			}
 		}
