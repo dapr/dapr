@@ -71,7 +71,12 @@ func WithShowOnlyServices(t *testing.T) OptionFunc {
 				}
 
 				if strings.HasSuffix(path, "service.yaml") {
-					o.showOnly = append(o.showOnly, strings.ReplaceAll(path, binary.GetRootDir(t)+"/charts/dapr/", ""))
+					chartPath := filepath.Join(binary.GetRootDir(t), "/charts/dapr")
+					relativePath, err := filepath.Rel(chartPath, path)
+					if err != nil {
+						return err
+					}
+					o.showOnly = append(o.showOnly, relativePath)
 				}
 				return nil
 			},
