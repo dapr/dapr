@@ -1151,7 +1151,9 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 
 	// If the reminder was cancelled, delete it.
 	if errors.Is(err, ErrReminderCanceled) {
+		a.wg.Add(1)
 		go func() {
+			defer a.wg.Done()
 			log.Debugf("Deleting reminder which was cancelled: %s", reminder.Key())
 			reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 			defer cancel()
