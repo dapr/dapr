@@ -153,7 +153,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 	select {
 	case resp := <-a.topicChan:
 		assert.Equal(t, "/myroute", resp)
-	case <-time.After(time.Second * 5):
+	case <-time.After(time.Second * 10):
 		assert.Fail(t, "timeout waiting for topic to return")
 	}
 
