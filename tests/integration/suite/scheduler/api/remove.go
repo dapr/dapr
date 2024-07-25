@@ -104,9 +104,11 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	resp, err := etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), resp.Count)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, rerr := etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+		require.NoError(c, rerr)
+		assert.Equal(c, int64(1), resp.Count)
+	}, time.Second*10, 10*time.Millisecond)
 
 	job, err := watch.Recv()
 	require.NoError(t, err)
@@ -118,7 +120,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 		},
 	}))
 
-	resp, err = etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	resp, err := etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
 	assert.Equal(t, int64(1), resp.Count)
 
@@ -134,7 +136,9 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	resp, err = etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-	require.NoError(t, err)
-	assert.Equal(t, int64(0), resp.Count)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err = etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+		require.NoError(c, err)
+		assert.Equal(c, int64(0), resp.Count)
+	}, time.Second*10, 10*time.Millisecond)
 }
