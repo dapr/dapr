@@ -312,8 +312,11 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 		}
 	}
 
+	wg := sync.WaitGroup{}
 	ch := make(chan int)
 	for j := 0; j < 50; j++ {
+		wg.Add(1)
+
 		go func() {
 			for {
 				i, ok := <-ch
@@ -329,6 +332,8 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 	for i := 0; i < reminderCount; i++ {
 		ch <- i
 	}
+	close(ch)
+	wg.Wait()
 	done := time.Since(now)
 	t.Logf("Created %d reminders in %s (%.1fqps)", reminderCount, done, float64(reminderCount)/done.Seconds())
 
