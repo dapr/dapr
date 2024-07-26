@@ -30,6 +30,7 @@ import (
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	clients "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -108,20 +109,18 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 
 	client := r.daprd.GRPCClient(t, ctx)
 
-	etcdClient, err := clientv3.New(clientv3.Config{
+	etcdClient := clients.Etcd(t, clientv3.Config{
 		Endpoints:   []string{fmt.Sprintf("localhost:%d", r.etcdPort)},
 		DialTimeout: 5 * time.Second,
 	})
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, etcdClient.Close()) })
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, rerr := etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
 		require.NoError(c, rerr)
-		assert.Equal(c, int64(0), resp.Count)
-	}, 10*time.Second, 10*time.Millisecond)
+		assert.Empty(c, keys)
+	}, time.Second*10, 10*time.Millisecond)
 
-	_, err = client.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
+	_, err := client.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
 		ActorType: "myactortype",
 		ActorId:   "myactorid",
 		Method:    "foo",
@@ -138,10 +137,10 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, rerr := etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
 		require.NoError(c, rerr)
-		assert.Equal(c, int64(1), resp.Count)
-	}, 10*time.Second, 10*time.Millisecond)
+		assert.Len(c, keys, 1)
+	}, time.Second*10, 10*time.Millisecond)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), r.triggered.Load())
@@ -155,8 +154,8 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-		require.NoError(c, err)
-		assert.Equal(c, int64(0), resp.Count)
-	}, 10*time.Second, 10*time.Millisecond)
+		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
+		require.NoError(c, rerr)
+		assert.Empty(c, keys)
+	}, time.Second*10, 10*time.Millisecond)
 }
