@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -45,7 +46,8 @@ type exec struct {
 	stdoutpipe io.WriteCloser
 	stderrpipe io.WriteCloser
 
-	wg sync.WaitGroup
+	wg   sync.WaitGroup
+	once atomic.Bool
 }
 
 func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
@@ -93,31 +95,35 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 	//nolint:gosec
 	e.cmd = oexec.CommandContext(ctx, e.binPath, e.args...)
 
-	stdoutPipe, err := e.cmd.StdoutPipe()
-	require.NoError(t, err)
-	stderrPipe, err := e.cmd.StderrPipe()
-	require.NoError(t, err)
+	iow := iowriter.New(t, filepath.Base(e.binPath))
+	for _, pipe := range []struct {
+		cmdPipeFn func() (io.ReadCloser, error)
+		procPipe  io.WriteCloser
+	}{
+		{cmdPipeFn: e.cmd.StdoutPipe, procPipe: e.stdoutpipe},
+		{cmdPipeFn: e.cmd.StderrPipe, procPipe: e.stderrpipe},
+	} {
+		cmdPipe, err := pipe.cmdPipeFn()
+		require.NoError(t, err)
 
-	stdoutpipe := tee.NewWriterCloser(
-		iowriter.New(t, filepath.Base(e.binPath)),
-		e.stdoutpipe,
-	)
-	stderrpipe := tee.NewWriterCloser(
-		iowriter.New(t, filepath.Base(e.binPath)),
-		e.stderrpipe,
-	)
+		pipe := tee.WriteCloser(iow, pipe.procPipe)
 
-	e.wg.Add(2)
-	go func() {
-		defer e.wg.Done()
-		io.Copy(stdoutpipe, stdoutPipe)
-		require.NoError(t, stdoutpipe.Close())
-	}()
-	go func() {
-		defer e.wg.Done()
-		io.Copy(stderrpipe, stderrPipe)
-		require.NoError(t, stderrpipe.Close())
-	}()
+		e.wg.Add(1)
+		pipeErrCh := make(chan error, 1)
+		go func() {
+			defer e.wg.Done()
+			io.Copy(pipe, cmdPipe)
+			pipeErrCh <- pipe.Close()
+		}()
+		t.Cleanup(func() {
+			select {
+			case err := <-pipeErrCh:
+				require.NoError(t, err)
+			case <-ctx.Done():
+				require.Fail(t, "context cancelled before exec pipe closed")
+			}
+		})
+	}
 
 	// Wait for a few seconds before killing the process completely.
 	e.cmd.WaitDelay = time.Second * 5
@@ -130,7 +136,12 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 }
 
 func (e *exec) Cleanup(t *testing.T) {
-	defer e.wg.Wait()
+	e.wg.Add(1)
+	defer func() { e.wg.Done(); e.wg.Wait() }()
+
+	if !e.once.CompareAndSwap(false, true) {
+		return
+	}
 
 	kill.Kill(t, e.cmd)
 	e.checkExit(t)

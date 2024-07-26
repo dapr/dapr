@@ -127,5 +127,5 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 
 	kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
-	require.Empty(t, kvs.Count)
+	assert.Empty(t, kvs.Count)
 }

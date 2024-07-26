@@ -32,20 +32,14 @@ func init() {
 	suite.Register(new(basic))
 }
 
-// basic tests the operator's ListCompontns API.
 type basic struct {
 	helm *helm.Helm
-
-	helmStdout io.ReadCloser
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	stdoutR, stdoutW := io.Pipe()
-	b.helmStdout = stdoutR
 	b.helm = helm.New(t,
 		helm.WithGlobalValues("ha.enabled=false"), // Not HA
 		helm.WithShowOnlySchedulerSTS(),
-		helm.WithStdout(stdoutW),
 	)
 
 	return []framework.Option{
@@ -55,7 +49,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
 	var sts appsv1.StatefulSet
-	bs, err := io.ReadAll(b.helmStdout)
+	bs, err := io.ReadAll(b.helm.Stdout(t))
 	require.NoError(t, err)
 	require.NoError(t, yaml.Unmarshal(bs, &sts))
 	require.Equal(t, int32(1), *sts.Spec.Replicas)

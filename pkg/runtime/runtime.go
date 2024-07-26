@@ -650,10 +650,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return err
 	}
 
-	if err := a.processor.Subscriber().InitProgramaticSubscriptions(ctx); err != nil {
-		return fmt.Errorf("failed to init programmatic subscriptions: %s", err)
-	}
-
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
 	}
