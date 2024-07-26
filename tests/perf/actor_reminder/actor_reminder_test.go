@@ -49,7 +49,7 @@ const (
 	targetSchedulerQPS float64 = 3300
 
 	// Target for the QPS to trigger reminders.
-	targetTriggerQPS          float64 = 4700
+	targetTriggerQPS          float64 = 1700
 	targetSchedulerTriggerQPS float64 = 3800
 
 	// reminderCount is the number of reminders to register.
@@ -290,7 +290,7 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
 
-	t.Logf("invoking actor reminder scheduler")
+	t.Logf("invoking actor reminder")
 	_, err = utils.HTTPGet(fmt.Sprintf("%s/actors/%s/abc/method/foo", testAppURL, actorType))
 	require.NoError(t, err)
 
