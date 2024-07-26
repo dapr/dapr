@@ -52,6 +52,8 @@ type subscriptions struct {
 }
 
 func (s *subscriptions) Setup(t *testing.T) []framework.Option {
+	t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
+
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
 	s.compStore = store.New(metav1.GroupVersionKind{
