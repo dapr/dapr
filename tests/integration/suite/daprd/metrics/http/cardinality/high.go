@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -81,25 +82,31 @@ func (h *high) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("service invocation", func(t *testing.T) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
-		metrics := h.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/healthz|status:204"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := h.daprd.Metrics(t, ctx)
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
+			assert.Equal(c, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/healthz|status:204"]))
+			assert.Equal(c, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200"]))
+		}, time.Second*10, 10*time.Millisecond)
 	})
 
 	t.Run("state stores", func(t *testing.T) {
 		body := `[{"key":"myvalue", "value":"hello world"}]`
 		h.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore", strings.NewReader(body), "content-type", "application/json")
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/state/mystore/myvalue")
-		metrics := h.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:/v1.0/state/mystore|status:204"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/state/mystore|status:200"]))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := h.daprd.Metrics(t, ctx)
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:/v1.0/state/mystore|status:204"]))
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/state/mystore|status:200"]))
+		}, time.Second*10, 10*time.Millisecond)
 	})
 
 	t.Run("actor invocation", func(t *testing.T) {
 		h.daprd.HTTPPost2xx(t, ctx, "/v1.0/actors/myactortype/myactorid/method/foo", nil, "content-type", "application/json")
-		metrics := h.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:/v1.0/actors/myactortype/{id}/method|status:200"]))
-		assert.NotContains(t, metrics, "method:InvokeActor/myactortype")
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := h.daprd.Metrics(t, ctx)
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:/v1.0/actors/myactortype/{id}/method|status:200"]))
+			assert.NotContains(c, metrics, "method:InvokeActor/myactortype")
+		}, time.Second*10, 10*time.Millisecond)
 	})
 }
