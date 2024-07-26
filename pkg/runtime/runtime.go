@@ -320,31 +320,6 @@ func newDaprRuntime(ctx context.Context,
 		},
 	)
 
-	if runtimeConfig.SchedulerEnabled() {
-		opts := clients.Options{
-			Addresses: runtimeConfig.schedulerAddress,
-			Security:  sec,
-		}
-
-		rt.schedulerClients, err = continuouslyRetrySchedulerClient(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-
-		rt.schedulerManager, err = scheduler.New(scheduler.Options{
-			Namespace: namespace,
-			AppID:     runtimeConfig.id,
-			Clients:   rt.schedulerClients,
-			Channels:  channels,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if err := rt.runnerCloser.Add(rt.schedulerManager.Run); err != nil {
-			return nil, err
-		}
-	}
-
 	if err := rt.runnerCloser.AddCloser(
 		func() error {
 			log.Info("Dapr is shutting down")
@@ -780,6 +755,17 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		default:
 		}
 
+		if a.runtimeConfig.SchedulerEnabled() {
+			a.wg.Add(1)
+			go func() {
+				log.Debugf("Initializing connection to Scheduler in the background")
+				defer a.wg.Done()
+				if err := a.initScheduler(ctx); err != nil {
+					log.Errorf("Scheduler failed to start due to: %s", err.Error())
+				}
+			}()
+		}
+
 		// First time the app becomes healthy, complete the init process
 		if a.appHealthReady != nil {
 			if err := a.appHealthReady(ctx); err != nil {
@@ -823,6 +809,32 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			a.schedulerManager.Stop()
 		}
 	}
+}
+
+func (a *DaprRuntime) initScheduler(ctx context.Context) error {
+	opts := clients.Options{
+		Addresses: a.runtimeConfig.schedulerAddress,
+		Security:  a.sec,
+	}
+	var err error
+	a.schedulerClients, err = continuouslyRetrySchedulerClient(ctx, opts)
+	if err != nil {
+		return err
+	}
+
+	a.schedulerManager, err = scheduler.New(scheduler.Options{
+		Namespace: a.namespace,
+		AppID:     a.runtimeConfig.id,
+		Clients:   a.schedulerClients,
+		Channels:  a.channels,
+	})
+	if err != nil {
+		return err
+	}
+	if err := a.runnerCloser.Add(a.schedulerManager.Run); err != nil {
+		return err
+	}
+	return nil
 }
 
 func (a *DaprRuntime) populateSecretsConfiguration() {
