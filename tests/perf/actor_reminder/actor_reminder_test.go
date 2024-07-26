@@ -45,7 +45,7 @@ const (
 
 	// Target for the QPS - Temporary
 	targetQPS          float64 = 50
-	targetSchedulerQPS float64 = 3600
+	targetSchedulerQPS float64 = 3300
 
 	// Target for the QPS to trigger reminders.
 	targetTriggerQPS          float64 = 4700
@@ -383,9 +383,14 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 		}
 	}
 
+	wg := sync.WaitGroup{}
 	ch := make(chan int)
 	for j := 0; j < 50; j++ {
+		wg.Add(1)
+
 		go func() {
+			defer wg.Done()
+
 			for {
 				i, ok := <-ch
 				if !ok {
@@ -400,6 +405,8 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	for i := 0; i < reminderCountScheduler; i++ {
 		ch <- i
 	}
+	close(ch)
+	wg.Wait()
 	done := time.Since(now)
 	t.Logf("Created %d reminders in %s (%.1fqps)", reminderCountScheduler, done, float64(reminderCountScheduler)/done.Seconds())
 
