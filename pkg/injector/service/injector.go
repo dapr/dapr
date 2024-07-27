@@ -38,7 +38,6 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
-	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
 
@@ -95,7 +94,7 @@ type injector struct {
 	controlPlaneTrustDomain string
 	currentTrustAnchors     currentTrustAnchorsFn
 	sentrySPIFFEID          spiffeid.ID
-	schedulerAddresses      []string
+	schedulerReplicaCount   int
 
 	htarget              healthz.Target
 	namespaceNameMatcher *namespacednamematcher.EqualPrefixNameNamespaceMatcher
@@ -231,14 +230,9 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spif
 	i.currentTrustAnchors = currentTrustAnchors
 	i.sentrySPIFFEID = sentryID
 
-	clusterDomain, err := utils.GetKubeClusterDomain()
-	if err != nil {
-		clusterDomain = utils.DefaultKubeClusterDomain
-	}
-
 	for {
 		var sched *appsv1.StatefulSet
-		sched, err = i.kubeClient.AppsV1().StatefulSets(i.controlPlaneNamespace).Get(ctx, "dapr-scheduler-server", metav1.GetOptions{})
+		sched, err := i.kubeClient.AppsV1().StatefulSets(i.controlPlaneNamespace).Get(ctx, "dapr-scheduler-server", metav1.GetOptions{})
 		if apierrors.IsNotFound(err) {
 			log.Warnf("%s/dapr-scheduler-server StatefulSet not found, retrying in 5 seconds", i.controlPlaneNamespace)
 			select {
@@ -257,20 +251,12 @@ func (i *injector) Run(ctx context.Context, tlsConfig *tls.Config, sentryID spif
 			return errors.New("dapr-scheduler-server StatefulSet has no replicas")
 		}
 
-		// TODO: remove nolint when golangci-lint is updated to support range over int/func
-		// nolint: typecheck // go 1.22 allows this but golangci-lint does not as it is experimental https://github.com/golangci/golangci-lint/issues/4627
-		for n := range *sched.Spec.Replicas {
-			i.schedulerAddresses = append(i.schedulerAddresses, fmt.Sprintf(
-				"dapr-scheduler-server-%d.dapr-scheduler-server.%s.svc.%s:50006",
-				n, i.controlPlaneNamespace, clusterDomain,
-			))
-		}
-
+		i.schedulerReplicaCount = int(*sched.Spec.Replicas)
 		break
 	}
 
-	if len(i.schedulerAddresses) > 0 {
-		log.Infof("Found dapr-scheduler-server StatefulSet with addresses: %s", strings.Join(i.schedulerAddresses, ","))
+	if i.schedulerReplicaCount > 0 {
+		log.Infof("Found dapr-scheduler-server StatefulSet %v replicas", i.schedulerReplicaCount)
 	}
 
 	ln, err := tls.Listen("tcp", fmt.Sprintf(":%d", i.port), tlsConfig)
