@@ -31,6 +31,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	clients "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -81,29 +82,30 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	d.place.WaitUntilRunning(t, ctx)
 	d.daprd.WaitUntilRunning(t, ctx)
 
-	etcdClient, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"localhost:" + d.scheduler.EtcdClientPort()},
+	etcdClient := clients.Etcd(t, clientv3.Config{
+		Endpoints:   []string{fmt.Sprintf("localhost:%s", d.scheduler.EtcdClientPort())},
 		DialTimeout: 5 * time.Second,
 	})
-	require.NoError(t, err)
 
-	kvs, err := etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-	require.NoError(t, err)
-	require.Empty(t, kvs.Count)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
+		require.NoError(c, rerr)
+		assert.Empty(c, keys)
+	}, time.Second*10, 10*time.Millisecond)
 
 	r := task.NewTaskRegistry()
 	require.NoError(t, r.AddOrchestratorN("SingleActivity", func(c *task.OrchestrationContext) (any, error) {
 		var input string
-		if err = c.GetInput(&input); err != nil {
+		if err := c.GetInput(&input); err != nil {
 			return nil, err
 		}
 		var output string
-		err = c.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
+		err := c.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
 		return output, err
 	}))
 	require.NoError(t, r.AddActivityN("SayHello", func(c task.ActivityContext) (any, error) {
 		var inp string
-		if err = c.GetInput(&inp); err != nil {
+		if err := c.GetInput(&inp); err != nil {
 			return nil, err
 		}
 
@@ -125,7 +127,9 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, metadata.IsComplete())
 	assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
 
-	kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-	require.NoError(t, err)
-	assert.Empty(t, kvs.Count)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
+		require.NoError(c, rerr)
+		assert.Empty(c, keys)
+	}, time.Second*10, 10*time.Millisecond)
 }
