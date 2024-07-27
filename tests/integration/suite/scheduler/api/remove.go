@@ -16,6 +16,7 @@ package api
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -44,7 +45,9 @@ type remove struct {
 }
 
 func (r *remove) Setup(t *testing.T) []framework.Option {
-	t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
+	if runtime.GOOS == "windows" {
+		t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
+	}
 
 	fp := ports.Reserve(t, 2)
 	port1 := fp.Port(t)

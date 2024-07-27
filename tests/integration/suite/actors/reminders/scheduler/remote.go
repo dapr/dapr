@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -58,7 +59,9 @@ type remote struct {
 }
 
 func (r *remote) Setup(t *testing.T) []framework.Option {
-	t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
+	if runtime.GOOS == "windows" {
+		t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
+	}
 
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte(`

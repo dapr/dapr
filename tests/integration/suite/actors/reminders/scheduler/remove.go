@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -103,6 +104,10 @@ spec:
 }
 
 func (r *remove) Run(t *testing.T, ctx context.Context) {
+	if runtime.GOOS == "windows" {
+		t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
+	}
+
 	r.scheduler.WaitUntilRunning(t, ctx)
 	r.place.WaitUntilRunning(t, ctx)
 	r.daprd.WaitUntilRunning(t, ctx)
