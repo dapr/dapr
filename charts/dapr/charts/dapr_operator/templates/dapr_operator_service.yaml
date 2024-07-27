@@ -52,19 +52,10 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
-{{- if or .Values.apiService.annotations .Values.global.prometheus.enabled }}
+{{- if .Values.webhookService.annotations }}
   annotations:
-    {{- if .Values.global.prometheus.enabled }}
-    prometheus.io/scrape: "true"
-    prometheus.io/port: "{{ .Values.global.prometheus.port }}"
-    prometheus.io/path: "/"
-    {{- end }}
-  {{- if .Values.webhookService.annotations }}
-    {{- range $key, $value := .Values.webhookService.annotations }}
-      {{ $key }}: "{{ $value }}"
-    {{- end }}
-  {{- end }}
-  {{- end }}
+{{ toYaml .Values.webhookService.annotations | indent 4}}
+{{- end }}
 spec:
   type: {{ .Values.webhookService.type }}
   ports:
