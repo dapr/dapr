@@ -755,17 +755,6 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		default:
 		}
 
-		if a.runtimeConfig.SchedulerEnabled() {
-			a.wg.Add(1)
-			go func() {
-				log.Debugf("Initializing connection to Scheduler in the background")
-				defer a.wg.Done()
-				if err := a.initScheduler(ctx); err != nil {
-					log.Errorf("Scheduler failed to start due to: %s", err.Error())
-				}
-			}()
-		}
-
 		// First time the app becomes healthy, complete the init process
 		if a.appHealthReady != nil {
 			if err := a.appHealthReady(ctx); err != nil {
@@ -791,7 +780,17 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		}
 
 		if a.runtimeConfig.SchedulerEnabled() {
-			a.schedulerManager.Start(a.actor)
+			a.wg.Add(1)
+			go func() {
+				log.Info("Initializing connection to Scheduler in the background")
+				defer a.wg.Done()
+				if err := a.initScheduler(ctx); err != nil {
+					log.Errorf("Scheduler failed to start due to: %s", err.Error())
+					return
+				}
+
+				a.schedulerManager.Start(a.actor)
+			}()
 		}
 
 	case apphealth.AppStatusUnhealthy:
@@ -806,7 +805,9 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		a.processor.Binding().StopReadingFromBindings(false)
 
 		if a.runtimeConfig.SchedulerEnabled() {
-			a.schedulerManager.Stop()
+			if a.schedulerManager != nil {
+				a.schedulerManager.Stop()
+			}
 		}
 	}
 }
