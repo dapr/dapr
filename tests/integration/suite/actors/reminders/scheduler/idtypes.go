@@ -190,6 +190,7 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 					ActorId:   i.actorDaprds[x].actorTypes[y].ids[z],
 					Name:      "remindermethod",
 					DueTime:   "1s",
+					Period:    "10000s",
 					Data:      []byte("reminderdata"),
 				})
 				require.NoError(t, err)
