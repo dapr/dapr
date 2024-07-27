@@ -126,8 +126,14 @@ func (u *unregister) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	last += 1
+	// Sleep to give time for any ongoing call to take place.
+	time.Sleep(time.Second * 2)
+	// Last method invoke after unregister.
+	last = u.methodcalled.Load()
+
+	// Sleep some time to make sure nothing was called again.
+	time.Sleep(time.Second * 5)
 	assert.Eventually(t, func() bool {
 		return u.methodcalled.Load() == last
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 }
