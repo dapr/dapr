@@ -385,6 +385,12 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 			return nil
 		})
 	}
+	if a.runtimeConfig.SchedulerEnabled() {
+		log.Info("Initializing connection to Scheduler in the background")
+		if err := a.initScheduler(ctx); err != nil {
+			log.Errorf("Scheduler failed to start due to: %s", err.Error())
+		}
+	}
 
 	return a.runnerCloser.Run(ctx)
 }
@@ -688,6 +694,10 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 		}
 	}
 
+	if a.runtimeConfig.SchedulerEnabled() {
+		a.schedulerManager.Start(a.actor)
+	}
+
 	return nil
 }
 
@@ -779,20 +789,6 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			}
 		}
 
-		if a.runtimeConfig.SchedulerEnabled() {
-			a.wg.Add(1)
-			go func() {
-				log.Info("Initializing connection to Scheduler in the background")
-				defer a.wg.Done()
-				if err := a.initScheduler(ctx); err != nil {
-					log.Errorf("Scheduler failed to start due to: %s", err.Error())
-					return
-				}
-
-				a.schedulerManager.Start(a.actor)
-			}()
-		}
-
 	case apphealth.AppStatusUnhealthy:
 		select {
 		case <-a.isAppHealthy:
@@ -813,28 +809,34 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 }
 
 func (a *DaprRuntime) initScheduler(ctx context.Context) error {
-	opts := clients.Options{
-		Addresses: a.runtimeConfig.schedulerAddress,
-		Security:  a.sec,
-	}
 	var err error
-	a.schedulerClients, err = continuouslyRetrySchedulerClient(ctx, opts)
-	if err != nil {
-		return err
-	}
-
 	a.schedulerManager, err = scheduler.New(scheduler.Options{
 		Namespace: a.namespace,
 		AppID:     a.runtimeConfig.id,
-		Clients:   a.schedulerClients,
 		Channels:  a.channels,
 	})
 	if err != nil {
 		return err
 	}
+
 	if err := a.runnerCloser.Add(a.schedulerManager.Run); err != nil {
 		return err
 	}
+
+	a.wg.Add(1)
+	go func() {
+		defer a.wg.Done()
+		opts := clients.Options{
+			Addresses: a.runtimeConfig.schedulerAddress,
+			Security:  a.sec,
+		}
+		a.schedulerClients, err = continuouslyRetrySchedulerClient(ctx, opts)
+		if err != nil {
+			log.Errorf("failed to create scheduler clients: could not connect to scheduler: %s", err)
+		}
+		a.schedulerManager.SetClients(a.schedulerClients)
+	}()
+
 	return nil
 }
 
