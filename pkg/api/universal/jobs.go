@@ -16,10 +16,16 @@ package universal
 import (
 	"context"
 	"strings"
+	"time"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"google.golang.org/grpc"
+)
+
+const (
+	rpcTimeout = time.Second * 30
 )
 
 func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
@@ -65,7 +71,10 @@ func (a *Universal) ScheduleJobRequestAlpha1(ctx context.Context, job *runtimev1
 		},
 	}
 
-	_, err := a.schedulerClients.Next().ScheduleJob(ctx, internalScheduleJobReq)
+	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	_, err := a.schedulerClients.Next().ScheduleJob(schedCtx, internalScheduleJobReq, grpc.WaitForReady(true))
 	if err != nil {
 		a.logger.Errorf("Error scheduling job %s due to: %s", job.GetName(), err)
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerScheduleJob(errMetadata, err)
@@ -98,7 +107,10 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 		},
 	}
 
-	_, err := a.schedulerClients.Next().DeleteJob(ctx, internalDeleteJobReq)
+	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	_, err := a.schedulerClients.Next().DeleteJob(schedCtx, internalDeleteJobReq, grpc.WaitForReady(true))
 	if err != nil {
 		a.logger.Errorf("Error deleting job: %s due to: %s", inReq.GetName(), err)
 		return &runtimev1pb.DeleteJobResponse{}, apierrors.SchedulerDeleteJob(errMetadata, err)
@@ -131,7 +143,10 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 		},
 	}
 
-	resp, err := a.schedulerClients.Next().GetJob(ctx, internalGetJobReq)
+	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	resp, err := a.schedulerClients.Next().GetJob(schedCtx, internalGetJobReq, grpc.WaitForReady(true))
 	if err != nil {
 		a.logger.Errorf("Error getting job %s due to: %s", inReq.GetName(), err)
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
