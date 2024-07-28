@@ -809,14 +809,14 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 }
 
 func (a *DaprRuntime) initScheduler(ctx context.Context) error {
-	var err error
-	a.schedulerManager, err = scheduler.New(scheduler.Options{
+	var schedError error
+	a.schedulerManager, schedError = scheduler.New(scheduler.Options{
 		Namespace: a.namespace,
 		AppID:     a.runtimeConfig.id,
 		Channels:  a.channels,
 	})
-	if err != nil {
-		return err
+	if schedError != nil {
+		return schedError
 	}
 
 	if err := a.runnerCloser.Add(a.schedulerManager.Run); err != nil {
@@ -830,9 +830,9 @@ func (a *DaprRuntime) initScheduler(ctx context.Context) error {
 			Addresses: a.runtimeConfig.schedulerAddress,
 			Security:  a.sec,
 		}
-		a.schedulerClients, err = continuouslyRetrySchedulerClient(ctx, opts)
-		if err != nil {
-			log.Errorf("failed to create scheduler clients: could not connect to scheduler: %s", err)
+		a.schedulerClients, schedError = continuouslyRetrySchedulerClient(ctx, opts)
+		if schedError != nil {
+			log.Errorf("failed to create scheduler clients: could not connect to scheduler: %s", schedError)
 		}
 		a.schedulerManager.SetClients(a.schedulerClients)
 	}()
