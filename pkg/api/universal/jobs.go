@@ -18,10 +18,11 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/grpc"
+
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"google.golang.org/grpc"
 )
 
 const (
