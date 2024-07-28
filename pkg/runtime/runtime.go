@@ -789,6 +789,10 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			}
 		}
 
+		if a.runtimeConfig.SchedulerEnabled() {
+			a.schedulerManager.Start(a.actor)
+		}
+
 	case apphealth.AppStatusUnhealthy:
 		select {
 		case <-a.isAppHealthy:
