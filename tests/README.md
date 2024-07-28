@@ -19,3 +19,4 @@ This contains end-to-end tests, related test framework, and docs for Dapr:
 * [Running Performance tests](./docs/running-perf-tests.md)
 * [Running E2E tests](./docs/running-e2e-test.md)
 * [Writing E2E tests](./docs/writing-e2e-test.md)
+* Runbooks for [E2E test infrastructure](./docs/e2e-test-infra.md)
