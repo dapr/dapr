@@ -340,7 +340,9 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		a.placement.Start(ctx)
+		if err := a.placement.Start(ctx); err != nil {
+			log.Errorf("Placement failed to start due to: %s", err.Error())
+		}
 	}()
 
 	log.Infof("Actor runtime started. Idle timeout: %v", a.actorsConfig.Config.ActorIdleTimeout)
