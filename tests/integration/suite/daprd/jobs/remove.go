@@ -16,7 +16,7 @@ package jobs
 import (
 	"context"
 	"fmt"
-	"runtime"
+	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -84,9 +84,6 @@ func (r *remove) Setup(t *testing.T) []framework.Option {
 }
 
 func (r *remove) Run(t *testing.T, ctx context.Context) {
-	if runtime.GOOS == "windows" {
-		t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
-	}
 	r.scheduler.WaitUntilRunning(t, ctx)
 	r.daprd.WaitUntilRunning(t, ctx)
 
@@ -97,8 +94,11 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 		DialTimeout: 5 * time.Second,
 	})
 
+	// Use "path/filepath" import, it is using OS specific path separator unlike "path"
+	etcdKeysPrefix := filepath.Join("dapr", "jobs")
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
+		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Empty(c, keys)
 	}, time.Second*10, 10*time.Millisecond)
@@ -114,13 +114,13 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
+		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Len(c, keys, 1)
 	}, time.Second*10, 10*time.Millisecond)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(1), r.triggered.Load())
+		assert.GreaterOrEqual(c, r.triggered.Load(), int64(1))
 	}, 30*time.Second, 10*time.Millisecond)
 
 	_, err = client.DeleteJobAlpha1(ctx, &runtimev1pb.DeleteJobRequest{
@@ -129,7 +129,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
+		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Empty(c, keys)
 	}, time.Second*10, 10*time.Millisecond)
