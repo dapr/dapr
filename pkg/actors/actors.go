@@ -1176,8 +1176,8 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 		select {
 		case <-ctx.Done():
 			return ctx.Err()
-		case err := <-errCh:
-			return err
+		case errC := <-errCh:
+			return errC
 		}
 	}
 
