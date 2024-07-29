@@ -103,7 +103,6 @@ spec:
 }
 
 func (r *remove) Run(t *testing.T, ctx context.Context) {
-
 	r.scheduler.WaitUntilRunning(t, ctx)
 	r.place.WaitUntilRunning(t, ctx)
 	r.daprd.WaitUntilRunning(t, ctx)
