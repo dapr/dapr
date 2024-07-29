@@ -1177,7 +1177,13 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 		case <-ctx.Done():
 			return ctx.Err()
 		case errC := <-errCh:
-			return errC
+			if errC != nil {
+				fmt.Println("--- Error deleting reminder", errC)
+				return errC
+			} else {
+				fmt.Println("--- Deleted reminder", errC)
+				return ErrReminderCanceled
+			}
 		}
 	}
 
