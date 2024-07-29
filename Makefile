@@ -391,12 +391,7 @@ test-integration-parallel: test-deps
 # You can download version v1.55.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.55.2
 .PHONY: lint
 lint: check-linter
-ifdef LINT_BASE
-	@echo "LINT_BASE is set to "$(LINT_BASE)". Linter will only check diff."
-	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m --new-from-rev $(shell git rev-parse $(LINT_BASE))
-else
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
-endif
 
 
 ################################################################################
