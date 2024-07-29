@@ -390,6 +390,7 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 		if err := a.initScheduler(ctx); err != nil {
 			log.Errorf("Scheduler failed to start due to: %s", err.Error())
 		}
+		log.Info("Scheduler client connections created")
 	}
 
 	return a.runnerCloser.Run(ctx)
@@ -827,19 +828,15 @@ func (a *DaprRuntime) initScheduler(ctx context.Context) error {
 		return err
 	}
 
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		opts := clients.Options{
-			Addresses: a.runtimeConfig.schedulerAddress,
-			Security:  a.sec,
-		}
-		a.schedulerClients, schedError = continuouslyRetrySchedulerClient(ctx, opts)
-		if schedError != nil {
-			log.Errorf("failed to create scheduler clients: could not connect to scheduler: %s", schedError)
-		}
-		a.schedulerManager.SetClients(a.schedulerClients)
-	}()
+	opts := clients.Options{
+		Addresses: a.runtimeConfig.schedulerAddress,
+		Security:  a.sec,
+	}
+	a.schedulerClients, schedError = continuouslyRetrySchedulerClient(ctx, opts)
+	if schedError != nil {
+		log.Errorf("failed to create scheduler clients: could not connect to scheduler: %s", schedError)
+	}
+	a.schedulerManager.SetClients(a.schedulerClients)
 
 	return nil
 }

@@ -105,8 +105,6 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 	s.schedulers[1].WaitUntilRunning(t, ctx)
 	s.schedulers[2].WaitUntilRunning(t, ctx)
 
-	time.Sleep(time.Second * 10)
-
 	s.daprdA.WaitUntilRunning(t, ctx)
 	s.daprdB.WaitUntilRunning(t, ctx)
 
