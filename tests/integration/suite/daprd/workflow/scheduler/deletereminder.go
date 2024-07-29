@@ -87,8 +87,11 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 		DialTimeout: 5 * time.Second,
 	})
 
+	// Use "path/filepath" import, it is using OS specific path separator unlike "path"
+	etcdKeysPrefix := filepath.Join("dapr", "jobs")
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
+		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Empty(c, keys)
 	}, time.Second*10, 10*time.Millisecond)
@@ -128,7 +131,7 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, "dapr/jobs")
+		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Empty(c, keys)
 	}, time.Second*10, 10*time.Millisecond)
