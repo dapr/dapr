@@ -1165,7 +1165,7 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 				log.Errorf("Error deleting reminder %s: %s", reminder.Key(), derr)
 			}
 		}()
-		return ErrReminderCanceled
+		return nil
 	}
 
 	return err
