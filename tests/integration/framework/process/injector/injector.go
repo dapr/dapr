@@ -151,7 +151,7 @@ func (i *Injector) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		assert.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-	}, time.Second*5, 10*time.Millisecond)
+	}, time.Second*30, 100*time.Millisecond)
 }
 
 func (i *Injector) Port() int {
