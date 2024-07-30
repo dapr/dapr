@@ -15,6 +15,7 @@ package scheduler
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
@@ -23,10 +24,11 @@ import (
 )
 
 type connector struct {
-	req      *schedulerv1pb.WatchJobsRequest
-	client   schedulerv1pb.SchedulerClient
-	channels *channels.Channels
-	actors   actors.ActorRuntime
+	req                 *schedulerv1pb.WatchJobsRequest
+	client              schedulerv1pb.SchedulerClient
+	channels            *channels.Channels
+	actors              actors.ActorRuntime
+	failureWatchingJobs atomic.Bool
 }
 
 // run starts the scheduler connector. Attempts to re-connect to the Scheduler
@@ -39,7 +41,11 @@ func (c *connector) run(ctx context.Context) error {
 		}
 
 		if err != nil {
-			log.Errorf("failed to watch scheduler jobs, retrying: %s", err)
+			if !c.failureWatchingJobs.Load() {
+				// don't spam
+				log.Errorf("failed to watch scheduler jobs, retrying indefinitely in the background: %s", err)
+				c.failureWatchingJobs.Store(true)
+			}
 			select {
 			case <-ctx.Done():
 				return ctx.Err()
@@ -49,6 +55,7 @@ func (c *connector) run(ctx context.Context) error {
 		}
 
 		log.Info("Scheduler stream connected")
+		c.failureWatchingJobs.Store(false)
 
 		if err = stream.Send(c.req); err != nil {
 			select {

@@ -100,7 +100,7 @@ func (s *streamer) outgoing(ctx context.Context) error {
 // handleJob invokes the appropriate app or actor reminder based on the job metadata.
 func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) {
 	meta := job.GetMetadata()
-
+	log.Debugf("\n\nCASSIE in handleJob. job %+v\n\n", job)
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		if err := s.invokeApp(ctx, job); err != nil {
@@ -155,6 +155,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 
 // invokeActorReminder calls the actor ID with the given reminder data.
 func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) error {
+	log.Debugf("\n\nCASSIE in invokeActorReminder. Job data: %+v\n\n", job)
 	if s.actors == nil {
 		return errors.New("received actor reminder job but actor runtime is not initialized")
 	}
@@ -168,10 +169,29 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		}
 	}
 
-	return s.actors.ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
+	err := s.actors.ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
 		Name:      job.GetName(),
 		ActorType: actor.GetType(),
 		ActorID:   actor.GetId(),
 		Data:      jspb.GetValue(),
 	})
+	if errors.Is(err, actors.ErrReminderCanceled) {
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				reqCtx := context.Background()
+				derr := s.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
+					Name:      job.Name,
+					ActorType: actor.GetType(),
+					ActorID:   actor.GetId(),
+				})
+				if derr != nil {
+					log.Errorf("Failed to delete actor reminder: %s. %s", job.Name, derr.Error())
+				}
+			}
+		}()
+	}
+	return err
 }
