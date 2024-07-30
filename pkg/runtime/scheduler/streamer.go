@@ -100,7 +100,6 @@ func (s *streamer) outgoing(ctx context.Context) error {
 // handleJob invokes the appropriate app or actor reminder based on the job metadata.
 func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) {
 	meta := job.GetMetadata()
-	log.Debugf("\n\nCASSIE in handleJob. job %+v\n\n", job)
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		if err := s.invokeApp(ctx, job); err != nil {
@@ -155,7 +154,6 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 
 // invokeActorReminder calls the actor ID with the given reminder data.
 func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) error {
-	log.Debugf("\n\nCASSIE in invokeActorReminder. Job data: %+v\n\n", job)
 	if s.actors == nil {
 		return errors.New("received actor reminder job but actor runtime is not initialized")
 	}
