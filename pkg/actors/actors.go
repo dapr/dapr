@@ -1098,7 +1098,7 @@ func (a *actorsRuntime) executeReminder(reminder *internal.Reminder) bool {
 						ActorID:   reminder.ActorID,
 					})
 					if derr != nil {
-						log.Errorf("Error deleting reminder named %s: %s", reminder.Name, derr)
+						log.Errorf("Error deleting reminder named %s: %s", reminder.Name, derr.Error())
 					}
 					return
 				}
@@ -1174,7 +1174,7 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 							ActorID:   reminder.ActorID,
 						})
 						if derr != nil {
-							log.Errorf("Error deleting reminder named %s: %s", reminder.Name, derr)
+							log.Errorf("Error deleting reminder named %s: %s", reminder.Name, derr.Error())
 						}
 						return
 					}
@@ -1336,7 +1336,7 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 						ActorID:   reminder.ActorID,
 					})
 					if derr != nil {
-						log.Errorf("Error deleting reminder named %s: %s", reminder.Name, derr)
+						log.Errorf("Error deleting reminder named %s: %s", reminder.Name, derr.Error())
 					}
 					return
 				}
