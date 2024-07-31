@@ -329,7 +329,6 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 				}
 			}
 		}()
-
 	}
 	return nil, err
 }
