@@ -161,7 +161,24 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 	var re *recoverableError
 	switch {
 	case err == nil:
-		return actors.ErrReminderCanceled
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				reqCtx := context.Background()
+				derr := wf.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
+					Name:      reminder.Name,
+					ActorType: reminder.ActorType,
+					ActorID:   reminder.ActorID,
+				})
+				if derr != nil {
+					wfLogger.Errorf("Error deleting workflow reminder named %s: %s", reminder.Name, derr.Error())
+				}
+				return
+			}
+		}()
+		return nil
 	case errors.Is(err, context.DeadlineExceeded):
 		wfLogger.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", wf.actorID, err)
 		return nil
@@ -173,7 +190,24 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 		return nil
 	default: // Other error
 		wfLogger.Errorf("Workflow actor '%s': execution failed with a non-recoverable error: %v", wf.actorID, err)
-		return actors.ErrReminderCanceled
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				reqCtx := context.Background()
+				derr := wf.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
+					Name:      reminder.Name,
+					ActorType: reminder.ActorType,
+					ActorID:   reminder.ActorID,
+				})
+				if derr != nil {
+					wfLogger.Errorf("Error deleting workflow reminder named %s: %s", reminder.Name, derr.Error())
+				}
+				return
+			}
+		}()
+		return nil
 	}
 }
 
@@ -543,6 +577,26 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 			// Workflow execution failed with recoverable error
 			executionStatus = diag.StatusRecoverable
 			return newRecoverableError(errExecutionAborted)
+		} else {
+			// delete reminder data bc completed
+			go func() {
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					reqCtx := context.Background()
+
+					derr := wf.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
+						Name:      reminder.Name,
+						ActorType: reminder.ActorType,
+						ActorID:   reminder.ActorID,
+					})
+					if derr != nil {
+						wfLogger.Errorf("Error deleting wf actor reminder named %s: %s", reminder.Name, derr.Error())
+					}
+					return
+				}
+			}()
 		}
 	}
 	wfLogger.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", wf.actorID, runtimeState.RuntimeStatus().String(), wi.InstanceID)

@@ -128,7 +128,6 @@ func (a *activityActor) InvokeMethod(ctx context.Context, methodName string, dat
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
 func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.InternalActorReminder, metadata map[string][]string) error {
 	wfLogger.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
-
 	state, _ := a.loadActivityState(ctx)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 
@@ -142,7 +141,25 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 	switch {
 	case err == nil:
 		// We delete the reminder on success and on non-recoverable errors.
-		return actors.ErrReminderCanceled
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				reqCtx := context.Background()
+				derr := a.actorRuntime.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
+					Name:      reminder.Name,
+					ActorType: reminder.ActorType,
+					ActorID:   reminder.ActorID,
+				})
+				if derr != nil {
+					wfLogger.Errorf("Error deleting activity reminder named %s: %s", reminder.Name, derr.Error())
+				}
+				return
+			}
+		}()
+
+		return nil
 	case errors.Is(err, context.DeadlineExceeded):
 		wfLogger.Warnf("%s: execution of '%s' timed-out and will be retried later: %v", a.actorID, reminder.Name, err)
 		return nil
@@ -155,7 +172,24 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 	default: // Other error
 		wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", a.actorID, err)
 		// TODO: Reply with a failure - this requires support from durabletask-go to produce TaskFailure results
-		return actors.ErrReminderCanceled
+		go func() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				reqCtx := context.Background()
+				derr := a.actorRuntime.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
+					Name:      reminder.Name,
+					ActorType: reminder.ActorType,
+					ActorID:   reminder.ActorID,
+				})
+				if derr != nil {
+					wfLogger.Errorf("Error deleting activity actor reminder named %s: %s", reminder.Name, derr.Error())
+				}
+				return
+			}
+		}()
+		return nil
 	}
 }
 
