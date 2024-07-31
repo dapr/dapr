@@ -45,7 +45,6 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -547,27 +546,6 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 	}
 
 	if err != nil {
-		if errors.Is(err, ErrReminderCanceled) {
-			go func() {
-				select {
-				case <-ctx.Done():
-					log.Debugf("Context canceled, stopping reminder deletion: %s", req.GetActor().GetActorKey())
-					return
-				default:
-					reqCtx := context.Background()
-					derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
-						Name:      req.GetActor().GetActorKey(),
-						ActorType: req.GetActor().GetActorType(),
-						ActorID:   req.GetActor().GetActorId(),
-					})
-					if derr != nil {
-						log.Errorf("Failed to delete reminder. %s", derr.Error())
-					}
-					return
-				}
-			}()
-		}
-
 		if res != nil && actorerrors.Is(err) {
 			return res, err
 		}
@@ -1129,30 +1107,7 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 
 		err = internalAct.InvokeTimer(ctx, reminder, md)
 		if err != nil {
-			if errors.Is(err, ErrReminderCanceled) {
-				go func() {
-					select {
-					case <-ctx.Done():
-						log.Debugf("Context canceled, stopping reminder deletion: %s", reminder.Key())
-						return
-					default:
-						reqCtx := context.Background()
-						req := &DeleteReminderRequest{
-							Name:      reminder.Name,
-							ActorID:   reminder.ActorID,
-							ActorType: reminder.ActorType,
-						}
-						err = a.DeleteReminder(reqCtx, req)
-						if err != nil {
-							err = messages.ErrActorReminderDelete.WithFormat(err)
-							log.Debugf("failed to delete reminder: %s", err.Error())
-						}
-						return
-					}
-				}()
-			} else {
-				log.Errorf("Error executing timer for internal actor '%s': %v", reminder.Key(), err)
-			}
+			log.Errorf("Error executing timer for internal actor '%s': %v", reminder.Key(), err)
 			return err
 		}
 	} else {
@@ -1160,28 +1115,7 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 
 		err = internalAct.InvokeReminder(ctx, reminder, md)
 		if err != nil {
-			if errors.Is(err, ErrReminderCanceled) {
-				go func() {
-					select {
-					case <-ctx.Done():
-						log.Debugf("Context canceled, stopping reminder deletion: %s", reminder.Key())
-						return
-					default:
-						reqCtx := context.Background()
-						derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
-							Name:      reminder.Name,
-							ActorType: reminder.ActorType,
-							ActorID:   reminder.ActorID,
-						})
-						if derr != nil {
-							log.Errorf("Error deleting reminder named %s: %s", reminder.Name, derr.Error())
-						}
-						return
-					}
-				}()
-			} else {
-				log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
-			}
+			log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
 			return err
 		}
 	}
@@ -1253,7 +1187,7 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 				return
 			}
 		}()
-		return ErrReminderCanceled
+		return nil
 	}
 
 	return err

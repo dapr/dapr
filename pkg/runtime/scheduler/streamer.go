@@ -173,23 +173,5 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		ActorID:   actor.GetId(),
 		Data:      jspb.GetValue(),
 	})
-	if errors.Is(err, actors.ErrReminderCanceled) {
-		go func() {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				reqCtx := context.Background()
-				derr := s.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
-					Name:      job.GetName(),
-					ActorType: actor.GetType(),
-					ActorID:   actor.GetId(),
-				})
-				if derr != nil {
-					log.Errorf("Failed to delete actor reminder: %s. %s", job.GetName(), derr.Error())
-				}
-			}
-		}()
-	}
 	return err
 }

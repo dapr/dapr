@@ -303,7 +303,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 // CallActorReminder invokes an internal virtual actor.
 func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
-	err := a.Actors().ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
+	return nil, a.Actors().ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
 		Name:      in.GetName(),
 		ActorType: in.GetActorType(),
 		ActorID:   in.GetActorId(),
@@ -312,25 +312,6 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 		Period:    in.GetPeriod(),
 		TTL:       in.GetExpirationTime().String(),
 	})
-	if errors.Is(err, actors.ErrReminderCanceled) {
-		go func() {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				reqCtx := context.Background()
-				derr := a.Actors().DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
-					Name:      in.GetName(),
-					ActorType: in.GetActorType(),
-					ActorID:   in.GetActorId(),
-				})
-				if derr != nil {
-					a.logger.Errorf("Failed to delete actor reminder: %s. %s", in.GetName(), derr.Error())
-				}
-			}
-		}()
-	}
-	return nil, err
 }
 
 // Used by CallLocal and CallLocalStream to check the request against the access control list
