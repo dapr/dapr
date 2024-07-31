@@ -100,6 +100,7 @@ func (s *streamer) outgoing(ctx context.Context) error {
 // handleJob invokes the appropriate app or actor reminder based on the job metadata.
 func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) {
 	meta := job.GetMetadata()
+
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		if err := s.invokeApp(ctx, job); err != nil {
@@ -167,11 +168,10 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		}
 	}
 
-	err := s.actors.ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
+	return s.actors.ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
 		Name:      job.GetName(),
 		ActorType: actor.GetType(),
 		ActorID:   actor.GetId(),
 		Data:      jspb.GetValue(),
 	})
-	return err
 }
