@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	apiErrors "github.com/dapr/dapr/pkg/api/errors"
+
 	"github.com/alphadose/haxmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -203,7 +205,7 @@ func (p *Service) Start(ctx context.Context) error {
 
 	sec, err := p.sec.Handler(ctx)
 	if err != nil {
-		return err
+		return errors.New("context error occurred")
 	}
 
 	serverListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", p.listenAddress, p.port))
@@ -247,12 +249,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 	clientID, err := p.validateClient(stream)
 	if err != nil {
-		return err
+		return apiErrors.PlacementServiceInternalError(fmt.Sprintf("internal error: %s", err))
 	}
 
 	firstMessage, err := p.receiveAndValidateFirstMessage(stream, clientID)
 	if err != nil {
-		return err
+		return apiErrors.PlacementServiceUnAuthenticated(fmt.Sprintf("permission error: %s", err))
 	}
 
 	// Older versions won't be sending the namespace in subsequent messages either,
@@ -282,13 +284,13 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		case nil:
 
 			if clientID != nil && req.GetId() != clientID.AppID() {
-				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
+				return apiErrors.PlacementServicePermissionDenied(fmt.Sprintf("client ID %s is not allowed", req.GetId()))
 			}
 
 			if registeredMemberID == "" {
 				registeredMemberID, err = p.handleNewConnection(req, daprStream, namespace)
 				if err != nil {
-					return err
+					return apiErrors.PlacementServiceFailedTableUpdate(fmt.Sprintln("handle connection error: ", err))
 				}
 			}
 
@@ -350,7 +352,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		}
 	}
 
-	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
+	return apiErrors.PlacementServiceFailedPrecondition(fmt.Sprintln(err))
 }
 
 func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatusServer) (*spiffe.Parsed, error) {
