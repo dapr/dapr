@@ -22,6 +22,7 @@ import (
 const (
 	resiliencyCountViewName      = "resiliency/count"
 	resiliencyActivationViewName = "resiliency/activations_total"
+	resiliencyCBStateViewName    = "resiliency/cb_state"
 	resiliencyLoadedViewName     = "resiliency/loaded"
 	testAppID                    = "fakeID"
 	testResiliencyName           = "testResiliency"
@@ -33,7 +34,8 @@ func cleanupRegisteredViews() {
 	diag.CleanupRegisteredViews(
 		resiliencyCountViewName,
 		resiliencyLoadedViewName,
-		resiliencyActivationViewName)
+		resiliencyActivationViewName,
+		resiliencyCBStateViewName)
 }
 
 func TestResiliencyCountMonitoring(t *testing.T) {
@@ -206,6 +208,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 		unitFn              func()
 		wantNumberOfRows    int
 		wantCbStateTagCount map[tag.Tag]int64
+		wantCbStateLastValue tag.Tag
 	}{
 		{
 			name: "EndpointPolicyCloseState",
@@ -221,6 +224,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			},
 			wantNumberOfRows:    3,
 			wantCbStateTagCount: map[tag.Tag]int64{diag.NewTag(diag.StatusKey.Name(), "closed"): 2},
+			wantCbStateLastValue: diag.NewTag(diag.StatusKey.Name(), "closed"),
 		},
 		{
 			name: "EndpointPolicyOpenState",
@@ -239,6 +243,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateClosed)): 2,
 				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):   1,
 			},
+			wantCbStateLastValue: diag.NewTag(diag.StatusKey.Name(), "open"),
 		},
 		{
 			name: "EndpointPolicyHalfOpenState",
@@ -265,6 +270,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateOpen)):     1,
 				diag.NewTag(diag.StatusKey.Name(), string(breaker.StateHalfOpen)): 1,
 			},
+			wantCbStateLastValue: diag.NewTag(diag.StatusKey.Name(), "half-open"),
 		},
 	}
 
@@ -276,6 +282,10 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			require.NoError(t, err)
 			require.Len(t, rows, test.wantNumberOfRows)
+
+			rows_cb_state, err2 := view.RetrieveData(resiliencyCBStateViewName)
+			require.NoError(t, err2)
+			require.NotNil(t, rows_cb_state)
 
 			wantedTags := []tag.Tag{
 				diag.NewTag("app_id", testAppID),
@@ -291,9 +301,19 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				diag.RequireTagExist(t, rows, wantTag)
 			}
 			for cbTag, wantCount := range test.wantCbStateTagCount {
-				gotCount := diag.GetValueForObservationWithTagSet(
+				gotCount := diag.GetCountValueForObservationWithTagSet(
 					rows, map[tag.Tag]bool{cbTag: true, diag.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
 				require.Equal(t, wantCount, gotCount)
+				
+				//Current (last value) state should have a value of 1, others should be 0
+				found, gotValue := diag.GetLastValueForObservationWithTagset(
+					rows_cb_state, map[tag.Tag]bool{cbTag: true, diag.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
+				require.Equal(t, true, found)
+				if cbTag.Value == test.wantCbStateLastValue.Value {
+					require.Equal(t, float64(1), gotValue)
+				} else {
+					require.Equal(t, float64(0), gotValue)
+				}
 			}
 		})
 	}
@@ -460,15 +480,15 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 				diag.RequireTagExist(t, rows, wantTag)
 			}
 			for cbTag, wantCount := range test.wantCbStateTagCount {
-				gotCount := diag.GetValueForObservationWithTagSet(
+				gotCount := diag.GetCountValueForObservationWithTagSet(
 					rows, map[tag.Tag]bool{cbTag: true, diag.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
 				require.Equal(t, wantCount, gotCount)
 			}
-			gotRetriesCount := diag.GetValueForObservationWithTagSet(
+			gotRetriesCount := diag.GetCountValueForObservationWithTagSet(
 				rows, map[tag.Tag]bool{diag.NewTag(diag.PolicyKey.Name(), string(diag.RetryPolicy)): true})
 			require.Equal(t, test.wantRetriesCount, gotRetriesCount)
 
-			gotTimeoutCount := diag.GetValueForObservationWithTagSet(
+			gotTimeoutCount := diag.GetCountValueForObservationWithTagSet(
 				rows, map[tag.Tag]bool{diag.NewTag(diag.PolicyKey.Name(), string(diag.TimeoutPolicy)): true})
 			require.Equal(t, test.wantTimeoutCount, gotTimeoutCount)
 		})
