@@ -220,6 +220,15 @@ spec:
                   values:
                   - dapr-sentry
               topologyKey: topology.kubernetes.io/zone
+          - weight: 50
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - dapr-sentry
+              topologyKey: kubernetes.io/hostname
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:

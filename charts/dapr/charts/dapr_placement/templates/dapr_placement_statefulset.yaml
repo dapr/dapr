@@ -240,6 +240,15 @@ spec:
                   values:
                   - dapr-placement-server
               topologyKey: topology.kubernetes.io/zone
+          - weight: 50
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - dapr-placement-server
+              topologyKey: kubernetes.io/hostname
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
