@@ -1165,32 +1165,7 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 		DueTime:   reminder.DueTime,
 	}
 
-	err := a.doExecuteReminderOrTimer(ctx, ir, false)
-
-	// If the reminder was cancelled, delete it.
-	if errors.Is(err, ErrReminderCanceled) {
-		go func() {
-			log.Debugf("Deleting reminder which was cancelled: %s", reminder.Key())
-			select {
-			case <-ctx.Done():
-				log.Debugf("Context canceled, stopping reminder deletion: %s", reminder.Key())
-				return
-			default:
-				reqCtx := context.Background()
-				if derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
-					Name:      reminder.Name,
-					ActorType: reminder.ActorType,
-					ActorID:   reminder.ActorID,
-				}); derr != nil {
-					log.Errorf("Error deleting reminder %s: %s", reminder.Key(), derr.Error())
-				}
-				return
-			}
-		}()
-		return nil
-	}
-
-	return err
+	return a.doExecuteReminderOrTimer(ctx, ir, false)
 }
 
 // Executes a reminder or timer
