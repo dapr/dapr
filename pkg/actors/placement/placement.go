@@ -59,9 +59,10 @@ const (
 // actorPlacement maintains membership of actor instances and consistent hash
 // tables to discover the actor while interacting with Placement service.
 type actorPlacement struct {
-	actorTypes []string
-	config     internal.Config
-	namespace  string
+	actorTypesMu sync.RWMutex
+	actorTypes   []string
+	config       internal.Config
+	namespace    string
 
 	// client is the placement client.
 	client *placementClient
@@ -147,6 +148,9 @@ func (p *actorPlacement) StatusMessage() string {
 // Register an actor type by adding it to the list of known actor types (if it's not already registered)
 // The placement tables will get updated when the next heartbeat fires
 func (p *actorPlacement) AddHostedActorType(actorType string, idleTimeout time.Duration) error {
+	p.actorTypesMu.Lock()
+	defer p.actorTypesMu.Unlock()
+
 	for _, t := range p.actorTypes {
 		if t == actorType {
 			return fmt.Errorf("actor type %s already registered", actorType)
@@ -155,6 +159,21 @@ func (p *actorPlacement) AddHostedActorType(actorType string, idleTimeout time.D
 
 	p.actorTypes = append(p.actorTypes, actorType)
 	return nil
+}
+
+// Delete an actor type from the list of known actor types (if it's already registered)
+// The placement tables will get updated when the next heartbeat fires
+func (p *actorPlacement) DeleteHostedActorType(actorType string) error {
+	p.actorTypesMu.Lock()
+	defer p.actorTypesMu.Unlock()
+
+	for i, t := range p.actorTypes {
+		if t == actorType {
+			p.actorTypes = append(p.actorTypes[:i], p.actorTypes[i+1:]...)
+			return nil
+		}
+	}
+	return fmt.Errorf("actor type %s not found", actorType)
 }
 
 // Start connects placement service to register to membership and send heartbeat
@@ -270,9 +289,13 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				continue
 			}
 
+			p.actorTypesMu.RLock()
+			actorTypes := p.actorTypes
+			p.actorTypesMu.RUnlock()
+
 			host := v1pb.Host{
 				Name:     p.config.GetRuntimeHostname(),
-				Entities: p.actorTypes,
+				Entities: actorTypes,
 				Id:       p.config.AppID,
 				Load:     1, // Not used yet
 				Pod:      p.config.PodName,

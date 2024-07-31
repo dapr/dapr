@@ -89,6 +89,7 @@ type ActorRuntime interface {
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
 	GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime
 	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error
+	UnregisterInternalActor(ctx context.Context, actorType string) error
 	Entities() []string
 }
 
@@ -999,7 +1000,8 @@ func (a *actorsRuntime) drainRebalancedActors() {
 				ActorType: actorType,
 				ActorID:   actorID,
 			})
-			if lar.Address != "" && !a.isActorLocal(lar.Address, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
+			// actor type can be unregistered in this instance or across all daprd instances or can be registered but in a different daprd instance (hence not local)
+			if lar.Address == "" || !a.isActorLocal(lar.Address, a.actorsConfig.Config.HostAddress, a.actorsConfig.Config.Port) {
 				// actor has been moved to a different host, deactivate when calls are done cancel any reminders
 				// each item in reminders contain a struct with some metadata + the actual reminder struct
 				a.actorsReminders.DrainRebalancedReminders(actorType, actorID)
@@ -1289,8 +1291,6 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 		return fmt.Errorf("actor type '%s' already registered", actorType)
 	}
 
-	log.Debugf("Registered internal actor type '%s'", actorType)
-
 	a.actorsConfig.Config.HostedActorTypes.AddActorType(actorType, actorIdleTimeout)
 
 	if a.placementEnabled {
@@ -1299,6 +1299,34 @@ func (a *actorsRuntime) RegisterInternalActor(ctx context.Context, actorType str
 			return fmt.Errorf("error updating hosted actor types: %w", err)
 		}
 	}
+
+	log.Debugf("Registered internal actor type '%s'", actorType)
+
+	return nil
+}
+
+func (a *actorsRuntime) UnregisterInternalActor(ctx context.Context, actorType string) error {
+	if !a.haveCompatibleStorage() {
+		return fmt.Errorf("unable to unregister internal actor type '%s': %w", actorType, ErrIncompatibleStateStore)
+	}
+
+	if a.placementEnabled {
+		err := a.placement.DeleteHostedActorType(actorType)
+		if err != nil {
+			return fmt.Errorf("error updating hosted actor types: %w", err)
+		}
+	}
+
+	a.actorsConfig.Config.HostedActorTypes.RemoveActorType(actorType)
+
+	// Call GetAndDel which returns "existing=true" if the actor type was already registered
+	_, existing := a.internalActorTypes.GetAndDel(actorType)
+	if !existing {
+		return nil
+	}
+
+	log.Debugf("Unregistered internal actor type '%s'", actorType)
+
 	return nil
 }
 

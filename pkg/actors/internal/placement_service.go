@@ -35,6 +35,7 @@ type PlacementService interface {
 	WaitUntilReady(ctx context.Context) error
 	LookupActor(ctx context.Context, req LookupActorRequest) (LookupActorResponse, error)
 	AddHostedActorType(actorType string, idleTimeout time.Duration) error
+	DeleteHostedActorType(actorType string) error
 	ReportActorDeactivation(ctx context.Context, actorType, actorID string) error
 
 	SetHaltActorFns(haltFn HaltActorFn, haltAllFn HaltAllActorsFn)

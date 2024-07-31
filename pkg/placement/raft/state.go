@@ -200,6 +200,23 @@ func (s *DaprHostMemberState) MemberCountInNamespace(ns string) int {
 	return len(n.Members)
 }
 
+func (s *DaprHostMemberState) HasMember(ns, hostName, appID string) bool {
+	s.lock.RLock()
+	defer s.lock.RUnlock()
+
+	n, ok := s.data.Namespace[ns]
+	if !ok {
+		return false
+	}
+
+	m, ok := n.Members[hostName]
+	if !ok {
+		return false
+	}
+
+	return m.AppID == appID && m.Name == hostName
+}
+
 // UpsertRequired checks if the newly reported data matches the saved state, or needs to be updated
 func (s *DaprHostMemberState) UpsertRequired(ns string, new *placementv1pb.Host) bool {
 	s.lock.RLock()
@@ -210,8 +227,12 @@ func (s *DaprHostMemberState) UpsertRequired(ns string, new *placementv1pb.Host)
 		return true // If the member doesn't exist, we need to upsert
 	}
 	if m, ok := n.Members[new.GetName()]; ok {
+		newE := new.GetEntities()
+		if newE == nil {
+			newE = []string{}
+		}
 		// If all attributes match, no upsert is required
-		return !(m.AppID == new.GetId() && m.Name == new.GetName() && cmp.Equal(m.Entities, new.GetEntities()))
+		return !(m.AppID == new.GetId() && m.Name == new.GetName() && cmp.Equal(m.Entities, newE))
 	}
 
 	return true
@@ -332,22 +353,32 @@ func (s *DaprHostMemberState) clone() *DaprHostMemberState {
 
 // caller should hold Lock.
 func (s *DaprHostMemberState) updateHashingTables(host *DaprHostMember) {
-	if _, ok := s.data.Namespace[host.Namespace]; !ok {
+	ns, ok := s.data.Namespace[host.Namespace]
+
+	if !ok {
 		s.data.Namespace[host.Namespace] = &daprNamespace{
 			Members:         make(map[string]*DaprHostMember),
 			hashingTableMap: make(map[string]*hashing.Consistent),
 		}
+		ns = s.data.Namespace[host.Namespace]
 	}
+
 	for _, e := range host.Entities {
-		if s.data.Namespace[host.Namespace].hashingTableMap == nil {
-			s.data.Namespace[host.Namespace].hashingTableMap = make(map[string]*hashing.Consistent)
+		if ns.hashingTableMap == nil {
+			ns.hashingTableMap = make(map[string]*hashing.Consistent)
 		}
 
-		if _, ok := s.data.Namespace[host.Namespace].hashingTableMap[e]; !ok {
-			s.data.Namespace[host.Namespace].hashingTableMap[e] = hashing.NewConsistentHash(s.config.replicationFactor)
+		if _, ok := ns.hashingTableMap[e]; !ok {
+			ns.hashingTableMap[e] = hashing.NewConsistentHash(s.config.replicationFactor)
 		}
 
-		s.data.Namespace[host.Namespace].hashingTableMap[e].Add(host.Name, host.AppID, 0)
+		ns.hashingTableMap[e].Add(host.Name, host.AppID, 0)
+	}
+
+	if len(host.Entities) == 0 && ns.hashingTableMap != nil {
+		for _, v := range ns.hashingTableMap {
+			v.Remove(host.Name)
+		}
 	}
 }
 
@@ -383,7 +414,8 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 	ns, ok := s.data.Namespace[host.Namespace]
 	if !ok {
 		s.data.Namespace[host.Namespace] = &daprNamespace{
-			Members: make(map[string]*DaprHostMember),
+			Members:         make(map[string]*DaprHostMember),
+			hashingTableMap: make(map[string]*hashing.Consistent),
 		}
 		ns = s.data.Namespace[host.Namespace]
 	}
@@ -446,7 +478,10 @@ func (s *DaprHostMemberState) removeMember(host *DaprHostMember) bool {
 }
 
 func (s *DaprHostMemberState) isActorHost(host *DaprHostMember) bool {
-	return len(host.Entities) > 0
+	if len(host.Entities) == 0 && !s.HasMember(host.Namespace, host.Name, host.AppID) {
+		return false
+	}
+	return true
 }
 
 // caller should hold Lock.

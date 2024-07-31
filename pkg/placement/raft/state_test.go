@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 func TestNewDaprHostMemberState(t *testing.T) {
@@ -171,6 +173,36 @@ func TestUpsertMemberNonActorHost(t *testing.T) {
 	// act
 	updated := s.upsertMember(testMember)
 	require.False(t, updated)
+}
+
+func TestUpsertMemberEmptyEntities(t *testing.T) {
+	s := newDaprHostMemberState(DaprHostMemberStateConfig{
+		replicationFactor: 10,
+		minAPILevel:       0,
+		maxAPILevel:       100,
+	})
+
+	testMember := &DaprHostMember{
+		Name:      "127.0.0.1:8080",
+		Namespace: "ns1",
+		AppID:     "FakeID",
+		Entities:  []string{"a", "b"},
+		UpdatedAt: 100,
+	}
+
+	updated := s.upsertMember(testMember)
+	require.True(t, updated)
+
+	testMember = &DaprHostMember{
+		Name:      "127.0.0.1:8080",
+		Namespace: "ns1",
+		AppID:     "FakeID",
+		Entities:  []string{},
+		UpdatedAt: 100,
+	}
+
+	updated = s.upsertMember(testMember)
+	require.True(t, updated)
 }
 
 func TestUpdateHashingTable(t *testing.T) {
@@ -397,4 +429,257 @@ func TestUpdateAPILevel(t *testing.T) {
 
 		require.Equal(t, uint32(20), s.data.APILevel)
 	})
+}
+
+func TestDaprHostMemberState_UpsertRequired(t *testing.T) {
+	type fields struct {
+		data DaprHostMemberStateData
+	}
+	type args struct {
+		ns  string
+		new *placementv1pb.Host
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   bool
+	}{
+		{
+			name: "yes - basic",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  []string{"a", "b", "c"},
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  []string{"a", "b"},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "no - basic",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  []string{"a", "b"},
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  []string{"a", "b"},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "yes - set empty",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  []string{"a", "b", "c"},
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  []string{},
+				},
+			},
+			want: true,
+		},
+		{
+			name: "no - set empty",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  []string{},
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  []string{},
+				},
+			},
+			want: false,
+		},
+		{
+			name: "no - set empty nil",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  []string{},
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  nil,
+				},
+			},
+			want: false,
+		},
+		{
+			name: "no - set empty nil 2",
+			fields: fields{
+				data: DaprHostMemberStateData{
+					Namespace: map[string]*daprNamespace{
+						"ns": {
+							Members: map[string]*DaprHostMember{
+								"m1": {
+									Name:      "m1",
+									AppID:     "app1",
+									Namespace: "ns",
+									Entities:  nil,
+								},
+							},
+						},
+					},
+				},
+			},
+			args: args{
+				ns: "ns",
+				new: &placementv1pb.Host{
+					Name:      "m1",
+					Id:        "app1",
+					Namespace: "ns",
+					Entities:  []string{},
+				},
+			},
+			want: true,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &DaprHostMemberState{
+				data: tt.fields.data,
+			}
+			if got := s.UpsertRequired(tt.args.ns, tt.args.new); got != tt.want {
+				t.Errorf("DaprHostMemberState.UpsertRequired() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestHasMember(t *testing.T) {
+	// Initialize the state
+	state := &DaprHostMemberState{}
+	state.data.Namespace = make(map[string]*daprNamespace)
+
+	// Add a namespace and a member
+	state.data.Namespace["namespace1"] = &daprNamespace{
+		Members: map[string]*DaprHostMember{
+			"member1": {Name: "member1", AppID: "app1"},
+		},
+	}
+
+	tests := []struct {
+		name     string
+		ns       string
+		host     *placementv1pb.Host
+		expected bool
+	}{
+		{
+			name:     "Namespace does not exist",
+			ns:       "nonexistent",
+			host:     &placementv1pb.Host{Name: "member1", Id: "app1"},
+			expected: false,
+		},
+		{
+			name:     "Member does not exist",
+			ns:       "namespace1",
+			host:     &placementv1pb.Host{Name: "member2", Id: "app1", Namespace: "ns1"},
+			expected: false,
+		},
+		{
+			name:     "Member exists with matching details",
+			ns:       "namespace1",
+			host:     &placementv1pb.Host{Name: "member1", Id: "app1", Namespace: "ns1"},
+			expected: true,
+		},
+		{
+			name:     "Member exists with non-matching details",
+			ns:       "namespace1",
+			host:     &placementv1pb.Host{Name: "member1", Id: "app2", Namespace: "ns1"},
+			expected: false,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			result := state.HasMember(tt.ns, tt.host.GetName(), tt.host.GetId())
+			require.Equal(t, tt.expected, result)
+		})
+	}
 }
