@@ -320,12 +320,12 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 			default:
 				reqCtx := context.Background()
 				derr := a.Actors().DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
-					Name:      in.Name,
-					ActorType: in.ActorType,
-					ActorID:   in.ActorId,
+					Name:      in.GetName(),
+					ActorType: in.GetActorType(),
+					ActorID:   in.GetActorId(),
 				})
 				if derr != nil {
-					a.logger.Errorf("Failed to delete actor reminder: %s. %s", in.Name, derr.Error())
+					a.logger.Errorf("Failed to delete actor reminder: %s. %s", in.GetName(), derr.Error())
 				}
 			}
 		}()

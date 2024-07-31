@@ -181,12 +181,12 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 			default:
 				reqCtx := context.Background()
 				derr := s.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
-					Name:      job.Name,
+					Name:      job.GetName(),
 					ActorType: actor.GetType(),
 					ActorID:   actor.GetId(),
 				})
 				if derr != nil {
-					log.Errorf("Failed to delete actor reminder: %s. %s", job.Name, derr.Error())
+					log.Errorf("Failed to delete actor reminder: %s. %s", job.GetName(), derr.Error())
 				}
 			}
 		}()

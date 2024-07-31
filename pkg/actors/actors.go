@@ -28,7 +28,6 @@ import (
 
 	"github.com/alphadose/haxmap"
 	"github.com/cenkalti/backoff/v4"
-	"github.com/dapr/dapr/pkg/messages"
 	"github.com/google/uuid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -46,6 +45,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -551,14 +551,14 @@ func (a *actorsRuntime) Call(ctx context.Context, req *internalv1pb.InternalInvo
 			go func() {
 				select {
 				case <-ctx.Done():
-					log.Debugf("Context canceled, stopping reminder deletion: %s", req.Actor.GetActorKey())
+					log.Debugf("Context canceled, stopping reminder deletion: %s", req.GetActor().GetActorKey())
 					return
 				default:
 					reqCtx := context.Background()
 					derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
-						Name:      req.Actor.GetActorKey(),
-						ActorType: req.Actor.GetActorType(),
-						ActorID:   req.Actor.GetActorId(),
+						Name:      req.GetActor().GetActorKey(),
+						ActorType: req.GetActor().GetActorType(),
+						ActorID:   req.GetActor().GetActorId(),
 					})
 					if derr != nil {
 						log.Errorf("Failed to delete reminder. %s", derr.Error())
@@ -1150,7 +1150,6 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 						return
 					}
 				}()
-
 			} else {
 				log.Errorf("Error executing timer for internal actor '%s': %v", reminder.Key(), err)
 			}
