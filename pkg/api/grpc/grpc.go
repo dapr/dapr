@@ -184,14 +184,14 @@ func (a *api) PublishEvent(ctx context.Context, in *runtimev1pb.PublishEventRequ
 
 	if !rawPayload {
 		span := diagUtils.SpanFromContext(ctx)
-		corID, traceState := diag.TraceIDAndStateFromSpan(span)
+		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
 
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.Universal.AppID(),
 			Topic:           in.GetTopic(),
 			DataContentType: in.GetDataContentType(),
 			Data:            body,
-			TraceID:         corID,
+			TraceID:         traceID,
 			TraceState:      traceState,
 			Pubsub:          in.GetPubsubName(),
 		}, in.GetMetadata())
@@ -398,7 +398,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 		if !rawPayload {
 			// Extract trace context from context.
 			_, childSpan := diag.StartGRPCProducerSpanChildFromParent(ctx, span, "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1/")
-			corID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
+			traceID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
 
 			// For multiple events in a single bulk call traceParent is different for each event.
 			// Populate W3C traceparent to cloudevent envelope
@@ -409,7 +409,7 @@ func (a *api) BulkPublishEventAlpha1(ctx context.Context, in *runtimev1pb.BulkPu
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
-				TraceID:         corID,
+				TraceID:         traceID,
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)
@@ -971,8 +971,8 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	outboxEnabled := a.outbox.Enabled(in.GetStoreName())
 	if outboxEnabled {
 		span := diagUtils.SpanFromContext(ctx)
-		corID, traceState := diag.TraceIDAndStateFromSpan(span)
-		ops, err := a.outbox.PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), corID, traceState)
+		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
+		ops, err := a.outbox.PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), traceID, traceState)
 		if err != nil {
 			nerr := apierrors.PubSubOutbox(a.AppID(), err)
 			apiServerLogger.Debug(nerr)
