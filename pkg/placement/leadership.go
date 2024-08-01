@@ -52,18 +52,13 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 		return err
 	}
 	var (
-		leaderCh                    = raft.LeaderCh()
-		leaderLoopRunning           atomic.Bool
-		loopNotRunning              = make(chan struct{})
-		leaderCtx, leaderLoopCancel = context.WithCancel(ctx)
+		leaderCh          = raft.LeaderCh()
+		leaderLoopRunning atomic.Bool
+		loopNotRunning    = make(chan struct{})
 	)
 	close(loopNotRunning)
 
-	defer func() {
-		leaderLoopCancel()
-		<-loopNotRunning
-	}()
-
+	var leaderLoopCancel context.CancelFunc
 	for {
 		select {
 		case <-ctx.Done():
@@ -72,13 +67,22 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 			if isLeader {
 				if leaderLoopRunning.CompareAndSwap(false, true) {
 					loopNotRunning = make(chan struct{})
+					leaderCtx, leaderLoopCancel := context.WithCancel(ctx)
 					p.wg.Add(1)
 					go func() {
-						defer p.wg.Done()
-						defer close(loopNotRunning)
-						defer leaderLoopRunning.Store(false)
+						defer func() {
+							p.wg.Done()
+							close(loopNotRunning)
+							leaderLoopRunning.Store(false)
+							leaderLoopCancel()
+							leaderLoopCancel = nil
+						}()
+
 						log.Info("Cluster leadership acquired")
-						p.leaderLoop(leaderCtx)
+						err := p.leaderLoop(leaderCtx)
+						if err != nil {
+							log.Error("placement leader loop failed", "error", err)
+						}
 					}()
 				}
 			} else {
@@ -90,7 +94,10 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 				}
 
 				log.Info("Shutting down leader loop")
-				leaderLoopCancel()
+				if leaderLoopCancel != nil {
+					leaderLoopCancel()
+					leaderLoopCancel = nil
+				}
 				select {
 				case <-loopNotRunning:
 				case <-ctx.Done():
