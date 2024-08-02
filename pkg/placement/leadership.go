@@ -75,6 +75,12 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 							p.wg.Done()
 							close(loopNotRunning)
 							leaderLoopRunning.Store(false)
+							// If the placement server is restarted without receiving a leadership change event,
+							// the leaderLoopCancel will not be nil, so we need to cancel it here.
+							if leaderLoopCancel != nil {
+								leaderLoopCancel()
+								leaderLoopCancel = nil
+							}
 						}()
 
 						log.Info("Cluster leadership acquired")
