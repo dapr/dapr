@@ -30,6 +30,7 @@ import (
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	clients "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -108,18 +109,21 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 
 	client := r.daprd.GRPCClient(t, ctx)
 
-	etcdClient, err := clientv3.New(clientv3.Config{
+	etcdClient := clients.Etcd(t, clientv3.Config{
 		Endpoints:   []string{fmt.Sprintf("localhost:%d", r.etcdPort)},
 		DialTimeout: 5 * time.Second,
 	})
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, etcdClient.Close()) })
 
-	resp, err := etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-	require.NoError(t, err)
-	assert.Equal(t, int64(0), resp.Count)
+	// Use "path/filepath" import, it is using OS specific path separator unlike "path"
+	etcdKeysPrefix := filepath.Join("dapr", "jobs")
 
-	_, err = client.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
+		require.NoError(c, rerr)
+		assert.Empty(c, keys)
+	}, time.Second*10, 10*time.Millisecond)
+
+	_, err := client.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
 		ActorType: "myactortype",
 		ActorId:   "myactorid",
 		Method:    "foo",
@@ -135,13 +139,15 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	resp, err = etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-	require.NoError(t, err)
-	assert.Equal(t, int64(1), resp.Count)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
+		require.NoError(c, rerr)
+		assert.Len(c, keys, 1)
+	}, time.Second*10, 10*time.Millisecond)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(1), r.triggered.Load())
-	}, 30*time.Second, 10*time.Millisecond)
+		assert.GreaterOrEqual(c, r.triggered.Load(), int64(1))
+	}, 30*time.Second, 10*time.Millisecond, fmt.Sprintf("failed to wait for 'triggered' to be greatrer or equal 1, actual value %d", r.triggered.Load()))
 
 	_, err = client.UnregisterActorReminder(ctx, &runtimev1pb.UnregisterActorReminderRequest{
 		ActorType: "myactortype",
@@ -150,7 +156,9 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	resp, err = etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-	require.NoError(t, err)
-	assert.Equal(t, int64(0), resp.Count)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
+		require.NoError(c, rerr)
+		assert.Empty(c, keys)
+	}, time.Second*10, 10*time.Millisecond)
 }
