@@ -59,6 +59,7 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 	close(loopNotRunning)
 
 	var leaderLoopCancel context.CancelFunc
+	var leaderCtx context.Context
 	for {
 		select {
 		case <-ctx.Done():
@@ -67,7 +68,7 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 			if isLeader {
 				if leaderLoopRunning.CompareAndSwap(false, true) {
 					loopNotRunning = make(chan struct{})
-					leaderCtx, leaderLoopCancel := context.WithCancel(ctx)
+					leaderCtx, leaderLoopCancel = context.WithCancel(ctx)
 					p.wg.Add(1)
 					go func() {
 						defer func() {
