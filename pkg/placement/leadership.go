@@ -75,8 +75,6 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 							p.wg.Done()
 							close(loopNotRunning)
 							leaderLoopRunning.Store(false)
-							leaderLoopCancel()
-							leaderLoopCancel = nil
 						}()
 
 						log.Info("Cluster leadership acquired")
