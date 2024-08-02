@@ -193,7 +193,7 @@ func (n *failover) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, msgCnt, 1)
 	}, 10*time.Second, 10*time.Millisecond)
 
-	// Stop the placement leader and don't reconnect one fo the hosts in ns2. Check that:
+	// Stop the placement leader and don't reconnect one of the hosts in ns2. Check that:
 	// - a new leader has been elected
 	// - dissemination message hasn't been sent to host1, because there haven't been changes in ns1
 	// - dissemination message has been sent to host2, because host 3 hasn't reconnected, thus
