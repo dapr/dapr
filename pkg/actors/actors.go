@@ -114,6 +114,8 @@ type Actors interface {
 	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 	// ExecuteLocalOrRemoteActorReminder executes a reminder on a local or remote actor.
 	ExecuteLocalOrRemoteActorReminder(ctx context.Context, reminder *CreateReminderRequest) error
+
+	UsingSchedulerReminders() bool
 }
 
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
@@ -125,6 +127,7 @@ type actorsRuntime struct {
 	appChannel         channel.AppChannel
 	placement          internal.PlacementService
 	placementEnabled   bool
+	schedulerReminders bool
 	grpcConnectionFn   GRPCConnectionFn
 	actorsConfig       Config
 	timers             internal.TimersProvider
@@ -147,6 +150,10 @@ type actorsRuntime struct {
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
+}
+
+func (a *actorsRuntime) UsingSchedulerReminders() bool {
+	return a.schedulerReminders
 }
 
 // ActorsOpts contains options for NewActors.
@@ -234,6 +241,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 			return nil, fmt.Errorf("scheduler reminders are enabled, but no Scheduler clients are available")
 		}
 		log.Debug("Using Scheduler service for reminders.")
+		a.schedulerReminders = true
 		a.actorsReminders = reminders.NewScheduler(reminders.SchedulerOptions{
 			Clients:   opts.Config.SchedulerClients,
 			Namespace: opts.Config.Namespace,
@@ -1062,25 +1070,15 @@ func (a *actorsRuntime) executeReminder(reminder *internal.Reminder) bool {
 		if errors.Is(err, ErrReminderCanceled) {
 			// The handler is explicitly canceling the timer
 			log.Debug("Reminder " + reminder.ActorKey() + " was canceled by the actor")
-
-			go func() {
-				select {
-				case <-ctx.Done():
-					log.Debugf("Context canceled, stopping reminder deletion: %s", reminder.Key())
-					return
-				default:
-					reqCtx := context.Background()
-					derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
-						Name:      reminder.Name,
-						ActorType: reminder.ActorType,
-						ActorID:   reminder.ActorID,
-					})
-					if derr != nil {
-						log.Errorf("Error deleting reminder named %s: %s", reminder.Name, derr.Error())
-					}
-					return
-				}
-			}()
+			reqCtx := context.Background()
+			derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
+				Name:      reminder.Name,
+				ActorType: reminder.ActorType,
+				ActorID:   reminder.ActorID,
+			})
+			if derr != nil {
+				log.Errorf("Error deleting reminder named %s: %s", reminder.Name, derr.Error())
+			}
 			return false
 		}
 		log.Errorf("Error invoking reminder on actor %s: %s", reminder.ActorKey(), err)
@@ -1112,7 +1110,6 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 		}
 	} else {
 		log.Debugf("Executing reminder for internal actor '%s'", reminder.Key())
-
 		err = internalAct.InvokeReminder(ctx, reminder, md)
 		if err != nil {
 			log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
@@ -1232,24 +1229,15 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 	})
 	if err != nil {
 		if errors.Is(err, ErrReminderCanceled) {
-			go func() {
-				select {
-				case <-ctx.Done():
-					log.Debugf("Context canceled, stopping reminder deletion: %s", reminder.Key())
-					return
-				default:
-					reqCtx := context.Background()
-					derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
-						Name:      reminder.Name,
-						ActorType: reminder.ActorType,
-						ActorID:   reminder.ActorID,
-					})
-					if derr != nil {
-						log.Errorf("Error deleting reminder named %s: %s", reminder.Name, derr.Error())
-					}
-					return
-				}
-			}()
+			reqCtx := context.Background()
+			derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
+				Name:      reminder.Name,
+				ActorType: reminder.ActorType,
+				ActorID:   reminder.ActorID,
+			})
+			if derr != nil {
+				log.Errorf("Error deleting reminder named %s: %s", reminder.Name, derr.Error())
+			}
 		} else {
 			log.Errorf("Error executing %s for actor %s: %v", logName, reminder.Key(), err)
 		}

@@ -22,6 +22,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/microsoft/durabletask-go/api"
@@ -141,7 +142,11 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 	switch {
 	case err == nil:
 		// We delete the reminder on success and on non-recoverable errors.
+		wg := sync.WaitGroup{}
+		wg.Add(1)
 		go func() {
+			defer wg.Done()
+
 			select {
 			case <-ctx.Done():
 				return
@@ -158,6 +163,10 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 				return
 			}
 		}()
+		a.config.activityRemindersMutex.Lock()
+		delete(a.config.activityActorReminders, a.actorID)
+		a.config.activityRemindersMutex.Unlock()
+		wg.Wait() //wait for the deletion from the db
 
 		return nil
 	case errors.Is(err, context.DeadlineExceeded):
@@ -172,24 +181,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 	default: // Other error
 		wfLogger.Errorf("%s: execution failed with a non-recoverable error: %v", a.actorID, err)
 		// TODO: Reply with a failure - this requires support from durabletask-go to produce TaskFailure results
-		go func() {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				reqCtx := context.Background()
-				derr := a.actorRuntime.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
-					Name:      reminder.Name,
-					ActorType: reminder.ActorType,
-					ActorID:   reminder.ActorID,
-				})
-				if derr != nil {
-					wfLogger.Errorf("Error deleting activity actor reminder named %s: %s", reminder.Name, derr.Error())
-				}
-				return
-			}
-		}()
-		return nil
+		return actors.ErrReminderCanceled
 	}
 }
 
@@ -398,6 +390,13 @@ func (a *activityActor) createReliableReminder(ctx context.Context, data any) er
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
+
+	if a.actorRuntime.UsingSchedulerReminders() == true {
+		a.config.activityRemindersMutex.Lock()
+		a.config.activityActorReminders[a.actorID] = reminderName
+		a.config.activityRemindersMutex.Unlock()
+	}
+
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   a.actorID,

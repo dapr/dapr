@@ -25,6 +25,7 @@ import (
 	"io"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -161,26 +162,15 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 	var re *recoverableError
 	switch {
 	case err == nil:
-		go func() {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				reqCtx := context.Background()
-				derr := wf.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
-					Name:      reminder.Name,
-					ActorType: reminder.ActorType,
-					ActorID:   reminder.ActorID,
-				})
-				if derr != nil {
-					wfLogger.Errorf("Error deleting workflow reminder named %s: %s", reminder.Name, derr.Error())
-				}
-				return
-			}
-		}()
 		return nil
 	case errors.Is(err, context.DeadlineExceeded):
-		wfLogger.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", wf.actorID, err)
+		// Note this might be due to the workflow being done and the durable task killing the ctx
+		if len(wf.state.Inbox) == 0 {
+			wfLogger.Warnf("Workflow actor '%s': execution ctx deadline exceeded, the workflow execution is complete: '%v'", wf.actorID, err)
+		} else {
+			wfLogger.Debugf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", wf.actorID, err)
+		}
+
 		return nil
 	case errors.Is(err, context.Canceled):
 		wfLogger.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", wf.actorID, err)
@@ -189,25 +179,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 		wfLogger.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", wf.actorID, re)
 		return nil
 	default: // Other error
-		wfLogger.Errorf("Workflow actor '%s': execution failed with a non-recoverable error: %v", wf.actorID, err)
-		go func() {
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				reqCtx := context.Background()
-				derr := wf.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
-					Name:      reminder.Name,
-					ActorType: reminder.ActorType,
-					ActorID:   reminder.ActorID,
-				})
-				if derr != nil {
-					wfLogger.Errorf("Error deleting workflow reminder named %s: %s", reminder.Name, derr.Error())
-				}
-				return
-			}
-		}()
-		return nil
+		return actors.ErrReminderCanceled
 	}
 }
 
@@ -577,26 +549,6 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 			// Workflow execution failed with recoverable error
 			executionStatus = diag.StatusRecoverable
 			return newRecoverableError(errExecutionAborted)
-		} else {
-			// delete reminder data bc completed
-			go func() {
-				select {
-				case <-ctx.Done():
-					return
-				default:
-					reqCtx := context.Background()
-
-					derr := wf.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
-						Name:      reminder.Name,
-						ActorType: reminder.ActorType,
-						ActorID:   reminder.ActorID,
-					})
-					if derr != nil {
-						wfLogger.Errorf("Error deleting wf actor reminder named %s: %s", reminder.Name, derr.Error())
-					}
-					return
-				}
-			}()
 		}
 	}
 	wfLogger.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", wf.actorID, runtimeState.RuntimeStatus().String(), wi.InstanceID)
@@ -744,6 +696,69 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 	}
 	if runtimeState.IsCompleted() {
 		wfLogger.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", wf.actorID, runtimeState.RuntimeStatus().String(), workflowName)
+
+		// scheduler logic does not hit the reminders/statestore.go code, so we need to manually
+		// purge all the reminders that get created for a workflow. This includes the workflow actor
+		// reminders along with the activity actor reminders.
+		if wf.actors.UsingSchedulerReminders() == true {
+			wg := sync.WaitGroup{}
+			wf.config.workflowRemindersMutex.Lock()
+			reminderNames, ok := wf.config.workflowActorReminders[wf.actorID]
+			if ok {
+				for _, reminderName := range reminderNames {
+					wg.Add(1)
+					go func(name string) {
+						defer wg.Done()
+						select {
+						case <-ctx.Done():
+							return
+						default:
+							reqCtx := context.Background()
+							derr := wf.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
+								Name:      name,
+								ActorType: wf.config.workflowActorType,
+								ActorID:   wf.actorID,
+							})
+							if derr != nil {
+								wfLogger.Errorf("Error deleting workflow reminder named %s: %s", name, derr.Error())
+							}
+						}
+					}(reminderName)
+				}
+				// Remove the entry for the specific workflow actor ID running this
+				delete(wf.config.workflowActorReminders, wf.actorID)
+			}
+			wf.config.workflowRemindersMutex.Unlock()
+
+			wf.config.activityRemindersMutex.Lock()
+			for actorID, actReminderName := range wf.config.activityActorReminders {
+				if actorID == wf.actorID {
+					wg.Add(1)
+					go func(name string, id string) {
+						defer wg.Done()
+						select {
+						case <-ctx.Done():
+							return
+						default:
+							reqCtx := context.Background()
+							derr := wf.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
+								Name:      name,
+								ActorType: wf.config.activityActorType,
+								ActorID:   id,
+							})
+							if derr != nil {
+								wfLogger.Errorf("Error deleting activity reminder named %s: %s", name, derr.Error())
+							}
+						}
+					}(actReminderName, actorID)
+					// Remove the entry for the specific workflow actor ID running this
+					delete(wf.config.activityActorReminders, actorID)
+				}
+			}
+			wf.config.activityRemindersMutex.Unlock()
+			// ensure the deletion of reminders for the workflow actor instance running this code
+			wg.Wait()
+		}
 	}
 	return nil
 }
@@ -839,6 +854,12 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, namePrefix 
 	dataEnc, err := json.Marshal(data)
 	if err != nil {
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
+	}
+
+	if wf.actors.UsingSchedulerReminders() == true {
+		wf.config.workflowRemindersMutex.Lock()
+		wf.config.workflowActorReminders[wf.actorID] = append(wf.config.workflowActorReminders[wf.actorID], reminderName)
+		wf.config.workflowRemindersMutex.Unlock()
 	}
 
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{

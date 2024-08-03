@@ -207,7 +207,7 @@ func (r *statestore) CreateReminder(ctx context.Context, req *internal.CreateRem
 	}
 
 	// Start the reminder
-	return r.startReminder(reminder, stop)
+	return r.startReminder(ctx, reminder, stop)
 }
 
 func (r *statestore) Close() error {
@@ -334,7 +334,7 @@ func (r *statestore) evaluateReminders(ctx context.Context) {
 					stop := make(chan struct{})
 					_, exists := r.activeReminders.LoadOrStore(reminderKey, stop)
 					if !exists {
-						err := r.startReminder(&rmd, stop)
+						err := r.startReminder(ctx, &rmd, stop)
 						if err != nil {
 							log.Errorf("Error starting reminder %s: %v", reminderKey, err)
 						} else {
@@ -991,10 +991,10 @@ func constructCompositeKey(keys ...string) string {
 	return strings.Join(keys, daprSeparator)
 }
 
-func (r *statestore) startReminder(reminder *internal.Reminder, stopChannel chan struct{}) error {
+func (r *statestore) startReminder(ctx context.Context, reminder *internal.Reminder, stopChannel chan struct{}) error {
 	reminderKey := reminder.Key()
 
-	track, err := r.getReminderTrack(context.TODO(), reminderKey)
+	track, err := r.getReminderTrack(ctx, reminderKey)
 	if err != nil {
 		return fmt.Errorf("error getting reminder track: %w", err)
 	}
@@ -1056,11 +1056,11 @@ func (r *statestore) startReminder(reminder *internal.Reminder, stopChannel chan
 
 			_, exists = r.activeReminders.Load(reminderKey)
 			if exists {
-				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
+				err = r.updateReminderTrack(ctx, reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
 				if err != nil {
 					log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
 				}
-				track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
+				track, gErr := r.getReminderTrack(ctx, reminderKey)
 				if gErr != nil {
 					log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
 				} else {
@@ -1088,7 +1088,7 @@ func (r *statestore) startReminder(reminder *internal.Reminder, stopChannel chan
 		}
 
 	delete:
-		err = r.DeleteReminder(context.TODO(), internal.DeleteReminderRequest{
+		err = r.DeleteReminder(ctx, internal.DeleteReminderRequest{
 			Name:      reminder.Name,
 			ActorID:   reminder.ActorID,
 			ActorType: reminder.ActorType,
