@@ -166,7 +166,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 		a.config.activityRemindersMutex.Lock()
 		delete(a.config.activityActorReminders, a.actorID)
 		a.config.activityRemindersMutex.Unlock()
-		wg.Wait() //wait for the deletion from the db
+		wg.Wait() // wait for the deletion from the db
 
 		return nil
 	case errors.Is(err, context.DeadlineExceeded):

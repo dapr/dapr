@@ -55,8 +55,8 @@ type actorsBackendConfig struct {
 	activityActorType      string
 	workflowActorReminders map[string][]string
 	activityActorReminders map[string]string
-	activityRemindersMutex sync.Mutex
-	workflowRemindersMutex sync.Mutex
+	activityRemindersMutex *sync.Mutex
+	workflowRemindersMutex *sync.Mutex
 }
 
 // NewActorsBackendConfig creates a new workflow engine configuration
@@ -66,12 +66,13 @@ func NewActorsBackendConfig(appID string) actorsBackendConfig {
 		workflowActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType: actors.InternalActorTypePrefix + utils.GetNamespaceOrDefault(defaultNamespace) + utils.DotDelimiter + appID + utils.DotDelimiter + ActivityNameLabelKey,
 		// below is used when Scheduler is used for Reminders under the hood
-
+		// used for scheduler reminder purging
 		// stores the actor id as the key, reminder names as the val
-		workflowActorReminders: map[string][]string{}, // used for scheduler reminder purging
-
+		workflowActorReminders: map[string][]string{},
+		workflowRemindersMutex: &sync.Mutex{},
 		// stores the actorID id as the key, reminder name as the val
-		activityActorReminders: map[string]string{}, // used for scheduler reminder purging
+		activityActorReminders: map[string]string{},
+		activityRemindersMutex: &sync.Mutex{},
 	}
 }
 
