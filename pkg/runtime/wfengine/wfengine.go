@@ -194,7 +194,7 @@ func (wfe *WorkflowEngine) WaitForWorkflowEngineReady(ctx context.Context) {
 		return
 	}
 
-	waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Second)
+	waitCtx, waitCancel := context.WithTimeout(ctx, 20*time.Second)
 	defer waitCancel()
 
 	select {

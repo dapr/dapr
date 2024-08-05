@@ -713,7 +713,8 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 						case <-ctx.Done():
 							return
 						default:
-							reqCtx := context.Background()
+							reqCtx, reqCancel := context.WithTimeout(context.Background(), 10*time.Second)
+							defer reqCancel()
 							derr := wf.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
 								Name:      name,
 								ActorType: wf.config.workflowActorType,
@@ -740,7 +741,8 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 						case <-ctx.Done():
 							return
 						default:
-							reqCtx := context.Background()
+							reqCtx, reqCancel := context.WithTimeout(context.Background(), 10*time.Second)
+							defer reqCancel()
 							derr := wf.actors.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
 								Name:      name,
 								ActorType: wf.config.activityActorType,

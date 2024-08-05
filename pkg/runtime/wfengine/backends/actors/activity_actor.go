@@ -142,7 +142,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 	switch {
 	case err == nil:
 		// We delete the reminder on success and on non-recoverable errors.
-		if a.actorRuntime.UsingSchedulerReminders() {
+		if a.actorRuntime.UsingSchedulerReminders() == true {
 			wg := sync.WaitGroup{}
 			wg.Add(1)
 			go func() {

@@ -1072,7 +1072,8 @@ func (a *actorsRuntime) executeReminder(reminder *internal.Reminder) bool {
 		if errors.Is(err, ErrReminderCanceled) {
 			// The handler is explicitly canceling the timer
 			log.Debug("Reminder " + reminder.ActorKey() + " was canceled by the actor")
-			reqCtx := context.Background()
+			reqCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
 			derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
 				Name:      reminder.Name,
 				ActorType: reminder.ActorType,
@@ -1231,7 +1232,8 @@ func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *
 	})
 	if err != nil {
 		if errors.Is(err, ErrReminderCanceled) {
-			reqCtx := context.Background()
+			reqCtx, cancel := context.WithCancel(ctx)
+			defer cancel()
 			derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
 				Name:      reminder.Name,
 				ActorType: reminder.ActorType,

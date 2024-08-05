@@ -135,7 +135,7 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64) {
 
 	delete(nsPool.conns, id)
 
-	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
+	log.Debugf("Removing a Sidecar connection from Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
 	for i := 0; i < len(appIDConns); i++ {
 		if appIDConns[i] == id {
 			appIDConns = append(appIDConns[:i], appIDConns[i+1:]...)
