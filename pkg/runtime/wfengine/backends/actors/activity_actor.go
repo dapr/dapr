@@ -131,9 +131,6 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 
 	state, _ := a.loadActivityState(ctx)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
-	if state == nil {
-		return errors.New("no activity state found")
-	}
 
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
 	defer cancelTimeout()
