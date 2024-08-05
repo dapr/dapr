@@ -93,6 +93,8 @@ type ActorRuntime interface {
 }
 
 // Actors allow calling into virtual actors as well as actor state management.
+//
+//nolint:interfacebloat
 type Actors interface {
 	// Call an actor.
 	Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
@@ -114,7 +116,7 @@ type Actors interface {
 	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 	// ExecuteLocalOrRemoteActorReminder executes a reminder on a local or remote actor.
 	ExecuteLocalOrRemoteActorReminder(ctx context.Context, reminder *CreateReminderRequest) error
-
+	// UsingScheduledReminders returns a bool indicating if the actor implementation is using the scheduler service
 	UsingSchedulerReminders() bool
 }
 
