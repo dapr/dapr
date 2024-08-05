@@ -142,33 +142,36 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 	switch {
 	case err == nil:
 		// We delete the reminder on success and on non-recoverable errors.
-		wg := sync.WaitGroup{}
-		wg.Add(1)
-		go func() {
-			defer wg.Done()
+		if a.actorRuntime.UsingSchedulerReminders() {
+			wg := sync.WaitGroup{}
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
 
-			select {
-			case <-ctx.Done():
-				return
-			default:
-				reqCtx := context.Background()
-				derr := a.actorRuntime.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
-					Name:      reminder.Name,
-					ActorType: reminder.ActorType,
-					ActorID:   reminder.ActorID,
-				})
-				if derr != nil {
-					wfLogger.Errorf("Error deleting activity reminder named %s: %s", reminder.Name, derr.Error())
+				select {
+				case <-ctx.Done():
+					return
+				default:
+					reqCtx := context.Background()
+					derr := a.actorRuntime.DeleteReminder(reqCtx, &actors.DeleteReminderRequest{
+						Name:      reminder.Name,
+						ActorType: reminder.ActorType,
+						ActorID:   reminder.ActorID,
+					})
+					if derr != nil {
+						wfLogger.Errorf("Error deleting activity reminder named %s: %s", reminder.Name, derr.Error())
+					}
+					return
 				}
-				return
-			}
-		}()
-		a.config.activityRemindersMutex.Lock()
-		delete(a.config.activityActorReminders, a.actorID)
-		a.config.activityRemindersMutex.Unlock()
-		wg.Wait() // wait for the deletion from the db
-
-		return nil
+			}()
+			a.config.activityRemindersMutex.Lock()
+			delete(a.config.activityActorReminders, a.actorID)
+			a.config.activityRemindersMutex.Unlock()
+			wg.Wait() // wait for the deletion from the db
+			return nil
+		} else {
+			return actors.ErrReminderCanceled
+		}
 	case errors.Is(err, context.DeadlineExceeded):
 		wfLogger.Warnf("%s: execution of '%s' timed-out and will be retried later: %v", a.actorID, reminder.Name, err)
 		return nil
