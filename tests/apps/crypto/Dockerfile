@@ -24,7 +24,7 @@ RUN go mod download
 COPY *.go /app/
 RUN go build -o app .
 
-FROM gcr.io/distroless/base-nossl:nonroot
+FROM gcr.io/distroless/static:nonroot
 WORKDIR /
 COPY --from=build_env /app/app /
 CMD ["/app"]
