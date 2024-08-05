@@ -793,7 +793,7 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, namePrefix 
 		Data:      dataEnc,
 		DueTime:   delay.String(),
 		Name:      reminderName,
-		Period:    wf.reminderInterval.String(),
+		Period:    fmt.Sprintf("R2/PT%vS", int(wf.reminderInterval.Seconds())),
 	})
 }
 

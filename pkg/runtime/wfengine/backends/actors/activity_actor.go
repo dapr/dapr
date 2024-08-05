@@ -364,12 +364,13 @@ func (a *activityActor) createReliableReminder(ctx context.Context, data any) er
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
+
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   a.actorID,
 		Data:      dataEnc,
 		DueTime:   "0s",
 		Name:      reminderName,
-		Period:    a.reminderInterval.String(),
+		Period:    fmt.Sprintf("R2/PT%vS", int(a.reminderInterval.Seconds())),
 	})
 }
