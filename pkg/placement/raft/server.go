@@ -395,10 +395,6 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 	return resp.(bool), nil
 }
 
-func (s *Server) GetID() string {
-	return s.id
-}
-
 func (s *Server) GetRaftBind() string {
 	return s.raftBind
 }
