@@ -24,6 +24,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -88,20 +90,26 @@ func (u *unregister) Run(t *testing.T, ctx context.Context) {
 
 	gclient := u.daprd.GRPCClient(t, ctx)
 
-	_, err := gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: "myactortype",
-		ActorId:   "myactorid",
-		Name:      "xyz",
-		DueTime:   time.Now().Format(time.RFC3339),
-		Period:    "PT1S",
-	})
-	require.NoError(t, err)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, err := gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+			ActorType: "myactortype",
+			ActorId:   "myactorid",
+			Name:      "xyz",
+			DueTime:   time.Now().Format(time.RFC3339),
+			Period:    "PT1S",
+		})
+		if err != nil {
+			st, ok := status.FromError(err)
+			require.True(t, ok, "expected a gRPC status error, got %v", err)
+			require.Equal(t, codes.Unavailable, st.Code(), "the only allowed error is 'Unavailable', but got %v", err)
+		}
+	}, time.Second*10, time.Millisecond*50)
 
 	assert.EventuallyWithT(t, func(ct *assert.CollectT) {
 		assert.GreaterOrEqual(ct, int(u.methodcalled.Load()), 2)
 	}, time.Second*5, time.Millisecond*10)
 
-	_, err = gclient.UnregisterActorReminder(ctx, &rtv1.UnregisterActorReminderRequest{
+	_, err := gclient.UnregisterActorReminder(ctx, &rtv1.UnregisterActorReminderRequest{
 		ActorType: "myactortype",
 		ActorId:   "myactorid",
 		Name:      "xyz",
