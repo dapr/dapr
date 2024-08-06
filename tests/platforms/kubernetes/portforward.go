@@ -103,6 +103,7 @@ func (p *PodPortForwarder) Connect(name string, targetPorts ...int) ([]int, erro
 		readyChannel: p.readyChannel,
 	})
 	if err != nil {
+		log.Printf("error starting port forwarding: %+v", err)
 		return nil, err
 	}
 

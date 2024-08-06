@@ -86,6 +86,7 @@ func TestMain(m *testing.M) {
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE": actorType,
 			},
+			EnableProfiling: false, // Enable profiling when running locally
 		},
 		{
 			AppName:           appNameScheduler,
@@ -121,8 +122,21 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 		perf.WithPayload("{}"),
 	)
 
-	// Get the ingress external url of test app
-	testAppURL := tr.Platform.AcquireAppExternalURL(appName)
+	var testAppURL string
+	if tr.Platform.IsLocalRun() {
+		ports, err := tr.Platform.PortForwardToApp(appName, 3000)
+		require.NoError(t, err)
+
+		t.Logf("Ports: %v", ports)
+
+		appPort := ports[0]
+		testAppURL = "localhost:" + strconv.Itoa(appPort)
+	} else {
+		testAppURL = tr.Platform.AcquireAppExternalURL(appName)
+	}
+
+	tr.Platform.ProfileApp(appName, p.TestDuration)
+
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available

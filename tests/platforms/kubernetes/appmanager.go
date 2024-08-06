@@ -17,8 +17,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"golang.org/x/exp/maps"
+	"io"
 	"log"
+	"net/http"
 	"os"
+	"path/filepath"
 	"time"
 
 	appsv1 "k8s.io/api/apps/v1"
@@ -63,6 +67,8 @@ type AppManager struct {
 	forwarder *PodPortForwarder
 
 	logPrefix string
+
+	portForwardingMap map[int]int
 }
 
 // PodInfo holds information about a given pod.
@@ -74,10 +80,11 @@ type PodInfo struct {
 // NewAppManager creates AppManager instance.
 func NewAppManager(client *KubeClient, namespace string, app AppDescription) *AppManager {
 	return &AppManager{
-		client:    client,
-		namespace: namespace,
-		app:       app,
-		ctx:       context.Background(),
+		client:            client,
+		namespace:         namespace,
+		app:               app,
+		ctx:               context.Background(),
+		portForwardingMap: make(map[int]int),
 	}
 }
 
@@ -480,6 +487,24 @@ func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 
 // DoPortForwarding performs port forwarding for given podname to access test apps in the cluster.
 func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int, error) {
+	// check if port forwarding is already done
+	// build a list of ports to forward
+	portsToForward := make([]int, 0)
+	portsAlreadyForwarded := make([]int, 0)
+	for _, port := range targetPorts {
+		if forwardedPort, found := m.portForwardingMap[port]; !found {
+			portsToForward = append(portsToForward, port)
+		} else {
+			portsAlreadyForwarded = append(portsAlreadyForwarded, forwardedPort)
+		}
+	}
+
+	// to return the already forwarded ports to avoid duplicate port forwarding
+	if len(portsToForward) == 0 {
+		return portsAlreadyForwarded, nil
+	}
+	targetPorts = portsToForward
+
 	podClient := m.client.Pods(m.namespace)
 	// Filter only 'testapp=appName' labeled Pods
 	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
@@ -501,7 +526,14 @@ func (m *AppManager) DoPortForwarding(podName string, targetPorts ...int) ([]int
 		}
 	}
 
-	return m.forwarder.Connect(name, targetPorts...)
+	ports, err := m.forwarder.Connect(name, targetPorts...)
+	if err != nil {
+		return nil, err
+	}
+	for i, port := range ports {
+		m.portForwardingMap[targetPorts[i]] = port
+	}
+	return maps.Values(m.portForwardingMap), err
 }
 
 // ScaleDeploymentReplica scales the deployment.
@@ -847,4 +879,50 @@ func (m *AppManager) GetTotalRestarts() (int, error) {
 	}
 
 	return restartCount, nil
+}
+
+func (m *AppManager) GetProfilingInfo(port int, duration time.Duration) error {
+	if m.app.EnableProfiling {
+		durationInSeconds := int64(duration.Seconds())
+		log.Printf("Starting Profiling for app %s for duration of %d seconds", m.app.AppName, durationInSeconds)
+
+		reqURL := fmt.Sprintf("http://127.0.0.1:%d/debug/pprof/profile?seconds=%d", port, durationInSeconds)
+		client := &http.Client{
+			Transport: http.DefaultTransport.(*http.Transport).Clone(),
+		}
+
+		get, err := client.Get(reqURL)
+		if err != nil {
+			log.Printf("failed to get profiling info from %s. Error was %+v", reqURL, err)
+			return err
+		}
+		if get.StatusCode != 200 {
+			errorMsg := fmt.Sprintf("failed to get profiling info from %s, Bad status code: %d", reqURL, get.StatusCode)
+			log.Println(errorMsg)
+			return fmt.Errorf(errorMsg)
+		}
+
+		body, err := io.ReadAll(get.Body)
+		if err != nil {
+			log.Printf("failed to read profiling info response from %s. error: %s", reqURL, err)
+			return err
+		}
+
+		filename := filepath.Join(m.logPrefix, fmt.Sprintf("profile.%s.%s.out", m.app.AppName, time.Now().Format("2006-01-02-15-04-05")))
+		fh, err := os.Create(filename)
+		if err != nil {
+			log.Printf("error creating profiling file %s. error: %s", filename, err)
+			return err
+		}
+		defer fh.Close()
+
+		bytesLen, err := fh.Write(body)
+		if err != nil {
+			log.Printf("error writing profiling to %s. error: %s", filename, err)
+			return err
+		}
+
+		log.Printf("profiling data saved %d bytes to %s", bytesLen, filename)
+	}
+	return nil
 }
