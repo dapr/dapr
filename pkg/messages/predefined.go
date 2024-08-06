@@ -75,13 +75,6 @@ var (
 	ErrOutboundHealthNotReady = APIError{"dapr outbound is not ready", "ERR_OUTBOUND_HEALTH_NOT_READY", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrHealthAppIDNotMatch    = APIError{"dapr app-id does not match", "ERR_HEALTH_APPID_NOT_MATCH", http.StatusInternalServerError, grpcCodes.Internal}
 
-	// Secrets.
-	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", "ERR_SECRET_STORES_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}
-	ErrSecretStoreNotFound      = APIError{"failed finding secret store with key %s", "ERR_SECRET_STORE_NOT_FOUND", http.StatusUnauthorized, grpcCodes.InvalidArgument}
-	ErrSecretPermissionDenied   = APIError{"access denied by policy to get %q from %q", "ERR_PERMISSION_DENIED", http.StatusForbidden, grpcCodes.PermissionDenied}
-	ErrSecretGet                = APIError{"failed getting secret with key %s from secret store %s: %s", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
-	ErrBulkSecretGet            = APIError{"failed getting secrets from secret store %s: %v", "ERR_SECRET_GET", http.StatusInternalServerError, grpcCodes.Internal}
-
 	// Crypto.
 	ErrCryptoProvidersNotConfigured = APIError{"crypto providers not configured", "ERR_CRYPTO_PROVIDERS_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrCryptoProviderNotFound       = APIError{"crypto provider %s not found", "ERR_CRYPTO_PROVIDER_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
