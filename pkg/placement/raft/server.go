@@ -344,6 +344,10 @@ func (s *Server) raftStorePath() string {
 	return s.raftLogStorePath
 }
 
+func (s *Server) GetID() string {
+	return s.id
+}
+
 // FSM returns fsm.
 func (s *Server) FSM() *FSM {
 	return s.fsm
@@ -389,10 +393,6 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 
 	resp := future.Response()
 	return resp.(bool), nil
-}
-
-func (s *Server) GetID() string {
-	return s.id
 }
 
 func (s *Server) GetRaftBind() string {
