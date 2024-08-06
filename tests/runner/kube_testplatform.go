@@ -16,12 +16,13 @@ package runner
 import (
 	"context"
 	"fmt"
-	"golang.org/x/exp/slices"
 	"log"
 	"os"
 	"strconv"
 	"strings"
 	"time"
+
+	"golang.org/x/exp/slices"
 
 	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -275,7 +276,7 @@ func (c *KubeTestPlatform) appMemoryLimit() string {
 func (c *KubeTestPlatform) IsLocalRun() bool {
 	isLocal := os.Getenv("TEST_LOCAL_RUN")
 	if isLocal != "" {
-		return strings.ToLower(isLocal) == "true"
+		return strings.EqualFold(isLocal, "true")
 	}
 	return false
 }

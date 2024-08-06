@@ -17,13 +17,14 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"golang.org/x/exp/maps"
 	"io"
 	"log"
 	"net/http"
 	"os"
 	"path/filepath"
 	"time"
+
+	"golang.org/x/exp/maps"
 
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
@@ -896,7 +897,7 @@ func (m *AppManager) GetProfilingInfo(port int, duration time.Duration) error {
 			log.Printf("failed to get profiling info from %s. Error was %+v", reqURL, err)
 			return err
 		}
-		if get.StatusCode != 200 {
+		if get.StatusCode != http.StatusOK {
 			errorMsg := fmt.Sprintf("failed to get profiling info from %s, Bad status code: %d", reqURL, get.StatusCode)
 			log.Println(errorMsg)
 			return fmt.Errorf(errorMsg)
@@ -907,6 +908,8 @@ func (m *AppManager) GetProfilingInfo(port int, duration time.Duration) error {
 			log.Printf("failed to read profiling info response from %s. error: %s", reqURL, err)
 			return err
 		}
+
+		defer get.Body.Close()
 
 		filename := filepath.Join(m.logPrefix, fmt.Sprintf("profile.%s.%s.out", m.app.AppName, time.Now().Format("2006-01-02-15-04-05")))
 		fh, err := os.Create(filename)
