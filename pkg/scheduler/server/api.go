@@ -57,7 +57,9 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		Payload:  req.GetJob().GetData(),
 	}
 
-	err = s.cron.Add(ctx, jobName, job)
+	reqCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err = s.cron.Add(reqCtx, jobName, job)
 	if err != nil {
 		log.Errorf("error scheduling job %s: %s", req.GetName(), err)
 		return nil, err
@@ -82,7 +84,9 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequ
 		return nil, err
 	}
 
-	err = s.cron.Delete(ctx, jobName)
+	reqCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	err = s.cron.Delete(reqCtx, jobName)
 	if err != nil {
 		log.Errorf("error deleting job %s: %s", jobName, err)
 		return nil, err
@@ -106,8 +110,10 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 	if err != nil {
 		return nil, err
 	}
-
-	job, err := s.cron.Get(ctx, jobName)
+	
+	reqCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	job, err := s.cron.Get(reqCtx, jobName)
 	if err != nil {
 		log.Errorf("error getting job %s: %s", jobName, err)
 		return nil, err
