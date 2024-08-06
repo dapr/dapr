@@ -45,8 +45,8 @@ const (
 	appNameScheduler   = "perf-actor-reminder-scheduler-service"
 
 	// Target for the QPS - Temporary
-	targetQPS          float64 = 35
-	targetSchedulerQPS float64 = 3500
+	targetQPS          float64 = 30
+	targetSchedulerQPS float64 = 3000
 
 	// Target for the QPS to trigger reminders.
 	targetTriggerQPS          float64 = 1600
