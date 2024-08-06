@@ -110,7 +110,7 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 	if err != nil {
 		return nil, err
 	}
-	
+
 	reqCtx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 	job, err := s.cron.Get(reqCtx, jobName)
