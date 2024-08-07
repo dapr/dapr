@@ -126,6 +126,10 @@ type MockActors struct {
 	mock.Mock
 }
 
+func (_m *MockActors) UsingSchedulerReminders() bool {
+	return false // by default, need preview feature
+}
+
 func (_m *MockActors) Entities() []string {
 	return nil
 }
@@ -364,6 +368,10 @@ func (_m *MockActors) GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRu
 
 type FailingActors struct {
 	Failure daprt.Failure
+}
+
+func (f *FailingActors) UsingSchedulerReminders() bool {
+	return false // by default, need preview feature
 }
 
 func (f *FailingActors) Entities() []string {
