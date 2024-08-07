@@ -155,7 +155,9 @@ func TestWriteCloser(t *testing.T) {
 		strValue, ok := value.(string)
 		assert.True(t, ok)
 
-		assert.Equal(t, "helloworld", strValue[:10])
+		if ok {
+			assert.Equal(t, "helloworld", strValue[:10])
+		}
 
 		require.NoError(t, w.Close())
 		n, err = pr1.Read(resp)
