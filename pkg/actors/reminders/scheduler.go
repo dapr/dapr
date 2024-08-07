@@ -224,8 +224,9 @@ func (s *scheduler) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 			},
 		},
 	}
-
-	_, err := s.clients.Next().DeleteJob(ctx, internalDeleteJobReq)
+	reqCtx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_, err := s.clients.Next().DeleteJob(reqCtx, internalDeleteJobReq)
 	if err != nil {
 		log.Errorf("Error deleting reminder job %s due to: %s", req.Name, err)
 	}

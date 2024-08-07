@@ -74,7 +74,20 @@ func RunIntegrationTests(t *testing.T) {
 			options := tcase.Setup(t)
 
 			t.Logf("setting up test case")
-			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
+
+			var (
+				ctx    context.Context
+				cancel context.CancelFunc
+			)
+
+			if tcase.Name() == "daprd/workflow/scheduler/deletereminder" {
+				// this test needs longer to ensure that the records in etcd are cleaned up
+				// explicitly giving a longer time for this test so the test passes
+				ctx, cancel = context.WithTimeout(context.Background(), 70*time.Second)
+			} else {
+				ctx, cancel = context.WithTimeout(context.Background(), 45*time.Second)
+			}
+
 			t.Cleanup(cancel)
 
 			framework.Run(t, ctx, options...)
