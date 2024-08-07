@@ -16,6 +16,7 @@ package http
 
 import (
 	"errors"
+	"fmt"
 	"net/http"
 	"strings"
 	"testing"
@@ -724,6 +725,36 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 403, resp.StatusCode)
+		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+	})
+
+	t.Run("Invoke returns error - 500 NO TARGET_APP_ID ", func(t *testing.T) {
+		apiPath := "fakeMethod"
+		fakeData := []byte("fakeData")
+
+		mockDirectMessaging.Calls = nil // reset call count
+
+		mockDirectMessaging.
+			On(
+				"Invoke",
+				mock.MatchedBy(matchContextInterface),
+				mock.MatchedBy(func(b string) bool {
+					return b == "fakeAppID"
+				}),
+				mock.AnythingOfType("*v1.InvokeMethodRequest"),
+			).
+			Return(nil, errors.New("NO TARGET_APP_ID")).
+			Once()
+
+		// act
+		// resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil, "dapr-app-id", "")
+		// Is this the correct way of creating a request with no target app id? doRequest instead of DoRequest is used
+		resp := fakeServer.doRequest(fmt.Sprintf("dapr-app-id:%s", ""), "POST", apiPath, fakeData, nil)
+
+		// assert
+		// can't invoke even once because of the missing target app id. Commented it to confirm
+		// mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
+		assert.Equal(t, 404, resp.StatusCode)
 		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
 	})
 
