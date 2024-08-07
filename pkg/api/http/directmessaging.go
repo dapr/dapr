@@ -29,11 +29,12 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
-	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	kitErrors "github.com/dapr/kit/errors"
 )
 
 // directMessagingSpanData is the data passed by the onDirectMessage endpoint to the tracing middleware
@@ -100,7 +101,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 
 	targetID, invokeMethodName := findTargetIDAndMethod(reqPath, r.Header)
 	if targetID == "" {
-		respondWithError(w, messages.ErrDirectInvokeNoAppID)
+		respondWithError(w, apierrors.Invoke("invoke").WithAppError("", nil).NoAppID())
 		return
 	}
 
@@ -115,7 +116,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 
 	verb := strings.ToUpper(r.Method)
 	if a.directMessaging == nil {
-		respondWithError(w, messages.ErrDirectInvokeNotReady)
+		respondWithError(w, apierrors.Invoke("invoke").WithAppError(targetID, nil).NotReady())
 		return
 	}
 
@@ -158,12 +159,15 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		if rErr != nil {
 			// Allowlist policies that are applied on the callee side can return a Permission Denied error.
 			// For everything else, treat it as a gRPC transport error
-			apiErr := messages.ErrDirectInvoke.WithFormat(targetID, rErr)
-			invokeErr := invokeError{
-				statusCode: apiErr.HTTPCode(),
-				msg:        apiErr.JSONErrorValue(),
-			}
 
+			apiErr := apierrors.Invoke("invoke").WithAppError(targetID, rErr).DirectInvoke()
+
+			// getting the kit Error equivalent of the above error to be able to get its status code & msg
+			apiKitErr, _ := kitErrors.FromError(apiErr)
+			invokeErr := invokeError{
+				statusCode: apiKitErr.HTTPStatusCode(),
+				msg:        apiKitErr.JSONErrorValue(),
+			}
 			if status.Code(rErr) == codes.PermissionDenied {
 				invokeErr.statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
 			}
@@ -286,7 +290,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		respondWithData(w, invokeErr.statusCode, invokeErr.msg)
 		return
 	default:
-		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, err))
+		respondWithError(w, apierrors.Invoke("invoke").WithAppError(targetID, err).DirectInvoke())
 		return
 	}
 }
