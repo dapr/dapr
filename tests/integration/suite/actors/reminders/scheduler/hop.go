@@ -120,7 +120,7 @@ func (h *hop) Run(t *testing.T, ctx context.Context) {
 				DueTime:   "0s",
 				Data:      []byte("reminderdata"),
 			})
-			require.NoError(t, err)
+			require.NoError(c, err)
 		}, time.Second*10, time.Millisecond*50)
 	}
 
