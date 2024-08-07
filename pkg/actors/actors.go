@@ -340,7 +340,9 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		a.placement.Start(ctx)
+		if err := a.placement.Start(ctx); err != nil {
+			log.Errorf("Placement failed to start due to: %s", err.Error())
+		}
 	}()
 
 	log.Infof("Actor runtime started. Idle timeout: %v", a.actorsConfig.Config.ActorIdleTimeout)
@@ -1151,14 +1153,19 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 
 	// If the reminder was cancelled, delete it.
 	if errors.Is(err, ErrReminderCanceled) {
-		log.Debugf("Deleting reminder which was cancelled: %s", reminder.Key())
-		reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-		defer cancel()
-		return a.DeleteReminder(reqCtx, &DeleteReminderRequest{
-			Name:      reminder.Name,
-			ActorType: reminder.ActorType,
-			ActorID:   reminder.ActorID,
-		})
+		go func() {
+			log.Debugf("Deleting reminder which was cancelled: %s", reminder.Key())
+			reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+			defer cancel()
+			if derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
+				Name:      reminder.Name,
+				ActorType: reminder.ActorType,
+				ActorID:   reminder.ActorID,
+			}); derr != nil {
+				log.Errorf("Error deleting reminder %s: %s", reminder.Key(), derr)
+			}
+		}()
+		return ErrReminderCanceled
 	}
 
 	return err

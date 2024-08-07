@@ -111,6 +111,8 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	if opts.listenAddress != nil {
 		args = append(args, "--listen-address="+*opts.listenAddress)
+	} else {
+		args = append(args, "--listen-address=localhost")
 	}
 	if opts.sentry != nil {
 		taFile := filepath.Join(t.TempDir(), "ca.pem")

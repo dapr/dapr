@@ -24,7 +24,7 @@ param enableArm bool = false
 param enableWindows bool = false
 
 @description('VM size to use for Linux nodes (agent pool)')
-param linuxVMSize string = 'Standard_DS2_v2'
+param linuxVMSize string = 'Standard_D2s_v5'
 
 @description('VM size to use for Windows nodes, if enabled')
 param windowsVMSize string = 'Standard_DS3_v2'
