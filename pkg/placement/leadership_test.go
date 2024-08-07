@@ -97,7 +97,12 @@ func TestMonitorLeadership(t *testing.T) {
 	}, time.Second*15, 10*time.Millisecond, "raft server two was not set as leader in time")
 
 	// Transfer leadership back to the original leader
-	underlyingRaftServers[secondServerID].LeadershipTransferToServer(hashicorpRaft.ServerID(raftServers[leaderIdx].GetID()), hashicorpRaft.ServerAddress(raftServers[leaderIdx].GetRaftBind()))
+	var future hashicorpRaft.Future
+	require.Eventually(t, func() bool {
+		future = underlyingRaftServers[secondServerID].LeadershipTransferToServer(hashicorpRaft.ServerID(raftServers[leaderIdx].GetID()), hashicorpRaft.ServerAddress(raftServers[leaderIdx].GetRaftBind()))
+		return future.Error() == nil
+	}, time.Second*15, 500*time.Millisecond, "raft leadership transfer timeout")
+
 	require.Eventually(t, func() bool {
 		return raftServers[leaderIdx].IsLeader() && placementServers[leaderIdx].hasLeadership.Load()
 	}, time.Second*15, 10*time.Millisecond, "server was not properly re-elected in time")
