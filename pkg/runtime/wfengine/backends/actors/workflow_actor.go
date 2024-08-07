@@ -787,13 +787,18 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, namePrefix 
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 
+	period := wf.reminderInterval.String()
+	if wf.actors.UsingSchedulerReminders() {
+		period = fmt.Sprintf("R2/PT%vS", int(wf.reminderInterval.Seconds()))
+	}
+
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: wf.config.workflowActorType,
 		ActorID:   wf.actorID,
 		Data:      dataEnc,
 		DueTime:   delay.String(),
 		Name:      reminderName,
-		Period:    fmt.Sprintf("R2/PT%vS", int(wf.reminderInterval.Seconds())),
+		Period:    period,
 	})
 }
 

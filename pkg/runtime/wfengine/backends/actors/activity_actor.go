@@ -365,12 +365,17 @@ func (a *activityActor) createReliableReminder(ctx context.Context, data any) er
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 
+	period := a.reminderInterval.String()
+	if a.actorRuntime.UsingSchedulerReminders() {
+		period = fmt.Sprintf("R2/PT%vS", int(a.reminderInterval.Seconds()))
+	}
+
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   a.actorID,
 		Data:      dataEnc,
 		DueTime:   "0s",
 		Name:      reminderName,
-		Period:    fmt.Sprintf("R2/PT%vS", int(a.reminderInterval.Seconds())),
+		Period:    period,
 	})
 }
