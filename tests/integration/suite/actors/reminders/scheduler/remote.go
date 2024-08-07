@@ -156,7 +156,7 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*5, time.Millisecond*10)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(t, r.actorIDs, r.methodcalled.Load().([]string))
+		assert.ElementsMatch(c, r.actorIDs, r.methodcalled.Load().([]string))
 	}, time.Second*10, time.Millisecond*10)
 
 	assert.GreaterOrEqual(t, r.daprd1called.Load(), uint64(0))
