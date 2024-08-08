@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.22.4
+go 1.22.5
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -367,6 +367,7 @@ require (
 	github.com/riferrei/srclient v0.6.0 // indirect
 	github.com/rs/zerolog v1.28.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.0.0 // indirect
+	github.com/sashabaranov/go-openai v1.27.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.13.0+incompatible // indirect
@@ -493,3 +494,5 @@ replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
+
+replace github.com/dapr/components-contrib => ../cont-dapr

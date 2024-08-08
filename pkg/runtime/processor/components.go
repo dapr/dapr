@@ -122,7 +122,7 @@ func (p *Processor) WaitForEmptyComponentQueue() {
 }
 
 func (p *Processor) processComponentAndDependents(ctx context.Context, comp componentsapi.Component) error {
-	log.Debug("Loading component: " + comp.LogName())
+	log.Debug("Loading component: " + comp.LogName() + "type: " + comp.Spec.Type)
 	res := p.preprocessOneComponent(ctx, &comp)
 	if res.unreadyDependency != "" {
 		p.pendingComponentDependents[res.unreadyDependency] = append(p.pendingComponentDependents[res.unreadyDependency], comp)

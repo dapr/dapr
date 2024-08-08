@@ -62,6 +62,7 @@ const (
 	Lock                          ComponentType         = "Lock"
 	Pubsub                        ComponentType         = "Pubsub"
 	Crypto                        ComponentType         = "Crypto"
+	Conversation                  ComponentType         = "Conversation"
 	Secretstore                   ComponentType         = "Secretstore"
 	Statestore                    ComponentType         = "Statestore"
 	Inbound                       ComponentDirection    = "Inbound"

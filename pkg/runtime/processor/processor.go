@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor/binding"
 	"github.com/dapr/dapr/pkg/runtime/processor/configuration"
+	"github.com/dapr/dapr/pkg/runtime/processor/conversation"
 	"github.com/dapr/dapr/pkg/runtime/processor/crypto"
 	"github.com/dapr/dapr/pkg/runtime/processor/lock"
 	"github.com/dapr/dapr/pkg/runtime/processor/middleware"
@@ -227,6 +228,11 @@ func New(opts Options) *Processor {
 				Meta:         opts.Meta,
 				RegistryHTTP: opts.Registry.HTTPMiddlewares(),
 				HTTP:         opts.MiddlewareHTTP,
+			}),
+			components.CategoryConversation: conversation.New(conversation.Options{
+				Meta:     opts.Meta,
+				Registry: opts.Registry.Conversations(),
+				Store:    opts.ComponentStore,
 			}),
 		},
 	}
