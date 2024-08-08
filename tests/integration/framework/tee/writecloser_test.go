@@ -149,7 +149,15 @@ func TestWriteCloser(t *testing.T) {
 			require.Fail(t, "timeout waiting for write to complete")
 		}
 
-		assert.Equal(t, "helloworld", pr2resp.Load().(string)[:10])
+		value := pr2resp.Load()
+		assert.NotNil(t, value)
+
+		strValue, ok := value.(string)
+		assert.True(t, ok)
+
+		if ok {
+			assert.Equal(t, "helloworld", strValue[:10])
+		}
 
 		require.NoError(t, w.Close())
 		n, err = pr1.Read(resp)

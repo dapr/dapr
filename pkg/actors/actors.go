@@ -93,6 +93,8 @@ type ActorRuntime interface {
 }
 
 // Actors allow calling into virtual actors as well as actor state management.
+//
+//nolint:interfacebloat
 type Actors interface {
 	// Call an actor.
 	Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
@@ -114,6 +116,8 @@ type Actors interface {
 	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 	// ExecuteLocalOrRemoteActorReminder executes a reminder on a local or remote actor.
 	ExecuteLocalOrRemoteActorReminder(ctx context.Context, reminder *CreateReminderRequest) error
+	// UsingScheduledReminders returns a bool indicating if the actor implementation is using the scheduler service
+	UsingSchedulerReminders() bool
 }
 
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
@@ -125,6 +129,7 @@ type actorsRuntime struct {
 	appChannel         channel.AppChannel
 	placement          internal.PlacementService
 	placementEnabled   bool
+	schedulerReminders bool
 	grpcConnectionFn   GRPCConnectionFn
 	actorsConfig       Config
 	timers             internal.TimersProvider
@@ -234,6 +239,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 			return nil, fmt.Errorf("scheduler reminders are enabled, but no Scheduler clients are available")
 		}
 		log.Debug("Using Scheduler service for reminders.")
+		a.schedulerReminders = true
 		a.actorsReminders = reminders.NewScheduler(reminders.SchedulerOptions{
 			Clients:   opts.Config.SchedulerClients,
 			Namespace: opts.Config.Namespace,
@@ -269,6 +275,10 @@ func (a *actorsRuntime) isActorLocallyHosted(ctx context.Context, actorType stri
 		return true, lar.Address
 	}
 	return false, lar.Address
+}
+
+func (a *actorsRuntime) UsingSchedulerReminders() bool {
+	return a.schedulerReminders
 }
 
 func (a *actorsRuntime) haveCompatibleStorage() bool {
