@@ -228,8 +228,8 @@ github.com/Shopify/toxiproxy/v2 v2.1.6-0.20210914104332-15ea381dcdae/go.mod h1:/
 github.com/StackExchange/wmi v0.0.0-20190523213315-cbe66965904d/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
 github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46 h1:5sXbqlSomvdjlRbWyNqkPsJ3Fg+tQZCbgeX1VGljbQY=
 github.com/StackExchange/wmi v0.0.0-20210224194228-fe8f1750fd46/go.mod h1:3eOhrUMpNV+6aFIbp5/iudMxNCF27Vw2OZgy4xEx0Fg=
-github.com/TheLandGame/components-contrib v0.0.0-20230601105430-44ee9766bbfb h1:02fAv2TPejh7WKHq+1vTpX/l+6Zl9XzJSG+WhpsCi4M=
-github.com/TheLandGame/components-contrib v0.0.0-20230601105430-44ee9766bbfb/go.mod h1:U0cjxEEbZR7sNN9i1ZdWnkIOZP8iRSvoyF2gRhBaHfc=
+github.com/TheLandGame/components-contrib v0.0.0-20240808135807-08bb7d22b671 h1:QWYCo7fh676cKR2LB+8KsNEKEk5UWqjhinPkiOTHVlw=
+github.com/TheLandGame/components-contrib v0.0.0-20240808135807-08bb7d22b671/go.mod h1:U0cjxEEbZR7sNN9i1ZdWnkIOZP8iRSvoyF2gRhBaHfc=
 github.com/VividCortex/gohistogram v1.0.0/go.mod h1:Pf5mBqqDxYaXu3hDrrU+w6nw50o/4+TcAqDqk/vUH7g=
 github.com/Workiva/go-datastructures v1.0.52/go.mod h1:Z+F2Rca0qCsVYDS8z7bAGm8f3UkzuWYS/oBZz5a7VVA=
 github.com/Workiva/go-datastructures v1.0.53 h1:J6Y/52yX10Xc5JjXmGtWoSSxs3mZnGSaq37xZZh7Yig=
