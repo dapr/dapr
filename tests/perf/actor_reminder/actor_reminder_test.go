@@ -83,11 +83,11 @@ func TestMain(m *testing.M) {
 			IngressEnabled:    true,
 			AppPort:           3000,
 			DaprCPULimit:      "4.0",
-			DaprCPURequest:    "0.1",
+			DaprCPURequest:    "1.0",
 			DaprMemoryLimit:   "2GiB",
 			DaprMemoryRequest: "250Mi",
 			AppCPULimit:       "4.0",
-			AppCPURequest:     "0.1",
+			AppCPURequest:     "1.0",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
 			AppEnv: map[string]string{
@@ -103,11 +103,11 @@ func TestMain(m *testing.M) {
 			IngressEnabled:    true,
 			AppPort:           3000,
 			DaprCPULimit:      "4.0",
-			DaprCPURequest:    "0.1",
+			DaprCPURequest:    "1.0",
 			DaprMemoryLimit:   "2GiB",
 			DaprMemoryRequest: "250Mi",
 			AppCPULimit:       "4.0",
-			AppCPURequest:     "0.1",
+			AppCPURequest:     "1.0",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
 			AppEnv: map[string]string{
@@ -526,7 +526,7 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 		triggeredCount, err = strconv.Atoi(strings.TrimSpace(string(resp)))
 		require.NoError(t, err)
 		assert.GreaterOrEqual(c, triggeredCount, reminderCountScheduler*repeatCount)
-	}, waitFor, 100*time.Millisecond, "expected to trigger %d reminders in less than %d seconds", reminderCountScheduler*repeatCount, waitFor.Seconds())
+	}, waitFor, 100*time.Millisecond, "expected to trigger %d reminders in less than %.1f seconds", reminderCountScheduler*repeatCount, waitFor.Seconds())
 	done = time.Since(start)
 
 	qps := float64(triggeredCount) / done.Seconds()
