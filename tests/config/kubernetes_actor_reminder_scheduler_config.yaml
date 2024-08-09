@@ -6,3 +6,5 @@ spec:
   features:
   - name: SchedulerReminders
     enabled: true
+  tracing:
+    samplingRate: '0'
