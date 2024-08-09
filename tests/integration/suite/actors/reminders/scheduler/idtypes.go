@@ -170,7 +170,7 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 				require.EventuallyWithT(t, func(c *assert.CollectT) {
 					invoke := fmt.Sprintf("%s/%s/%s/method/foo", daprdURL, i.actorDaprds[x].actorTypes[y].typename, i.actorDaprds[x].actorTypes[y].ids[z])
 					req, err := http.NewRequestWithContext(ctx, http.MethodPost, invoke, nil)
-					require.NoError(t, err)
+					require.NoError(c, err)
 					resp, err := client.Do(req)
 					//nolint:testifylint
 					if assert.NoError(c, err) {
