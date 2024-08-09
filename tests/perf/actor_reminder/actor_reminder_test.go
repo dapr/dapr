@@ -45,8 +45,8 @@ const (
 	appNameScheduler   = "perf-actor-reminder-scheduler-service"
 
 	// Target for the QPS - Temporary
-	targetQPS          float64 = 40
-	targetSchedulerQPS float64 = 2500
+	targetQPS          float64 = 30
+	targetSchedulerQPS float64 = 2000
 
 	// Reminders repetition count and interval, used to calculate the target trigger QPS
 	repeatCount           = 5
@@ -65,8 +65,8 @@ const (
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
-	dueTime          = 60
-	dueTimeScheduler = 60
+	dueTime          = 180
+	dueTimeScheduler = 180
 )
 
 var tr *runner.TestRunner
