@@ -26,8 +26,8 @@ import (
 )
 
 const (
-	kubeTknPath       = "/var/run/secrets/dapr.io/sentrytoken/token"
-	legacyKubeTknPath = "/var/run/secrets/kubernetes.io/serviceaccount/token"
+	kubeTknPath       = "/run/secrets/dapr.io/sentrytoken/token"
+	legacyKubeTknPath = "/run/secrets/kubernetes.io/serviceaccount/token"
 )
 
 var log = logger.NewLogger("dapr.security.token")

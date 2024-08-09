@@ -77,11 +77,11 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
           - name: dapr-trust-bundle
-            mountPath: /var/run/secrets/dapr.io/tls
+            mountPath: /run/secrets/dapr.io/tls
             readOnly: true
         {{- if .Values.global.mtls.mountSentryVolume }}
           - name: dapr-identity-token
-            mountPath: /var/run/secrets/dapr.io/sentrytoken
+            mountPath: /run/secrets/dapr.io/sentrytoken
         {{- end }}
         {{- with .Values.global.extraVolumeMounts.placement }}
           {{- toYaml . | nindent 10 }}
@@ -160,7 +160,7 @@ spec:
 {{- end }}
         - "--tls-enabled"
         - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
-        - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"
+        - "--trust-anchors-file=/run/secrets/dapr.io/tls/ca.crt"
         - "--sentry-address={{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}"
         - "--mode=kubernetes"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}

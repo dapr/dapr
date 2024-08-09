@@ -28,7 +28,7 @@ ports:
 ha: false
 
 cluster:
-  etcdDataDirPath: /var/run/data/dapr-scheduler
+  etcdDataDirPath: /var/lib/dapr/scheduler
   etcdDataDirWinPath: C:\\dapr-scheduler
   storageClassName: ""
   storageSize: 10Gi

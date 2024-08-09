@@ -141,7 +141,7 @@ spec:
 {{ toYaml .Values.resources | indent 10 }}
         volumeMounts:
           - name: credentials
-            mountPath: /var/run/secrets/dapr.io/credentials
+            mountPath: /run/secrets/dapr.io/credentials
             readOnly: true
         {{- with .Values.global.extraVolumeMounts.sentry }}
           {{- toYaml . | nindent 10 }}
