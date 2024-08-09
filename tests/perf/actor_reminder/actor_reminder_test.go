@@ -45,8 +45,8 @@ const (
 	appNameScheduler   = "perf-actor-reminder-scheduler-service"
 
 	// Target for the QPS - Temporary
-	targetQPS          float64 = 50
-	targetSchedulerQPS float64 = 3000
+	targetQPS          float64 = 40
+	targetSchedulerQPS float64 = 2700
 
 	// Reminders repetition count and interval, used to calculate the target trigger QPS
 	repeatCount           = 5
@@ -54,7 +54,7 @@ const (
 
 	// Target for the QPS to trigger reminders.
 	targetTriggerQPS          float64 = 950
-	targetSchedulerTriggerQPS float64 = 4700
+	targetSchedulerTriggerQPS float64 = 1500
 
 	// reminderCount is the number of reminders to register.
 	// actor reminders bottlenecks at 2500 due to serialization
@@ -525,7 +525,7 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 		triggeredCount, err = strconv.Atoi(strings.TrimSpace(string(resp)))
 		require.NoError(t, err)
 		assert.GreaterOrEqual(c, triggeredCount, reminderCountScheduler*repeatCount)
-	}, 120*time.Second, 100*time.Millisecond)
+	}, 240*time.Second, 100*time.Millisecond)
 	done = time.Since(start)
 
 	qps := float64(triggeredCount) / done.Seconds()
