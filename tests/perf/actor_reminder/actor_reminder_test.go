@@ -461,8 +461,8 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	require.NotEmpty(t, cleanupResponse)
 	t.Logf("reminders cleanup results: %s", string(cleanupResponse))
 
-	t.Logf("Waiting 5s after cleanup")
-	time.Sleep(5 * time.Second)
+	t.Logf("Waiting 30s after cleanup")
+	time.Sleep(30 * time.Second)
 
 	t.Logf("invoking actor reminder scheduler")
 	_, err = utils.HTTPGet(fmt.Sprintf("%s/actors/%s/abc/method/foo", testAppURL, actorTypeScheduler))
