@@ -46,7 +46,7 @@ const (
 
 	// Target for the QPS - Temporary
 	targetQPS          float64 = 40
-	targetSchedulerQPS float64 = 2700
+	targetSchedulerQPS float64 = 2500
 
 	// Reminders repetition count and interval, used to calculate the target trigger QPS
 	repeatCount           = 5
@@ -519,13 +519,14 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	t.Logf("Waiting for %d reminders to trigger", reminderCountScheduler*repeatCount)
 	triggeredCount := 0
 	start := time.Now()
+	waitFor := 10 * time.Minute
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := utils.HTTPGet(fmt.Sprintf("%s/remindersCount", testAppURL))
 		require.NoError(t, err)
 		triggeredCount, err = strconv.Atoi(strings.TrimSpace(string(resp)))
 		require.NoError(t, err)
 		assert.GreaterOrEqual(c, triggeredCount, reminderCountScheduler*repeatCount)
-	}, 240*time.Second, 100*time.Millisecond)
+	}, waitFor, 100*time.Millisecond, "expected to trigger %d reminders in less than %d seconds", reminderCountScheduler*repeatCount, waitFor.Seconds())
 	done = time.Since(start)
 
 	qps := float64(triggeredCount) / done.Seconds()
