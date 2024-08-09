@@ -15,7 +15,9 @@ package app
 
 import (
 	"context"
+	"fmt"
 	nethttp "net/http"
+	"strings"
 	"sync/atomic"
 	"testing"
 
@@ -34,7 +36,6 @@ func New(t *testing.T, fopts ...Option) *App {
 
 	opts := options{
 		subscribe:     "[]",
-		config:        "{}",
 		initialHealth: true,
 	}
 	for _, fopt := range fopts {
@@ -46,7 +47,7 @@ func New(t *testing.T, fopts ...Option) *App {
 
 	httpopts := []http.Option{
 		http.WithHandlerFunc("/dapr/config", func(w nethttp.ResponseWriter, r *nethttp.Request) {
-			w.Write([]byte(opts.config))
+			fmt.Fprintf(w, `{"entities":[%s]}`, strings.Join(opts.actorTypes, ","))
 		}),
 		http.WithHandlerFunc("/dapr/subscribe", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			w.Write([]byte(opts.subscribe))
