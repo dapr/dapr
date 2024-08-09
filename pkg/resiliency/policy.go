@@ -49,7 +49,7 @@ type PolicyDefinition struct {
 	log                       logger.Logger
 	name                      string
 	t                         time.Duration
-	r                         *retry.Config
+	r                         *Retry
 	cb                        *breaker.CircuitBreaker
 	addTimeoutActivatedMetric func()
 	addRetryActivatedMetric   func()
@@ -57,7 +57,7 @@ type PolicyDefinition struct {
 }
 
 // NewPolicyDefinition returns a PolicyDefinition object with the given parameters.
-func NewPolicyDefinition(log logger.Logger, name string, t time.Duration, r *retry.Config, cb *breaker.CircuitBreaker) *PolicyDefinition {
+func NewPolicyDefinition(log logger.Logger, name string, t time.Duration, r *Retry, cb *breaker.CircuitBreaker) *PolicyDefinition {
 	return &PolicyDefinition{
 		log:  log,
 		name: name,
@@ -217,6 +217,14 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				if rErr != nil && opts.Disposer != nil && !isZero(rRes) {
 					opts.Disposer(rRes)
 					rRes = zero
+				}
+				var cErr CodeError
+				if errors.As(rErr, &cErr) {
+					if def.r.statusCodeNeedRetry(cErr.StatusCode) {
+						return rRes, rErr
+					} else {
+						return rRes, backoff.Permanent(rErr)
+					}
 				}
 				return rRes, rErr
 			},
