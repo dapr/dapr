@@ -163,6 +163,10 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 		annotationObject["dapr.io/http-max-request-size"] = strconv.Itoa(appDesc.MaxRequestSizeMB)
 	}
 
+	if appDesc.EnableProfiling {
+		annotationObject["dapr.io/enable-profiling"] = "true"
+	}
+
 	return annotationObject
 }
 

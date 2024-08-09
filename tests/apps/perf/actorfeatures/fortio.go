@@ -96,6 +96,8 @@ func buildFortioArgs(params TestParameters) []string {
 			"-c", strconv.Itoa(params.ClientConnections),
 			"-t", params.TestDuration,
 			"-payload", params.Payload,
+			"-uniform",
+			"-nocatchup",
 		}
 	} else {
 		args = []string{
@@ -105,6 +107,8 @@ func buildFortioArgs(params TestParameters) []string {
 			"-c", strconv.Itoa(params.ClientConnections),
 			"-t", params.TestDuration,
 			"-payload-size", strconv.Itoa(params.PayloadSizeKB),
+			"-uniform",
+			"-nocatchup",
 		}
 	}
 	if params.StdClient {

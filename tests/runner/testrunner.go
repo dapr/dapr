@@ -58,6 +58,8 @@ type PlatformInterface interface {
 	GetConfiguration(name string) (*configurationv1alpha1.Configuration, error)
 	GetService(name string) (*corev1.Service, error)
 	LoadTest(loadtester LoadTester) error
+	ProfileApp(appName string, duration string)
+	IsLocalRun() bool
 }
 
 // AppUsage holds the CPU and Memory information for the application.

@@ -121,6 +121,15 @@ func (m *MockPlatform) AddSecrets(secrets []kube.SecretDescription) error {
 	return args.Error(0)
 }
 
+func (m *MockPlatform) ProfileApp(appName string, duration string) {
+	m.Called(appName, duration)
+}
+
+func (m *MockPlatform) IsLocalRun() bool {
+	_ = m.Called()
+	return false
+}
+
 func TestStartRunner(t *testing.T) {
 	fakeTestApps := []kube.AppDescription{
 		{

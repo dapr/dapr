@@ -77,6 +77,7 @@ type AppDescription struct {
 	AppHealthThreshold        int                             `json:",omitempty"`
 	AppChannelAddress         string                          `json:",omitempty"`
 	MaxRequestSizeMB          int                             `json:",omitempty"`
+	EnableProfiling           bool                            `json:",omitempty"`
 }
 
 func (a AppDescription) String() string {

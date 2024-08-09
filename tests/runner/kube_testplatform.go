@@ -19,7 +19,10 @@ import (
 	"log"
 	"os"
 	"strconv"
+	"strings"
 	"time"
+
+	"golang.org/x/exp/slices"
 
 	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
@@ -39,6 +42,7 @@ const (
 	defaultAppMemoryLimit       = "300Mi"
 	defaultAppCPURequest        = "0.1"
 	defaultAppMemoryRequest     = "200Mi"
+	defaultSidecarProfilingPort = 7777
 )
 
 // KubeTestPlatform includes K8s client for testing cluster and kubernetes testing apps.
@@ -269,6 +273,14 @@ func (c *KubeTestPlatform) appMemoryLimit() string {
 	return defaultAppMemoryLimit
 }
 
+func (c *KubeTestPlatform) IsLocalRun() bool {
+	isLocal := os.Getenv("TEST_LOCAL_RUN")
+	if isLocal != "" {
+		return strings.EqualFold(isLocal, "true")
+	}
+	return false
+}
+
 // GetOrCreateNamespace gets or creates namespace unless namespace exists.
 func (c *KubeTestPlatform) GetOrCreateNamespace(parentCtx context.Context, namespace string) (*corev1.Namespace, error) {
 	log.Printf("Checking namespace %q ...", namespace)
@@ -375,6 +387,14 @@ func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) 
 	if targetPorts == nil {
 		return nil, fmt.Errorf("cannot open connection with no target ports")
 	}
+
+	// if profiling is enabled, add the default sidecar profiling port to the list of ports to forward if it is not already present
+	if appManager.App().EnableProfiling && c.IsLocalRun() {
+		if !slices.Contains(targetPorts, defaultSidecarProfilingPort) {
+			targetPorts = append(targetPorts, defaultSidecarProfilingPort)
+		}
+	}
+
 	return appManager.DoPortForwarding("", targetPorts...)
 }
 
@@ -436,4 +456,34 @@ func (c *KubeTestPlatform) GetService(name string) (*corev1.Service, error) {
 
 func (c *KubeTestPlatform) LoadTest(loadtester LoadTester) error {
 	return loadtester.Run(c)
+}
+
+// ProfileApp gets profiling info for the app in a background go routine. It will be running for the duration of the test.
+func (c *KubeTestPlatform) ProfileApp(appName string, dur string) {
+	if c.IsLocalRun() {
+		duration, err := time.ParseDuration(dur)
+		if err != nil {
+			log.Printf("failed to parse duration, assuming default 1m, error: %v", err)
+			duration = 1 * time.Minute
+		}
+		app := c.AppResources.FindActiveResource(appName)
+		appManager := app.(*kube.AppManager)
+		if appManager.App().EnableProfiling {
+			ports, err := c.PortForwardToApp(appName, defaultSidecarProfilingPort)
+			if err != nil {
+				log.Printf("failed to port forward to app %s, error: %s", appName, err)
+				return
+			}
+
+			if len(ports) == 0 {
+				log.Printf("failed to port forward to app %s, no ports found", appName)
+				return
+			}
+
+			profilingPort := ports[0]
+			if appManager != nil {
+				go func() { _ = appManager.GetProfilingInfo(profilingPort, duration) }()
+			}
+		}
+	}
 }

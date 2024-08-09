@@ -229,17 +229,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
-	if opts.SchedulerReminders {
-		if opts.Config.SchedulerClients == nil {
-			return nil, fmt.Errorf("scheduler reminders are enabled, but no Scheduler clients are available")
-		}
-		log.Debug("Using Scheduler service for reminders.")
-		a.actorsReminders = reminders.NewScheduler(reminders.SchedulerOptions{
-			Clients:   opts.Config.SchedulerClients,
-			Namespace: opts.Config.Namespace,
-			AppID:     opts.Config.AppID,
-		})
-	} else {
+	if !opts.SchedulerReminders {
 		factory, err := opts.Config.GetRemindersProvider(a.placement)
 		if err != nil {
 			return nil, fmt.Errorf("failed to initialize reminders provider: %w", err)
@@ -249,6 +239,16 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
 		a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
 		a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
+	} else {
+		if opts.Config.SchedulerClients == nil {
+			return nil, fmt.Errorf("scheduler reminders are enabled, but no Scheduler clients are available")
+		}
+		log.Debug("Using Scheduler service for reminders.")
+		a.actorsReminders = reminders.NewScheduler(reminders.SchedulerOptions{
+			Clients:   opts.Config.SchedulerClients,
+			Namespace: opts.Config.Namespace,
+			AppID:     opts.Config.AppID,
+		})
 	}
 
 	a.idleActorProcessor = eventqueue.NewProcessor[string, *actor](a.idleProcessorExecuteFn).WithClock(clock)
