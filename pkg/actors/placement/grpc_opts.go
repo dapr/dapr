@@ -15,6 +15,8 @@ package placement
 
 import (
 	"errors"
+	"fmt"
+	"net"
 	"strings"
 	"sync"
 
@@ -62,11 +64,25 @@ func getGrpcOptsGetter(servers []string, sec security.Handler) func() ([]grpc.Di
 			)
 		}
 
-		if len(servers) == 1 && strings.HasPrefix(servers[0], "dns:///") {
-			// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
-			// With round robin load balancer, Dapr can find the leader automatically.
-			opts = append(opts, grpc.WithDefaultServiceConfig(grpcServiceConfig))
+		fmt.Printf(">>GOT SERVERS: %v\n", servers)
+		for _, server := range servers {
+			srv := strings.TrimSuffix(strings.TrimPrefix(server, "dns:///"), ":50005")
+			resp, err := net.LookupIP(srv)
+			if err != nil {
+				log.Errorf("failed to resolve address %s: %v", srv, err)
+				continue
+			}
+			fmt.Printf(">>GOT [%d] ADDRESSES: %v\n", len(resp), resp)
+			for i, ip := range resp {
+				fmt.Printf(">>[%d] %s\n", i, ip)
+			}
 		}
+
+		//if len(servers) == 1 && strings.HasPrefix(servers[0], "dns:///") {
+		//	// In Kubernetes environment, dapr-placement headless service resolves multiple IP addresses.
+		//	// With round robin load balancer, Dapr can find the leader automatically.
+		//	opts = append(opts, grpc.WithDefaultServiceConfig(`{"loadBalancingPolicy":"round_robin"}`), grpc.WithDe
+		//}
 		cached = opts
 		return cached, nil
 	}
