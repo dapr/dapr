@@ -466,6 +466,7 @@ setup-test-env-redis:
 	  --wait \
 	  --timeout 5m0s \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
+	 --set master.persistence.size=1Gi \
 	  -f ./tests/config/redis_override.yaml
 
 delete-test-env-redis:
