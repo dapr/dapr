@@ -479,6 +479,9 @@ setup-test-env-kafka:
 	  --version 23.0.7 \
 	  -f ./tests/config/kafka_override.yaml \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --set broker.persistence.size=1Gi \
+	  --set broker.logPersistence.size=1Gi \
+	  --set zookeeper.persistence.size=1Gi \
 	  --timeout 10m0s
 
 # install rabbitmq to the cluster
@@ -489,6 +492,7 @@ setup-test-env-rabbitmq:
 	  --set auth.username='admin' \
 	  --set auth.password='admin' \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --set persistence.size=1Gi \
 	  --timeout 10m0s
 
 # install mqtt to the cluster
@@ -521,6 +525,7 @@ setup-test-env-postgres:
 	  --install dapr-postgres bitnami/postgresql \
 	  --version 12.8.0 \
 	  -f ./tests/config/postgres_override.yaml \
+	  --set primary.persistence.size=1Gi \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
 	  --wait \
 	  --timeout 5m0s
