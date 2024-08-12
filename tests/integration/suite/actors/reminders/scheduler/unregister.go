@@ -103,7 +103,7 @@ func (u *unregister) Run(t *testing.T, ctx context.Context) {
 			require.True(t, ok, "expected a gRPC status error, got %v", err)
 			require.Equal(t, codes.Unavailable, st.Code(), "the only allowed error is 'Unavailable', but got %v", err)
 		}
-	}, time.Second*10, time.Millisecond*50)
+	}, time.Second*10, time.Millisecond*10)
 
 	assert.EventuallyWithT(t, func(ct *assert.CollectT) {
 		assert.GreaterOrEqual(ct, int(u.methodcalled.Load()), 2)
@@ -124,7 +124,7 @@ func (u *unregister) Run(t *testing.T, ctx context.Context) {
 		prevLast := last
 		last = called
 		assert.Equal(ct, int(prevLast), int(called))
-	}, time.Second*15, time.Second*2)
+	}, time.Second*15, time.Second*1)
 
 	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "myactortype",

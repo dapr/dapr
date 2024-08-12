@@ -98,7 +98,8 @@ spec:
 
 func (a *appready) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
-
+	a.appHealthy.Store(false)
+	a.bindingCalled.Store(0)
 	gclient := a.daprd.GRPCClient(t, ctx)
 	httpClient := client.HTTP(t)
 
@@ -108,13 +109,12 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		require.NoError(t, err)
+		require.NoError(c, err)
 		assert.Len(c, resp.GetRegisteredComponents(), 1)
 	}, time.Second*5, time.Millisecond*10)
 
 	called := a.healthCalled.Load()
 	require.Eventually(t, func() bool { return a.healthCalled.Load() > called }, time.Second*5, time.Millisecond*10)
-
 	assert.Eventually(t, func() bool {
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
@@ -122,7 +122,6 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		return resp.StatusCode == http.StatusInternalServerError
 	}, time.Second*5, 10*time.Millisecond)
 
-	time.Sleep(time.Second * 2)
 	assert.Equal(t, int64(0), a.bindingCalled.Load())
 
 	a.appHealthy.Store(true)
