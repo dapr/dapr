@@ -41,7 +41,7 @@ import (
 const (
 	numHealthChecks    = 60 // Number of times to check for endpoint health per app.
 	actorType          = "PerfTestActorReminder"
-	actorTypeScheduler = "PerfTestActorReminderSchduler"
+	actorTypeScheduler = "PerfTestActorReminderScheduler"
 	appName            = "perf-actor-reminder-service"
 	appNameScheduler   = "perf-actor-reminder-scheduler-service"
 
@@ -67,7 +67,7 @@ const (
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
 	dueTime          = 180
-	dueTimeScheduler = 180
+	dueTimeScheduler = 300
 )
 
 var tr *runner.TestRunner
