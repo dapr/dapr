@@ -93,8 +93,6 @@ type ActorRuntime interface {
 }
 
 // Actors allow calling into virtual actors as well as actor state management.
-//
-//nolint:interfacebloat
 type Actors interface {
 	// Call an actor.
 	Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
@@ -116,8 +114,6 @@ type Actors interface {
 	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
 	// ExecuteLocalOrRemoteActorReminder executes a reminder on a local or remote actor.
 	ExecuteLocalOrRemoteActorReminder(ctx context.Context, reminder *CreateReminderRequest) error
-	// UsingScheduledReminders returns a bool indicating if the actor implementation is using the scheduler service
-	UsingSchedulerReminders() bool
 }
 
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
@@ -129,7 +125,6 @@ type actorsRuntime struct {
 	appChannel         channel.AppChannel
 	placement          internal.PlacementService
 	placementEnabled   bool
-	schedulerReminders bool
 	grpcConnectionFn   GRPCConnectionFn
 	actorsConfig       Config
 	timers             internal.TimersProvider
@@ -149,6 +144,9 @@ type actorsRuntime struct {
 	closed             atomic.Bool
 	closeCh            chan struct{}
 	apiLevel           atomic.Uint32
+
+	lock                       sync.Mutex
+	internalReminderInProgress map[string]struct{}
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -196,6 +194,8 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		compStore:          opts.CompStore,
 		sec:                opts.Security,
 
+		internalReminderInProgress: map[string]struct{}{},
+
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
 		closeCh:         make(chan struct{}),
@@ -239,7 +239,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 			return nil, fmt.Errorf("scheduler reminders are enabled, but no Scheduler clients are available")
 		}
 		log.Debug("Using Scheduler service for reminders.")
-		a.schedulerReminders = true
 		a.actorsReminders = reminders.NewScheduler(reminders.SchedulerOptions{
 			Clients:   opts.Config.SchedulerClients,
 			Namespace: opts.Config.Namespace,
@@ -275,10 +274,6 @@ func (a *actorsRuntime) isActorLocallyHosted(ctx context.Context, actorType stri
 		return true, lar.Address
 	}
 	return false, lar.Address
-}
-
-func (a *actorsRuntime) UsingSchedulerReminders() bool {
-	return a.schedulerReminders
 }
 
 func (a *actorsRuntime) haveCompatibleStorage() bool {
@@ -1000,6 +995,10 @@ func (a *actorsRuntime) drainRebalancedActors() {
 	// visit all currently active actors.
 	var wg sync.WaitGroup
 
+	a.lock.Lock()
+	a.internalReminderInProgress = make(map[string]struct{})
+	a.lock.Unlock()
+
 	a.actorsTable.Range(func(key any, value any) bool {
 		wg.Add(1)
 		go func(key any, value any) {
@@ -1103,15 +1102,35 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 			return err
 		}
 	} else {
-		log.Debugf("Executing reminder for internal actor '%s'", reminder.Key())
+		key := reminder.Key()
+
+		log.Debugf("Executing reminder for internal actor '%s'", key)
+
+		a.lock.Lock()
+		if _, ok := a.internalReminderInProgress[key]; ok {
+			a.lock.Unlock()
+			// We don't need to return cancel here as the first invocation will
+			// delete the reminder.
+			log.Debugf("Duplicate concurrent reminder invocation detected for '%s', likely due to long processing time. Ignoring in favour of the active invocation", key)
+			return nil
+		}
+		a.internalReminderInProgress[key] = struct{}{}
+		a.lock.Unlock()
 
 		err = internalAct.InvokeReminder(ctx, reminder, md)
-		if err != nil {
-			if !errors.Is(err, ErrReminderCanceled) {
-				log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
-			}
-			return err
+
+		// Ensure that the in progress tracker is removed if the internal reminder
+		// timed out.
+		if errors.Is(err, context.DeadlineExceeded) {
+			a.lock.Lock()
+			delete(a.internalReminderInProgress, key)
+			a.lock.Unlock()
 		}
+		if err != nil && !errors.Is(err, ErrReminderCanceled) {
+			log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
+		}
+
+		return err
 	}
 
 	return nil
@@ -1174,8 +1193,11 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 			}); derr != nil {
 				log.Errorf("Error deleting reminder %s: %s", reminder.Key(), derr)
 			}
+			a.lock.Lock()
+			delete(a.internalReminderInProgress, constructCompositeKey(reminder.ActorType, reminder.ActorID, reminder.Name))
+			a.lock.Unlock()
 		}()
-		return ErrReminderCanceled
+		return nil
 	}
 
 	return err
