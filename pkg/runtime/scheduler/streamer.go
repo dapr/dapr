@@ -23,6 +23,7 @@ import (
 
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -114,9 +115,21 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 			// more relevant for workflows which currently has a repeat set to 2 since setting it to 1 caused
 			// issues. This will be updated in the future releases, but for now we will see this err. To not
 			// spam users only log if the error is not reminder canceled because this is expected for now.
-			if !errors.Is(err, actors.ErrReminderCanceled) {
-				log.Errorf("failed to invoke scheduled actor reminder named: %s due to: %s", job.GetName(), err)
+
+			isErrReminderCancelled := errors.Is(err, actors.ErrReminderCanceled)
+			if isErrReminderCancelled {
+				return
 			}
+
+			// If the actor was hosted on another instance, the error will be a gRPC status error,
+			// so we have to match on the error message
+			if st, ok := status.FromError(err); ok {
+				if st.Message() == actors.ErrReminderCanceled.Error() {
+					return
+				}
+			}
+
+			log.Errorf("failed to invoke scheduled actor reminder named: %s due to: %s", job.GetName(), err)
 		}
 
 	default:
