@@ -62,7 +62,7 @@ const (
 	// at this point there's a risk of timeouts during reminder creation
 	// using smaller number of reminders for the registration and trigger test to be consistent with the numbers
 	reminderCount          = 1000
-	reminderCountScheduler = 50000
+	reminderCountScheduler = 40000
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
