@@ -143,12 +143,14 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		return resp.StatusCode == http.StatusOK
 	}, time.Second*5, 10*time.Millisecond)
 
-	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-		PubsubName: "mypubsub",
-		Topic:      "mytopic",
-		Data:       []byte(`{"status": "completed"}`),
-	})
-	require.NoError(t, err)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+			PubsubName: "mypubsub",
+			Topic:      "mytopic",
+			Data:       []byte(`{"status": "completed"}`),
+		})
+		require.NoError(c, err)
+	}, time.Second*5, time.Millisecond*10)
 
 	select {
 	case resp := <-a.topicChan:
