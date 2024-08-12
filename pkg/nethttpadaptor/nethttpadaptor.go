@@ -41,6 +41,8 @@ func NewNetHTTPHandlerFunc(h fasthttp.RequestHandler) http.HandlerFunc {
 		c.Init(&fasthttp.Request{}, &remoteAddr, nil)
 
 		if r.Body != nil {
+			defer r.Body.Close()
+
 			reqBody, err := io.ReadAll(r.Body)
 			if err != nil {
 				msg := fmt.Sprintf("error reading request body: %v", err)
