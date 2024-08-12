@@ -115,13 +115,12 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 			// more relevant for workflows which currently has a repeat set to 2 since setting it to 1 caused
 			// issues. This will be updated in the future releases, but for now we will see this err. To not
 			// spam users only log if the error is not reminder canceled because this is expected for now.
-
 			if errors.Is(err, actors.ErrReminderCanceled) {
 				return
 			}
 
 			// If the actor was hosted on another instance, the error will be a gRPC status error,
-			// so we have to match on the error message
+			// so we need to unwrap it and match on the error message
 			if st, ok := status.FromError(err); ok {
 				if st.Message() == actors.ErrReminderCanceled.Error() {
 					return
