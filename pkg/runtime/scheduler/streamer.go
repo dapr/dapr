@@ -116,8 +116,7 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 			// issues. This will be updated in the future releases, but for now we will see this err. To not
 			// spam users only log if the error is not reminder canceled because this is expected for now.
 
-			isErrReminderCancelled := errors.Is(err, actors.ErrReminderCanceled)
-			if isErrReminderCancelled {
+			if errors.Is(err, actors.ErrReminderCanceled) {
 				return
 			}
 
