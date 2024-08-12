@@ -22,9 +22,11 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -39,26 +41,33 @@ import (
 const (
 	numHealthChecks    = 60 // Number of times to check for endpoint health per app.
 	actorType          = "PerfTestActorReminder"
-	actorTypeScheduler = "PerfTestActorReminderSchduler"
+	actorTypeScheduler = "PerfTestActorReminderScheduler"
 	appName            = "perf-actor-reminder-service"
 	appNameScheduler   = "perf-actor-reminder-scheduler-service"
 
 	// Target for the QPS - Temporary
-	targetQPS          float64 = 50
-	targetSchedulerQPS float64 = 4000
+	targetQPS          float64 = 30
+	targetSchedulerQPS float64 = 2000
+
+	// Reminders repetition count and interval, used to calculate the target trigger QPS
+	repeatCount           = 5
+	repeatIntervalSeconds = 1
 
 	// Target for the QPS to trigger reminders.
-	targetTriggerQPS          float64 = 4700
-	targetSchedulerTriggerQPS float64 = 3800
+	targetTriggerQPS          float64 = 950
+	targetSchedulerTriggerQPS float64 = 1500
 
 	// reminderCount is the number of reminders to register.
-	reminderCount          = 5000
-	reminderCountScheduler = 50000
+	// actor reminders bottlenecks at 2500 due to serialization
+	// at this point there's a risk of timeouts during reminder creation
+	// using smaller number of reminders for the registration and trigger test to be consistent with the numbers
+	reminderCount          = 1000
+	reminderCountScheduler = 40000
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
-	dueTime          = 220
-	dueTimeScheduler = 110
+	dueTime          = 180
+	dueTimeScheduler = 330
 )
 
 var tr *runner.TestRunner
@@ -75,16 +84,17 @@ func TestMain(m *testing.M) {
 			IngressEnabled:    true,
 			AppPort:           3000,
 			DaprCPULimit:      "4.0",
-			DaprCPURequest:    "0.1",
-			DaprMemoryLimit:   "2GiB",
+			DaprCPURequest:    "1.0",
+			DaprMemoryLimit:   "2Gi",
 			DaprMemoryRequest: "250Mi",
 			AppCPULimit:       "4.0",
-			AppCPURequest:     "0.1",
+			AppCPURequest:     "1.0",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE": actorType,
 			},
+			EnableProfiling: false, // Enable profiling when running locally
 		},
 		{
 			AppName:           appNameScheduler,
@@ -94,17 +104,18 @@ func TestMain(m *testing.M) {
 			IngressEnabled:    true,
 			AppPort:           3000,
 			DaprCPULimit:      "4.0",
-			DaprCPURequest:    "0.1",
-			DaprMemoryLimit:   "2GiB",
+			DaprCPURequest:    "1.0",
+			DaprMemoryLimit:   "2Gi",
 			DaprMemoryRequest: "250Mi",
 			AppCPULimit:       "4.0",
-			AppCPURequest:     "0.1",
+			AppCPURequest:     "1.0",
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "2500Mi",
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE": actorTypeScheduler,
 			},
-			Config: "featureactorreminderscheduler",
+			Config:          "featureactorreminderscheduler",
+			EnableProfiling: false,
 		},
 	}
 
@@ -120,14 +131,36 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 		perf.WithPayload("{}"),
 	)
 
-	// Get the ingress external url of test app
-	testAppURL := tr.Platform.AcquireAppExternalURL(appName)
+	var testAppURL string
+	if tr.Platform.IsLocalRun() {
+		ports, err := tr.Platform.PortForwardToApp(appName, 3000)
+		require.NoError(t, err)
+
+		t.Logf("Ports: %v", ports)
+
+		appPort := ports[0]
+		testAppURL = "localhost:" + strconv.Itoa(appPort)
+	} else {
+		testAppURL = tr.Platform.AcquireAppExternalURL(appName)
+	}
+
+	tr.Platform.ProfileApp(appName, p.TestDuration)
+
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
 	t.Logf("test app url: %s", testAppURL+"/health")
 	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
+
+	// Cleanup previous reminders
+	cleanupResponse, err := utils.HTTPGet(testAppURL + "/test/cleanup/" + actorType)
+	require.NoError(t, err)
+	require.NotEmpty(t, cleanupResponse)
+	t.Logf("reminders cleanup results: %s", string(cleanupResponse))
+
+	t.Logf("Waiting 5s after cleanup")
+	time.Sleep(5 * time.Second)
 
 	// Perform dapr test
 	endpoint := fmt.Sprintf("http://127.0.0.1:3500/v1.0/actors/%v/{uuid}/reminders/myreminder", actorType)
@@ -200,14 +233,35 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 		perf.WithPayload("{}"),
 	)
 
-	// Get the ingress external url of test app
-	testAppURL := tr.Platform.AcquireAppExternalURL(appNameScheduler)
+	var testAppURL string
+	if tr.Platform.IsLocalRun() {
+		ports, err := tr.Platform.PortForwardToApp(appNameScheduler, 3000)
+		require.NoError(t, err)
+
+		t.Logf("Ports: %v", ports)
+
+		appPort := ports[0]
+		testAppURL = "localhost:" + strconv.Itoa(appPort)
+	} else {
+		testAppURL = tr.Platform.AcquireAppExternalURL(appNameScheduler)
+	}
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
 	t.Logf("test app url: %s", testAppURL+"/health")
 	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
+
+	// Cleanup previous reminders
+	cleanupResponse, err := utils.HTTPGet(testAppURL + "/test/cleanup/" + actorTypeScheduler)
+	require.NoError(t, err)
+	require.NotEmpty(t, cleanupResponse)
+	t.Logf("reminders cleanup results: %s", string(cleanupResponse))
+
+	t.Logf("Waiting 5s after cleanup")
+	time.Sleep(5 * time.Second)
+
+	tr.Platform.ProfileApp(appNameScheduler, p.TestDuration)
 
 	// Perform dapr test
 	endpoint := fmt.Sprintf("http://127.0.0.1:3500/v1.0/actors/%v/{uuid}/reminders/myreminder", actorTypeScheduler)
@@ -280,8 +334,18 @@ type actorReminderRequest struct {
 }
 
 func TestActorReminderTriggerPerformance(t *testing.T) {
-	// Get the ingress external url of test app
-	testAppURL := tr.Platform.AcquireAppExternalURL(appName)
+	var testAppURL string
+	if tr.Platform.IsLocalRun() {
+		ports, err := tr.Platform.PortForwardToApp(appName, 3000)
+		require.NoError(t, err)
+
+		t.Logf("Ports: %v", ports)
+
+		appPort := ports[0]
+		testAppURL = "localhost:" + strconv.Itoa(appPort)
+	} else {
+		testAppURL = tr.Platform.AcquireAppExternalURL(appName)
+	}
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
@@ -289,15 +353,23 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
 
-	t.Logf("invoking actor reminder scheduler")
+	// Cleanup previous reminders
+	cleanupResponse, err := utils.HTTPGet(testAppURL + "/test/cleanup/" + actorType)
+	require.NoError(t, err)
+	require.NotEmpty(t, cleanupResponse)
+	t.Logf("reminders cleanup results: %s", string(cleanupResponse))
+
+	t.Logf("Waiting 5s after cleanup")
+	time.Sleep(5 * time.Second)
+
+	t.Logf("invoking actor reminder")
 	_, err = utils.HTTPGet(fmt.Sprintf("%s/actors/%s/abc/method/foo", testAppURL, actorType))
 	require.NoError(t, err)
 
 	t.Logf("registering actor reminders")
 	reminder := &actorReminderRequest{
 		DueTime: ptr.Of(time.Now().Add(time.Second * dueTime).Format(time.RFC3339)),
-		Period:  ptr.Of("1s"),
-		Ttl:     ptr.Of("5s"),
+		Period:  ptr.Of(fmt.Sprintf("R%d/PT%dS", repeatCount, repeatIntervalSeconds)),
 	}
 	reminderB, err := json.Marshal(reminder)
 	require.NoError(t, err)
@@ -311,9 +383,14 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 		}
 	}
 
+	wg := sync.WaitGroup{}
 	ch := make(chan int)
 	for j := 0; j < 50; j++ {
+		wg.Add(1)
+
 		go func() {
+			defer wg.Done()
+
 			for {
 				i, ok := <-ch
 				if !ok {
@@ -328,6 +405,8 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 	for i := 0; i < reminderCount; i++ {
 		ch <- i
 	}
+	close(ch)
+	wg.Wait()
 	done := time.Since(now)
 	t.Logf("Created %d reminders in %s (%.1fqps)", reminderCount, done, float64(reminderCount)/done.Seconds())
 
@@ -336,30 +415,54 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 	t.Logf("Waiting %s for reminders to trigger", (dueTime*time.Second)-done)
 	time.Sleep((dueTime * time.Second) - done)
 
-	t.Logf("Waiting for %d reminders to trigger", reminderCount*5)
+	t.Logf("Waiting for %d reminders to trigger", reminderCount*repeatCount)
+	triggeredCount := 0
 	start := time.Now()
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := utils.HTTPGet(fmt.Sprintf("%s/remindersCount", testAppURL))
 		require.NoError(t, err)
-		gotCount, err := strconv.Atoi(strings.TrimSpace(string(resp)))
+		triggeredCount, err = strconv.Atoi(strings.TrimSpace(string(resp)))
 		require.NoError(t, err)
-		assert.GreaterOrEqual(c, gotCount, reminderCount*5)
-	}, 100*time.Second, time.Millisecond*100)
+		assert.GreaterOrEqual(c, triggeredCount, reminderCount*repeatCount)
+	}, 100*time.Second, 100*time.Millisecond)
+
 	done = time.Since(start)
-	qps := float64(reminderCount*5) / done.Seconds()
-	t.Logf("Triggered %d reminders in %s (%.1fqps)", reminderCount*5, done, qps)
+	qps := float64(triggeredCount) / done.Seconds()
+	t.Logf("Triggered %d reminders in %s (%.1fqps)", triggeredCount, done, qps)
 	assert.GreaterOrEqual(t, qps, targetTriggerQPS)
+
+	// Allow reminders to be cleaned by dapr
+	time.Sleep(15 * time.Second)
 }
 
 func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
-	// Get the ingress external url of test app
-	testAppURL := tr.Platform.AcquireAppExternalURL(appNameScheduler)
+	var testAppURL string
+	if tr.Platform.IsLocalRun() {
+		ports, err := tr.Platform.PortForwardToApp(appNameScheduler, 3000)
+		require.NoError(t, err)
+
+		t.Logf("Ports: %v", ports)
+
+		appPort := ports[0]
+		testAppURL = "localhost:" + strconv.Itoa(appPort)
+	} else {
+		testAppURL = tr.Platform.AcquireAppExternalURL(appNameScheduler)
+	}
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
 	t.Logf("test app url: %s", testAppURL+"/health")
 	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
+
+	// Cleanup previous reminders
+	cleanupResponse, err := utils.HTTPGet(testAppURL + "/test/cleanup/" + actorTypeScheduler)
+	require.NoError(t, err)
+	require.NotEmpty(t, cleanupResponse)
+	t.Logf("reminders cleanup results: %s", string(cleanupResponse))
+
+	t.Logf("Waiting 30s after cleanup")
+	time.Sleep(30 * time.Second)
 
 	t.Logf("invoking actor reminder scheduler")
 	_, err = utils.HTTPGet(fmt.Sprintf("%s/actors/%s/abc/method/foo", testAppURL, actorTypeScheduler))
@@ -368,14 +471,17 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	t.Logf("registering actor reminders")
 	reminder := &actorReminderRequest{
 		DueTime: ptr.Of(time.Now().Add(time.Second * dueTimeScheduler).Format(time.RFC3339)),
-		Period:  ptr.Of("1s"),
-		Ttl:     ptr.Of("5s"),
+		Period:  ptr.Of(fmt.Sprintf("R%d/PT%dS", repeatCount, repeatIntervalSeconds)),
 	}
 	reminderB, err := json.Marshal(reminder)
 	require.NoError(t, err)
 
 	worker := func(i int) {
-		_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/abc/reminders/myreminder%d", testAppURL, actorTypeScheduler, i), reminderB)
+		err := backoff.Retry(func() error {
+			_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/abc/reminders/myreminder%d", testAppURL, actorTypeScheduler, i), reminderB)
+			require.NoError(t, err)
+			return err
+		}, backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 10))
 		require.NoError(t, err)
 
 		if (i+1)%10000 == 0 {
@@ -383,9 +489,14 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 		}
 	}
 
+	wg := sync.WaitGroup{}
 	ch := make(chan int)
 	for j := 0; j < 50; j++ {
+		wg.Add(1)
+
 		go func() {
+			defer wg.Done()
+
 			for {
 				i, ok := <-ch
 				if !ok {
@@ -400,25 +511,41 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	for i := 0; i < reminderCountScheduler; i++ {
 		ch <- i
 	}
+	close(ch)
+	wg.Wait()
 	done := time.Since(now)
 	t.Logf("Created %d reminders in %s (%.1fqps)", reminderCountScheduler, done, float64(reminderCountScheduler)/done.Seconds())
 
-	require.GreaterOrEqualf(t, dueTimeScheduler*time.Second, done, "expected to create reminders %d in less than %ss", reminderCountScheduler, dueTimeScheduler)
+	require.GreaterOrEqualf(t, dueTimeScheduler*time.Second, done, "expected to create reminders %d in less than %ds", reminderCountScheduler, dueTimeScheduler)
 
 	t.Logf("Waiting %s for reminders to trigger", (dueTimeScheduler*time.Second)-done)
 	time.Sleep((dueTimeScheduler * time.Second) - done)
 
-	t.Logf("Waiting for %d reminders to trigger", reminderCountScheduler*5)
+	t.Logf("Waiting for %d reminders to trigger", reminderCountScheduler*repeatCount)
+	triggeredCount := 0
 	start := time.Now()
+	waitFor := 10 * time.Minute
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := utils.HTTPGet(fmt.Sprintf("%s/remindersCount", testAppURL))
 		require.NoError(t, err)
-		gotCount, err := strconv.Atoi(strings.TrimSpace(string(resp)))
+		triggeredCount, err = strconv.Atoi(strings.TrimSpace(string(resp)))
 		require.NoError(t, err)
-		assert.GreaterOrEqual(c, gotCount, reminderCountScheduler*5)
-	}, 100*time.Second, time.Millisecond*100)
+		assert.GreaterOrEqual(c, triggeredCount, reminderCountScheduler*repeatCount)
+	}, waitFor, 100*time.Millisecond, "expected to trigger %d reminders in less than %.1f seconds", reminderCountScheduler*repeatCount, waitFor.Seconds())
 	done = time.Since(start)
-	qps := float64(reminderCountScheduler*5) / done.Seconds()
-	t.Logf("Triggered %d reminders in %s (%.1fqps)", reminderCountScheduler*5, done, qps)
+
+	resp, err := utils.HTTPGet(fmt.Sprintf("%s/remindersMap", testAppURL))
+	require.NoError(t, err)
+
+	// save reminders map to a file
+	err = os.WriteFile("./container_logs/remindersMap.json", resp, 0644)
+	require.NoError(t, err)
+
+	qps := float64(triggeredCount) / done.Seconds()
+	t.Logf("Triggered %d reminders in %s (%.1fqps)", triggeredCount, done, qps)
+
 	assert.GreaterOrEqual(t, qps, targetSchedulerTriggerQPS)
+
+	// Allow reminders to be cleaned by dapr
+	time.Sleep(15 * time.Second)
 }

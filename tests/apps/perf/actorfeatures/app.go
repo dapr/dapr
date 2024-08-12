@@ -14,6 +14,7 @@ limitations under the License.
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -21,29 +22,39 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
+	"time"
 
 	chi "github.com/go-chi/chi/v5"
+	"github.com/jackc/pgx/v5"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	"github.com/dapr/dapr/tests/apps/utils"
 )
 
 const (
-	appPort                 = 3000
-	daprV1URL               = "http://localhost:3500/v1.0"
-	actorMethodURLFormat    = daprV1URL + "/actors/%s/%s/%s/%s"
-	actorSaveStateURLFormat = daprV1URL + "/actors/%s/%s/state/"
-	actorGetStateURLFormat  = daprV1URL + "/actors/%s/%s/state/%s/"
-	defaultActorType        = "testactorfeatures"   // Actor type must be unique per test app.
-	actorTypeEnvName        = "TEST_APP_ACTOR_TYPE" // Env variable tests can set to change actor type.
-	actorIdleTimeout        = "1h"
-	drainOngoingCallTimeout = "30s"
-	drainRebalancedActors   = true
-	secondsToWaitInMethod   = 5
+	appPort                  = 3000
+	daprV1URL                = "http://localhost:3500/v1.0"
+	actorMethodURLFormat     = daprV1URL + "/actors/%s/%s/%s/%s"
+	actorSaveStateURLFormat  = daprV1URL + "/actors/%s/%s/state/"
+	actorGetStateURLFormat   = daprV1URL + "/actors/%s/%s/state/%s/"
+	defaultActorType         = "testactorfeatures"   // Actor type must be unique per test app.
+	actorTypeEnvName         = "TEST_APP_ACTOR_TYPE" // Env variable tests can set to change actor type.
+	actorIdleTimeout         = "1h"
+	drainOngoingCallTimeout  = "30s"
+	drainRebalancedActors    = true
+	secondsToWaitInMethod    = 5
+	postgresConnectionString = "host=dapr-postgres-postgresql.dapr-tests.svc.cluster.local user=postgres password=example port=5432 connect_timeout=10 database=dapr_test"
+	reminderKeyPrefix        = "dapr"
 )
 
 var (
-	httpClient = utils.NewHTTPClient()
+	httpClient        = utils.NewHTTPClient()
+	postgresClient    *pgx.Conn
+	etcdClient        *clientv3.Client
+	remindersCounters = map[string]int{}
+	remindersMutex    sync.Mutex
 )
 
 type daprConfig struct {
@@ -111,7 +122,17 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 var actorReminderCount atomic.Uint32
 
 func actorReminderHandler(w http.ResponseWriter, r *http.Request) {
+	reminderName := chi.URLParam(r, "reminderName")
+	remindersMutex.Lock()
+	remindersCounters[reminderName]++
+	remindersMutex.Unlock()
 	actorReminderCount.Add(1)
+}
+
+func actorRemindersMap(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(remindersCounters)
 }
 
 func actorRemindersCountHandler(w http.ResponseWriter, r *http.Request) {
@@ -135,7 +156,7 @@ func createActorReminder(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	req.Header.Set("Content-Type", "applcation/json")
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -169,7 +190,7 @@ func invokeActor(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	req.Header.Set("Content-Type", "applcation/json")
+	req.Header.Set("Content-Type", "application/json")
 
 	resp, err := httpClient.Do(req)
 	if err != nil {
@@ -180,6 +201,96 @@ func invokeActor(w http.ResponseWriter, r *http.Request) {
 
 	w.WriteHeader(resp.StatusCode)
 	io.Copy(w, resp.Body)
+}
+
+func cleanupHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+
+	multiWriter := io.MultiWriter(w, os.Stdout)
+	log.SetOutput(multiWriter)
+
+	log.Printf("processing %s test request for %s", r.Method, r.URL.RequestURI())
+
+	actorType := chi.URLParam(r, "actorType")
+	log.Printf("cleaning up actors for type %s", actorType)
+
+	cleanupPostgres(actorType)
+
+	cleanupEtcd()
+}
+
+func cleanupEtcd() {
+	log.Printf("looking for the existing actor type in etcd")
+
+	timeout, cancelFunc := context.WithTimeout(context.Background(), 10*time.Second)
+	defer cancelFunc()
+
+	list, err := etcdClient.Get(timeout, reminderKeyPrefix, clientv3.WithPrefix())
+	if err != nil {
+		log.Printf("failed to get %s prefix list from etcd: %v", reminderKeyPrefix, err)
+		return
+	}
+
+	log.Printf("found %d existing reminders with prefix %s", list.Count, reminderKeyPrefix)
+
+	if list.Count > 0 {
+		timeoutDelete, cancelFuncDelete := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancelFuncDelete()
+		response, err := etcdClient.Delete(timeoutDelete, reminderKeyPrefix, clientv3.WithPrefix())
+		if err != nil {
+			log.Printf("failed to delete %s prefix list from etcd: %v", reminderKeyPrefix, err)
+			return
+		}
+		log.Printf("deleted %d existing reminders with prefix %s", response.Deleted, reminderKeyPrefix)
+	}
+}
+
+func cleanupPostgres(actorType string) {
+	log.Printf("looking for the existing actor type in postgres")
+	query := fmt.Sprintf("SELECT value FROM dapr_test.public.v2actorstate where key = 'actors||%s'", actorType)
+	log.Printf("query: %s", query)
+	rows, err := postgresClient.Query(context.Background(), query)
+	if err != nil {
+		log.Printf("error looking for the existing actor type: %s", err.Error())
+		return
+	}
+
+	var values [][]byte
+	for rows.Next() {
+		var value []byte
+		err := rows.Scan(&value)
+		if err != nil {
+			log.Printf("error scanning the existing actor type: %s", err.Error())
+			return
+		}
+		values = append(values, value)
+	}
+
+	log.Printf("found %d existing actor type reminders rows", len(values))
+
+	for _, value := range values {
+		if len(value) > 0 {
+			log.Printf("found %s reminders record", actorType)
+
+			var reminders []any
+			err = json.Unmarshal(value, &reminders)
+			if err != nil {
+				log.Printf("error unmarshalling the existing actor type: %+v", err)
+				return
+			}
+			log.Printf("actor reminders contain: %d entries", len(reminders))
+
+			if len(reminders) > 0 {
+				log.Printf("deleting %s reminders entries", actorType)
+				_, err := postgresClient.Exec(context.Background(), fmt.Sprintf("DELETE FROM dapr_test.public.v2actorstate"))
+				if err != nil {
+					log.Printf("error deleting actor type %s reminders entries: %+v", actorType, err)
+					return
+				}
+				log.Printf("successfully deleted %s reminders record", actorType)
+			}
+		}
+	}
 }
 
 // appRouter initializes restful api router
@@ -194,6 +305,7 @@ func appRouter() http.Handler {
 	router.HandleFunc("/actors/{actorType}/{id}/method/remind/{reminderName}", actorReminderHandler)
 	router.HandleFunc("/actors/{actorType}/{id}/reminders/{reminderName}", createActorReminder)
 	router.HandleFunc("/remindersCount", actorRemindersCountHandler)
+	router.HandleFunc("/remindersMap", actorRemindersMap)
 
 	router.Post("/actors/{actorType}/{id}", deactivateActorHandler)
 	router.Delete("/actors/{actorType}/{id}", deactivateActorHandler)
@@ -202,10 +314,47 @@ func appRouter() http.Handler {
 
 	router.HandleFunc("/test", fortioTestHandler)
 
+	router.HandleFunc("/test/cleanup/{actorType}", cleanupHandler)
+
 	return router
 }
 
+func initPgClient() error {
+	connect, err := pgx.Connect(context.Background(), postgresConnectionString)
+	if err != nil {
+		log.Printf("Error connecting to postgres: %s", err.Error())
+		return err
+	}
+	postgresClient = connect
+	return nil
+}
+
+func initEtcdClient() error {
+	schedulerEtcdEndpoint := "dapr-scheduler-server.dapr-tests.svc.cluster.local:2379"
+	cl, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{schedulerEtcdEndpoint},
+		DialTimeout: 5 * time.Second,
+	})
+	if err != nil {
+		return err
+	}
+	etcdClient = cl
+	return nil
+}
+
 func main() {
+	err := initPgClient()
+	if err != nil {
+		log.Printf("error initializing postgres client: %s", err.Error())
+		return
+	}
+
+	err = initEtcdClient()
+	if err != nil {
+		log.Printf("Error initializing etcd client: %s", err.Error())
+		return
+	}
+
 	log.Printf("Actor App - listening on http://localhost:%d", appPort)
 
 	log.Fatal(http.ListenAndServe(fmt.Sprintf(":%d", appPort), appRouter()))
