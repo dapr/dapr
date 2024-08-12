@@ -75,6 +75,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	opts := options{
 		logLevel:        "info",
+		listenAddress:   "localhost",
 		id:              uids,
 		replicaCount:    1,
 		port:            fp.Port(t),
@@ -107,13 +108,9 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		"--initial-cluster=" + opts.initialCluster,
 		"--etcd-data-dir=" + dataDir,
 		"--etcd-client-ports=" + strings.Join(opts.etcdClientPorts, ","),
+		"--listen-address=" + opts.listenAddress,
 	}
 
-	if opts.listenAddress != nil {
-		args = append(args, "--listen-address="+*opts.listenAddress)
-	} else {
-		args = append(args, "--listen-address=localhost")
-	}
 	if opts.sentry != nil {
 		taFile := filepath.Join(t.TempDir(), "ca.pem")
 		require.NoError(t, os.WriteFile(taFile, opts.sentry.CABundle().TrustAnchors, 0o600))
