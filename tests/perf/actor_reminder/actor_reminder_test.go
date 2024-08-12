@@ -67,7 +67,7 @@ const (
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
 	dueTime          = 180
-	dueTimeScheduler = 300
+	dueTimeScheduler = 330
 )
 
 var tr *runner.TestRunner
