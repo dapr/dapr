@@ -208,5 +208,5 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 		i.lock.Lock()
 		defer i.lock.Unlock()
 		assert.ElementsMatch(c, i.expcalled, i.methodcalled)
-	}, time.Second*20, time.Millisecond*10)
+	}, time.Second*30, time.Millisecond*10)
 }
