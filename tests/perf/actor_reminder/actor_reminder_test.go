@@ -85,7 +85,7 @@ func TestMain(m *testing.M) {
 			AppPort:           3000,
 			DaprCPULimit:      "4.0",
 			DaprCPURequest:    "1.0",
-			DaprMemoryLimit:   "2GiB",
+			DaprMemoryLimit:   "2Gi",
 			DaprMemoryRequest: "250Mi",
 			AppCPULimit:       "4.0",
 			AppCPURequest:     "1.0",
@@ -105,7 +105,7 @@ func TestMain(m *testing.M) {
 			AppPort:           3000,
 			DaprCPULimit:      "4.0",
 			DaprCPURequest:    "1.0",
-			DaprMemoryLimit:   "2GiB",
+			DaprMemoryLimit:   "2Gi",
 			DaprMemoryRequest: "250Mi",
 			AppCPULimit:       "4.0",
 			AppCPURequest:     "1.0",
@@ -533,6 +533,13 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 		assert.GreaterOrEqual(c, triggeredCount, reminderCountScheduler*repeatCount)
 	}, waitFor, 100*time.Millisecond, "expected to trigger %d reminders in less than %.1f seconds", reminderCountScheduler*repeatCount, waitFor.Seconds())
 	done = time.Since(start)
+
+	resp, err := utils.HTTPGet(fmt.Sprintf("%s/remindersMap", testAppURL))
+	require.NoError(t, err)
+
+	// save reminders map to a file
+	err = os.WriteFile("./container_logs/remindersMap.json", resp, 0644)
+	require.NoError(t, err)
 
 	qps := float64(triggeredCount) / done.Seconds()
 	t.Logf("Triggered %d reminders in %s (%.1fqps)", triggeredCount, done, qps)

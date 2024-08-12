@@ -22,6 +22,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -49,9 +50,11 @@ const (
 )
 
 var (
-	httpClient     = utils.NewHTTPClient()
-	postgresClient *pgx.Conn
-	etcdClient     *clientv3.Client
+	httpClient        = utils.NewHTTPClient()
+	postgresClient    *pgx.Conn
+	etcdClient        *clientv3.Client
+	remindersCounters = map[string]int{}
+	remindersMutex    sync.Mutex
 )
 
 type daprConfig struct {
@@ -119,7 +122,17 @@ func healthzHandler(w http.ResponseWriter, r *http.Request) {
 var actorReminderCount atomic.Uint32
 
 func actorReminderHandler(w http.ResponseWriter, r *http.Request) {
+	reminderName := chi.URLParam(r, "reminderName")
+	remindersMutex.Lock()
+	remindersCounters[reminderName]++
+	remindersMutex.Unlock()
 	actorReminderCount.Add(1)
+}
+
+func actorRemindersMap(w http.ResponseWriter, r *http.Request) {
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusOK)
+	json.NewEncoder(w).Encode(remindersCounters)
 }
 
 func actorRemindersCountHandler(w http.ResponseWriter, r *http.Request) {
@@ -292,6 +305,7 @@ func appRouter() http.Handler {
 	router.HandleFunc("/actors/{actorType}/{id}/method/remind/{reminderName}", actorReminderHandler)
 	router.HandleFunc("/actors/{actorType}/{id}/reminders/{reminderName}", createActorReminder)
 	router.HandleFunc("/remindersCount", actorRemindersCountHandler)
+	router.HandleFunc("/remindersMap", actorRemindersMap)
 
 	router.Post("/actors/{actorType}/{id}", deactivateActorHandler)
 	router.Delete("/actors/{actorType}/{id}", deactivateActorHandler)
