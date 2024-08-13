@@ -55,6 +55,28 @@ func (i *InvokeMetadataError) DirectInvoke() error {
 	)
 }
 
+func (i *InvokeMetadataError) MalformedResponse() error {
+	msg := "code not found in response"
+	return i.build(
+		codes.Internal,
+		http.StatusInternalServerError,
+		msg,
+		"ERR_MALFORMED_RESPONSE",
+		"MALFORMED_RESPONSE",
+	)
+}
+
+func (i *InvokeMetadataError) NoPermission() error {
+	msg := "you don't have enough permission"
+	return i.build(
+		codes.PermissionDenied,
+		http.StatusForbidden,
+		msg,
+		"ERR_DIRECT_INVOKE",
+		"NO_PERMISSION",
+	)
+}
+
 func (i *InvokeMetadataError) NoAppID() error {
 	msg := "failed getting app id either from the URL path or the header dapr-app-id"
 	return i.build(
@@ -78,9 +100,16 @@ func (i *InvokeMetadataError) NotReady() error {
 }
 
 func (i *InvokeMetadataError) build(grpcCode codes.Code, httpCode int, msg, tag, errCode string) error {
-	err := errors.NewBuilder(grpcCode, httpCode, msg, tag)
+	err := errors.NewBuilder(grpcCode, httpCode, msg, tag).WithHelpLink("https://docs.dapr.io/developing-applications/building-blocks/service-invocation/howto-invoke-discover-services/", "Check the details of Service Invocation")
 	if !i.skipResourceInfo {
 		err.WithResourceInfo("invoke", i.i.name, "", msg)
 	}
 	return err.WithErrorInfo(codePrefixServiceInvocation+errCode, i.metadata).Build()
+}
+
+func ErrorToKitError(err error) *errors.Error {
+	if kitError, ok := errors.FromError(err); ok {
+		return kitError
+	}
+	return nil
 }
