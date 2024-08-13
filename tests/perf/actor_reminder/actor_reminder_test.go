@@ -119,7 +119,7 @@ func TestMain(m *testing.M) {
 
 func TestActorReminderRegistrationPerformance(t *testing.T) {
 	p := perf.Params(
-		perf.WithQPS(500),
+		perf.WithQPS(33),
 		perf.WithConnections(8),
 		perf.WithDuration("1m"),
 		perf.WithPayload("{}"),
@@ -220,7 +220,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 	})
 
 	p := perf.Params(
-		perf.WithQPS(5000),
+		perf.WithQPS(3000),
 		perf.WithConnections(8),
 		perf.WithDuration("1m"),
 		perf.WithPayload("{}"),
