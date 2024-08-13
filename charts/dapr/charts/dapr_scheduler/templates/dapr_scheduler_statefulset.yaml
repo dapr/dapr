@@ -16,17 +16,17 @@ spec:
   selector:
     matchLabels:
       app: dapr-scheduler-server
+  {{- if not .Values.cluster.inMemoryStorage }}
   volumeClaimTemplates:
   - metadata:
       name: dapr-scheduler-data-dir
     spec:
       accessModes: [ "ReadWriteOnce" ]
-      {{- if .Values.cluster.storageClassName }}
       storageClassName: {{ .Values.cluster.storageClassName }}
-      {{- end }}
       resources:
         requests:
           storage: {{ .Values.cluster.storageSize }}
+  {{- end }}
   template:
     metadata:
       labels:
@@ -203,7 +203,7 @@ spec:
         {{- end }}
       serviceAccountName: dapr-scheduler
       volumes:
-      {{- if not .Values.cluster.storageClassName }}
+      {{- if .Values.cluster.inMemoryStorage }}
       - name: dapr-scheduler-data-dir
         emptyDir:
           medium: Memory
