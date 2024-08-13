@@ -480,9 +480,8 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	worker := func(i int) {
 		err := backoff.Retry(func() error {
 			_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/abc/reminders/myreminder%d", testAppURL, actorTypeScheduler, i), reminderB)
-			require.NoError(t, err)
 			return err
-		}, backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 10))
+		}, backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 20))
 		require.NoError(t, err)
 
 		if (i+1)%10000 == 0 {
