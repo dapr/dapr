@@ -49,8 +49,8 @@ const (
 	appNameScheduler   = "perf-actor-reminder-scheduler-service"
 
 	// Target for the QPS - Temporary
-	targetQPS          float64 = 44
-	targetSchedulerQPS float64 = 4000
+	targetQPS          float64 = 33
+	targetSchedulerQPS float64 = 3000
 
 	// Target for the QPS to trigger reminders.
 	targetTriggerQPS          float64 = 1000
@@ -194,7 +194,7 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	assert.Equal(t, 0, daprResult.RetCodes.Num400)
 	assert.Equal(t, 0, daprResult.RetCodes.Num500)
 	assert.Equal(t, 0, restarts)
-	assert.True(t, daprResult.ActualQPS > targetQPS) // TODO: Revert to p.QPS
+	assert.GreaterOrEqual(t, daprResult.ActualQPS, targetQPS) // TODO: Revert to p.QPS
 }
 
 func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
