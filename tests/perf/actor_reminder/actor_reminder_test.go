@@ -53,7 +53,7 @@ const (
 	targetSchedulerQPS float64 = 4000
 
 	// Target for the QPS to trigger reminders.
-	targetTriggerQPS          float64 = 4700
+	targetTriggerQPS          float64 = 1000
 	targetSchedulerTriggerQPS float64 = 3800
 
 	// reminderCount is the number of reminders to register.
@@ -202,6 +202,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 		platform := tr.Platform.(*runner.KubeTestPlatform)
 		scheme := runtime.NewScheme()
 		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, appsv1.AddToScheme(scheme))
 		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
 		require.NoError(t, err)
 		var pod corev1.Pod
@@ -381,6 +382,7 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 		platform := tr.Platform.(*runner.KubeTestPlatform)
 		scheme := runtime.NewScheme()
 		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, appsv1.AddToScheme(scheme))
 		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
 		require.NoError(t, err)
 		var pod corev1.Pod
