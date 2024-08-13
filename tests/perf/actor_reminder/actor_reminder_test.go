@@ -49,7 +49,7 @@ const (
 
 	// Target for the QPS - Temporary
 	targetQPS          float64 = 44
-	targetSchedulerQPS float64 = 950
+	targetSchedulerQPS float64 = 4000
 
 	// Target for the QPS to trigger reminders.
 	targetTriggerQPS          float64 = 4700
@@ -211,6 +211,13 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 	require.NoError(t, err)
 	err = cl.Delete(context.Background(), &pod)
 	require.NoError(t, err)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+		//nolint:testifylint
+		if assert.NoError(c, err) {
+			assert.Equal(c, corev1.PodRunning, pod.Status.Phase)
+		}
+	}, 30*time.Second, time.Millisecond*100)
 
 	p := perf.Params(
 		perf.WithQPS(5000),
@@ -385,6 +392,13 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	require.NoError(t, err)
 	err = cl.Delete(context.Background(), &pod)
 	require.NoError(t, err)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+		//nolint:testifylint
+		if assert.NoError(c, err) {
+			assert.Equal(c, corev1.PodRunning, pod.Status.Phase)
+		}
+	}, 30*time.Second, time.Millisecond*100)
 
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL(appNameScheduler)
