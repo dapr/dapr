@@ -23,7 +23,7 @@ This document helps you get started developing Dapr. If you find any problems wh
 
 ## Go (Golang)
 
-1. Download and install [Go 1.22.6 or later](https://golang.org/doc/install#tarball).
+1. Download and install [go 1.23.0 or later](https://golang.org/doc/install#tarball).
 
 2. Install [Delve](https://github.com/go-delve/delve/tree/master/Documentation/installation) for Go debugging, if desired.
 
