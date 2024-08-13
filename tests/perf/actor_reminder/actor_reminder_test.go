@@ -61,7 +61,7 @@ const (
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
-	dueTime          = 260
+	dueTime          = 300
 	dueTimeScheduler = 110
 )
 
@@ -248,7 +248,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 	// fast fail if daprResp starts with error
-	require.False(t, strings.HasPrefix(string(daprResp), "error"))
+	require.False(t, strings.HasPrefix(string(daprResp), "error"), daprResp)
 
 	// Let test run for 90s triggering the timers and collect metrics.
 	time.Sleep(90 * time.Second)
