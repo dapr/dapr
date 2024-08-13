@@ -32,6 +32,7 @@ cluster:
   etcdDataDirWinPath: C:\\dapr-scheduler
   storageClassName: ""
   storageSize: 1Gi
+  inMemoryStorage: false
 
 etcdSpaceQuota: 2147483648
 etcdCompactionMode: periodic
