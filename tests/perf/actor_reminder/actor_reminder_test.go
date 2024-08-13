@@ -211,6 +211,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 	require.NoError(t, err)
 	err = cl.Delete(context.Background(), &pod)
 	require.NoError(t, err)
+	time.Sleep(time.Second * 5)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
 		//nolint:testifylint
@@ -392,6 +393,7 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	require.NoError(t, err)
 	err = cl.Delete(context.Background(), &pod)
 	require.NoError(t, err)
+	time.Sleep(time.Second * 5)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
 		//nolint:testifylint
