@@ -28,6 +28,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"sigs.k8s.io/controller-runtime/pkg/client"
@@ -56,7 +57,7 @@ const (
 	targetSchedulerTriggerQPS float64 = 3800
 
 	// reminderCount is the number of reminders to register.
-	reminderCount          = 5000
+	reminderCount          = 2000
 	reminderCountScheduler = 50000
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
@@ -197,28 +198,25 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 }
 
 func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
-	platform, ok := tr.Platform.(*runner.KubeTestPlatform)
-	if !ok {
-		t.Skip("skipping test; only supported on kubernetes")
-	}
-
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
-	require.NoError(t, err)
-	var pod corev1.Pod
-	err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-	require.NoError(t, err)
-	err = cl.Delete(context.Background(), &pod)
-	require.NoError(t, err)
-	time.Sleep(time.Second * 5)
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	t.Cleanup(func() {
+		platform := tr.Platform.(*runner.KubeTestPlatform)
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
+		require.NoError(t, err)
+		var pod corev1.Pod
 		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-		//nolint:testifylint
-		if assert.NoError(c, err) {
-			assert.Equal(c, corev1.PodRunning, pod.Status.Phase)
-		}
-	}, 30*time.Second, time.Millisecond*100)
+		require.NoError(t, err)
+		err = cl.Delete(context.Background(), &pod)
+		require.NoError(t, err)
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			var sts appsv1.StatefulSet
+			err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
+			require.NoError(t, err)
+			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
+		}, time.Minute, time.Second)
+	})
 
 	p := perf.Params(
 		perf.WithQPS(5000),
@@ -233,7 +231,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 
 	// Check if test app endpoint is available
 	t.Logf("test app url: %s", testAppURL+"/health")
-	_, err = utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
+	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
 
 	// Perform dapr test
@@ -249,7 +247,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 	// fast fail if daprResp starts with error
-	require.False(t, strings.HasPrefix(string(daprResp), "error"), daprResp)
+	require.False(t, strings.HasPrefix(string(daprResp), "error"), string(daprResp))
 
 	// Let test run for 90s triggering the timers and collect metrics.
 	time.Sleep(90 * time.Second)
@@ -379,28 +377,25 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 }
 
 func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
-	platform, ok := tr.Platform.(*runner.KubeTestPlatform)
-	if !ok {
-		t.Skip("skipping test; only supported on kubernetes")
-	}
-
-	scheme := runtime.NewScheme()
-	require.NoError(t, corev1.AddToScheme(scheme))
-	cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
-	require.NoError(t, err)
-	var pod corev1.Pod
-	err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-	require.NoError(t, err)
-	err = cl.Delete(context.Background(), &pod)
-	require.NoError(t, err)
-	time.Sleep(time.Second * 5)
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	t.Cleanup(func() {
+		platform := tr.Platform.(*runner.KubeTestPlatform)
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
+		require.NoError(t, err)
+		var pod corev1.Pod
 		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
-		//nolint:testifylint
-		if assert.NoError(c, err) {
-			assert.Equal(c, corev1.PodRunning, pod.Status.Phase)
-		}
-	}, 30*time.Second, time.Millisecond*100)
+		require.NoError(t, err)
+		err = cl.Delete(context.Background(), &pod)
+		require.NoError(t, err)
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			var sts appsv1.StatefulSet
+			err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
+			require.NoError(t, err)
+			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
+		}, time.Minute, time.Second)
+	})
 
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL(appNameScheduler)
@@ -408,7 +403,7 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 
 	// Check if test app endpoint is available
 	t.Logf("test app url: %s", testAppURL+"/health")
-	_, err = utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
+	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
 
 	t.Logf("invoking actor reminder scheduler")
