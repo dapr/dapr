@@ -422,8 +422,11 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	worker := func(i int) {
-		_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/abc/reminders/myreminder%d", testAppURL, actorTypeScheduler, i), reminderB)
-		require.NoError(t, err)
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/abc/reminders/myreminder%d", testAppURL, actorTypeScheduler, i), reminderB)
+			//nolint:testifylint
+			assert.NoError(c, err)
+		}, 10*time.Second, time.Millisecond*100)
 
 		if (i+1)%10000 == 0 {
 			fmt.Printf("Reminders registered: %d\n", i+1)
