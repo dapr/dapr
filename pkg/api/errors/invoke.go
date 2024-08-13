@@ -4,8 +4,9 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/dapr/kit/errors"
 	"google.golang.org/grpc/codes"
+
+	"github.com/dapr/kit/errors"
 )
 
 type InvokeError struct {

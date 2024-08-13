@@ -86,6 +86,5 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
 		// wip
-
 	})
 }

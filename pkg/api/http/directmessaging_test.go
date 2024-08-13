@@ -623,12 +623,12 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	t.Run("Invoke returns error - 500 NO_TARGET_APP_ID ", func(t *testing.T) {
 		mockDirectMessaging1 := new(daprt.MockDirectMessaging)
 
-		compStore := compstore.New()
+		compStore1 := compstore.New()
 		fakeServer1 := newFakeHTTPServer()
 		testAPI := &api{
 			directMessaging: mockDirectMessaging1,
 			universal: universal.New(universal.Options{
-				CompStore:  compStore,
+				CompStore:  compStore1,
 				Resiliency: resiliency.New(nil),
 			}),
 		}
