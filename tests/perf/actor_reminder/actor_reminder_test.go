@@ -20,6 +20,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -62,7 +63,7 @@ const (
 	// at this point there's a risk of timeouts during reminder creation
 	// using smaller number of reminders for the registration and trigger test to be consistent with the numbers
 	reminderCount          = 1000
-	reminderCountScheduler = 40000
+	reminderCountScheduler = 50000
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
@@ -538,7 +539,11 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	// save reminders map to a file
-	err = os.WriteFile("./container_logs/remindersMap.json", resp, 0644)
+	logsPath := os.Getenv("DAPR_CONTAINER_LOG_PATH")
+	if logsPath == "" {
+		logsPath = "./container_logs"
+	}
+	err = os.WriteFile(filepath.Join(logsPath, "remindersMap.json"), resp, 0644)
 	require.NoError(t, err)
 
 	qps := float64(triggeredCount) / done.Seconds()
