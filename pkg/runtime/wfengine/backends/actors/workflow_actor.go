@@ -164,7 +164,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 		return actors.ErrReminderCanceled
 	case errors.Is(err, context.DeadlineExceeded):
 		wfLogger.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", wf.actorID, err)
-		return nil
+		return err
 	case errors.Is(err, context.Canceled):
 		wfLogger.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", wf.actorID, err)
 		return nil
@@ -787,18 +787,13 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, namePrefix 
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 
-	period := wf.reminderInterval.String()
-	if wf.actors.UsingSchedulerReminders() {
-		period = fmt.Sprintf("R2/PT%vS", int(wf.reminderInterval.Seconds()))
-	}
-
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: wf.config.workflowActorType,
 		ActorID:   wf.actorID,
 		Data:      dataEnc,
 		DueTime:   delay.String(),
 		Name:      reminderName,
-		Period:    period,
+		Period:    wf.reminderInterval.String(),
 	})
 }
 
