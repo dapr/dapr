@@ -49,7 +49,7 @@ const (
 	appNameScheduler   = "perf-actor-reminder-scheduler-service"
 
 	// Target for the QPS - Temporary
-	targetQPS          float64 = 31
+	targetQPS          float64 = 33
 	targetSchedulerQPS float64 = 3000
 
 	// Target for the QPS to trigger reminders.
@@ -119,7 +119,7 @@ func TestMain(m *testing.M) {
 
 func TestActorReminderRegistrationPerformance(t *testing.T) {
 	p := perf.Params(
-		perf.WithQPS(31),
+		perf.WithQPS(33),
 		perf.WithConnections(8),
 		perf.WithDuration("1m"),
 		perf.WithPayload("{}"),
@@ -194,7 +194,7 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	assert.Equal(t, 0, daprResult.RetCodes.Num400)
 	assert.Equal(t, 0, daprResult.RetCodes.Num500)
 	assert.Equal(t, 0, restarts)
-	assert.GreaterOrEqual(t, daprResult.ActualQPS, targetQPS) // TODO: Revert to p.QPS
+	assert.InDelta(t, targetQPS, daprResult.ActualQPS, 2)
 }
 
 func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
@@ -296,7 +296,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 	assert.Equal(t, 0, daprResult.RetCodes.Num400)
 	assert.Equal(t, 0, daprResult.RetCodes.Num500)
 	assert.Equal(t, 0, restarts)
-	assert.GreaterOrEqual(t, daprResult.ActualQPS, targetSchedulerQPS)
+	assert.InDelta(t, targetSchedulerQPS, daprResult.ActualQPS, 5)
 }
 
 type actorReminderRequest struct {
