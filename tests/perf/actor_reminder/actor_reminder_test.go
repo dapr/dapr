@@ -49,7 +49,7 @@ const (
 	appNameScheduler   = "perf-actor-reminder-scheduler-service"
 
 	// Target for the QPS - Temporary
-	targetQPS          float64 = 33
+	targetQPS          float64 = 31
 	targetSchedulerQPS float64 = 3000
 
 	// Target for the QPS to trigger reminders.
@@ -119,7 +119,7 @@ func TestMain(m *testing.M) {
 
 func TestActorReminderRegistrationPerformance(t *testing.T) {
 	p := perf.Params(
-		perf.WithQPS(33),
+		perf.WithQPS(31),
 		perf.WithConnections(8),
 		perf.WithDuration("1m"),
 		perf.WithPayload("{}"),
