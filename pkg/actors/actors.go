@@ -1126,11 +1126,13 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 			delete(a.internalReminderInProgress, key)
 			a.lock.Unlock()
 		}
-		if err != nil && !errors.Is(err, ErrReminderCanceled) {
-			log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
-		}
 
-		return err
+		if err != nil {
+			if !errors.Is(err, ErrReminderCanceled) {
+				log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
+			}
+			return err
+		}
 	}
 
 	return nil
