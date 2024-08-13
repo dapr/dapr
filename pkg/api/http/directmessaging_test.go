@@ -621,25 +621,25 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke returns error - 500 NO_TARGET_APP_ID ", func(t *testing.T) {
-		mockDirectMessaging := new(daprt.MockDirectMessaging)
+		mockDirectMessaging1 := new(daprt.MockDirectMessaging)
 
 		compStore := compstore.New()
-		fakeServer := newFakeHTTPServer()
+		fakeServer1 := newFakeHTTPServer()
 		testAPI := &api{
-			directMessaging: mockDirectMessaging,
+			directMessaging: mockDirectMessaging1,
 			universal: universal.New(universal.Options{
 				CompStore:  compStore,
 				Resiliency: resiliency.New(nil),
 			}),
 		}
-		fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
+		fakeServer1.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
 
 		apiPath := "noAppIDMethod"
 		fakeData := []byte("fakeData")
 
-		mockDirectMessaging.Calls = nil // reset call count
+		mockDirectMessaging1.Calls = nil // reset call count
 
-		mockDirectMessaging.
+		mockDirectMessaging1.
 			On(
 				"Invoke",
 				mock.MatchedBy(matchContextInterface),
@@ -661,6 +661,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 404, resp.StatusCode)
 		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		fakeServer1.Shutdown()
 	})
 
 	t.Run("Invoke returns error - 500 ERR_DIRECT_INVOKE", func(t *testing.T) {
@@ -772,7 +773,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke returns error - no direct messaging ", func(t *testing.T) {
-		fakeServer := newFakeHTTPServer()
+		fakeServer1 := newFakeHTTPServer()
 		testAPI := &api{
 			directMessaging: nil,
 			universal: universal.New(universal.Options{
@@ -780,7 +781,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 				Resiliency: resiliency.New(nil),
 			}),
 		}
-		fakeServer.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
+		fakeServer1.StartServer(testAPI.constructDirectMessagingEndpoints(), nil)
 		apiPath := "v1.0/invoke/noDirectMessaging/method/fakeMethod"
 		fakeData := []byte("fakeData")
 		mockDirectMessaging.Calls = nil // reset call count
@@ -798,6 +799,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, fakeData, nil)
 		assert.Equal(t, 500, resp.StatusCode)
 		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		fakeServer1.Shutdown()
 	})
 
 	fakeServer.Shutdown()
