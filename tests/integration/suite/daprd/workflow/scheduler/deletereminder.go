@@ -134,6 +134,6 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Empty(c, keys)
-	}, time.Second*60, 10*time.Second) // account for cleanup time in etcd
+	}, time.Second*60, time.Millisecond*10) // account for cleanup time in etcd
 	// explicitly not checking the job/counters records since those get garbage collected after 180s
 }
