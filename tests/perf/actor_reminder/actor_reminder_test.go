@@ -17,6 +17,7 @@ limitations under the License.
 package actor_reminder_perf
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,6 +28,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/perf/utils"
@@ -193,6 +197,21 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 }
 
 func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
+	platform, ok := tr.Platform.(*runner.KubeTestPlatform)
+	if !ok {
+		t.Skip("skipping test; only supported on kubernetes")
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
+	require.NoError(t, err)
+	var pod corev1.Pod
+	err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+	require.NoError(t, err)
+	err = cl.Delete(context.Background(), &pod)
+	require.NoError(t, err)
+
 	p := perf.Params(
 		perf.WithQPS(5000),
 		perf.WithConnections(8),
@@ -206,7 +225,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 
 	// Check if test app endpoint is available
 	t.Logf("test app url: %s", testAppURL+"/health")
-	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
+	_, err = utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
 
 	// Perform dapr test
@@ -352,13 +371,28 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 }
 
 func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
+	platform, ok := tr.Platform.(*runner.KubeTestPlatform)
+	if !ok {
+		t.Skip("skipping test; only supported on kubernetes")
+	}
+
+	scheme := runtime.NewScheme()
+	require.NoError(t, corev1.AddToScheme(scheme))
+	cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
+	require.NoError(t, err)
+	var pod corev1.Pod
+	err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+	require.NoError(t, err)
+	err = cl.Delete(context.Background(), &pod)
+	require.NoError(t, err)
+
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL(appNameScheduler)
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
 
 	// Check if test app endpoint is available
 	t.Logf("test app url: %s", testAppURL+"/health")
-	_, err := utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
+	_, err = utils.HTTPGetNTimes(testAppURL+"/health", numHealthChecks)
 	require.NoError(t, err)
 
 	t.Logf("invoking actor reminder scheduler")
