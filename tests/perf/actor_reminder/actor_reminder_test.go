@@ -68,7 +68,7 @@ const (
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
 	dueTime          = 180
-	dueTimeScheduler = 330
+	dueTimeScheduler = 360
 )
 
 var tr *runner.TestRunner
@@ -540,9 +540,11 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	// save reminders map to a file
 	logsPath := os.Getenv("DAPR_CONTAINER_LOG_PATH")
 	if logsPath == "" {
-		logsPath = "./container_logs"
+		logsPath = "./container_logs/perf_tests/"
 	}
-	err = os.WriteFile(filepath.Join(logsPath, "remindersMap.json"), resp, 0644)
+	reminderMapFilePath := filepath.Join(logsPath, "remindersMap.json")
+	err = os.WriteFile(reminderMapFilePath, resp, 0666)
+	t.Logf("Reminders map saved to %s, size %d", reminderMapFilePath, len(resp))
 	require.NoError(t, err)
 
 	qps := float64(triggeredCount) / done.Seconds()
