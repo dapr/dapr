@@ -1199,7 +1199,7 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 			delete(a.internalReminderInProgress, constructCompositeKey(reminder.ActorType, reminder.ActorID, reminder.Name))
 			a.lock.Unlock()
 		}()
-		return nil
+		return ErrReminderCanceled
 	}
 
 	return err
