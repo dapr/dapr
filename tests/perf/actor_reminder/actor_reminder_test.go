@@ -49,7 +49,7 @@ const (
 
 	// Target for the QPS - Temporary
 	targetQPS          float64 = 44
-	targetSchedulerQPS float64 = 4000
+	targetSchedulerQPS float64 = 950
 
 	// Target for the QPS to trigger reminders.
 	targetTriggerQPS          float64 = 4700
@@ -61,7 +61,7 @@ const (
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
-	dueTime          = 240
+	dueTime          = 260
 	dueTimeScheduler = 110
 )
 
