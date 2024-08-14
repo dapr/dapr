@@ -18,6 +18,8 @@ import (
 	"encoding/json"
 	"fmt"
 	"log"
+	"net"
+	"net/url"
 	"os"
 	"time"
 
@@ -50,6 +52,9 @@ const (
 
 	// maxSideCarDetectionRetries is the maximum number of retries to detect Dapr sidecar.
 	maxSideCarDetectionRetries = 3
+
+	// kindDefaultContextName is the name of the default kind cluster
+	kindDefaultContextName = "kind-kind"
 )
 
 // AppManager holds Kubernetes clients and namespace used for test apps
@@ -650,6 +655,19 @@ func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
 	} else if minikubeExternalIP := m.minikubeNodeIP(); minikubeExternalIP != "" {
 		// if test cluster is minikube, external ip address is minikube node address
 		address, port = minikubeExternalIP, svcFstPort.NodePort
+	} else if m.isKindCluster() && m.isCurrentContextLocal() {
+		// Support Kind cluster with specific name that is used in the `make setup-kind` target
+		host := m.getCurrentContextHost()
+		fmt.Printf("Running in Kind cluster, forwarding ports to %s\n", host)
+
+		// if test cluster is kind, "external" ip address is localhost or 127.0.0.1, and we need to forward port
+		ports, err := m.DoPortForwarding("", int(svcFstPort.Port))
+		if err != nil {
+			log.Printf("error forwarding ports: %s", err)
+			return ""
+		}
+
+		address, port = host, int32(ports[0])
 	}
 	return fmt.Sprintf("%s:%d", address, port)
 }
@@ -666,7 +684,7 @@ func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 
 	if len(svc.Spec.Ports) > 0 {
 		// TODO: Support the other local k8s clusters
-		return m.minikubeNodeIP() != "" || !m.app.ShouldBeExposed()
+		return m.minikubeNodeIP() != "" || !m.app.ShouldBeExposed() || (m.isKindCluster() && m.isCurrentContextLocal())
 	}
 
 	return false
@@ -683,6 +701,39 @@ func (m *AppManager) minikubeNodeIP() string {
 
 	// TODO: Use the better way to get the node ip of minikube
 	return os.Getenv(MiniKubeIPEnvVar)
+}
+
+func (m *AppManager) isKindCluster() bool {
+	return m.client.RawConfig.CurrentContext == kindDefaultContextName
+}
+
+func (m *AppManager) isCurrentContextLocal() bool {
+	host := m.getCurrentContextHost()
+	if host == "" {
+		return false
+	}
+
+	ip := net.ParseIP(host)
+	return ip.IsLoopback()
+}
+
+func (m *AppManager) getCurrentContextHost() string {
+	currentContextName := m.client.RawConfig.CurrentContext
+	currentContext := m.client.RawConfig.Contexts[currentContextName]
+	currentCluster := m.client.RawConfig.Clusters[currentContext.Cluster]
+
+	serverAddressHost, err := url.Parse(currentCluster.Server)
+	if err != nil {
+		log.Printf("error parsing server url: %s, error: %+v", currentCluster.Server, err)
+		return ""
+	}
+
+	host, _, err := net.SplitHostPort(serverAddressHost.Host)
+	if err != nil {
+		log.Printf("error splitting host and port: %s, error: %+v", serverAddressHost.Host, err)
+		return ""
+	}
+	return host
 }
 
 // DeleteJob deletes job for the test app.
