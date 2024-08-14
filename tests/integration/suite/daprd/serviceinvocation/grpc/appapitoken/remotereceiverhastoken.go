@@ -28,8 +28,8 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
+	testpb "github.com/dapr/dapr/tests/integration/framework/process/grpc/app/proto"
 	"github.com/dapr/dapr/tests/integration/suite"
-	testpb "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc/proto"
 )
 
 func init() {
@@ -43,15 +43,18 @@ type remotereceiverhastoken struct {
 }
 
 func (r *remotereceiverhastoken) Setup(t *testing.T) []framework.Option {
-	fn, ch := newServer()
-	r.ch = ch
+	r.ch = make(chan metadata.MD, 1)
 	app := app.New(t,
-		app.WithRegister(fn),
 		app.WithOnInvokeFn(func(ctx context.Context, _ *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
 			md, ok := metadata.FromIncomingContext(ctx)
 			require.True(t, ok)
 			r.ch <- md
 			return new(commonv1.InvokeResponse), nil
+		}),
+		app.WithPingFn(func(ctx context.Context, _ *testpb.PingRequest) (*testpb.PingResponse, error) {
+			md, _ := metadata.FromIncomingContext(ctx)
+			r.ch <- md
+			return new(testpb.PingResponse), nil
 		}),
 	)
 

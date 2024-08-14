@@ -145,6 +145,9 @@ type actorsRuntime struct {
 	closeCh            chan struct{}
 	apiLevel           atomic.Uint32
 
+	lock                       sync.Mutex
+	internalReminderInProgress map[string]struct{}
+
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
 }
@@ -190,6 +193,8 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		internalActors:     haxmap.New[string, InternalActor](32),
 		compStore:          opts.CompStore,
 		sec:                opts.Security,
+
+		internalReminderInProgress: map[string]struct{}{},
 
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
@@ -340,7 +345,9 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		a.placement.Start(ctx)
+		if err := a.placement.Start(ctx); err != nil {
+			log.Errorf("Placement failed to start due to: %s", err.Error())
+		}
 	}()
 
 	log.Infof("Actor runtime started. Idle timeout: %v", a.actorsConfig.Config.ActorIdleTimeout)
@@ -988,6 +995,10 @@ func (a *actorsRuntime) drainRebalancedActors() {
 	// visit all currently active actors.
 	var wg sync.WaitGroup
 
+	a.lock.Lock()
+	a.internalReminderInProgress = make(map[string]struct{})
+	a.lock.Unlock()
+
 	a.actorsTable.Range(func(key any, value any) bool {
 		wg.Add(1)
 		go func(key any, value any) {
@@ -1091,9 +1102,31 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 			return err
 		}
 	} else {
-		log.Debugf("Executing reminder for internal actor '%s'", reminder.Key())
+		key := reminder.Key()
+
+		log.Debugf("Executing reminder for internal actor '%s'", key)
+
+		a.lock.Lock()
+		if _, ok := a.internalReminderInProgress[key]; ok {
+			a.lock.Unlock()
+			// We don't need to return cancel here as the first invocation will
+			// delete the reminder.
+			log.Debugf("Duplicate concurrent reminder invocation detected for '%s', likely due to long processing time. Ignoring in favour of the active invocation", key)
+			return nil
+		}
+		a.internalReminderInProgress[key] = struct{}{}
+		a.lock.Unlock()
 
 		err = internalAct.InvokeReminder(ctx, reminder, md)
+
+		// Ensure that the in progress tracker is removed if the internal reminder
+		// timed out.
+		if errors.Is(err, context.DeadlineExceeded) {
+			a.lock.Lock()
+			delete(a.internalReminderInProgress, key)
+			a.lock.Unlock()
+		}
+
 		if err != nil {
 			if !errors.Is(err, ErrReminderCanceled) {
 				log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
@@ -1151,14 +1184,22 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 
 	// If the reminder was cancelled, delete it.
 	if errors.Is(err, ErrReminderCanceled) {
-		log.Debugf("Deleting reminder which was cancelled: %s", reminder.Key())
-		reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-		defer cancel()
-		return a.DeleteReminder(reqCtx, &DeleteReminderRequest{
-			Name:      reminder.Name,
-			ActorType: reminder.ActorType,
-			ActorID:   reminder.ActorID,
-		})
+		go func() {
+			log.Debugf("Deleting reminder which was cancelled: %s", reminder.Key())
+			reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+			defer cancel()
+			if derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
+				Name:      reminder.Name,
+				ActorType: reminder.ActorType,
+				ActorID:   reminder.ActorID,
+			}); derr != nil {
+				log.Errorf("Error deleting reminder %s: %s", reminder.Key(), derr)
+			}
+			a.lock.Lock()
+			delete(a.internalReminderInProgress, constructCompositeKey(reminder.ActorType, reminder.ActorID, reminder.Name))
+			a.lock.Unlock()
+		}()
+		return ErrReminderCanceled
 	}
 
 	return err

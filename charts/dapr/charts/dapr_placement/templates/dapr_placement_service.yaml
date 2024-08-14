@@ -9,9 +9,17 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
-{{- if .Values.service.annotations }}
-{{ toYaml .Values.service.annotations | indent 4}}
-{{- end }}
+{{- if or .Values.service.annotations .Values.global.prometheus.enabled }}
+  annotations:
+    {{- if .Values.global.prometheus.enabled }}
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .Values.global.prometheus.port }}"
+    prometheus.io/path: "/"
+    {{- end }}
+  {{- if .Values.service.annotations }}
+  {{- .Values.service.annotations | toYaml | nindent 4 }}
+  {{- end }}
+  {{- end }}
 spec:
   selector:
     app: dapr-placement-server
@@ -23,5 +31,11 @@ spec:
     port: {{ .Values.ports.apiPort }}
   - name: raft-node
     port: {{ .Values.ports.raftRPCPort }}
+{{- if eq .Values.global.prometheus.enabled true }}
+  - name: metrics
+    port: {{ .Values.global.prometheus.port }}
+    targetPort: {{ .Values.global.prometheus.port }}
+    protocol: TCP
+{{- end}}
   clusterIP: None
 {{- end }}

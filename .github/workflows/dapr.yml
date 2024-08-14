@@ -170,6 +170,9 @@ jobs:
       GOPROXY: "https://proxy.golang.org"
       TEST_OUTPUT_FILE_PREFIX: "test_report"
     steps:
+      - name: Check localhost DNS resolution
+        run: |
+          python3 -c 'import socket;print("localhost resolves to:",list(info[4][0] for info in socket.getaddrinfo("localhost", None)))'
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
       - name: Set up Go
