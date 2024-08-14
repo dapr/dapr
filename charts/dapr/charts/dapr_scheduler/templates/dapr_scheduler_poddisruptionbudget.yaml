@@ -1,4 +1,4 @@
-{{- if and (gt (int .Values.replicaCount) 1) (eq .Values.global.scheduler.enabled true) }}
+{{- if (eq .Values.global.scheduler.enabled true) }}
 {{- if .Capabilities.APIVersions.Has "policy/v1" }}
 apiVersion: policy/v1
 {{- else }}

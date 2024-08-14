@@ -24,11 +24,11 @@ type conn struct {
 	lock             sync.RWMutex
 	streamLock       sync.Mutex
 	stream           rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
-	publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsResponseAlpha1
+	publishResponses map[string]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
 }
 
-func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsResponseAlpha1, func()) {
-	ch := make(chan *rtv1pb.SubscribeTopicEventsResponseAlpha1)
+func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1, func()) {
+	ch := make(chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1)
 	c.lock.Lock()
 	c.publishResponses[id] = ch
 	c.lock.Unlock()
@@ -39,7 +39,7 @@ func (c *conn) registerPublishResponse(id string) (chan *rtv1pb.SubscribeTopicEv
 	}
 }
 
-func (c *conn) notifyPublishResponse(ctx context.Context, resp *rtv1pb.SubscribeTopicEventsResponseAlpha1) {
+func (c *conn) notifyPublishResponse(ctx context.Context, resp *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1) {
 	c.lock.RLock()
 	ch, ok := c.publishResponses[resp.GetId()]
 	c.lock.RUnlock()

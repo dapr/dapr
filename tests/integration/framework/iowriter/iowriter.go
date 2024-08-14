@@ -63,9 +63,8 @@ func (w *stdwriter) Write(inp []byte) (n int, err error) {
 	return w.buf.Write(inp)
 }
 
-// Close flushes the buffer and marks the writer as closed.
+// Close is a no-op.
 func (w *stdwriter) Close() error {
-	w.flush()
 	return nil
 }
 

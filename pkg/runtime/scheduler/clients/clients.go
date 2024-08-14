@@ -62,6 +62,12 @@ func New(ctx context.Context, opts Options) (*Clients, error) {
 
 // Next returns the next client in a round-robin manner.
 func (c *Clients) Next() schedulerv1pb.SchedulerClient {
+	// This is called even when no scheduler is initialized.
+	// Keeping these nil checks here as a central location instead of spreading "ifs".
+	if c == nil || c.clients == nil || len(c.clients) == 0 {
+		return &schedulerClientNotInitializedInstance
+	}
+
 	if len(c.clients) == 1 {
 		return c.clients[0]
 	}

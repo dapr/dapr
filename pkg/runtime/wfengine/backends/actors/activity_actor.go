@@ -148,7 +148,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 		return actors.ErrReminderCanceled
 	case errors.Is(err, context.DeadlineExceeded):
 		wfLogger.Warnf("%s: execution of '%s' timed-out and will be retried later: %v", a.actorID, reminder.Name, err)
-		return nil
+		return err
 	case errors.Is(err, context.Canceled):
 		wfLogger.Warnf("%s: received cancellation signal while waiting for activity execution '%s'", a.actorID, reminder.Name)
 		return nil
@@ -367,6 +367,7 @@ func (a *activityActor) createReliableReminder(ctx context.Context, data any) er
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
+
 	return a.actorRuntime.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: a.config.activityActorType,
 		ActorID:   a.actorID,

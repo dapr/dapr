@@ -37,7 +37,7 @@ type options struct {
 
 	appID                   string
 	namespace               *string
-	appPort                 int
+	appPort                 *int
 	grpcPort                int
 	httpPort                int
 	internalGRPCPort        int
@@ -99,7 +99,7 @@ func WithExit1() Option {
 
 func WithAppPort(port int) Option {
 	return func(o *options) {
-		o.appPort = port
+		o.appPort = &port
 	}
 }
 
