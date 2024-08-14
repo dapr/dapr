@@ -132,6 +132,7 @@ RELEASE_NAME?=dapr
 DAPR_NAMESPACE?=dapr-system
 DAPR_MTLS_ENABLED?=true
 DAPR_SCHEDULER_REPLICAS?=1
+DAPR_SCHEDULER_IN_MEMORY_STORAGE?=false
 HELM_CHART_ROOT:=./charts
 HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
@@ -294,6 +295,7 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) \
 		--set dapr_scheduler.replicaCount=$(DAPR_SCHEDULER_REPLICAS) \
 		--set dapr_scheduler.cluster.storageSize=100Mi \
+		--set dapr_scheduler.cluster.inMemoryStorage=$(DAPR_SCHEDULER_IN_MEMORY_STORAGE) \
 		$(ADDITIONAL_HELM_SET) $(HELM_CHART_DIR)
 
 ################################################################################
