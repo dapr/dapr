@@ -124,7 +124,7 @@ func (u *unregister) Run(t *testing.T, ctx context.Context) {
 		prevLast := last
 		last = called
 		assert.Equal(ct, int(prevLast), int(called))
-	}, time.Second*15, time.Second*1)
+	}, time.Second*15, time.Second*2)
 
 	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 		ActorType: "myactortype",

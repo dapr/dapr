@@ -115,6 +115,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 			Job: &runtimev1pb.Job{
 				Name:     "test",
 				Schedule: ptr.Of("@every 1s"),
+				DueTime:  ptr.Of("0s"),
 				Repeats:  ptr.Of(uint32(1)),
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.type.Expr",

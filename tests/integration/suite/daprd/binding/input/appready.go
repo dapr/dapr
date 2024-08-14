@@ -122,6 +122,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		return resp.StatusCode == http.StatusInternalServerError
 	}, time.Second*5, 10*time.Millisecond)
 
+	time.Sleep(time.Second * 2)
 	assert.Equal(t, int64(0), a.bindingCalled.Load())
 
 	a.appHealthy.Store(true)
