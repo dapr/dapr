@@ -352,7 +352,6 @@ func (wf *workflowActor) getWorkflowMetadata(ctx context.Context) (*api.Orchestr
 
 func (wf *workflowActor) getWorkflowState(ctx context.Context) (*workflowState, error) {
 	state, err := wf.loadInternalState(ctx)
-	wfLogger.Errorf("Workflow actor '%s': getWorkflowState, state: %s", wf.actorID, state)
 	if err != nil {
 		return nil, err
 	}
