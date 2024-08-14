@@ -145,8 +145,9 @@ type actorsRuntime struct {
 	closeCh            chan struct{}
 	apiLevel           atomic.Uint32
 
-	lock                       sync.Mutex
-	internalReminderInProgress map[string]struct{}
+	lock                            sync.Mutex
+	internalReminderInProgress      map[string]struct{}
+	schedulerReminderFeatureEnabled bool
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -194,7 +195,8 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		compStore:          opts.CompStore,
 		sec:                opts.Security,
 
-		internalReminderInProgress: map[string]struct{}{},
+		internalReminderInProgress:      map[string]struct{}{},
+		schedulerReminderFeatureEnabled: opts.SchedulerReminders,
 
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
@@ -995,9 +997,11 @@ func (a *actorsRuntime) drainRebalancedActors() {
 	// visit all currently active actors.
 	var wg sync.WaitGroup
 
-	a.lock.Lock()
-	a.internalReminderInProgress = make(map[string]struct{})
-	a.lock.Unlock()
+	if a.schedulerReminderFeatureEnabled {
+		a.lock.Lock()
+		a.internalReminderInProgress = make(map[string]struct{})
+		a.lock.Unlock()
+	}
 
 	a.actorsTable.Range(func(key any, value any) bool {
 		wg.Add(1)
@@ -1106,22 +1110,24 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 
 		log.Debugf("Executing reminder for internal actor '%s'", key)
 
-		a.lock.Lock()
-		if _, ok := a.internalReminderInProgress[key]; ok {
+		if a.schedulerReminderFeatureEnabled {
+			a.lock.Lock()
+			if _, ok := a.internalReminderInProgress[key]; ok {
+				a.lock.Unlock()
+				// We don't need to return cancel here as the first invocation will
+				// delete the reminder.
+				log.Debugf("Duplicate concurrent reminder invocation detected for '%s', likely due to long processing time. Ignoring in favour of the active invocation", key)
+				return nil
+			}
+			a.internalReminderInProgress[key] = struct{}{}
 			a.lock.Unlock()
-			// We don't need to return cancel here as the first invocation will
-			// delete the reminder.
-			log.Debugf("Duplicate concurrent reminder invocation detected for '%s', likely due to long processing time. Ignoring in favour of the active invocation", key)
-			return nil
 		}
-		a.internalReminderInProgress[key] = struct{}{}
-		a.lock.Unlock()
 
 		err = internalAct.InvokeReminder(ctx, reminder, md)
 
 		// Ensure that the in progress tracker is removed if the internal reminder
 		// timed out.
-		if errors.Is(err, context.DeadlineExceeded) {
+		if a.schedulerReminderFeatureEnabled && errors.Is(err, context.DeadlineExceeded) {
 			a.lock.Lock()
 			delete(a.internalReminderInProgress, key)
 			a.lock.Unlock()
