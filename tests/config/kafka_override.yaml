@@ -34,6 +34,7 @@ affinity:
             operator: In
             values:
             - amd64
+            - arm64
 
 zookeeper:
   persistence:
@@ -51,3 +52,4 @@ zookeeper:
               operator: In
               values:
               - amd64
+              - arm64
