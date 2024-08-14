@@ -60,11 +60,19 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
 	}))
+
+	resp, err := stream.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, r.daprd.GetMetaSubscriptions(c, ctx), 1)
@@ -80,39 +88,39 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 
 	event, err := stream.Recv()
 	require.NoError(t, err)
-	assert.Equal(t, "a", event.GetTopic())
-	id := event.GetId()
+	assert.Equal(t, "a", event.GetEventMessage().GetTopic())
+	id := event.GetEventMessage().GetId()
 
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-				Id:     event.GetId(),
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     event.GetEventMessage().GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_RETRY},
 			},
 		},
 	}))
 	event, err = stream.Recv()
 	require.NoError(t, err)
-	assert.Equal(t, "a", event.GetTopic())
-	assert.Equal(t, id, event.GetId())
+	assert.Equal(t, "a", event.GetEventMessage().GetTopic())
+	assert.Equal(t, id, event.GetEventMessage().GetId())
 
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-				Id:     event.GetId(),
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     event.GetEventMessage().GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_RETRY},
 			},
 		},
 	}))
 	event, err = stream.Recv()
 	require.NoError(t, err)
-	assert.Equal(t, "a", event.GetTopic())
-	assert.Equal(t, id, event.GetId())
+	assert.Equal(t, "a", event.GetEventMessage().GetTopic())
+	assert.Equal(t, id, event.GetEventMessage().GetId())
 
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-				Id:     event.GetId(),
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     event.GetEventMessage().GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_DROP},
 			},
 		},
@@ -121,12 +129,12 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	event, err = stream.Recv()
 	require.NoError(t, err)
-	assert.Equal(t, "a", event.GetTopic())
-	assert.NotEqual(t, id, event.GetId())
+	assert.Equal(t, "a", event.GetEventMessage().GetTopic())
+	assert.NotEqual(t, id, event.GetEventMessage().GetId())
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-				Id:     event.GetId(),
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     event.GetEventMessage().GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
 			},
 		},
@@ -138,9 +146,9 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-				Id:     event1.GetId(),
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     event1.GetEventMessage().GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_DROP},
 			},
 		},
@@ -152,9 +160,9 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-				Id:     event2.GetId(),
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     event2.GetEventMessage().GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_RETRY},
 			},
 		},
@@ -162,7 +170,7 @@ func (r *retry) Run(t *testing.T, ctx context.Context) {
 
 	event3, err := stream.Recv()
 	require.NoError(t, err)
-	assert.Equal(t, event2.GetId(), event3.GetId())
+	assert.Equal(t, event2.GetEventMessage().GetId(), event3.GetEventMessage().GetId())
 
 	require.NoError(t, stream.CloseSend())
 }

@@ -72,11 +72,15 @@ func (n *failover) Setup(t *testing.T) []framework.Option {
 	n.srv = prochttp.New(t, prochttp.WithHandler(handler))
 
 	return []framework.Option{
-		framework.WithProcesses(n.fp, n.srv),
+		framework.WithProcesses(n.fp, n.srv, n.placements[0], n.placements[1], n.placements[2]),
 	}
 }
 
 func (n *failover) Run(t *testing.T, ctx context.Context) {
+	for _, p := range n.placements {
+		p.WaitUntilRunning(t, ctx)
+	}
+
 	host1 := &v1pb.Host{
 		Name:      "myapp1",
 		Namespace: "ns1",
@@ -102,16 +106,7 @@ func (n *failover) Run(t *testing.T, ctx context.Context) {
 		ApiLevel:  uint32(20),
 	}
 
-	n.placements[0].Run(t, ctx)
-	n.placements[1].Run(t, ctx)
-	n.placements[2].Run(t, ctx)
-
-	n.placements[0].WaitUntilRunning(t, ctx)
-	n.placements[1].WaitUntilRunning(t, ctx)
-	n.placements[2].WaitUntilRunning(t, ctx)
-
 	leaderIndex := n.getLeader(t, ctx, -1)
-	require.NotEqualf(t, -1, leaderIndex, "no leader elected")
 
 	placementMessageCh1 := n.placements[leaderIndex].RegisterHost(t, ctx, host1)
 	placementMessageCh2 := n.placements[leaderIndex].RegisterHost(t, ctx, host2)
@@ -198,7 +193,7 @@ func (n *failover) Run(t *testing.T, ctx context.Context) {
 		assert.GreaterOrEqual(c, msgCnt, 1)
 	}, 10*time.Second, 10*time.Millisecond)
 
-	// Stop the placement leader and don't reconnect one fo the hosts in ns2. Check that:
+	// Stop the placement leader and don't reconnect one of the hosts in ns2. Check that:
 	// - a new leader has been elected
 	// - dissemination message hasn't been sent to host1, because there haven't been changes in ns1
 	// - dissemination message has been sent to host2, because host 3 hasn't reconnected, thus
@@ -206,7 +201,6 @@ func (n *failover) Run(t *testing.T, ctx context.Context) {
 	n.placements[leaderIndex].Cleanup(t)
 
 	leaderIndex = n.getLeader(t, ctx, leaderIndex)
-	require.NotEqualf(t, -1, leaderIndex, "no leader elected")
 
 	placementMessageCh2 = n.placements[leaderIndex].RegisterHost(t, ctx, host2)
 	n.placements[leaderIndex].RegisterHost(t, ctx, host1)

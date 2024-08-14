@@ -395,3 +395,7 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 	resp := future.Response()
 	return resp.(bool), nil
 }
+
+func (s *Server) GetRaftBind() string {
+	return s.raftBind
+}
