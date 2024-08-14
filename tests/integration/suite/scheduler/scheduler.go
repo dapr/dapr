@@ -16,5 +16,6 @@ package scheduler
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/authz"
+	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/helm"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/quorum"
 )

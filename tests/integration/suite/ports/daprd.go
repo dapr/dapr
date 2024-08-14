@@ -25,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -38,16 +39,17 @@ type daprd struct {
 }
 
 func (d *daprd) Setup(t *testing.T) []framework.Option {
-	d.proc = procdaprd.New(t)
+	app := app.New(t)
+	d.proc = procdaprd.New(t, procdaprd.WithAppPort(app.Port(t)))
 	return []framework.Option{
-		framework.WithProcesses(d.proc),
+		framework.WithProcesses(app, d.proc),
 	}
 }
 
 func (d *daprd) Run(t *testing.T, ctx context.Context) {
 	dialer := net.Dialer{Timeout: time.Second * 5}
 	for name, port := range map[string]int{
-		"app":           d.proc.AppPort(),
+		"app":           d.proc.AppPort(t),
 		"grpc":          d.proc.GRPCPort(),
 		"http":          d.proc.HTTPPort(),
 		"metrics":       d.proc.MetricsPort(),

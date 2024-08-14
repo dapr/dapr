@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -57,7 +58,7 @@ func (f *fuzzgrpc) Setup(t *testing.T) []framework.Option {
 		}, nil
 	}
 
-	srv := newGRPCServer(t, onInvoke)
+	srv := app.New(t, app.WithOnInvokeFn(onInvoke))
 	f.daprd1 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv.Port(t)))
 	f.daprd2 = procdaprd.New(t)
 
