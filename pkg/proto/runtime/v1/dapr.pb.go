@@ -1786,6 +1786,7 @@ type InvokeBindingRequest struct {
 	//
 	// Common metadata property:
 	// - ttlInSeconds : the time to live in seconds for the message.
+	//
 	// If set in the binding definition will cause all messages to
 	// have a default time to live. The message ttl overrides any value
 	// in the binding definition.
@@ -4208,12 +4209,12 @@ type TryLockRequest struct {
 	// which aims to prevent multi-thread in the same process trying the same lock concurrently.
 	//
 	// The reason why we don't make it automatically generated is:
-	// 1. If it is automatically generated,there must be a 'my_lock_owner_id' field in the response.
-	// This name is so weird that we think it is inappropriate to put it into the api spec
-	// 2. If we change the field 'my_lock_owner_id' in the response to 'lock_owner',which means the current lock owner of this lock,
-	// we find that in some lock services users can't get the current lock owner.Actually users don't need it at all.
-	// 3. When reentrant lock is needed,the existing lock_owner is required to identify client and check "whether this client can reenter this lock".
-	// So this field in the request shouldn't be removed.
+	//  1. If it is automatically generated,there must be a 'my_lock_owner_id' field in the response.
+	//     This name is so weird that we think it is inappropriate to put it into the api spec
+	//  2. If we change the field 'my_lock_owner_id' in the response to 'lock_owner',which means the current lock owner of this lock,
+	//     we find that in some lock services users can't get the current lock owner.Actually users don't need it at all.
+	//  3. When reentrant lock is needed,the existing lock_owner is required to identify client and check "whether this client can reenter this lock".
+	//     So this field in the request shouldn't be removed.
 	LockOwner string `protobuf:"bytes,3,opt,name=lock_owner,json=lockOwner,proto3" json:"lock_owner,omitempty"`
 	// Required. The time before expiry.The time unit is second.
 	ExpiryInSeconds int32 `protobuf:"varint,4,opt,name=expiry_in_seconds,json=expiryInSeconds,proto3" json:"expiry_in_seconds,omitempty"`
