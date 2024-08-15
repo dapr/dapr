@@ -164,7 +164,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 		return actors.ErrReminderCanceled
 	case errors.Is(err, context.DeadlineExceeded):
 		wfLogger.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", wf.actorID, err)
-		return nil
+		return err
 	case errors.Is(err, context.Canceled):
 		wfLogger.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", wf.actorID, err)
 		return nil

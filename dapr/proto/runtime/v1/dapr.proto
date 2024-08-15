@@ -61,7 +61,7 @@ service Dapr {
 
   // SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
   // events from it.
-  rpc SubscribeTopicEventsAlpha1(stream SubscribeTopicEventsRequestAlpha1) returns (stream TopicEventRequest) {}
+  rpc SubscribeTopicEventsAlpha1(stream SubscribeTopicEventsRequestAlpha1) returns (stream SubscribeTopicEventsResponseAlpha1) {}
 
   // Invokes binding data to specific output bindings
   rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
@@ -428,17 +428,17 @@ message BulkPublishResponseFailedEntry {
 // SubscribeTopicEventsRequestAlpha1 is a message containing the details for
 // subscribing to a topic via streaming.
 // The first message must always be the initial request. All subsequent
-// messages must be event responses.
+// messages must be event processed responses.
 message SubscribeTopicEventsRequestAlpha1 {
   oneof subscribe_topic_events_request_type {
-    SubscribeTopicEventsInitialRequestAlpha1 initial_request = 1;
-    SubscribeTopicEventsResponseAlpha1 event_response = 2;
+    SubscribeTopicEventsRequestInitialAlpha1 initial_request = 1;
+    SubscribeTopicEventsRequestProcessedAlpha1 event_processed = 2;
   }
 }
 
-// SubscribeTopicEventsInitialRequestAlpha1 is the initial message containing the
-// details for subscribing to a topic via streaming.
-message SubscribeTopicEventsInitialRequestAlpha1 {
+// SubscribeTopicEventsRequestInitialAlpha1 is the initial message containing
+// the details for subscribing to a topic via streaming.
+message SubscribeTopicEventsRequestInitialAlpha1 {
   // The name of the pubsub component
   string pubsub_name = 1;
 
@@ -456,15 +456,30 @@ message SubscribeTopicEventsInitialRequestAlpha1 {
   optional string dead_letter_topic = 4;
 }
 
-// SubscribeTopicEventsResponseAlpha1 is a message containing the result of a
+// SubscribeTopicEventsRequestProcessedAlpha1 is the message containing the
 // subscription to a topic.
-message SubscribeTopicEventsResponseAlpha1 {
+message SubscribeTopicEventsRequestProcessedAlpha1 {
   // id is the unique identifier for the subscription request.
   string id = 1;
 
   // status is the result of the subscription request.
   TopicEventResponse status = 2;
 }
+
+
+// SubscribeTopicEventsResponseAlpha1 is a message returned from daprd
+// when subscribing to a topic via streaming.
+message SubscribeTopicEventsResponseAlpha1 {
+  oneof subscribe_topic_events_response_type {
+    SubscribeTopicEventsResponseInitialAlpha1 initial_response = 1;
+    TopicEventRequest event_message = 2;
+  }
+}
+
+// SubscribeTopicEventsResponseInitialAlpha1 is the initial response from daprd
+// when subscribing to a topic.
+message SubscribeTopicEventsResponseInitialAlpha1 {}
+
 
 // InvokeBindingRequest is the message to send data to output bindings
 message InvokeBindingRequest {
@@ -1178,25 +1193,52 @@ message ShutdownRequest {
   // Empty
 }
 
-// Job is the definition of a job.
+// Job is the definition of a job. At least one of schedule or due_time must be
+// provided but can also be provided together.
 message Job {
   // The unique name for the job.
-  string name = 1;
+  string name = 1 [json_name = "name"];
 
-  // The schedule for the job.
-  optional string schedule = 2;
+  // schedule is an optional schedule at which the job is to be run.
+  // Accepts both systemd timer style cron expressions, as well as human
+  // readable '@' prefixed period strings as defined below.
+  //
+  // Systemd timer style cron accepts 6 fields:
+  // seconds | minutes | hours | day of month | month        | day of week
+  // 0-59    | 0-59    | 0-23  | 1-31         | 1-12/jan-dec | 0-7/sun-sat
+  //
+  // "0 30 * * * *" - every hour on the half hour
+  // "0 15 3 * * *" - every day at 03:15
+  //
+  // Period string expressions:
+	// Entry                  | Description                                | Equivalent To
+	// -----                  | -----------                                | -------------
+  // @every <duration>      | Run every <duration> (e.g. '@every 1h30m') | N/A
+	// @yearly (or @annually) | Run once a year, midnight, Jan. 1st        | 0 0 0 1 1 *
+	// @monthly               | Run once a month, midnight, first of month | 0 0 0 1 * *
+	// @weekly                | Run once a week, midnight on Sunday        | 0 0 0 * * 0
+	// @daily (or @midnight)  | Run once a day, midnight                   | 0 0 0 * * *
+	// @hourly                | Run once an hour, beginning of hour        | 0 0 * * * *
+  optional string schedule = 2 [json_name = "schedule"];
 
-  // Optional: jobs with fixed repeat counts (accounting for Actor Reminders).
-  optional uint32 repeats = 3;
+  // repeats is the optional number of times in which the job should be
+  // triggered. If not set, the job will run indefinitely or until expiration.
+  optional uint32 repeats = 3 [json_name = "repeats"];
 
-  // Optional: sets time at which or time interval before the callback is invoked for the first time.
-  optional string due_time = 4;
+  // due_time is the optional time at which the job should be active, or the
+  // "one shot" time if other scheduling type fields are not provided. Accepts
+  // a "point in time" string in the format of RFC3339, Go duration string
+  // (calculated from job creation time), or non-repeating ISO8601.
+  optional string due_time = 4 [json_name = "dueTime"];
 
-  // Optional: Time To Live to allow for auto deletes (accounting for Actor Reminders).
-  optional string ttl = 5;
+  // ttl is the optional time to live or expiration of the job. Accepts a
+  // "point in time" string in the format of RFC3339, Go duration string
+  // (calculated from job creation time), or non-repeating ISO8601.
+  optional string ttl = 5 [json_name = "ttl"];
 
-  // Job data.
-  google.protobuf.Any data = 6;
+  // payload is the serialized job payload that will be sent to the recipient
+  // when the job is triggered.
+  google.protobuf.Any data = 6 [json_name = "data"];
 }
 
 // ScheduleJobRequest is the message to create/schedule the job.
