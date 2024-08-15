@@ -658,7 +658,7 @@ func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
 	} else if m.isKindCluster() && m.isCurrentContextLocal() {
 		// Support Kind cluster with specific name that is used in the `make setup-kind` target
 		host := m.getCurrentContextHost()
-		fmt.Printf("Running in Kind cluster, forwarding ports to %s\n", host)
+		log.Printf("Running in Kind cluster, forwarding ports to %s", host)
 
 		// if test cluster is kind, "external" ip address is localhost or 127.0.0.1, and we need to forward port
 		ports, err := m.DoPortForwarding("", int(svcFstPort.Port))
