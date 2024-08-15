@@ -99,7 +99,6 @@ spec:
 func (a *appready) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 
-	a.bindingCalled.Store(0)
 	gclient := a.daprd.GRPCClient(t, ctx)
 	httpClient := client.HTTP(t)
 
