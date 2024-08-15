@@ -493,6 +493,7 @@ message InvokeBindingRequest {
   //
   // Common metadata property:
   // - ttlInSeconds : the time to live in seconds for the message.
+  //
   // If set in the binding definition will cause all messages to
   // have a default time to live. The message ttl overrides any value
   // in the binding definition.
@@ -839,11 +840,11 @@ message TryLockRequest {
   //
   // The reason why we don't make it automatically generated is:
   // 1. If it is automatically generated,there must be a 'my_lock_owner_id' field in the response.
-  // This name is so weird that we think it is inappropriate to put it into the api spec
+  //   This name is so weird that we think it is inappropriate to put it into the api spec
   // 2. If we change the field 'my_lock_owner_id' in the response to 'lock_owner',which means the current lock owner of this lock,
-  // we find that in some lock services users can't get the current lock owner.Actually users don't need it at all.
+  //   we find that in some lock services users can't get the current lock owner.Actually users don't need it at all.
   // 3. When reentrant lock is needed,the existing lock_owner is required to identify client and check "whether this client can reenter this lock".
-  // So this field in the request shouldn't be removed.
+  //   So this field in the request shouldn't be removed.
   string lock_owner = 3 [json_name = "lockOwner"];
 
   // Required. The time before expiry.The time unit is second.
@@ -880,7 +881,7 @@ message SubtleGetKeyRequest {
     // JSON (JSON Web Key) as string
     JSON = 1;
   }
- 
+
   // Name of the component
   string component_name = 1 [json_name="componentName"];
   // Name (or name/version) of the key to use in the key vault
@@ -1062,7 +1063,7 @@ message EncryptRequestOptions {
   // If true, the encrypted document does not contain a key reference.
   // In that case, calls to the Decrypt method must provide a key reference (name or name/version).
   // Defaults to false.
-  bool omit_decryption_key_name = 11 [json_name="omitDecryptionKeyName"]; 
+  bool omit_decryption_key_name = 11 [json_name="omitDecryptionKeyName"];
   // Key reference to embed in the encrypted document (name or name/version).
   // This is helpful if the reference of the key used to decrypt the document is different from the one used to encrypt it.
   // If unset, uses the reference of the key used to encrypt the document (this is the default behavior).
