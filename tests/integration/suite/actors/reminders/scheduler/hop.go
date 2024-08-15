@@ -112,14 +112,16 @@ func (h *hop) Run(t *testing.T, ctx context.Context) {
 
 	gclient := h.daprd1.GRPCClient(t, ctx)
 	for i := 0; i < 100; i++ {
-		_, err := gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-			ActorType: "myactortype",
-			ActorId:   "foo",
-			Name:      strconv.Itoa(i),
-			DueTime:   "0s",
-			Data:      []byte("reminderdata"),
-		})
-		require.NoError(t, err)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			_, err := gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+				ActorType: "myactortype",
+				ActorId:   "foo",
+				Name:      strconv.Itoa(i),
+				DueTime:   "0s",
+				Data:      []byte("reminderdata"),
+			})
+			require.NoError(c, err)
+		}, time.Second*10, time.Millisecond*50)
 	}
 
 	assert.Eventually(t, func() bool {

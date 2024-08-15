@@ -22,6 +22,7 @@ import (
 
 	"google.golang.org/grpc"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/config"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -130,17 +131,18 @@ func (s *Subscriber) StartStreamerSubscription(key string) error {
 	defer s.lock.Unlock()
 
 	if s.closed {
-		return nil
+		return apierrors.PubSub("").WithMetadata(nil).DeserializeError(errors.New("subscriber is closed"))
 	}
 
 	sub, ok := s.compStore.GetStreamSubscription(key)
 	if !ok {
-		return nil
+		err := fmt.Errorf("starting stream subscription without connection: %s", key)
+		return apierrors.PubSub("").WithMetadata(nil).DeserializeError(err)
 	}
 
 	pubsub, ok := s.compStore.GetPubSub(sub.PubsubName)
 	if !ok {
-		return nil
+		return apierrors.PubSub(sub.PubsubName).WithMetadata(nil).NotFound()
 	}
 
 	ss, err := s.startSubscription(pubsub, sub, true)
@@ -177,7 +179,7 @@ func (s *Subscriber) ReloadDeclaredAppSubscription(name, pubsubName string) erro
 	s.lock.Lock()
 	defer s.lock.Unlock()
 
-	if s.closed {
+	if !s.appSubActive || s.closed {
 		return nil
 	}
 

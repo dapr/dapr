@@ -24,6 +24,7 @@ type options struct {
 	bulkRoutes   []string
 	handlerFuncs []app.Option
 	progSubs     *[]SubscriptionJSON
+	initHealth   bool
 }
 
 func WithRoutes(routes ...string) Option {
@@ -50,5 +51,11 @@ func WithProgrammaticSubscriptions(subs ...SubscriptionJSON) Option {
 			o.progSubs = new([]SubscriptionJSON)
 		}
 		*o.progSubs = append(*o.progSubs, subs...)
+	}
+}
+
+func WithInitialHealth(health bool) Option {
+	return func(o *options) {
+		o.initHealth = health
 	}
 }
