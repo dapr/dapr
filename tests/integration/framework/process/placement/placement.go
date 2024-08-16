@@ -140,6 +140,7 @@ func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.Do(req)
+		//nolint:testifylint
 		if assert.NoError(c, err) {
 			defer resp.Body.Close()
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
