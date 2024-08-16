@@ -39,6 +39,8 @@ func TestAppFlag(t *testing.T) {
 	assert.EqualValues(t, false, opts.Logger.JSONFormatEnabled)
 	assert.EqualValues(t, true, opts.Metrics.Enabled())
 	assert.EqualValues(t, "9090", opts.Metrics.Port())
+	assert.EqualValues(t, 2, opts.KeepAliveTime)
+	assert.EqualValues(t, 3, opts.KeepAliveTimeout)
 }
 
 func TestInitialCluster(t *testing.T) {

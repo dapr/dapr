@@ -36,6 +36,9 @@ const (
 	defaultPlacementPort     = 50005
 	defaultReplicationFactor = 100
 	envMetadataEnabled       = "DAPR_PLACEMENT_METADATA_ENABLED"
+
+	defaultKeepAliveTime    = 2 // in seconds
+	defaultKeepAliveTimeout = 3 // in seconds
 )
 
 type Options struct {
@@ -62,6 +65,9 @@ type Options struct {
 	Mode             string
 
 	ReplicationFactor int
+
+	KeepAliveTime    int
+	KeepAliveTimeout int
 
 	// Log and metrics configurations
 	Logger  logger.Options
@@ -90,7 +96,7 @@ func New(origArgs []string) *Options {
 	}
 
 	// Create a flag set
-	fs := pflag.NewFlagSet("sentry", pflag.ExitOnError)
+	fs := pflag.NewFlagSet("placement", pflag.ExitOnError)
 	fs.SortFlags = true
 
 	fs.StringVar(&opts.RaftID, "id", "dapr-placement-0", "Placement server ID")
@@ -106,6 +112,8 @@ func New(origArgs []string) *Options {
 	fs.IntVar(&opts.MaxAPILevel, "max-api-level", 10, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
 	fs.IntVar(&opts.MinAPILevel, "min-api-level", 0, "Enforces a minimum 'api-level' in the cluster")
 	fs.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
+	fs.IntVar(&opts.KeepAliveTime, "keepalive-time", defaultKeepAliveTime, "sets the gRPC keepalive time for the placement-daprd stream")
+	fs.IntVar(&opts.KeepAliveTimeout, "keepalive-timeout", defaultKeepAliveTimeout, "sets the gRPC keepalive timeout for the placement-daprd stream")
 
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")

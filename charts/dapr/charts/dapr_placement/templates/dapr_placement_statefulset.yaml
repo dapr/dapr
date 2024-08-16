@@ -145,6 +145,12 @@ spec:
 {{- if eq .Values.metadataEnabled true }}
         - "--metadata-enabled"
 {{- end }}
+{{- if .Values.keepAliveTime }}
+        - "--keepalive-time={{ .Values.keepAliveTime }}"
+{{- end }}
+{{- if .Values.keepAliveTimeout }}
+        - "--keepalive-timeout={{ .Values.keepAliveTimeout }}"
+{{- end }}
 {{- if eq .Values.global.prometheus.enabled true }}
         - "--enable-metrics"
         - "--replicationFactor"
