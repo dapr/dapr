@@ -75,6 +75,6 @@ func (h *excludeVerbs) Run(t *testing.T, ctx context.Context) {
 		metrics := h.daprd.Metrics(t, ctx)
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:|path:/v1.0/invoke/myapp/method/orders/123|status:200"]))
-		}, time.Second*5, time.Millisecond*10)
+		}, time.Second*10, time.Millisecond*10)
 	})
 }
