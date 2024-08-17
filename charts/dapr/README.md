@@ -163,6 +163,8 @@ The Helm chart has the follow configuration options that can be supplied:
 | `dapr_placement.statefulsetAnnotations`         | Custom annotations for Dapr Placement Statefulset                                                                                                                         | `{}`    |
 | `dapr_placement.service.annotations` | Custom annotations for "dapr-placement-server" Service resource | `{}` |
 | `dapr_placement.extraEnvVars` | Dictionary (key: value pairs) to use as extra environment variables in the injected sidecar containers (e.g. `my-env-var: "my-val"`, etc) | `{}` |
+| `dapr_placement.keepAliveTime` | Sets the interval (in seconds) at which the placement service sends keepalive pings to daprd on the gRPC stream to check if the connection is still alive. Lower values will lead to shorter actor rebalancing time in case of pod loss, but higher network traffic during normal operation. [Мore info](https://grpc.io/docs/guides/keepalive/) on gRPC keepalive. | `2` |
+| `dapr_placement.keepAliveTimeout` | Sets the timeout period (in seconds) for daprd to respond to the placement service's keepalive pings before the placement service closes the connection. Lower values will lead to shorter actor rebalancing time in case of pod loss/restart, but higher network traffic during normal operation. [Мore info](https://grpc.io/docs/guides/keepalive/) on gRPC keepalive. | `3` |
 
 ### Dapr RBAC options:
 | Parameter | Description | Default |

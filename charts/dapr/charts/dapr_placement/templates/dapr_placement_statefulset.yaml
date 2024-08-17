@@ -145,20 +145,13 @@ spec:
 {{- if eq .Values.metadataEnabled true }}
         - "--metadata-enabled"
 {{- end }}
-{{- if .Values.keepAliveTime }}
+        - "--replicationFactor={{ .Values.replicationFactor }}"
+        - "--max-api-level={{ .Values.maxActorApiLevel }}"
+        - "--min-api-level={{ .Values.minActorApiLevel }}"
         - "--keepalive-time={{ .Values.keepAliveTime }}"
-{{- end }}
-{{- if .Values.keepAliveTimeout }}
         - "--keepalive-timeout={{ .Values.keepAliveTimeout }}"
-{{- end }}
 {{- if eq .Values.global.prometheus.enabled true }}
         - "--enable-metrics"
-        - "--replicationFactor"
-        - "{{ .Values.replicationFactor }}"
-        - "--max-api-level"
-        - "{{ .Values.maxActorApiLevel }}"
-        - "--min-api-level"
-        - "{{ .Values.minActorApiLevel }}"
         - "--metrics-port"
         - "{{ .Values.global.prometheus.port }}"
 {{- else }}
