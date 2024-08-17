@@ -93,13 +93,14 @@ func Run() {
 		log.Fatal("Failed to create raft server.")
 	}
 
-	placementOpts := placement.PlacementServiceOpts{
-		Port:             opts.PlacementPort,
-		RaftNode:         raftServer,
-		SecProvider:      secProvider,
-		Healthz:          healthz,
-		KeepAliveTime:    time.Duration(opts.KeepAliveTime) * time.Second,
-		KeepAliveTimeout: time.Duration(opts.KeepAliveTimeout) * time.Second,
+	placementOpts := placement.ServiceOpts{
+		Port:               opts.PlacementPort,
+		RaftNode:           raftServer,
+		SecProvider:        secProvider,
+		Healthz:            healthz,
+		KeepAliveTime:      time.Duration(opts.KeepAliveTime) * time.Second,
+		KeepAliveTimeout:   time.Duration(opts.KeepAliveTimeout) * time.Second,
+		DisseminateTimeout: time.Duration(opts.DisseminateTimeout) * time.Second,
 	}
 	if opts.MinAPILevel >= 0 && opts.MinAPILevel < math.MaxInt32 {
 		placementOpts.MinAPILevel = uint32(opts.MinAPILevel)

@@ -37,8 +37,9 @@ const (
 	defaultReplicationFactor = 100
 	envMetadataEnabled       = "DAPR_PLACEMENT_METADATA_ENABLED"
 
-	defaultKeepAliveTime    = 2 // in seconds
-	defaultKeepAliveTimeout = 3 // in seconds
+	defaultKeepAliveTime      = 2 // in seconds
+	defaultKeepAliveTimeout   = 3 // in seconds
+	defaultDisseminateTimeout = 2 // in seconds
 )
 
 type Options struct {
@@ -68,6 +69,14 @@ type Options struct {
 
 	KeepAliveTime    int
 	KeepAliveTimeout int
+
+	// DisseminateTimeout is the timeout to disseminate hashing tables after the membership change.
+	// When the multiple actor service pods are deployed first, a few pods are deployed in the beginning
+	// and the rest of pods will be deployed gradually. disseminateNextTime is maintained to decide when
+	// the hashing table is disseminated. disseminateNextTime is updated whenever membership change
+	// is applied to raft state or each pod is deployed. If we increase disseminateTimeout, it will
+	// reduce the frequency of dissemination, but it will delay the table dissemination.
+	DisseminateTimeout int
 
 	// Log and metrics configurations
 	Logger  logger.Options
@@ -112,8 +121,9 @@ func New(origArgs []string) *Options {
 	fs.IntVar(&opts.MaxAPILevel, "max-api-level", 10, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
 	fs.IntVar(&opts.MinAPILevel, "min-api-level", 0, "Enforces a minimum 'api-level' in the cluster")
 	fs.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
-	fs.IntVar(&opts.KeepAliveTime, "keepalive-time", defaultKeepAliveTime, "sets the gRPC keepalive time for the placement-daprd stream")
-	fs.IntVar(&opts.KeepAliveTimeout, "keepalive-timeout", defaultKeepAliveTimeout, "sets the gRPC keepalive timeout for the placement-daprd stream")
+	fs.IntVar(&opts.KeepAliveTime, "keepalive-time", defaultKeepAliveTime, "sets the gRPC keepalive time (in seconds) for the placement-daprd stream")
+	fs.IntVar(&opts.KeepAliveTimeout, "keepalive-timeout", defaultKeepAliveTimeout, "sets the gRPC keepalive timeout (in seconds) for the placement-daprd stream")
+	fs.IntVar(&opts.DisseminateTimeout, "disseminate-timeout", defaultDisseminateTimeout, "sets the timeout period (in seconds) for dissemination to be delayed after actor membership change (usually related to pod restarts) so as to avoid excessive dissemination during multiple pod restarts")
 
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")

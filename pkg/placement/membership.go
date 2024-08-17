@@ -166,7 +166,7 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 							// it will keep moving the time to disseminate the table, which will
 							// reduce the unnecessary table dissemination.
 							val, _ := p.disseminateNextTime.GetOrSet(op.host.Namespace, &atomic.Int64{})
-							val.Store(p.clock.Now().Add(disseminateTimeout).UnixNano())
+							val.Store(p.clock.Now().Add(p.disseminateTimeout).UnixNano())
 						}
 					}
 					<-logApplyConcurrency

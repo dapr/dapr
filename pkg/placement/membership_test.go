@@ -226,17 +226,17 @@ func TestMembershipChangeWorker(t *testing.T) {
 			// going to be disseminated in the next tick
 			ts1, ok := testServer.disseminateNextTime.Get("ns1")
 			if assert.True(c, ok) {
-				assert.Equal(c, clock.Now().Add(disseminateTimeout).UnixNano(), ts1.Load())
+				assert.Equal(c, clock.Now().Add(testServer.disseminateTimeout).UnixNano(), ts1.Load())
 			}
 
 			ts2, ok := testServer.disseminateNextTime.Get("ns2")
 			if assert.True(c, ok) {
-				assert.Equal(c, clock.Now().Add(disseminateTimeout).UnixNano(), ts2.Load())
+				assert.Equal(c, clock.Now().Add(testServer.disseminateTimeout).UnixNano(), ts2.Load())
 			}
 		}, 10*time.Second, 100*time.Millisecond)
 
 		// Move the clock forward so dissemination is triggered
-		clock.Step(disseminateTimeout)
+		clock.Step(testServer.disseminateTimeout)
 
 		// Wait for all three hosts to receive the updates
 		updateMsgCnt := 0

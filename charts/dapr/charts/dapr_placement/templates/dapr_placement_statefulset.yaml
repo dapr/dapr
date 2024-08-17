@@ -150,6 +150,7 @@ spec:
         - "--min-api-level={{ .Values.minActorApiLevel }}"
         - "--keepalive-time={{ .Values.keepAliveTime }}"
         - "--keepalive-timeout={{ .Values.keepAliveTimeout }}"
+        - "--disseminate-timeout={{ .Values.disseminateTimeout }}"
 {{- if eq .Values.global.prometheus.enabled true }}
         - "--enable-metrics"
         - "--metrics-port"

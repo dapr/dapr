@@ -41,6 +41,7 @@ func TestAppFlag(t *testing.T) {
 	assert.EqualValues(t, "9090", opts.Metrics.Port())
 	assert.EqualValues(t, 2, opts.KeepAliveTime)
 	assert.EqualValues(t, 3, opts.KeepAliveTimeout)
+	assert.EqualValues(t, 2, opts.DisseminateTimeout)
 }
 
 func TestInitialCluster(t *testing.T) {
