@@ -136,7 +136,7 @@ func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[strin
 		}
 		require.NoError(t, err)
 
-		l.got.Write(line)
+		l.got.Write(append(line, '\n'))
 
 		for expLine := range expLines {
 			if strings.Contains(string(line), expLine) {
