@@ -144,7 +144,7 @@ func getBulk(secrets []daprSecret) ([]daprSecret, int, error) {
 	/* #nosec */
 	res, err := httpClient.Get(url)
 	if err != nil {
-		return nil, http.StatusInternalServerError, fmt.Errorf("bulk get secret request faild %w", err)
+		return nil, http.StatusInternalServerError, fmt.Errorf("bulk get secret request failed %w", err)
 	}
 	defer res.Body.Close()
 
