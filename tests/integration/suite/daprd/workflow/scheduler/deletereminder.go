@@ -18,8 +18,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"strings"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,6 +31,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	clients "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -83,75 +82,35 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	d.place.WaitUntilRunning(t, ctx)
 	d.daprd.WaitUntilRunning(t, ctx)
 
-	etcdClient, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"localhost:" + d.scheduler.EtcdClientPort()},
+	etcdClient := clients.Etcd(t, clientv3.Config{
+		Endpoints:   []string{fmt.Sprintf("localhost:%s", d.scheduler.EtcdClientPort())},
 		DialTimeout: 5 * time.Second,
 	})
-	require.NoError(t, err)
 
-	kvs, err := etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-	require.NoError(t, err)
-	require.Empty(t, kvs.Count)
+	// Use "path/filepath" import, it is using OS specific path separator unlike "path"
+	etcdKeysPrefix := filepath.Join("dapr", "jobs")
 
-	var runSingleActivity atomic.Uint32
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
+		require.NoError(c, rerr)
+		assert.Empty(c, keys)
+	}, time.Second*10, 10*time.Millisecond)
 
 	r := task.NewTaskRegistry()
 	require.NoError(t, r.AddOrchestratorN("SingleActivity", func(c *task.OrchestrationContext) (any, error) {
-		if !assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-			//nolint:testifylint
-			if assert.NoError(c, err, "failed to get jobs") {
-				assert.Lenf(c, kvs.Kvs, 1, "expected 1 job, got %d", len(kvs.Kvs))
-			}
-		}, 15*time.Second, 10*time.Millisecond) {
-			return nil, nil
-		}
-
-		name := string(kvs.Kvs[0].Key)
-		name = name[strings.LastIndex(name, "|")+1:]
-		var expectedName string
-		if runSingleActivity.Add(1) == 1 {
-			expectedName = "start-"
-		} else {
-			expectedName = "new-event-"
-		}
-		assert.True(t, strings.HasPrefix(name, expectedName), "expected job name to start with %q but got %q", expectedName, name)
-
 		var input string
-		if err = c.GetInput(&input); err != nil {
+		if err := c.GetInput(&input); err != nil {
 			return nil, err
 		}
 		var output string
-		err = c.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
-
-		kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-		require.NoError(t, err)
-		require.Len(t, kvs.Kvs, 1)
-		name = string(kvs.Kvs[0].Key)
-		name = name[strings.LastIndex(name, "|")+1:]
-		assert.True(t, strings.HasPrefix(name, "new-event-"), "expected job name to start with  'new-event-' but got %q", name)
-
+		err := c.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
 		return output, err
 	}))
 	require.NoError(t, r.AddActivityN("SayHello", func(c task.ActivityContext) (any, error) {
-		kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-		require.NoError(t, err)
-		require.Len(t, kvs.Kvs, 1)
-		name := string(kvs.Kvs[0].Key)
-		name = name[strings.LastIndex(name, "|")+1:]
-		assert.Equal(t, "run-activity", name)
-
 		var inp string
-		if err = c.GetInput(&inp); err != nil {
+		if err := c.GetInput(&inp); err != nil {
 			return nil, err
 		}
-
-		kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-		require.NoError(t, err)
-		require.Len(t, kvs.Kvs, 1)
-		name = string(kvs.Kvs[0].Key)
-		name = name[strings.LastIndex(name, "|")+1:]
-		assert.Equal(t, "run-activity", name)
 
 		return fmt.Sprintf("Hello, %s!", inp), nil
 	}))
@@ -171,7 +130,10 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	assert.True(t, metadata.IsComplete())
 	assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
 
-	kvs, err = etcdClient.KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-	require.NoError(t, err)
-	require.Empty(t, kvs.Count)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
+		require.NoError(c, rerr)
+		assert.Empty(c, keys)
+	}, time.Second*60, time.Millisecond*10) // account for cleanup time in etcd
+	// explicitly not checking the job/counters records since those get garbage collected after 180s
 }

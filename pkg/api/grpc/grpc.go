@@ -501,6 +501,21 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		req.Metadata[key] = val
 	}
 
+	// this is for the http binding, so dont need grpc-trace-bin
+	span := diagUtils.SpanFromContext(ctx)
+	sc := span.SpanContext()
+	tp := diag.SpanContextToW3CString(sc)
+	if span != nil {
+		if _, ok := req.Metadata[diag.TraceparentHeader]; !ok {
+			req.Metadata[diag.TraceparentHeader] = tp
+		}
+		if _, ok := req.Metadata[diag.TracestateHeader]; !ok {
+			if sc.TraceState().Len() > 0 {
+				req.Metadata[diag.TracestateHeader] = diag.TraceStateToW3CString(sc)
+			}
+		}
+	}
+
 	// Allow for distributed tracing by passing context metadata.
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {

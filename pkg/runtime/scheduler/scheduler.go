@@ -64,6 +64,10 @@ func New(opts Options) (*Manager, error) {
 	}, nil
 }
 
+func (m *Manager) SetClients(clients *clients.Clients) {
+	m.clients = clients
+}
+
 // Run starts watching for job triggers from all scheduler clients.
 func (m *Manager) Run(ctx context.Context) error {
 	if !m.running.CompareAndSwap(false, true) {
