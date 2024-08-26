@@ -1786,6 +1786,7 @@ type InvokeBindingRequest struct {
 	//
 	// Common metadata property:
 	// - ttlInSeconds : the time to live in seconds for the message.
+	//
 	// If set in the binding definition will cause all messages to
 	// have a default time to live. The message ttl overrides any value
 	// in the binding definition.
@@ -4208,12 +4209,12 @@ type TryLockRequest struct {
 	// which aims to prevent multi-thread in the same process trying the same lock concurrently.
 	//
 	// The reason why we don't make it automatically generated is:
-	// 1. If it is automatically generated,there must be a 'my_lock_owner_id' field in the response.
-	// This name is so weird that we think it is inappropriate to put it into the api spec
-	// 2. If we change the field 'my_lock_owner_id' in the response to 'lock_owner',which means the current lock owner of this lock,
-	// we find that in some lock services users can't get the current lock owner.Actually users don't need it at all.
-	// 3. When reentrant lock is needed,the existing lock_owner is required to identify client and check "whether this client can reenter this lock".
-	// So this field in the request shouldn't be removed.
+	//  1. If it is automatically generated,there must be a 'my_lock_owner_id' field in the response.
+	//     This name is so weird that we think it is inappropriate to put it into the api spec
+	//  2. If we change the field 'my_lock_owner_id' in the response to 'lock_owner',which means the current lock owner of this lock,
+	//     we find that in some lock services users can't get the current lock owner.Actually users don't need it at all.
+	//  3. When reentrant lock is needed,the existing lock_owner is required to identify client and check "whether this client can reenter this lock".
+	//     So this field in the request shouldn't be removed.
 	LockOwner string `protobuf:"bytes,3,opt,name=lock_owner,json=lockOwner,proto3" json:"lock_owner,omitempty"`
 	// Required. The time before expiry.The time unit is second.
 	ExpiryInSeconds int32 `protobuf:"varint,4,opt,name=expiry_in_seconds,json=expiryInSeconds,proto3" json:"expiry_in_seconds,omitempty"`
@@ -6466,14 +6467,14 @@ type Job struct {
 	// "0 15 3 * * *" - every day at 03:15
 	//
 	// Period string expressions:
-	// Entry                  | Description                                | Equivalent To
-	// -----                  | -----------                                | -------------
-	// @every <duration>      | Run every <duration> (e.g. '@every 1h30m') | N/A
-	// @yearly (or @annually) | Run once a year, midnight, Jan. 1st        | 0 0 0 1 1 *
-	// @monthly               | Run once a month, midnight, first of month | 0 0 0 1 * *
-	// @weekly                | Run once a week, midnight on Sunday        | 0 0 0 * * 0
-	// @daily (or @midnight)  | Run once a day, midnight                   | 0 0 0 * * *
-	// @hourly                | Run once an hour, beginning of hour        | 0 0 * * * *
+	// Entry                  | Description                                  | Equivalent To
+	// -----                  | -----------                                  | -------------
+	// @every `<duration>`    | Run every `<duration>` (e.g. '@every 1h30m') | N/A
+	// @yearly (or @annually) | Run once a year, midnight, Jan. 1st          | 0 0 0 1 1 *
+	// @monthly               | Run once a month, midnight, first of month   | 0 0 0 1 * *
+	// @weekly                | Run once a week, midnight on Sunday          | 0 0 0 * * 0
+	// @daily (or @midnight)  | Run once a day, midnight                     | 0 0 0 * * *
+	// @hourly                | Run once an hour, beginning of hour          | 0 0 * * * *
 	Schedule *string `protobuf:"bytes,2,opt,name=schedule,proto3,oneof" json:"schedule,omitempty"`
 	// repeats is the optional number of times in which the job should be
 	// triggered. If not set, the job will run indefinitely or until expiration.
