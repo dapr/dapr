@@ -9,7 +9,7 @@ metadata:
     {{- end }}
   {{- if .Values.apiService.annotations }}
   annotations:
-  {{ toYaml .Values.apiService.annotations | indent 4}}
+  {{- toYaml .Values.apiService.annotations | nindent 4}}
   {{- end }}
 spec:
   selector:
