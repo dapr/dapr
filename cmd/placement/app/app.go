@@ -44,8 +44,8 @@ func Run() {
 	}
 
 	// Apply options to all loggers.
-	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
-		log.Fatal(err)
+	if e := logger.ApplyOptionsToLoggers(&opts.Logger); e != nil {
+		log.Fatal(e)
 	}
 
 	log.Infof("Starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
@@ -60,8 +60,8 @@ func Run() {
 		Healthz:   healthz,
 	})
 
-	if err := monitoring.InitMetrics(); err != nil {
-		log.Fatal(err)
+	if e := monitoring.InitMetrics(); e != nil {
+		log.Fatal(e)
 	}
 
 	ctx := signals.Context()

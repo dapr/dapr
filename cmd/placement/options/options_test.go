@@ -17,13 +17,14 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 )
 
 func TestAppFlag(t *testing.T) {
 	opts, err := New([]string{})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.EqualValues(t, "dapr-placement-0", opts.RaftID)
 	assert.EqualValues(t, []raft.PeerInfo{{ID: "dapr-placement-0", Address: "127.0.0.1:8201"}}, opts.RaftPeers)
 	assert.EqualValues(t, true, opts.RaftInMemEnabled)
@@ -85,7 +86,7 @@ func TestInitialCluster(t *testing.T) {
 	for _, tt := range peerAddressTests {
 		t.Run(tt.name, func(t *testing.T) {
 			opts, err := New(tt.in)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 			assert.EqualValues(t, tt.out, opts.RaftPeers)
 		})
 	}
@@ -177,12 +178,11 @@ func TestBadPlacementKeepAliveTimeEnvVars(t *testing.T) {
 			t.Setenv(tt.envVar, tt.envVarVal)
 
 			opts, err := New([]string{})
-			assert.Error(t, err)
-			assert.Nil(t, opts)
-			assert.ErrorContains(t, err, tt.error)
+			require.Error(t, err)
+			require.Nil(t, opts)
+			require.ErrorContains(t, err, tt.error)
 		})
 	}
-
 }
 
 // TestValidPlacementEnvVars tests that valid placement environment variables are accepted
@@ -192,24 +192,24 @@ func TestValidPlacementEnvVars(t *testing.T) {
 		t.Setenv("DAPR_PLACEMENT_KEEPALIVE_TIME", "1")
 
 		opts, err := New([]string{})
-		assert.NoError(t, err)
-		assert.NotNil(t, opts)
-		assert.EqualValues(t, 1, opts.KeepAliveTime)
+		require.NoError(t, err)
+		require.NotNil(t, opts)
+		require.EqualValues(t, 1, opts.KeepAliveTime)
 	})
 	t.Run("valid keep alive timeout values should be accepted", func(t *testing.T) {
 		t.Setenv("DAPR_PLACEMENT_KEEPALIVE_TIMEOUT", "3")
 
 		opts, err := New([]string{})
-		assert.NoError(t, err)
-		assert.NotNil(t, opts)
-		assert.EqualValues(t, 3, opts.KeepAliveTimeout)
+		require.NoError(t, err)
+		require.NotNil(t, opts)
+		require.EqualValues(t, 3, opts.KeepAliveTimeout)
 	})
 	t.Run("valid disseminate timeout values should be accepted", func(t *testing.T) {
 		t.Setenv("DAPR_PLACEMENT_DISSEMINATE_TIMEOUT", "3")
 
 		opts, err := New([]string{})
-		assert.NoError(t, err)
-		assert.NotNil(t, opts)
-		assert.EqualValues(t, 3, opts.DisseminateTimeout)
+		require.NoError(t, err)
+		require.NotNil(t, opts)
+		require.EqualValues(t, 3, opts.DisseminateTimeout)
 	})
 }
