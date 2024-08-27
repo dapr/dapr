@@ -72,15 +72,8 @@ type Options struct {
 
 	ReplicationFactor int
 
-	KeepAliveTime    int
-	KeepAliveTimeout int
-
-	// DisseminateTimeout is the timeout to disseminate hashing tables after the membership change.
-	// When the multiple actor service pods are deployed first, a few pods are deployed in the beginning
-	// and the rest of pods will be deployed gradually. disseminateNextTime is maintained to decide when
-	// the hashing table is disseminated. disseminateNextTime is updated whenever membership change
-	// is applied to raft state or each pod is deployed. If we increase disseminateTimeout, it will
-	// reduce the frequency of dissemination, but it will delay the table dissemination.
+	KeepAliveTime      int
+	KeepAliveTimeout   int
 	DisseminateTimeout int
 
 	// Log and metrics configurations
