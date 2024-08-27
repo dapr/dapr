@@ -38,7 +38,10 @@ import (
 var log = logger.NewLogger("dapr.placement")
 
 func Run() {
-	opts := options.New(os.Args[1:])
+	opts, err := options.New(os.Args[1:])
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Apply options to all loggers.
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
@@ -57,8 +60,7 @@ func Run() {
 		Healthz:   healthz,
 	})
 
-	err := monitoring.InitMetrics()
-	if err != nil {
+	if err := monitoring.InitMetrics(); err != nil {
 		log.Fatal(err)
 	}
 

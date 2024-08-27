@@ -22,7 +22,8 @@ import (
 )
 
 func TestAppFlag(t *testing.T) {
-	opts := New([]string{})
+	opts, err := New([]string{})
+	assert.NoError(t, err)
 	assert.EqualValues(t, "dapr-placement-0", opts.RaftID)
 	assert.EqualValues(t, []raft.PeerInfo{{ID: "dapr-placement-0", Address: "127.0.0.1:8201"}}, opts.RaftPeers)
 	assert.EqualValues(t, true, opts.RaftInMemEnabled)
@@ -83,8 +84,132 @@ func TestInitialCluster(t *testing.T) {
 
 	for _, tt := range peerAddressTests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := New(tt.in)
+			opts, err := New(tt.in)
+			assert.NoError(t, err)
 			assert.EqualValues(t, tt.out, opts.RaftPeers)
 		})
 	}
+}
+
+func TestBadPlacementKeepAliveTimeEnvVars(t *testing.T) {
+	envVarTests := []struct {
+		name      string
+		envVar    string
+		envVarVal string
+		error     string
+	}{
+		{
+			"should error if keep alive time is not integer",
+			"DAPR_PLACEMENT_KEEPALIVE_TIME",
+			"0.5",
+			"invalid integer value for the DAPR_PLACEMENT_KEEPALIVE_TIME env variable",
+		},
+		{
+			"should error if keep alive time is not integer",
+			"DAPR_PLACEMENT_KEEPALIVE_TIME",
+			"abc",
+			"invalid integer value for the DAPR_PLACEMENT_KEEPALIVE_TIME env variable",
+		},
+		{
+			"should error if keep alive time is lower than 1",
+			"DAPR_PLACEMENT_KEEPALIVE_TIME",
+			"0",
+			"value should be between 1 and 10 for best performance",
+		},
+		{
+			"should error if keep alive time is higher than 10",
+			"DAPR_PLACEMENT_KEEPALIVE_TIME",
+			"11",
+			"value should be between 1 and 10 for best performance",
+		},
+		{
+			"should error if keep alive timeout is not integer",
+			"DAPR_PLACEMENT_KEEPALIVE_TIMEOUT",
+			"0.5",
+			"invalid integer value for the DAPR_PLACEMENT_KEEPALIVE_TIMEOUT env variable",
+		},
+		{
+			"should error if keep alive timeout is not integer",
+			"DAPR_PLACEMENT_KEEPALIVE_TIMEOUT",
+			"abc",
+			"invalid integer value for the DAPR_PLACEMENT_KEEPALIVE_TIMEOUT env variable",
+		},
+		{
+			"should error if keep alive time is lower than 1",
+			"DAPR_PLACEMENT_KEEPALIVE_TIMEOUT",
+			"0",
+			"value should be between 1 and 10 for best performance",
+		},
+		{
+			"should error if keep alive time is higher than 10",
+			"DAPR_PLACEMENT_KEEPALIVE_TIMEOUT",
+			"11",
+			"value should be between 1 and 10 for best performance",
+		},
+		{
+			"should error if keep alive timeout is not integer",
+			"DAPR_PLACEMENT_DISSEMINATE_TIMEOUT",
+			"0.5",
+			"invalid integer value for the DAPR_PLACEMENT_DISSEMINATE_TIMEOUT env variable",
+		},
+		{
+			"should error if keep alive timeout is not integer",
+			"DAPR_PLACEMENT_DISSEMINATE_TIMEOUT",
+			"abc",
+			"invalid integer value for the DAPR_PLACEMENT_DISSEMINATE_TIMEOUT env variable",
+		},
+		{
+			"should error if keep alive time is lower than 1",
+			"DAPR_PLACEMENT_DISSEMINATE_TIMEOUT",
+			"0",
+			"value should be between 1 and 5 for best performance",
+		},
+		{
+			"should error if keep alive time is higher than 5",
+			"DAPR_PLACEMENT_DISSEMINATE_TIMEOUT",
+			"6",
+			"value should be between 1 and 5 for best performance",
+		},
+	}
+
+	for _, tt := range envVarTests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Setenv(tt.envVar, tt.envVarVal)
+
+			opts, err := New([]string{})
+			assert.Error(t, err)
+			assert.Nil(t, opts)
+			assert.ErrorContains(t, err, tt.error)
+		})
+	}
+
+}
+
+// TestValidPlacementEnvVars tests that valid placement environment variables are accepted
+// default values are not covered in this test as they are covered in the TestAppFlag test
+func TestValidPlacementEnvVars(t *testing.T) {
+	t.Run("valid keep alive time values should be accepted", func(t *testing.T) {
+		t.Setenv("DAPR_PLACEMENT_KEEPALIVE_TIME", "1")
+
+		opts, err := New([]string{})
+		assert.NoError(t, err)
+		assert.NotNil(t, opts)
+		assert.EqualValues(t, 1, opts.KeepAliveTime)
+	})
+	t.Run("valid keep alive timeout values should be accepted", func(t *testing.T) {
+		t.Setenv("DAPR_PLACEMENT_KEEPALIVE_TIMEOUT", "3")
+
+		opts, err := New([]string{})
+		assert.NoError(t, err)
+		assert.NotNil(t, opts)
+		assert.EqualValues(t, 3, opts.KeepAliveTimeout)
+	})
+	t.Run("valid disseminate timeout values should be accepted", func(t *testing.T) {
+		t.Setenv("DAPR_PLACEMENT_DISSEMINATE_TIMEOUT", "3")
+
+		opts, err := New([]string{})
+		assert.NoError(t, err)
+		assert.NotNil(t, opts)
+		assert.EqualValues(t, 3, opts.DisseminateTimeout)
+	})
 }

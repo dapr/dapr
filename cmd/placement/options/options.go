@@ -16,6 +16,7 @@ package options
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/spf13/pflag"
@@ -36,6 +37,10 @@ const (
 	defaultPlacementPort     = 50005
 	defaultReplicationFactor = 100
 	envMetadataEnabled       = "DAPR_PLACEMENT_METADATA_ENABLED"
+
+	envKeepAliveTime      = "DAPR_PLACEMENT_KEEPALIVE_TIME"
+	envKeepAliveTimeout   = "DAPR_PLACEMENT_KEEPALIVE_TIMEOUT"
+	envDisseminateTimeout = "DAPR_PLACEMENT_DISSEMINATE_TIMEOUT"
 
 	defaultKeepAliveTime      = 2 // in seconds
 	defaultKeepAliveTimeout   = 3 // in seconds
@@ -83,7 +88,7 @@ type Options struct {
 	Metrics *metrics.FlagOptions
 }
 
-func New(origArgs []string) *Options {
+func New(origArgs []string) (*Options, error) {
 	// We are using pflag to parse the CLI flags
 	// pflag is a drop-in replacement for the standard library's "flag" package, however…
 	// There's one key difference: with the stdlib's "flag" package, there are no short-hand options so options can be defined with a single slash (such as "daprd -mode").
@@ -100,8 +105,24 @@ func New(origArgs []string) *Options {
 	}
 
 	// Default options
+	keepAliveTime, err := getEnvIntWithRange(envKeepAliveTime, defaultKeepAliveTime, 1, 10)
+	if err != nil {
+		return nil, err
+	}
+	keepAliveTimeout, err := getEnvIntWithRange(envKeepAliveTimeout, defaultKeepAliveTimeout, 1, 10)
+	if err != nil {
+		return nil, err
+	}
+	disseminateTimeout, err := getEnvIntWithRange(envDisseminateTimeout, defaultDisseminateTimeout, 1, 5)
+	if err != nil {
+		return nil, err
+	}
+
 	opts := Options{
-		MetadataEnabled: utils.IsTruthy(os.Getenv(envMetadataEnabled)),
+		MetadataEnabled:    utils.IsTruthy(os.Getenv(envMetadataEnabled)),
+		KeepAliveTime:      keepAliveTime,
+		KeepAliveTimeout:   keepAliveTimeout,
+		DisseminateTimeout: disseminateTimeout,
 	}
 
 	// Create a flag set
@@ -121,9 +142,6 @@ func New(origArgs []string) *Options {
 	fs.IntVar(&opts.MaxAPILevel, "max-api-level", 10, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
 	fs.IntVar(&opts.MinAPILevel, "min-api-level", 0, "Enforces a minimum 'api-level' in the cluster")
 	fs.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
-	fs.IntVar(&opts.KeepAliveTime, "keepalive-time", defaultKeepAliveTime, "sets the gRPC keepalive time (in seconds) for the placement-daprd stream")
-	fs.IntVar(&opts.KeepAliveTimeout, "keepalive-timeout", defaultKeepAliveTimeout, "sets the gRPC keepalive timeout (in seconds) for the placement-daprd stream")
-	fs.IntVar(&opts.DisseminateTimeout, "disseminate-timeout", defaultDisseminateTimeout, "sets the timeout period (in seconds) for dissemination to be delayed after actor membership change (usually related to pod restarts) so as to avoid excessive dissemination during multiple pod restarts")
 
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
@@ -144,7 +162,7 @@ func New(origArgs []string) *Options {
 		opts.RaftInMemEnabled = false
 	}
 
-	return &opts
+	return &opts, nil
 }
 
 func parsePeersFromFlag(val []string) []raft.PeerInfo {
@@ -165,4 +183,23 @@ func parsePeersFromFlag(val []string) []raft.PeerInfo {
 	}
 
 	return peers[:i]
+}
+
+// getEnvIntWithRange returns the integer value of the environment variable with the given name.
+func getEnvIntWithRange(envVar string, defaultValue int, min int, max int) (int, error) {
+	v := os.Getenv(envVar)
+	if v == "" {
+		return defaultValue, nil
+	}
+
+	val, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid integer value for the %s env variable: %w", envVar, err)
+	}
+
+	if val < min || val > max {
+		return 0, fmt.Errorf("invalid value for the %s env variable: value should be between %d and %d for best performance", envVar, min, max)
+	}
+
+	return val, nil
 }
