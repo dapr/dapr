@@ -150,11 +150,11 @@ spec:
         # Configuration for injected sidecars
         - name: SIDECAR_RUN_AS_NON_ROOT
           value: {{ .Values.sidecarRunAsNonRoot | toString | toYaml }}
-{{- if and (.Values.sidecarRunAsUser) (gt .Values.sidecarRunAsUser 0) }}
+{{- if and (.Values.sidecarRunAsUser) (gt (.Values.sidecarRunAsUser | int) 0) }}
         - name: SIDECAR_RUN_AS_USER
           value: {{ .Values.sidecarRunAsUser | toString | toYaml }}
 {{- end }}
-{{- if and (.Values.sidecarRunAsGroup) (gt .Values.sidecarRunAsGroup 0) }}
+{{- if and (.Values.sidecarRunAsGroup) (gt (.Values.sidecarRunAsGroup | int) 0) }}
         - name: SIDECAR_RUN_AS_GROUP
           value: {{ .Values.sidecarRunAsGroup | toString | toYaml }}
 {{- end }}
