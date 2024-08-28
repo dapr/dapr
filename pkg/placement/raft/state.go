@@ -382,10 +382,6 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 
 	ns, ok := s.data.Namespace[host.Namespace]
 	if !ok {
-		if s.data.Namespace == nil {
-			s.data.Namespace = make(map[string]*daprNamespace)
-		}
-
 		ns = &daprNamespace{
 			Members: make(map[string]*DaprHostMember),
 		}
@@ -477,6 +473,9 @@ func (s *DaprHostMemberState) restore(r io.Reader) error {
 	defer s.lock.Unlock()
 
 	s.data = data
+	if s.data.Namespace == nil {
+		s.data.Namespace = make(map[string]*daprNamespace)
+	}
 
 	s.restoreHashingTables()
 	s.updateAPILevel()
