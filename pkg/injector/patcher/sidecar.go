@@ -43,6 +43,8 @@ type SidecarConfig struct {
 	OperatorAddress             string
 	SentryAddress               string
 	RunAsNonRoot                bool
+	RunAsUser                   *int64
+	RunAsGroup                  *int64
 	EnableK8sDownwardAPIs       bool
 	ReadOnlyRootFilesystem      bool
 	SidecarDropALLCapabilities  bool
