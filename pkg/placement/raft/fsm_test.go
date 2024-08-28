@@ -201,16 +201,6 @@ func TestRestore(t *testing.T) {
 	require.Len(t, hashingTable, 2)
 }
 
-type FSMOld struct {
-	// stateLock is only used to protect outside callers to State() from
-	// racing with Restore(), which is called by Raft (it puts in a totally
-	// new state store). Everything internal here is synchronized by the
-	// Raft side, so doesn't need to lock this.
-	stateLock sync.RWMutex
-	state     *DaprHostMemberStateOld
-	config    DaprHostMemberStateConfig
-}
-
 type DaprHostMemberOld struct {
 	// Name is the unique name of Dapr runtime host.
 	Name string
@@ -313,5 +303,4 @@ func TestRestoreFromOldVersion(t *testing.T) {
 	})
 
 	require.True(t, ok)
-
 }
