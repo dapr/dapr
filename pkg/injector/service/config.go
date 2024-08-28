@@ -16,6 +16,7 @@ package service
 import (
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"github.com/kelseyhightower/envconfig"
 	corev1 "k8s.io/api/core/v1"
@@ -40,6 +41,8 @@ type Config struct {
 	RemindersServiceName              string `envconfig:"REMINDERS_SERVICE_NAME"`
 	RemindersServiceAddress           string `envconfig:"REMINDERS_SERVICE_ADDRESS"`
 	RunAsNonRoot                      string `envconfig:"SIDECAR_RUN_AS_NON_ROOT"`
+	RunAsUser                         string `envconfig:"SIDECAR_RUN_AS_USER"`
+	RunAsGroup                        string `envconfig:"SIDECAR_RUN_AS_GROUP"`
 	ReadOnlyRootFilesystem            string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
 	EnableK8sDownwardAPIs             string `envconfig:"ENABLE_K8S_DOWNWARD_APIS"`
 	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
@@ -56,6 +59,8 @@ type Config struct {
 	parsedEnableK8sDownwardAPIs      bool
 	parsedSidecarDropALLCapabilities bool
 	parsedEntrypointTolerations      []corev1.Toleration
+	parsedRunAsUser                  *int64
+	parsedRunAsGroup                 *int64
 }
 
 // NewConfigWithDefaults returns a Config object with default values already
@@ -119,6 +124,14 @@ func (c Config) GetRunAsNonRoot() bool {
 	return c.parsedRunAsNonRoot
 }
 
+func (c Config) GetRunAsUser() *int64 {
+	return c.parsedRunAsUser
+}
+
+func (c Config) GetRunAsGroup() *int64 {
+	return c.parsedRunAsGroup
+}
+
 func (c Config) GetReadOnlyRootFilesystem() bool {
 	return c.parsedReadOnlyRootFilesystem
 }
@@ -178,6 +191,10 @@ func (c *Config) parse() (err error) {
 	c.parsedEnableK8sDownwardAPIs = kitutils.IsTruthy(c.EnableK8sDownwardAPIs)
 	c.parsedSidecarDropALLCapabilities = kitutils.IsTruthy(c.SidecarDropALLCapabilities)
 
+	// Parse the runAsUser and runAsGroup
+	c.parsedRunAsUser = parseStringToInt64Pointer(c.RunAsUser)
+	c.parsedRunAsGroup = parseStringToInt64Pointer(c.RunAsGroup)
+
 	return nil
 }
 
@@ -203,4 +220,17 @@ func isTruthyDefaultTrue(val string) bool {
 		return true
 	}
 	return kitutils.IsTruthy(val)
+}
+
+func parseStringToInt64Pointer(intStr string) *int64 {
+	if intStr == "" {
+		return nil
+	}
+	i, err := strconv.Atoi(intStr)
+	if err != nil {
+		log.Warnf("couldn't parse %s to int: %v", intStr, err)
+		return nil
+	}
+	i64 := int64(i)
+	return &i64
 }

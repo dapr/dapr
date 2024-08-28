@@ -16,6 +16,7 @@ package service
 import (
 	"testing"
 
+	"github.com/dapr/kit/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -90,6 +91,33 @@ func TestGetInjectorConfig(t *testing.T) {
 		require.NoError(t, err)
 		assert.False(t, cfg.GetRunAsNonRoot())
 		assert.False(t, cfg.GetReadOnlyRootFilesystem())
+
+		// Set to default
+		t.Setenv("SIDECAR_RUN_AS_USER", "")
+		t.Setenv("SIDECAR_RUN_AS_GROUP", "")
+
+		cfg, err = GetConfig()
+		require.NoError(t, err)
+		assert.Nil(t, cfg.GetRunAsUser())
+		assert.Nil(t, cfg.GetRunAsGroup())
+
+		// Set to specific value
+		t.Setenv("SIDECAR_RUN_AS_USER", "1000")
+		t.Setenv("SIDECAR_RUN_AS_GROUP", "3000")
+
+		cfg, err = GetConfig()
+		require.NoError(t, err)
+		assert.Equal(t, ptr.Of(int64(1000)), cfg.GetRunAsUser())
+		assert.Equal(t, ptr.Of(int64(3000)), cfg.GetRunAsGroup())
+
+		// Set to invalid value
+		t.Setenv("SIDECAR_RUN_AS_USER", "invalid")
+		t.Setenv("SIDECAR_RUN_AS_GROUP", "invalid")
+
+		cfg, err = GetConfig()
+		require.NoError(t, err)
+		assert.Nil(t, cfg.GetRunAsUser())
+		assert.Nil(t, cfg.GetRunAsGroup())
 	})
 }
 
