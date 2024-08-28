@@ -133,6 +133,10 @@ $(error cannot find get minikube node ip address. ensure that you have minikube 
 endif
 endif
 
+ifeq ($(DAPR_TEST_KIND_CLUSTER_NAME),)
+DAPR_TEST_KIND_CLUSTER_NAME=kind-kind
+endif
+
 
 ifeq ($(DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME),)
 DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME=test_all.yaml
@@ -622,7 +626,7 @@ setup-components-perf-test:
 
 # Setup kind
 setup-kind:
-	kind create cluster --config ./tests/config/kind.yaml --name kind
+	kind create cluster --config ./tests/config/kind.yaml --name $(DAPR_TEST_KIND_CLUSTER_NAME)
 	$(KUBECTL) cluster-info --context kind-kind
 	# Setup registry
 	docker run -d --restart=always -p 5000:5000 --name kind-registry registry:2
@@ -639,7 +643,8 @@ describe-kind-env:
 	export DAPR_REGISTRY=$${DAPR_REGISTRY:-localhost:5000/dapr}\n\
 	export DAPR_TEST_REGISTRY=$${DAPR_TEST_REGISTRY:-localhost:5000/dapr}\n\
 	export DAPR_TAG=dev\n\
-	export DAPR_NAMESPACE=dapr-tests"
+	export DAPR_NAMESPACE=dapr-tests\n\
+	export DAPR_TEST_KIND_CLUSTER_NAME=$(DAPR_TEST_KIND_CLUSTER_NAME)"
 
 
 delete-kind:
