@@ -382,10 +382,14 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 
 	ns, ok := s.data.Namespace[host.Namespace]
 	if !ok {
-		s.data.Namespace[host.Namespace] = &daprNamespace{
+		if s.data.Namespace == nil {
+			s.data.Namespace = make(map[string]*daprNamespace)
+		}
+
+		ns = &daprNamespace{
 			Members: make(map[string]*DaprHostMember),
 		}
-		ns = s.data.Namespace[host.Namespace]
+		s.data.Namespace[host.Namespace] = ns
 	}
 
 	if m, ok := ns.Members[host.Name]; ok {
