@@ -489,7 +489,8 @@ replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
 // Don't commit with this uncommented!
 //
 // replace github.com/dapr/components-contrib => ../components-contrib
-// replace github.com/dapr/kit => ../kit
+replace github.com/dapr/kit => github.com/elena-kolevska/kit v0.0.0-20240828164126-51730063a14e
+
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.

@@ -16,7 +16,6 @@ package options
 import (
 	"fmt"
 	"os"
-	"strconv"
 	"strings"
 
 	"github.com/spf13/pflag"
@@ -98,15 +97,15 @@ func New(origArgs []string) (*Options, error) {
 	}
 
 	// Default options
-	keepAliveTime, err := getEnvIntWithRange(envKeepAliveTime, defaultKeepAliveTime, 1, 10)
+	keepAliveTime, err := utils.GetEnvIntWithRange(envKeepAliveTime, defaultKeepAliveTime, 1, 10)
 	if err != nil {
 		return nil, err
 	}
-	keepAliveTimeout, err := getEnvIntWithRange(envKeepAliveTimeout, defaultKeepAliveTimeout, 1, 10)
+	keepAliveTimeout, err := utils.GetEnvIntWithRange(envKeepAliveTimeout, defaultKeepAliveTimeout, 1, 10)
 	if err != nil {
 		return nil, err
 	}
-	disseminateTimeout, err := getEnvIntWithRange(envDisseminateTimeout, defaultDisseminateTimeout, 1, 5)
+	disseminateTimeout, err := utils.GetEnvIntWithRange(envDisseminateTimeout, defaultDisseminateTimeout, 1, 5)
 	if err != nil {
 		return nil, err
 	}
@@ -176,23 +175,4 @@ func parsePeersFromFlag(val []string) []raft.PeerInfo {
 	}
 
 	return peers[:i]
-}
-
-// getEnvIntWithRange returns the integer value of the environment variable with the given name.
-func getEnvIntWithRange(envVar string, defaultValue int, min int, max int) (int, error) {
-	v := os.Getenv(envVar)
-	if v == "" {
-		return defaultValue, nil
-	}
-
-	val, err := strconv.Atoi(v)
-	if err != nil {
-		return 0, fmt.Errorf("invalid integer value for the %s env variable: %w", envVar, err)
-	}
-
-	if val < min || val > max {
-		return 0, fmt.Errorf("invalid value for the %s env variable: value should be between %d and %d for best performance", envVar, min, max)
-	}
-
-	return val, nil
 }
