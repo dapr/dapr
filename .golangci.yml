@@ -16,15 +16,35 @@ run:
   build-tags:
     - unit
 
-  # which dirs to skip: they won't be analyzed;
-  # can use regexp here: generated.*, regexp is applied on full path;
-  # default value is empty list, but next dirs are always skipped independently
-  # from this option's value:
-  # third_party$, testdata$, examples$, Godeps$, builtin$
-  skip-dirs:
-    - ^pkg.*client.*clientset.*versioned.*
-    - ^pkg.*client.*informers.*externalversions.*
-    - ^pkg.*proto.*
+  # If set, we pass it to "go list -mod={option}". From "go help modules":
+  # If invoked with -mod=readonly, the go command is disallowed from the implicit
+  # automatic updating of go.mod described above. Instead, it fails when any changes
+  # to go.mod are needed. This setting is most useful to check that go.mod does
+  # not need updates, such as in a continuous integration and testing system.
+  # If invoked with -mod=vendor, the go command assumes that the vendor
+  # directory holds the correct copies of dependencies and ignores
+  # the dependency descriptions in go.mod.
+  #
+  # Allowed values: readonly|vendor|mod
+  # Default: ""
+  modules-download-mode: readonly
+
+  # Allow multiple parallel golangci-lint instances running.
+  # If false, golangci-lint acquires file lock on start.
+  # Default: false
+  # allow-parallel-runners: false
+
+  # Allow multiple golangci-lint instances running, but serialize them around a lock.
+  # If false, golangci-lint exits with an error if it fails to acquire file lock on start.
+  # Default: false
+  # allow-serial-runners: false
+
+  # Define the Go version limit.
+  # Mainly related to generics support since go1.18.
+  # Default: use Go version from the go.mod file, fallback on the env var `GOVERSION`, fallback on 1.17
+  # go: 'unset'
+
+
 
   # which files to skip: they will be analyzed, but issues from them
   # won't be reported. Default value is empty list, but there is
@@ -37,7 +57,8 @@ run:
 # output configuration options
 output:
   # colored-line-number|line-number|json|tab|checkstyle, default is "colored-line-number"
-  format: tab
+  formats:
+    - format: tab
 
   # print lines of code with issue, default is true
   print-issued-lines: true
@@ -57,10 +78,11 @@ linters-settings:
     # default is false: such cases aren't reported by default.
     check-blank: false
 
-    # [deprecated] comma-separated list of pairs of the form pkg:regex
-    # the regex is used to ignore names within pkg. (default "fmt:.*").
-    # see https://github.com/kisielk/errcheck#the-deprecated-method for details
-    ignore: fmt:.*,io/ioutil:^Read.*
+    # List of functions to exclude from checking, where each entry is a single function to exclude.
+    # See https://github.com/kisielk/errcheck#excluding-functions for details.
+    exclude-functions:
+      - fmt:.*
+      - io/ioutil:^Read.*
 
     # path to a file containing a list of functions to exclude from checking
     # see https://github.com/kisielk/errcheck#excluding-functions for details
@@ -71,9 +93,6 @@ linters-settings:
     statements: 40
 
   govet:
-    # report about shadowed variables
-    check-shadowing: true
-
     # settings per analyzer
     settings:
       printf: # analyzer name, run `go tool vet help` to see all analyzers
@@ -87,12 +106,7 @@ linters-settings:
     enable:
       - atomicalign
     enable-all: false
-    disable:
-      - shadow
     disable-all: false
-  golint:
-    # minimal confidence for issues, default is 0.8
-    min-confidence: 0.8
   revive:
     # minimal confidence for issues, default is 0.8
     confidence: 0.8
@@ -109,9 +123,6 @@ linters-settings:
   gocognit:
     # minimal code complexity to report, 30 by default (but we recommend 10-20)
     min-complexity: 10
-  maligned:
-    # print struct with more effective memory layout or not, false by default
-    suggest-new: true
   dupl:
     # tokens count to trigger issue, 150 by default
     threshold: 100
@@ -273,9 +284,7 @@ linters:
   enable-all: true
   disable:
     # TODO Enforce the below linters later
-    - nosnakecase
     - musttag
-    - dupl
     - errcheck
     - funlen
     - gochecknoglobals
@@ -283,28 +292,23 @@ linters:
     - gocyclo
     - gocognit
     - godox
-    - interfacer
     - lll
-    - maligned
-    - scopelint
     - unparam
     - wsl
     - gomnd
     - testpackage
-    - goerr113
+    - err113
     - nestif
     - nlreturn
     - exhaustive
     - exhaustruct
     - noctx
     - gci
-    - golint
     - tparallel
     - paralleltest
     - wrapcheck
     - tagliatelle
     - ireturn
-    - exhaustivestruct
     - errchkjson
     - contextcheck
     - gomoddirectives
@@ -313,7 +317,6 @@ linters:
     - varnamelen
     - errorlint
     - forcetypeassert
-    - ifshort
     - maintidx
     - nilnil
     - predeclared
@@ -326,8 +329,18 @@ linters:
     - asasalint
     - rowserrcheck
     - sqlclosecheck
-    - structcheck
-    - varcheck
-    - deadcode
     - inamedparam
     - tagalign
+    - exportloopref # disabled due to deprecation
+    - execinquery # disabled due to deprecation
+
+issues:
+  # which dirs to skip: they won't be analyzed;
+  # can use regexp here: generated.*, regexp is applied on full path;
+  # default value is empty list, but next dirs are always skipped independently
+  # from this option's value:
+  # third_party$, testdata$, examples$, Godeps$, builtin$
+  exclude-dirs:
+    - ^pkg.*client.*clientset.*versioned.*
+    - ^pkg.*client.*informers.*externalversions.*
+    - ^pkg.*proto.*
