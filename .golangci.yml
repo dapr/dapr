@@ -4,7 +4,7 @@ run:
   concurrency: 4
 
   # timeout for analysis, e.g. 30s, 5m, default is 1m
-  deadline: 15m
+  timeout: 15m
 
   # exit code when at least one issue was found, default is 1
   issues-exit-code: 1
@@ -197,12 +197,6 @@ linters-settings:
     line-length: 120
     # tab width in spaces. Default to 1.
     tab-width: 1
-  unused:
-    # treat code as a program (not a library) and report unused exported identifiers; default is false.
-    # XXX: if you enable this setting, unused will report a lot of false-positives in text editors:
-    # if it's called for subdir of a project it can't find funcs usages. All text editor integrations
-    # with golangci-lint call it on a directory with the changed file.
-    check-exported: false
   unparam:
     # Inspect exported functions, default is false. Set to true if no external program/library imports your code.
     # XXX: if you enable this setting, unparam will report a lot of false-positives in text editors:
@@ -265,25 +259,12 @@ linters-settings:
     multi-if: false   # Enforces newlines (or comments) after every multi-line if statement
     multi-func: false # Enforces newlines (or comments) after every multi-line function signature
 
-  wsl:
-    # If true append is only allowed to be cuddled if appending value is
-    # matching variables, fields or types on line above. Default is true.
-    strict-append: true
-    # Allow calls and assignments to be cuddled as long as the lines have any
-    # matching variables, fields or types. Default is true.
-    allow-assign-and-call: true
-    # Allow multiline assignments to be cuddled. Default is true.
-    allow-multiline-assign: true
-    # Allow case blocks to end with a whitespace.
-    allow-case-traling-whitespace: true
-    # Allow declarations (var) to be cuddled.
-    allow-cuddle-declarations: false
-
 linters:
   fast: false
   enable-all: true
   disable:
     # TODO Enforce the below linters later
+    - dupl
     - musttag
     - errcheck
     - funlen
@@ -295,7 +276,8 @@ linters:
     - lll
     - unparam
     - wsl
-    - gomnd
+    - gomnd # deprecated alias for mnd
+    - mnd # alias for gomnd
     - testpackage
     - err113
     - nestif
