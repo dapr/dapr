@@ -15,6 +15,8 @@ run:
   # list of build tags, all linters use it. Default is empty list.
   build-tags:
     - unit
+    - allcomponents
+    - subtlecrypto
 
   # If set, we pass it to "go list -mod={option}". From "go help modules":
   # If invoked with -mod=readonly, the go command is disallowed from the implicit
@@ -315,6 +317,12 @@ linters:
     - tagalign
     - exportloopref # disabled due to deprecation
     - execinquery # disabled due to deprecation
+
+    - canonicalheader
+    - copyloopvar
+    - spancheck
+    - intrange
+    - fatcontext
 
 issues:
   # which dirs to skip: they won't be analyzed;
