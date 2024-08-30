@@ -138,7 +138,7 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 		r.nextCall = r.nextCall[1:]
 
 		if val := req.Metadata()["Dapr-Reentrancy-Id"]; val != nil {
-			if nextReq.Metadata == nil { //nolint:protogetter
+			if nextReq.Metadata == nil {
 				nextReq.Metadata = make(map[string]*internalsv1pb.ListStringValue)
 			}
 			nextReq.Metadata["Dapr-Reentrancy-Id"] = &internalsv1pb.ListStringValue{

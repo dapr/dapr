@@ -381,7 +381,7 @@ func (p *actorPlacement) doLookupActor(ctx context.Context, actorType, actorID s
 	}
 	host, err := t.GetHost(actorID)
 	if err != nil || host == nil {
-		return "", "", nil //nolint:nilerr
+		return "", "", nil
 	}
 	return host.Name, host.AppID, nil
 }

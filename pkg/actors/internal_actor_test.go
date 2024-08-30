@@ -142,7 +142,6 @@ func TestInternalActorCall(t *testing.T) {
 	require.NoError(t, err)
 
 	// Need this nolint due to a bug in the linter
-	//nolint:protogetter
 	req := internals.NewInternalInvokeRequest(testMethod).
 		WithActor(testActorType, testActorID).
 		WithData([]byte(testInput)).

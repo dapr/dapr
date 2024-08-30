@@ -47,7 +47,6 @@ func (a *Universal) ScheduleJobRequestAlpha1(ctx context.Context, job *runtimev1
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
-	//nolint:protogetter
 	if job.Schedule == nil && job.DueTime == nil {
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Schedule", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty))
 	}
