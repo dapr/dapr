@@ -323,6 +323,10 @@ linters:
     - spancheck
     - intrange
     - fatcontext
+    - perfsprint
+    - testifylint
+    - gosec
+    - govet
 
 issues:
   # which dirs to skip: they won't be analyzed;
