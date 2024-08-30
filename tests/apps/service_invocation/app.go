@@ -1281,7 +1281,7 @@ func badServiceCallTestHTTP(w http.ResponseWriter, r *http.Request) {
 		httpClient.Timeout = prevTimeout
 	}
 
-	testResponse.MainCallSuccessful = err == nil && resp.StatusCode == 200
+	testResponse.MainCallSuccessful = err == nil && resp.StatusCode == http.StatusOK
 
 	if resp != nil && resp.Body != nil {
 		fmt.Printf("badServiceCallTestHTTP - Response Code: %d\n", resp.StatusCode)
@@ -1430,7 +1430,7 @@ func largeDataErrorServiceCall(w http.ResponseWriter, r *http.Request, isHTTP bo
 
 		if isHTTP {
 			resp, err := httpClient.Post(sanitizeHTTPURL(url), jsonContentType, bytes.NewReader(jsonBody))
-			result.CallSuccessful = !((resp != nil && resp.StatusCode != 200) || err != nil)
+			result.CallSuccessful = !((resp != nil && resp.StatusCode != http.StatusOK) || err != nil)
 			if resp != nil {
 				// Drain before closing
 				_, _ = io.Copy(io.Discard, resp.Body)

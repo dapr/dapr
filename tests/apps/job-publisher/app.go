@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -48,7 +49,7 @@ func stopSidecar() {
 			log.Printf("Error stopping the sidecar %s", err)
 		}
 
-		if r.StatusCode != 200 && r.StatusCode != 204 {
+		if r.StatusCode != http.StatusOK && r.StatusCode != http.StatusNoContent {
 			log.Printf("Received Non-200 from shutdown API. Code: %d", r.StatusCode)
 			time.Sleep(10 * time.Second)
 			continue
