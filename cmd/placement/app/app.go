@@ -17,7 +17,6 @@ import (
 	"encoding/json"
 	"math"
 	"os"
-	"time"
 
 	"github.com/dapr/dapr/cmd/placement/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
@@ -100,9 +99,9 @@ func Run() {
 		RaftNode:           raftServer,
 		SecProvider:        secProvider,
 		Healthz:            healthz,
-		KeepAliveTime:      time.Duration(opts.KeepAliveTime) * time.Second,
-		KeepAliveTimeout:   time.Duration(opts.KeepAliveTimeout) * time.Second,
-		DisseminateTimeout: time.Duration(opts.DisseminateTimeout) * time.Second,
+		KeepAliveTime:      opts.KeepAliveTime,
+		KeepAliveTimeout:   opts.KeepAliveTimeout,
+		DisseminateTimeout: opts.DisseminateTimeout,
 	}
 	if opts.MinAPILevel >= 0 && opts.MinAPILevel < math.MaxInt32 {
 		placementOpts.MinAPILevel = uint32(opts.MinAPILevel)

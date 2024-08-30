@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 
@@ -41,9 +42,9 @@ const (
 	envKeepAliveTimeout   = "DAPR_PLACEMENT_KEEPALIVE_TIMEOUT"
 	envDisseminateTimeout = "DAPR_PLACEMENT_DISSEMINATE_TIMEOUT"
 
-	defaultKeepAliveTime      = 2 // in seconds
-	defaultKeepAliveTimeout   = 3 // in seconds
-	defaultDisseminateTimeout = 2 // in seconds
+	defaultKeepAliveTime      = 2 * time.Second
+	defaultKeepAliveTimeout   = 3 * time.Second
+	defaultDisseminateTimeout = 2 * time.Second
 )
 
 type Options struct {
@@ -71,9 +72,9 @@ type Options struct {
 
 	ReplicationFactor int
 
-	KeepAliveTime      int
-	KeepAliveTimeout   int
-	DisseminateTimeout int
+	KeepAliveTime      time.Duration
+	KeepAliveTimeout   time.Duration
+	DisseminateTimeout time.Duration
 
 	// Log and metrics configurations
 	Logger  logger.Options
@@ -97,15 +98,15 @@ func New(origArgs []string) (*Options, error) {
 	}
 
 	// Default options
-	keepAliveTime, err := utils.GetEnvIntWithRange(envKeepAliveTime, defaultKeepAliveTime, 1, 10)
+	keepAliveTime, err := utils.GetEnvDurationWithRange(envKeepAliveTime, defaultKeepAliveTime, time.Second, 10*time.Second)
 	if err != nil {
 		return nil, err
 	}
-	keepAliveTimeout, err := utils.GetEnvIntWithRange(envKeepAliveTimeout, defaultKeepAliveTimeout, 1, 10)
+	keepAliveTimeout, err := utils.GetEnvDurationWithRange(envKeepAliveTimeout, defaultKeepAliveTimeout, time.Second, 10*time.Second)
 	if err != nil {
 		return nil, err
 	}
-	disseminateTimeout, err := utils.GetEnvIntWithRange(envDisseminateTimeout, defaultDisseminateTimeout, 1, 5)
+	disseminateTimeout, err := utils.GetEnvDurationWithRange(envDisseminateTimeout, defaultDisseminateTimeout, time.Second, 5*time.Second)
 	if err != nil {
 		return nil, err
 	}

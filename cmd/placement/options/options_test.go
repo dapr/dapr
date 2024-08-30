@@ -15,6 +15,7 @@ package options
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,9 +42,9 @@ func TestAppFlag(t *testing.T) {
 	assert.EqualValues(t, false, opts.Logger.JSONFormatEnabled)
 	assert.EqualValues(t, true, opts.Metrics.Enabled())
 	assert.EqualValues(t, "9090", opts.Metrics.Port())
-	assert.EqualValues(t, 2, opts.KeepAliveTime)
-	assert.EqualValues(t, 3, opts.KeepAliveTimeout)
-	assert.EqualValues(t, 2, opts.DisseminateTimeout)
+	assert.EqualValues(t, 2*time.Second, opts.KeepAliveTime)
+	assert.EqualValues(t, 3*time.Second, opts.KeepAliveTimeout)
+	assert.EqualValues(t, 2*time.Second, opts.DisseminateTimeout)
 }
 
 func TestInitialCluster(t *testing.T) {
@@ -90,4 +91,35 @@ func TestInitialCluster(t *testing.T) {
 			assert.EqualValues(t, tt.out, opts.RaftPeers)
 		})
 	}
+}
+
+func TestOptsFromEnvVariables(t *testing.T) {
+	t.Run("metadata enabled", func(t *testing.T) {
+		t.Setenv("DAPR_PLACEMENT_METADATA_ENABLED", "true")
+
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.True(t, opts.MetadataEnabled)
+	})
+	t.Run("keepalive time", func(t *testing.T) {
+		t.Setenv("DAPR_PLACEMENT_KEEPALIVE_TIME", "4s")
+
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, 4*time.Second, opts.KeepAliveTime)
+	})
+	t.Run("keepalive timeout", func(t *testing.T) {
+		t.Setenv("DAPR_PLACEMENT_KEEPALIVE_TIMEOUT", "5s")
+
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, 5*time.Second, opts.KeepAliveTimeout)
+	})
+	t.Run("disseminate timeout", func(t *testing.T) {
+		t.Setenv("DAPR_PLACEMENT_DISSEMINATE_TIMEOUT", "4s")
+
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.Equal(t, 4*time.Second, opts.DisseminateTimeout)
+	})
 }
