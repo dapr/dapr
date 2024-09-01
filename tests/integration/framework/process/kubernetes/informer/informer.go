@@ -74,9 +74,15 @@ func (i *Informer) Handler(t *testing.T, wrapped http.Handler) http.HandlerFunc 
 			split = split[2:]
 		}
 		if split[0] == "namespaces" {
-			split = split[2:]
+			if len(split) > 1 {
+				split = split[2:]
+				gvk.Kind = split[0]
+			} else {
+				gvk.Kind = "Namespace"
+			}
+		} else {
+			gvk.Kind = split[0]
 		}
-		gvk.Kind = split[0]
 
 		w.Header().Add("Transfer-Encoding", "chunked")
 		w.Header().Add("Content-Type", "application/json")
@@ -147,6 +153,8 @@ func (i *Informer) objToGVK(t *testing.T, obj runtime.Object) schema.GroupVersio
 		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "secrets"}
 	case *corev1.ConfigMap:
 		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "configmaps"}
+	case *corev1.Namespace:
+		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "namespaces"}
 	default:
 		require.Fail(t, "unknown type: %T", obj)
 		return schema.GroupVersionKind{}

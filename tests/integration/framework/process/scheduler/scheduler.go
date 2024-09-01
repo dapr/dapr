@@ -29,6 +29,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -120,6 +121,13 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 			"--trust-anchors-file="+taFile,
 			"--trust-domain="+opts.sentry.TrustDomain(t),
 		)
+	}
+
+	if opts.kubeconfig != nil {
+		args = append(args, "--kubeconfig="+*opts.kubeconfig)
+	}
+	if opts.mode != nil {
+		args = append(args, "--mode="+*opts.mode)
 	}
 
 	clientPorts := make(map[string]string)
@@ -264,4 +272,20 @@ func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) 
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 	return schedulerv1pb.NewSchedulerClient(conn)
+}
+
+func (s *Scheduler) ETCDClient(t *testing.T) *clientv3.Client {
+	t.Helper()
+
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{fmt.Sprintf("127.0.0.1:%s", s.EtcdClientPort())},
+		DialTimeout: 40 * time.Second,
+	})
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		require.NoError(t, client.Close())
+	})
+
+	return client
 }

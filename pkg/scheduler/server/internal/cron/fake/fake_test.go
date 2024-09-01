@@ -11,11 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package jobs
+package fake
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/grpc"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/http"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/kubernetes"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/streaming"
+	"testing"
+
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 )
+
+func Test_Fake(t *testing.T) {
+	var _ cron.Interface = new(Fake)
+}
