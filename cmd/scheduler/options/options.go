@@ -42,6 +42,7 @@ type Options struct {
 	SentryAddress    string
 	PlacementAddress string
 	Mode             string
+	KubeConfig       *string
 
 	ID                      string
 	ReplicaID               uint32
@@ -61,6 +62,7 @@ type Options struct {
 	Metrics *metrics.FlagOptions
 
 	taFile         string
+	kubeconfig     string
 	etcdSpaceQuota string
 }
 
@@ -83,6 +85,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.taFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
 	fs.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
+	fs.StringVar(&opts.kubeconfig, "kubeconfig", "", "Kubernetes mode only. Absolute path to the kubeconfig file.")
 
 	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
 	fs.Uint32Var(&opts.ReplicaCount, "replica-count", 1, "The total number of scheduler replicas in the cluster")
@@ -132,6 +135,13 @@ func New(origArgs []string) (*Options, error) {
 
 	if etcdSpaceQuota.Value() < defaultEtcdStorageQuota {
 		log.Warnf("--etcd-space-quota of %s may be too low for production use. Consider increasing the value to 16Gi or larger.", etcdSpaceQuota.String())
+	}
+
+	if fs.Changed("kubeconfig") {
+		if opts.Mode != string(modes.KubernetesMode) {
+			return nil, fmt.Errorf("kubeconfig flag is only valid in --mode=kubernetes")
+		}
+		opts.KubeConfig = &opts.kubeconfig
 	}
 
 	return &opts, nil

@@ -127,6 +127,13 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		)
 	}
 
+	if opts.kubeconfig != nil {
+		args = append(args, "--kubeconfig="+*opts.kubeconfig)
+	}
+	if opts.mode != nil {
+		args = append(args, "--mode="+*opts.mode)
+	}
+
 	clientPorts := make(map[string]string)
 	for _, input := range opts.etcdClientPorts {
 		idAndPort := strings.Split(input, "=")
@@ -336,12 +343,12 @@ func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) map[string]float6
 	return metrics
 }
 
-func (s *Scheduler) EtcdClient(t *testing.T) *clientv3.Client {
+func (s *Scheduler) ETCDClient(t *testing.T) *clientv3.Client {
 	t.Helper()
 
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
-		DialTimeout: 15 * time.Second,
+		Endpoints:   []string{fmt.Sprintf("127.0.0.1:%s", s.EtcdClientPort())},
+		DialTimeout: 40 * time.Second,
 	})
 	require.NoError(t, err)
 

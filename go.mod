@@ -492,6 +492,8 @@ replace (
 // Needed due to a deprecated method used in functional tests
 replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
 
+replace github.com/diagridio/go-etcd-cron => github.com/joshvanl/go-etcd-cron v0.0.0-20240901031816-5173b9308d3e
+
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
