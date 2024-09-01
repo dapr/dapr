@@ -14,7 +14,6 @@ limitations under the License.
 package http
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"io"
@@ -70,13 +69,7 @@ func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 	rsp, _ := json.Marshal(headers)
 
-	var rspBuffer bytes.Buffer
-	if _, err := rspBuffer.Write(rsp); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	io.WriteString(w, rspBuffer.String())
+	w.Write(rsp)
 }
 
 // testQueryStringHandler is used for querystring test.
