@@ -15,6 +15,7 @@ package logline
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -39,6 +40,7 @@ type LogLine struct {
 	stderr            io.ReadCloser
 	stderrExp         io.WriteCloser
 	stderrLinContains map[string]bool
+	got               bytes.Buffer
 
 	outCheck chan map[string]bool
 	closeCh  chan struct{}
@@ -98,7 +100,7 @@ func (l *LogLine) Cleanup(t *testing.T) {
 	close(l.closeCh)
 	for i := 0; i < 2; i++ {
 		for expLine := range <-l.outCheck {
-			assert.Fail(t, "expected to log line", expLine)
+			assert.Fail(t, "expected to log line: "+expLine, l.got.String())
 		}
 	}
 }
@@ -133,6 +135,8 @@ func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[strin
 			break
 		}
 		require.NoError(t, err)
+
+		l.got.Write(append(line, '\n'))
 
 		for expLine := range expLines {
 			if strings.Contains(string(line), expLine) {
