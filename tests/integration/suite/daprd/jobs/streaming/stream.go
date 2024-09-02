@@ -116,6 +116,7 @@ func (s *streaming) Run(t *testing.T, ctx context.Context) {
 				Name:     "test",
 				Schedule: ptr.Of("@every 1s"),
 				Repeats:  ptr.Of(uint32(1)),
+				DueTime:  ptr.Of("0m"),
 				Data: &anypb.Any{
 					TypeUrl: "type.googleapis.com/google.type.Expr",
 				},
