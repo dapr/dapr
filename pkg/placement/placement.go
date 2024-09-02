@@ -359,9 +359,13 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			}
 
 			if isActorRuntime {
-				p.membershipCh <- hostMemberChange{
+				select {
+				case p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberRemove,
 					host:    raft.DaprHostMember{Name: registeredMemberID, Namespace: namespace},
+				}:
+				case <-p.closedCh:
+					return errors.New("placement service is closed")
 				}
 			}
 

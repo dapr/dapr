@@ -75,7 +75,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		b.daprd.HTTPGet2xx(t, ctx, "/v1.0/state/mystore/myvalue")
 
 		metrics := b.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:/v1.0/state/mystore|status:204"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/state/mystore|status:200"]))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:/v1.0/state/mystore|status:204"]))
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/state/mystore|status:200"]))
+		}, time.Second*3, time.Millisecond*10)
 	})
 }
