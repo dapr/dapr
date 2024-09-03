@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"net"
 	"net/url"
+	"path/filepath"
 	"strings"
 
 	"go.etcd.io/etcd/server/v3/embed"
@@ -85,7 +86,14 @@ func config(opts Options) (*embed.Config, error) {
 			}}
 		}
 	default:
-		config.Dir = opts.DataDir + "-" + security.CurrentNamespace() + "-" + opts.EtcdID
+
+		// If not listening on an IP interface or localhost, replace host name with
+		// 0.0.0.0 to listen on all interfaces.
+		if net.ParseIP(etcdURL) == nil && etcdURL != "localhost" {
+			etcdURL = "0.0.0.0"
+		}
+
+		config.Dir = filepath.Join(opts.DataDir, security.CurrentNamespace()+"-"+opts.EtcdID)
 
 		config.ListenPeerUrls = []url.URL{{
 			Scheme: "http",

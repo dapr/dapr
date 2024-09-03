@@ -7,9 +7,17 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
-{{- if .Values.apiService.annotations }}
-{{ toYaml .Values.apiService.annotations | indent 4}}
-{{- end }}
+{{- if or .Values.apiService.annotations .Values.global.prometheus.enabled }}
+  annotations:
+    {{- if .Values.global.prometheus.enabled }}
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .Values.global.prometheus.port }}"
+    prometheus.io/path: "/"
+    {{- end }}
+  {{- if .Values.apiService.annotations }}
+  {{- .Values.apiService.annotations | toYaml | nindent 4 }}
+  {{- end }}
+  {{- end }}
 spec:
   selector:
     app: dapr-operator
@@ -28,6 +36,12 @@ spec:
     targetPort: {{ .Values.ports.targetPort }}
     name: legacy
 {{ end }}
+{{- if eq .Values.global.prometheus.enabled true }}
+  - name: metrics
+    port: {{ .Values.global.prometheus.port }}
+    targetPort: {{ .Values.global.prometheus.port }}
+    protocol: TCP
+{{- end}}
 ---
 apiVersion: v1
 kind: Service
@@ -39,6 +53,7 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 {{- if .Values.webhookService.annotations }}
+  annotations:
 {{ toYaml .Values.webhookService.annotations | indent 4}}
 {{- end }}
 spec:

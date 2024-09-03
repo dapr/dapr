@@ -54,7 +54,7 @@ func New(opts Options) rtpubsub.AdapterStreamer {
 	}
 }
 
-func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, req *rtv1pb.SubscribeTopicEventsInitialRequestAlpha1) error {
+func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server, req *rtv1pb.SubscribeTopicEventsRequestInitialAlpha1) error {
 	s.lock.Lock()
 	key := s.StreamerKey(req.GetPubsubName(), req.GetTopic())
 	if _, ok := s.subscribers[key]; ok {
@@ -64,7 +64,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 
 	conn := &conn{
 		stream:           stream,
-		publishResponses: make(map[string]chan *rtv1pb.SubscribeTopicEventsResponseAlpha1),
+		publishResponses: make(map[string]chan *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1),
 	}
 	s.subscribers[key] = conn
 
@@ -96,7 +96,7 @@ func (s *streamer) Subscribe(stream rtv1pb.Dapr_SubscribeTopicEventsAlpha1Server
 			return err
 		}
 
-		eventResp := resp.GetEventResponse()
+		eventResp := resp.GetEventProcessed()
 		if eventResp == nil {
 			return errors.New("duplicate initial request received")
 		}
@@ -127,7 +127,11 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 
 	start := time.Now()
 	conn.streamLock.Lock()
-	err = conn.stream.Send(envelope)
+	err = conn.stream.Send(&rtv1pb.SubscribeTopicEventsResponseAlpha1{
+		SubscribeTopicEventsResponseType: &rtv1pb.SubscribeTopicEventsResponseAlpha1_EventMessage{
+			EventMessage: envelope,
+		},
+	})
 	conn.streamLock.Unlock()
 	elapsed := diag.ElapsedSince(start)
 
@@ -145,7 +149,7 @@ func (s *streamer) Publish(ctx context.Context, msg *rtpubsub.SubscribedMessage)
 		return err
 	}
 
-	var resp *rtv1pb.SubscribeTopicEventsResponseAlpha1
+	var resp *rtv1pb.SubscribeTopicEventsRequestProcessedAlpha1
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

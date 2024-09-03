@@ -24,7 +24,7 @@ param enableArm bool = false
 param enableWindows bool = false
 
 @description('VM size to use for Linux nodes (agent pool)')
-param linuxVMSize string = 'Standard_DS2_v2'
+param linuxVMSize string = 'Standard_D2s_v5'
 
 @description('VM size to use for Windows nodes, if enabled')
 param windowsVMSize string = 'Standard_DS3_v2'
@@ -43,7 +43,7 @@ param diagStorageResourceId string = ''
 var osDiskSizeGB = 0
 
 // Version of Kubernetes
-var kubernetesVersion = '1.27'
+var kubernetesVersion = '1.30'
 
 resource containerRegistry 'Microsoft.ContainerRegistry/registries@2019-05-01' = {
   name: '${namePrefix}acr'

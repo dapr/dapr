@@ -29,7 +29,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -92,7 +91,7 @@ func (h *healthy) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppHealthCheckPath("/healthz"),
 		daprd.WithAppHealthProbeInterval(1),
 		daprd.WithAppHealthProbeThreshold(1),
-		daprd.WithExecOptions(exec.WithStdout(h.logline.Stdout())),
+		daprd.WithLogLineStdout(h.logline),
 		daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
