@@ -228,9 +228,16 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 
 			// TODO: we may need to handle specific errors later.
 			if err != nil {
+				closeConnection := true
+				if s, ok := status.FromError(err); ok && s.Code() == codes.FailedPrecondition {
+					// If the current server is not leader, then it will try the next server
+					// without closing the connection because we might need to reuse it if we're
+					// dialing the placement headless service
+					closeConnection = false
+				}
 				p.client.disconnectFn(func() {
 					p.onPlacementError(err) // depending on the returned error a new server could be used
-				})
+				}, closeConnection)
 			} else {
 				p.onPlacementOrder(resp)
 			}

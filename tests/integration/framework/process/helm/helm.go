@@ -14,51 +14,41 @@ limitations under the License.
 package helm
 
 import (
+	"bufio"
+	"bytes"
 	"context"
+	"io"
 	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	"sigs.k8s.io/yaml"
 
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/tee"
 )
 
 // Helm test helm chart template.  It is not really an integration test but this seems the best place to place it
 type Helm struct {
-	exec process.Interface
+	exec   process.Interface
+	stdout tee.Reader
+	stderr tee.Reader
 }
 
 func New(t *testing.T, fopts ...OptionFunc) *Helm {
 	t.Helper()
 
-	opts := options{
-		// Since helmtemplate self exists, expect it to always run without error,
-		// even on windows.
-		execOpts: []exec.Option{
-			exec.WithRunError(func(t *testing.T, err error) {
-				t.Helper()
-				require.NoError(t, err, "expected helmtemplate to run without error")
-			}),
-			exec.WithExitCode(0),
-		},
-	}
-
+	var opts options
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
 
 	// helm options (not all are available)
-	args := make([]string, 0, 2*(len(opts.setValues)+len(opts.setStringValues)+len(opts.showOnly)))
+	args := make([]string, 0, 2*(len(opts.setValues)+len(opts.showOnly)))
 	for _, v := range opts.setValues {
 		args = append(args, "--set", v)
-	}
-	for _, v := range opts.setStringValues {
-		args = append(args, "--set-string", v)
-	}
-	if opts.setJSONValue != nil {
-		args = append(args, "--set-json", *opts.setJSONValue)
 	}
 	for _, v := range opts.showOnly {
 		args = append(args, "--show-only", v)
@@ -69,13 +59,27 @@ func New(t *testing.T, fopts ...OptionFunc) *Helm {
 
 	args = append(args, filepath.Join(binary.GetRootDir(t), "charts", "dapr"))
 
-	execOpts := opts.execOpts
-	if opts.stdout != nil {
-		execOpts = append(execOpts, exec.WithStdout(opts.stdout))
+	stdoutPipeR, stdoutPipeW := io.Pipe()
+	stderrPipeR, stderrPipeW := io.Pipe()
+	stdout := tee.Buffer(t, stdoutPipeR)
+	stderr := tee.Buffer(t, stderrPipeR)
+
+	execOpts := []exec.Option{
+		// Since helmtemplate self exists, expect it to always run without error,
+		// even on windows.
+		exec.WithRunError(func(t *testing.T, err error) {
+			t.Helper()
+			require.NoError(t, err, "expected helmtemplate to run without error")
+		}),
+		exec.WithExitCode(0),
+		exec.WithStdout(stdoutPipeW),
+		exec.WithStderr(stderrPipeW),
 	}
 
 	return &Helm{
-		exec: exec.New(t, binary.EnvValue("helmtemplate"), args, execOpts...),
+		exec:   exec.New(t, binary.EnvValue("helmtemplate"), args, execOpts...),
+		stdout: stdout,
+		stderr: stderr,
 	}
 }
 
@@ -84,5 +88,44 @@ func (h *Helm) Run(t *testing.T, ctx context.Context) {
 }
 
 func (h *Helm) Cleanup(t *testing.T) {
+	_, err := io.ReadAll(h.Stdout(t))
+	require.NoError(t, err)
+	_, err = io.ReadAll(h.Stderr(t))
+	require.NoError(t, err)
 	h.exec.Cleanup(t)
+}
+
+func (h *Helm) Stdout(t *testing.T) io.Reader {
+	return h.stdout.Add(t)
+}
+
+func (h *Helm) Stderr(t *testing.T) io.Reader {
+	return h.stderr.Add(t)
+}
+
+func UnmarshalStdout[K any](t *testing.T, h *Helm) []K {
+	t.Helper()
+
+	s := bufio.NewScanner(h.Stdout(t))
+	s.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+		if atEOF && len(data) == 0 {
+			return 0, nil, nil
+		}
+		if i := bytes.Index(data, []byte("\n---")); i >= 0 {
+			return i + 1, data[0:i], nil
+		}
+		if atEOF {
+			return len(data), data, nil
+		}
+		return 0, nil, nil
+	})
+
+	var ks []K
+	for s.Scan() {
+		var k K
+		require.NoError(t, yaml.Unmarshal(s.Bytes(), &k))
+		ks = append(ks, k)
+	}
+
+	return ks
 }

@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/runner/loadtest"
 	"github.com/dapr/dapr/tests/runner/summary"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -177,6 +178,13 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 					require.NoError(t, err)
 					err = cl.Delete(context.Background(), &pod)
 					require.NoError(t, err)
+					assert.EventuallyWithT(t, func(c *assert.CollectT) {
+						err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+						//nolint:testifylint
+						if assert.NoError(c, err) {
+							assert.Equal(c, corev1.PodRunning, pod.Status.Phase)
+						}
+					}, 30*time.Second, time.Millisecond*100)
 				}
 
 				// Re-starting the app to clear previous run's memory

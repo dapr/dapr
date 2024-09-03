@@ -35,10 +35,12 @@ import (
 	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"path/filepath"
 	"regexp"
 	"sort"
 	"strings"
+	"syscall"
 
 	"helm.sh/helm/v3/pkg/releaseutil"
 
@@ -58,6 +60,14 @@ func exitWithErr(err error) {
 }
 
 func main() {
+	ctx, cancel := context.WithCancel(context.Background())
+	sigCh := make(chan os.Signal, 1)
+	signal.Notify(sigCh, os.Interrupt, syscall.SIGTERM)
+	go func() {
+		<-sigCh
+		cancel()
+	}()
+
 	cfg := new(action.Configuration)
 	client := action.NewInstall(cfg)
 	client.DryRun = true
@@ -97,7 +107,6 @@ func main() {
 		exitWithErr(err)
 	}
 	client.Namespace = settings.Namespace()
-	ctx := context.Background()
 
 	rel, err := client.RunWithContext(ctx, chartRequested, vals)
 	if err != nil {

@@ -109,7 +109,9 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	}
 
 	if sidecar.SchedulerAddress == "" {
-		sidecar.SchedulerAddress = strings.Join(i.schedulerAddresses, ",")
+		allSchedulerAddresses := patcher.ServiceScheduler.AddressAllInstances(
+			i.schedulerReplicaCount, i.config.Namespace, i.config.KubeClusterDomain)
+		sidecar.SchedulerAddress = strings.Join(allSchedulerAddresses, ",")
 	}
 
 	// Default value for the sidecar image, which can be overridden by annotations

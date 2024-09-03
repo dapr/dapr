@@ -326,7 +326,7 @@ func (c *daprClient) SubscribeTopicEventsAlpha1(ctx context.Context, opts ...grp
 
 type Dapr_SubscribeTopicEventsAlpha1Client interface {
 	Send(*SubscribeTopicEventsRequestAlpha1) error
-	Recv() (*TopicEventRequest, error)
+	Recv() (*SubscribeTopicEventsResponseAlpha1, error)
 	grpc.ClientStream
 }
 
@@ -338,8 +338,8 @@ func (x *daprSubscribeTopicEventsAlpha1Client) Send(m *SubscribeTopicEventsReque
 	return x.ClientStream.SendMsg(m)
 }
 
-func (x *daprSubscribeTopicEventsAlpha1Client) Recv() (*TopicEventRequest, error) {
-	m := new(TopicEventRequest)
+func (x *daprSubscribeTopicEventsAlpha1Client) Recv() (*SubscribeTopicEventsResponseAlpha1, error) {
+	m := new(SubscribeTopicEventsResponseAlpha1)
 	if err := x.ClientStream.RecvMsg(m); err != nil {
 		return nil, err
 	}
@@ -1358,7 +1358,7 @@ func _Dapr_SubscribeTopicEventsAlpha1_Handler(srv interface{}, stream grpc.Serve
 }
 
 type Dapr_SubscribeTopicEventsAlpha1Server interface {
-	Send(*TopicEventRequest) error
+	Send(*SubscribeTopicEventsResponseAlpha1) error
 	Recv() (*SubscribeTopicEventsRequestAlpha1, error)
 	grpc.ServerStream
 }
@@ -1367,7 +1367,7 @@ type daprSubscribeTopicEventsAlpha1Server struct {
 	grpc.ServerStream
 }
 
-func (x *daprSubscribeTopicEventsAlpha1Server) Send(m *TopicEventRequest) error {
+func (x *daprSubscribeTopicEventsAlpha1Server) Send(m *SubscribeTopicEventsResponseAlpha1) error {
 	return x.ServerStream.SendMsg(m)
 }
 

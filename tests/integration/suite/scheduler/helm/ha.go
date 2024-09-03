@@ -34,27 +34,18 @@ func init() {
 type ha struct {
 	helm           *helm.Helm
 	helmNamespaced *helm.Helm
-
-	helmStdout           io.ReadCloser
-	helmNamespacedStdout io.ReadCloser
 }
 
 func (b *ha) Setup(t *testing.T) []framework.Option {
-	stdoutR, stdoutW := io.Pipe()
-	b.helmStdout = stdoutR
 	b.helm = helm.New(t,
 		helm.WithGlobalValues("ha.enabled=true"),
 		helm.WithShowOnlySchedulerSTS(),
-		helm.WithStdout(stdoutW),
 	)
 
-	stdoutRNamespaced, stdoutWNamespaced := io.Pipe()
-	b.helmNamespacedStdout = stdoutRNamespaced
 	b.helmNamespaced = helm.New(t,
 		helm.WithGlobalValues("ha.enabled=true"),
 		helm.WithShowOnlySchedulerSTS(),
 		helm.WithNamespace("dapr-system"),
-		helm.WithStdout(stdoutWNamespaced),
 	)
 
 	return []framework.Option{
@@ -65,7 +56,7 @@ func (b *ha) Setup(t *testing.T) []framework.Option {
 func (b *ha) Run(t *testing.T, ctx context.Context) {
 	// good path
 	var sts appsv1.StatefulSet
-	bs, err := io.ReadAll(b.helmStdout)
+	bs, err := io.ReadAll(b.helm.Stdout(t))
 	require.NoError(t, err)
 	require.NoError(t, yaml.Unmarshal(bs, &sts))
 
@@ -96,7 +87,7 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 	// namespaced
 	t.Run("initial_cluster_has_all_instances_dapr_system_namespace", func(t *testing.T) {
 		var stsNamespaced appsv1.StatefulSet
-		bs, err = io.ReadAll(b.helmNamespacedStdout)
+		bs, err = io.ReadAll(b.helmNamespaced.Stdout(t))
 		require.NoError(t, err)
 		require.NoError(t, yaml.Unmarshal(bs, &stsNamespaced))
 		requireArgsValue(t, stsNamespaced.Spec.Template.Spec.Containers[0].Args, "--initial-cluster",
