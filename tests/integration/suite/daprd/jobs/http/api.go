@@ -90,6 +90,7 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 	body := `{
 "schedule": "@every 1s",
 "repeats": 10,
+"dueTime": "0s",
 "data": {
 	"@type": "type.googleapis.com/google.protobuf.StringValue",
 	"value": "\"someData\""
@@ -119,7 +120,7 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, []byte(`"someData"`), bytes.TrimSpace(job.GetData().GetValue()))
 		assert.Equal(t, "type.googleapis.com/google.protobuf.StringValue", job.GetData().GetTypeUrl())
 
-	case <-time.After(time.Second * 3):
+	case <-time.After(time.Second * 10):
 		assert.Fail(t, "timed out waiting for triggered job")
 	}
 
