@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.22.4
+go 1.22.6
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -10,9 +10,9 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.14.0-rc.4
-	github.com/dapr/kit v0.13.1-0.20240523225705-106329e5839f
-	github.com/diagridio/go-etcd-cron v0.1.0
+	github.com/dapr/components-contrib v1.14.0-rc.6
+	github.com/dapr/kit v0.13.1-0.20240724000121-26b564d9d0f5
+	github.com/diagridio/go-etcd-cron v0.2.3
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
@@ -69,7 +69,7 @@ require (
 	golang.org/x/sync v0.7.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240624140628-dc46fd24d27d
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d
-	google.golang.org/grpc v1.64.0
+	google.golang.org/grpc v1.64.1
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.30.2

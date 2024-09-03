@@ -32,23 +32,22 @@ func (a *api) SubscribeTopicEventsAlpha1(stream runtimev1pb.Dapr_SubscribeTopicE
 
 	go func() {
 		defer a.wg.Done()
-
 		select {
 		case <-a.closeCh:
+			errCh <- errors.New("api server closed")
 		case <-subDone:
 		}
-		errCh <- nil
 	}()
 
 	go func() {
 		defer a.wg.Done()
-		errCh <- a.streamSubscribe(stream, errCh, subDone)
+		errCh <- a.streamSubscribe(stream, subDone)
 	}()
 
 	return <-errCh
 }
 
-func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1Server, errCh chan error, subDone chan struct{}) error {
+func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1Server, subDone chan struct{}) error {
 	defer close(subDone)
 
 	ireq, err := stream.Recv()
@@ -85,7 +84,7 @@ func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1
 		return err
 	}
 
-	if err := a.processor.Subscriber().StartStreamerSubscription(key); err != nil {
+	if err = a.processor.Subscriber().StartStreamerSubscription(key); err != nil {
 		a.Universal.CompStore().DeleteStreamSubscription(key)
 		return err
 	}
@@ -94,6 +93,14 @@ func (a *api) streamSubscribe(stream runtimev1pb.Dapr_SubscribeTopicEventsAlpha1
 		a.processor.Subscriber().StopStreamerSubscription(req.GetPubsubName(), key)
 		a.Universal.CompStore().DeleteStreamSubscription(key)
 	}()
+
+	if err = stream.Send(&runtimev1pb.SubscribeTopicEventsResponseAlpha1{
+		SubscribeTopicEventsResponseType: &runtimev1pb.SubscribeTopicEventsResponseAlpha1_InitialResponse{
+			InitialResponse: new(runtimev1pb.SubscribeTopicEventsResponseInitialAlpha1),
+		},
+	}); err != nil {
+		return err
+	}
 
 	return a.pubsubAdapterStreamer.Subscribe(stream, req)
 }

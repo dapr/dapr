@@ -20,6 +20,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/genproto/googleapis/rpc/errdetails"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -65,7 +67,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "", Topic: "a",
 			},
 		},
@@ -80,7 +82,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "",
 			},
 		},
@@ -95,7 +97,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
@@ -109,7 +111,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, streamDupe.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
@@ -125,20 +127,62 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { require.NoError(t, streamDoubleInit.CloseSend()) })
 	require.NoError(t, streamDoubleInit.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "b",
 			},
 		},
 	}))
+
+	resp, err := streamDoubleInit.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
+
 	require.NoError(t, streamDoubleInit.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "b",
 			},
 		},
 	}))
 	_, err = streamDoubleInit.Recv()
+	require.Error(t, err)
 	s, ok = status.FromError(err)
 	require.True(t, ok)
 	assert.Contains(t, s.Message(), "duplicate initial request received")
+
+	notExist, err := client.SubscribeTopicEventsAlpha1(ctx)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, streamDoubleInit.CloseSend()) })
+	require.NoError(t, notExist.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
+				PubsubName: "notexist", Topic: "b",
+			},
+		},
+	}))
+
+	_, err = notExist.Recv()
+	require.Error(t, err)
+	s, ok = status.FromError(err)
+	require.True(t, ok)
+	assert.Equal(t, codes.InvalidArgument, s.Code())
+	assert.Equal(t, "pubsub notexist is not found", s.Message())
+	require.Len(t, s.Details(), 1)
+	errInfo, ok := s.Details()[0].(*errdetails.ErrorInfo)
+	require.True(t, ok)
+	assert.Equal(t, "DAPR_PUBSUB_NOT_FOUND", errInfo.GetReason())
+	require.Equal(t, "dapr.io", errInfo.GetDomain())
+
+	closeBeforeInit, err := client.SubscribeTopicEventsAlpha1(ctx)
+	require.NoError(t, err)
+	require.NoError(t, closeBeforeInit.CloseSend())
+
+	// Test daprd closed even if client is still connected, without sending
+	// initial request message.
+	_, err = client.SubscribeTopicEventsAlpha1(ctx)
+	require.NoError(t, err)
 }

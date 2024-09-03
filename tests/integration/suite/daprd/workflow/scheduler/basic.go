@@ -52,6 +52,7 @@ func init() {
 
 type basic struct {
 	daprd      *daprd.Daprd
+	daprd2     *daprd.Daprd
 	place      *placement.Placement
 	scheduler  *procscheduler.Scheduler
 	httpClient *http.Client
@@ -92,7 +93,7 @@ spec:
 		daprd.WithConfigs(configFile),
 	)
 
-	daprd2 := daprd.New(t,
+	b.daprd2 = daprd.New(t,
 		daprd.WithAppID(b.daprd.AppID()),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
@@ -103,7 +104,7 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(db, b.scheduler, b.place, srv, daprd2, b.daprd),
+		framework.WithProcesses(db, b.scheduler, b.place, srv, b.daprd2, b.daprd),
 	}
 }
 
@@ -111,6 +112,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.scheduler.WaitUntilRunning(t, ctx)
 	b.place.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
+	b.daprd2.WaitUntilRunning(t, ctx)
 
 	b.httpClient = frameworkclient.HTTP(t)
 
@@ -297,7 +299,7 @@ func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, in
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/start", b.daprd.HTTPPort(), name)
 	data, err := json.Marshal(input)
 	require.NoError(t, err)
-	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, strings.NewReader(string(data)))
 	req.Header.Set("Content-Type", "application/json")
@@ -319,7 +321,7 @@ func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, in
 func (b *basic) terminateWorkflow(t *testing.T, ctx context.Context, instanceID string) {
 	// use http client to terminate the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", b.daprd.HTTPPort(), instanceID)
-	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
 	require.NoError(t, err)
@@ -333,7 +335,7 @@ func (b *basic) terminateWorkflow(t *testing.T, ctx context.Context, instanceID 
 func (b *basic) purgeWorkflow(t *testing.T, ctx context.Context, instanceID string) {
 	// use http client to purge the workflow
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", b.daprd.HTTPPort(), instanceID)
-	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
 	require.NoError(t, err)

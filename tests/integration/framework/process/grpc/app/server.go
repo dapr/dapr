@@ -20,9 +20,12 @@ import (
 
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	testpb "github.com/dapr/dapr/tests/integration/framework/process/grpc/app/proto"
 )
 
 type server struct {
+	testpb.UnsafeTestServiceServer
+
 	onInvokeFn         func(context.Context, *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error)
 	onJobEventFn       func(context.Context, *rtv1.JobEventRequest) (*rtv1.JobEventResponse, error)
 	onTopicEventFn     func(context.Context, *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error)
@@ -31,6 +34,7 @@ type server struct {
 	listInputBindFn    func(context.Context, *emptypb.Empty) (*rtv1.ListInputBindingsResponse, error)
 	onBindingEventFn   func(context.Context, *rtv1.BindingEventRequest) (*rtv1.BindingEventResponse, error)
 	healthCheckFn      func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error)
+	pingFn             func(context.Context, *testpb.PingRequest) (*testpb.PingResponse, error)
 }
 
 func (s *server) OnInvoke(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
@@ -87,4 +91,11 @@ func (s *server) HealthCheck(ctx context.Context, e *emptypb.Empty) (*rtv1.Healt
 		return new(rtv1.HealthCheckResponse), nil
 	}
 	return s.healthCheckFn(ctx, e)
+}
+
+func (s *server) Ping(ctx context.Context, req *testpb.PingRequest) (*testpb.PingResponse, error) {
+	if s.pingFn != nil {
+		return s.pingFn(ctx, req)
+	}
+	return new(testpb.PingResponse), nil
 }

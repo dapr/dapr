@@ -41,6 +41,8 @@ type placementClient struct {
 	clientStream v1pb.Placement_ReportDaprStatusClient
 	// clientConn is the gRPC client connection.
 	clientConn *grpc.ClientConn
+	// client is the gRPC client.
+	client v1pb.PlacementClient
 	// streamConnAlive is the status of stream connection alive.
 	streamConnAlive bool
 	// streamConnectedCond is the condition variable for goroutines waiting for or announcing
@@ -56,27 +58,36 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 		return err
 	}
 
-	conn, err := grpc.DialContext(ctx, serverAddr, opts...) //nolint:staticcheck
-	if err != nil {
-		if conn != nil {
-			conn.Close()
+	// If we're trying to connect to the same address, we reuse the existing connection.
+	// This is not just an optimisation, but a necessary feature for the round-robin load balancer
+	// to work correctly when connecting to the placement headless service in k8s
+	var conn *grpc.ClientConn
+	if c.clientConn == nil || c.clientConn.Target() != serverAddr {
+		if c.clientConn != nil {
+			c.clientConn.Close() // Closes previous connection to avoid leaks
+			c.client = nil
 		}
-		return err
+		conn, err = grpc.DialContext(ctx, serverAddr, opts...) //nolint:staticcheck
+		if err != nil {
+			if conn != nil {
+				conn.Close()
+			}
+			return err
+		}
+
+		// Creating the new connection and client
+		c.clientConn = conn
+		c.client = v1pb.NewPlacementClient(c.clientConn)
+		ctx = metadata.AppendToOutgoingContext(ctx, placement.GRPCContextKeyAcceptVNodes, "false")
 	}
 
-	client := v1pb.NewPlacementClient(conn)
-	ctx = metadata.AppendToOutgoingContext(ctx, placement.GRPCContextKeyAcceptVNodes, "false")
-	stream, err := client.ReportDaprStatus(ctx)
+	stream, err := c.client.ReportDaprStatus(ctx)
 	if err != nil {
-		if conn != nil {
-			conn.Close()
-		}
 		return err
 	}
 
 	c.streamConnectedCond.L.Lock()
 	c.clientStream = stream
-	c.clientConn = conn
 	c.streamConnAlive = true
 	c.streamConnectedCond.Broadcast()
 	c.streamConnectedCond.L.Unlock()
@@ -89,7 +100,9 @@ func (c *placementClient) drain(stream grpc.ClientStream, conn *grpc.ClientConn)
 	c.sendLock.Lock()
 	stream.CloseSend() // CloseSend cannot be invoked concurrently with Send()
 	c.sendLock.Unlock()
-	conn.Close()
+	if conn != nil {
+		conn.Close()
+	}
 
 	c.recvLock.Lock()
 	defer c.recvLock.Unlock()
@@ -104,12 +117,12 @@ var noop = func() {}
 
 // disconnect from the current server without any additional operation.
 func (c *placementClient) disconnect() {
-	c.disconnectFn(noop)
+	c.disconnectFn(noop, true)
 }
 
 // disconnectFn disconnects from the current server providing a way to run a function inside the lock in case of new disconnection occurs.
 // the function will not be executed in case of the stream is already disconnected.
-func (c *placementClient) disconnectFn(insideLockFn func()) {
+func (c *placementClient) disconnectFn(insideLockFn func(), closeConnection bool) {
 	c.streamConnectedCond.L.Lock()
 	if !c.streamConnAlive {
 		c.streamConnectedCond.Broadcast()
@@ -117,7 +130,11 @@ func (c *placementClient) disconnectFn(insideLockFn func()) {
 		return
 	}
 
-	c.drain(c.clientStream, c.clientConn)
+	if closeConnection {
+		c.drain(c.clientStream, c.clientConn)
+	} else {
+		c.drain(c.clientStream, nil)
+	}
 
 	c.streamConnAlive = false
 	c.streamConnectedCond.Broadcast()

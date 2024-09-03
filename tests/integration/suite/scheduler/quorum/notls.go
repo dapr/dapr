@@ -32,7 +32,6 @@ import (
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -45,7 +44,6 @@ func init() {
 
 // notls tests scheduler can find quorum with tls disabled.
 type notls struct {
-	daprd      *daprd.Daprd
 	schedulers []*scheduler.Scheduler
 }
 
@@ -70,13 +68,9 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 		scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...),
 	}
 
-	n.daprd = daprd.New(t,
-		daprd.WithSchedulerAddresses(n.schedulers[0].Address(), n.schedulers[1].Address(), n.schedulers[2].Address()),
-	)
-
 	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(fp, n.schedulers[0], n.schedulers[1], n.schedulers[2], n.daprd),
+		framework.WithProcesses(fp, n.schedulers[0], n.schedulers[1], n.schedulers[2]),
 	}
 }
 
@@ -84,9 +78,6 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	n.schedulers[0].WaitUntilRunning(t, ctx)
 	n.schedulers[1].WaitUntilRunning(t, ctx)
 	n.schedulers[2].WaitUntilRunning(t, ctx)
-
-	// this is needed since the scheduler streams the job at trigger time back to the sidecar
-	n.daprd.WaitUntilRunning(t, ctx)
 
 	// Schedule job to random scheduler instance
 	//nolint:gosec // there is no need for a crypto secure rand.
@@ -117,8 +108,8 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			Ttl: ptr.Of("90s"),
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
-			AppId:     n.daprd.AppID(),
-			Namespace: n.daprd.Namespace(),
+			AppId:     "appid",
+			Namespace: "ns",
 			Target: &schedulerv1pb.JobTargetMetadata{
 				Type: &schedulerv1pb.JobTargetMetadata_Job{
 					Job: new(schedulerv1pb.TargetJob),
@@ -136,7 +127,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	// Check if the job's key exists in the etcd database
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		chosenSchedulerEtcdKeys := getEtcdKeys(t, chosenSchedulerPort)
-		checkKeysForJobName(t, n.daprd, "testJob", chosenSchedulerEtcdKeys)
+		n.checkKeysForJobName(t, "testJob", chosenSchedulerEtcdKeys)
 	}, time.Second*40, time.Millisecond*10, "failed to find job's key in etcd")
 
 	// ensure data exists on ALL schedulers
@@ -148,12 +139,12 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			diffSchedulerEtcdKeys := getEtcdKeys(t, diffSchedulerPort)
-			checkKeysForJobName(t, n.daprd, "testJob", diffSchedulerEtcdKeys)
+			n.checkKeysForJobName(t, "testJob", diffSchedulerEtcdKeys)
 		}, time.Second*40, time.Millisecond*10, "failed to find job's key in etcd")
 	}
 }
 
-func checkKeysForJobName(t *testing.T, daprd *daprd.Daprd, jobName string, keys []*mvccpb.KeyValue) {
+func (n *notls) checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
 	t.Helper()
 
 	var jobPrefix string
@@ -165,7 +156,7 @@ func checkKeysForJobName(t *testing.T, daprd *daprd.Daprd, jobName string, keys 
 
 	found := false
 	for _, kv := range keys {
-		if string(kv.Key) == fmt.Sprintf("%s||%s||%s||%s", jobPrefix, daprd.Namespace(), daprd.AppID(), jobName) {
+		if string(kv.Key) == fmt.Sprintf("%s||%s||%s||%s", jobPrefix, "ns", "appid", jobName) {
 			found = true
 			break
 		}

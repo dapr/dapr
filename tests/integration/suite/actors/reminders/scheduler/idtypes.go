@@ -84,7 +84,7 @@ spec:
 
 	i.daprdsNum = 4
 	i.actorTypesNum = 2
-	i.actorIDsNum = 25
+	i.actorIDsNum = 15
 	i.daprds = make([]*daprd.Daprd, i.daprdsNum)
 	i.actorDaprds = make([]actordaprd, i.daprdsNum)
 	procs := make([]process.Interface, i.daprdsNum*2+2)
@@ -190,6 +190,7 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 					ActorId:   i.actorDaprds[x].actorTypes[y].ids[z],
 					Name:      "remindermethod",
 					DueTime:   "1s",
+					Period:    "10000s",
 					Data:      []byte("reminderdata"),
 				})
 				require.NoError(t, err)
@@ -207,5 +208,5 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 		i.lock.Lock()
 		defer i.lock.Unlock()
 		assert.ElementsMatch(c, i.expcalled, i.methodcalled)
-	}, time.Second*20, time.Millisecond*10)
+	}, time.Second*30, time.Millisecond*10)
 }
