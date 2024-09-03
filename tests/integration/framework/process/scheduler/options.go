@@ -34,7 +34,7 @@ type options struct {
 	port          int
 	healthzPort   int
 	metricsPort   int
-	listenAddress *string
+	listenAddress string
 	sentry        *sentry.Sentry
 	dataDir       *string
 }
@@ -102,7 +102,7 @@ func WithMetricsPort(port int) Option {
 
 func WithListenAddress(address string) Option {
 	return func(o *options) {
-		o.listenAddress = &address
+		o.listenAddress = address
 	}
 }
 

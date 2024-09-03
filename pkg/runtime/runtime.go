@@ -210,26 +210,25 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:               runtimeConfig.id,
-		Namespace:        namespace,
-		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
-		SchedulerEnabled: len(runtimeConfig.schedulerAddress) > 0,
-		Registry:         runtimeConfig.registry,
-		ComponentStore:   compStore,
-		Meta:             meta,
-		GlobalConfig:     globalConfig,
-		Resiliency:       resiliencyProvider,
-		Mode:             runtimeConfig.mode,
-		PodName:          podName,
-		OperatorClient:   operatorClient,
-		GRPC:             grpc,
-		Channels:         channels,
-		MiddlewareHTTP:   httpMiddleware,
-		Security:         sec,
-		Outbox:           outbox,
-		Adapter:          pubsubAdapter,
-		AdapterStreamer:  pubsubAdapterStreamer,
+		ID:              runtimeConfig.id,
+		Namespace:       namespace,
+		IsHTTP:          runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:   len(runtimeConfig.actorsService) > 0,
+		Registry:        runtimeConfig.registry,
+		ComponentStore:  compStore,
+		Meta:            meta,
+		GlobalConfig:    globalConfig,
+		Resiliency:      resiliencyProvider,
+		Mode:            runtimeConfig.mode,
+		PodName:         podName,
+		OperatorClient:  operatorClient,
+		GRPC:            grpc,
+		Channels:        channels,
+		MiddlewareHTTP:  httpMiddleware,
+		Security:        sec,
+		Outbox:          outbox,
+		Adapter:         pubsubAdapter,
+		AdapterStreamer: pubsubAdapterStreamer,
 	})
 
 	var reloader *hotreload.Reloader
@@ -321,31 +320,6 @@ func newDaprRuntime(ctx context.Context,
 		},
 	)
 
-	if runtimeConfig.SchedulerEnabled() {
-		opts := clients.Options{
-			Addresses: runtimeConfig.schedulerAddress,
-			Security:  sec,
-		}
-
-		rt.schedulerClients, err = continuouslyRetrySchedulerClient(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-
-		rt.schedulerManager, err = scheduler.New(scheduler.Options{
-			Namespace: namespace,
-			AppID:     runtimeConfig.id,
-			Clients:   rt.schedulerClients,
-			Channels:  channels,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if err := rt.runnerCloser.Add(rt.schedulerManager.Run); err != nil {
-			return nil, err
-		}
-	}
-
 	if err := rt.runnerCloser.AddCloser(
 		func() error {
 			log.Info("Dapr is shutting down")
@@ -410,6 +384,13 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 			}
 			return nil
 		})
+	}
+	if a.runtimeConfig.SchedulerEnabled() {
+		log.Info("Initializing connection to Scheduler in the background")
+		if err := a.initScheduler(ctx); err != nil {
+			log.Errorf("Scheduler failed to start due to: %s", err.Error())
+		}
+		log.Info("Scheduler client connections created")
 	}
 
 	return a.runnerCloser.Run(ctx)
@@ -651,10 +632,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return err
 	}
 
-	if err := a.processor.Subscriber().InitProgramaticSubscriptions(ctx); err != nil {
-		return fmt.Errorf("failed to init programmatic subscriptions: %s", err)
-	}
-
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
 	}
@@ -716,6 +693,10 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 		}); err != nil {
 			return fmt.Errorf("failed to register components with callback: %w", err)
 		}
+	}
+
+	if a.runtimeConfig.SchedulerEnabled() {
+		a.schedulerManager.Start(a.actor)
 	}
 
 	return nil
@@ -793,18 +774,20 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			a.appHealthReady = nil
 		}
 
-		// Start subscribing to topics and reading from input bindings
-		if err := a.processor.Subscriber().StartAppSubscriptions(); err != nil {
-			log.Warnf("failed to subscribe to topics: %s ", err)
-		}
-		err := a.processor.Binding().StartReadingFromBindings(ctx)
-		if err != nil {
-			log.Warnf("failed to read from bindings: %s ", err)
-		}
+		if a.channels.AppChannel() != nil {
+			// Start subscribing to topics and reading from input bindings
+			if err := a.processor.Subscriber().StartAppSubscriptions(); err != nil {
+				log.Warnf("failed to subscribe to topics: %s ", err)
+			}
+			err := a.processor.Binding().StartReadingFromBindings(ctx)
+			if err != nil {
+				log.Warnf("failed to read from bindings: %s ", err)
+			}
 
-		// Start subscribing to outbox topics
-		if err := a.outbox.SubscribeToInternalTopics(ctx, a.runtimeConfig.id); err != nil {
-			log.Warnf("failed to subscribe to outbox topics: %s", err)
+			// Start subscribing to outbox topics
+			if err := a.outbox.SubscribeToInternalTopics(ctx, a.runtimeConfig.id); err != nil {
+				log.Warnf("failed to subscribe to outbox topics: %s", err)
+			}
 		}
 
 		if a.runtimeConfig.SchedulerEnabled() {
@@ -823,9 +806,39 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		a.processor.Binding().StopReadingFromBindings(false)
 
 		if a.runtimeConfig.SchedulerEnabled() {
-			a.schedulerManager.Stop()
+			if a.schedulerManager != nil {
+				a.schedulerManager.Stop()
+			}
 		}
 	}
+}
+
+func (a *DaprRuntime) initScheduler(ctx context.Context) error {
+	var schedError error
+	a.schedulerManager, schedError = scheduler.New(scheduler.Options{
+		Namespace: a.namespace,
+		AppID:     a.runtimeConfig.id,
+		Channels:  a.channels,
+	})
+	if schedError != nil {
+		return schedError
+	}
+
+	if err := a.runnerCloser.Add(a.schedulerManager.Run); err != nil {
+		return err
+	}
+
+	opts := clients.Options{
+		Addresses: a.runtimeConfig.schedulerAddress,
+		Security:  a.sec,
+	}
+	a.schedulerClients, schedError = continuouslyRetrySchedulerClient(ctx, opts)
+	if schedError != nil {
+		log.Errorf("failed to create scheduler clients: could not connect to scheduler: %s", schedError)
+	}
+	a.schedulerManager.SetClients(a.schedulerClients)
+
+	return nil
 }
 
 func (a *DaprRuntime) populateSecretsConfiguration() {
