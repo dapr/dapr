@@ -49,6 +49,13 @@ type workflowState struct {
 	config              actorsBackendConfig
 }
 
+type serializableWorkflowState struct {
+	Inbox        [][]byte
+	History      [][]byte
+	CustomStatus string
+	Generation   uint64
+}
+
 type workflowStateMetadata struct {
 	InboxLength   int
 	HistoryLength int
@@ -205,14 +212,11 @@ func (s *workflowState) EncodeWorkflowState() ([]byte, error) {
 	}
 
 	// Encode workflowState
-	encodedState, err := actors.EncodeInternalActorData(&struct {
-		Inbox        [][]byte
-		History      [][]byte
-		CustomStatus string
-	}{
+	encodedState, err := actors.EncodeInternalActorData(&serializableWorkflowState{
 		Inbox:        encodedInbox,
 		History:      encodedHistory,
 		CustomStatus: s.CustomStatus,
+		Generation:   s.Generation,
 	})
 	if err != nil {
 		return nil, err
@@ -224,11 +228,7 @@ func (s *workflowState) EncodeWorkflowState() ([]byte, error) {
 // It only decodes the inbox, history, and custom status.
 func (s *workflowState) DecodeWorkflowState(encodedState []byte) error {
 	// Decode workflowState
-	var decodedState struct {
-		Inbox        [][]byte
-		History      [][]byte
-		CustomStatus string
-	}
+	var decodedState serializableWorkflowState
 	err := actors.DecodeInternalActorData(bytes.NewReader(encodedState), &decodedState)
 	if err != nil {
 		return err
@@ -252,6 +252,7 @@ func (s *workflowState) DecodeWorkflowState(encodedState []byte) error {
 		s.Inbox[i] = event
 	}
 	s.CustomStatus = decodedState.CustomStatus
+	s.Generation = decodedState.Generation
 	return nil
 }
 
