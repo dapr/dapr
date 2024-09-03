@@ -31,10 +31,10 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/placement/hashing"
-	"github.com/dapr/dapr/pkg/placement/raft"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/utils"
+
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )
@@ -61,6 +61,7 @@ const (
 type actorPlacement struct {
 	actorTypes []string
 	config     internal.Config
+	namespace  string
 
 	// client is the placement client.
 	client *placementClient
@@ -128,6 +129,7 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		closeCh:           make(chan struct{}),
 		resiliency:        opts.Resiliency,
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
+		namespace:         opts.Namespace,
 	}
 }
 
@@ -226,9 +228,16 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 
 			// TODO: we may need to handle specific errors later.
 			if err != nil {
+				closeConnection := true
+				if s, ok := status.FromError(err); ok && s.Code() == codes.FailedPrecondition {
+					// If the current server is not leader, then it will try the next server
+					// without closing the connection because we might need to reuse it if we're
+					// dialing the placement headless service
+					closeConnection = false
+				}
 				p.client.disconnectFn(func() {
 					p.onPlacementError(err) // depending on the returned error a new server could be used
-				})
+				}, closeConnection)
 			} else {
 				p.onPlacementOrder(resp)
 			}
@@ -276,7 +285,8 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				Pod:      p.config.PodName,
 				// Port is redundant because Name should include port number
 				// Port: 0,
-				ApiLevel: internal.ActorAPILevel,
+				ApiLevel:  internal.ActorAPILevel,
+				Namespace: p.namespace,
 			}
 
 			err := p.client.send(&host)
@@ -310,7 +320,7 @@ func (p *actorPlacement) Close() error {
 	return nil
 }
 
-// WaitUntilReady waits until placement table is until table lock is unlocked.
+// WaitUntilReady waits until placement table is unlocked.
 func (p *actorPlacement) WaitUntilReady(ctx context.Context) error {
 	p.placementTableLock.RLock()
 	hasTablesCh := p.hasPlacementTablesCh
@@ -454,12 +464,11 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 // onPlacementError closes the current placement stream and reestablish the connection again,
 // uses a different placement server depending on the error code
 func (p *actorPlacement) onPlacementError(err error) {
+	log.Debugf("Disconnected from placement: %v", err)
 	s, ok := status.FromError(err)
 	// If the current server is not leader, then it will try to the next server.
 	if ok && s.Code() == codes.FailedPrecondition {
 		p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
-	} else {
-		log.Debugf("Disconnected from placement: %v", err)
 	}
 }
 
@@ -475,6 +484,7 @@ func (p *actorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 	case lockOperation:
 		p.blockPlacements()
 
+		// If we don't receive an unlock in 5 seconds, unlock the table
 		go func() {
 			// TODO: Use lock-free table update.
 			// current implementation is distributed two-phase locking algorithm.
@@ -551,10 +561,10 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 			// TODO: @elena in v1.15 remove the check for versions < 1.13
 			// only keep `hashing.NewFromExisting`
 
-			if p.apiLevel < raft.NoVirtualNodesInPlacementTablesAPILevel {
-				entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
-			} else {
+			if in.GetReplicationFactor() > 0 && len(v.GetHosts()) == 0 {
 				entries[k] = hashing.NewFromExisting(loadMap, in.GetReplicationFactor(), p.virtualNodesCache)
+			} else {
+				entries[k] = hashing.NewFromExistingWithVirtNodes(v.GetHosts(), v.GetSortedSet(), loadMap)
 			}
 		}
 

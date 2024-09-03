@@ -33,12 +33,12 @@ import (
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -141,8 +141,8 @@ func (u *uppercase) Run(t *testing.T, ctx context.Context) {
 	u.daprd2.WaitUntilAppHealth(t, ctx)
 	u.daprd3.WaitUntilAppHealth(t, ctx)
 
-	client := util.HTTPClient(t)
-	assert.Len(t, util.GetMetaComponents(t, ctx, client, u.daprd1.HTTPPort()), 2)
+	client := client.HTTP(t)
+	assert.Len(t, u.daprd1.GetMetaRegisteredComponents(t, ctx), 2)
 
 	t.Run("existing middleware should be loaded", func(t *testing.T) {
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, true)
@@ -171,8 +171,8 @@ func (u *uppercase) Run(t *testing.T, ctx context.Context) {
 		u.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, u.daprd2.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
+			assert.Len(c, u.daprd2.GetMetaRegisteredComponents(c, ctx), 1)
+		}, time.Second*5, time.Millisecond*10, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, true)
 		u.doReq(t, ctx, client, u.daprd1, u.daprd2, true)
@@ -200,8 +200,8 @@ func (u *uppercase) Run(t *testing.T, ctx context.Context) {
 		u.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp, EventType: operatorv1.ResourceEventType_CREATED})
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(t, ctx, client, u.daprd3.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
+			assert.Len(c, u.daprd3.GetMetaRegisteredComponents(t, ctx), 1)
+		}, time.Second*5, time.Millisecond*10, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, true)
 		u.doReq(t, ctx, client, u.daprd1, u.daprd2, true)
@@ -232,12 +232,12 @@ func (u *uppercase) Run(t *testing.T, ctx context.Context) {
 		u.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp, EventType: operatorv1.ResourceEventType_UPDATED})
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := util.GetMetaComponents(c, ctx, client, u.daprd1.HTTPPort())
+			resp := u.daprd1.GetMetaRegisteredComponents(c, ctx)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{Name: "uppercase", Type: "middleware.http.routeralias", Version: "v1"},
 				{Name: "uppercase2", Type: "middleware.http.routeralias", Version: "v1"},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
+		}, time.Second*5, time.Millisecond*10, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, false)
 		u.doReq(t, ctx, client, u.daprd1, u.daprd2, true)
@@ -265,12 +265,12 @@ func (u *uppercase) Run(t *testing.T, ctx context.Context) {
 		u.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &newComp, EventType: operatorv1.ResourceEventType_UPDATED})
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			resp := util.GetMetaComponents(c, ctx, client, u.daprd1.HTTPPort())
+			resp := u.daprd1.GetMetaRegisteredComponents(c, ctx)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{Name: "uppercase", Type: "middleware.http.routeralias", Version: "v1"},
 				{Name: "uppercase2", Type: "middleware.http.uppercase", Version: "v1"},
 			}, resp)
-		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
+		}, time.Second*5, time.Millisecond*10, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, true)
 		u.doReq(t, ctx, client, u.daprd1, u.daprd2, true)
@@ -320,10 +320,10 @@ func (u *uppercase) Run(t *testing.T, ctx context.Context) {
 		u.operator.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: comp4, EventType: operatorv1.ResourceEventType_DELETED})
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Empty(c, util.GetMetaComponents(c, ctx, client, u.daprd1.HTTPPort()))
-			assert.Empty(c, util.GetMetaComponents(c, ctx, client, u.daprd2.HTTPPort()))
-			assert.Empty(c, util.GetMetaComponents(c, ctx, client, u.daprd3.HTTPPort()))
-		}, time.Second*5, time.Millisecond*100, "expected component to be loaded")
+			assert.Empty(c, u.daprd1.GetMetaRegisteredComponents(t, ctx))
+			assert.Empty(c, u.daprd2.GetMetaRegisteredComponents(t, ctx))
+			assert.Empty(c, u.daprd3.GetMetaRegisteredComponents(t, ctx))
+		}, time.Second*5, time.Millisecond*10, "expected component to be loaded")
 
 		u.doReq(t, ctx, client, u.daprd1, u.daprd1, false)
 		u.doReq(t, ctx, client, u.daprd1, u.daprd2, false)

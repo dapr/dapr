@@ -23,29 +23,30 @@ import (
 	"golang.org/x/exp/maps"
 
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
 )
 
 // Config is the actor runtime configuration.
 type Config struct {
-	HostAddress                   string
-	AppID                         string
-	ActorsService                 string
-	RemindersService              string
-	HostedActorTypes              *hostedActors
-	Port                          int
-	HeartbeatInterval             time.Duration
-	ActorDeactivationScanInterval time.Duration
-	ActorIdleTimeout              time.Duration
-	DrainOngoingCallTimeout       time.Duration
-	DrainRebalancedActors         bool
-	Namespace                     string
-	Reentrancy                    daprAppConfig.ReentrancyConfig
-	RemindersStoragePartitions    int
-	EntityConfigs                 map[string]EntityConfig
-	HealthHTTPClient              *http.Client
-	HealthEndpoint                string
-	AppChannelAddress             string
-	PodName                       string
+	HostAddress                string
+	AppID                      string
+	ActorsService              string
+	RemindersService           string
+	SchedulerClients           *clients.Clients
+	HostedActorTypes           *hostedActors
+	Port                       int
+	HeartbeatInterval          time.Duration
+	ActorIdleTimeout           time.Duration
+	DrainOngoingCallTimeout    time.Duration
+	DrainRebalancedActors      bool
+	Namespace                  string
+	Reentrancy                 daprAppConfig.ReentrancyConfig
+	RemindersStoragePartitions int
+	EntityConfigs              map[string]EntityConfig
+	HealthHTTPClient           *http.Client
+	HealthEndpoint             string
+	AppChannelAddress          string
+	PodName                    string
 }
 
 func (c Config) GetRuntimeHostname() string {

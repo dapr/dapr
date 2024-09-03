@@ -27,9 +27,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -85,7 +85,7 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 
 	a.healthy.Store(true)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
@@ -98,7 +98,7 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusOK && string(body) == "GET /myfunc"
-	}, time.Second*5, 100*time.Millisecond, "expected dapr to report app healthy when /foo returns 200")
+	}, time.Second*5, 10*time.Millisecond, "expected dapr to report app healthy when /foo returns 200")
 
 	a.healthy.Store(false)
 
@@ -114,5 +114,5 @@ func (a *app) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, resp.Body.Close())
 		return resp.StatusCode == http.StatusInternalServerError &&
 			strings.Contains(string(body), "app is not in a healthy state")
-	}, time.Second*20, 100*time.Millisecond, "expected dapr to report app unhealthy now /foo returns 503")
+	}, time.Second*20, 10*time.Millisecond, "expected dapr to report app unhealthy now /foo returns 503")
 }

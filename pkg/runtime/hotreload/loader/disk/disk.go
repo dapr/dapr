@@ -15,17 +15,17 @@ package disk
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
-	"sync"
-	"sync/atomic"
 	"time"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
-	loadercompstore "github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
+	"github.com/dapr/dapr/pkg/runtime/hotreload/loader/store"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/batcher"
 	"github.com/dapr/kit/fswatcher"
 	"github.com/dapr/kit/logger"
@@ -35,19 +35,19 @@ import (
 var log = logger.NewLogger("dapr.runtime.hotreload.loader.disk")
 
 type Options struct {
+	AppID          string
 	Dirs           []string
 	ComponentStore *compstore.ComponentStore
 }
 
 type disk struct {
-	component *resource[componentsapi.Component]
-
-	wg      sync.WaitGroup
-	closeCh chan struct{}
-	closed  atomic.Bool
+	components    *resource[compapi.Component]
+	subscriptions *resource[subapi.Subscription]
+	fs            *fswatcher.FSWatcher
+	batcher       *batcher.Batcher[int, struct{}]
 }
 
-func New(ctx context.Context, opts Options) (loader.Interface, error) {
+func New(opts Options) (loader.Interface, error) {
 	log.Infof("Watching directories: [%s]", strings.Join(opts.Dirs, ", "))
 
 	fs, err := fswatcher.New(fswatcher.Options{
@@ -58,62 +58,66 @@ func New(ctx context.Context, opts Options) (loader.Interface, error) {
 		return nil, fmt.Errorf("failed to create watcher: %w", err)
 	}
 
-	batcher := batcher.New[int](0)
+	batcher := batcher.New[int, struct{}](0)
+
+	return &disk{
+		fs: fs,
+		components: newResource[compapi.Component](
+			resourceOptions[compapi.Component]{
+				loader: loaderdisk.NewComponents(loaderdisk.Options{
+					AppID: opts.AppID,
+					Paths: opts.Dirs,
+				}),
+				store:   store.NewComponents(opts.ComponentStore),
+				batcher: batcher,
+			},
+		),
+		subscriptions: newResource[subapi.Subscription](
+			resourceOptions[subapi.Subscription]{
+				loader: loaderdisk.NewSubscriptions(loaderdisk.Options{
+					AppID: opts.AppID,
+					Paths: opts.Dirs,
+				}),
+				store:   store.NewSubscriptions(opts.ComponentStore),
+				batcher: batcher,
+			},
+		),
+		batcher: batcher,
+	}, nil
+}
+
+func (d *disk) Run(ctx context.Context) error {
 	eventCh := make(chan struct{})
 
-	d := &disk{
-		closeCh:   make(chan struct{}),
-		component: newResource[componentsapi.Component](opts, batcher, loadercompstore.NewComponent(opts.ComponentStore)),
-	}
+	return concurrency.NewRunnerManager(
+		d.components.run,
+		d.subscriptions.run,
+		func(ctx context.Context) error {
+			return d.fs.Run(ctx, eventCh)
+		},
+		func(ctx context.Context) error {
+			defer d.batcher.Close()
 
-	ctx, cancel := context.WithCancel(ctx)
-
-	d.wg.Add(2)
-	go func() {
-		if err := fs.Run(ctx, eventCh); err != nil {
-			log.Errorf("Error watching directories: %s", err)
-		}
-		d.wg.Done()
-	}()
-
-	go func() {
-		defer d.wg.Done()
-		defer batcher.Close()
-		defer cancel()
-		var i int
-		for {
-			select {
-			case <-d.closeCh:
-				return
-			case <-ctx.Done():
-				return
-
-			case <-eventCh:
-				// Use a separate: index every batch to prevent deduplicates of separate
-				// file updates happening at the same time.
-				i++
-				batcher.Batch(i)
+			var i int
+			for {
+				select {
+				case <-ctx.Done():
+					return nil
+				case <-eventCh:
+					// Use a separate: index every batch to prevent deduplicates of separate
+					// file updates happening at the same time.
+					i++
+					d.batcher.Batch(i, struct{}{})
+				}
 			}
-		}
-	}()
-
-	return d, nil
+		},
+	).Run(ctx)
 }
 
-func (d *disk) Close() error {
-	defer d.wg.Wait()
-	if d.closed.CompareAndSwap(false, true) {
-		close(d.closeCh)
-	}
-
-	var errs []error
-	if err := d.component.close(); err != nil {
-		errs = append(errs, err)
-	}
-
-	return errors.Join(errs...)
+func (d *disk) Components() loader.Loader[compapi.Component] {
+	return d.components
 }
 
-func (d *disk) Components() loader.Loader[componentsapi.Component] {
-	return d.component
+func (d *disk) Subscriptions() loader.Loader[subapi.Subscription] {
+	return d.subscriptions
 }

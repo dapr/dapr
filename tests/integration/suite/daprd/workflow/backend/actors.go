@@ -29,7 +29,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -66,7 +65,7 @@ spec:
 func (a *actors) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 
-	comps := util.GetMetaComponents(t, ctx, util.HTTPClient(t), a.daprd.HTTPPort())
+	comps := a.daprd.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
 		{

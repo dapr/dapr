@@ -27,9 +27,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -125,7 +125,7 @@ func (r *routeralias) Run(t *testing.T, ctx context.Context) {
 	r.daprd1.WaitUntilAppHealth(t, ctx)
 	r.daprd2.WaitUntilAppHealth(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	r.doReq(t, ctx, client, fmt.Sprintf("/v1.0/invoke/%s/method/helloworld", r.daprd2.AppID()), "daprd2:/abc")
 
 	require.NoError(t, os.WriteFile(filepath.Join(r.resDir, "res.yaml"), []byte(`
@@ -175,7 +175,7 @@ spec:
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.doReq(c, ctx, client, fmt.Sprintf("/v1.0/invoke/%s/method/helloworld", r.daprd2.AppID()), "daprd2:/aaa")
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*10, time.Millisecond*10)
 }
 
 func (r *routeralias) doReq(t require.TestingT, ctx context.Context, client *nethttp.Client, path, expect string) {

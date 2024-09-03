@@ -47,11 +47,13 @@ type Options struct {
 	RaftLogStorePath string
 
 	// Placement server configurations
-	PlacementPort   int
-	HealthzPort     int
-	MetadataEnabled bool
-	MaxAPILevel     int
-	MinAPILevel     int
+	PlacementPort          int
+	PlacementListenAddress string
+	HealthzPort            int
+	HealthzListenAddress   string
+	MetadataEnabled        bool
+	MaxAPILevel            int
+	MinAPILevel            int
 
 	TLSEnabled       bool
 	TrustDomain      string
@@ -63,7 +65,7 @@ type Options struct {
 
 	// Log and metrics configurations
 	Logger  logger.Options
-	Metrics *metrics.Options
+	Metrics *metrics.FlagOptions
 }
 
 func New(origArgs []string) *Options {
@@ -96,10 +98,12 @@ func New(origArgs []string) *Options {
 	fs.BoolVar(&opts.RaftInMemEnabled, "inmem-store-enabled", true, "Enable in-memory log and snapshot store unless --raft-logstore-path is set")
 	fs.StringVar(&opts.RaftLogStorePath, "raft-logstore-path", "", "raft log store path.")
 	fs.IntVar(&opts.PlacementPort, "port", defaultPlacementPort, "sets the gRPC port for the placement service")
+	fs.StringVar(&opts.PlacementListenAddress, "listen-address", "", "The listening address for the placement service")
 	fs.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
+	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 	fs.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
 	fs.BoolVar(&opts.MetadataEnabled, "metadata-enabled", opts.MetadataEnabled, "Expose the placement tables on the healthz server")
-	fs.IntVar(&opts.MaxAPILevel, "max-api-level", -1, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
+	fs.IntVar(&opts.MaxAPILevel, "max-api-level", 10, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
 	fs.IntVar(&opts.MinAPILevel, "min-api-level", 0, "Enforces a minimum 'api-level' in the cluster")
 	fs.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
 
@@ -111,7 +115,7 @@ func New(origArgs []string) *Options {
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
-	opts.Metrics = metrics.DefaultMetricOptions()
+	opts.Metrics = metrics.DefaultFlagOptions()
 	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
 	// Ignore errors; flagset is set for ExitOnError

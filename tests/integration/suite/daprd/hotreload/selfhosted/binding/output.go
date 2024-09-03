@@ -28,8 +28,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -74,9 +74,9 @@ spec:
 func (o *output) Run(t *testing.T, ctx context.Context) {
 	o.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	t.Run("expect no components to be loaded yet", func(t *testing.T) {
-		assert.Empty(t, util.GetMetaComponents(t, ctx, client, o.daprd.HTTPPort()))
+		assert.Empty(t, o.daprd.GetMetaRegisteredComponents(t, ctx))
 	})
 
 	t.Run("adding a component should become available", func(t *testing.T) {
@@ -94,8 +94,8 @@ spec:
    value: '%s'
 `, o.bindingDir1)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 1)
+		}, time.Second*5, time.Millisecond*10)
 		o.postBinding(t, ctx, client, "binding1", "file1", "data1")
 		o.postBindingFail(t, ctx, client, "binding2")
 		o.postBindingFail(t, ctx, client, "binding3")
@@ -128,8 +128,8 @@ spec:
    value: '%s'
 `, o.bindingDir1, o.bindingDir2)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 2)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 2)
+		}, time.Second*5, time.Millisecond*10)
 		o.postBinding(t, ctx, client, "binding1", "file2", "data2")
 		o.postBinding(t, ctx, client, "binding2", "file1", "data1")
 		o.postBindingFail(t, ctx, client, "binding3")
@@ -152,8 +152,8 @@ spec:
    value: '%s'
 `, o.bindingDir3)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 3)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 3)
+		}, time.Second*5, time.Millisecond*10)
 		o.postBinding(t, ctx, client, "binding1", "file3", "data3")
 		o.postBinding(t, ctx, client, "binding2", "file2", "data2")
 		o.postBinding(t, ctx, client, "binding3", "file1", "data1")
@@ -177,8 +177,8 @@ spec:
    value: '%s'
 `, o.bindingDir2)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 2)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 2)
+		}, time.Second*5, time.Millisecond*10)
 		o.postBindingFail(t, ctx, client, "binding1")
 		assert.NoFileExists(t, filepath.Join(o.bindingDir1, "file4"))
 		o.postBinding(t, ctx, client, "binding2", "file3", "data3")
@@ -191,8 +191,8 @@ spec:
 		require.NoError(t, os.Remove(filepath.Join(o.resDir, "1.yaml")))
 		require.NoError(t, os.Remove(filepath.Join(o.resDir, "2.yaml")))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Empty(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()))
-		}, time.Second*5, time.Millisecond*100)
+			assert.Empty(c, o.daprd.GetMetaRegisteredComponents(t, ctx))
+		}, time.Second*5, time.Millisecond*10)
 		o.postBindingFail(t, ctx, client, "binding1")
 		o.postBindingFail(t, ctx, client, "binding2")
 		o.postBindingFail(t, ctx, client, "binding3")
@@ -213,8 +213,8 @@ spec:
    value: '%s'
 `, o.bindingDir2)), 0o600))
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Len(c, util.GetMetaComponents(c, ctx, client, o.daprd.HTTPPort()), 1)
-		}, time.Second*5, time.Millisecond*100)
+			assert.Len(c, o.daprd.GetMetaRegisteredComponents(t, ctx), 1)
+		}, time.Second*5, time.Millisecond*10)
 		o.postBinding(t, ctx, client, "binding2", "file5", "data5")
 		o.postBindingFail(t, ctx, client, "binding1")
 		o.postBindingFail(t, ctx, client, "binding3")

@@ -1,0 +1,61 @@
+# Default values for dapr_scheduler.
+# This is a YAML-formatted file.
+# Declare variables to be passed into your templates.
+
+logLevel: info
+component: scheduler
+
+# Override this to use a custom scheduler service image.
+# If the image name contains a "/", it is assumed to be a full docker image name, including the registry url and tag.
+# Otherwise, the helm chart will use {{ .Values.global.registry }}/{{ .Values.image.name }}:{{ .Values.global.tag }}
+image:
+  name: "scheduler"
+
+nameOverride: ""
+fullnameOverride: ""
+
+statefulsetAnnotations: {}
+
+service:
+  annotations: {}
+
+ports:
+  protocol: TCP
+  etcdGRPCClientPort: 2379
+  etcdHTTPClientPort: 2330
+  etcdGRPCPeerPort: 2380
+
+ha: false
+
+cluster:
+  etcdDataDirPath: /var/run/data/dapr-scheduler
+  etcdDataDirWinPath: C:\\dapr-scheduler
+  storageClassName: ""
+  storageSize: 1Gi
+  inMemoryStorage: false
+
+etcdSpaceQuota: 2147483648
+etcdCompactionMode: periodic
+etcdCompactionRetention: 24h
+
+livenessProbe:
+  initialDelaySeconds: 10
+  periodSeconds: 3
+  failureThreshold: 5
+readinessProbe:
+  initialDelaySeconds: 3
+  periodSeconds: 3
+  failureThreshold: 5
+
+debug:
+  enabled: false
+  port: 40000
+  initialDelaySeconds: 30000
+
+securityContext:
+  runAsNonRoot: true
+  fsGroup: 65532
+
+resources: {}
+
+extraEnvVars: {}

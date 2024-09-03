@@ -34,6 +34,7 @@ import (
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 
 	"github.com/dapr/dapr/pkg/client/clientset/versioned/fake"
+	"github.com/dapr/dapr/pkg/healthz"
 )
 
 func TestHandleRequest(t *testing.T) {
@@ -49,15 +50,13 @@ func TestHandleRequest(t *testing.T) {
 		},
 		DaprClient: fake.NewSimpleClientset(),
 		KubeClient: kubernetesfake.NewSimpleClientset(),
+		Healthz:    healthz.New(),
 	})
 
 	require.NoError(t, err)
 	injector := i.(*injector)
-	injector.currentTrustAnchors = func() ([]byte, error) {
+	injector.currentTrustAnchors = func(context.Context) ([]byte, error) {
 		return nil, nil
-	}
-	injector.signDaprdCertificate = func(context.Context, string) ([]byte, []byte, error) {
-		return []byte("test-cert"), []byte("test-key"), nil
 	}
 
 	podBytes, _ := json.Marshal(corev1.Pod{

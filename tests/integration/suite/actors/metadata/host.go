@@ -23,10 +23,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -79,7 +79,7 @@ func (m *host) Run(t *testing.T, ctx context.Context) {
 	m.place.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilTCPReady(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := fclient.HTTP(t)
 
 	// Before initialization
 	res := getMetadata(t, ctx, client, m.daprd.HTTPPort())
@@ -100,5 +100,5 @@ func (m *host) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(t, "myactortype", res.ActorRuntime.ActiveActors[0].Type)
 			assert.Equal(t, 0, res.ActorRuntime.ActiveActors[0].Count)
 		}
-	}, 10*time.Second, 100*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }

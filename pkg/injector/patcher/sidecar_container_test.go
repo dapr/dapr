@@ -14,6 +14,7 @@ limitations under the License.
 package patcher
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -328,8 +329,6 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Identity = "pod_identity"
 		c.ControlPlaneNamespace = "my-namespace"
 		c.ControlPlaneTrustDomain = "test.example.com"
-		c.CertChain = "my-cert-chain"
-		c.CertKey = "my-cert-key"
 
 		c.SetFromPodAnnotations()
 
@@ -361,24 +360,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		// Command should be empty, image's entrypoint to be used.
 		assert.Empty(t, container.Command)
-		// NAMESPACE
-		assert.Equal(t, "dapr-system", container.Env[0].Value)
-		// POD_NAME
-		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
-		// DAPR_CONTROLPLANE_NAMESPACE
-		assert.Equal(t, "my-namespace", container.Env[3].Value)
-		// DAPR_CONTROLPLANE_TRUST_DOMAIN
-		assert.Equal(t, "test.example.com", container.Env[4].Value)
-		// DAPR_CERT_CHAIN
-		assert.Equal(t, "my-cert-chain", container.Env[5].Value)
-		// DAPR_CERT_KEY
-		assert.Equal(t, "my-cert-key", container.Env[6].Value)
-		// SENTRY_LOCAL_IDENTITY
-		assert.Equal(t, "pod_identity", container.Env[7].Value)
-		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[8].ValueFrom.SecretKeyRef.Name)
-		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[9].ValueFrom.SecretKeyRef.Name)
+		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -410,8 +392,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Identity = "pod_identity"
 		c.ControlPlaneNamespace = "my-namespace"
 		c.ControlPlaneTrustDomain = "test.example.com"
-		c.CertChain = "my-cert-chain"
-		c.CertKey = "my-cert-key"
+		c.EnableK8sDownwardAPIs = true
 
 		c.SetFromPodAnnotations()
 
@@ -451,24 +432,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		// Command should be empty, image's entrypoint to be used.
 		assert.Empty(t, container.Command)
-		// NAMESPACE
-		assert.Equal(t, "dapr-system", container.Env[0].Value)
-		// POD_NAME
-		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
-		// DAPR_CONTROLPLANE_NAMESPACE
-		assert.Equal(t, "my-namespace", container.Env[3].Value)
-		// DAPR_CONTROLPLANE_TRUST_DOMAIN
-		assert.Equal(t, "test.example.com", container.Env[4].Value)
-		// DAPR_CERT_CHAIN
-		assert.Equal(t, "my-cert-chain", container.Env[5].Value)
-		// DAPR_CERT_KEY
-		assert.Equal(t, "my-cert-key", container.Env[6].Value)
-		// SENTRY_LOCAL_IDENTITY
-		assert.Equal(t, "pod_identity", container.Env[7].Value)
-		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[8].ValueFrom.SecretKeyRef.Name)
-		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[9].ValueFrom.SecretKeyRef.Name)
+		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_HOST_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -1164,4 +1128,12 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 		},
 	}))
+}
+
+func assertEqualJSON(t *testing.T, val any, expect string) {
+	t.Helper()
+
+	actual, err := json.Marshal(val)
+	require.NoError(t, err)
+	assert.Equal(t, expect, string(actual))
 }

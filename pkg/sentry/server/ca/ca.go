@@ -20,7 +20,6 @@ import (
 	"crypto/elliptic"
 	"crypto/rand"
 	"crypto/x509"
-	"time"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/client-go/kubernetes"
@@ -64,9 +63,7 @@ type Signer interface {
 	// before this point.
 	// If given true, then the certificate duration will be given the largest
 	// possible according to the signing certificate.
-	// TODO: @joshvanl: Remove bool value in v1.13 as the inject no longer needs
-	// to request other identities.
-	SignIdentity(context.Context, *SignRequest, bool) ([]*x509.Certificate, error)
+	SignIdentity(context.Context, *SignRequest) ([]*x509.Certificate, error)
 
 	// TrustAnchors returns the trust anchors for the CA in PEM format.
 	TrustAnchors() []byte
@@ -141,7 +138,7 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 	}, nil
 }
 
-func (c *ca) SignIdentity(ctx context.Context, req *SignRequest, overrideDuration bool) ([]*x509.Certificate, error) {
+func (c *ca) SignIdentity(ctx context.Context, req *SignRequest) ([]*x509.Certificate, error) {
 	td, err := spiffeid.TrustDomainFromString(req.TrustDomain)
 	if err != nil {
 		return nil, err
@@ -152,12 +149,7 @@ func (c *ca) SignIdentity(ctx context.Context, req *SignRequest, overrideDuratio
 		return nil, err
 	}
 
-	dur := c.config.WorkloadCertTTL
-	if overrideDuration {
-		dur = time.Until(c.bundle.IssChain[0].NotAfter)
-	}
-
-	tmpl, err := generateWorkloadCert(req.SignatureAlgorithm, dur, c.config.AllowedClockSkew, spiffeID)
+	tmpl, err := generateWorkloadCert(req.SignatureAlgorithm, c.config.WorkloadCertTTL, c.config.AllowedClockSkew, spiffeID)
 	if err != nil {
 		return nil, err
 	}

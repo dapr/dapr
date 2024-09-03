@@ -16,6 +16,7 @@ package grpc
 import (
 	"context"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -37,15 +38,17 @@ func init() {
 }
 
 type basic struct {
-	daprd *daprd.Daprd
-	lock  sync.Mutex
-	msg   []byte
+	eventCalled atomic.Int32
+	daprd       *daprd.Daprd
+	lock        sync.Mutex
+	msg         []byte
 }
 
 func (o *basic) Setup(t *testing.T) []framework.Option {
 	onTopicEvent := func(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
 		o.lock.Lock()
 		defer o.lock.Unlock()
+		o.eventCalled.Add(1)
 		o.msg = in.GetData()
 		return &runtimev1pb.TopicEventResponse{
 			Status: runtimev1pb.TopicEventResponse_SUCCESS,
@@ -98,7 +101,7 @@ scopes:
 func (o *basic) Run(t *testing.T, ctx context.Context) {
 	o.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, o.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, o.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock()) //nolint:staticcheck
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -120,5 +123,7 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 		o.lock.Lock()
 		defer o.lock.Unlock()
 		return string(o.msg) == "2"
-	}, time.Second*5, time.Millisecond*100, "failed to receive message in time")
+	}, time.Second*5, time.Millisecond*10, "failed to receive message in time")
+
+	assert.Equal(t, int32(1), o.eventCalled.Load())
 }

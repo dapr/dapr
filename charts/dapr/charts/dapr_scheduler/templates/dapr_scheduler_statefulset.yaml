@@ -1,0 +1,269 @@
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: dapr-scheduler-server
+  namespace: {{ .Release.Namespace }}
+  labels:
+    app: dapr-scheduler-server
+    {{- range $key, $value := .Values.global.k8sLabels }}
+    {{ $key }}: {{ tpl $value $ }}
+    {{- end }}
+spec:
+  {{- $replicas := include "dapr_scheduler.get-replicas" . }}
+  replicas: {{ $replicas }}
+  serviceName: dapr-scheduler-server
+  podManagementPolicy: Parallel
+  selector:
+    matchLabels:
+      app: dapr-scheduler-server
+  {{- if not .Values.cluster.inMemoryStorage }}
+  volumeClaimTemplates:
+  - metadata:
+      name: dapr-scheduler-data-dir
+    spec:
+      accessModes: [ "ReadWriteOnce" ]
+      storageClassName: {{ .Values.cluster.storageClassName }}
+      resources:
+        requests:
+          storage: {{ .Values.cluster.storageSize }}
+  {{- end }}
+  template:
+    metadata:
+      labels:
+        app: dapr-scheduler-server
+        {{- range $key, $value := .Values.global.k8sLabels }}
+        {{ $key }}: {{ tpl $value $ }}
+        {{- end }}
+        {{- with .Values.global.labels }}
+          {{- toYaml . | nindent 8 }}
+        {{- end }}
+      annotations:
+        dapr.io/control-plane: scheduler
+{{- if eq .Values.global.prometheus.enabled true }}
+        prometheus.io/scrape: "{{ .Values.global.prometheus.enabled }}"
+        prometheus.io/port: "{{ .Values.global.prometheus.port }}"
+        prometheus.io/path: "/"
+{{- end }}
+{{- with .Values.statefulsetAnnotations }}
+{{ toYaml . | indent 8 }}
+{{- end }}
+    spec:
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
+      containers:
+      - name: dapr-scheduler-server
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+{{- if eq .Values.debug.enabled false }}
+          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds }}
+{{- else }}
+          initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
+{{- end }}
+          periodSeconds: {{ .Values.livenessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.livenessProbe.failureThreshold }}
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: 8080
+{{- if eq .Values.debug.enabled false }}
+          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds }}
+{{- else }}
+          initialDelaySeconds: {{ .Values.debug.initialDelaySeconds }}
+{{- end }}
+          periodSeconds: {{ .Values.readinessProbe.periodSeconds }}
+          failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
+{{- if contains "/" .Values.image.name }}
+        image: "{{ .Values.image.name }}"
+{{- else }}
+        image: "{{ .Values.global.registry }}/{{ .Values.image.name }}:{{ .Values.global.tag }}"
+{{- end }}
+        imagePullPolicy: {{ .Values.global.imagePullPolicy }}
+        resources:
+{{ toYaml .Values.resources | indent 10 }}
+        volumeMounts:
+          - name: dapr-scheduler-data-dir
+          {{- if eq .Values.global.daprControlPlaneOs "windows" }}
+            mountPath: {{ .Values.cluster.etcdDataDirWinPath }}/
+          {{- else }}
+            mountPath: {{ .Values.cluster.etcdDataDirPath }}/
+          {{- end }}
+            readOnly: false
+          - name: dapr-trust-bundle
+            mountPath: /var/run/secrets/dapr.io/tls
+            readOnly: true
+        {{- if .Values.global.mtls.mountSentryVolume }}
+          - name: dapr-identity-token
+            mountPath: /var/run/secrets/dapr.io/sentrytoken
+        {{- end }}
+        {{- with .Values.global.extraVolumeMounts.scheduler }}
+          {{- toYaml . | nindent 10 }}
+        {{- end }}
+        ports:
+          - containerPort: 50006
+            name: api
+          - containerPort: {{ .Values.ports.etcdGRPCClientPort }}
+            name: etcd-client
+          - containerPort: {{ .Values.ports.etcdHTTPClientPort }}
+            name: etcd-httpclient
+          - containerPort: {{ .Values.ports.etcdGRPCPeerPort }}
+            name: etcd-peer
+          {{- if eq .Values.global.prometheus.enabled true }}
+          - name: metrics
+            containerPort: {{ .Values.global.prometheus.port }}
+            protocol: TCP
+          {{- end }}
+        command:
+{{- if eq .Values.debug.enabled false }}
+        - "/scheduler"
+{{- else }}
+        - "/dlv"
+{{- end }}
+        args:
+{{- if eq .Values.debug.enabled true }}
+        - "--listen=:{{ .Values.debug.port }}"
+        - "--accept-multiclient"
+        - "--headless=true"
+        - "--log"
+        - "exec"
+        - "/scheduler"
+        - "--"
+{{- end }}
+        - "--listen-address=0.0.0.0"
+        - "--id"
+        - "$(SCHEDULER_ID)"
+        - "--replica-count"
+        {{- if (eq .Values.global.scheduler.enabled true) }}
+        - "{{ $replicas }}"
+        {{- else }}
+        - "0"
+        {{- end }}
+        - "--initial-cluster"
+        - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
+        - "--etcd-client-ports"
+        - {{ include "dapr_scheduler.etcdclientports" . | toYaml | trim }}
+{{- if .Values.ports.etcdHTTPClientPort}}
+        - "--etcd-client-http-ports"
+        - {{ include "dapr_scheduler.etcdclienthttpports" . | toYaml | trim }}
+{{- end }}
+        - "--log-level"
+        - {{ .Values.logLevel }}
+{{- if eq .Values.global.logAsJson true }}
+        - "--log-as-json"
+{{- end }}
+{{- if eq .Values.global.prometheus.enabled true }}
+        - "--enable-metrics"
+        - "--metrics-port"
+        - "{{ .Values.global.prometheus.port }}"
+{{- else }}
+        - "--enable-metrics=false"
+{{- end }}
+        - "--etcd-data-dir={{ if eq .Values.global.daprControlPlaneOs "windows" }}{{ .Values.cluster.etcdDataDirWinPath }}{{- else }}{{ .Values.cluster.etcdDataDirPath }}{{- end }}/{{ .Release.Namespace }}/$(SCHEDULER_ID)"
+        - "--etcd-space-quota={{ int .Values.etcdSpaceQuota }}"
+        - "--etcd-compaction-mode={{ .Values.etcdCompactionMode }}"
+        - "--etcd-compaction-retention={{ .Values.etcdCompactionRetention }}"
+        - "--tls-enabled"
+        - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
+        - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"
+        - "--sentry-address={{ if .Values.global.mtls.sentryAddress }}{{ .Values.global.mtls.sentryAddress }}{{ else }}dapr-sentry.{{ .Release.Namespace }}.svc.cluster.local:443{{ end }}"
+        - "--mode=kubernetes"
+{{- if eq .Values.global.daprControlPlaneOs "linux" }}
+        securityContext:
+          runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+  {{- if eq .Values.debug.enabled true }}
+          capabilities:
+            add: ["SYS_PTRACE"]
+  {{- else }}
+          readOnlyRootFilesystem: false
+          capabilities:
+            drop: ["ALL"]
+  {{- end }}
+  {{- if .Values.global.seccompProfile }}
+          seccompProfile:
+            type: {{ .Values.global.seccompProfile }}
+  {{- end }}
+{{- end }}
+        env:
+        - name: SCHEDULER_ID
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.name
+        - name: NAMESPACE
+          valueFrom:
+            fieldRef:
+              fieldPath: metadata.namespace
+        - name: POD_IP
+          valueFrom:
+            fieldRef:
+              fieldPath: status.podIP
+        {{- range $name, $value := .Values.extraEnvVars }}
+        - name: "{{ $name }}"
+          value: "{{ $value }}"
+        {{- end }}
+      serviceAccountName: dapr-scheduler
+      volumes:
+      {{- if .Values.cluster.inMemoryStorage }}
+      - name: dapr-scheduler-data-dir
+        emptyDir:
+          medium: Memory
+      {{- end }}
+      - name: dapr-trust-bundle
+        configMap:
+          name: dapr-trust-bundle
+    {{- if .Values.global.mtls.mountSentryVolume }}
+      - name: dapr-identity-token
+        projected:
+          sources:
+          - serviceAccountToken:
+              path: token
+              expirationSeconds: 600
+              audience: "spiffe://{{ .Values.global.mtls.controlPlaneTrustDomain }}/ns/{{ .Release.Namespace }}/dapr-sentry"
+    {{- end }}
+    {{- with .Values.global.extraVolumes.scheduler }}
+      {{- toYaml . | nindent 6 }}
+    {{- end }}
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+             nodeSelectorTerms:
+                - matchExpressions:
+                  - key: kubernetes.io/os
+                    operator: In
+                    values:
+                    - {{ .Values.global.daprControlPlaneOs }}
+{{- if .Values.global.daprControlPlaneArch }}
+                  - key: kubernetes.io/arch
+                    operator: In
+                    values:
+                    - {{ .Values.global.daprControlPlaneArch }}
+{{- end }}
+{{- if (gt (int $replicas) 1) }}
+        podAntiAffinity:
+          preferredDuringSchedulingIgnoredDuringExecution:
+          - weight: 100
+            podAffinityTerm:
+              labelSelector:
+                matchExpressions:
+                - key: app
+                  operator: In
+                  values:
+                  - dapr-scheduler-server
+              topologyKey: topology.kubernetes.io/zone
+{{- end }}
+{{- if .Values.global.imagePullSecrets }}
+      imagePullSecrets:
+        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}
+{{- end }}
+{{- if .Values.global.nodeSelector }}
+      nodeSelector:
+{{ toYaml .Values.global.nodeSelector | indent 8 }}
+{{- end }}
+{{- if .Values.global.tolerations }}
+      tolerations:
+{{ toYaml .Values.global.tolerations | indent 8 }}
+{{- end }}
+{{- if .Values.global.priorityClassName }}
+      priorityClassName:
+{{ toYaml .Values.global.priorityClassName | indent 8 }}
+{{- end }}

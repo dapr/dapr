@@ -57,6 +57,7 @@ const (
 // Config holds the configuration for the Certificate Authority.
 type Config struct {
 	Port             int
+	ListenAddress    string
 	TrustDomain      string
 	CAStore          string
 	WorkloadCertTTL  time.Duration
@@ -93,6 +94,7 @@ func IsKubernetesHosted() bool {
 func getDefaultConfig() Config {
 	return Config{
 		Port:             DefaultPort,
+		ListenAddress:    "0.0.0.0",
 		WorkloadCertTTL:  defaultWorkloadCertTTL,
 		AllowedClockSkew: defaultAllowedClockSkew,
 		TrustDomain:      defaultTrustDomain,

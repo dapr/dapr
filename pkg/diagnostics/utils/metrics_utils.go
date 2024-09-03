@@ -27,6 +27,25 @@ import (
 
 var metricsRules map[string][]regexPair
 
+var StaticPaths = map[string]bool{
+	"/dapr/config":    true,
+	"/dapr/metrics":   true,
+	"/dapr/subscribe": true,
+	"/healthz":        true,
+}
+
+var ValidHTTPVerbs = map[string]bool{
+	"GET":     true,
+	"PUT":     true,
+	"POST":    true,
+	"PATCH":   true,
+	"DELETE":  true,
+	"HEAD":    true,
+	"OPTIONS": true,
+	"CONNECT": true,
+	"TRACE":   true,
+}
+
 type regexPair struct {
 	regex   *regexp.Regexp
 	replace string

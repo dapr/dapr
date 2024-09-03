@@ -29,6 +29,7 @@ runAsNonRoot: true
 sidecarRunAsNonRoot: true
 sidecarReadOnlyRootFilesystem: true
 sidecarDropALLCapabilities: false
+enableK8sDownwardAPIs: false
 allowedServiceAccounts: ""
 allowedServiceAccountsPrefixNames: ""
 resources: {}

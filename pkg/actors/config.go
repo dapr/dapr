@@ -21,6 +21,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
 )
 
 // Config is the actor runtime configuration.
@@ -31,7 +32,6 @@ type Config struct {
 const (
 	defaultActorIdleTimeout     = time.Minute * 60
 	defaultHeartbeatInterval    = time.Second * 1
-	defaultActorScanInterval    = time.Second * 30
 	defaultOngoingCallTimeout   = time.Second * 60
 	defaultReentrancyStackLimit = 32
 )
@@ -42,6 +42,7 @@ type ConfigOpts struct {
 	AppID             string
 	ActorsService     string
 	RemindersService  string
+	SchedulerClients  *clients.Clients
 	Port              int
 	Namespace         string
 	AppConfig         daprAppConfig.ApplicationConfig
@@ -54,30 +55,25 @@ type ConfigOpts struct {
 // NewConfig returns the actor runtime configuration.
 func NewConfig(opts ConfigOpts) Config {
 	c := internal.Config{
-		HostAddress:                   opts.HostAddress,
-		AppID:                         opts.AppID,
-		ActorsService:                 opts.ActorsService,
-		RemindersService:              opts.RemindersService,
-		Port:                          opts.Port,
-		Namespace:                     opts.Namespace,
-		DrainRebalancedActors:         opts.AppConfig.DrainRebalancedActors,
-		HostedActorTypes:              internal.NewHostedActors(opts.AppConfig.Entities),
-		Reentrancy:                    opts.AppConfig.Reentrancy,
-		RemindersStoragePartitions:    opts.AppConfig.RemindersStoragePartitions,
-		HealthHTTPClient:              opts.HealthHTTPClient,
-		HealthEndpoint:                opts.HealthEndpoint,
-		HeartbeatInterval:             defaultHeartbeatInterval,
-		ActorDeactivationScanInterval: defaultActorScanInterval,
-		ActorIdleTimeout:              defaultActorIdleTimeout,
-		DrainOngoingCallTimeout:       defaultOngoingCallTimeout,
-		EntityConfigs:                 make(map[string]internal.EntityConfig),
-		AppChannelAddress:             opts.AppChannelAddress,
-		PodName:                       opts.PodName,
-	}
-
-	scanDuration, err := time.ParseDuration(opts.AppConfig.ActorScanInterval)
-	if err == nil {
-		c.ActorDeactivationScanInterval = scanDuration
+		HostAddress:                opts.HostAddress,
+		AppID:                      opts.AppID,
+		ActorsService:              opts.ActorsService,
+		RemindersService:           opts.RemindersService,
+		SchedulerClients:           opts.SchedulerClients,
+		Port:                       opts.Port,
+		Namespace:                  opts.Namespace,
+		DrainRebalancedActors:      opts.AppConfig.DrainRebalancedActors,
+		HostedActorTypes:           internal.NewHostedActors(opts.AppConfig.Entities),
+		Reentrancy:                 opts.AppConfig.Reentrancy,
+		RemindersStoragePartitions: opts.AppConfig.RemindersStoragePartitions,
+		HealthHTTPClient:           opts.HealthHTTPClient,
+		HealthEndpoint:             opts.HealthEndpoint,
+		HeartbeatInterval:          defaultHeartbeatInterval,
+		ActorIdleTimeout:           defaultActorIdleTimeout,
+		DrainOngoingCallTimeout:    defaultOngoingCallTimeout,
+		EntityConfigs:              make(map[string]internal.EntityConfig),
+		AppChannelAddress:          opts.AppChannelAddress,
+		PodName:                    opts.PodName,
 	}
 
 	idleDuration, err := time.ParseDuration(opts.AppConfig.ActorIdleTimeout)

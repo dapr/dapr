@@ -39,9 +39,10 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/health"
 	"github.com/dapr/dapr/pkg/actors/internal"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/channel"
-	configuration "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -52,9 +53,12 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/retry"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
 	"github.com/dapr/dapr/pkg/security"
+	eventqueue "github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
+	"github.com/dapr/kit/utils"
 )
 
 const (
@@ -63,6 +67,9 @@ const (
 
 	errStateStoreNotFound      = "actors: state store does not exist or incorrectly configured"
 	errStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
+
+	// If an idle actor is getting deactivated, but it's still busy, will be re-enqueued with its idle timeout increased by this duration.
+	actorBusyReEnqueueInterval = 10 * time.Second
 )
 
 var (
@@ -82,6 +89,7 @@ type ActorRuntime interface {
 	IsActorHosted(ctx context.Context, req *ActorHostedRequest) bool
 	GetRuntimeStatus(ctx context.Context) *runtimev1pb.ActorRuntime
 	RegisterInternalActor(ctx context.Context, actorType string, actor InternalActorFactory, actorIdleTimeout time.Duration) error
+	Entities() []string
 }
 
 // Actors allow calling into virtual actors as well as actor state management.
@@ -104,12 +112,16 @@ type Actors interface {
 	CreateTimer(ctx context.Context, req *CreateTimerRequest) error
 	// DeleteTimer deletes an actor timer.
 	DeleteTimer(ctx context.Context, req *DeleteTimerRequest) error
+	// ExecuteLocalOrRemoteActorReminder executes a reminder on a local or remote actor.
+	ExecuteLocalOrRemoteActorReminder(ctx context.Context, reminder *CreateReminderRequest) error
 }
 
 // GRPCConnectionFn is the type of the function that returns a gRPC connection
 type GRPCConnectionFn func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 type actorsRuntime struct {
+	idleActorProcessor *eventqueue.Processor[string, *actor]
+
 	appChannel         channel.AppChannel
 	placement          internal.PlacementService
 	placementEnabled   bool
@@ -118,13 +130,14 @@ type actorsRuntime struct {
 	timers             internal.TimersProvider
 	actorsReminders    internal.RemindersProvider
 	actorsTable        *sync.Map
-	tracingSpec        configuration.TracingSpec
+	tracingSpec        config.TracingSpec
 	resiliency         resiliency.Provider
 	storeName          string
 	compStore          *compstore.ComponentStore
 	clock              clock.WithTicker
 	internalActorTypes *haxmap.Map[string, InternalActorFactory]
 	internalActors     *haxmap.Map[string, InternalActor]
+	entities           []string
 	sec                security.Handler
 	checker            *health.Checker
 	wg                 sync.WaitGroup
@@ -132,20 +145,25 @@ type actorsRuntime struct {
 	closeCh            chan struct{}
 	apiLevel           atomic.Uint32
 
+	lock                       sync.Mutex
+	internalReminderInProgress map[string]struct{}
+
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
 }
 
 // ActorsOpts contains options for NewActors.
 type ActorsOpts struct {
-	AppChannel       channel.AppChannel
-	GRPCConnectionFn GRPCConnectionFn
-	Config           Config
-	TracingSpec      configuration.TracingSpec
-	Resiliency       resiliency.Provider
-	StateStoreName   string
-	CompStore        *compstore.ComponentStore
-	Security         security.Handler
+	AppChannel         channel.AppChannel
+	GRPCConnectionFn   GRPCConnectionFn
+	Config             Config
+	TracingSpec        config.TracingSpec
+	Resiliency         resiliency.Provider
+	StateStoreName     string
+	CompStore          *compstore.ComponentStore
+	Security           security.Handler
+	SchedulerClients   *clients.Clients
+	SchedulerReminders bool
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled bool
@@ -176,6 +194,8 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		compStore:          opts.CompStore,
 		sec:                opts.Security,
 
+		internalReminderInProgress: map[string]struct{}{},
+
 		// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 		stateTTLEnabled: opts.StateTTLEnabled,
 		closeCh:         make(chan struct{}),
@@ -194,6 +214,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		Clock:      a.clock,
 		APILevel:   &a.apiLevel,
 		Resiliency: a.resiliency,
+		Namespace:  security.CurrentNamespace(),
 	}
 
 	// Initialize the placement client if we don't have a mocked one already
@@ -205,16 +226,6 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		a.placement = factory(providerOpts)
 	}
 
-	factory, err := opts.Config.GetRemindersProvider(a.placement)
-	if err != nil {
-		return nil, fmt.Errorf("failed to initialize reminders provider: %w", err)
-	}
-	a.actorsReminders = factory(providerOpts)
-
-	a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
-	a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
-	a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
-
 	a.placement.SetHaltActorFns(a.haltActor, a.haltAllActors)
 	a.placement.SetOnAPILevelUpdate(func(apiLevel uint32) {
 		a.apiLevel.Store(apiLevel)
@@ -223,6 +234,29 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 
 	a.timers.SetExecuteTimerFn(a.executeTimer)
 
+	if opts.SchedulerReminders {
+		if opts.Config.SchedulerClients == nil {
+			return nil, fmt.Errorf("scheduler reminders are enabled, but no Scheduler clients are available")
+		}
+		log.Debug("Using Scheduler service for reminders.")
+		a.actorsReminders = reminders.NewScheduler(reminders.SchedulerOptions{
+			Clients:   opts.Config.SchedulerClients,
+			Namespace: opts.Config.Namespace,
+			AppID:     opts.Config.AppID,
+		})
+	} else {
+		factory, err := opts.Config.GetRemindersProvider(a.placement)
+		if err != nil {
+			return nil, fmt.Errorf("failed to initialize reminders provider: %w", err)
+		}
+		a.actorsReminders = factory(providerOpts)
+
+		a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
+		a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
+		a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
+	}
+
+	a.idleActorProcessor = eventqueue.NewProcessor[string, *actor](a.idleProcessorExecuteFn).WithClock(clock)
 	return a, nil
 }
 
@@ -269,8 +303,12 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 		}
 	}
 
-	a.actorsReminders.Init(ctx)
-	a.timers.Init(ctx)
+	if err = a.actorsReminders.Init(ctx); err != nil {
+		return err
+	}
+	if err = a.timers.Init(ctx); err != nil {
+		return err
+	}
 
 	a.placementEnabled = true
 
@@ -292,27 +330,27 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 		}()
 	}
 
+	for actorType := range a.actorsConfig.EntityConfigs {
+		a.entities = append(a.entities, actorType)
+	}
+
 	for _, actorType := range hat {
 		err = a.placement.AddHostedActorType(actorType, a.actorsConfig.GetIdleTimeoutForType(actorType))
 		if err != nil {
 			return fmt.Errorf("failed to register actor '%s': %w", actorType, err)
 		}
+		a.entities = append(a.entities, actorType)
 	}
 
 	a.wg.Add(1)
 	go func() {
 		defer a.wg.Done()
-		a.placement.Start(ctx)
+		if err := a.placement.Start(ctx); err != nil {
+			log.Errorf("Placement failed to start due to: %s", err.Error())
+		}
 	}()
 
-	a.wg.Add(1)
-	go func() {
-		defer a.wg.Done()
-		a.deactivationTicker(a.actorsConfig, a.haltActor)
-	}()
-
-	log.Infof("Actor runtime started. Actor idle timeout: %v. Actor scan interval: %v",
-		a.actorsConfig.Config.ActorIdleTimeout, a.actorsConfig.Config.ActorDeactivationScanInterval)
+	log.Infof("Actor runtime started. Idle timeout: %v", a.actorsConfig.Config.ActorIdleTimeout)
 
 	return nil
 }
@@ -464,48 +502,9 @@ func (a *actorsRuntime) deactivateActor(act *actor) error {
 	return nil
 }
 
-func (a *actorsRuntime) removeActorFromTable(actorType, actorID string) {
-	a.actorsTable.Delete(constructCompositeKey(actorType, actorID))
-}
-
 func (a *actorsRuntime) getActorTypeAndIDFromKey(key string) (string, string) {
 	typ, id, _ := strings.Cut(key, daprSeparator)
 	return typ, id
-}
-
-func (a *actorsRuntime) deactivationTicker(configuration Config, haltFn internal.HaltActorFn) {
-	ticker := a.clock.NewTicker(configuration.ActorDeactivationScanInterval)
-	ch := ticker.C()
-	defer ticker.Stop()
-
-	for {
-		select {
-		case t := <-ch:
-			a.actorsTable.Range(func(key, value any) bool {
-				actorInstance := value.(*actor)
-
-				if actorInstance.isBusy() {
-					return true
-				}
-
-				if !t.Before(actorInstance.ScheduledTime()) {
-					a.wg.Add(1)
-					go func(actorKey string) {
-						defer a.wg.Done()
-						actorType, actorID := a.getActorTypeAndIDFromKey(actorKey)
-						err := haltFn(actorType, actorID)
-						if err != nil {
-							log.Errorf("failed to deactivate actor %s: %s", actorKey, err)
-						}
-					}(key.(string))
-				}
-
-				return true
-			})
-		case <-a.closeCh:
-			return
-		}
-	}
 }
 
 // Returns an internal actor instance, allocating it if needed.
@@ -565,14 +564,14 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 	ctx context.Context,
 	numRetries int,
 	backoffInterval time.Duration,
-	fn func(ctx context.Context, targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, func(destroy bool), error),
+	fn func(ctx context.Context, namespace, targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, func(destroy bool), error),
 	targetAddress, targetID string, req *internalv1pb.InternalInvokeRequest,
 ) (*internalv1pb.InternalInvokeResponse, error) {
 	if !a.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries))
 		return policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
 			attempt := resiliency.GetAttempt(ctx)
-			rResp, teardown, rErr := fn(ctx, targetAddress, targetID, req)
+			rResp, teardown, rErr := fn(ctx, a.actorsConfig.Namespace, targetAddress, targetID, req)
 			if rErr == nil {
 				teardown(false)
 				return rResp, nil
@@ -590,7 +589,7 @@ func (a *actorsRuntime) callRemoteActorWithRetry(
 		})
 	}
 
-	res, teardown, err := fn(ctx, targetAddress, targetID, req)
+	res, teardown, err := fn(ctx, a.actorsConfig.Namespace, targetAddress, targetID, req)
 	teardown(false)
 	return res, err
 }
@@ -647,6 +646,10 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 	err = act.lock(reentrancyID)
 	if err != nil {
 		return nil, status.Error(codes.ResourceExhausted, err.Error())
+	}
+	err = a.idleActorProcessor.Enqueue(act)
+	if err != nil {
+		return nil, fmt.Errorf("failed to enqueue actor in idle processor: %w", err)
 	}
 	defer act.unlock()
 
@@ -709,6 +712,11 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 	// The .NET SDK indicates Actor failure via a header instead of a bad response
 	if _, ok := res.GetHeaders()["X-Daprerrorresponseheader"]; ok {
 		return res, actorerrors.NewActorError(res)
+	}
+
+	// Allow stopping a recurring reminder or timer
+	if v := res.GetHeaders()["X-Daprremindercancel"]; v != nil && len(v.GetValues()) > 0 && utils.IsTruthy(v.GetValues()[0]) {
+		return res, ErrReminderCanceled
 	}
 
 	return res, nil
@@ -798,10 +806,10 @@ func (a *actorsRuntime) callInternalActor(ctx context.Context, req *internalv1pb
 
 func (a *actorsRuntime) callRemoteActor(
 	ctx context.Context,
-	targetAddress, targetID string,
+	namespace, targetAddress, targetID string,
 	req *internalv1pb.InternalInvokeRequest,
 ) (*internalv1pb.InternalInvokeResponse, func(destroy bool), error) {
-	conn, teardown, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, a.actorsConfig.Config.Namespace)
+	conn, teardown, err := a.grpcConnectionFn(context.TODO(), targetAddress, targetID, namespace)
 	if err != nil {
 		return nil, teardown, err
 	}
@@ -987,6 +995,10 @@ func (a *actorsRuntime) drainRebalancedActors() {
 	// visit all currently active actors.
 	var wg sync.WaitGroup
 
+	a.lock.Lock()
+	a.internalReminderInProgress = make(map[string]struct{})
+	a.lock.Unlock()
+
 	a.actorsTable.Range(func(key any, value any) bool {
 		wg.Add(1)
 		go func(key any, value any) {
@@ -1039,7 +1051,7 @@ func (a *actorsRuntime) executeTimer(reminder *internal.Reminder) bool {
 		return false
 	}
 
-	err := a.doExecuteReminderOrTimer(context.TODO(), reminder, true)
+	err := a.doExecuteReminderOrTimerCheckLocal(context.TODO(), reminder, true)
 	diag.DefaultMonitoring.ActorTimerFired(reminder.ActorType, err == nil)
 	if err != nil {
 		log.Errorf("error invoking timer on actor %s: %s", reminder.ActorKey(), err)
@@ -1052,7 +1064,7 @@ func (a *actorsRuntime) executeTimer(reminder *internal.Reminder) bool {
 
 // executeReminder implements reminders.ExecuteReminderFn.
 func (a *actorsRuntime) executeReminder(reminder *internal.Reminder) bool {
-	err := a.doExecuteReminderOrTimer(context.TODO(), reminder, false)
+	err := a.doExecuteReminderOrTimerCheckLocal(context.TODO(), reminder, false)
 	diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
 	if err != nil {
 		if errors.Is(err, ErrReminderCanceled) {
@@ -1067,7 +1079,7 @@ func (a *actorsRuntime) executeReminder(reminder *internal.Reminder) bool {
 }
 
 // Executes a reminder or timer on an internal actor
-func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Context, reminder *internal.Reminder, isTimer bool, internalAct InternalActor) (err error) {
+func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Context, reminder InternalActorReminder, isTimer bool, internalAct InternalActor) (err error) {
 	// Get the actor, activating it as necessary, and the metadata for the request
 	act := a.getOrCreateActor(&internalv1pb.Actor{
 		ActorType: reminder.ActorType,
@@ -1079,11 +1091,10 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 	}
 	defer act.unlock()
 
-	ir := newInternalActorReminder(reminder)
 	if isTimer {
 		log.Debugf("Executing timer for internal actor '%s'", reminder.Key())
 
-		err = internalAct.InvokeTimer(ctx, ir, md)
+		err = internalAct.InvokeTimer(ctx, reminder, md)
 		if err != nil {
 			if !errors.Is(err, ErrReminderCanceled) {
 				log.Errorf("Error executing timer for internal actor '%s': %v", reminder.Key(), err)
@@ -1091,9 +1102,31 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 			return err
 		}
 	} else {
-		log.Debugf("Executing reminder for internal actor '%s'", reminder.Key())
+		key := reminder.Key()
 
-		err = internalAct.InvokeReminder(ctx, ir, md)
+		log.Debugf("Executing reminder for internal actor '%s'", key)
+
+		a.lock.Lock()
+		if _, ok := a.internalReminderInProgress[key]; ok {
+			a.lock.Unlock()
+			// We don't need to return cancel here as the first invocation will
+			// delete the reminder.
+			log.Debugf("Duplicate concurrent reminder invocation detected for '%s', likely due to long processing time. Ignoring in favour of the active invocation", key)
+			return nil
+		}
+		a.internalReminderInProgress[key] = struct{}{}
+		a.lock.Unlock()
+
+		err = internalAct.InvokeReminder(ctx, reminder, md)
+
+		// Ensure that the in progress tracker is removed if the internal reminder
+		// timed out.
+		if errors.Is(err, context.DeadlineExceeded) {
+			a.lock.Lock()
+			delete(a.internalReminderInProgress, key)
+			a.lock.Unlock()
+		}
+
 		if err != nil {
 			if !errors.Is(err, ErrReminderCanceled) {
 				log.Errorf("Error executing reminder for internal actor '%s': %v", reminder.Key(), err)
@@ -1105,18 +1138,90 @@ func (a *actorsRuntime) doExecuteReminderOrTimerOnInternalActor(ctx context.Cont
 	return nil
 }
 
+func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, reminder *CreateReminderRequest) error {
+	isLocal, _ := a.isActorLocallyHosted(ctx, reminder.ActorType, reminder.ActorID)
+
+	if !isLocal {
+		lar, err := a.placement.LookupActor(ctx, internal.LookupActorRequest{
+			ActorType: reminder.ActorType,
+			ActorID:   reminder.ActorID,
+		})
+		if err != nil {
+			return err
+		}
+
+		conn, teardown, err := a.grpcConnectionFn(ctx, lar.Address, lar.AppID, a.actorsConfig.Namespace)
+		if err != nil {
+			return err
+		}
+		defer teardown(false)
+
+		span := diagUtils.SpanFromContext(ctx)
+		reqCtx := diag.SpanContextToGRPCMetadata(context.Background(), span.SpanContext())
+		client := internalv1pb.NewServiceInvocationClient(conn)
+
+		_, err = client.CallActorReminder(reqCtx, &internalv1pb.Reminder{
+			ActorId:   reminder.ActorID,
+			ActorType: reminder.ActorType,
+			Name:      reminder.Name,
+			Data:      reminder.Data,
+			Period:    reminder.Period,
+			DueTime:   reminder.DueTime,
+		})
+		return err
+	}
+
+	ir := &internal.Reminder{
+		ActorID:   reminder.ActorID,
+		ActorType: reminder.ActorType,
+		Name:      reminder.Name,
+		Data:      reminder.Data,
+		Period:    internal.NewEmptyReminderPeriod(),
+		DueTime:   reminder.DueTime,
+	}
+
+	err := a.doExecuteReminderOrTimer(ctx, ir, false)
+
+	// If the reminder was cancelled, delete it.
+	if errors.Is(err, ErrReminderCanceled) {
+		go func() {
+			log.Debugf("Deleting reminder which was cancelled: %s", reminder.Key())
+			reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+			defer cancel()
+			if derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
+				Name:      reminder.Name,
+				ActorType: reminder.ActorType,
+				ActorID:   reminder.ActorID,
+			}); derr != nil {
+				log.Errorf("Error deleting reminder %s: %s", reminder.Key(), derr)
+			}
+			a.lock.Lock()
+			delete(a.internalReminderInProgress, constructCompositeKey(reminder.ActorType, reminder.ActorID, reminder.Name))
+			a.lock.Unlock()
+		}()
+		return ErrReminderCanceled
+	}
+
+	return err
+}
+
 // Executes a reminder or timer
-func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *internal.Reminder, isTimer bool) (err error) {
+func (a *actorsRuntime) doExecuteReminderOrTimerCheckLocal(ctx context.Context, reminder *internal.Reminder, isTimer bool) (err error) {
 	// Sanity check: make sure the actor is actually locally-hosted
 	isLocal, _ := a.isActorLocallyHosted(ctx, reminder.ActorType, reminder.ActorID)
 	if !isLocal {
 		return errors.New("actor is not locally hosted")
 	}
 
+	return a.doExecuteReminderOrTimer(ctx, reminder, isTimer)
+}
+
+func (a *actorsRuntime) doExecuteReminderOrTimer(ctx context.Context, reminder *internal.Reminder, isTimer bool) (err error) {
 	// If it's an internal actor, we call it directly
 	internalAct, ok := a.getInternalActor(reminder.ActorType, reminder.ActorID)
 	if ok {
-		return a.doExecuteReminderOrTimerOnInternalActor(ctx, reminder, isTimer, internalAct)
+		ir := newInternalActorReminder(reminder)
+		return a.doExecuteReminderOrTimerOnInternalActor(ctx, ir, isTimer, internalAct)
 	}
 
 	var (
@@ -1177,12 +1282,7 @@ func (a *actorsRuntime) CreateReminder(ctx context.Context, req *CreateReminderR
 		return ErrReminderOpActorNotHosted
 	}
 
-	// Create the new reminder object
-	reminder, err := req.NewReminder(a.clock.Now())
-	if err != nil {
-		return err
-	}
-	return a.actorsReminders.CreateReminder(ctx, reminder)
+	return a.actorsReminders.CreateReminder(ctx, req)
 }
 
 func (a *actorsRuntime) CreateTimer(ctx context.Context, req *CreateTimerRequest) error {
@@ -1302,6 +1402,12 @@ func (a *actorsRuntime) Close() error {
 				errs = append(errs, fmt.Errorf("failed to close placement service: %w", err))
 			}
 		}
+		if a.idleActorProcessor != nil {
+			err := a.idleActorProcessor.Close()
+			if err != nil {
+				errs = append(errs, fmt.Errorf("failed to close actor idle processor: %w", err))
+			}
+		}
 	}
 
 	return errors.Join(errs...)
@@ -1331,4 +1437,8 @@ func (a *actorsRuntime) stateStore() (string, internal.TransactionalStateStore, 
 	}
 
 	return a.storeName, store, nil
+}
+
+func (a *actorsRuntime) Entities() []string {
+	return a.entities
 }

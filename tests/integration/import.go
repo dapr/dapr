@@ -17,8 +17,10 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd"
 	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
+	_ "github.com/dapr/dapr/tests/integration/suite/helm"
 	_ "github.com/dapr/dapr/tests/integration/suite/operator"
 	_ "github.com/dapr/dapr/tests/integration/suite/placement"
 	_ "github.com/dapr/dapr/tests/integration/suite/ports"
+	_ "github.com/dapr/dapr/tests/integration/suite/scheduler"
 	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
 )

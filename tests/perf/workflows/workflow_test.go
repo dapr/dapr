@@ -17,6 +17,7 @@ limitations under the License.
 package workflows
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"log"
@@ -31,7 +32,11 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 	"github.com/dapr/dapr/tests/runner/loadtest"
 	"github.com/dapr/dapr/tests/runner/summary"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 )
 
 var tr *runner.TestRunner
@@ -63,6 +68,21 @@ func TestMain(m *testing.M) {
 			AppMemoryLimit:    "800Mi",
 			AppMemoryRequest:  "800Mi",
 			AppPort:           -1,
+		},
+		{
+			AppName:           appNamePrefix + backend + "-scheduler",
+			DaprEnabled:       true,
+			ImageName:         "perf-workflowsapp",
+			Replicas:          1,
+			IngressEnabled:    true,
+			IngressPort:       3000,
+			MetricsEnabled:    true,
+			DaprMemoryLimit:   "800Mi",
+			DaprMemoryRequest: "800Mi",
+			AppMemoryLimit:    "800Mi",
+			AppMemoryRequest:  "800Mi",
+			AppPort:           -1,
+			Config:            "featureactorreminderscheduler",
 		},
 	}
 
@@ -132,9 +152,9 @@ func addTestResults(t *testing.T, testName string, testAppName string, result *l
 		OutputK6Trend(testName+"Iteration Duration", "ms", result.IterationDuration)
 }
 
-// Runs the test for `workflowName` workflow with differnt inputs and different scenarios
+// Runs the test for `workflowName` workflow with different inputs and different scenarios
 // inputs are the different workflow inputs/payload_sizes for which workflows are run
-// scnearios are the different combinations of {VU,iterations} for which tests are run
+// scenarios are the different combinations of {VU,iterations} for which tests are run
 // rateChecks[index1][index2] represents the check required for the run with input=inputs[index1] and scenario=scenarios[index2]
 func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs []string, scenarios []string, rateChecks [][]string, restart bool, payloadTest bool) {
 	table := summary.ForTest(t)
@@ -142,6 +162,31 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 		for index2, scenario := range scenarios {
 			subTestName := "[" + strings.ToUpper(scenario) + "]: "
 			t.Run(subTestName, func(t *testing.T) {
+				// restart scheduler if the app is the one using scheduler for reminders under the hood
+				if strings.Contains(testAppName, "-scheduler") {
+					platform, ok := tr.Platform.(*runner.KubeTestPlatform)
+					if !ok {
+						t.Skip("skipping test; only supported on kubernetes")
+					}
+
+					scheme := runtime.NewScheme()
+					require.NoError(t, corev1.AddToScheme(scheme))
+					cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
+					require.NoError(t, err)
+					var pod corev1.Pod
+					err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+					require.NoError(t, err)
+					err = cl.Delete(context.Background(), &pod)
+					require.NoError(t, err)
+					assert.EventuallyWithT(t, func(c *assert.CollectT) {
+						err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+						//nolint:testifylint
+						if assert.NoError(c, err) {
+							assert.Equal(c, corev1.PodRunning, pod.Status.Phase)
+						}
+					}, 30*time.Second, time.Millisecond*100)
+				}
+
 				// Re-starting the app to clear previous run's memory
 				if restart {
 					log.Printf("Restarting app %s", testAppName)
@@ -202,7 +247,7 @@ func testWorkflow(t *testing.T, workflowName string, testAppName string, inputs 
 func TestWorkflowWithConstantVUs(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_30_300", "t_30_300", "t_30_300"}
+	scenarios := []string{"t_30_300", "t_30_300", "t_30_300"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, false, false)
 }
@@ -210,7 +255,7 @@ func TestWorkflowWithConstantVUs(t *testing.T) {
 func TestWorkflowWithConstantIterations(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_30_300", "t_60_300", "t_90_300"}
+	scenarios := []string{"t_30_300", "t_60_300", "t_90_300"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
 }
@@ -219,7 +264,7 @@ func TestWorkflowWithConstantIterations(t *testing.T) {
 func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
 	workflowName := "sum_series_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_350_1400"}
+	scenarios := []string{"t_350_1400"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
 }
@@ -228,7 +273,7 @@ func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
 func TestParallelWorkflowWithMaxVUs(t *testing.T) {
 	workflowName := "sum_parallel_wf"
 	inputs := []string{"100"}
-	scenarios := []string{"t_110_440"}
+	scenarios := []string{"t_110_440"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
 }
@@ -236,7 +281,7 @@ func TestParallelWorkflowWithMaxVUs(t *testing.T) {
 // Runs tests for `state_wf` with different Payload
 func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	workflowName := "state_wf"
-	scenarios := []string{"t_30_300"}
+	scenarios := []string{"t_30_300"} // t_workflowCount_iterations
 	inputs := []string{"10000", "50000", "100000"}
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
 	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, true)

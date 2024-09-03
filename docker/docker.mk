@@ -30,11 +30,16 @@ DAPR_PLACEMENT_IMAGE_NAME?=placement
 DAPR_SENTRY_IMAGE_NAME?=sentry
 DAPR_OPERATOR_IMAGE_NAME?=operator
 DAPR_INJECTOR_IMAGE_NAME?=injector
+DAPR_SCHEDULER_IMAGE_NAME?=scheduler
 
 # build docker image for linux
 BIN_PATH=$(OUT_DIR)/$(TARGET_OS)_$(TARGET_ARCH)
 
+# Important to avoid using oci images on local dev.
+DOCKER_OUTPUT_TYPE?=--output type=docker
 ifeq ($(TARGET_OS), windows)
+  # Docker CLI on Windows does not support "--output"
+  DOCKER_OUTPUT_TYPE=
   DOCKERFILE?=Dockerfile-windows
   BIN_PATH := $(BIN_PATH)/release
 else ifeq ($(origin DEBUG), undefined)
@@ -48,13 +53,15 @@ else
   BIN_PATH := $(BIN_PATH)/debug
 endif
 
+DOCKER_IMAGE_ARCH:=amd64
 ifeq ($(TARGET_ARCH),arm)
-  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/arm/v7
+  DOCKER_IMAGE_ARCH:=arm/v7
 else ifeq ($(TARGET_ARCH),arm64)
-  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/arm64/v8
-else
-  DOCKER_IMAGE_PLATFORM:=$(TARGET_OS)/amd64
+  DOCKER_IMAGE_ARCH:=arm64/v8
 endif
+DOCKER_IMAGE_PLATFORM=$(TARGET_OS)/$(DOCKER_IMAGE_ARCH)
+DOCKER_BUILDX_NAME=daprbuild_multi
+DOCKER_BUILDX_PLATFORMS=$(TARGET_OS)/arm/v7,$(TARGET_OS)/arm64/v8,$(TARGET_OS)/amd64
 
 # Supported docker image architecture
 DOCKER_MULTI_ARCH?=linux-amd64 linux-arm linux-arm64 windows-1809-amd64 windows-ltsc2022-amd64
@@ -89,6 +96,7 @@ DAPR_PLACEMENT_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_PLACEMENT_IMAGE_NAME)
 DAPR_SENTRY_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_SENTRY_IMAGE_NAME)
 DAPR_OPERATOR_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_OPERATOR_IMAGE_NAME)
 DAPR_INJECTOR_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_INJECTOR_IMAGE_NAME)
+DAPR_SCHEDULER_DOCKER_IMAGE=$(DAPR_REGISTRY)/$(DAPR_SCHEDULER_IMAGE_NAME)
 BUILD_TAG=$(DAPR_TAG)-$(DOCKER_IMAGE_VARIANT)
 
 # To use buildx: https://github.com/docker/buildx#docker-ce
@@ -116,28 +124,32 @@ docker-build: check-docker-env check-arch
 	$(info Building $(DOCKER_IMAGE):$(DAPR_TAG) docker images ...)
 ifeq ($(TARGET_ARCH),$(TARGET_ARCH_LOCAL))
 ifeq ($(ONLY_DAPR_IMAGE),true)
-	$(DOCKER) build --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
+	$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
 else
-	$(DOCKER) build --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
+	$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=* $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG)
 	if [[ "$(BINARIES)" == *"daprd"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=daprd $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=daprd $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_RUNTIME_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"placement"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=placement $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=placement $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_PLACEMENT_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"sentry"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=sentry $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=sentry $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SENTRY_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"operator"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=operator $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=operator $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_OPERATOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
-		$(DOCKER) build --build-arg PKG_FILES=injector $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=injector $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
+	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+		$(DOCKER) build $(DOCKER_OUTPUT_TYPE) --build-arg PKG_FILES=scheduler $(BUILD_ARGS) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
 endif
 else
-	-$(DOCKER) buildx create --use --name daprbuild
-	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
+	-$(DOCKER) run --privileged --rm tonistiigi/binfmt:qemu-v7.0.0 --install all
+	-$(DOCKER) buildx create --use --name $(DOCKER_BUILDX_NAME) --platform $(DOCKER_BUILDX_PLATFORMS)
+	$(DOCKER) buildx inspect $(DOCKER_BUILDX_NAME) --bootstrap
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) buildx build --build-arg PKG_FILES=* $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG) --provenance=false
 else
@@ -156,6 +168,9 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=injector $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
+	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+		$(DOCKER) buildx build --build-arg PKG_FILES=scheduler $(BUILD_ARGS) --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false; \
 	fi
 endif
 endif
@@ -184,10 +199,14 @@ else
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 		$(DOCKER) push $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+		$(DOCKER) push $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG); \
+	fi
 endif
 else
-	-$(DOCKER) buildx create --use --name daprbuild
-	-$(DOCKER) run --rm --privileged multiarch/qemu-user-static --reset -p yes
+	-$(DOCKER) run --privileged --rm tonistiigi/binfmt:qemu-v7.0.0 --install all
+	-$(DOCKER) buildx create --use --name $(DOCKER_BUILDX_NAME) --platform $(DOCKER_BUILDX_PLATFORMS)
+	$(DOCKER) buildx inspect $(DOCKER_BUILDX_NAME) --bootstrap
 ifeq ($(ONLY_DAPR_IMAGE),true)
 	$(DOCKER) buildx build --build-arg PKG_FILES=* --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DOCKER_IMAGE):$(BUILD_TAG) --provenance=false --push
 else
@@ -206,6 +225,9 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 		$(DOCKER) buildx build --build-arg PKG_FILES=injector --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false --push; \
+	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+		$(DOCKER) buildx build --build-arg PKG_FILES=scheduler --platform $(DOCKER_IMAGE_PLATFORM) -f $(DOCKERFILE_DIR)/$(DOCKERFILE) $(BIN_PATH) -t $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG) --provenance=false --push; \
 	fi
 endif
 endif
@@ -233,6 +255,9 @@ else
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 		kind load docker-image $(DAPR_INJECTOR_DOCKER_IMAGE):$(BUILD_TAG); \
 	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+		kind load docker-image $(DAPR_SCHEDULER_DOCKER_IMAGE):$(BUILD_TAG); \
+	fi
 endif
 
 # publish muti-arch docker image to the registry
@@ -257,6 +282,9 @@ else
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 	$(DOCKER) manifest create $(DAPR_INJECTOR_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
 	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+	$(DOCKER) manifest create $(DAPR_SCHEDULER_DOCKER_IMAGE):$(DAPR_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SCHEDULER_DOCKER_IMAGE):$(MANIFEST_TAG)-%); \
+	fi
 endif
 ifeq ($(LATEST_RELEASE),true)
 ifeq ($(ONLY_DAPR_IMAGE),true)
@@ -277,6 +305,9 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 	$(DOCKER) manifest create $(DAPR_INJECTOR_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_INJECTOR_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
+	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+	$(DOCKER) manifest create $(DAPR_SCHEDULER_DOCKER_IMAGE):$(LATEST_TAG) $(DOCKER_MULTI_ARCH:%=$(DAPR_SCHEDULER_DOCKER_IMAGE):$(MANIFEST_LATEST_TAG)-%); \
 	fi
 endif
 endif
@@ -302,6 +333,9 @@ else
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE):$(DAPR_TAG); \
 	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+	$(DOCKER) manifest push $(DAPR_SCHEDULER_DOCKER_IMAGE):$(DAPR_TAG); \
+	fi
 endif
 ifeq ($(LATEST_RELEASE),true)
 ifeq ($(ONLY_DAPR_IMAGE),true)
@@ -322,6 +356,9 @@ else
 	fi
 	if [[ "$(BINARIES)" == *"injector"* ]]; then \
 	$(DOCKER) manifest push $(DAPR_INJECTOR_DOCKER_IMAGE):$(LATEST_TAG); \
+	fi
+	if [[ "$(BINARIES)" == *"scheduler"* ]]; then \
+	$(DOCKER) manifest push $(DAPR_SCHEDULER_DOCKER_IMAGE):$(LATEST_TAG); \
 	fi
 endif
 endif
@@ -365,10 +402,10 @@ endif
 build-dev-container:
 ifeq ($(DAPR_REGISTRY),)
 	$(info DAPR_REGISTRY environment variable not set, tagging image without registry prefix.)
-	$(info `make tag-dev-container` should be run with DAPR_REGISTRY before `make push-dev-container.)
-	$(DOCKER) build --build-arg DAPR_CLI_VERSION=$(DEV_CONTAINER_CLI_TAG) -f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) $(DOCKERFILE_DIR)/. -t $(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
+	$(info `make tag-dev-container` should be run with DAPR_REGISTRY before `make push-dev-container`)
+	$(DOCKER) build --output type=docker --build-arg DAPR_CLI_VERSION=$(DEV_CONTAINER_CLI_TAG) -f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) $(DOCKERFILE_DIR)/. -t $(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
 else
-	$(DOCKER) build --build-arg DAPR_CLI_VERSION=$(DEV_CONTAINER_CLI_TAG) -f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) $(DOCKERFILE_DIR)/. -t $(DAPR_REGISTRY)/$(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
+	$(DOCKER) build --output type=docker --build-arg DAPR_CLI_VERSION=$(DEV_CONTAINER_CLI_TAG) -f $(DOCKERFILE_DIR)/$(DEV_CONTAINER_DOCKERFILE) $(DOCKERFILE_DIR)/. -t $(DAPR_REGISTRY)/$(DEV_CONTAINER_IMAGE_NAME):$(DEV_CONTAINER_VERSION_TAG)
 endif
 
 tag-dev-container: check-docker-env-for-dev-container

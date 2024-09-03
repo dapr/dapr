@@ -27,6 +27,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	loaderdisk "github.com/dapr/dapr/pkg/internal/loader/disk"
 	operatorpb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/hotreload/loader"
@@ -69,19 +70,25 @@ func Test_Disk(t *testing.T) {
 	dir := t.TempDir()
 	store := compstore.New()
 
-	d, err := New(context.Background(), Options{
+	d, err := New(Options{
 		Dirs:           []string{dir},
 		ComponentStore: store,
 	})
 	require.NoError(t, err)
 
+	errCh := make(chan error)
+	ctx, cancel := context.WithCancel(context.Background())
+	go func() {
+		errCh <- d.Run(ctx)
+	}()
 	t.Cleanup(func() {
-		require.NoError(t, d.Close())
+		cancel()
+		require.NoError(t, <-errCh)
 	})
 
 	assert.Empty(t, store.ListComponents())
 
-	ch, err := d.Components().Stream(context.Background())
+	conn, err := d.Components().Stream(context.Background())
 	require.NoError(t, err)
 
 	err = os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
@@ -90,7 +97,7 @@ func Test_Disk(t *testing.T) {
 	var events []*loader.Event[componentsapi.Component]
 	for i := 0; i < 3; i++ {
 		select {
-		case event := <-ch:
+		case event := <-conn.EventCh:
 			events = append(events, event)
 		case <-time.After(time.Second * 3):
 			assert.Fail(t, "expected to receive event")
@@ -135,24 +142,42 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
-		batcher := batcher.New[int](0)
+		batcher := batcher.New[int, struct{}](0)
 		store := compstore.New()
 
-		r := newResource[componentsapi.Component](
-			Options{Dirs: []string{dir}},
-			batcher,
-			loadercompstore.NewComponent(store),
-		)
+		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
+			store:   loadercompstore.NewComponents(store),
+			batcher: batcher,
+			loader: loaderdisk.NewComponents(loaderdisk.Options{
+				Paths: []string{dir},
+			}),
+		})
 
-		batcher.Batch(0)
+		errCh := make(chan error)
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(func() {
+			cancel()
+			require.NoError(t, <-errCh)
+		})
+		go func() {
+			errCh <- r.run(ctx)
+		}()
 
-		ch, err := r.Stream(context.Background())
+		select {
+		case <-r.running:
+		case <-time.After(time.Second * 3):
+			assert.Fail(t, "expected to be running")
+		}
+
+		batcher.Batch(0, struct{}{})
+
+		conn, err := r.Stream(context.Background())
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 3; i++ {
 			select {
-			case event := <-ch:
+			case event := <-conn.EventCh:
 				events = append(events, event)
 			case <-time.After(time.Second * 3):
 				assert.Fail(t, "expected to receive event")
@@ -185,8 +210,6 @@ func Test_Stream(t *testing.T) {
 				},
 			},
 		}, events)
-
-		require.NoError(t, r.close())
 	})
 
 	t.Run("if store has a component and event happens, should send create event with new components", func(t *testing.T) {
@@ -196,7 +219,7 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp1, comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
-		batcher := batcher.New[int](0)
+		batcher := batcher.New[int, struct{}](0)
 		store := compstore.New()
 		require.NoError(t, store.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
@@ -205,21 +228,39 @@ func Test_Stream(t *testing.T) {
 		}))
 		require.NoError(t, store.CommitPendingComponent())
 
-		r := newResource[componentsapi.Component](
-			Options{Dirs: []string{dir}},
-			batcher,
-			loadercompstore.NewComponent(store),
-		)
+		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
+			store:   loadercompstore.NewComponents(store),
+			batcher: batcher,
+			loader: loaderdisk.NewComponents(loaderdisk.Options{
+				Paths: []string{dir},
+			}),
+		})
 
-		batcher.Batch(0)
+		errCh := make(chan error)
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(func() {
+			cancel()
+			require.NoError(t, <-errCh)
+		})
+		go func() {
+			errCh <- r.run(ctx)
+		}()
 
-		ch, err := r.Stream(context.Background())
+		select {
+		case <-r.running:
+		case <-time.After(time.Second * 3):
+			assert.Fail(t, "expected to be running")
+		}
+
+		batcher.Batch(0, struct{}{})
+
+		conn, err := r.Stream(context.Background())
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 2; i++ {
 			select {
-			case event := <-ch:
+			case event := <-conn.EventCh:
 				events = append(events, event)
 			case <-time.After(time.Second * 3):
 				assert.Fail(t, "expected to receive event")
@@ -244,8 +285,6 @@ func Test_Stream(t *testing.T) {
 				},
 			},
 		}, events)
-
-		require.NoError(t, r.close())
 	})
 
 	t.Run("if store has a component and event happens, should send create/update/delete events components", func(t *testing.T) {
@@ -255,7 +294,7 @@ func Test_Stream(t *testing.T) {
 		err := os.WriteFile(filepath.Join(dir, "f.yaml"), []byte(strings.Join([]string{comp2, comp3}, "\n---\n")), 0o600)
 		require.NoError(t, err)
 
-		batcher := batcher.New[int](0)
+		batcher := batcher.New[int, struct{}](0)
 		store := compstore.New()
 		require.NoError(t, store.AddPendingComponentForCommit(componentsapi.Component{
 			ObjectMeta: metav1.ObjectMeta{Name: "comp1"},
@@ -273,21 +312,39 @@ func Test_Stream(t *testing.T) {
 		}))
 		require.NoError(t, store.CommitPendingComponent())
 
-		r := newResource[componentsapi.Component](
-			Options{Dirs: []string{dir}},
-			batcher,
-			loadercompstore.NewComponent(store),
-		)
+		r := newResource[componentsapi.Component](resourceOptions[componentsapi.Component]{
+			store:   loadercompstore.NewComponents(store),
+			batcher: batcher,
+			loader: loaderdisk.NewComponents(loaderdisk.Options{
+				Paths: []string{dir},
+			}),
+		})
 
-		batcher.Batch(0)
+		errCh := make(chan error)
+		ctx, cancel := context.WithCancel(context.Background())
+		t.Cleanup(func() {
+			cancel()
+			require.NoError(t, <-errCh)
+		})
+		go func() {
+			errCh <- r.run(ctx)
+		}()
 
-		ch, err := r.Stream(context.Background())
+		select {
+		case <-r.running:
+		case <-time.After(time.Second * 3):
+			assert.Fail(t, "expected to be running")
+		}
+
+		batcher.Batch(0, struct{}{})
+
+		conn, err := r.Stream(context.Background())
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
 		for i := 0; i < 3; i++ {
 			select {
-			case event := <-ch:
+			case event := <-conn.EventCh:
 				events = append(events, event)
 			case <-time.After(time.Second * 3):
 				assert.Fail(t, "expected to receive event")
@@ -320,7 +377,5 @@ func Test_Stream(t *testing.T) {
 				},
 			},
 		}, events)
-
-		require.NoError(t, r.close())
 	})
 }

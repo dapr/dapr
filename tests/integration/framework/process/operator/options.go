@@ -17,7 +17,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 )
 
-// options contains the options for running Sentry in integration tests.
+// options contains the options for running Operator in integration tests.
 type options struct {
 	execOpts []exec.Option
 

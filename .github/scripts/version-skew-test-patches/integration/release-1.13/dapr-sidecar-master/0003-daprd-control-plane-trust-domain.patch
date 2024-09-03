@@ -1,0 +1,24 @@
+diff --git a/tests/integration/suite/daprd/hotreload/operator/informer/basic.go b/tests/integration/suite/daprd/hotreload/operator/informer/basic.go
+index a37051644..22338fdea 100644
+--- a/tests/integration/suite/daprd/hotreload/operator/informer/basic.go
++++ b/tests/integration/suite/daprd/hotreload/operator/informer/basic.go
+@@ -105,6 +105,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithExecOptions(exec.WithEnvVars(t,
+ 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+ 		)),
++		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/daprd/hotreload/operator/informer/reconnect/components.go b/tests/integration/suite/daprd/hotreload/operator/informer/reconnect/components.go
+index 9ae9ac671..052ccad2e 100644
+--- a/tests/integration/suite/daprd/hotreload/operator/informer/reconnect/components.go
++++ b/tests/integration/suite/daprd/hotreload/operator/informer/reconnect/components.go
+@@ -107,6 +107,7 @@ func (c *components) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithExecOptions(exec.WithEnvVars(t,
+ 			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+ 		)),
++		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
+ 	)
+ 
+ 	return []framework.Option{

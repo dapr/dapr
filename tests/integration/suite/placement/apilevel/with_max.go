@@ -24,8 +24,8 @@ import (
 
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -53,7 +53,7 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 	const level1 = 20
 	const level2 = 30
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	n.place.WaitUntilRunning(t, ctx)
 
@@ -100,7 +100,7 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		n.place.CheckAPILevelInState(t, httpClient, level1)
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 5*time.Second, 10*time.Millisecond)
 
 	// Register the second host with the higher API level
 	msg2 := &placementv1pb.Host{
@@ -131,15 +131,15 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 		}
 	}()
 
-	// After 3s, we should not receive an update
+	// After 1s, we should not receive an update
 	// This can take a while as dissemination happens on intervals
-	time.Sleep(3 * time.Second)
+	time.Sleep(time.Second)
 	require.Equal(t, lastUpdate, lastVersionUpdate.Load())
 
 	// API level should not increase
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		n.place.CheckAPILevelInState(t, httpClient, level1)
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 5*time.Second, 10*time.Millisecond)
 
 	// Stop the first host, and the in API level should increase to the max (25)
 	cancel1()
@@ -150,5 +150,5 @@ func (n *withMax) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(t *assert.CollectT) {
 		n.place.CheckAPILevelInState(t, httpClient, 25)
-	}, 5*time.Second, 100*time.Millisecond)
+	}, 5*time.Second, 10*time.Millisecond)
 }

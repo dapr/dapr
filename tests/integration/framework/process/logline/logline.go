@@ -15,6 +15,7 @@ package logline
 
 import (
 	"bufio"
+	"bytes"
 	"context"
 	"errors"
 	"io"
@@ -26,22 +27,20 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-
-	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 )
 
 // Option is a function that configures the process.
 type Option func(*options)
 
-// LogLine is a HTTP server that can be used in integration tests.
 type LogLine struct {
-	stdout             io.Reader
+	stdout             io.ReadCloser
 	stdoutExp          io.WriteCloser
 	stdoutLineContains map[string]bool
 
-	stderr            io.Reader
+	stderr            io.ReadCloser
 	stderrExp         io.WriteCloser
 	stderrLinContains map[string]bool
+	got               bytes.Buffer
 
 	outCheck chan map[string]bool
 	closeCh  chan struct{}
@@ -71,10 +70,10 @@ func New(t *testing.T, fopts ...Option) *LogLine {
 	stderrReader, stderrWriter := io.Pipe()
 
 	return &LogLine{
-		stdout:             io.TeeReader(stdoutReader, iowriter.New(t, "logline:stdout")),
+		stdout:             stdoutReader,
 		stdoutExp:          stdoutWriter,
 		stdoutLineContains: stdoutLineContains,
-		stderr:             io.TeeReader(stderrReader, iowriter.New(t, "logline:stderr")),
+		stderr:             stderrReader,
 		stderrExp:          stderrWriter,
 		stderrLinContains:  stderrLineContains,
 		outCheck:           make(chan map[string]bool),
@@ -101,7 +100,7 @@ func (l *LogLine) Cleanup(t *testing.T) {
 	close(l.closeCh)
 	for i := 0; i < 2; i++ {
 		for expLine := range <-l.outCheck {
-			assert.Fail(t, "expected to log line: "+expLine)
+			assert.Fail(t, "expected to log line: "+expLine, l.got.String())
 		}
 	}
 }
@@ -110,6 +109,7 @@ func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[strin
 	t.Helper()
 
 	if len(expLines) == 0 {
+		go io.Copy(io.Discard, reader)
 		l.done.Add(1)
 		return expLines
 	}
@@ -136,6 +136,8 @@ func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[strin
 		}
 		require.NoError(t, err)
 
+		l.got.Write(append(line, '\n'))
+
 		for expLine := range expLines {
 			if strings.Contains(string(line), expLine) {
 				delete(expLines, expLine)
@@ -155,5 +157,5 @@ func (l *LogLine) Stderr() io.WriteCloser {
 }
 
 func (l *LogLine) EventuallyFoundAll(t *testing.T) {
-	assert.Eventually(t, l.FoundAll, time.Second*20, time.Millisecond*100)
+	assert.Eventually(t, l.FoundAll, time.Second*7, time.Millisecond*10)
 }

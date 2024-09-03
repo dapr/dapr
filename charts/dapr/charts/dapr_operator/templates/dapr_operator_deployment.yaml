@@ -176,7 +176,7 @@ spec:
       volumes:
         - name: dapr-operator-tmp
           emptyDir:
-            sizeLimit: 2Mi
+            sizeLimit: 64Mi
             medium: Memory
         - name: dapr-trust-bundle
           configMap:
@@ -223,7 +223,7 @@ spec:
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 }}
+        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:

@@ -225,7 +225,7 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				if def.addRetryActivatedMetric != nil {
 					def.addRetryActivatedMetric()
 				}
-				def.log.Infof("Error processing operation %s. Retrying in %v…", def.name, d)
+				def.log.Warnf("Error processing operation %s. Retrying in %v…", def.name, d)
 				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)
 			},
 			func() {

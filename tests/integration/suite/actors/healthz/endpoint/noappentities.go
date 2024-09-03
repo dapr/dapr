@@ -25,10 +25,10 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -120,7 +120,7 @@ func (n *noappentities) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(c, tv.activeActors, meta.GetActorRuntime().GetActiveActors())
 			assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 			assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
-		}, time.Second*30, time.Millisecond*100)
+		}, time.Second*30, time.Millisecond*10)
 	}
 
 	select {
@@ -129,7 +129,7 @@ func (n *noappentities) Run(t *testing.T, ctx context.Context) {
 		assert.Fail(t, "timed out waiting for healthz call")
 	}
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, fooActorURL(n.daprd), nil)
 	require.NoError(t, err)

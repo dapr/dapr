@@ -27,5 +27,10 @@ metadata:
 spec:
   metrics:
     enabled: true
+    latencyDistributionBuckets:
+    - 5
+    - 50
+    - 500
+    - 5000
     http:
       increasedCardinality: false

@@ -28,9 +28,9 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -91,8 +91,8 @@ spec:
 func (a *appready) Run(t *testing.T, ctx context.Context) {
 	a.daprd.WaitUntilRunning(t, ctx)
 
+	httpClient := client.HTTP(t)
 	client := a.daprd.GRPCClient(t, ctx)
-	httpClient := util.HTTPClient(t)
 
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", a.daprd.HTTPPort(), a.daprd.AppID())
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
@@ -103,10 +103,10 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		resp, err = client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
 		assert.Len(c, resp.GetRegisteredComponents(), 1)
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 
 	called := a.healthCalled.Load()
-	require.Eventually(t, func() bool { return a.healthCalled.Load() > called }, time.Second*5, time.Millisecond*100)
+	require.Eventually(t, func() bool { return a.healthCalled.Load() > called }, time.Second*5, time.Millisecond*10)
 
 	assert.Eventually(t, func() bool {
 		var resp *http.Response
@@ -114,7 +114,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusInternalServerError
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*5, 10*time.Millisecond)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypubsub",
@@ -131,31 +131,34 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		default:
 		}
 		return a.healthCalled.Load() > called
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 
 	a.appHealthy.Store(true)
 
 	assert.Eventually(t, func() bool {
 		var resp *http.Response
-		resp, err = util.HTTPClient(t).Do(req)
+		resp, err = httpClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusOK
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*5, 10*time.Millisecond)
 
-	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-		PubsubName: "mypubsub",
-		Topic:      "mytopic",
-		Data:       []byte(`{"status": "completed"}`),
-	})
-	require.NoError(t, err)
+	assert.Eventually(t, func() bool {
+		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+			PubsubName: "mypubsub",
+			Topic:      "mytopic",
+			Data:       []byte(`{"status": "completed"}`),
+		})
+		require.NoError(t, err)
 
-	select {
-	case resp := <-a.topicChan:
-		assert.Equal(t, "/myroute", resp)
-	case <-time.After(time.Second * 5):
-		assert.Fail(t, "timeout waiting for topic to return")
-	}
+		select {
+		case resp := <-a.topicChan:
+			assert.Equal(t, "/myroute", resp)
+			return true
+		case <-time.After(time.Second):
+			return false
+		}
+	}, time.Second*5, time.Millisecond*10)
 
 	// Should stop sending messages to subscribed app when it becomes unhealthy.
 	a.appHealthy.Store(false)
@@ -165,7 +168,7 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusInternalServerError
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*5, 10*time.Millisecond)
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypubsub",
 		Topic:      "mytopic",
@@ -181,5 +184,5 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		default:
 		}
 		return a.healthCalled.Load() > called
-	}, time.Second*5, time.Millisecond*100)
+	}, time.Second*5, time.Millisecond*10)
 }

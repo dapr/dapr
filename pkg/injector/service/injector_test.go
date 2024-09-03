@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/json"
 	"testing"
-	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -27,6 +26,7 @@ import (
 	"k8s.io/apimachinery/pkg/runtime"
 	kubernetesfake "k8s.io/client-go/kubernetes/fake"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/injector/namespacednamematcher"
 )
 
@@ -39,6 +39,7 @@ func TestConfigCorrectValues(t *testing.T) {
 			AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*",
 			ControlPlaneTrustDomain:           "trust.domain",
 		},
+		Healthz: healthz.New(),
 	})
 	require.NoError(t, err)
 
@@ -59,6 +60,7 @@ func TestNewInjectorBadAllowedPrefixedServiceAccountConfig(t *testing.T) {
 			Namespace:                         "e",
 			AllowedServiceAccountsPrefixNames: "ns*:sa,namespace:sa*sa",
 		},
+		Healthz: healthz.New(),
 	})
 	require.Error(t, err)
 }
@@ -155,23 +157,5 @@ func TestAllowedControllersServiceAccountUID(t *testing.T) {
 		uids, err := AllowedControllersServiceAccountUID(context.TODO(), Config{AllowedServiceAccounts: "test:test,abc:abc"}, client)
 		require.NoError(t, err)
 		assert.Len(t, uids, 3)
-	})
-}
-
-func TestReady(t *testing.T) {
-	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-	defer cancel()
-
-	t.Run("if injector ready return nil", func(t *testing.T) {
-		i := &injector{ready: make(chan struct{})}
-		close(i.ready)
-		require.NoError(t, i.Ready(ctx))
-	})
-
-	t.Run("if not ready then should return timeout error if context cancelled", func(t *testing.T) {
-		ctx, cancel := context.WithTimeout(context.Background(), time.Millisecond*10)
-		defer cancel()
-		i := &injector{ready: make(chan struct{})}
-		require.EqualError(t, i.Ready(ctx), "timed out waiting for injector to become ready")
 	})
 }

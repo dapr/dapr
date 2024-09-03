@@ -86,7 +86,7 @@ spec:
 func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	l.place.WaitUntilRunning(t, ctx)
 	l.daprd.WaitUntilRunning(t, ctx)
-
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, l.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -100,7 +100,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		})
 		//nolint:testifylint
 		assert.NoError(c, err)
-	}, time.Second*20, time.Millisecond*100, "actor not ready")
+	}, time.Second*20, time.Millisecond*10, "actor not ready")
 
 	now := time.Now()
 
@@ -174,6 +174,6 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			require.NoError(c, err)
 			assert.Empty(c, resp.GetData())
 			assert.Empty(c, resp.GetMetadata())
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 10*time.Millisecond)
 	})
 }

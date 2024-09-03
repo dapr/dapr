@@ -46,7 +46,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
-
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, b.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })

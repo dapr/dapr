@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 const (
@@ -15,16 +17,32 @@ const (
 
 func componentsMetrics() *componentMetrics {
 	c := newComponentMetrics()
-	c.Init("test", "default")
+	_ = c.Init("test", "default", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log))
 
 	return c
 }
 
 func TestPubSub(t *testing.T) {
+	t.Run("record drop by app or sidecar", func(t *testing.T) {
+		c := componentsMetrics()
+
+		c.PubsubIngressEvent(context.Background(), componentName, "drop", "success", "A", 1)
+		c.PubsubIngressEvent(context.Background(), componentName, "drop", "drop", "A", 1)
+
+		viewData, _ := view.RetrieveData("component/pubsub_ingress/count")
+		v := view.Find("component/pubsub_ingress/count")
+
+		allTagsPresent(t, v, viewData[0].Tags)
+
+		assert.Len(t, viewData, 2)
+		assert.Equal(t, int64(1), viewData[0].Data.(*view.CountData).Value)
+		assert.Equal(t, int64(1), viewData[1].Data.(*view.CountData).Value)
+	})
+
 	t.Run("record ingress count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.PubsubIngressEvent(context.Background(), componentName, "retry", "A", 0)
+		c.PubsubIngressEvent(context.Background(), componentName, "retry", "retry", "A", 0)
 
 		viewData, _ := view.RetrieveData("component/pubsub_ingress/count")
 		v := view.Find("component/pubsub_ingress/count")
@@ -35,7 +53,7 @@ func TestPubSub(t *testing.T) {
 	t.Run("record ingress latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.PubsubIngressEvent(context.Background(), componentName, "retry", "A", 1)
+		c.PubsubIngressEvent(context.Background(), componentName, "retry", "", "A", 1)
 
 		viewData, _ := view.RetrieveData("component/pubsub_ingress/latencies")
 		v := view.Find("component/pubsub_ingress/latencies")

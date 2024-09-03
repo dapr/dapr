@@ -35,7 +35,7 @@ func Test_generic(t *testing.T) {
 		streamer := newFakeStreamer()
 		r := newResource[componentsapi.Component](
 			Options{},
-			loadercompstore.NewComponent(compstore.New()),
+			loadercompstore.NewComponents(compstore.New()),
 			streamer,
 		)
 
@@ -49,7 +49,7 @@ func Test_generic(t *testing.T) {
 		streamer := newFakeStreamer()
 		r := newResource[componentsapi.Component](
 			Options{},
-			loadercompstore.NewComponent(compstore.New()),
+			loadercompstore.NewComponents(compstore.New()),
 			streamer,
 		)
 
@@ -69,12 +69,12 @@ func Test_generic(t *testing.T) {
 		streamer := newFakeStreamer()
 		r := newResource[componentsapi.Component](
 			Options{},
-			loadercompstore.NewComponent(compstore.New()),
+			loadercompstore.NewComponents(compstore.New()),
 			streamer,
 		)
 
 		recCh := make(chan *loader.Event[componentsapi.Component], 1)
-		streamer.recvFn = func() (*loader.Event[componentsapi.Component], error) {
+		streamer.recvFn = func(context.Context) (*loader.Event[componentsapi.Component], error) {
 			return <-recCh, nil
 		}
 
@@ -91,7 +91,7 @@ func Test_generic(t *testing.T) {
 			}
 
 			select {
-			case got := <-ch:
+			case got := <-ch.EventCh:
 				assert.Same(t, comp, got)
 			case <-time.After(time.Second):
 				t.Error("expected to get event from on receive")
@@ -107,7 +107,7 @@ func Test_generic(t *testing.T) {
 		streamer := newFakeStreamer()
 		r := newResource[componentsapi.Component](
 			Options{},
-			loadercompstore.NewComponent(compstore.New()),
+			loadercompstore.NewComponents(compstore.New()),
 			streamer,
 		)
 
@@ -127,17 +127,23 @@ func Test_generic(t *testing.T) {
 			return errors.New("test error")
 		}
 
-		streamer.recvFn = func() (*loader.Event[componentsapi.Component], error) {
+		streamer.recvFn = func(context.Context) (*loader.Event[componentsapi.Component], error) {
 			return nil, errors.New("recv error")
 		}
 
-		_, err := r.Stream(context.Background())
+		conn, err := r.Stream(context.Background())
 		require.NoError(t, err)
 
 		select {
 		case <-retried:
 		case <-time.After(time.Second * 3):
 			t.Error("expected generic to retry establishing stream after failure")
+		}
+
+		select {
+		case <-conn.ReconcileCh:
+		case <-time.After(time.Second * 3):
+			t.Error("expected reconcile channel to be sent")
 		}
 
 		require.NoError(t, r.close())
@@ -148,7 +154,7 @@ func Test_generic(t *testing.T) {
 		streamer := newFakeStreamer()
 		r := newResource[componentsapi.Component](
 			Options{},
-			loadercompstore.NewComponent(compstore.New()),
+			loadercompstore.NewComponents(compstore.New()),
 			streamer,
 		)
 
@@ -181,7 +187,7 @@ func Test_generic(t *testing.T) {
 type fakeStreamer[T differ.Resource] struct {
 	listFn      func(context.Context, operatorpb.OperatorClient, string, string) ([][]byte, error)
 	closeFn     func() error
-	recvFn      func() (*loader.Event[T], error)
+	recvFn      func(context.Context) (*loader.Event[T], error)
 	establishFn func(context.Context, operatorpb.OperatorClient, string, string) error
 }
 
@@ -193,7 +199,7 @@ func newFakeStreamer() *fakeStreamer[componentsapi.Component] {
 		closeFn: func() error {
 			return nil
 		},
-		recvFn: func() (*loader.Event[componentsapi.Component], error) {
+		recvFn: func(context.Context) (*loader.Event[componentsapi.Component], error) {
 			return nil, nil
 		},
 		establishFn: func(context.Context, operatorpb.OperatorClient, string, string) error {
@@ -213,8 +219,8 @@ func (f *fakeStreamer[T]) close() error {
 }
 
 //nolint:unused
-func (f *fakeStreamer[T]) recv() (*loader.Event[T], error) {
-	return f.recvFn()
+func (f *fakeStreamer[T]) recv(ctx context.Context) (*loader.Event[T], error) {
+	return f.recvFn(ctx)
 }
 
 //nolint:unused

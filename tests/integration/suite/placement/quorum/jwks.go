@@ -34,14 +34,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -93,10 +95,11 @@ spec:
 	taFile := filepath.Join(t.TempDir(), "ca.pem")
 	require.NoError(t, os.WriteFile(taFile, bundle.TrustAnchors, 0o600))
 
-	fp := util.ReservePorts(t, 3)
+	fp := ports.Reserve(t, 3)
+	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 	opts := []placement.Option{
-		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2))),
-		placement.WithInitialClusterPorts(fp.Port(t, 0), fp.Port(t, 1), fp.Port(t, 2)),
+		placement.WithInitialCluster(fmt.Sprintf("p1=localhost:%d,p2=localhost:%d,p3=localhost:%d", port1, port2, port3)),
+		placement.WithInitialClusterPorts(port1, port2, port3),
 		placement.WithEnableTLS(true),
 		placement.WithTrustAnchorsFile(taFile),
 		placement.WithSentryAddress(j.sentry.Address()),
@@ -110,9 +113,8 @@ spec:
 			placement.WithExecOptions(exec.WithEnvVars(t, "DAPR_SENTRY_TOKEN_FILE", tokenFiles[2])))...),
 	}
 
-	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(j.sentry, j.places[0], j.places[1], j.places[2]),
+		framework.WithProcesses(j.sentry, fp, j.places[0], j.places[1], j.places[2]),
 	}
 }
 
@@ -122,8 +124,6 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 	j.places[1].WaitUntilRunning(t, ctx)
 	j.places[2].WaitUntilRunning(t, ctx)
 
-	t.Setenv("DAPR_SENTRY_TOKEN_FILE", j.appTokenFile)
-
 	secProv, err := security.New(ctx, security.Options{
 		SentryAddress:           j.sentry.Address(),
 		ControlPlaneTrustDomain: "localhost",
@@ -131,6 +131,8 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		TrustAnchors:            j.sentry.CABundle().TrustAnchors,
 		AppID:                   "app-1",
 		MTLSEnabled:             true,
+		SentryTokenFile:         ptr.Of(j.appTokenFile),
+		Healthz:                 healthz.New(),
 	})
 	require.NoError(t, err)
 
@@ -150,6 +152,8 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 
 	var stream v1pb.Placement_ReportDaprStatusClient
 
+	// Try connecting to each placement until one succeeds,
+	// indicating that a leader has been elected
 	i := -1
 	require.Eventually(t, func() bool {
 		i++
@@ -157,8 +161,8 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 			i = 0
 		}
 		host := j.places[i].Address()
-		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(),
-			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID),
+		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(), //nolint:staticcheck
+			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID), //nolint:staticcheck
 		)
 		if cerr != nil {
 			return false
@@ -179,15 +183,16 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 			return false
 		}
 		return true
-	}, time.Second*10, time.Millisecond*100)
+	}, time.Second*10, time.Millisecond*10)
 
 	err = stream.Send(&v1pb.Host{
-		Name:     "app-1",
-		Port:     1234,
-		Load:     1,
-		Entities: []string{"entity-1", "entity-2"},
-		Id:       "app-1",
-		Pod:      "pod-1",
+		Name:      "app-1",
+		Namespace: "default",
+		Port:      1234,
+		Load:      1,
+		Entities:  []string{"entity-1", "entity-2"},
+		Id:        "app-1",
+		Pod:       "pod-1",
 	})
 	require.NoError(t, err)
 
@@ -200,7 +205,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(c, o.GetTables().GetEntries(), "entity-1")
 			assert.Contains(c, o.GetTables().GetEntries(), "entity-2")
 		}
-	}, time.Second*20, time.Millisecond*100)
+	}, time.Second*20, time.Millisecond*10)
 }
 
 func (j *jwks) signJWT(t *testing.T, jwkPriv jwk.Key, id string) []byte {

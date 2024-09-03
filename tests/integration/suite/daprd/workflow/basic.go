@@ -38,10 +38,10 @@ import (
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -49,7 +49,6 @@ func init() {
 	suite.Register(new(basic))
 }
 
-// metrics tests daprd metrics
 type basic struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
@@ -65,7 +64,6 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	b.place = placement.New(t)
 	b.daprd = daprd.New(t,
-		daprd.WithAppID("myapp"),
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithPlacementAddresses(b.place.Address()),
@@ -81,12 +79,12 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.place.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
 
-	b.httpClient = util.HTTPClient(t)
+	b.httpClient = fclient.HTTP(t)
 
-	conn, err := grpc.DialContext(ctx,
+	conn, err := grpc.DialContext(ctx, //nolint:staticcheck
 		b.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -113,7 +111,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return fmt.Sprintf("Hello, %s!", name), nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
 		id := api.InstanceID(b.startWorkflow(ctx, t, "SingleActivity", "Dapr"))
@@ -153,7 +151,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		})
 
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
 		id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
@@ -174,7 +172,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				}
 			}
 			return true
-		}, 2*time.Second, 100*time.Millisecond)
+		}, 2*time.Second, 10*time.Millisecond)
 
 		// Terminate the root orchestration
 		b.terminateWorkflow(t, ctx, string(id))
@@ -199,7 +197,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("purge", func(t *testing.T) {
-		delayTime := 4 * time.Second
 		r := task.NewTaskRegistry()
 		r.AddOrchestratorN("Root", func(ctx *task.OrchestrationContext) (any, error) {
 			ctx.CallSubOrchestrator("L1", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_L1")).Await(nil)
@@ -210,11 +207,11 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return nil, nil
 		})
 		r.AddOrchestratorN("L2", func(ctx *task.OrchestrationContext) (any, error) {
-			ctx.CreateTimer(delayTime).Await(nil)
+			ctx.CreateTimer(2 * time.Second).Await(nil)
 			return nil, nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
 		// Run the orchestration, which will block waiting for external events
@@ -258,7 +255,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return fmt.Sprintf("Hello, %s!", input), nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-		backendClient.StartWorkItemListener(taskhubCtx, r)
+		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
 		id := api.InstanceID(b.startWorkflow(ctx, t, "root", "Dapr"))

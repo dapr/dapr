@@ -31,6 +31,8 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/healthz"
 )
 
 func Test_Start(t *testing.T) {
@@ -90,19 +92,17 @@ func Test_Start(t *testing.T) {
 		require.NoError(t, os.WriteFile(tdFile, root1, 0o600))
 
 		p, err := New(context.Background(), Options{
-			TrustAnchorsFile:        tdFile,
+			TrustAnchorsFile:        &tdFile,
 			AppID:                   "test",
 			ControlPlaneTrustDomain: "test.example.com",
 			ControlPlaneNamespace:   "default",
 			MTLSEnabled:             true,
-			OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
+			OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
 				return []*x509.Certificate{workloadCert}, nil
 			},
+			Healthz: healthz.New(),
 		})
 		require.NoError(t, err)
-
-		// Override the default of 500ms to 0 to speed up the test.
-		p.(*provider).fswatcherInterval = 0
 
 		ctx, cancel := context.WithCancel(context.Background())
 
@@ -123,7 +123,7 @@ func Test_Start(t *testing.T) {
 		sec, err := p.Handler(ctx)
 		require.NoError(t, err)
 
-		td, err := sec.CurrentTrustAnchors()
+		td, err := sec.CurrentTrustAnchors(ctx)
 		require.NoError(t, err)
 		assert.Equal(t, root1, td)
 
@@ -134,22 +134,18 @@ func Test_Start(t *testing.T) {
 			sec.WatchTrustAnchors(ctx, caBundleCh)
 		}()
 
-		assert.Eventually(t, func() bool {
-			prov.sec.source.lock.RLock()
-			defer prov.sec.source.lock.RUnlock()
-			return len(prov.sec.source.trustAnchorSubscribers) > 0
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			curr, err := prov.sec.trustAnchors.CurrentTrustAnchors(ctx)
+			require.NoError(t, err)
+			assert.Equal(c, root1, curr)
 		}, time.Second, time.Millisecond)
-
-		curr, err := prov.sec.source.trustAnchors.Marshal()
-		require.NoError(t, err)
-		require.Equal(t, root1, curr)
 
 		assert.Eventually(t, func() bool {
 			// We put the write file inside this assert loop since we have to wait
 			// for the fsnotify go rountine to warm up.
 			require.NoError(t, os.WriteFile(tdFile, root2, 0o600))
 
-			curr, err := prov.sec.source.trustAnchors.Marshal()
+			curr, err := prov.sec.trustAnchors.CurrentTrustAnchors(ctx)
 			require.NoError(t, err)
 			return bytes.Equal(root2, curr)
 		}, time.Second*5, time.Millisecond*750)
@@ -200,4 +196,38 @@ func TestCurrentNamespace(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "foo", ns)
 	})
+}
+
+func Test_isControlPlaneService(t *testing.T) {
+	tests := map[string]struct {
+		name string
+		exp  bool
+	}{
+		"operator should be control plane service": {
+			name: "dapr-operator",
+			exp:  true,
+		},
+		"sentry should be control plane service": {
+			name: "dapr-sentry",
+			exp:  true,
+		},
+		"placement should be control plane service": {
+			name: "dapr-placement",
+			exp:  true,
+		},
+		"sidecar injector should be control plane service": {
+			name: "dapr-injector",
+			exp:  true,
+		},
+		"not a control plane service": {
+			name: "my-app",
+			exp:  false,
+		},
+	}
+
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			assert.Equal(t, test.exp, isControlPlaneService(test.name))
+		})
+	}
 }

@@ -50,7 +50,7 @@ type resource[T differ.Resource] struct {
 type streamer[T differ.Resource] interface {
 	list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error)
 	close() error
-	recv() (*loader.Event[T], error)
+	recv(context.Context) (*loader.Event[T], error)
 	establish(context.Context, operatorpb.OperatorClient, string, string) error
 }
 
@@ -88,7 +88,7 @@ func (r *resource[T]) List(ctx context.Context) (*differ.LocalRemoteResources[T]
 	}, nil
 }
 
-func (r *resource[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], error) {
+func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error) {
 	if r.closed.Load() {
 		return nil, errors.New("stream is closed")
 	}
@@ -99,7 +99,10 @@ func (r *resource[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], erro
 
 	log.Debugf("stream established with operator")
 
-	eventCh := make(chan *loader.Event[T])
+	conn := &loader.StreamConn[T]{
+		EventCh:     make(chan *loader.Event[T]),
+		ReconcileCh: make(chan struct{}),
+	}
 	ctx, cancel := context.WithCancel(ctx)
 	r.wg.Add(2)
 	go func() {
@@ -112,16 +115,16 @@ func (r *resource[T]) Stream(ctx context.Context) (<-chan *loader.Event[T], erro
 	}()
 	go func() {
 		defer r.wg.Done()
-		r.stream(ctx, eventCh)
+		r.stream(ctx, conn)
 	}()
 
-	return eventCh, nil
+	return conn, nil
 }
 
-func (r *resource[T]) stream(ctx context.Context, eventCh chan<- *loader.Event[T]) {
+func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 	for {
 		for {
-			event, err := r.streamer.recv()
+			event, err := r.streamer.recv(ctx)
 			if err != nil {
 				r.streamer.close()
 				// Retry on stream error.
@@ -130,27 +133,32 @@ func (r *resource[T]) stream(ctx context.Context, eventCh chan<- *loader.Event[T
 			}
 
 			select {
-			case eventCh <- event:
+			case conn.EventCh <- event:
 			case <-ctx.Done():
 				return
 			}
 		}
 
-		for {
-			if ctx.Err() != nil {
-				return
-			}
+		if ctx.Err() != nil {
+			return
+		}
 
-			if err := backoff.Retry(func() error {
-				berr := r.streamer.establish(ctx, r.opClient, r.namespace, r.podName)
-				if berr != nil {
-					log.Errorf("Failed to establish stream: %s", berr)
-				}
-				return berr
-			}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx)); err != nil {
-				log.Errorf("Stream retry failed: %s", err)
-				return
+		if err := backoff.Retry(func() error {
+			berr := r.streamer.establish(ctx, r.opClient, r.namespace, r.podName)
+			if berr != nil {
+				log.Errorf("Failed to establish stream: %s", berr)
 			}
+			return berr
+		}, backoff.WithContext(backoff.NewExponentialBackOff(), ctx)); err != nil {
+			log.Errorf("Stream retry failed: %s", err)
+			return
+		}
+
+		log.Info("Reconnected to operator")
+		select {
+		case <-ctx.Done():
+			return
+		case conn.ReconcileCh <- struct{}{}:
 		}
 	}
 }

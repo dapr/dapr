@@ -168,7 +168,7 @@ func (mockOperator) ListResiliency(context.Context, *operatorv1pb.ListResiliency
 }
 
 func getOperatorClient(address string) operatorv1pb.OperatorClient {
-	conn, _ := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, _ := grpc.Dial(address, grpc.WithTransportCredentials(insecure.NewCredentials())) //nolint:staticcheck
 	return operatorv1pb.NewOperatorClient(conn)
 }
 
@@ -224,7 +224,7 @@ func TestPoliciesForTargets(t *testing.T) {
 
 func TestLoadKubernetesResiliency(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	require.NoError(t, err)
 
 	s := grpc.NewServer()
@@ -324,7 +324,7 @@ func TestParseMaxRetries(t *testing.T) {
 
 func TestResiliencyScopeIsRespected(t *testing.T) {
 	port, _ := freeport.GetFreePort()
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
+	lis, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
 	require.NoError(t, err)
 
 	s := grpc.NewServer()

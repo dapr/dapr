@@ -29,14 +29,12 @@ func (x *PublishEventRequest) AppendSpanAttributes(rpcMethod string, m map[strin
 	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
 	m[diagConsts.MessagingSystemSpanAttributeKey] = diagConsts.PubsubBuildingBlockType
 	m[diagConsts.MessagingDestinationSpanAttributeKey] = x.GetTopic()
-	m[diagConsts.MessagingDestinationKindSpanAttributeKey] = diagConsts.MessagingDestinationTopicKind
 }
 
 func (x *BulkPublishRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	m[diagConsts.GrpcServiceSpanAttributeKey] = diagConsts.DaprGRPCDaprService
 	m[diagConsts.MessagingSystemSpanAttributeKey] = diagConsts.PubsubBuildingBlockType
 	m[diagConsts.MessagingDestinationSpanAttributeKey] = x.GetTopic()
-	m[diagConsts.MessagingDestinationKindSpanAttributeKey] = diagConsts.MessagingDestinationTopicKind
 }
 
 func (x *InvokeBindingRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
@@ -79,6 +77,10 @@ func (x *GetSecretRequest) AppendSpanAttributes(rpcMethod string, m map[string]s
 	m[diagConsts.DBConnectionStringSpanAttributeKey] = diagConsts.SecretBuildingBlockType
 }
 
+func (*DeleteJobRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+
 func (*DecryptRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
@@ -104,6 +106,9 @@ func (*GetBulkStateRequest) AppendSpanAttributes(rpcMethod string, m map[string]
 	// TODO
 }
 func (*GetConfigurationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+func (*GetJobRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
 func (*GetMetadataRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
@@ -136,6 +141,9 @@ func (*RegisterActorTimerRequest) AppendSpanAttributes(rpcMethod string, m map[s
 func (*ResumeWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+func (*ScheduleJobRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
 func (*SetMetadataRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
@@ -146,6 +154,15 @@ func (*StartWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string
 	// TODO
 }
 func (*SubscribeConfigurationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+func (*SubscribeTopicEventsRequestInitialAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+func (*SubscribeTopicEventsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODOalph
+}
+func (*SubscribeTopicEventsRequestAlpha1_InitialRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
 func (*SubtleDecryptRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {

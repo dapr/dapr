@@ -27,11 +27,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -56,7 +56,7 @@ func (p *protobufFormat) Setup(t *testing.T) []framework.Option {
 	}
 
 	// Init placement with minimum API level of 20
-	p.place = placement.New(t, placement.WithMinAPILevel(20))
+	p.place = placement.New(t, placement.WithMaxAPILevel(-1), placement.WithMinAPILevel(20))
 
 	// Create a SQLite database and ensure state tables exist
 	now := time.Now().UTC().Format(time.RFC3339)
@@ -77,8 +77,6 @@ INSERT INTO state VALUES
 		daprd.WithResourceFiles(p.db.GetComponent(t)),
 		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(p.place.Port())),
 		daprd.WithAppPort(p.srv.Port()),
-		// Daprd is super noisy in debug mode when connecting to placement.
-		daprd.WithLogLevel("info"),
 	)
 
 	return []framework.Option{
@@ -97,7 +95,7 @@ func (p *protobufFormat) Run(t *testing.T, ctx context.Context) {
 	err := p.handler.WaitForActorsReady(ctx)
 	require.NoError(t, err)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	baseURL := fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/myactorid", p.daprd.HTTPPort())
 
 	// Invoke an actor to confirm everything is ready to go

@@ -37,12 +37,12 @@ func GetOperatorClient(ctx context.Context, address string, sec security.Handler
 
 	opts := []grpc.DialOption{
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
-		sec.GRPCDialOptionMTLS(operatorID), grpc.WithReturnConnectionError(),
+		sec.GRPCDialOptionMTLS(operatorID), grpc.WithReturnConnectionError(), //nolint:staticcheck
 	}
 
 	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
 	defer cancel()
-	conn, err := grpc.DialContext(ctx, address, opts...)
+	conn, err := grpc.DialContext(ctx, address, opts...) //nolint:staticcheck
 	if err != nil {
 		return nil, nil, err
 	}

@@ -16,7 +16,6 @@ package app
 import (
 	"context"
 	"encoding/base64"
-	"fmt"
 	"os"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -25,8 +24,8 @@ import (
 	"github.com/dapr/dapr/cmd/injector/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
-	"github.com/dapr/dapr/pkg/health"
-	"github.com/dapr/dapr/pkg/injector/sentry"
+	"github.com/dapr/dapr/pkg/healthz"
+	healthzserver "github.com/dapr/dapr/pkg/healthz/server"
 	"github.com/dapr/dapr/pkg/injector/service"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -51,7 +50,14 @@ func Run() {
 	log.Infof("Starting Dapr Sidecar Injector -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
 	log.Infof("Log level set to: %s", opts.Logger.OutputLevel)
 
-	metricsExporter := metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, opts.Metrics)
+	healthz := healthz.New()
+	metricsExporter := metrics.New(metrics.Options{
+		Log:       log,
+		Enabled:   opts.Metrics.Enabled(),
+		Namespace: metrics.DefaultMetricNamespace,
+		Port:      opts.Metrics.Port(),
+		Healthz:   healthz,
+	})
 
 	err = utils.SetEnvVariables(map[string]string{
 		utils.KubeConfigVar: opts.Kubeconfig,
@@ -83,36 +89,51 @@ func Run() {
 		log.Fatalf("Failed to get authentication uids from services accounts: %s", err)
 	}
 
+	namespace, err := security.CurrentNamespaceOrError()
+	if err != nil {
+		log.Fatalf("Failed to get current namespace: %s", err)
+	}
+
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           cfg.SentryAddress,
 		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
-		ControlPlaneNamespace:   security.CurrentNamespace(),
-		TrustAnchorsFile:        cfg.TrustAnchorsFile,
+		ControlPlaneNamespace:   namespace,
+		TrustAnchorsFile:        &cfg.TrustAnchorsFile,
 		AppID:                   "dapr-injector",
 		MTLSEnabled:             true,
 		Mode:                    modes.KubernetesMode,
+		Healthz:                 healthz,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 
 	inj, err := service.NewInjector(service.Options{
+		Port:                    opts.Port,
+		ListenAddress:           opts.ListenAddress,
 		AuthUIDs:                uids,
 		Config:                  cfg,
 		DaprClient:              daprClient,
 		KubeClient:              kubeClient,
 		ControlPlaneNamespace:   security.CurrentNamespace(),
 		ControlPlaneTrustDomain: cfg.ControlPlaneTrustDomain,
+		Healthz:                 healthz,
 	})
 	if err != nil {
 		log.Fatalf("Error creating injector: %v", err)
 	}
 
-	healthzServer := health.NewServer(health.Options{Log: log})
+	webConfHealthTarget := healthz.AddTarget()
+
 	caBundleCh := make(chan []byte)
 	mngr := concurrency.NewRunnerManager(
-		metricsExporter.Run,
+		metricsExporter.Start,
 		secProvider.Run,
+		healthzserver.New(healthzserver.Options{
+			Log:     log,
+			Port:    opts.HealthzPort,
+			Healthz: healthz,
+		}).Start,
 		func(ctx context.Context) error {
 			sec, rerr := secProvider.Handler(ctx)
 			if rerr != nil {
@@ -122,38 +143,16 @@ func Run() {
 			if err != nil {
 				return rerr
 			}
-			requester := sentry.New(sentry.Options{
-				SentryAddress: cfg.SentryAddress,
-				SentryID:      sentryID,
-				Security:      sec,
-			})
 			return inj.Run(ctx,
 				sec.TLSServerConfigNoClientAuth(),
 				sentryID,
-				requester.RequestCertificateFromSentry,
 				sec.CurrentTrustAnchors,
 			)
 		},
 		func(ctx context.Context) error {
-			readyErr := inj.Ready(ctx)
-			if readyErr != nil {
-				return readyErr
-			}
-			healthzServer.Ready()
-			<-ctx.Done()
-			return nil
-		},
-		func(ctx context.Context) error {
-			healhtzErr := healthzServer.Run(ctx, opts.HealthzPort)
-			if healhtzErr != nil {
-				return fmt.Errorf("failed to start healthz server: %w", healhtzErr)
-			}
-			return nil
-		},
-		func(ctx context.Context) error {
-			sec, rErr := secProvider.Handler(ctx)
-			if rErr != nil {
-				return rErr
+			sec, rerr := secProvider.Handler(ctx)
+			if rerr != nil {
+				return rerr
 			}
 			sec.WatchTrustAnchors(ctx, caBundleCh)
 			return nil
@@ -166,7 +165,7 @@ func Run() {
 				return rerr
 			}
 
-			caBundle, rErr := sec.CurrentTrustAnchors()
+			caBundle, rErr := sec.CurrentTrustAnchors(ctx)
 			if rErr != nil {
 				return rErr
 			}
@@ -184,6 +183,8 @@ func Run() {
 				if rErr != nil {
 					return rErr
 				}
+
+				webConfHealthTarget.Ready()
 
 				select {
 				case caBundle = <-caBundleCh:

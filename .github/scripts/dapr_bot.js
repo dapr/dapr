@@ -3,9 +3,13 @@
 // TODO: Read owners from OWNERS file.
 const owners = [
     'addjuarez',
+    'antontroshin',
     'artursouza',
+    'ashiquemd',
     'berndverst',
+    'cicoyle',
     'daixiang0',
+    'elena-kolevska',
     'deepanshua',
     'halspang',
     'italypaleale',
@@ -13,10 +17,12 @@ const owners = [
     'joshvanl',
     'kaibocai',
     'mcandeia',
+    'mikeee',
     'msfussell',
     'mukundansundar',
     'pkedy',
     'pruthvidhodda',
+    'rabollin',
     'robertojrojas',
     'ryanlettieri',
     'shivamkm07',
@@ -24,9 +30,7 @@ const owners = [
     'skyao',
     'taction',
     'tanvigour',
-    'yaron2',
-    'rabollin',
-    'ashiquemd'
+    'yaron2'
 ]
 
 const SDKs = [

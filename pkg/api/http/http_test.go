@@ -55,10 +55,12 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/middleware"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
+	outboxfake "github.com/dapr/dapr/pkg/outbox/fake"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -143,6 +145,7 @@ var testResiliency = &v1alpha1.Resiliency{
 func TestPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
 			CompStore: compstore.New(),
@@ -168,10 +171,10 @@ func TestPubSubEndpoints(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.universal.CompStore().AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("pubsubname", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errorpubsub", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotfound", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotallowed", &runtimePubsub.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
@@ -314,6 +317,7 @@ func TestPubSubEndpoints(t *testing.T) {
 func TestBulkPubSubEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
 			CompStore: compstore.New(),
@@ -347,10 +351,10 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 
 	mock := daprt.MockPubSub{}
 	mock.On("Features").Return([]pubsub.Feature{})
-	testAPI.universal.CompStore().AddPubSub("pubsubname", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errorpubsub", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotfound", compstore.PubsubItem{Component: &mock})
-	testAPI.universal.CompStore().AddPubSub("errnotallowed", compstore.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("pubsubname", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errorpubsub", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotfound", &runtimePubsub.PubsubItem{Component: &mock})
+	testAPI.universal.CompStore().AddPubSub("errnotallowed", &runtimePubsub.PubsubItem{Component: &mock})
 
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
@@ -783,6 +787,7 @@ func TestShutdownEndpoints(t *testing.T) {
 
 	shutdownCh := make(chan struct{})
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			ShutdownFn: func() {
 				close(shutdownCh)
@@ -857,6 +862,7 @@ func TestGetMetadataFromFastHTTPRequest(t *testing.T) {
 func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 	testAPI := &api{
+		healthz: healthz.New(),
 		sendToOutputBindingFn: func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			if name == "testbinding" {
 				return nil, nil
@@ -945,6 +951,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	createExporters(&buffer)
 
 	testAPI := &api{
+		healthz: healthz.New(),
 		sendToOutputBindingFn: func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error) {
 			return nil, nil
 		},
@@ -1000,9 +1007,12 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 func TestV1ActorEndpoints(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
-	rc := resiliency.FromConfigurations(logger.NewLogger("test.api.http.actors"), testResiliency)
+	testLog := logger.NewLogger("test.api.http.actors")
+	rc := resiliency.FromConfigurations(testLog, testResiliency)
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
+			Logger:     testLog,
 			AppID:      "fakeAPI",
 			Resiliency: rc,
 		}),
@@ -1088,7 +1098,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		// assert
 		assert.Equal(t, 200, resp.StatusCode)
 		assert.Equal(t, fakeData, resp.RawBody)
-		assert.Equal(t, "2020-01-01T00:00:00Z", resp.RawHeader.Get("metadata.ttlexpiretime"))
+		assert.Equalf(t, "2020-01-01T00:00:00Z", resp.RawHeader.Get("metadata.ttlexpiretime"), "Headers: %v", resp.RawHeader)
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
 
@@ -1512,34 +1522,6 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
-	t.Run("Reminder Get - 500 on JSON encode failure from actor", func(t *testing.T) {
-		apiPath := "v1.0/actors/fakeActorType/fakeActorID/reminders/reminder1"
-		reminderRequest := actors.GetReminderRequest{
-			Name:      "reminder1",
-			ActorType: "fakeActorType",
-			ActorID:   "fakeActorID",
-		}
-
-		reminderResponse := actors.MockReminder{
-			// This is not valid JSON
-			Data: json.RawMessage(`foo`),
-		}
-
-		mockActors := new(actors.MockActors)
-
-		mockActors.On("GetReminder", &reminderRequest).Return(&reminderResponse, nil)
-
-		testAPI.universal.SetActorRuntime(mockActors)
-
-		// act
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-
-		// assert
-		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
-		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
-	})
-
 	t.Run("Timer Create - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/actors/fakeActorType/fakeActorID/timers/timer1"
 
@@ -1772,17 +1754,15 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		},
 	}))
 	require.NoError(t, compStore.CommitPendingComponent())
-	compStore.SetSubscriptions([]runtimePubsub.Subscription{
-		{
-			PubsubName:      "test",
-			Topic:           "topic",
-			DeadLetterTopic: "dead",
-			Metadata:        map[string]string{},
-			Rules: []*runtimePubsub.Rule{
-				{
-					Match: &expr.Expr{},
-					Path:  "path",
-				},
+	compStore.SetProgramaticSubscriptions(runtimePubsub.Subscription{
+		PubsubName:      "test",
+		Topic:           "topic",
+		DeadLetterTopic: "dead",
+		Metadata:        map[string]string{},
+		Rules: []*runtimePubsub.Rule{
+			{
+				Match: &expr.Expr{},
+				Path:  "path",
 			},
 		},
 	})
@@ -1821,6 +1801,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 	}
 
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			AppID:     "xyz",
 			CompStore: compStore,
@@ -1847,7 +1828,7 @@ func TestV1MetadataEndpoint(t *testing.T) {
 		assert.Equal(t, 204, resp.StatusCode)
 	})
 
-	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"RUNNING","activeActors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"hostReady":true}}`
+	const expectedBody = `{"id":"xyz","runtimeVersion":"edge","actors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"components":[{"name":"MockComponent1Name","type":"mock.component1Type","version":"v1.0","capabilities":["mock.feat.MockComponent1Name"]},{"name":"MockComponent2Name","type":"mock.component2Type","version":"v1.0","capabilities":["mock.feat.MockComponent2Name"]}],"extended":{"daprRuntimeVersion":"edge","foo":"bar","test":"value"},"subscriptions":[{"pubsubname":"test","topic":"topic","rules":[{"path":"path"}],"deadLetterTopic":"dead","type":"PROGRAMMATIC"}],"httpEndpoints":[{"name":"MockHTTPEndpoint"}],"appConnectionProperties":{"port":5000,"protocol":"http","channelAddress":"1.2.3.4","maxConcurrency":10,"health":{"healthCheckPath":"/healthz","healthProbeInterval":"10s","healthProbeTimeout":"5s","healthThreshold":3}},"actorRuntime":{"runtimeStatus":"RUNNING","activeActors":[{"type":"abcd","count":10},{"type":"xyz","count":5}],"hostReady":true}}`
 
 	t.Run("Get Metadata", func(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", "v1.0/metadata", nil, nil)
@@ -1882,7 +1863,9 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 	createExporters(&buffer)
 
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
+			Logger:     logger.NewLogger("fakeLogger"),
 			Resiliency: resiliency.New(nil),
 		}),
 		tracingSpec: spec,
@@ -2006,6 +1989,7 @@ func TestAPIToken(t *testing.T) {
 	compStore := compstore.New()
 
 	testAPI := &api{
+		healthz:         healthz.New(),
 		directMessaging: mockDirectMessaging,
 		universal: universal.New(universal.Options{
 			CompStore:  compStore,
@@ -2127,6 +2111,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 	compStore := compstore.New()
 
 	testAPI := &api{
+		healthz:         healthz.New(),
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
 		universal: universal.New(universal.Options{
@@ -2175,6 +2160,7 @@ func TestConfigurationGet(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Resiliency: resiliency.New(nil),
 			CompStore:  compStore,
@@ -2377,6 +2363,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddConfiguration(storeName, fakeConfigurationStore)
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Resiliency: resiliency.New(nil),
 			CompStore:  compStore,
@@ -2479,6 +2466,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddLock(storeName, fakeLockStore)
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     l,
 			CompStore:  compStore,
@@ -2653,6 +2641,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	wfengine.SetWorkflowEngineReadyDone()
 
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:         logger.NewLogger("fakeLogger"),
 			CompStore:      compStore,
@@ -2971,6 +2960,7 @@ func TestSinglePipelineWithTracer(t *testing.T) {
 	compStore := compstore.New()
 
 	testAPI := &api{
+		healthz:         healthz.New(),
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
 		universal: universal.New(universal.Options{
@@ -3033,6 +3023,7 @@ func TestSinglePipelineWithNoTracing(t *testing.T) {
 	compStore := compstore.New()
 
 	testAPI := &api{
+		healthz:         healthz.New(),
 		directMessaging: mockDirectMessaging,
 		tracingSpec:     spec,
 		universal: universal.New(universal.Options{
@@ -3254,12 +3245,14 @@ func TestV1StateEndpoints(t *testing.T) {
 	compStore.AddStateStore("failStore", failingStore)
 	rc := resiliency.FromConfigurations(logger.NewLogger("state.test"), testResiliency)
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
 			Resiliency: rc,
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 
@@ -3808,6 +3801,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", newFakeStateStore())
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
@@ -3827,6 +3821,7 @@ func TestStateStoreQuerierNotEnabled(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", newFakeStateStore())
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
@@ -3846,6 +3841,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore(storeName, newFakeStateStoreQuerier())
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("fakeLogger"),
 			CompStore:  compStore,
@@ -4037,6 +4033,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		compStore.AddSecretStore(name, store)
 	}
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			Logger:     l,
 			CompStore:  compStore,
@@ -4364,7 +4361,10 @@ func TestV1HealthzEndpoint(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	const appID = "fakeAPI"
+	healthz := healthz.New()
+	htarget := healthz.AddTarget()
 	testAPI := &api{
+		healthz: healthz,
 		universal: universal.New(universal.Options{
 			AppID: appID,
 		}),
@@ -4381,7 +4381,8 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	t.Run("Healthz - 204 No Content", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
-		testAPI.MarkStatusAsReady()
+		htarget.Ready()
+		t.Cleanup(htarget.NotReady)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 
 		assert.Equal(t, 204, resp.StatusCode)
@@ -4389,14 +4390,16 @@ func TestV1HealthzEndpoint(t *testing.T) {
 
 	t.Run("Healthz - 500 No AppId Match", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
-		testAPI.MarkStatusAsReady()
+		htarget.Ready()
+		t.Cleanup(htarget.NotReady)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": "not-test"})
 		assert.Equal(t, 500, resp.StatusCode)
 	})
 
 	t.Run("Healthz - 204 AppId Match", func(t *testing.T) {
 		apiPath := "v1.0/healthz"
-		testAPI.MarkStatusAsReady()
+		htarget.Ready()
+		t.Cleanup(htarget.NotReady)
 		resp := fakeServer.DoRequest("GET", apiPath, nil, map[string]string{"appid": appID})
 		assert.Equal(t, 204, resp.StatusCode)
 	})
@@ -4413,11 +4416,13 @@ func TestV1TransactionEndpoints(t *testing.T) {
 	compStore.AddStateStore("storeNonTransactional", fakeStoreNonTransactional)
 
 	testAPI := &api{
+		healthz: healthz.New(),
 		universal: universal.New(universal.Options{
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
+		outbox:        outboxfake.New(),
 	}
 	fakeServer.StartServer(testAPI.constructStateEndpoints(), nil)
 	fakeBodyObject := map[string]interface{}{"data": "fakeData"}
