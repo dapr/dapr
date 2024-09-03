@@ -1054,6 +1054,11 @@ func (a *api) stateErrorResponse(err error, errorCode string) (int, string, Erro
 	}
 	message = err.Error()
 
+	standardizedErr, ok := kiterrors.FromError(err)
+	if ok {
+		return standardizedErr.HTTPStatusCode(), standardizedErr.Error(), r
+	}
+
 	return nethttp.StatusInternalServerError, message, r
 }
 
