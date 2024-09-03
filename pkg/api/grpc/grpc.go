@@ -61,6 +61,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
+	kiterrors "github.com/dapr/kit/errors"
 	"github.com/dapr/kit/logger"
 )
 
@@ -761,6 +762,11 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 		case state.ETagInvalid:
 			return status.Errorf(codes.InvalidArgument, format, args...)
 		}
+	}
+
+	standardizedErr, ok := kiterrors.FromError(err)
+	if ok {
+		return standardizedErr
 	}
 
 	return status.Errorf(codes.Internal, format, args...)
