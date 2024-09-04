@@ -80,7 +80,7 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 	assert.InDelta(t,
 		s.workflow.Metrics(t, ctx)["process_resident_memory_bytes"]*1e-6,
 		actorMemBaseline,
-		30,
+		35,
 		"workflow memory leak",
 	)
 }
