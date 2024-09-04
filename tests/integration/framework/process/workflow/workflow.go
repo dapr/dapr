@@ -15,6 +15,7 @@ package workflow
 
 import (
 	"context"
+	"runtime"
 	"testing"
 
 	"github.com/microsoft/durabletask-go/client"
@@ -41,6 +42,10 @@ type Workflow struct {
 
 func New(t *testing.T, fopts ...Option) *Workflow {
 	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows due to SQLite limitations")
+	}
 
 	opts := options{
 		registry: task.NewTaskRegistry(),
