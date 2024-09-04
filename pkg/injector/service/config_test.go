@@ -14,6 +14,8 @@ limitations under the License.
 package service
 
 import (
+	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/dapr/kit/ptr"
@@ -113,11 +115,23 @@ func TestGetInjectorConfig(t *testing.T) {
 
 		// Set to invalid value
 		t.Setenv("SIDECAR_RUN_AS_USER", "invalid")
-		t.Setenv("SIDECAR_RUN_AS_GROUP", "invalid")
-
 		cfg, err = GetConfig()
-		require.NoError(t, err)
+		assert.Error(t, err)
+		errors.Is(err, &strconv.NumError{
+			Func: "Atoi",
+			Num:  "invalid",
+			Err:  errors.New("invalid syntax"),
+		})
 		assert.Nil(t, cfg.GetRunAsUser())
+
+		t.Setenv("SIDECAR_RUN_AS_GROUP", "invalid")
+		cfg, err = GetConfig()
+		assert.Error(t, err)
+		errors.Is(err, &strconv.NumError{
+			Func: "Atoi",
+			Num:  "invalid",
+			Err:  errors.New("invalid syntax"),
+		})
 		assert.Nil(t, cfg.GetRunAsGroup())
 	})
 }
