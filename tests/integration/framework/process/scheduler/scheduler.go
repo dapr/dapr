@@ -181,6 +181,8 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		defer resp.Body.Close()
 		return http.StatusOK == resp.StatusCode
 	}, time.Second*15, 10*time.Millisecond)
+
+	s.Client(t, ctx)
 }
 
 func (s *Scheduler) ID() string {
