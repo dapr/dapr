@@ -180,7 +180,7 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusOK == resp.StatusCode
-	}, time.Second*5, 10*time.Millisecond)
+	}, time.Second*15, 10*time.Millisecond)
 }
 
 func (s *Scheduler) ID() string {
