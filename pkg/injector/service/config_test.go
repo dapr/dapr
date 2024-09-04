@@ -116,7 +116,7 @@ func TestGetInjectorConfig(t *testing.T) {
 		// Set to invalid value
 		t.Setenv("SIDECAR_RUN_AS_USER", "invalid")
 		cfg, err = GetConfig()
-		assert.Error(t, err)
+		require.Error(t, err)
 		errors.Is(err, &strconv.NumError{
 			Func: "Atoi",
 			Num:  "invalid",
@@ -126,7 +126,7 @@ func TestGetInjectorConfig(t *testing.T) {
 
 		t.Setenv("SIDECAR_RUN_AS_GROUP", "invalid")
 		cfg, err = GetConfig()
-		assert.Error(t, err)
+		require.Error(t, err)
 		errors.Is(err, &strconv.NumError{
 			Func: "Atoi",
 			Num:  "invalid",
