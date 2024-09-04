@@ -192,8 +192,14 @@ func (c *Config) parse() (err error) {
 	c.parsedSidecarDropALLCapabilities = kitutils.IsTruthy(c.SidecarDropALLCapabilities)
 
 	// Parse the runAsUser and runAsGroup
-	c.parsedRunAsUser = parseStringToInt64Pointer(c.RunAsUser)
-	c.parsedRunAsGroup = parseStringToInt64Pointer(c.RunAsGroup)
+	c.parsedRunAsUser, err = parseStringToInt64Pointer(c.RunAsUser)
+	if err != nil {
+		return fmt.Errorf("failed to parse runAsUser: %w", err)
+	}
+	c.parsedRunAsGroup, err = parseStringToInt64Pointer(c.RunAsGroup)
+	if err != nil {
+		return fmt.Errorf("failed to parse runAsGroup: %w", err)
+	}
 
 	return nil
 }
@@ -222,15 +228,14 @@ func isTruthyDefaultTrue(val string) bool {
 	return kitutils.IsTruthy(val)
 }
 
-func parseStringToInt64Pointer(intStr string) *int64 {
+func parseStringToInt64Pointer(intStr string) (*int64, error) {
 	if intStr == "" {
-		return nil
+		return nil, nil
 	}
 	i, err := strconv.Atoi(intStr)
 	if err != nil {
-		log.Warnf("couldn't parse %s to int: %v", intStr, err)
-		return nil
+		return nil, err
 	}
 	i64 := int64(i)
-	return &i64
+	return &i64, nil
 }
