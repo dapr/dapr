@@ -26,16 +26,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/go-chi/chi/v5"
-	"github.com/google/uuid"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/mock"
-	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
-	"google.golang.org/grpc/test/bufconn"
-	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
-	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
 	"github.com/dapr/components-contrib/lock"
@@ -44,6 +34,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	workflowContrib "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
+	daprerrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/api/universal"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -72,6 +63,16 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
+	"github.com/go-chi/chi/v5"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"github.com/valyala/fasthttp"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/test/bufconn"
+	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
 const bufconnBufSize = 2 << 20 // 2MB
@@ -4677,6 +4678,15 @@ func TestStateStoreErrors(t *testing.T) {
 		assert.True(t, e)
 		assert.Equal(t, 400, c)
 		assert.Equal(t, "invalid etag value: error", m)
+	})
+
+	t.Run("standardized error", func(t *testing.T) {
+		a := &api{}
+		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, gohttp.StatusNotFound, "", "testReason")
+		c, m, r := a.stateErrorResponse(standardizedErr, "ERR_STATE_SAVE")
+		assert.Equal(t, 404, c)
+		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", m)
+		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
 	})
 }
 
