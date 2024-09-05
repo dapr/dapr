@@ -83,6 +83,10 @@ func (*mockInternalActor) InvokeTimer(ctx context.Context, timer InternalActorRe
 	panic("unimplemented")
 }
 
+func (ia *mockInternalActor) Completed() bool {
+	panic("unimplemented")
+}
+
 // newTestActorsRuntimeWithInternalActors creates and initializes an actors runtime with a specified set of internal actors
 func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalActorFactory) (*actorsRuntime, error) {
 	spec := config.TracingSpec{SamplingRate: "1"}
