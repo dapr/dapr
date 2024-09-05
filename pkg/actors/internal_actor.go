@@ -36,6 +36,7 @@ type InternalActor interface {
 	DeactivateActor(ctx context.Context) error
 	InvokeReminder(ctx context.Context, reminder InternalActorReminder, metadata map[string][]string) error
 	InvokeTimer(ctx context.Context, timer InternalActorReminder, metadata map[string][]string) error
+	Completed() bool
 }
 
 type InternalActorReminder struct {

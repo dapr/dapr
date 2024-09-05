@@ -193,7 +193,7 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 		}
 		net.Close()
 		return true
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 15*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
