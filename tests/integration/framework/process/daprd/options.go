@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
 )
@@ -309,5 +310,11 @@ func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
 		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)))(o)
 		WithSentryAddress(sentry.Address())(o)
 		WithEnableMTLS(true)(o)
+	}
+}
+
+func WithScheduler(scheduler *scheduler.Scheduler) Option {
+	return func(o *options) {
+		WithSchedulerAddresses(scheduler.Address())(o)
 	}
 }
