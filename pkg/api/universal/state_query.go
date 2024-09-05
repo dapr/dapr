@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	kiterrors "github.com/dapr/kit/errors"
 )
 
 func (a *Universal) GetStateStore(name string) (state.Store, error) {
@@ -85,6 +86,10 @@ func (a *Universal) QueryStateAlpha1(ctx context.Context, in *runtimev1pb.QueryS
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.StateQuery, err == nil, elapsed)
 
 	if err != nil {
+		if kerr, ok := kiterrors.FromError(err); ok {
+			return nil, kerr
+		}
+
 		err = errors.StateStore(in.GetStoreName()).QueryFailed(err.Error())
 		a.logger.Debug(err)
 		return nil, err
