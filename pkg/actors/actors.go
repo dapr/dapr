@@ -389,6 +389,10 @@ func (a *actorsRuntime) haltActor(actorType, actorID string) error {
 	key := constructCompositeKey(actorType, actorID)
 	log.Debugf("Halting actor '%s'", key)
 
+	// Optimistically remove the actor from the internal actors table. No need to
+	// check whether it actually exists.
+	a.internalActors.Del(key)
+
 	// Remove the actor from the table
 	// This will forbit more state changes
 	actAny, ok := a.actorsTable.LoadAndDelete(key)
@@ -1074,6 +1078,15 @@ func (a *actorsRuntime) executeReminder(reminder *internal.Reminder) bool {
 		if errors.Is(err, ErrReminderCanceled) {
 			// The handler is explicitly canceling the timer
 			log.Debug("Reminder " + reminder.ActorKey() + " was canceled by the actor")
+
+			a.lock.Lock()
+			key := constructCompositeKey(reminder.ActorType, reminder.ActorID)
+			if act, ok := a.internalActors.Get(key); ok && act.Completed() {
+				a.internalActors.Del(key)
+				a.actorsTable.Delete(key)
+			}
+			a.lock.Unlock()
+
 			return false
 		}
 		log.Errorf("Error invoking reminder on actor %s: %s", reminder.ActorKey(), err)
@@ -1190,6 +1203,13 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 
 	// If the reminder was cancelled, delete it.
 	if errors.Is(err, ErrReminderCanceled) {
+		a.lock.Lock()
+		key := constructCompositeKey(reminder.ActorType, reminder.ActorID)
+		if act, ok := a.internalActors.Get(key); ok && act.Completed() {
+			a.internalActors.Del(key)
+			a.actorsTable.Delete(key)
+		}
+		a.lock.Unlock()
 		go func() {
 			log.Debugf("Deleting reminder which was cancelled: %s", reminder.Key())
 			reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
@@ -1202,7 +1222,7 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 				log.Errorf("Error deleting reminder %s: %s", reminder.Key(), derr)
 			}
 			a.lock.Lock()
-			delete(a.internalReminderInProgress, constructCompositeKey(reminder.ActorType, reminder.ActorID, reminder.Name))
+			delete(a.internalReminderInProgress, reminder.Key())
 			a.lock.Unlock()
 		}()
 		return ErrReminderCanceled
