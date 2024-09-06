@@ -5,19 +5,21 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
+	"sync/atomic"
+	"testing"
+	"time"
+
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/suite"
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"io"
-	"net/http"
-	"sync/atomic"
-	"testing"
-	"time"
 )
 
 func init() {
@@ -29,14 +31,11 @@ type delete struct {
 	daprd         *procdaprd.Daprd
 }
 
-var (
-	msg atomic.Value
-)
+var msg atomic.Value
 
 func (o *delete) Setup(t *testing.T) []framework.Option {
 	newHTTPServer := func() *prochttp.HTTP {
 		handler := http.NewServeMux()
-		var msg atomic.Value
 
 		handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 			o.appTestCalled.Add(1)
@@ -210,66 +209,4 @@ func (o *delete) Run(t *testing.T, ctx context.Context) {
 
 	// expecting the delete to not call the test app topic and calls counter stay the same
 	assert.Equal(t, int32(1), o.appTestCalled.Load())
-}
-
-func (o *delete) startSubscriber(t *testing.T) (framework.Option, *procdaprd.Daprd) {
-
-	newHTTPServer := func() *prochttp.HTTP {
-		handler := http.NewServeMux()
-
-		handler.HandleFunc("/test", func(w http.ResponseWriter, r *http.Request) {
-			o.appTestCalled.Add(1)
-			defer r.Body.Close()
-			b, err := io.ReadAll(r.Body)
-			if err != nil {
-				t.Fatal(err)
-			}
-
-			msg.Store(b)
-			w.WriteHeader(http.StatusOK)
-			w.Write([]byte("ok"))
-		})
-		return prochttp.New(t, prochttp.WithHandler(handler))
-	}
-	srv1 := newHTTPServer()
-
-	daprd := procdaprd.New(t, procdaprd.WithAppID("outboxtest"), procdaprd.WithAppPort(srv1.Port()), procdaprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-  metadata:
-  - name: outboxPublishPubsub
-    value: "mypubsub"
-  - name: outboxPublishTopic
-    value: "test"
-`,
-		`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: 'mypubsub'
-spec:
-  type: pubsub.in-memory
-  version: v1
-`,
-		`
-apiVersion: dapr.io/v2alpha1
-kind: Subscription
-metadata:
-  name: 'order'
-spec:
-  topic: 'test'
-  routes:
-    default: '/test'
-  pubsubname: 'mypubsub'
-scopes:
-- outboxtest
-`))
-
-	return framework.WithProcesses(srv1, daprd), daprd
-
 }

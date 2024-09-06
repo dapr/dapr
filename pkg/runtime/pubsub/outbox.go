@@ -184,9 +184,7 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 
 				if sr.ContentType != nil {
 					contentType = *sr.ContentType
-				}
-
-				if ct, ok := sr.Metadata[metadata.ContentType]; ok {
+				} else if ct, ok := sr.Metadata[metadata.ContentType]; ok {
 					contentType = ct
 				}
 			}
