@@ -4,7 +4,7 @@ E2E tests are designed for verifying the functional correctness by replicating e
 
 - [Run E2E tests in local dev environment](#run-e2e-tests-in-local-dev-environment)
 - [Run E2E tests through GitHub Actions](#run-e2e-tests-through-github-actions)
-- [Run E2E tests on Azure Aks](#run-e2e-tests-on-Azure-AKS)
+- [Run E2E tests on Azure Aks](#run-e2e-tests-on-azure-aks)
 - [Run E2E tests using a Wireguard Tunnel with tailscale](#run-e2e-tests-using-a-wireguard-tunnel-with-tailscale)
 
 ## Run E2E tests in local dev environment
@@ -91,14 +91,13 @@ If you are starting from scratch and just want to build dapr, deploy it, and run
    make delete-test-namespace
    ```
 
-    > Note: please make sure that you have executed helm uninstall command before you deleted dapr test namespace. Otherwise if you directly deleted the dapr test namespace without helm uninstall command and re-installed dapr control plane, the dapr sidecar injector won't work and fail for "bad certificate". And you have already run into this problem, you can recover by helm uninstall command. See https://github.com/dapr/dapr/issues/4612
+    > Note: please make sure that you have executed helm uninstall command before you deleted dapr test namespace. Otherwise if you directly deleted the dapr test namespace without helm uninstall command and re-installed dapr control plane, the dapr sidecar injector won't work and fail for "bad certificate". And you have already run into this problem, you can recover by helm uninstall command. See <https://github.com/dapr/dapr/issues/4612>
 
 3. Build, deploy, run tests from start to finish
 
    ```bash
    make e2e-build-deploy-run
    ```
-
 
 ### Option 2: Step by step guide
 
@@ -253,7 +252,6 @@ make create-test-namespace
 
 After this, run the E2E tests as per instructions above, making sure to use the newly-created Azure Container Registry as Docker registry (make sure you maintain the environmental variables set in the steps above).
 
-
 ### Deploy AKS and other Azure resources
 
 This is the setup that our E2E tests use in GitHub Actions, which includes AKS, Azure Cosmos DB, and Azure Service Bus, in addition to an Azure Container Registry. To replicate the same setup, run:
@@ -305,7 +303,8 @@ make create-test-namespace
 
 After this, run the E2E tests as per instructions above, making sure to use the newly-created Azure Container Registry as Docker registry (make sure you maintain the environmental variables set in the steps above).
 
-### Run tests 
+### Run tests
+
 The command in [Option 2: Step by step guide](#option-2-step-by-step-guide) can also run in AKS. Here is a sample script.
 
 ```sh
@@ -426,6 +425,7 @@ if you want to run the tests using tailscale as your network, few things are nec
 2. [Download and install](https://tailscale.com/download/) the tailscale client for your OS.
 3. When you're logged in, navigate to the menu `Access Controls` and two things are necessary, edit the ACL definition with:
    1. Create a new tag that will be used later to assign permissions to keys.
+
     ```json
     {...
       "tagOwners": {
@@ -433,7 +433,9 @@ if you want to run the tests using tailscale as your network, few things are nec
       }
     }
     ```
-   2. Assign permissions to the created tag. Since we are going to use the [tailscale subnet router](https://tailscale.com/kb/1185/kubernetes/), it is much convenient that the subnet router should auto approve the registered routes, for that, use the following acl.
+
+   1. Assign permissions to the created tag. Since we are going to use the [tailscale subnet router](https://tailscale.com/kb/1185/kubernetes/), it is much convenient that the subnet router should auto approve the registered routes, for that, use the following acl.
+
    ```json
      {...
        "autoApprovers": {
@@ -443,6 +445,7 @@ if you want to run the tests using tailscale as your network, few things are nec
        }
      }
    ```
+
    > Warning: as we are using `10.0.0.0/8` we must guarantee that our CIDR block used in the kubernetes cluster must be a subset of it
 4. Now, go to the Settings > Personal Settings > Keys.
 5. Once in the keys section, generate a new ephemeral key by clicking in `Generate auth key`.
@@ -465,4 +468,3 @@ One more config is necessary, `TEST_E2E_USE_INTERNAL_IP=true`, you can use it as
 ```sh
 TEST_E2E_USE_INTERNAL_IP=true make test-e2e-all
 ```
-

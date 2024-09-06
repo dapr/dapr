@@ -220,3 +220,49 @@ func Test_stsTransformer(t *testing.T) {
 		require.Len(t, store.List(), 1)
 	})
 }
+
+func Test_dsTransformer(t *testing.T) {
+	dsTransformer := getObjectTransformer(t, &appsv1.DaemonSet{})
+
+	t.Run("allDapr", func(t *testing.T) {
+		store := getNewTestStore()
+
+		daemonsets := []appsv1.DaemonSet{
+			testobjects.GetDaemonSet("test", "true", testobjects.NameNamespace("pod1", "ns1")),
+			testobjects.GetDaemonSet("test", "true", testobjects.NameNamespace("pod2", "ns2")),
+			testobjects.GetDaemonSet("test", "true", testobjects.NameNamespace("pod3", "ns3")),
+		}
+
+		for i := range daemonsets {
+			p := daemonsets[i]
+			obj, err := dsTransformer(&p)
+			require.NoError(t, err)
+			require.NoError(t, store.Add(obj))
+		}
+		require.Len(t, store.List(), len(daemonsets))
+
+		depObj, ok, err := store.Get(&appsv1.DaemonSet{ObjectMeta: metav1.ObjectMeta{Name: "pod1", Namespace: "ns1"}})
+		require.NoError(t, err)
+		require.True(t, ok)
+		sts := depObj.(*appsv1.DaemonSet)
+		require.Equal(t, sts.Status, dsEmptyStatus)
+		require.Equal(t, sts.Spec.Template.Spec, podEmptySpec)
+	})
+	t.Run("allNonDapr", func(t *testing.T) {
+		store := getNewTestStore()
+
+		daemonsets := []appsv1.DaemonSet{
+			testobjects.GetDaemonSet("test", "false", testobjects.NameNamespace("pod1", "ns1")),
+			testobjects.GetDaemonSet("test", "false", testobjects.NameNamespace("pod2", "ns2")),
+			testobjects.GetDaemonSet("test", "false", testobjects.NameNamespace("pod3", "ns3")),
+		}
+
+		for i := range daemonsets {
+			p := daemonsets[i]
+			obj, err := dsTransformer(&p)
+			require.NoError(t, err)
+			require.NoError(t, store.Add(obj))
+		}
+		require.Len(t, store.List(), 1)
+	})
+}

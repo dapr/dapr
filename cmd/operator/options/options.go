@@ -74,7 +74,7 @@ func New() *Options {
 	flag.IntVar(&opts.MaxPodRestartsPerMinute, "max-pod-restarts-per-minute", defaultMaxPodRestartsPerMinute, "Maximum number of pods in an invalid state that can be restarted per minute")
 
 	flag.BoolVar(&opts.DisableLeaderElection, "disable-leader-election", false, "Disable leader election for operator")
-	flag.BoolVar(&opts.DisableServiceReconciler, "disable-service-reconciler", false, "Disable the Service reconciler for Dapr-enabled Deployments and StatefulSets")
+	flag.BoolVar(&opts.DisableServiceReconciler, "disable-service-reconciler", false, "Disable the Service reconciler for Dapr-enabled Deployments, StatefulSets, and DaemonSets")
 	flag.StringVar(&opts.WatchNamespace, "watch-namespace", "", "Namespace to watch Dapr annotated resources in")
 	flag.BoolVar(&opts.EnableArgoRolloutServiceReconciler, "enable-argo-rollout-service-reconciler", false, "Enable the service reconciler for Dapr-enabled Argo Rollouts")
 	flag.BoolVar(&opts.WatchdogCanPatchPodLabels, "watchdog-can-patch-pod-labels", false, "Allow watchdog to patch pod labels to set pods with sidecar present")

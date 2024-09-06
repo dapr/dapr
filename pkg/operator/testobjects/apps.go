@@ -102,7 +102,6 @@ func GetDeployment(appID string, daprEnabled string, withOpts ...resourceOptsFun
 			Name:      opts.name,
 			Namespace: opts.namespace,
 		},
-
 		Spec: appsv1.DeploymentSpec{
 			Template: podTemplateSpec,
 			Selector: &metaV1.LabelSelector{
@@ -129,7 +128,6 @@ func GetStatefulSet(appID string, daprEnabled string, withOpts ...resourceOptsFu
 			Name:      opts.name,
 			Namespace: opts.namespace,
 		},
-
 		Spec: appsv1.StatefulSetSpec{
 			Template: podTemplateSpec,
 			Selector: &metaV1.LabelSelector{
@@ -142,4 +140,30 @@ func GetStatefulSet(appID string, daprEnabled string, withOpts ...resourceOptsFu
 	opts.updateMetadata(&statefulset.ObjectMeta)
 
 	return statefulset
+}
+
+func GetDaemonSet(appID string, daprEnabled string, withOpts ...resourceOptsFunc) appsv1.DaemonSet {
+	podTemplateSpec := corev1.PodTemplateSpec{
+		ObjectMeta: getPodMetadata(appID, daprEnabled),
+	}
+
+	opts := getOptsOrDefaults(withOpts)
+
+	daemonSet := appsv1.DaemonSet{
+		ObjectMeta: metaV1.ObjectMeta{
+			Name:      opts.name,
+			Namespace: opts.namespace,
+		},
+		Spec: appsv1.DaemonSetSpec{
+			Template: podTemplateSpec,
+			Selector: &metaV1.LabelSelector{
+				MatchLabels: map[string]string{
+					"app": "test",
+				},
+			},
+		},
+	}
+	opts.updateMetadata(&daemonSet.ObjectMeta)
+
+	return daemonSet
 }
