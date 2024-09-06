@@ -24,6 +24,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 
+	"github.com/dapr/components-contrib/metadata"
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -183,6 +184,10 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 
 				if sr.ContentType != nil {
 					contentType = *sr.ContentType
+				}
+
+				if ct, ok := sr.Metadata[metadata.ContentType]; ok {
+					contentType = ct
 				}
 			}
 
