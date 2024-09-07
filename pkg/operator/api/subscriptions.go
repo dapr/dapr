@@ -104,6 +104,10 @@ func (a *apiServer) SubscriptionUpdate(in *operatorv1pb.SubscriptionUpdateReques
 	key := keyObj.String()
 
 	a.connLock.Lock()
+	if a.closed.Load() {
+		a.connLock.Unlock()
+		return nil
+	}
 	updateChan := make(chan *SubscriptionUpdateEvent)
 	a.allSubscriptionUpdateChan[key] = updateChan
 	a.connLock.Unlock()
