@@ -24,7 +24,6 @@ import (
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	ctrl "sigs.k8s.io/controller-runtime"
-	"sigs.k8s.io/controller-runtime/pkg/builder"
 	metricsserver "sigs.k8s.io/controller-runtime/pkg/metrics/server"
 
 	"github.com/dapr/dapr/pkg/healthz"
@@ -81,7 +80,7 @@ func New(opts Options) (concurrency.Runner, error) {
 
 	if err := ctrl.NewControllerManagedBy(mgr).
 		Named("namespaces").
-		For(new(corev1.Namespace), builder.OnlyMetadata).
+		For(new(corev1.Namespace)).
 		Complete(&namespace{
 			nsReader: mgr.GetCache(),
 			cron:     opts.Cron,

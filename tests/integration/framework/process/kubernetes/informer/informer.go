@@ -78,7 +78,7 @@ func (i *Informer) Handler(t *testing.T, wrapped http.Handler) http.HandlerFunc 
 				split = split[2:]
 				gvk.Kind = split[0]
 			} else {
-				gvk.Kind = "Namespace"
+				gvk.Kind = "namespaces"
 			}
 		} else {
 			gvk.Kind = split[0]

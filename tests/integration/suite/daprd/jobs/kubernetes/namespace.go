@@ -34,7 +34,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
-	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
 	"github.com/dapr/dapr/tests/integration/framework/process/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -48,9 +47,10 @@ func init() {
 }
 
 type namespace struct {
-	store     *store.Store
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
+	placement *placement.Placement
+	kubeapi   *kubernetes.Kubernetes
 }
 
 func (n *namespace) Setup(t *testing.T) []framework.Option {
@@ -61,16 +61,7 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/foo", func(http.ResponseWriter, *http.Request) {}),
 	)
 
-	n.store = store.New(metav1.GroupVersionKind{
-		Version: "v1",
-		Kind:    "Namespace",
-	})
-	n.store.Add(&corev1.Namespace{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
-		ObjectMeta: metav1.ObjectMeta{Name: "default"},
-	})
-
-	kubeapi := kubernetes.New(t,
+	n.kubeapi = kubernetes.New(t,
 		kubernetes.WithBaseOperatorAPI(t, spiffeid.RequireTrustDomainFromString("localhost"), "default", sentry.Port()),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			Items: []configapi.Configuration{{
@@ -83,22 +74,27 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithClusterDaprComponentList(t, &compapi.ComponentList{
 			Items: []compapi.Component{manifest.ActorInMemoryStateComponent("default", "foo")},
 		}),
-		kubernetes.WithClusterNamespaceListFromStore(t, n.store),
+		kubernetes.WithClusterNamespaceList(t, &corev1.NamespaceList{
+			Items: []corev1.Namespace{{
+				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			}},
+		}),
 	)
 
 	n.scheduler = scheduler.New(t,
 		scheduler.WithSentry(sentry),
-		scheduler.WithKubeconfig(kubeapi.KubeconfigPath(t)),
+		scheduler.WithKubeconfig(n.kubeapi.KubeconfigPath(t)),
 		scheduler.WithMode("kubernetes"),
 	)
 
 	operator := operator.New(t,
 		operator.WithNamespace("default"),
-		operator.WithKubeconfigPath(kubeapi.KubeconfigPath(t)),
+		operator.WithKubeconfigPath(n.kubeapi.KubeconfigPath(t)),
 		operator.WithTrustAnchorsFile(sentry.TrustAnchorsFile(t)),
 	)
 
-	placement := placement.New(t, placement.WithSentry(t, sentry))
+	n.placement = placement.New(t, placement.WithSentry(t, sentry))
 
 	n.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
@@ -108,17 +104,19 @@ func (n *namespace) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppPort(app.Port()),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithControlPlaneAddress(operator.Address()),
-		daprd.WithPlacementAddresses(placement.Address()),
+		daprd.WithPlacementAddresses(n.placement.Address()),
 		daprd.WithConfigs("schedulerreminders"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, sentry, kubeapi, n.scheduler, placement, operator, n.daprd),
+		framework.WithProcesses(app, sentry, n.kubeapi, n.scheduler, n.placement, operator, n.daprd),
 	}
 }
 
 func (n *namespace) Run(t *testing.T, ctx context.Context) {
 	n.daprd.WaitUntilRunning(t, ctx)
+	n.scheduler.WaitUntilRunning(t, ctx)
+	n.placement.WaitUntilRunning(t, ctx)
 
 	client := n.daprd.GRPCClient(t, ctx)
 	_, err := client.ScheduleJobAlpha1(ctx, &rtv1.ScheduleJobRequest{
@@ -139,7 +137,7 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Len(t, resp.Kvs, 2)
 
-	n.store.Delete(&corev1.Namespace{
+	n.kubeapi.Informer().Delete(t, &corev1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
 		ObjectMeta: metav1.ObjectMeta{Name: "default"},
 	})
