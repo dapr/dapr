@@ -1,3 +1,16 @@
+/*
+Copyright 2024 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package http
 
 import (
@@ -16,8 +29,13 @@ import (
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 
-	// "github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
+)
+
+const (
+	ErrInfoType      = "type.googleapis.com/google.rpc.ErrorInfo"
+	ResourceInfoType = "type.googleapis.com/google.rpc.ResourceInfo"
+	HelpLinkType     = "type.googleapis.com/google.rpc.Help"
 )
 
 func init() {
@@ -82,9 +100,37 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 
 		detailsArray, ok := details.([]interface{})
 		require.True(t, ok)
-		require.Len(t, detailsArray, 2)
+		require.Len(t, detailsArray, 3)
 
-		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
-		// wip
+		// Parse the json into go objects
+		var errInfo map[string]interface{}
+		var resInfo map[string]interface{}
+		var links map[string]interface{}
+
+		for _, detail := range detailsArray {
+			d, ok := detail.(map[string]interface{})
+			require.True(t, ok)
+			switch d["@type"] {
+			case HelpLinkType:
+				links = d
+			case ErrInfoType:
+				errInfo = d
+			case ResourceInfoType:
+				resInfo = d
+			default:
+				require.FailNow(t, "unexpected status detail")
+			}
+		}
+
+		// Confirm that the ErrorInfo details are correct
+		require.NotEmptyf(t, errInfo, "ErrorInfo not found in %+v", detailsArray)
+		require.NotEmptyf(t, links, "Help link not found in %+v", detailsArray...)
+		require.Equal(t, "dapr.io", errInfo["domain"])
+		require.Equal(t, "DAPR_SERVICE_INVOCATION_"+"APP_ID_EMPTY", errInfo["reason"])
+
+		// Confirm that the ResourceInfo details are correct
+		require.NotEmptyf(t, resInfo, "ResourceInfo not found in %+v", detailsArray)
+		require.Equal(t, "invoke", resInfo["resource_type"])
+		require.Equal(t, "service_invocation", resInfo["resource_name"])
 	})
 }
