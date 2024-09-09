@@ -18,7 +18,9 @@ spec:
       app: dapr-scheduler-server
   {{- if not .Values.cluster.inMemoryStorage }}
   volumeClaimTemplates:
-  - metadata:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
       name: dapr-scheduler-data-dir
     spec:
       accessModes: [ "ReadWriteOnce" ]
