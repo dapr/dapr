@@ -14,6 +14,7 @@ limitations under the License.
 package options
 
 import (
+	"fmt"
 	"testing"
 	"time"
 
@@ -101,25 +102,50 @@ func TestOptsFromEnvVariables(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, opts.MetadataEnabled)
 	})
-	t.Run("keepalive time", func(t *testing.T) {
-		t.Setenv("DAPR_PLACEMENT_KEEPALIVE_TIME", "4s")
+}
 
-		opts, err := New([]string{})
-		require.NoError(t, err)
-		assert.Equal(t, 4*time.Second, opts.KeepAliveTime)
-	})
-	t.Run("keepalive timeout", func(t *testing.T) {
-		t.Setenv("DAPR_PLACEMENT_KEEPALIVE_TIMEOUT", "5s")
-
-		opts, err := New([]string{})
-		require.NoError(t, err)
-		assert.Equal(t, 5*time.Second, opts.KeepAliveTimeout)
-	})
-	t.Run("disseminate timeout", func(t *testing.T) {
-		t.Setenv("DAPR_PLACEMENT_DISSEMINATE_TIMEOUT", "4s")
-
-		opts, err := New([]string{})
-		require.NoError(t, err)
-		assert.Equal(t, 4*time.Second, opts.DisseminateTimeout)
-	})
+func TestValidateFlags(t *testing.T) {
+	testCases := []struct {
+		name  string
+		arg   string
+		value string
+	}{
+		{
+			"keepalive-time too low",
+			"keepalive-time",
+			"0.5s",
+		},
+		{
+			"keepalive-time too high",
+			"keepalive-time",
+			"11s",
+		},
+		{
+			"keepalive-timeout too low",
+			"keepalive-timeout",
+			"0.5s",
+		},
+		{
+			"keepalive-timeout too high",
+			"keepalive-timeout",
+			"11s",
+		},
+		{
+			"disseminate-timeout too low",
+			"disseminate-timeout",
+			"0.5s",
+		},
+		{
+			"disseminate-timeout too high",
+			"disseminate-timeout",
+			"6s",
+		},
+	}
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := New([]string{"--" + tt.arg, tt.value})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), fmt.Sprintf("invalid value for %s", tt.arg))
+		})
+	}
 }

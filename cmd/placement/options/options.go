@@ -38,13 +38,16 @@ const (
 	defaultReplicationFactor = 100
 	envMetadataEnabled       = "DAPR_PLACEMENT_METADATA_ENABLED"
 
-	envKeepAliveTime      = "DAPR_PLACEMENT_KEEPALIVE_TIME"
-	envKeepAliveTimeout   = "DAPR_PLACEMENT_KEEPALIVE_TIMEOUT"
-	envDisseminateTimeout = "DAPR_PLACEMENT_DISSEMINATE_TIMEOUT"
-
 	defaultKeepAliveTime      = 2 * time.Second
 	defaultKeepAliveTimeout   = 3 * time.Second
 	defaultDisseminateTimeout = 2 * time.Second
+
+	keepAliveTimeMin      = 1 * time.Second
+	keepAliveTimeMax      = 10 * time.Second
+	keepAliveTimeoutMin   = 1 * time.Second
+	keepAliveTimeoutMax   = 10 * time.Second
+	disseminateTimeoutMin = 1 * time.Second
+	disseminateTimeoutMax = 5 * time.Second
 )
 
 type Options struct {
@@ -97,25 +100,8 @@ func New(origArgs []string) (*Options, error) {
 		}
 	}
 
-	// Default options
-	keepAliveTime, err := utils.GetEnvDurationWithRange(envKeepAliveTime, defaultKeepAliveTime, time.Second, 10*time.Second)
-	if err != nil {
-		return nil, err
-	}
-	keepAliveTimeout, err := utils.GetEnvDurationWithRange(envKeepAliveTimeout, defaultKeepAliveTimeout, time.Second, 10*time.Second)
-	if err != nil {
-		return nil, err
-	}
-	disseminateTimeout, err := utils.GetEnvDurationWithRange(envDisseminateTimeout, defaultDisseminateTimeout, time.Second, 5*time.Second)
-	if err != nil {
-		return nil, err
-	}
-
 	opts := Options{
-		MetadataEnabled:    utils.IsTruthy(os.Getenv(envMetadataEnabled)),
-		KeepAliveTime:      keepAliveTime,
-		KeepAliveTimeout:   keepAliveTimeout,
-		DisseminateTimeout: disseminateTimeout,
+		MetadataEnabled: utils.IsTruthy(os.Getenv(envMetadataEnabled)),
 	}
 
 	// Create a flag set
@@ -135,6 +121,9 @@ func New(origArgs []string) (*Options, error) {
 	fs.IntVar(&opts.MaxAPILevel, "max-api-level", 10, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
 	fs.IntVar(&opts.MinAPILevel, "min-api-level", 0, "Enforces a minimum 'api-level' in the cluster")
 	fs.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
+	fs.DurationVar(&opts.KeepAliveTime, "keepalive-time", defaultKeepAliveTime, "sets the gRPC keepalive time (in seconds) for the placement-daprd stream")
+	fs.DurationVar(&opts.KeepAliveTimeout, "keepalive-timeout", defaultKeepAliveTimeout, "sets the gRPC keepalive timeout (in seconds) for the placement-daprd stream")
+	fs.DurationVar(&opts.DisseminateTimeout, "disseminate-timeout", defaultDisseminateTimeout, "sets the timeout period (in seconds) for dissemination to be delayed after actor membership change (usually related to pod restarts) so as to avoid excessive dissemination during multiple pod restarts")
 
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
@@ -149,6 +138,10 @@ func New(origArgs []string) (*Options, error) {
 
 	// Ignore errors; flagset is set for ExitOnError
 	_ = fs.Parse(args)
+
+	if err := opts.Validate(); err != nil {
+		return nil, err
+	}
 
 	opts.RaftPeers = parsePeersFromFlag(opts.raftPeerFlag)
 	if opts.RaftLogStorePath != "" {
@@ -176,4 +169,20 @@ func parsePeersFromFlag(val []string) []raft.PeerInfo {
 	}
 
 	return peers[:i]
+}
+
+func (o *Options) Validate() error {
+	if o.KeepAliveTime < keepAliveTimeMin || o.KeepAliveTime > keepAliveTimeMax {
+		return fmt.Errorf("invalid value for keepalive-time: value should be between %s and %s, got %s", keepAliveTimeMin, keepAliveTimeMax, o.KeepAliveTime)
+	}
+
+	if o.KeepAliveTimeout < keepAliveTimeoutMin || o.KeepAliveTimeout > keepAliveTimeoutMax {
+		return fmt.Errorf("invalid value for keepalive-timeout: value should be between %s and %s, got %s", keepAliveTimeoutMin, keepAliveTimeoutMax, o.KeepAliveTimeout)
+	}
+
+	if o.DisseminateTimeout < disseminateTimeoutMin || o.DisseminateTimeout > disseminateTimeoutMax {
+		return fmt.Errorf("invalid value for disseminate-timeout: value should be between %s and %s, got %s", disseminateTimeoutMin, disseminateTimeoutMax, o.DisseminateTimeout)
+	}
+
+	return nil
 }
