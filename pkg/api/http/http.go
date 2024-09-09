@@ -529,8 +529,14 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.BulkGet, err == nil, elapsed)
 
 	if err != nil {
+		code := nethttp.StatusInternalServerError
+		kerr, ok := kiterrors.FromError(err)
+		if ok {
+			code = kerr.HTTPStatusCode()
+		}
+
 		msg := NewErrorResponse("ERR_STATE_BULK_GET", err.Error())
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(code, msg))
 		log.Debug(msg)
 		return
 	}
@@ -629,8 +635,14 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
+		code := nethttp.StatusInternalServerError
+		kerr, ok := kiterrors.FromError(err)
+		if ok {
+			code = kerr.HTTPStatusCode()
+		}
+
 		msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
-		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
+		fasthttpRespond(reqCtx, fasthttpResponseWithError(code, msg))
 		log.Debug(msg)
 		return
 	}

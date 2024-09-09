@@ -659,7 +659,13 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
+		kerr, ok := kiterrors.FromError(err)
+		if ok {
+			err = kerr.GRPCStatus().Err()
+		} else {
+			err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
+		}
+
 		a.logger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -779,9 +785,9 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 		}
 	}
 
-	standardizedErr, ok := kiterrors.FromError(err)
+	kerr, ok := kiterrors.FromError(err)
 	if ok {
-		return standardizedErr
+		return kerr
 	}
 
 	return status.Errorf(codes.Internal, format, args...)
