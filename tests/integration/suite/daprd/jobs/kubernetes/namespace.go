@@ -133,9 +133,11 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	etcdClient := n.scheduler.ETCDClient(t).KV
-	resp, err := etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
-	require.NoError(t, err)
-	assert.Len(t, resp.Kvs, 2)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+		require.NoError(t, err)
+		assert.Len(c, resp.Kvs, 2)
+	}, time.Second*10, 10*time.Millisecond)
 
 	n.kubeapi.Informer().Delete(t, &corev1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
@@ -143,7 +145,7 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 	})
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err = etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+		resp, err := etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 		require.NoError(t, err)
 		assert.Empty(c, resp.Kvs)
 	}, time.Second*10, 10*time.Millisecond)
