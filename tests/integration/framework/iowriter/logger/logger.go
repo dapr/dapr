@@ -11,10 +11,18 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package workflow
+package logger
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/backend"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/memory"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler"
+	"testing"
+
+	"github.com/dapr/dapr/tests/integration/framework/iowriter"
+	"github.com/dapr/kit/logger"
 )
+
+func New(t *testing.T) logger.Logger {
+	log := logger.NewLogger(t.Name())
+	log.SetOutput(iowriter.New(t, t.Name()))
+	log.SetOutputLevel(logger.DebugLevel)
+	return log
+}
