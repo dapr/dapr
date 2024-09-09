@@ -253,7 +253,9 @@ spec:
 {{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
   volumeClaimTemplates:
-  - metadata:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
       name: raft-log
     spec:
       accessModes:
