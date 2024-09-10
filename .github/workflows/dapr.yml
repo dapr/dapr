@@ -687,3 +687,36 @@ jobs:
             echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
             exit -1
           fi
+
+  update-longhauls:
+    name: Update the dapr veesion in longhaul tests
+    runs-on: ubuntu-latest
+    needs: helmpublish
+    if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr'
+    steps:
+      - name: Get Token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@v2
+        with:
+          application_id: ${{ secrets.LONGHAUL_APPLICATION_ID }}
+          application_private_key: ${{ secrets.LONGHAUL_APPLICATION_PRIVATE_KEY }}
+
+      - name: Checkout the longhaul tests repo
+        uses: actions/checkout@v3
+        with:
+          repository: dapr/test-infra
+          token: ${{ steps.get_workflow_token.outputs.token }}  # Use the generated token
+          path: test-infra
+
+      - name: Update dapr runtime version in test-infra
+        run: |
+          echo "${{ inputs.rel_version }}" > test-infra/config/dapr_runtime.version
+
+      - name: Commit and Push Changes to repoB
+        run: |
+          cd test-infra
+          git config --global user.name "github-actions"
+          git config --global user.email "github-actions@github.com"
+          git add config/dapr_runtime.version
+          git commit -m "Update dapr_runtime.version to ${{ inputs.rel_version }}"
+          git push
