@@ -47,10 +47,6 @@ func config(opts Options) (*embed.Config, error) {
 	config.Name = opts.EtcdID
 	config.InitialCluster = strings.Join(opts.EtcdInitialPeers, ",")
 
-	config.QuotaBackendBytes = opts.EtcdSpaceQuota
-	config.AutoCompactionMode = opts.EtcdCompactionMode
-	config.AutoCompactionRetention = opts.EtcdCompactionRetention
-
 	etcdURL, peerPort, err := peerHostAndPort(opts.EtcdID, opts.EtcdInitialPeers)
 	if err != nil {
 		return nil, fmt.Errorf("invalid format for initial cluster. Make sure to include 'http://' in Scheduler URL: %s", err)
@@ -117,6 +113,13 @@ func config(opts Options) (*embed.Config, error) {
 	// TODO: Cassie do extra validation that the client port != peer port -> dont fail silently
 	// TODO: Cassie do extra validation if people forget to put http:// -> dont fail silently
 	// TODO: Cassie do extra validation to ensure that the list of ids sent in for the clientPort == list of ids from initial cluster
+
+	config.QuotaBackendBytes = opts.EtcdSpaceQuota
+	config.AutoCompactionMode = opts.EtcdCompactionMode
+	config.AutoCompactionRetention = opts.EtcdCompactionRetention
+	config.MaxSnapFiles = opts.EtcdMaxSnapshots
+	config.MaxWalFiles = opts.EtcdMaxWALs
+	config.SnapshotCount = opts.EtcdSnapshotCount
 
 	return config, nil
 }
