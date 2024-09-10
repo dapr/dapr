@@ -16,12 +16,12 @@ package fake
 import (
 	"context"
 
-	etcdcron "github.com/diagridio/go-etcd-cron"
+	"github.com/diagridio/go-etcd-cron/api"
 )
 
 type Fake struct {
 	runFn    func(context.Context) error
-	clientFn func(context.Context) (etcdcron.Interface, error)
+	clientFn func(context.Context) (api.Interface, error)
 }
 
 func New() *Fake {
@@ -30,7 +30,7 @@ func New() *Fake {
 			<-ctx.Done()
 			return ctx.Err()
 		},
-		clientFn: func(context.Context) (etcdcron.Interface, error) {
+		clientFn: func(context.Context) (api.Interface, error) {
 			return nil, nil
 		},
 	}
@@ -41,7 +41,7 @@ func (f *Fake) WithRun(fn func(context.Context) error) *Fake {
 	return f
 }
 
-func (f *Fake) WithClient(fn func(context.Context) (etcdcron.Interface, error)) *Fake {
+func (f *Fake) WithClient(fn func(context.Context) (api.Interface, error)) *Fake {
 	f.clientFn = fn
 	return f
 }
@@ -50,6 +50,6 @@ func (f *Fake) Run(ctx context.Context) error {
 	return f.runFn(ctx)
 }
 
-func (f *Fake) Client(ctx context.Context) (etcdcron.Interface, error) {
+func (f *Fake) Client(ctx context.Context) (api.Interface, error) {
 	return f.clientFn(ctx)
 }

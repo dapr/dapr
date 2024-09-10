@@ -68,6 +68,7 @@ require (
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0
 	golang.org/x/net v0.29.0
 	golang.org/x/sync v0.8.0
+	google.golang.org/appengine v1.6.8
 	google.golang.org/genproto/googleapis/api v0.0.0-20240924160255-9d4c2d233b61
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240924160255-9d4c2d233b61
 	google.golang.org/grpc v1.67.0
@@ -491,8 +492,6 @@ replace (
 
 // Needed due to a deprecated method used in functional tests
 replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
-
-replace github.com/diagridio/go-etcd-cron => github.com/joshvanl/go-etcd-cron v0.0.0-20240901031816-5173b9308d3e
 
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!

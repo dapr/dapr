@@ -17,8 +17,8 @@ import (
 	"context"
 	"testing"
 
-	etcdcron "github.com/diagridio/go-etcd-cron"
-	etcdcronfake "github.com/diagridio/go-etcd-cron/fake"
+	"github.com/diagridio/go-etcd-cron/cron"
+	etcdcronfake "github.com/diagridio/go-etcd-cron/tests/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"
@@ -68,7 +68,7 @@ func Test_Reconcile(t *testing.T) {
 			t.Parallel()
 
 			var prefixCalled []string
-			cron := cronfake.New().WithClient(func(context.Context) (etcdcron.Interface, error) {
+			cron := cronfake.New().WithClient(func(context.Context) (cron.Interface, error) {
 				etcdcron := etcdcronfake.New().WithDeletePrefixes(func(_ context.Context, prefixes ...string) error {
 					prefixCalled = append(prefixCalled, prefixes...)
 					return test.deletePError

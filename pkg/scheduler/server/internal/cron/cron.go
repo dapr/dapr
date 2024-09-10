@@ -20,8 +20,8 @@ import (
 	"strings"
 	"time"
 
-	etcdcron "github.com/diagridio/go-etcd-cron"
 	"github.com/diagridio/go-etcd-cron/api"
+	etcdcron "github.com/diagridio/go-etcd-cron/cron"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 
@@ -49,7 +49,7 @@ type Interface interface {
 
 	// Client returns a client to schedule jobs with the underlying cron
 	// framework and database. Blocks until Etcd and the Cron library are ready.
-	Client(ctx context.Context) (etcdcron.Interface, error)
+	Client(ctx context.Context) (api.Interface, error)
 }
 
 type cron struct {
@@ -58,7 +58,7 @@ type cron struct {
 
 	config         *embed.Config
 	connectionPool *pool.Pool
-	etcdcron       etcdcron.Interface
+	etcdcron       api.Interface
 
 	readyCh chan struct{}
 	hzETCD  healthz.Target
@@ -143,7 +143,7 @@ func (c *cron) Run(ctx context.Context) error {
 
 // Client returns the Cron client, blocking until Etcd and the Cron library are
 // ready.
-func (c *cron) Client(ctx context.Context) (etcdcron.Interface, error) {
+func (c *cron) Client(ctx context.Context) (api.Interface, error) {
 	select {
 	case <-c.readyCh:
 		return c.etcdcron, nil

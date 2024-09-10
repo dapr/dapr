@@ -22,13 +22,6 @@ import (
 	"sync"
 	"sync/atomic"
 
-<<<<<<< HEAD
-	"github.com/diagridio/go-etcd-cron/api"
-	"github.com/diagridio/go-etcd-cron/cron"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/server/v3/embed"
-=======
->>>>>>> 4735e839d (Scheduler: Adds Kubernetes namespace controller)
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/healthz"
@@ -73,17 +66,10 @@ type Server struct {
 	port          int
 
 	sec            security.Handler
-<<<<<<< HEAD
-	authz          *authz.Authz
-	config         *embed.Config
-	cron           api.Interface
-	connectionPool *internal.Pool // Connection pool for sidecars
-=======
 	serializer     *serialize.Serializer
 	cron           cron.Interface
 	connectionPool *pool.Pool // Connection pool for sidecars
 	controller     concurrency.Runner
->>>>>>> 4735e839d (Scheduler: Adds Kubernetes namespace controller)
 
 	hzAPIServer healthz.Target
 
@@ -197,73 +183,3 @@ func (s *Server) runServer(ctx context.Context) error {
 		},
 	).Run(ctx)
 }
-<<<<<<< HEAD
-
-func (s *Server) runEtcdCron(ctx context.Context) error {
-	defer s.hzETCD.NotReady()
-
-	log.Info("Starting etcd")
-
-	etcd, err := embed.StartEtcd(s.config)
-	if err != nil {
-		return err
-	}
-	defer etcd.Close()
-
-	select {
-	case <-etcd.Server.ReadyNotify():
-		log.Info("Etcd server is ready!")
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
-	log.Info("Starting EtcdCron")
-
-	endpoints := make([]string, 0, len(etcd.Clients))
-	for _, peer := range etcd.Clients {
-		endpoints = append(endpoints, peer.Addr().String())
-	}
-
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:          endpoints,
-		MaxCallRecvMsgSize: math.MaxInt32,
-	})
-	if err != nil {
-		return err
-	}
-
-	// pass in initial cluster endpoints, but with client ports
-	s.cron, err = cron.New(cron.Options{
-		Client:         client,
-		Namespace:      "dapr",
-		PartitionID:    s.replicaID,
-		PartitionTotal: s.replicaCount,
-		TriggerFn:      s.triggerJob,
-	})
-	if err != nil {
-		return fmt.Errorf("fail to create etcd-cron: %s", err)
-	}
-	close(s.readyCh)
-
-	s.hzETCD.Ready()
-
-	return concurrency.NewRunnerManager(
-		func(ctx context.Context) error {
-			if err := s.cron.Run(ctx); !errors.Is(err, context.DeadlineExceeded) {
-				return err
-			}
-			return nil
-		},
-		func(ctx context.Context) error {
-			defer log.Info("EtcdCron shutting down")
-			select {
-			case err := <-etcd.Err():
-				return err
-			case <-ctx.Done():
-				return nil
-			}
-		},
-	).Run(ctx)
-}
-=======
->>>>>>> 4735e839d (Scheduler: Adds Kubernetes namespace controller)

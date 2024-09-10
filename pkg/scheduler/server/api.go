@@ -20,7 +20,6 @@ import (
 	"strings"
 
 	"github.com/diagridio/go-etcd-cron/api"
-	"google.golang.org/appengine/log"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
@@ -111,22 +110,17 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 }
 
 func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-s.readyCh:
-	}
-
-	if err := s.authz.Metadata(ctx, req.GetMetadata()); err != nil {
-		return nil, err
-	}
-
-	prefix, err := buildJobPrefix(req.GetMetadata())
+	cron, err := s.cron.Client(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	list, err := s.cron.List(ctx, prefix)
+	prefix, err := s.serializer.PrefixFromList(ctx, req.GetMetadata())
+	if err != nil {
+		return nil, err
+	}
+
+	list, err := cron.List(ctx, prefix)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query job list: %w", err)
 	}

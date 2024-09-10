@@ -73,6 +73,26 @@ func (s *Serializer) FromRequest(ctx context.Context, req Request) (*Job, error)
 	}, nil
 }
 
+func (s *Serializer) PrefixFromList(ctx context.Context, req *schedulerv1pb.JobMetadata) (string, error) {
+	if err := s.authz.Metadata(ctx, req); err != nil {
+		return "", err
+	}
+
+	switch t := req.GetTarget(); t.GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Actor:
+		actor := t.GetActor()
+		s := joinStrings("actorreminder", req.GetNamespace(), actor.GetType())
+		if len(actor.GetId()) > 0 {
+			s = joinStrings(s, actor.GetId())
+		}
+		return s, nil
+	case *schedulerv1pb.JobTargetMetadata_Job:
+		return joinStrings("app", req.GetNamespace(), req.GetAppId()), nil
+	default:
+		return "", fmt.Errorf("unknown job type: %v", t)
+	}
+}
+
 func (s *Serializer) FromWatch(stream schedulerv1pb.Scheduler_WatchJobsServer) (*schedulerv1pb.WatchJobsRequestInitial, error) {
 	req, err := stream.Recv()
 	if err != nil {
@@ -100,10 +120,6 @@ func (j *Job) Metadata() *anypb.Any {
 }
 
 func buildJobName(name string, meta *schedulerv1pb.JobMetadata) (string, error) {
-	joinStrings := func(ss ...string) string {
-		return strings.Join(ss, "||")
-	}
-
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Actor:
 		actor := t.GetActor()
@@ -113,4 +129,8 @@ func buildJobName(name string, meta *schedulerv1pb.JobMetadata) (string, error) 
 	default:
 		return "", fmt.Errorf("unknown job type: %v", t)
 	}
+}
+
+func joinStrings(ss ...string) string {
+	return strings.Join(ss, "||")
 }
