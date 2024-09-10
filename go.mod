@@ -10,7 +10,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.14.4
+	github.com/dapr/components-contrib v1.14.1-0.20240910151552-93f19c96d10c
 	github.com/dapr/kit v0.13.1-0.20240909215017-3823663aa4bb
 	github.com/diagridio/go-etcd-cron v0.2.3
 	github.com/evanphx/json-patch/v5 v5.9.0
@@ -488,8 +488,7 @@ replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
 //
-replace github.com/dapr/components-contrib => github.com/joshvanl/components-contrib v0.0.0-20240910141559-0bdb69702ff7
-
+// replace github.com/dapr/components-contrib => ../components-contrib
 // replace github.com/dapr/kit => ../kit
 //
 // Then, run `make modtidy-all` in this repository.
