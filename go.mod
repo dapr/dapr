@@ -14,7 +14,7 @@ require (
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.14.1-0.20240919155322-be7c19b742b1
 	github.com/dapr/kit v0.13.1-0.20240909215017-3823663aa4bb
-	github.com/diagridio/go-etcd-cron v0.2.3
+	github.com/diagridio/go-etcd-cron v0.3.0
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
@@ -487,8 +487,6 @@ replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday
 
 // Needed due to a deprecated method used in functional tests
 replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
-
-replace github.com/diagridio/go-etcd-cron => github.com/joshvanl/go-etcd-cron v0.0.0-20240901031816-5173b9308d3e
 
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
