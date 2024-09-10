@@ -11,7 +11,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.14.4
-	github.com/dapr/kit v0.13.1-0.20240724000121-26b564d9d0f5
+	github.com/dapr/kit v0.13.1-0.20240909215017-3823663aa4bb
 	github.com/diagridio/go-etcd-cron v0.2.3
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
