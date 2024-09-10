@@ -783,11 +783,11 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			if err != nil {
 				log.Warnf("failed to read from bindings: %s ", err)
 			}
+		}
 
-			// Start subscribing to outbox topics
-			if err := a.outbox.SubscribeToInternalTopics(ctx, a.runtimeConfig.id); err != nil {
-				log.Warnf("failed to subscribe to outbox topics: %s", err)
-			}
+		// Start subscribing to outbox topics
+		if err := a.outbox.SubscribeToInternalTopics(ctx, a.runtimeConfig.id); err != nil {
+			log.Warnf("failed to subscribe to outbox topics: %s", err)
 		}
 
 		if a.runtimeConfig.SchedulerEnabled() {
