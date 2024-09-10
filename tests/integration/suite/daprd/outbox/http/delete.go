@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package http
 
 import (
@@ -98,6 +99,7 @@ scopes:
 		framework.WithProcesses(app, o.daprd),
 	}
 }
+
 func (o *delete) Run(t *testing.T, ctx context.Context) {
 	o.daprd.WaitUntilRunning(t, ctx)
 	transactionRequest, err := json.Marshal(&stateTransactionRequestBody{
