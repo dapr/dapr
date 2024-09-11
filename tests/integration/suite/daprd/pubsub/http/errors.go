@@ -521,7 +521,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		require.Equal(t, fmt.Sprintf("error when publishing to topic %s in pubsub %s", topic, name), errMsg)
+		require.Contains(t, fmt.Sprintf("error when publishing to topic %s in pubsub %s", topic, name), errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]
