@@ -95,7 +95,7 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 		},
 		"proto string": {
 			data: `{"@type":"type.googleapis.com/google.protobuf.StringValue","value": "aproto"}`,
-			exp:  `{"@type":"type.googleapis.com/google.protobuf.StringValue", "value":"aproto"}`,
+			exp:  `{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"aproto"}`,
 		},
 		"proto string space ": {
 			data: `  {  "@type":  "type.googleapis.com/google.protobuf.StringValue","value": "aproto"   }   `,
@@ -111,7 +111,7 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 			a.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/test", body)
 			select {
 			case data := <-a.dataCh:
-				assert.Equal(t, test.exp, string(data))
+				assert.JSONEq(t, test.exp, string(data))
 			case <-time.After(time.Second * 10):
 				assert.Fail(t, "timed out waiting for triggered job")
 			}
