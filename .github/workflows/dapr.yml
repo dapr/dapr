@@ -696,11 +696,11 @@ jobs:
     steps:
       - name: Get Token
         id: get_workflow_token
-        uses: peter-murray/workflow-application-token-action@v2
+        uses: actions/create-github-app-token@v1
         with:
-          application_id: ${{ secrets.LONGHAUL_APPLICATION_ID }}
-          application_private_key: ${{ secrets.LONGHAUL_APPLICATION_PRIVATE_KEY }}
-
+          app-id: ${{ secrets.APPLICATION_ID }}
+          private-key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
+          repositories: "test-infra"
       - name: Checkout the longhaul tests repo
         uses: actions/checkout@v3
         with:
