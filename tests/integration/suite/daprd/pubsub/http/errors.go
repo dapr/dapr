@@ -489,4 +489,53 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, kiterrors.CodePrefixPubSub+"OUTBOX", detailsObject["reason"])
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
+
+	// Covers errors.PublishMessage() to confirm 400 status code upon publishing to a topic that does not exist
+	t.Run("pubsub topic does not exist", func(t *testing.T) {
+		name := "mypubsub"
+		topic := "invalid-topic"
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", e.daprd.HTTPPort(), topic)
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(""))
+		require.NoError(t, err)
+
+		resp, err := httpClient.Do(req)
+		require.Error(t, err)
+
+		require.Equal(t, "application/json", resp.Header.Get("Content-Type"))
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		var data map[string]interface{}
+		err = json.Unmarshal([]byte(string(body)), &data)
+		require.NoError(t, err)
+
+		// Confirm that the 'errorCode' field exists and contains the correct error code
+		errCode, exists := data["errorCode"]
+		require.True(t, exists)
+		require.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", errCode)
+
+		// Confirm that the 'message' field exists and contains the correct error message
+		errMsg, exists := data["message"]
+		require.True(t, exists)
+		require.Equal(t, fmt.Sprintf("error when publishing to topic %s in pubsub %s", topic, name), errMsg)
+
+		// Confirm that the 'details' field exists and has one element
+		details, exists := data["details"]
+		require.True(t, exists)
+
+		detailsArray, ok := details.([]interface{})
+		require.True(t, ok)
+		require.Len(t, detailsArray, 1)
+
+		// Confirm that the first element of the 'details' array has the correct ErrorInfo details
+		detailsObject, ok := detailsArray[0].(map[string]interface{})
+		require.True(t, ok)
+		require.Equal(t, "dapr.io", detailsObject["domain"])
+		require.Equal(t, kiterrors.CodePrefixPubSub+kiterrors.CodeNotFound, detailsObject["reason"])
+		require.Equal(t, ErrInfoType, detailsObject["@type"])
+	})
 }

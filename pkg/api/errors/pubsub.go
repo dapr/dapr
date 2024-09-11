@@ -76,8 +76,8 @@ func (p *PubSubError) withTopicError(topic string, err error) *PubSubMetadataErr
 
 func (p PubSubError) PublishMessage(topic string, err error) error {
 	return p.withTopicError(topic, err).build(
-		codes.Internal,
-		http.StatusInternalServerError,
+		codes.InvalidArgument,
+		http.StatusBadRequest,
 		fmt.Sprintf("error when publishing to topic %s in pubsub %s: %s", topic, p.name, err),
 		"ERR_PUBSUB_PUBLISH_MESSAGE",
 		"PUBLISH_MESSAGE",
