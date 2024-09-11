@@ -131,10 +131,10 @@ func (a *activityActor) InvokeMethod(ctx context.Context, methodName string, dat
 func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.InternalActorReminder, metadata map[string][]string) error {
 	wfLogger.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
 
-	state, _ := a.loadActivityState(ctx)
+	state, err := a.loadActivityState(ctx)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
-	if state == nil {
-		return errors.New("no activity state found")
+	if err != nil || len(state.EventPayload) == 0 {
+		wfLogger.Errorf("no activity state found for reminder: %s, err: %s", reminder.Name, err)
 	}
 
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
@@ -312,7 +312,7 @@ func (a *activityActor) loadActivityState(ctx context.Context) (*activityState, 
 	}
 	res, err := a.actorRuntime.GetState(ctx, &req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load activity state: %w", err)
+		return &activityState{}, fmt.Errorf("failed to load activity state: %w", err)
 	}
 
 	if len(res.Data) == 0 {
@@ -323,7 +323,7 @@ func (a *activityActor) loadActivityState(ctx context.Context) (*activityState, 
 	state := &activityState{}
 	err = json.Unmarshal(res.Data, state)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal activity state: %w", err)
+		return &activityState{}, fmt.Errorf("failed to unmarshal activity state: %w", err)
 	}
 	return state, nil
 }
