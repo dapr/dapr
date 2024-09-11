@@ -182,6 +182,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 			g.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/"+name, body)
 			select {
 			case job := <-g.jobChan:
+				//nolint:protogetter
 				assert.Equal(t, test.exp(t), &runtimev1pb.JobEventRequest{
 					Name:          job.Name,
 					Method:        job.Method,
