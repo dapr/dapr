@@ -134,7 +134,7 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 	state, err := a.loadActivityState(ctx)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 	if err != nil || len(state.EventPayload) == 0 {
-		wfLogger.Errorf("no activity state found for reminder: %s, err: %s", reminder.Name, err)
+		wfLogger.Errorf("no activity state found for internal wf activity actor: %s, err: %s", reminder.Name, err)
 	}
 
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
