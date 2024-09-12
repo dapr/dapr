@@ -69,7 +69,6 @@ func TestMain(m *testing.M) {
 			AppEnv: map[string]string{
 				"TEST_APP_ACTOR_TYPE": actorsTypes,
 			},
-			DebugLoggingEnabled: true,
 		},
 	}
 

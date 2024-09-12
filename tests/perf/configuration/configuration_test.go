@@ -59,17 +59,16 @@ func TestMain(m *testing.M) {
 
 	testApps := []kube.AppDescription{
 		{
-			AppName:             testAppName,
-			DaprEnabled:         true,
-			ImageName:           "perf-configuration",
-			Replicas:            1,
-			IngressEnabled:      true,
-			MetricsEnabled:      true,
-			DaprMemoryLimit:     "200Mi",
-			DaprMemoryRequest:   "100Mi",
-			AppMemoryLimit:      "200Mi",
-			AppMemoryRequest:    "100Mi",
-			DebugLoggingEnabled: true,
+			AppName:           testAppName,
+			DaprEnabled:       true,
+			ImageName:         "perf-configuration",
+			Replicas:          1,
+			IngressEnabled:    true,
+			MetricsEnabled:    true,
+			DaprMemoryLimit:   "200Mi",
+			DaprMemoryRequest: "100Mi",
+			AppMemoryLimit:    "200Mi",
+			AppMemoryRequest:  "100Mi",
 		},
 	}
 
