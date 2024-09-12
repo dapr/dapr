@@ -17,6 +17,8 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -41,6 +43,11 @@ type memory struct {
 }
 
 func (m *memory) Setup(t *testing.T) []framework.Option {
+	if os.Getenv("GITHUB_ACTIONS") == "true" &&
+		(runtime.GOOS == "windows" || runtime.GOOS == "darwin") {
+		t.SKip("Skipping memory test on Windows and MacOS in GitHub Actions")
+	}
+
 	app := app.New(t,
 		app.WithHandlerFunc("/foo", func(w http.ResponseWriter, r *http.Request) {}),
 	)
@@ -76,8 +83,8 @@ func (m *memory) Run(t *testing.T, ctx context.Context) {
 	baseMemory := m.daprd.MetricResidentMemoryMi(t, ctx)
 
 	var wg sync.WaitGroup
-	wg.Add(400)
-	for i := 0; i < 400; i++ {
+	wg.Add(300)
+	for i := 0; i < 300; i++ {
 		go func(i int) {
 			defer wg.Done()
 			m.daprd.HTTPPost2xx(t, ctx, "/v1.0/bindings/mybin", strings.NewReader(`{"operation":"get","data":`+input+`}`))

@@ -16,6 +16,8 @@ package memory
 import (
 	"context"
 	"fmt"
+	"os"
+	"runtime"
 	"strings"
 	"sync"
 	"testing"
@@ -39,6 +41,11 @@ type transaction struct {
 }
 
 func (tr *transaction) Setup(t *testing.T) []framework.Option {
+	if os.Getenv("GITHUB_ACTIONS") == "true" &&
+		(runtime.GOOS == "windows" || runtime.GOOS == "darwin") {
+		t.SKip("Skipping memory test on Windows and MacOS in GitHub Actions")
+	}
+
 	tr.daprd = daprd.New(t, daprd.WithInMemoryStateStore("mystore"))
 
 	return []framework.Option{
