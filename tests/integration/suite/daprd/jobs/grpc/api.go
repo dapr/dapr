@@ -14,21 +14,23 @@ limitations under the License.
 package grpc
 
 import (
+	"bytes"
 	"context"
-	"encoding/base64"
-	"encoding/json"
-	"strings"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app/proto"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
@@ -42,11 +44,6 @@ type api struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
 	jobChan   chan *runtimev1pb.JobEventRequest
-}
-
-type jobData struct {
-	TypeURL string `json:"type_url"`
-	Value   string `json:"value"`
 }
 
 func (a *api) Setup(t *testing.T) []framework.Option {
@@ -75,41 +72,85 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 	a.scheduler.WaitUntilRunning(t, ctx)
 	a.daprd.WaitUntilRunning(t, ctx)
 
-	client := a.daprd.GRPCClient(t, ctx)
-
-	t.Run("app receives triggered job", func(t *testing.T) {
-		req := &runtimev1pb.ScheduleJobRequest{
-			Job: &runtimev1pb.Job{
-				Name:     "test",
-				Schedule: ptr.Of("@every 1s"), Repeats: ptr.Of(uint32(1)),
-				Data: &anypb.Any{
-					TypeUrl: "type.googleapis.com/google.type.Expr",
-					Value:   []byte(`{"expression": "val"}`),
-				},
+	tests := map[string]struct {
+		data func(t *testing.T) *anypb.Any
+		exp  func(t *testing.T, job *runtimev1pb.JobEventRequest)
+	}{
+		"expr": {
+			data: func(*testing.T) *anypb.Any {
+				t.Helper()
+				str, err := structpb.NewStruct(map[string]any{
+					"expression": "val",
+				})
+				require.NoError(t, err)
+				data, err := anypb.New(structpb.NewStructValue(str))
+				require.NoError(t, err)
+				return data
 			},
-		}
-		_, err := client.ScheduleJobAlpha1(ctx, req)
-		require.NoError(t, err)
+			exp: func(t *testing.T, job *runtimev1pb.JobEventRequest) {
+				t.Helper()
+				str, err := structpb.NewStruct(map[string]any{
+					"expression": "val",
+				})
+				require.NoError(t, err)
+				data, err := anypb.New(structpb.NewStructValue(str))
+				require.NoError(t, err)
+				assert.Equal(t, data, job.GetData())
+			},
+		},
+		"bytes": {
+			data: func(t *testing.T) *anypb.Any {
+				t.Helper()
+				anyB, err := anypb.New(wrapperspb.Bytes([]byte("hello world")))
+				require.NoError(t, err)
+				return anyB
+			},
+			exp: func(t *testing.T, job *runtimev1pb.JobEventRequest) {
+				t.Helper()
+				assert.Equal(t, "type.googleapis.com/google.protobuf.BytesValue", job.GetData().GetTypeUrl())
+				assert.Equal(t, []byte("hello world"), bytes.TrimSpace((job.GetData().GetValue())))
+				var b wrapperspb.BytesValue
+				require.NoError(t, job.GetData().UnmarshalTo(&b))
+				assert.Equal(t, []byte("hello world"), b.GetValue())
+			},
+		},
+		"ping": {
+			data: func(t *testing.T) *anypb.Any {
+				anyB, err := anypb.New(&proto.PingResponse{Value: "pong", Counter: 123})
+				require.NoError(t, err)
+				return anyB
+			},
+			exp: func(t *testing.T, job *runtimev1pb.JobEventRequest) {
+				assert.Equal(t, "type.googleapis.com/dapr.io.testproto.PingResponse", job.GetData().GetTypeUrl())
+				var ping proto.PingResponse
+				require.NoError(t, job.GetData().UnmarshalTo(&ping))
+				assert.Equal(t, "pong", ping.GetValue())
+				assert.Equal(t, int32(123), ping.GetCounter())
+			},
+		},
+	}
 
-		select {
-		case job := <-a.jobChan:
-			assert.NotNil(t, job)
-			assert.Equal(t, "job/test", job.GetMethod())
-
-			var data jobData
-			dataBytes := job.GetData().GetValue()
-
-			err := json.Unmarshal(dataBytes, &data)
+	client := a.daprd.GRPCClient(t, ctx)
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+				Job: &runtimev1pb.Job{
+					Name:    name,
+					DueTime: ptr.Of("0s"),
+					Data:    test.data(t),
+				},
+			})
 			require.NoError(t, err)
 
-			decodedValue, err := base64.StdEncoding.DecodeString(data.Value)
-			require.NoError(t, err)
-
-			actualVal := strings.TrimSpace(string(decodedValue))
-			assert.Equal(t, `{"expression": "val"}`, actualVal)
-
-		case <-time.After(time.Second * 3):
-			assert.Fail(t, "timed out waiting for triggered job")
-		}
-	})
+			select {
+			case job := <-a.jobChan:
+				assert.NotNil(t, job)
+				assert.Equal(t, "job/"+name, job.GetMethod())
+				assert.Equal(t, commonv1pb.HTTPExtension_POST, job.GetHttpExtension().GetVerb())
+				test.exp(t, job)
+			case <-time.After(time.Second * 10):
+				assert.Fail(t, "timed out waiting for triggered job")
+			}
+		})
+	}
 }
