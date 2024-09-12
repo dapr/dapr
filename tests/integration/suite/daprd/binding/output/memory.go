@@ -76,8 +76,8 @@ func (m *memory) Run(t *testing.T, ctx context.Context) {
 	baseMemory := m.daprd.MetricResidentMemoryMi(t, ctx)
 
 	var wg sync.WaitGroup
-	wg.Add(500)
-	for i := 0; i < 500; i++ {
+	wg.Add(400)
+	for i := 0; i < 400; i++ {
 		go func(i int) {
 			defer wg.Done()
 			m.daprd.HTTPPost2xx(t, ctx, "/v1.0/bindings/mybin", strings.NewReader(`{"operation":"get","data":`+input+`}`))

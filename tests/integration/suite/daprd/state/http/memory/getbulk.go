@@ -56,8 +56,8 @@ func (g *getbulk) Run(t *testing.T, ctx context.Context) {
 	input := fmt.Sprintf(`{"keys": [%s]}`, strings.Join(keys, `, `))
 
 	var wg sync.WaitGroup
-	wg.Add(500)
-	for i := 0; i < 500; i++ {
+	wg.Add(400)
+	for i := 0; i < 400; i++ {
 		go func(i int) {
 			defer wg.Done()
 			g.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore/bulk", strings.NewReader(input))

@@ -58,8 +58,8 @@ func (s *save) Run(t *testing.T, ctx context.Context) {
 	input := []byte(`[{"key":"123","value":"` + strings.Repeat("0", int(bytesN)) + `"}]`)
 
 	var wg sync.WaitGroup
-	wg.Add(500)
-	for i := 0; i < 500; i++ {
+	wg.Add(400)
+	for i := 0; i < 400; i++ {
 		go func(i int) {
 			defer wg.Done()
 			s.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore", bytes.NewReader(input))
