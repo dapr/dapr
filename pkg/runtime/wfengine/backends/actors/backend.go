@@ -412,7 +412,7 @@ func (abe *ActorBackend) String() string {
 
 func (abe *ActorBackend) validateConfiguration() error {
 	if abe.actorRuntime == nil {
-		return errors.New("actor runtime has not been configured")
+		return errors.New("actor runtime has not been configured. Ensure Placement is running")
 	}
 	return nil
 }
