@@ -97,7 +97,7 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 			data: `{"@type":"type.googleapis.com/google.protobuf.StringValue","value": "aproto"}`,
 			exp:  `{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"aproto"}`,
 		},
-		"proto-string-space ": {
+		"proto-string-space": {
 			data: `  {  "@type":  "type.googleapis.com/google.protobuf.StringValue","value": "aproto"   }   `,
 			exp:  `{"@type":"type.googleapis.com/google.protobuf.StringValue", "value":"aproto"}`,
 		},
