@@ -397,6 +397,7 @@ func (d *Daprd) http2xx(t assert.TestingT, ctx context.Context, method, path str
 	path = strings.TrimPrefix(path, "/")
 	url := fmt.Sprintf("http://%s/%s", d.HTTPAddress(), path)
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
+	//nolint:testifylint
 	assert.NoError(t, err)
 
 	for i := 0; i < len(headers); i += 2 {
