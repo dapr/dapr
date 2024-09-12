@@ -691,7 +691,6 @@ jobs:
   update-longhauls:
     name: Update the dapr version in longhaul tests
     runs-on: ubuntu-latest
-    needs: helmpublish
     if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr'
     steps:
       - name: Get Token
@@ -701,20 +700,37 @@ jobs:
           app-id: ${{ secrets.APPLICATION_ID }}
           private-key: ${{ secrets.APPLICATION_PRIVATE_KEY }}
           repositories: "test-infra"
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+        with:
+          path: dapr
       - name: Checkout the longhaul tests repo
         uses: actions/checkout@v3
         with:
           repository: dapr/test-infra
           token: ${{ steps.get_workflow_token.outputs.token }}  # Use the generated token
           path: test-infra
+      - name: Install Python Dependencies
+        run: |
+          pip install packaging
       - name: Parse release version and set REL_VERSION and LATEST_RELEASE
-        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+        run: python dapr/.github/scripts/get_release_version.py ${{ github.event_name }}
+
+      - name: Compare versions and determine if update of long haul tests is required
+        id: compare_versions
+        run: |
+          EXISTING_VERSION=$(cat test-infra/config/dapr_runtime.version)
+          echo "Existing version in long haul tests: $EXISTING_VERSION"
+          echo "New version: ${{ env.REL_VERSION }}"
+          python dapr/.github/scripts/compare_versions.py "${{ env.REL_VERSION }}" "$EXISTING_VERSION"
 
       - name: Update dapr runtime version in test-infra
+        if: env.UPDATE_REQUIRED == 'true'
         run: |
           echo "${REL_VERSION}" > test-infra/config/dapr_runtime.version
 
       - name: Commit and Push Changes to repoB
+        if: env.UPDATE_REQUIRED == 'true'
         run: |
           cd test-infra
           git config --global user.name "github-actions"
