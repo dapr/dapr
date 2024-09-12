@@ -43,7 +43,7 @@ type save struct {
 func (s *save) Setup(t *testing.T) []framework.Option {
 	if os.Getenv("GITHUB_ACTIONS") == "true" &&
 		(runtime.GOOS == "windows" || runtime.GOOS == "darwin") {
-		t.SKip("Skipping memory test on Windows and MacOS in GitHub Actions")
+		t.Skip("Skipping memory test on Windows and MacOS in GitHub Actions")
 	}
 
 	s.daprd = daprd.New(t, daprd.WithInMemoryStateStore("mystore"))

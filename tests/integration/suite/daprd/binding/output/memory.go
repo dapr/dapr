@@ -45,7 +45,7 @@ type memory struct {
 func (m *memory) Setup(t *testing.T) []framework.Option {
 	if os.Getenv("GITHUB_ACTIONS") == "true" &&
 		(runtime.GOOS == "windows" || runtime.GOOS == "darwin") {
-		t.SKip("Skipping memory test on Windows and MacOS in GitHub Actions")
+		t.Skip("Skipping memory test on Windows and MacOS in GitHub Actions")
 	}
 
 	app := app.New(t,
