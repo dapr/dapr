@@ -383,37 +383,35 @@ func (d *Daprd) HTTPGet2xx(t *testing.T, ctx context.Context, path string) {
 	d.http2xx(t, ctx, http.MethodGet, path, nil)
 }
 
-func (d *Daprd) HTTPPost2xx(t *testing.T, ctx context.Context, path string, body io.Reader, headers ...string) {
-	t.Helper()
+func (d *Daprd) HTTPPost2xx(t assert.TestingT, ctx context.Context, path string, body io.Reader, headers ...string) {
 	d.http2xx(t, ctx, http.MethodPost, path, body, headers...)
 }
 
-func (d *Daprd) HTTPDelete2xx(t *testing.T, ctx context.Context, path string, body io.Reader, headers ...string) {
-	t.Helper()
+func (d *Daprd) HTTPDelete2xx(t assert.TestingT, ctx context.Context, path string, body io.Reader, headers ...string) {
 	d.http2xx(t, ctx, http.MethodDelete, path, body, headers...)
 }
 
-func (d *Daprd) http2xx(t *testing.T, ctx context.Context, method, path string, body io.Reader, headers ...string) {
-	t.Helper()
-
-	require.Zero(t, len(headers)%2, "headers must be key-value pairs")
+func (d *Daprd) http2xx(t assert.TestingT, ctx context.Context, method, path string, body io.Reader, headers ...string) {
+	assert.Zero(t, len(headers)%2, "headers must be key-value pairs")
 
 	path = strings.TrimPrefix(path, "/")
 	url := fmt.Sprintf("http://%s/%s", d.HTTPAddress(), path)
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	for i := 0; i < len(headers); i += 2 {
 		req.Header.Set(headers[i], headers[i+1])
 	}
 
 	resp, err := d.httpClient.Do(req)
-	require.NoError(t, err)
-	b, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-	require.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code: "+string(b))
-	require.Less(t, resp.StatusCode, 300, "expected 2xx status code: "+string(b))
+	//nolint:testifylint
+	if assert.NoError(t, err) {
+		b, err := io.ReadAll(resp.Body)
+		assert.NoError(t, err)
+		assert.NoError(t, resp.Body.Close())
+		assert.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code: "+string(b))
+		assert.Less(t, resp.StatusCode, 300, "expected 2xx status code: "+string(b))
+	}
 }
 
 func (d *Daprd) GetMetaRegisteredComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {

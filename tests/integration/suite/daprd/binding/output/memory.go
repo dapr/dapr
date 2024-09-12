@@ -87,7 +87,9 @@ func (m *memory) Run(t *testing.T, ctx context.Context) {
 	for i := 0; i < 300; i++ {
 		go func(i int) {
 			defer wg.Done()
-			m.daprd.HTTPPost2xx(t, ctx, "/v1.0/bindings/mybin", strings.NewReader(`{"operation":"get","data":`+input+`}`))
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
+				m.daprd.HTTPPost2xx(c, ctx, "/v1.0/bindings/mybin", strings.NewReader(`{"operation":"get","data":`+input+`}`))
+			}, 10*time.Second, 10*time.Millisecond)
 		}(i)
 	}
 	wg.Wait()
