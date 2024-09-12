@@ -24,12 +24,14 @@ import (
 	"google.golang.org/grpc/codes"
 	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -89,15 +91,15 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 }
 
 // TriggerJob sends the triggered job to the app via gRPC.
-func (g *Channel) TriggerJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (g *Channel) TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
 	if g.appHealth != nil && g.appHealth.GetStatus() != apphealth.AppStatusHealthy {
 		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
 	}
 
-	return g.sendJob(ctx, req)
+	return g.sendJob(ctx, name, data)
 }
 
-func (g *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
+func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
 	if g.ch != nil {
 		g.ch <- struct{}{}
 	}
@@ -108,28 +110,21 @@ func (g *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest
 		}
 	}()
 
-	// Read the request, including the data
-	pd, err := req.ProtoWithData()
-	if err != nil {
-		return nil, err
-	}
-
 	var header, trailer grpcMetadata.MD
-	opts := []grpc.CallOption{
+
+	_, err := g.appCallbackAlphaClient.OnJobEventAlpha1(ctx,
+		&runtimev1pb.JobEventRequest{
+			Name:          name,
+			Data:          data,
+			Method:        "job/" + name,
+			ContentType:   data.GetTypeUrl(),
+			HttpExtension: &commonv1pb.HTTPExtension{Verb: commonv1pb.HTTPExtension_POST},
+		},
 		grpc.Header(&header),
 		grpc.Trailer(&trailer),
 		grpc.MaxCallSendMsgSize(g.maxRequestBodySize),
 		grpc.MaxCallRecvMsgSize(g.maxRequestBodySize),
-	}
-
-	jobReq := &runtimev1pb.JobEventRequest{
-		Data:          pd.GetMessage().GetData(),
-		Method:        pd.GetMessage().GetMethod(),
-		ContentType:   pd.GetMessage().GetContentType(),
-		HttpExtension: pd.GetMessage().GetHttpExtension(),
-	}
-
-	_, err = g.appCallbackAlphaClient.OnJobEventAlpha1(ctx, jobReq, opts...)
+	)
 
 	var rsp *invokev1.InvokeMethodResponse
 	if err != nil {
