@@ -108,6 +108,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--app-health-threshold=" + strconv.Itoa(opts.appHealthProbeThreshold),
 		"--mode=" + opts.mode,
 		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
+		"--enable-profiling",
 	}
 
 	if opts.appPort != nil {
@@ -161,7 +162,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		ports:            fp,
-		httpClient:       client.HTTP(t),
+		httpClient:       client.HTTPWithTimeout(t, 30*time.Second),
 		appID:            opts.appID,
 		namespace:        ns,
 		appProtocol:      opts.appProtocol,
@@ -373,6 +374,10 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	return metrics
 }
 
+func (d *Daprd) MetricResidentMemoryMi(t *testing.T, ctx context.Context) float64 {
+	return d.Metrics(t, ctx)["process_resident_memory_bytes"] * 1e-6
+}
+
 func (d *Daprd) HTTPGet2xx(t *testing.T, ctx context.Context, path string) {
 	t.Helper()
 	d.http2xx(t, ctx, http.MethodGet, path, nil)
@@ -381,6 +386,11 @@ func (d *Daprd) HTTPGet2xx(t *testing.T, ctx context.Context, path string) {
 func (d *Daprd) HTTPPost2xx(t *testing.T, ctx context.Context, path string, body io.Reader, headers ...string) {
 	t.Helper()
 	d.http2xx(t, ctx, http.MethodPost, path, body, headers...)
+}
+
+func (d *Daprd) HTTPDelete2xx(t *testing.T, ctx context.Context, path string, body io.Reader, headers ...string) {
+	t.Helper()
+	d.http2xx(t, ctx, http.MethodDelete, path, body, headers...)
 }
 
 func (d *Daprd) http2xx(t *testing.T, ctx context.Context, method, path string, body io.Reader, headers ...string) {

@@ -28,9 +28,6 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-// To track the metrics for fasthttp using opencensus, this implementation is inspired by
-// https://github.com/census-instrumentation/opencensus-go/tree/master/plugin/ochttp
-
 // Tag key definitions for http requests.
 var (
 	httpStatusCodeKey = tag.MustNewKey("status")
