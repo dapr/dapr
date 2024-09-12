@@ -150,6 +150,10 @@ func (a *apiServer) HTTPEndpointUpdate(in *operatorv1pb.HTTPEndpointUpdateReques
 	key := keyObj.String()
 
 	a.endpointLock.Lock()
+	if a.closed.Load() {
+		a.endpointLock.Unlock()
+		return nil
+	}
 	a.allEndpointsUpdateChan[key] = make(chan *httpendpointsapi.HTTPEndpoint, 1)
 	updateChan := a.allEndpointsUpdateChan[key]
 	a.endpointLock.Unlock()
