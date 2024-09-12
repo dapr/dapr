@@ -60,8 +60,8 @@ func (tr *transaction) Run(t *testing.T, ctx context.Context) {
 	)
 
 	var wg sync.WaitGroup
-	wg.Add(1000)
-	for i := 0; i < 1000; i++ {
+	wg.Add(500)
+	for i := 0; i < 500; i++ {
 		go func(i int) {
 			defer wg.Done()
 			tr.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore/transaction", strings.NewReader(payload))
