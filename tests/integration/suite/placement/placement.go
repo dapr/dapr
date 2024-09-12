@@ -20,4 +20,5 @@ import (
 	_ "github.com/dapr/dapr/tests/integration/suite/placement/ha"
 	_ "github.com/dapr/dapr/tests/integration/suite/placement/quorum"
 	_ "github.com/dapr/dapr/tests/integration/suite/placement/vnodes"
+	_ "github.com/dapr/dapr/tests/integration/suite/placement/errors"
 )
