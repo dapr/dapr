@@ -736,5 +736,5 @@ jobs:
           git config --global user.name "github-actions"
           git config --global user.email "github-actions@github.com"
           git add config/dapr_runtime.version
-          git commit -m "Update dapr_runtime.version to ${REL_VERSION}"
+          git commit -m "Updates dapr runtime version to ${REL_VERSION}"
           git push
