@@ -84,7 +84,7 @@ spec:
 
 	i.daprdsNum = 4
 	i.actorTypesNum = 2
-	i.actorIDsNum = 25
+	i.actorIDsNum = 15
 	i.daprds = make([]*daprd.Daprd, i.daprdsNum)
 	i.actorDaprds = make([]actordaprd, i.daprdsNum)
 	procs := make([]process.Interface, i.daprdsNum*2+2)

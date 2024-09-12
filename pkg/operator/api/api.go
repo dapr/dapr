@@ -76,6 +76,7 @@ type apiServer struct {
 	connLock                  sync.Mutex
 	readyCh                   chan struct{}
 	running                   atomic.Bool
+	closed                    atomic.Bool
 }
 
 // NewAPIServer returns a new API server.
@@ -127,6 +128,7 @@ func (a *apiServer) Run(ctx context.Context) error {
 		func(ctx context.Context) error {
 			// Block until context is done
 			<-ctx.Done()
+			a.closed.Store(true)
 			a.connLock.Lock()
 			for key, ch := range a.allSubscriptionUpdateChan {
 				close(ch)

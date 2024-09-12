@@ -31,11 +31,15 @@ cluster:
   etcdDataDirPath: /var/run/data/dapr-scheduler
   etcdDataDirWinPath: C:\\dapr-scheduler
   storageClassName: ""
-  storageSize: 1Gi
+  storageSize: 16Gi
+  inMemoryStorage: false
 
-etcdSpaceQuota: 2147483648
+etcdSpaceQuota: 16Gi
 etcdCompactionMode: periodic
-etcdCompactionRetention: 24h
+etcdCompactionRetention: 10m
+etcdSnapshotCount: 10000
+etcdMaxSnapshots: 5
+etcdMaxWals: 5
 
 livenessProbe:
   initialDelaySeconds: 10

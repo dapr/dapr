@@ -57,6 +57,7 @@ type workflowActor struct {
 	reminderInterval      time.Duration
 	config                actorsBackendConfig
 	activityResultAwaited atomic.Bool
+	completed             atomic.Bool
 }
 
 type durableTimer struct {
@@ -154,7 +155,11 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 	// Workflow executions should never take longer than a few seconds at the most
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, wf.defaultTimeout)
 	defer cancelTimeout()
-	err := wf.runWorkflow(timeoutCtx, reminder)
+	completed, err := wf.runWorkflow(timeoutCtx, reminder)
+
+	if completed == runCompletedTrue {
+		wf.completed.Store(true)
+	}
 
 	// We delete the reminder on success and on non-recoverable errors.
 	// Returning nil signals that we want the execution to be retried in the next period interval
@@ -164,7 +169,7 @@ func (wf *workflowActor) InvokeReminder(ctx context.Context, reminder actors.Int
 		return actors.ErrReminderCanceled
 	case errors.Is(err, context.DeadlineExceeded):
 		wfLogger.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", wf.actorID, err)
-		return nil
+		return err
 	case errors.Is(err, context.Canceled):
 		wfLogger.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", wf.actorID, err)
 		return nil
@@ -265,6 +270,10 @@ func isStatusMatch(statuses []api.OrchestrationStatus, runtimeStatus api.Orchest
 	return false
 }
 
+func (wf *workflowActor) Completed() bool {
+	return wf.completed.Load()
+}
+
 func (wf *workflowActor) createIfCompleted(ctx context.Context, runtimeState *backend.OrchestrationRuntimeState, state *workflowState, startEvent *backend.HistoryEvent) error {
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
@@ -352,7 +361,6 @@ func (wf *workflowActor) getWorkflowMetadata(ctx context.Context) (*api.Orchestr
 
 func (wf *workflowActor) getWorkflowState(ctx context.Context) (*workflowState, error) {
 	state, err := wf.loadInternalState(ctx)
-	wfLogger.Errorf("Workflow actor '%s': getWorkflowState, state: %s", wf.actorID, state)
 	if err != nil {
 		return nil, err
 	}
@@ -372,6 +380,7 @@ func (wf *workflowActor) purgeWorkflowState(ctx context.Context) error {
 		return api.ErrInstanceNotFound
 	}
 	runtimeState := getRuntimeState(wf.actorID, state)
+	wf.completed.Store(true)
 	return wf.cleanupWorkflowStateInternal(ctx, state, !runtimeState.IsCompleted())
 }
 
@@ -414,30 +423,30 @@ func (wf *workflowActor) getWorkflowName(oldEvents, newEvents []*backend.History
 	return ""
 }
 
-func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.InternalActorReminder) error {
+func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.InternalActorReminder) (runCompleted, error) {
 	state, err := wf.loadInternalState(ctx)
 	if err != nil {
-		return fmt.Errorf("error loading internal state: %w", err)
+		return runCompletedTrue, fmt.Errorf("error loading internal state: %w", err)
 	}
 	if state == nil {
 		// The assumption is that someone manually deleted the workflow state. This is non-recoverable.
-		return errors.New("no workflow state found")
+		return runCompletedTrue, errors.New("no workflow state found")
 	}
 
 	if strings.HasPrefix(reminder.Name, "timer-") {
 		var timerData durableTimer
 		if err = reminder.DecodeData(&timerData); err != nil {
 			// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
-			return err
+			return runCompletedTrue, err
 		}
 		if timerData.Generation < state.Generation {
 			wfLogger.Infof("Workflow actor '%s': ignoring durable timer from previous generation '%v'", wf.actorID, timerData.Generation)
-			return nil
+			return runCompletedFalse, nil
 		} else {
 			e, eventErr := backend.UnmarshalHistoryEvent(timerData.Bytes)
 			if eventErr != nil {
 				// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
-				return fmt.Errorf("failed to unmarshal timer data %w", eventErr)
+				return runCompletedTrue, fmt.Errorf("failed to unmarshal timer data %w", eventErr)
 			}
 			state.Inbox = append(state.Inbox, e)
 		}
@@ -447,7 +456,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 		// This can happen after multiple events are processed in batches; there may still be reminders around
 		// for some of those already processed events.
 		wfLogger.Debugf("Workflow actor '%s': ignoring run request for reminder '%s' because the workflow inbox is empty", wf.actorID, reminder.Name)
-		return nil
+		return runCompletedFalse, nil
 	}
 
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
@@ -487,7 +496,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 			Operations: operations,
 		})
 		if err != nil {
-			return fmt.Errorf("failed to delete activity state for activity actor '%s' with error: %w", activityActorID, err)
+			return runCompletedFalse, fmt.Errorf("failed to delete activity state for activity actor '%s' with error: %w", activityActorID, err)
 		}
 	}
 
@@ -518,9 +527,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 	err = wf.scheduler(ctx, wi)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
-			return newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
+			return runCompletedFalse, newRecoverableError(fmt.Errorf("timed-out trying to schedule a workflow execution - this can happen if there are too many in-flight workflows or if the workflow engine isn't running: %w", err))
 		}
-		return newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
+		return runCompletedFalse, newRecoverableError(fmt.Errorf("failed to schedule a workflow execution: %w", err))
 	}
 
 	wf.recordWorkflowSchedulingLatency(ctx, esHistoryEvent, workflowName)
@@ -537,12 +546,12 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 	case <-ctx.Done(): // caller is responsible for timeout management
 		// Workflow execution failed with recoverable error
 		executionStatus = diag.StatusRecoverable
-		return ctx.Err()
+		return runCompletedFalse, ctx.Err()
 	case completed := <-callback:
 		if !completed {
 			// Workflow execution failed with recoverable error
 			executionStatus = diag.StatusRecoverable
-			return newRecoverableError(errExecutionAborted)
+			return runCompletedFalse, newRecoverableError(errExecutionAborted)
 		}
 	}
 	wfLogger.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", wf.actorID, runtimeState.RuntimeStatus().String(), wi.InstanceID)
@@ -559,11 +568,11 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 		for _, t := range runtimeState.PendingTimers() {
 			tf := t.GetTimerFired()
 			if tf == nil {
-				return errors.New("invalid event in the PendingTimers list")
+				return runCompletedTrue, errors.New("invalid event in the PendingTimers list")
 			}
 			timerBytes, errMarshal := backend.MarshalHistoryEvent(t)
 			if errMarshal != nil {
-				return fmt.Errorf("failed to marshal pending timer data: %w", errMarshal)
+				return runCompletedTrue, fmt.Errorf("failed to marshal pending timer data: %w", errMarshal)
 			}
 			delay := time.Until(tf.GetFireAt().AsTime())
 			if delay < 0 {
@@ -574,7 +583,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 			wfLogger.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer", wf.actorID, reminderPrefix)
 			if _, err = wf.createReliableReminder(ctx, reminderPrefix, data, delay); err != nil {
 				executionStatus = diag.StatusRecoverable
-				return newRecoverableError(fmt.Errorf("actor '%s' failed to create reminder for timer: %w", wf.actorID, err))
+				return runCompletedFalse, newRecoverableError(fmt.Errorf("actor '%s' failed to create reminder for timer: %w", wf.actorID, err))
 			}
 		}
 	}
@@ -602,13 +611,13 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 
 		eventData, errMarshal := backend.MarshalHistoryEvent(e)
 		if errMarshal != nil {
-			return errMarshal
+			return runCompletedTrue, errMarshal
 		}
 		activityRequestBytes, errInternal := actors.EncodeInternalActorData(ActivityRequest{
 			HistoryEvent: eventData,
 		})
 		if errInternal != nil {
-			return errInternal
+			return runCompletedTrue, errInternal
 		}
 		targetActorID := getActivityActorID(wf.actorID, e.GetEventId(), state.Generation)
 
@@ -628,7 +637,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 			continue
 		} else if err != nil {
 			executionStatus = diag.StatusRecoverable
-			return newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.GetName(), err))
+			return runCompletedFalse, newRecoverableError(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.GetName(), err))
 		}
 	}
 
@@ -637,7 +646,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 		for _, msg := range msgList {
 			eventData, errMarshal := backend.MarshalHistoryEvent(msg.HistoryEvent)
 			if errMarshal != nil {
-				return errMarshal
+				return runCompletedTrue, errMarshal
 			}
 
 			requestBytes := eventData
@@ -647,7 +656,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 					StartEventBytes: eventData,
 				})
 				if err != nil {
-					return fmt.Errorf("failed to marshal createWorkflowInstanceRequest: %w", err)
+					return runCompletedTrue, fmt.Errorf("failed to marshal createWorkflowInstanceRequest: %w", err)
 				}
 			}
 
@@ -662,7 +671,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 			if err != nil {
 				executionStatus = diag.StatusRecoverable
 				// workflow-related actor methods are never expected to return errors
-				return newRecoverableError(fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.TargetInstanceID, err))
+				return runCompletedFalse, newRecoverableError(fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.TargetInstanceID, err))
 			}
 		}
 	}
@@ -672,7 +681,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 
 	err = wf.saveInternalState(ctx, state)
 	if err != nil {
-		return err
+		return runCompletedTrue, err
 	}
 	if executionStatus != "" {
 		// If workflow is not completed, set executionStatus to empty string
@@ -690,8 +699,9 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 	}
 	if runtimeState.IsCompleted() {
 		wfLogger.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", wf.actorID, runtimeState.RuntimeStatus().String(), workflowName)
+		return runCompletedTrue, nil
 	}
-	return nil
+	return runCompletedFalse, nil
 }
 
 func (*workflowActor) calculateWorkflowExecutionLatency(state *workflowState) (wfExecutionElapsedTime float64) {
@@ -787,18 +797,13 @@ func (wf *workflowActor) createReliableReminder(ctx context.Context, namePrefix 
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 
-	period := wf.reminderInterval.String()
-	if wf.actors.UsingSchedulerReminders() {
-		period = fmt.Sprintf("R2/PT%vS", int(wf.reminderInterval.Seconds()))
-	}
-
 	return reminderName, wf.actors.CreateReminder(ctx, &actors.CreateReminderRequest{
 		ActorType: wf.config.workflowActorType,
 		ActorID:   wf.actorID,
 		Data:      dataEnc,
 		DueTime:   delay.String(),
 		Name:      reminderName,
-		Period:    period,
+		Period:    wf.reminderInterval.String(),
 	})
 }
 

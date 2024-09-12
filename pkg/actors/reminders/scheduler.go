@@ -18,7 +18,9 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
+	retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -122,7 +124,10 @@ func (s *scheduler) CreateReminder(ctx context.Context, reminder *internal.Creat
 		},
 	}
 
-	_, err = s.clients.Next().ScheduleJob(ctx, internalScheduleJobReq)
+	_, err = s.clients.Next().ScheduleJob(ctx, internalScheduleJobReq,
+		retry.WithMax(3),
+		retry.WithPerRetryTimeout(time.Second/2),
+	)
 	if err != nil {
 		log.Errorf("Error scheduling reminder job %s due to: %s", reminder.Name, err)
 	}
@@ -224,9 +229,8 @@ func (s *scheduler) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 			},
 		},
 	}
-	reqCtx, cancel := context.WithCancel(context.Background())
-	defer cancel()
-	_, err := s.clients.Next().DeleteJob(reqCtx, internalDeleteJobReq)
+
+	_, err := s.clients.Next().DeleteJob(context.Background(), internalDeleteJobReq)
 	if err != nil {
 		log.Errorf("Error deleting reminder job %s due to: %s", req.Name, err)
 	}

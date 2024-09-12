@@ -3,6 +3,7 @@
 // TODO: Read owners from OWNERS file.
 const owners = [
     'addjuarez',
+    'antontroshin',
     'artursouza',
     'ashiquemd',
     'berndverst',

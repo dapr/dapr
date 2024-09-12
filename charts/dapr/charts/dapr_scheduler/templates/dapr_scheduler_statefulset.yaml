@@ -16,17 +16,19 @@ spec:
   selector:
     matchLabels:
       app: dapr-scheduler-server
+  {{- if not .Values.cluster.inMemoryStorage }}
   volumeClaimTemplates:
-  - metadata:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
       name: dapr-scheduler-data-dir
     spec:
       accessModes: [ "ReadWriteOnce" ]
-      {{- if .Values.cluster.storageClassName }}
       storageClassName: {{ .Values.cluster.storageClassName }}
-      {{- end }}
       resources:
         requests:
           storage: {{ .Values.cluster.storageSize }}
+  {{- end }}
   template:
     metadata:
       labels:
@@ -160,9 +162,12 @@ spec:
         - "--enable-metrics=false"
 {{- end }}
         - "--etcd-data-dir={{ if eq .Values.global.daprControlPlaneOs "windows" }}{{ .Values.cluster.etcdDataDirWinPath }}{{- else }}{{ .Values.cluster.etcdDataDirPath }}{{- end }}/{{ .Release.Namespace }}/$(SCHEDULER_ID)"
-        - "--etcd-space-quota={{ int .Values.etcdSpaceQuota }}"
+        - "--etcd-space-quota={{ .Values.etcdSpaceQuota }}"
         - "--etcd-compaction-mode={{ .Values.etcdCompactionMode }}"
         - "--etcd-compaction-retention={{ .Values.etcdCompactionRetention }}"
+        - "--etcd-snapshot-count={{ .Values.etcdSnapshotCount }}"
+        - "--etcd-max-snapshots={{ .Values.etcdMaxSnapshots }}"
+        - "--etcd-max-wals={{ .Values.etcdMaxWals }}"
         - "--tls-enabled"
         - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
         - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"
@@ -203,7 +208,7 @@ spec:
         {{- end }}
       serviceAccountName: dapr-scheduler
       volumes:
-      {{- if not .Values.cluster.storageClassName }}
+      {{- if .Values.cluster.inMemoryStorage }}
       - name: dapr-scheduler-data-dir
         emptyDir:
           medium: Memory
