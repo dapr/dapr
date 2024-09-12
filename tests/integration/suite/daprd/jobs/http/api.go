@@ -47,7 +47,7 @@ func (a *api) Setup(t *testing.T) []framework.Option {
 
 	a.dataCh = make(chan []byte, 1)
 	app := app.New(t,
-		app.WithHandlerFunc("/job/test", func(w http.ResponseWriter, r *http.Request) {
+		app.WithHandlerFunc("/job/", func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
 			require.NoError(t, err)
 			a.dataCh <- body
@@ -73,11 +73,11 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 		data any
 		exp  string
 	}{
-		"simple string": {
+		"simple-string": {
 			data: `"someData"`,
 			exp:  `"someData"`,
 		},
-		"quoted string": {
+		"quoted-string": {
 			data: `"\"xyz\""`,
 			exp:  `"\"xyz\""`,
 		},
@@ -89,15 +89,15 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 			data: `{"expression":"val"}`,
 			exp:  `{"expression":"val"}`,
 		},
-		"object space": {
+		"object-space": {
 			data: `  {    "expression":   "val" } `,
 			exp:  `{"expression":"val"}`,
 		},
-		"proto string": {
+		"proto-string": {
 			data: `{"@type":"type.googleapis.com/google.protobuf.StringValue","value": "aproto"}`,
 			exp:  `{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"aproto"}`,
 		},
-		"proto string space ": {
+		"proto-string-space ": {
 			data: `  {  "@type":  "type.googleapis.com/google.protobuf.StringValue","value": "aproto"   }   `,
 			exp:  `{"@type":"type.googleapis.com/google.protobuf.StringValue", "value":"aproto"}`,
 		},
@@ -108,7 +108,7 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 			t.Helper()
 
 			body := strings.NewReader(fmt.Sprintf(`{"dueTime":"0s","data":%s}`, test.data))
-			a.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/test", body)
+			a.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/"+name, body)
 			select {
 			case data := <-a.dataCh:
 				assert.JSONEq(t, test.exp, string(data))
