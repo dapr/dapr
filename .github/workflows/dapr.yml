@@ -690,6 +690,7 @@ jobs:
 
   update-longhauls:
     name: Update the dapr version in longhaul tests
+    needs: helmpublish
     runs-on: ubuntu-latest
     if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr'
     steps:
