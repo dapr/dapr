@@ -249,12 +249,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 
 	clientID, err := p.validateClient(stream)
 	if err != nil {
-		return apiErrors.PlacementServiceInternalError(fmt.Sprintf("internal error: %s", err))
+		return apiErrors.PlacementServiceInternalError(fmt.Sprintf("internal or unauthenticated error: %s", err))
 	}
 
 	firstMessage, err := p.receiveAndValidateFirstMessage(stream, clientID)
 	if err != nil {
-		return apiErrors.PlacementServiceUnAuthenticated(fmt.Sprintf("permission error: %s", err))
+		return apiErrors.PlacementServicePermissionDenied(fmt.Sprintf("internal of permission denied error: %s", err))
 	}
 
 	// Older versions won't be sending the namespace in subsequent messages either,
@@ -290,7 +290,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			if registeredMemberID == "" {
 				registeredMemberID, err = p.handleNewConnection(req, daprStream, namespace)
 				if err != nil {
-					return apiErrors.PlacementServiceFailedTableUpdate(fmt.Sprintln("handle connection error: ", err))
+					return apiErrors.PlacementServiceFailedPrecondition(fmt.Sprintln("handle connection error: ", err))
 				}
 			}
 
