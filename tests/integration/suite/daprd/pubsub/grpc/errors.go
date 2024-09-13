@@ -429,7 +429,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
-		require.Contains(t, fmt.Sprintf("error when publishing to topic %s in pubsub", topic, name), s.Message())
+		require.Contains(t, fmt.Sprintf("error when publishing to topic %s in pubsub %s", topic, name), s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 1)
