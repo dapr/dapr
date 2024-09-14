@@ -109,6 +109,9 @@ func Run() {
 				EtcdCompactionMode:      opts.EtcdCompactionMode,
 				EtcdCompactionRetention: opts.EtcdCompactionRetention,
 				EtcdClientHTTPPorts:     opts.EtcdClientHTTPPorts,
+				EtcdSnapshotCount:       opts.EtcdSnapshotCount,
+				EtcdMaxSnapshots:        opts.EtcdMaxSnapshots,
+				EtcdMaxWALs:             opts.EtcdMaxWALs,
 			})
 			if serr != nil {
 				return serr

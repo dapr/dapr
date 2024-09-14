@@ -198,6 +198,10 @@ func (ss *grpcStateStore) Features() []state.Feature {
 func (ss *grpcStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
 	_, err := ss.Client.Delete(ctx, toDeleteRequest(req))
 
+	if kerr, ok := pluggable.KitErrorFromGrpcError(err); ok {
+		return kerr
+	}
+
 	return mapDeleteErrs(err)
 }
 
@@ -205,7 +209,7 @@ func (ss *grpcStateStore) Delete(ctx context.Context, req *state.DeleteRequest) 
 func (ss *grpcStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
 	response, err := ss.Client.Get(ctx, toGetRequest(req))
 	if err != nil {
-		return nil, err
+		return nil, pluggable.KitErrorFromGrpcErrorIgnore(err)
 	}
 
 	if response == nil {
@@ -222,6 +226,11 @@ func (ss *grpcStateStore) Set(ctx context.Context, req *state.SetRequest) error 
 		return err
 	}
 	_, err = ss.Client.Set(ctx, protoRequest)
+
+	if kerr, ok := pluggable.KitErrorFromGrpcError(err); ok {
+		return kerr
+	}
+
 	return mapSetErrs(err)
 }
 
@@ -241,6 +250,11 @@ func (ss *grpcStateStore) BulkDelete(ctx context.Context, reqs []state.DeleteReq
 	}
 
 	_, err := ss.Client.BulkDelete(ctx, bulkDeleteRequest)
+
+	if kerr, ok := pluggable.KitErrorFromGrpcError(err); ok {
+		return kerr
+	}
+
 	return mapBulkDeleteErrs(err)
 }
 
@@ -260,7 +274,7 @@ func (ss *grpcStateStore) BulkGet(ctx context.Context, req []state.GetRequest, o
 
 	bulkGetResponse, err := ss.Client.BulkGet(ctx, bulkGetRequest)
 	if err != nil {
-		return nil, err
+		return nil, pluggable.KitErrorFromGrpcErrorIgnore(err)
 	}
 
 	items := make([]state.BulkGetResponse, len(bulkGetResponse.GetItems()))
@@ -293,6 +307,11 @@ func (ss *grpcStateStore) BulkSet(ctx context.Context, req []state.SetRequest, o
 			Parallelism: int64(opts.Parallelism),
 		},
 	})
+
+	if kerr, ok := pluggable.KitErrorFromGrpcError(err); ok {
+		return kerr
+	}
+
 	return mapBulkSetErrs(err)
 }
 
@@ -308,7 +327,7 @@ func (ss *grpcStateStore) Query(ctx context.Context, req *state.QueryRequest) (*
 		Metadata: req.Metadata,
 	})
 	if err != nil {
-		return nil, err
+		return nil, pluggable.KitErrorFromGrpcErrorIgnore(err)
 	}
 	return fromQueryResponse(resp), nil
 }
@@ -327,6 +346,11 @@ func (ss *grpcStateStore) Multi(ctx context.Context, request *state.Transactiona
 		Operations: operations,
 		Metadata:   request.Metadata,
 	})
+
+	if kerr, ok := pluggable.KitErrorFromGrpcError(err); ok {
+		return kerr
+	}
+
 	return err
 }
 
