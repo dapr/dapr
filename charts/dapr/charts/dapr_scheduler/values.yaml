@@ -34,7 +34,7 @@ cluster:
   storageSize: 1Gi
   inMemoryStorage: false
 
-etcdSpaceQuota: 16Gi
+etcdSpaceQuota: 1Gi
 etcdCompactionMode: periodic
 etcdCompactionRetention: 10m
 etcdSnapshotCount: 10000
