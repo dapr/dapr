@@ -777,7 +777,9 @@ func (a *api) onSubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Requ
 	}
 
 	start := time.Now()
-	policyRunner := resiliency.NewRunner[string](r.Context(),
+	// TODO: @joshvanl: This TODO context should be based on the server context, and
+	// closed on Dapr shutdown.
+	policyRunner := resiliency.NewRunner[string](context.TODO(),
 		a.universal.Resiliency().ComponentOutboundPolicy(storeName, resiliency.Configuration),
 	)
 	subscribeID, err := policyRunner(func(ctx context.Context) (string, error) {
