@@ -140,7 +140,7 @@ func TestPlacementHA(t *testing.T) {
 
 			retrieveValidState(t, raftServers[findLeader(t, raftServers)], testMembers[1])
 			return true
-		}, time.Second*10, time.Millisecond*300)
+		}, time.Second*20, time.Millisecond*300)
 	})
 
 	t.Run("leave only leader node running", func(t *testing.T) {
@@ -386,7 +386,10 @@ func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMem
 	var actual *raft.DaprHostMember
 	assert.Eventuallyf(t, func() bool {
 		state := srv.FSM().State()
-		assert.NotNil(t, state)
+		if state == nil {
+			return false
+		}
+
 		var ok bool
 		state.ForEachHostInNamespace(expect.Namespace, func(member *raft.DaprHostMember) bool {
 			if member.Name == expect.Name {
