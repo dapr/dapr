@@ -495,7 +495,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	t.Run("pubsub topic does not exist", func(t *testing.T) {
 		name := mypubsub
 		topic := "invalid-topic"
-		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", name, e.daprd.HTTPPort(), topic)
+		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/%s", e.daprd.HTTPPort(), name, topic)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(""))
 		require.NoError(t, err)
