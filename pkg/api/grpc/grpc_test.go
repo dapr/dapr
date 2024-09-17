@@ -3859,6 +3859,10 @@ func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.Un
 	return nil
 }
 
+func (m *mockConfigStore) Close() error {
+	return nil
+}
+
 func TestTryLock(t *testing.T) {
 	l := logger.NewLogger("fakeLogger")
 	resiliencyConfig := resiliency.FromConfigurations(l, testResiliency)
