@@ -4729,3 +4729,15 @@ func matchContextInterface(v any) bool {
 	_, ok := v.(context.Context)
 	return ok
 }
+
+func (c fakeConfigurationStore) Close() error {
+	return nil
+}
+
+func (l fakeLockStore) Close() error {
+	return nil
+}
+
+func (c fakeStateStore) Close() error {
+	return nil
+}
