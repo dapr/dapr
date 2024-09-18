@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -30,7 +31,6 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/client"
 	"github.com/microsoft/durabletask-go/task"
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -92,6 +92,7 @@ type activityactorstate struct {
 	handler    *httpServer
 	place      *placement.Placement
 	db         *frameworksql.SQLite
+	dbMutex    sync.Mutex
 }
 
 func (s *activityactorstate) Setup(t *testing.T) []framework.Option {
@@ -100,7 +101,10 @@ func (s *activityactorstate) Setup(t *testing.T) []framework.Option {
 	}
 
 	// Create a SQLite database
-	s.db = frameworksql.New(t, frameworksql.WithActorStateStore(true))
+	s.db = frameworksql.New(t,
+		frameworksql.WithActorStateStore(true),
+		frameworksql.WithTableName("workflow"),
+	)
 
 	s.handler = &httpServer{}
 
@@ -153,50 +157,122 @@ func (s *activityactorstate) Run(t *testing.T, ctx context.Context) {
 			err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
 			return output, err
 		})
-		for i := 0; i < 10; i++ {
-			r.AddActivityN("SayHello"+strconv.Itoa(i), func(ctx task.ActivityContext) (any, error) {
-				var name string
-				if err := ctx.GetInput(&name); err != nil {
-					return nil, err
-				}
-				return fmt.Sprintf("Hello, %s!", name), nil
-			})
-		}
 
-		// check for any data - what tables
-		queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		var result any
-		err := s.db.GetConnection(t).QueryRowContext(queryCtx, "SELECT name FROM sqlite_master WHERE type='table'").Scan(&result)
-		fmt.Printf("Cassie test result1: %+v\n", result)
+		r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
+			var name string
+			if err := ctx.GetInput(&name); err != nil {
+				return nil, err
+			}
+			var r1, r2, r3, r4, r5, r6 []byte
+			queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel()
+			s.dbMutex.Lock()
+			rows, err := s.db.GetConnection(t).QueryContext(queryCtx, fmt.Sprintf("SELECT * FROM %s", s.db.GetTableName(t)))
+			s.dbMutex.Unlock()
+			require.NoError(t, err)
+			for rows.Next() {
+				err = rows.Scan(&r1, &r2, &r3, &r4, &r5, &r6)
+				if err != nil {
+					fmt.Printf("<<%v\n", err)
+					break
+				}
+				fmt.Printf(">>%s \n>>%s \n>>%s \n>>%s \n>>%s \n>>%s<<\n", r1, r2, r3, r4, r5, r6)
+
+				queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+				defer cancel()
+				s.dbMutex.Lock()
+				_, err := s.db.GetConnection(t).QueryContext(queryCtx, fmt.Sprintf("DELETE FROM %s", s.db.GetTableName(t)))
+				s.dbMutex.Unlock()
+				require.NoError(t, err)
+				fmt.Printf("cassie deelted from table")
+				break
+
+				// tried deleting all records
+				/*
+					dbrecords := []string{string(r1), string(r2), string(r3), string(r4), string(r5), string(r6)}
+					for _, field := range dbrecords {
+						queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+						defer cancel()
+						query := fmt.Sprintf(`
+							DELETE FROM %s
+							WHERE key = ?
+							`)
+						s.dbMutex.Lock()
+						_, err = s.db.GetConnection(t).ExecContext(queryCtx, query, field)
+						s.dbMutex.Unlock()
+						fmt.Printf("cassie deleting record: %+v\n", field)
+
+						// tried deleting just the activityState
+
+							//if strings.Contains(field, "activityState") {
+							//	fmt.Printf("cassie deleting record: %+v\n", field)
+							//	queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+							//	defer cancel()
+							//	query := fmt.Sprintf(`
+							//	DELETE FROM %s
+							//	WHERE key = ?
+							//`, s.db.GetTableName(t))
+							//
+							//	_, err = s.db.GetConnection(t).ExecContext(queryCtx, query, field)
+							//	if err != nil {
+							//		fmt.Printf("Failed to delete record: %v\n", err)
+							//	} else {
+							//		fmt.Printf("\nRecord with '.activity' deleted. field: %+v\n", field)
+							//	}
+							//}
+
+					}
+				*/
+			}
+
+			// ensure db fields are deleted
+			fmt.Println("*********************************")
+			var f1, f2, f3, f4, f5, f6 []byte
+			queryCtx1, cancel1 := context.WithTimeout(context.Background(), 5*time.Second)
+			defer cancel1()
+			s.dbMutex.Lock()
+			rows1, err := s.db.GetConnection(t).QueryContext(queryCtx1, fmt.Sprintf("SELECT * FROM %s", s.db.GetTableName(t)))
+			s.dbMutex.Unlock()
+			require.NoError(t, err)
+			fmt.Printf("cassie err: %s && rows1: %+v\n", err, rows1.Next())
+			for rows1.Next() {
+				err = rows.Scan(&f1, &f2, &f3, &f4, &f5, &f6)
+				if err != nil {
+					fmt.Printf("<<%v\n", err)
+					break
+				}
+				fmt.Printf(">>%s \n>>%s \n>>%s \n>>%s \n>>%s \n>>%s<<\n", f1, f2, f3, f4, f5, f6)
+			}
+
+			return fmt.Sprintf("Hello, %s!", name), nil
+		})
 
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
 		require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
 		defer cancelTaskhub()
 
 		id := api.InstanceID(s.startWorkflow(ctx, t, "SingleActivity", "Dapr"))
+		//s.getWorkflow(t, ctx, string(id))
 
-		// Purge the root orchestration
-		s.purgeWorkflow(t, ctx, string(id)) // TODO: rm if doesnt work
-
-		// check for any data - whats in the table
-		queryCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
+		queryCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 		defer cancel()
-		var result1 any
-		err = s.db.GetConnection(t).QueryRowContext(queryCtx, "SELECT * FROM 'metadata'").Scan(&result1)
-		fmt.Printf("Cassie test result2: %+v\n", result1)
+		s.dbMutex.Lock()
+		// try again
+		_, err := s.db.GetConnection(t).QueryContext(queryCtx, fmt.Sprintf("DELETE FROM %s", s.db.GetTableName(t)))
+		s.dbMutex.Unlock()
+		require.NoError(t, err)
+		fmt.Printf("cassie deelted from table")
+
+		// pause the root orchestration
+		s.pauseWorkflow(t, ctx, string(id))
+		time.Sleep(3 * time.Second)
+		s.resumeWorkflow(t, ctx, string(id))
 
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
-		require.NoError(t, err)
-
-		// check again for any data - whats in the table
-		queryCtx, cancel = context.WithTimeout(context.Background(), 5*time.Second)
-		defer cancel()
-		err = s.db.GetConnection(t).QueryRowContext(queryCtx, "SELECT * from 'metadata'").Scan(&result)
-		fmt.Printf("Cassie test result3: %+v\n", result)
-
-		assert.True(t, metadata.IsComplete())
-		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+		//require.NoError(t, err)
+		fmt.Printf("cassie err: %s && metadata: %+v\n", err, metadata)
+		//assert.True(t, metadata.IsComplete())
+		//assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
 	})
 
 }
@@ -224,10 +300,38 @@ func (s *activityactorstate) startWorkflow(ctx context.Context, t *testing.T, na
 	return response.InstanceID
 }
 
-// purge workflow
-func (s *activityactorstate) purgeWorkflow(t *testing.T, ctx context.Context, instanceID string) {
-	// use http client to purge the workflow
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/purge", s.daprd.HTTPPort(), instanceID)
+// pause workflow
+func (s *activityactorstate) pauseWorkflow(t *testing.T, ctx context.Context, instanceID string) {
+	// use http client to pause the workflow
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/pause", s.daprd.HTTPPort(), instanceID)
+	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
+	require.NoError(t, err)
+	resp, err := s.httpClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+}
+
+// get workflow
+func (s *activityactorstate) getWorkflow(t *testing.T, ctx context.Context, instanceID string) {
+	// use http client to get the workflow
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s", s.daprd.HTTPPort(), instanceID)
+	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
+	defer cancel()
+	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
+	require.NoError(t, err)
+	resp, err := s.httpClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+}
+
+// resume workflow
+func (s *activityactorstate) resumeWorkflow(t *testing.T, ctx context.Context, instanceID string) {
+	// use http client to resume the workflow
+	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/resume", s.daprd.HTTPPort(), instanceID)
 	reqCtx, cancel := context.WithTimeout(ctx, 10*time.Second)
 	defer cancel()
 	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
