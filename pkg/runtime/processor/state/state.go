@@ -16,7 +16,6 @@ package state
 import (
 	"context"
 	"fmt"
-	"io"
 	"strings"
 	"sync"
 
@@ -162,11 +161,8 @@ func (s *state) Close(comp compapi.Component) error {
 
 	defer s.compStore.DeleteStateStore(comp.Name)
 
-	closer, ok := ss.(io.Closer)
-	if ok && closer != nil {
-		if err := closer.Close(); err != nil {
-			return err
-		}
+	if err := ss.Close(); err != nil {
+		return err
 	}
 
 	return nil

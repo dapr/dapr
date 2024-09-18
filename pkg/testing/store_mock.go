@@ -130,3 +130,11 @@ func (f *FailingConfigurationStore) Subscribe(ctx context.Context, req *configur
 func (f *FailingConfigurationStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
 	return f.Failure.PerformFailure(req.ID)
 }
+
+func (_m *MockConfigurationStore) Close() error {
+	return nil
+}
+
+func (f *FailingConfigurationStore) Close() error {
+	return nil
+}
