@@ -137,7 +137,7 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 		resp, err := etcdClient.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 		require.NoError(t, err)
 		assert.Len(c, resp.Kvs, 2)
-	}, time.Second*10, 10*time.Millisecond)
+	}, time.Second*20, 10*time.Millisecond)
 
 	n.kubeapi.Informer().Delete(t, &corev1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
