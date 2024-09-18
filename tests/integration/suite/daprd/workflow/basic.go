@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -54,6 +55,7 @@ type basic struct {
 	place      *placement.Placement
 	httpClient *http.Client
 	grpcClient runtimev1pb.DaprClient
+	db         *sqlite.SQLite
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
@@ -63,15 +65,19 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	})
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	b.place = placement.New(t)
+	b.db = sqlite.New(t,
+		sqlite.WithActorStateStore(true),
+		sqlite.WithTableName("helloworld"),
+	)
 	b.daprd = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithPlacementAddresses(b.place.Address()),
-		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithResourceFiles(b.db.GetComponent(t)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(b.place, srv, b.daprd),
+		framework.WithProcesses(b.place, srv, b.db, b.daprd),
 	}
 }
 
@@ -108,6 +114,18 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			if err := ctx.GetInput(&name); err != nil {
 				return nil, err
 			}
+			var r1, r2, r3, r4, r5, r6 []byte
+			rows, err := b.db.GetConnection(t).QueryContext(context.Background(), "SELECT * FROM helloworld")
+			require.NoError(t, err)
+			for rows.Next() {
+				err = rows.Scan(&r1, &r2, &r3, &r4, &r5, &r6)
+				if err != nil {
+					fmt.Printf("<<%v\n", err)
+					break
+				}
+				fmt.Printf(">>%s %s %s %s %s %s<<\n", r1, r2, r3, r4, r5, r6)
+			}
+
 			return fmt.Sprintf("Hello, %s!", name), nil
 		})
 		taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
