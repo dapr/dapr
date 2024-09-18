@@ -27,10 +27,12 @@ type ActorLock struct {
 	activeRequest *string
 	stackDepth    atomic.Int32
 	maxStackDepth int32
+	lockChan      chan struct{}
 }
 
 func NewActorLock(maxStackDepth int32) *ActorLock {
 	return &ActorLock{
+		lockChan:      make(chan struct{}, 1),
 		maxStackDepth: maxStackDepth,
 	}
 }
@@ -43,7 +45,8 @@ func (a *ActorLock) Lock(requestID *string) error {
 	}
 
 	if currentRequest == nil || *currentRequest != *requestID {
-		a.methodLock.Lock()
+		//a.methodLock.Lock()
+		a.lockChan <- struct{}{}
 		a.setCurrentID(requestID)
 		a.stackDepth.Add(1)
 	} else {
@@ -57,7 +60,8 @@ func (a *ActorLock) Unlock() {
 	a.stackDepth.Add(-1)
 	if a.stackDepth.Load() == 0 {
 		a.clearCurrentID()
-		a.methodLock.Unlock()
+		//a.methodLock.Unlock()
+		<-a.lockChan
 	}
 }
 
