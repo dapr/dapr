@@ -73,7 +73,7 @@ type apiServer struct {
 	endpointLock              sync.Mutex
 	allEndpointsUpdateChan    map[string]chan *httpendpointsapi.HTTPEndpoint
 	allSubscriptionUpdateChan map[string]chan *SubscriptionUpdateEvent
-	connLock                  sync.Mutex
+	subLock                   sync.Mutex
 	readyCh                   chan struct{}
 	running                   atomic.Bool
 	closed                    atomic.Bool
@@ -129,12 +129,18 @@ func (a *apiServer) Run(ctx context.Context) error {
 			// Block until context is done
 			<-ctx.Done()
 			a.closed.Store(true)
-			a.connLock.Lock()
+			a.subLock.Lock()
 			for key, ch := range a.allSubscriptionUpdateChan {
 				close(ch)
 				delete(a.allSubscriptionUpdateChan, key)
 			}
-			a.connLock.Unlock()
+			a.subLock.Unlock()
+			a.endpointLock.Lock()
+			for key, ch := range a.allEndpointsUpdateChan {
+				close(ch)
+				delete(a.allEndpointsUpdateChan, key)
+			}
+			a.endpointLock.Unlock()
 			s.GracefulStop()
 			return nil
 		},
