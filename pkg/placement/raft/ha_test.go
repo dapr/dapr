@@ -1,4 +1,4 @@
-package placement
+package raft
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/healthz"
-	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/security/fake"
 	daprtesting "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
@@ -25,16 +24,16 @@ func init() {
 	})
 }
 
-func TestPlacementHA(t *testing.T) {
+func TestRaftHA(t *testing.T) {
 	// Get 3 ports
 	ports, err := daprtesting.GetFreePorts(3)
 	if err != nil {
-		log.Fatalf("failed to get 3 ports: %v", err)
+		logging.Fatalf("failed to get 3 ports: %v", err)
 		return
 	}
 
 	// Note that ports below are unused (i.e. no service is started on those ports), they are just used as identifiers with the IP address
-	testMembers := []*raft.DaprHostMember{
+	testMembers := []*DaprHostMember{
 		{
 			Name:      "127.0.0.1:3031",
 			Namespace: "ns1",
@@ -56,12 +55,12 @@ func TestPlacementHA(t *testing.T) {
 	}
 
 	// Create 3 raft servers
-	raftServers := make([]*raft.Server, 3)
+	raftServers := make([]*Server, 3)
 	ready := make([]<-chan struct{}, 3)
 	raftServerCancel := make([]context.CancelFunc, 3)
-	peers := make([]raft.PeerInfo, 3)
+	peers := make([]PeerInfo, 3)
 	for i := 0; i < 3; i++ {
-		peers[i] = raft.PeerInfo{
+		peers[i] = PeerInfo{
 			ID:      fmt.Sprintf("mynode-%d", i),
 			Address: fmt.Sprintf("127.0.0.1:%d", ports[i]),
 		}
@@ -93,7 +92,7 @@ func TestPlacementHA(t *testing.T) {
 	t.Run("set and retrieve state in leader", func(t *testing.T) {
 		assert.Eventually(t, func() bool {
 			lead := findLeader(t, raftServers)
-			_, err := raftServers[lead].ApplyCommand(raft.MemberUpsert, *testMembers[0])
+			_, err := raftServers[lead].ApplyCommand(MemberUpsert, *testMembers[0])
 			if errors.Is(err, hcraft.ErrLeadershipLost) || errors.Is(err, hcraft.ErrNotLeader) {
 				// If leadership is lost, we should retry
 				return false
@@ -131,7 +130,7 @@ func TestPlacementHA(t *testing.T) {
 
 	t.Run("set and retrieve state in leader after re-election", func(t *testing.T) {
 		assert.Eventually(t, func() bool {
-			_, err := raftServers[findLeader(t, raftServers)].ApplyCommand(raft.MemberUpsert, *testMembers[1])
+			_, err := raftServers[findLeader(t, raftServers)].ApplyCommand(MemberUpsert, *testMembers[1])
 			if errors.Is(err, hcraft.ErrLeadershipLost) || errors.Is(err, hcraft.ErrNotLeader) {
 				// If leadership is lost, we should retry
 				return false
@@ -140,7 +139,7 @@ func TestPlacementHA(t *testing.T) {
 
 			retrieveValidState(t, raftServers[findLeader(t, raftServers)], testMembers[1])
 			return true
-		}, time.Second*10, time.Millisecond*300)
+		}, time.Second*20, time.Millisecond*300)
 	})
 
 	t.Run("leave only leader node running", func(t *testing.T) {
@@ -285,10 +284,10 @@ func TestPlacementHA(t *testing.T) {
 	}
 }
 
-func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Server, <-chan struct{}, context.CancelFunc) {
+func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-chan struct{}, context.CancelFunc) {
 	clock := clocktesting.NewFakeClock(time.Now())
 
-	srv := raft.New(raft.Options{
+	srv := New(Options{
 		ID:           fmt.Sprintf("mynode-%d", nodeID),
 		InMem:        true,
 		Peers:        peers,
@@ -353,7 +352,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 	}
 }
 
-func findLeader(t *testing.T, raftServers []*raft.Server) int {
+func findLeader(t *testing.T, raftServers []*Server) int {
 	// Ensure that one node became leader
 	n := -1
 	require.Eventually(t, func() bool {
@@ -380,15 +379,18 @@ func findLeader(t *testing.T, raftServers []*raft.Server) int {
 	return n
 }
 
-func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMember) {
+func retrieveValidState(t *testing.T, srv *Server, expect *DaprHostMember) {
 	t.Helper()
 
-	var actual *raft.DaprHostMember
+	var actual *DaprHostMember
 	assert.Eventuallyf(t, func() bool {
 		state := srv.FSM().State()
-		assert.NotNil(t, state)
+		if state == nil {
+			return false
+		}
+
 		var ok bool
-		state.ForEachHostInNamespace(expect.Namespace, func(member *raft.DaprHostMember) bool {
+		state.ForEachHostInNamespace(expect.Namespace, func(member *DaprHostMember) bool {
 			if member.Name == expect.Name {
 				actual = member
 				ok = true
