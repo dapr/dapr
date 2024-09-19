@@ -180,7 +180,7 @@ func TestDisconnect(t *testing.T) {
 		}()
 		client.disconnectFn(shouldBeCalled, true)
 		ready.Wait()
-		assert.Equal(t, connectivity.Shutdown, client.clientConn.GetState())
+		assert.Nil(t, client.clientConn)
 		assert.True(t, called)
 	})
 	t.Run("disconnectFn should broadcast not connected when disconnected and should drain and execute func inside lock, reusing connection", func(t *testing.T) {

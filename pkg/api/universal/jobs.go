@@ -15,12 +15,15 @@ package universal
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"time"
 
 	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
@@ -30,10 +33,27 @@ const (
 )
 
 func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
-	return a.ScheduleJobRequestAlpha1(ctx, inReq.GetJob())
+	return a.scheduleJob(ctx, inReq.GetJob())
 }
 
-func (a *Universal) ScheduleJobRequestAlpha1(ctx context.Context, job *runtimev1pb.Job) (*runtimev1pb.ScheduleJobResponse, error) {
+func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1pb.JobHTTPRequest) (*runtimev1pb.ScheduleJobResponse, error) {
+	data, err := anypb.New(job.GetData())
+	if err != nil {
+		return &runtimev1pb.ScheduleJobResponse{}, fmt.Errorf("error creating storable job data from job: %w", err)
+	}
+
+	//nolint:protogetter
+	return a.scheduleJob(ctx, &runtimev1pb.Job{
+		Name:     job.GetName(),
+		Schedule: job.Schedule,
+		Repeats:  job.Repeats,
+		DueTime:  job.DueTime,
+		Ttl:      job.Ttl,
+		Data:     data,
+	})
+}
+
+func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*runtimev1pb.ScheduleJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
