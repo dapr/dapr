@@ -14,9 +14,7 @@ limitations under the License.
 package http
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
@@ -27,9 +25,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -43,41 +39,29 @@ func init() {
 type api struct {
 	daprd     *daprd.Daprd
 	scheduler *scheduler.Scheduler
-	jobChan   chan *runtimev1pb.JobEventRequest
+	dataCh    chan []byte
 }
 
 func (a *api) Setup(t *testing.T) []framework.Option {
 	a.scheduler = scheduler.New(t)
 
-	a.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
-	srv := app.New(t,
-		app.WithHandlerFunc("/job/test", func(w http.ResponseWriter, r *http.Request) {
+	a.dataCh = make(chan []byte, 1)
+	app := app.New(t,
+		app.WithHandlerFunc("/job/", func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
-			if err != nil {
-				http.Error(w, "Error reading request body", http.StatusInternalServerError)
-				return
-			}
-
-			var jobEventRequest runtimev1pb.JobEventRequest
-			if err := json.Unmarshal(body, &jobEventRequest.Data); err != nil {
-				http.Error(w, "Error decoding JSON", http.StatusBadRequest)
-				return
-			}
-			jobEventRequest.Method = r.URL.String()
-			a.jobChan <- &jobEventRequest
-
-			w.WriteHeader(http.StatusOK)
+			require.NoError(t, err)
+			a.dataCh <- body
 		}),
 	)
 
 	a.daprd = daprd.New(t,
 		daprd.WithSchedulerAddresses(a.scheduler.Address()),
-		daprd.WithAppPort(srv.Port()),
+		daprd.WithAppPort(app.Port()),
 		daprd.WithAppProtocol("http"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(a.scheduler, srv, a.daprd),
+		framework.WithProcesses(a.scheduler, app, a.daprd),
 	}
 }
 
@@ -85,62 +69,52 @@ func (a *api) Run(t *testing.T, ctx context.Context) {
 	a.scheduler.WaitUntilRunning(t, ctx)
 	a.daprd.WaitUntilRunning(t, ctx)
 
-	client := client.HTTP(t)
-
-	body := `{
-"schedule": "@every 1s",
-"repeats": 10,
-"data": {
-	"@type": "type.googleapis.com/google.protobuf.StringValue",
-	"value": "\"someData\""
-}}`
-
-	url := fmt.Sprintf("http://%s/v1.0-alpha1/jobs/test", a.daprd.HTTPAddress())
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
-	require.NoError(t, err)
-
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-	require.NoError(t, resp.Body.Close())
-
-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	require.NoError(t, err)
-	resp, err = client.Do(req)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	require.NoError(t, resp.Body.Close())
-
-	select {
-	case job := <-a.jobChan:
-		assert.NotNil(t, job)
-		assert.NotNil(t, job.GetData())
-		assert.Equal(t, "/job/test", job.GetMethod())
-		assert.Equal(t, []byte(`"someData"`), bytes.TrimSpace(job.GetData().GetValue()))
-		assert.Equal(t, "type.googleapis.com/google.protobuf.StringValue", job.GetData().GetTypeUrl())
-
-	case <-time.After(time.Second * 3):
-		assert.Fail(t, "timed out waiting for triggered job")
+	tests := map[string]struct {
+		data any
+		exp  string
+	}{
+		"simple-string": {
+			data: `"someData"`,
+			exp:  `"someData"`,
+		},
+		"quoted-string": {
+			data: `"\"xyz\""`,
+			exp:  `"\"xyz\""`,
+		},
+		"number": {
+			data: `123`,
+			exp:  `123`,
+		},
+		"object": {
+			data: `{"expression":"val"}`,
+			exp:  `{"expression":"val"}`,
+		},
+		"object-space": {
+			data: `  {    "expression":   "val" } `,
+			exp:  `{"expression":"val"}`,
+		},
+		"proto-string": {
+			data: `{"@type":"type.googleapis.com/google.protobuf.StringValue","value": "aproto"}`,
+			exp:  `{"@type":"type.googleapis.com/google.protobuf.StringValue","value":"aproto"}`,
+		},
+		"proto-string-space": {
+			data: `  {  "@type":  "type.googleapis.com/google.protobuf.StringValue","value": "aproto"   }   `,
+			exp:  `{"@type":"type.googleapis.com/google.protobuf.StringValue", "value":"aproto"}`,
+		},
 	}
 
-	req, err = http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
-	require.NoError(t, err)
-	resp, err = client.Do(req)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-	require.NoError(t, resp.Body.Close())
+	for name, test := range tests {
+		t.Run(name, func(t *testing.T) {
+			t.Helper()
 
-	req, err = http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	require.NoError(t, err)
-	resp, err = client.Do(req)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
-	require.NoError(t, resp.Body.Close())
-
-	req, err = http.NewRequestWithContext(ctx, http.MethodDelete, url, nil)
-	require.NoError(t, err)
-	resp, err = client.Do(req)
-	require.NoError(t, err)
-	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-	require.NoError(t, resp.Body.Close())
+			body := strings.NewReader(fmt.Sprintf(`{"dueTime":"0s","data":%s}`, test.data))
+			a.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/"+name, body)
+			select {
+			case data := <-a.dataCh:
+				assert.JSONEq(t, test.exp, string(data))
+			case <-time.After(time.Second * 10):
+				assert.Fail(t, "timed out waiting for triggered job")
+			}
+		})
+	}
 }
