@@ -24,3 +24,7 @@ func (m *MockResolver) ResolveID(_ context.Context, req nr.ResolveRequest) (stri
 	args := m.Called(req)
 	return args.String(0), args.Error(1)
 }
+
+func (m *MockResolver) Close() error {
+	return nil
+}
