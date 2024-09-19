@@ -103,3 +103,7 @@ func (w *MockWorkflow) Purge(ctx context.Context, req *workflowContrib.PurgeRequ
 	}
 	return nil
 }
+
+func (w *MockWorkflow) Close() error {
+	return nil
+}
