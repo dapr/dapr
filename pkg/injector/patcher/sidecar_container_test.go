@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestParseEnvString(t *testing.T) {
@@ -848,6 +849,58 @@ func TestGetSidecarContainer(t *testing.T) {
 				assert.NotNil(t, container.SecurityContext.Capabilities, "SecurityContext.Capabilities should not be nil")
 				assert.Equal(t, corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}, *container.SecurityContext.Capabilities, "SecurityContext.Capabilities should drop all capabilities")
 				assert.Nil(t, container.SecurityContext.SeccompProfile)
+			},
+		},
+		{
+			name: "set run as non root explicitly true",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsNonRoot = true
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
+				assert.Equal(t, ptr.Of(true), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be true")
+			},
+		},
+		{
+			name: "set run as non root explicitly false",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsNonRoot = false
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
+				assert.Equal(t, ptr.Of(false), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be false")
+			},
+		},
+		{
+			name: "set run as user 1000",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsUser = ptr.Of(int64(1000))
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should not be nil")
+				assert.Equal(t, ptr.Of(int64(1000)), container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be 1000")
+			},
+		},
+		{
+			name: "do not set run as user leave it as default",
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be nil")
+			},
+		},
+		{
+			name: "set run as group 3000",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsGroup = ptr.Of(int64(3000))
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should not be nil")
+				assert.Equal(t, ptr.Of(int64(3000)), container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be 3000")
+			},
+		},
+		{
+			name: "do not set run as group leave it as default",
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be nil")
 			},
 		},
 	}))

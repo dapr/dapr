@@ -212,6 +212,8 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	securityContext := &corev1.SecurityContext{
 		AllowPrivilegeEscalation: ptr.Of(false),
 		RunAsNonRoot:             ptr.Of(c.RunAsNonRoot),
+		RunAsUser:                c.RunAsUser,
+		RunAsGroup:               c.RunAsGroup,
 		ReadOnlyRootFilesystem:   ptr.Of(c.ReadOnlyRootFilesystem),
 	}
 	if c.SidecarSeccompProfileType != "" {
@@ -339,6 +341,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			// However certain security scanner may complain about this.
 			container.SecurityContext.RunAsNonRoot = ptr.Of(false)
 			container.SecurityContext.ReadOnlyRootFilesystem = ptr.Of(false)
+
+			// Set RunAsUser and RunAsGroup to default nil to avoid the error when specific user or group is set previously via helm chart.
+			container.SecurityContext.RunAsUser = nil
+			container.SecurityContext.RunAsGroup = nil
 			break
 		}
 	}
