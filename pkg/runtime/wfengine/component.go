@@ -244,3 +244,7 @@ func getStatusString(status int32) string {
 	}
 	return "UNKNOWN"
 }
+
+func (c *workflowEngineComponent) Close() error {
+	return nil
+}
