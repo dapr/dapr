@@ -121,9 +121,9 @@ func New(origArgs []string) (*Options, error) {
 	fs.IntVar(&opts.MaxAPILevel, "max-api-level", 10, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
 	fs.IntVar(&opts.MinAPILevel, "min-api-level", 0, "Enforces a minimum 'api-level' in the cluster")
 	fs.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
-	fs.DurationVar(&opts.KeepAliveTime, "keepalive-time", defaultKeepAliveTime, "sets the gRPC keepalive time (in seconds) for the placement-daprd stream")
-	fs.DurationVar(&opts.KeepAliveTimeout, "keepalive-timeout", defaultKeepAliveTimeout, "sets the gRPC keepalive timeout (in seconds) for the placement-daprd stream")
-	fs.DurationVar(&opts.DisseminateTimeout, "disseminate-timeout", defaultDisseminateTimeout, "sets the timeout period (in seconds) for dissemination to be delayed after actor membership change (usually related to pod restarts) so as to avoid excessive dissemination during multiple pod restarts")
+	fs.DurationVar(&opts.KeepAliveTime, "keepalive-time", defaultKeepAliveTime, "sets the interval at which the placement service sends keepalive pings to daprd \non the gRPC stream to check if the connection is still alive. \nLower values will lead to shorter actor rebalancing time in case of pod loss/restart, \nbut higher network traffic during normal operation. \nAccepts values between 1 and 10 seconds")
+	fs.DurationVar(&opts.KeepAliveTimeout, "keepalive-timeout", defaultKeepAliveTimeout, "sets the timeout period for daprd to respond to the placement service's keepalive pings \nbefore the placement service closes the connection. \nLower values will lead to shorter actor rebalancing time in case of pod loss/restart, \nbut higher network traffic during normal operation. \nAccepts values between 1 and 10 seconds")
+	fs.DurationVar(&opts.DisseminateTimeout, "disseminate-timeout", defaultDisseminateTimeout, "sets the timeout period for dissemination to be delayed after actor membership change \nso as to avoid excessive dissemination during multiple pod restarts. \nHigher values will reduce the frequency of dissemination, but delay the table dissemination. \nAccepts values between 1 and 5 seconds")
 
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
