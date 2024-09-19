@@ -346,7 +346,11 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 			for _, l := range m.GetLabel() {
 				key += "|" + l.GetName() + ":" + l.GetValue()
 			}
-			metrics[key] = m.GetCounter().GetValue()
+			if m.GetCounter() != nil {
+				metrics[key] = m.GetCounter().GetValue()
+			} else { // GetValue() returns 0 if the metric is nilptr
+				metrics[key] = m.GetGauge().GetValue()
+			}
 		}
 	}
 
