@@ -250,10 +250,8 @@ func (s *server) Close() error {
 	}
 
 	if s.api != nil {
-		if closer, ok := s.api.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				return err
-			}
+		if err := s.api.Close(); err != nil {
+			return err
 		}
 	}
 
