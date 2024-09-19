@@ -1514,6 +1514,17 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				log.Debug(status)
 				return
 			}
+
+			if req.Metadata != nil {
+				if upsertReq.Metadata == nil {
+					upsertReq.Metadata = metadata
+				} else {
+					for k, v := range metadata {
+						upsertReq.Metadata[k] = v
+					}
+				}
+			}
+
 			operations = append(operations, upsertReq)
 		case string(state.OperationDelete):
 			var delReq state.DeleteRequest
@@ -1532,6 +1543,17 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 
 				return
 			}
+
+			if req.Metadata != nil {
+				if delReq.Metadata == nil {
+					delReq.Metadata = metadata
+				} else {
+					for k, v := range metadata {
+						delReq.Metadata[k] = v
+					}
+				}
+			}
+
 			operations = append(operations, delReq)
 		default:
 			msg := NewErrorResponse(
