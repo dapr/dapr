@@ -21,7 +21,7 @@ from packaging.version import Version, InvalidVersion
 
 # compare_versions returns True if the comparison is successful.
 # It returns False if the versions are invalid.
-# The result of the comparison is written to the UPDATE_REQUIRED GitHub environment variable.
+# The result of the comparison is written to the VERSION_UPDATE_REQUIRED GitHub environment variable.
 def compare_versions(new_version, existing_version) -> bool:
     try:
         new_ver = Version(new_version)
@@ -38,7 +38,7 @@ def compare_versions(new_version, existing_version) -> bool:
     github_env_path = os.getenv("GITHUB_ENV")
     if github_env_path:
         with open(github_env_path, "a") as github_env:
-            github_env.write(f"UPDATE_REQUIRED={str(update_required).lower()}\n")
+            github_env.write(f"VERSION_UPDATE_REQUIRED={str(update_required).lower()}\n")
 
     return True
 

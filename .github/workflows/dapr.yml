@@ -726,12 +726,12 @@ jobs:
           python dapr/.github/scripts/compare_versions.py "${{ env.REL_VERSION }}" "$EXISTING_VERSION"
 
       - name: Update dapr runtime version in test-infra
-        if: env.UPDATE_REQUIRED == 'true'
+        if: env.VERSION_UPDATE_REQUIRED == 'true'
         run: |
           echo "${REL_VERSION}" > test-infra/config/dapr_runtime.version
 
       - name: Commit and Push Changes to repoB
-        if: env.UPDATE_REQUIRED == 'true'
+        if: env.VERSION_UPDATE_REQUIRED == 'true'
         run: |
           cd test-infra
           git config --global user.name "github-actions"
