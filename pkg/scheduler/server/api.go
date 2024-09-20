@@ -184,6 +184,7 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 		log.Errorf("Error sending job to connection stream: %s", err)
 	}
 
+	monitoring.RecordJobsTriggeredCount(meta.GetNamespace(), meta.GetAppId())
 	return true
 }
 

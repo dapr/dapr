@@ -41,8 +41,8 @@ var (
 		"scheduler/trigger_duration_total",
 		"The total time it takes to trigger a job.",
 		stats.UnitDimensionless)
-	jobsSuccessfullyTriggeredTotal = stats.Int64(
-		"scheduler/jobs_successfully_triggered_total",
+	jobsTriggeredTotal = stats.Int64(
+		"scheduler/jobs_triggered_total",
 		"The total number of successfully triggered jobs.",
 		stats.UnitDimensionless)
 
@@ -70,7 +70,12 @@ func RecordJobsScheduledCount(jobMetadata *schedulerv1pb.JobMetadata) {
 	stats.RecordWithTags(context.Background(), diagUtils.WithTags(jobsScheduledTotal.Name(), appIDKey, jobMetadata.GetAppId(), jobType), jobsScheduledTotal.M(1))
 }
 
-//TODO ADD: triggerDurationTotal && jobsSuccessfullyTriggeredTotal
+// RecordJobsTriggeredCount records the total number of jobs successfully triggered from the scheduler service
+func RecordJobsTriggeredCount(ns string, appID string) {
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(jobsTriggeredTotal.Name(), appIDKey, ns, appID), jobsTriggeredTotal.M(1))
+}
+
+//TODO ADD: triggerDurationTotal
 
 // InitMetrics initialize the scheduler service metrics.
 func InitMetrics() error {
@@ -78,7 +83,7 @@ func InitMetrics() error {
 		diagUtils.NewMeasureView(sidecarsConnectedTotal, []tag.Key{appIDKey}, view.Count()),
 		diagUtils.NewMeasureView(jobsScheduledTotal, []tag.Key{appIDKey}, view.Count()),
 		diagUtils.NewMeasureView(triggerDurationTotal, []tag.Key{appIDKey}, view.Count()),
-		diagUtils.NewMeasureView(jobsSuccessfullyTriggeredTotal, []tag.Key{appIDKey}, view.Count()),
+		diagUtils.NewMeasureView(jobsTriggeredTotal, []tag.Key{appIDKey}, view.Count()),
 	)
 
 	return err
