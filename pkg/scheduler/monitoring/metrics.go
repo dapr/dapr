@@ -19,7 +19,7 @@ import (
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
-	
+
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
@@ -51,9 +51,9 @@ var (
 )
 
 // RecordSidecarsConnectedCount records the number of dapr sidecars connected to the scheduler service
-func RecordSidecarsConnectedCount(appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(sidecarsConnectedTotal.Name(), appIDKey, appID), sidecarsConnectedTotal.M(1))
-} //TODO FINISH
+func RecordSidecarsConnectedCount(ns string, appID string) {
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(sidecarsConnectedTotal.Name(), appIDKey, ns, appID), sidecarsConnectedTotal.M(1))
+}
 
 // RecordJobsScheduledCount records the number of jobs scheduled to the scheduler service
 func RecordJobsScheduledCount(jobMetadata *schedulerv1pb.JobMetadata) {

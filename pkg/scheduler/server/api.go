@@ -146,6 +146,7 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 	}
 
 	s.connectionPool.Add(req.GetInitial(), stream)
+	monitoring.RecordSidecarsConnectedCount(req.GetInitial().GetNamespace(), req.GetInitial().GetAppId())
 
 	select {
 	case <-s.closeCh:
