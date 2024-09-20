@@ -41,7 +41,7 @@ func ExampleNewRunnerWithOptions_accumulator() {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionFilter()),
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionMatch()),
 	}
 
 	// Handler function
@@ -83,7 +83,7 @@ func ExampleNewRunnerWithOptions_disposer() {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionFilter()),
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionMatch()),
 	}
 
 	// Handler function
@@ -142,7 +142,7 @@ func TestPolicy(t *testing.T) {
 		"empty": {},
 		"all": {
 			t:  10 * time.Millisecond,
-			r:  NewRetry(retryValue, NewRetryConditionFilter()),
+			r:  NewRetry(retryValue, NewRetryConditionMatch()),
 			cb: &cbValue,
 		},
 		"nil policy": nil,
@@ -257,7 +257,7 @@ func TestPolicyRetry(t *testing.T) {
 				log:  testLog,
 				name: "retry",
 				t:    10 * time.Millisecond,
-				r:    NewRetry(retry.Config{MaxRetries: test.maxRetries}, NewRetryConditionFilter()),
+				r:    NewRetry(retry.Config{MaxRetries: test.maxRetries}, NewRetryConditionMatch()),
 			})
 			_, err := policy(fn)
 			if err != nil {
@@ -268,7 +268,7 @@ func TestPolicyRetry(t *testing.T) {
 	}
 }
 
-func TestPolicyRetryWithFilter(t *testing.T) {
+func TestPolicyRetryWithMatch(t *testing.T) {
 	tests := []struct {
 		name         string
 		maxCalls     int32
@@ -317,13 +317,13 @@ func TestPolicyRetryWithFilter(t *testing.T) {
 				return struct{}{}, nil
 			}
 
-			filter, err := ParseRetryConditionFilter(test.matching)
+			match, err := ParseRetryConditionMatch(test.matching)
 			require.NoError(t, err)
 			policy := NewRunner[struct{}](context.Background(), &PolicyDefinition{
 				log:  testLog,
 				name: "retry",
 				t:    10 * time.Millisecond,
-				r:    NewRetry(retry.Config{MaxRetries: test.maxRetries}, filter),
+				r:    NewRetry(retry.Config{MaxRetries: test.maxRetries}, match),
 			})
 			_, err = policy(fn)
 			if err != nil {
@@ -360,7 +360,7 @@ func TestPolicyAccumulator(t *testing.T) {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionFilter()),
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionMatch()),
 	}
 	var accumulatorCalled int
 	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
@@ -404,7 +404,7 @@ func TestPolicyDisposer(t *testing.T) {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    NewRetry(retry.Config{MaxRetries: 5}, NewRetryConditionFilter()),
+		r:    NewRetry(retry.Config{MaxRetries: 5}, NewRetryConditionMatch()),
 	}
 	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
 		Disposer: func(i int32) {

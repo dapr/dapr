@@ -50,7 +50,7 @@ spec:
         duration: 5s
         maxRetries: 3
 
-      withFilter:
+      withMatch:
         policy: constant
         duration: 5s
         maxRetries: 3

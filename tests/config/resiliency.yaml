@@ -13,7 +13,7 @@ spec:
         policy: constant
         duration: 10ms
         maxRetries: 5
-      fiveRetriesWithFilter:
+      fiveRetriesWithMatch:
         policy: constant
         duration: 10ms
         maxRetries: 5
@@ -31,12 +31,12 @@ spec:
     apps:
       resiliencyapp:
         timeout: fast
-        retry: fiveRetriesWithFilter
+        retry: fiveRetriesWithMatch
         circuitBreaker: simpleCB
 
       resiliencyappgrpc:
         timeout: fast
-        retry: fiveRetriesWithFilter
+        retry: fiveRetriesWithMatch
         circuitBreaker: simpleCB
 
     actors:
@@ -50,15 +50,15 @@ spec:
 
     components:
       dapr-resiliency-binding:
-        inbound: 
+        inbound:
           timeout: fast
-          retry: fiveRetriesWithFilter
+          retry: fiveRetriesWithMatch
         outbound:
           timeout: fast
-          retry: fiveRetriesWithFilter
+          retry: fiveRetriesWithMatch
 
       dapr-resiliency-binding-grpc:
-        inbound: 
+        inbound:
           timeout: fast
           retry: fiveRetries
         outbound:
@@ -68,7 +68,7 @@ spec:
       dapr-resiliency-pubsub:
         inbound:
           timeout: fast
-          retry: fiveRetriesWithFilter
+          retry: fiveRetriesWithMatch
         outbound:
           timeout: fast
-          retry: fiveRetriesWithFilter
+          retry: fiveRetriesWithMatch

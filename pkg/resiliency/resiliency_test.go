@@ -322,7 +322,7 @@ func TestParseMaxRetries(t *testing.T) {
 	assert.Equal(t, int64(-1), r.retries["missingMaxRetries"].MaxRetries)
 }
 
-func TestParseRetryWithFilter(t *testing.T) {
+func TestParseRetryWithMatch(t *testing.T) {
 	configs := LoadLocalResiliency(log, "appC", "./testdata")
 	require.NotNil(t, configs)
 	require.Len(t, configs, 1)
@@ -334,15 +334,15 @@ func TestParseRetryWithFilter(t *testing.T) {
 	require.NotNil(t, r.retries["retryForever"])
 	require.NotNil(t, r.retries["missingMaxRetries"])
 	require.NotNil(t, r.retries["important"])
-	require.NotNil(t, r.retries["withFilter"])
+	require.NotNil(t, r.retries["withMatch"])
 
-	// important does not have a filter, so should default to true
+	// important does not have a matching, so should default to true
 	assert.True(t, r.retries["important"].statusCodeNeedRetry(500))
 	assert.True(t, r.retries["important"].statusCodeNeedRetry(400))
-	// withFilter has a filter, should return true for 500 and false for anything else
-	assert.True(t, r.retries["withFilter"].statusCodeNeedRetry(500))
-	assert.False(t, r.retries["withFilter"].statusCodeNeedRetry(501))
-	assert.False(t, r.retries["withFilter"].statusCodeNeedRetry(400))
+	// withMatch has a matching, should return true for 500 and false for anything else
+	assert.True(t, r.retries["withMatch"].statusCodeNeedRetry(500))
+	assert.False(t, r.retries["withMatch"].statusCodeNeedRetry(501))
+	assert.False(t, r.retries["withMatch"].statusCodeNeedRetry(400))
 }
 
 func TestResiliencyScopeIsRespected(t *testing.T) {

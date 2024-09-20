@@ -38,16 +38,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(retryfiltergrpc))
+	suite.Register(new(retrymatchinggrpc))
 }
 
-type retryfiltergrpc struct {
+type retrymatchinggrpc struct {
 	daprd1   *daprd.Daprd
 	daprd2   *daprd.Daprd
 	counters sync.Map
 }
 
-func (d *retryfiltergrpc) Setup(t *testing.T) []framework.Option {
+func (d *retrymatchinggrpc) Setup(t *testing.T) []framework.Option {
 	onInvoke := func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
 		key := in.GetMethod()
 		if key == "" {
@@ -102,7 +102,7 @@ spec:
 	}
 }
 
-func (d *retryfiltergrpc) getCount(key string) int {
+func (d *retrymatchinggrpc) getCount(key string) int {
 	c, ok := d.counters.Load(key)
 	if !ok {
 		return 0
@@ -111,7 +111,7 @@ func (d *retryfiltergrpc) getCount(key string) int {
 	return int(c.(*atomic.Int32).Load())
 }
 
-func (d *retryfiltergrpc) Run(t *testing.T, ctx context.Context) {
+func (d *retrymatchinggrpc) Run(t *testing.T, ctx context.Context) {
 	d.daprd1.WaitUntilRunning(t, ctx)
 	d.daprd2.WaitUntilRunning(t, ctx)
 
@@ -122,19 +122,19 @@ func (d *retryfiltergrpc) Run(t *testing.T, ctx context.Context) {
 		expectRetries      bool
 	}{
 		{
-			title:              "success not in filter list 0",
+			title:              "success not in matching list 0",
 			statusCode:         0,
 			expectedStatusCode: 0,
 			expectRetries:      false,
 		},
 		{
-			title:              "error code not in filter list 14",
+			title:              "error code not in matching list 14",
 			statusCode:         14,
 			expectedStatusCode: 14,
 			expectRetries:      false,
 		},
 		{
-			title:              "error code in filter list 1",
+			title:              "error code in matching list 1",
 			statusCode:         1,
 			expectedStatusCode: 1,
 			expectRetries:      true,
