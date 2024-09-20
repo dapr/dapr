@@ -36,16 +36,16 @@ import (
 )
 
 func init() {
-	suite.Register(new(retryfilterhttp))
+	suite.Register(new(retrymatchinghttp))
 }
 
-type retryfilterhttp struct {
+type retrymatchinghttp struct {
 	daprd1   *daprd.Daprd
 	daprd2   *daprd.Daprd
 	counters sync.Map
 }
 
-func (d *retryfilterhttp) Setup(t *testing.T) []framework.Option {
+func (d *retrymatchinghttp) Setup(t *testing.T) []framework.Option {
 	handler := http.NewServeMux()
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(r.Method))
@@ -111,7 +111,7 @@ spec:
 	}
 }
 
-func (d *retryfilterhttp) getCount(key string) int {
+func (d *retrymatchinghttp) getCount(key string) int {
 	c, ok := d.counters.Load(key)
 	if !ok {
 		return 0
@@ -120,7 +120,7 @@ func (d *retryfilterhttp) getCount(key string) int {
 	return int(c.(*atomic.Int32).Load())
 }
 
-func (d *retryfilterhttp) Run(t *testing.T, ctx context.Context) {
+func (d *retrymatchinghttp) Run(t *testing.T, ctx context.Context) {
 	d.daprd1.WaitUntilRunning(t, ctx)
 	d.daprd2.WaitUntilRunning(t, ctx)
 
@@ -131,109 +131,109 @@ func (d *retryfilterhttp) Run(t *testing.T, ctx context.Context) {
 		expectRetries      bool
 	}{
 		{
-			title:              "success status in filter list",
+			title:              "success status in matching list",
 			statusCode:         200,
 			expectedStatusCode: 200,
 			expectRetries:      false,
 		},
 		{
-			title:              "success status not in filter list",
+			title:              "success status not in matching list",
 			statusCode:         204,
 			expectedStatusCode: 204,
 			expectRetries:      false,
 		},
 		{
-			title:              "error status not in filter list 404",
+			title:              "error status not in matching list 404",
 			statusCode:         404,
 			expectedStatusCode: 404,
 			expectRetries:      false,
 		},
 		{
-			title:              "invalid status not in filter list 0",
+			title:              "invalid status not in matching list 0",
 			statusCode:         0,
 			expectedStatusCode: 500,
 			expectRetries:      true, // this is retried because there is not a valid code to compare against
 		},
 		{
-			title:              "status in filter list 100",
+			title:              "status in matching list 100",
 			statusCode:         100,
 			expectedStatusCode: 200,
 			expectRetries:      false, // success status code
 		},
 		{
-			title:              "status in filter list 101",
+			title:              "status in matching list 101",
 			statusCode:         101,
 			expectedStatusCode: 101,
 			expectRetries:      true,
 		},
 		{
-			title:              "status in filter list 102",
+			title:              "status in matching list 102",
 			statusCode:         102,
 			expectedStatusCode: 200,
 			expectRetries:      false, // not considered an error
 		},
 		{
-			title:              "status in filter list 304",
+			title:              "status in matching list 304",
 			statusCode:         304,
 			expectedStatusCode: 304,
 			expectRetries:      false, // not considered an error
 		},
 		{
-			title:              "status in filter list 505",
+			title:              "status in matching list 505",
 			statusCode:         505,
 			expectedStatusCode: 505,
 			expectRetries:      true,
 		},
 		{
-			title:              "status in filter list 403",
+			title:              "status in matching list 403",
 			statusCode:         403,
 			expectedStatusCode: 403,
 			expectRetries:      true,
 		},
 		{
-			title:              "status in filter list 501",
+			title:              "status in matching list 501",
 			statusCode:         501,
 			expectedStatusCode: 501,
 			expectRetries:      true,
 		},
 		{
-			title:              "status in filter list 502",
+			title:              "status in matching list 502",
 			statusCode:         502,
 			expectedStatusCode: 502,
 			expectRetries:      true,
 		},
 		{
-			title:              "status in filter list 503",
+			title:              "status in matching list 503",
 			statusCode:         503,
 			expectedStatusCode: 503,
 			expectRetries:      true,
 		},
 		{
-			title:              "status not in filter list 504",
+			title:              "status not in matching list 504",
 			statusCode:         504,
 			expectedStatusCode: 504,
 			expectRetries:      false,
 		},
 		{
-			title:              "status in filter list 509",
+			title:              "status in matching list 509",
 			statusCode:         509,
 			expectedStatusCode: 509,
 			expectRetries:      true,
 		},
 		{
-			title:              "status in filter list 546",
+			title:              "status in matching list 546",
 			statusCode:         546,
 			expectedStatusCode: 546,
 			expectRetries:      true,
 		},
 		{
-			title:              "status in filter list 547",
+			title:              "status in matching list 547",
 			statusCode:         547,
 			expectedStatusCode: 547,
 			expectRetries:      true,
 		},
 		{
-			title:              "status not in filter list 548",
+			title:              "status not in matching list 548",
 			statusCode:         548,
 			expectedStatusCode: 548,
 			expectRetries:      false,

@@ -110,14 +110,14 @@ func TestInputBindingResiliency(t *testing.T) {
 			binding:      "dapr-resiliency-binding",
 		},
 		{
-			Name:               "Test resiliency with filter consider non-500 as success",
+			Name:               "Test resiliency with matching consider non-500 as success",
 			FailureCount:       ptr.Of(0), // since responseStatusCode is set, constantly fails with 404, this is the expected failure count
 			shouldFail:         false,
 			responseStatusCode: ptr.Of(404),
 			binding:            "dapr-resiliency-binding",
 		},
 		{
-			Name:               "Test resiliency with filter retry on 500",
+			Name:               "Test resiliency with matching retry on 500",
 			shouldFail:         true,
 			responseStatusCode: ptr.Of(500),
 			binding:            "dapr-resiliency-binding",
@@ -228,7 +228,7 @@ func TestPubsubSubscriptionResiliency(t *testing.T) {
 			topic:        "resiliency-topic-http",
 		},
 		{
-			Name:               "Test resiliency with filter consider non-500 as success",
+			Name:               "Test resiliency with matching consider non-500 as success",
 			FailureCount:       ptr.Of(0), // since responseStatusCode is set, constantly fails with 400, this is the expected failure count
 			shouldFail:         false,
 			responseStatusCode: ptr.Of(400),
@@ -236,7 +236,7 @@ func TestPubsubSubscriptionResiliency(t *testing.T) {
 			topic:              "resiliency-topic-http",
 		},
 		{
-			Name:               "Test resiliency with filter retry on 500",
+			Name:               "Test resiliency with matching retry on 500",
 			shouldFail:         true,
 			responseStatusCode: ptr.Of(500),
 			pubsub:             "dapr-resiliency-pubsub",
@@ -341,14 +341,14 @@ func TestServiceInvocationResiliency(t *testing.T) {
 			callType:     "http",
 		},
 		{
-			Name:         "Test resiliency with filter consider non-500 as success",
+			Name:         "Test resiliency with matching consider non-500 as success",
 			shouldFail:   false,
 			expectStatus: ptr.Of(404),
 			expectCount:  ptr.Of(1),
 			callType:     "http",
 		},
 		{
-			Name:         "Test resiliency with filter retry on 500",
+			Name:         "Test resiliency with matching retry on 500",
 			shouldFail:   true,
 			expectStatus: ptr.Of(500),
 			callType:     "http",
@@ -392,14 +392,14 @@ func TestServiceInvocationResiliency(t *testing.T) {
 			callType:     "grpc_proxy",
 		},
 		{
-			Name:         "Test resiliency with filter consider code non-2 as success in grpc proxy",
+			Name:         "Test resiliency with matching consider code non-2 as success in grpc proxy",
 			expectStatus: ptr.Of(5),
 			expectCount:  ptr.Of(1),
 			shouldFail:   false,
 			callType:     "grpc_proxy",
 		},
 		{
-			Name:         "Test resiliency with filter retry on 2 in grpc proxy",
+			Name:         "Test resiliency with mtching retry on 2 in grpc proxy",
 			FailureCount: ptr.Of(10),
 			expectStatus: ptr.Of(2),
 			shouldFail:   true,

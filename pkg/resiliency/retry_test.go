@@ -87,7 +87,7 @@ func TestResiliencyFunctions(t *testing.T) {
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
-			filter, err := ParseRetryConditionFilter(tc.matching)
+			match, err := ParseRetryConditionMatch(tc.matching)
 			if tc.expectError {
 				require.Error(t, err)
 				return
@@ -96,7 +96,7 @@ func TestResiliencyFunctions(t *testing.T) {
 			}
 
 			for i, code := range tc.testCodes {
-				retry := filter.statusCodeNeedRetry(code)
+				retry := match.statusCodeNeedRetry(code)
 				assert.Equal(t, tc.expectedRetry[i], retry)
 			}
 		})

@@ -61,17 +61,17 @@ func NewCodeError(statusCode int32, err error) CodeError {
 
 type Retry struct {
 	retry.Config
-	RetryConditionFilter
+	RetryConditionMatch
 }
 
-func NewRetry(retryConfig retry.Config, statusCodeFilter RetryConditionFilter) *Retry {
+func NewRetry(retryConfig retry.Config, statusCodeMatch RetryConditionMatch) *Retry {
 	return &Retry{
-		Config:               retryConfig,
-		RetryConditionFilter: statusCodeFilter,
+		Config:              retryConfig,
+		RetryConditionMatch: statusCodeMatch,
 	}
 }
 
-type RetryConditionFilter struct {
+type RetryConditionMatch struct {
 	httpStatusCodes []codeRange
 	gRPCStatusCodes []codeRange
 }
@@ -86,29 +86,29 @@ func (cr codeRange) matchCode(c int32) bool {
 	return cr.start <= c && c <= cr.end
 }
 
-func NewRetryConditionFilter() RetryConditionFilter {
-	return RetryConditionFilter{}
+func NewRetryConditionMatch() RetryConditionMatch {
+	return RetryConditionMatch{}
 }
 
-func ParseRetryConditionFilter(conditions *resiliencyV1alpha.RetryMatching) (RetryConditionFilter, error) {
-	filter := NewRetryConditionFilter()
+func ParseRetryConditionMatch(conditions *resiliencyV1alpha.RetryMatching) (RetryConditionMatch, error) {
+	match := NewRetryConditionMatch()
 	if conditions != nil {
 		httpStatusCodes, err := parsePatterns(conditions.HTTPStatusCodes, validHTTPStatusCodeRange)
 		if err != nil {
-			return filter, err
+			return match, err
 		}
 		gRPCStatusCodes, err := parsePatterns(conditions.GRPCStatusCodes, validGRPCStatusCodeRange)
 		if err != nil {
-			return filter, err
+			return match, err
 		}
 		// Only set in the end, to make sure all attributes are correct.
-		filter.httpStatusCodes = httpStatusCodes
-		filter.gRPCStatusCodes = gRPCStatusCodes
+		match.httpStatusCodes = httpStatusCodes
+		match.gRPCStatusCodes = gRPCStatusCodes
 	}
-	return filter, nil
+	return match, nil
 }
 
-func (f RetryConditionFilter) statusCodeNeedRetry(statusCode int32) bool {
+func (f RetryConditionMatch) statusCodeNeedRetry(statusCode int32) bool {
 	if validGRPCStatusCodeRange.matchCode(statusCode) {
 		return mustRetryStatusCode(statusCode, f.gRPCStatusCodes)
 	} else if validHTTPStatusCodeRange.matchCode(statusCode) {
@@ -117,7 +117,7 @@ func (f RetryConditionFilter) statusCodeNeedRetry(statusCode int32) bool {
 	return false
 }
 
-func (f RetryConditionFilter) ErrorNeedRetry(codeError CodeError) bool {
+func (f RetryConditionMatch) ErrorNeedRetry(codeError CodeError) bool {
 	switch codeError.retryScenario {
 	case retryScenarioGRPCInvoke:
 		return mustRetryStatusCode(codeError.StatusCode, f.gRPCStatusCodes)

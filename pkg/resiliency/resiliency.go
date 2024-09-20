@@ -422,14 +422,14 @@ func (r *Resiliency) decodePolicies(c *resiliencyV1alpha.Resiliency) (err error)
 				r.log.Warnf("Attempted override of %s did not meet minimum retry count, resetting to 3.", name)
 				rc.MaxRetries = 3
 			}
-			filter, err := ParseRetryConditionFilter(t.Matching)
+			match, err := ParseRetryConditionMatch(t.Matching)
 			if err != nil {
 				return err
 			}
 
 			r.retries[name] = &Retry{
-				Config:               rc,
-				RetryConditionFilter: filter,
+				Config:              rc,
+				RetryConditionMatch: match,
 			}
 		} else {
 			r.log.Warnf("Attempted to override protected policy %s which is not allowed. Ignoring provided policy and using default.", name)
