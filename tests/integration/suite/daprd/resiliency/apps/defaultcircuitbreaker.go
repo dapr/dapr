@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -102,7 +102,6 @@ spec:
 }
 
 func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
-	ctx = context.Background()
 	d.daprdClient.WaitUntilRunning(t, ctx)
 	d.daprdServer.WaitUntilRunning(t, ctx)
 
@@ -113,7 +112,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 		for i := 1; i <= 3; i++ {
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 			require.NoError(t, err)
-			resp, err := util.HTTPClient(t).Do(req)
+			resp, err := client.HTTP(t).Do(req)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			require.NoError(t, resp.Body.Close())
@@ -122,7 +121,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 		// 4th call should not trigger circuit breaker
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
-		resp, err := util.HTTPClient(t).Do(req)
+		resp, err := client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		require.NoError(t, err)
@@ -145,7 +144,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 		for i := 1; i <= 3; i++ {
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 			require.NoError(t, err)
-			resp, err := util.HTTPClient(t).Do(req)
+			resp, err := client.HTTP(t).Do(req)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 			require.NoError(t, resp.Body.Close())
@@ -154,7 +153,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 		// 4th call should trigger circuit breaker, even though the server would have returned a 200
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
-		resp, err := util.HTTPClient(t).Do(req)
+		resp, err := client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		require.NoError(t, err)
@@ -172,7 +171,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 		// This call should succeed and close the circuit
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
-		resp, err = util.HTTPClient(t).Do(req)
+		resp, err = client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		require.NoError(t, resp.Body.Close())
@@ -185,7 +184,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 		// Subsequent calls should succeed
 		req, err = http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
-		resp, err = util.HTTPClient(t).Do(req)
+		resp, err = client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		require.NoError(t, resp.Body.Close())
