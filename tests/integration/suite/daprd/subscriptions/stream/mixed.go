@@ -80,21 +80,48 @@ spec:
 func (m *mixed) Run(t *testing.T, ctx context.Context) {
 	m.daprd.WaitUntilRunning(t, ctx)
 
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, m.daprd.GetMetaSubscriptions(c, ctx), 2)
+		assert.Len(c, m.daprd.GetMetaSubscriptionsWithType(c, ctx, "DECLARATIVE"), 1)
+		assert.Len(c, m.daprd.GetMetaSubscriptionsWithType(c, ctx, "PROGRAMMATIC"), 1)
+	}, time.Second*5, time.Millisecond*10)
+
 	client := m.daprd.GRPCClient(t, ctx)
 
 	stream, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "c",
 			},
 		},
 	}))
 
+	resp, err := stream.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, m.daprd.GetMetaSubscriptions(c, ctx), 3)
-	}, time.Second*10, time.Millisecond*10)
+		assert.Len(c, m.daprd.GetMetaSubscriptionsWithType(c, ctx, "STREAMING"), 1)
+	}, time.Second*5, time.Millisecond*10)
+
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		subsInMeta = m.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 3)
+	}, time.Second*5, time.Millisecond*10)
+	assert.ElementsMatch(t, []daprd.MetadataResponsePubsubSubscription{
+		{PubsubName: "mypub", Topic: "a", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/123"}}, Type: rtv1.PubsubSubscriptionType_PROGRAMMATIC.String()},
+		{PubsubName: "mypub", Topic: "b", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/zyx"}}, Type: rtv1.PubsubSubscriptionType_DECLARATIVE.String()},
+		{PubsubName: "mypub", Topic: "c", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/"}}, Type: rtv1.PubsubSubscriptionType_STREAMING.String()},
+	},
+		subsInMeta,
+	)
 
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub", Topic: "a", Data: []byte(`{"status": "completed"}`),
@@ -112,13 +139,13 @@ func (m *mixed) Run(t *testing.T, ctx context.Context) {
 		PubsubName: "mypub", Topic: "c", Data: []byte(`{"status": "completed"}`),
 	})
 	require.NoError(t, err)
-	event, err := stream.Recv()
+	resp, err = stream.Recv()
 	require.NoError(t, err)
-	assert.Equal(t, "c", event.GetTopic())
+	assert.Equal(t, "c", resp.GetEventMessage().GetTopic())
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-				Id:     event.GetId(),
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     resp.GetEventMessage().GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
 			},
 		},
@@ -128,33 +155,49 @@ func (m *mixed) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
 	}))
-	// TODO: @joshvanl: expose bi-direction subscriptions to measure so we don't
-	// need to sleep.
-	time.Sleep(time.Second)
+
+	resp, err = stream.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, m.daprd.GetMetaSubscriptionsWithType(c, ctx, "STREAMING"), 2)
+	}, time.Second*5, time.Millisecond*10)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, m.daprd.GetMetaSubscriptions(c, ctx), 3)
+	}, time.Second*5, time.Millisecond*10)
+
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub", Topic: "a", Data: []byte(`{"status": "completed"}`),
 	})
 	require.NoError(t, err)
-	event, err = stream.Recv()
+	resp, err = stream.Recv()
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-				Id:     event.GetId(),
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     resp.GetEventMessage().GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
 			},
 		},
 	}))
 
 	require.NoError(t, stream.CloseSend())
-	// TODO: @joshvanl: expose bi-direction subscriptions to measure so we don't
-	// need to sleep.
-	time.Sleep(time.Second)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, m.daprd.GetMetaSubscriptionsWithType(c, ctx, "STREAMING"), 1)
+	}, time.Second*5, time.Millisecond*10)
+
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub", Topic: "a", Data: []byte(`{"status": "completed"}`),
 	})
@@ -165,24 +208,26 @@ func (m *mixed) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
 	}))
-	// TODO: @joshvanl: expose bi-direction subscriptions to measure so we don't
-	// need to sleep.
-	time.Sleep(time.Second)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, m.daprd.GetMetaSubscriptionsWithType(c, ctx, "STREAMING"), 2)
+	}, time.Second*5, time.Millisecond*10)
+
 	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
 		PubsubName: "mypub", Topic: "a", Data: []byte(`{"status": "completed"}`),
 	})
 	require.NoError(t, err)
-	event, err = stream.Recv()
+	resp, err = stream.Recv()
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-				Id:     event.GetId(),
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     resp.GetEventMessage().GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
 			},
 		},

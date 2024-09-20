@@ -29,10 +29,10 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -84,7 +84,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.place.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	daprdURL := "http://localhost:" + strconv.Itoa(b.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid"
 
@@ -101,9 +101,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			}
 		}, 10*time.Second, 10*time.Millisecond, "actor not ready in time")
 	})
-
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, b.daprd.GRPCAddress(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })

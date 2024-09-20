@@ -27,9 +27,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 	cryptotest "github.com/dapr/kit/crypto/test"
 )
@@ -139,7 +139,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 	h.daprd1.WaitUntilRunning(t, ctx)
 	h.daprd2.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	invokeTests := func(t *testing.T, expTLSCode int, assertBody func(c *assert.CollectT, body string), daprd *procdaprd.Daprd) {
 		for _, port := range []int{

@@ -59,18 +59,29 @@ func (d *disconnect) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, stream1.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
 	}))
 
+	resp, err := stream1.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
+
 	stream2, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, d.daprd.GetMetaSubscriptions(c, ctx), 1)
-	}, time.Second*10, time.Millisecond*10)
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		subsInMeta = d.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 1)
+	}, time.Second*5, time.Millisecond*10)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_STREAMING.String(), subsInMeta[0].Type)
 
 	d.daprd.Cleanup(t)
 

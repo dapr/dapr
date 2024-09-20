@@ -16,6 +16,7 @@ package grpc
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -112,4 +113,11 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "1.0", resp.GetSpecVersion())
 	assert.Equal(t, "mypub", resp.GetPubsubName())
 	assert.Equal(t, "com.dapr.event.sent", resp.GetType())
+
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		subsInMeta = b.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 1)
+	}, time.Second*2, time.Millisecond*10)
+	assert.Equal(t, rtv1.PubsubSubscriptionType_PROGRAMMATIC.String(), subsInMeta[0].Type)
 }

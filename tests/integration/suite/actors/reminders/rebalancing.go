@@ -34,11 +34,11 @@ import (
 
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -111,7 +111,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	// Establish a connection to the placement service
 	stream := i.getPlacementStream(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	// Try to invoke an actor to ensure the actor subsystem is ready
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -347,8 +347,9 @@ func (h *httpServer) WaitForActorsReady(ctx context.Context) error {
 
 func (i *rebalancing) getPlacementStream(t *testing.T, ctx context.Context) placementv1pb.Placement_ReportDaprStatusClient {
 	// Establish a connection with placement
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(i.place.Port()),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 		grpc.WithTransportCredentials(grpcinsecure.NewCredentials()),
 	)
 	require.NoError(t, err)

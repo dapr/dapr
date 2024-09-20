@@ -15,11 +15,13 @@ package subscriber
 
 import (
 	"context"
+	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/emptypb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -30,15 +32,19 @@ type Option func(*options)
 
 type Subscriber struct {
 	app      *app.App
+	healthy  *atomic.Bool
 	inCh     chan *rtv1.TopicEventRequest
 	inBulkCh chan *rtv1.TopicEventBulkRequest
 	closeCh  chan struct{}
+	closed   atomic.Bool
 }
 
 func New(t *testing.T, fopts ...Option) *Subscriber {
 	t.Helper()
 
-	var opts options
+	opts := options{
+		initialHealth: true,
+	}
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
@@ -47,11 +53,21 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 	inBulkCh := make(chan *rtv1.TopicEventBulkRequest, 100)
 	closeCh := make(chan struct{})
 
+	var healthy atomic.Bool
+	healthy.Store(opts.initialHealth)
+
 	return &Subscriber{
 		inCh:     inCh,
 		inBulkCh: inBulkCh,
 		closeCh:  closeCh,
+		healthy:  &healthy,
 		app: app.New(t,
+			app.WithHealthCheckFn(func(context.Context, *emptypb.Empty) (*rtv1.HealthCheckResponse, error) {
+				if healthy.Load() {
+					return &rtv1.HealthCheckResponse{}, nil
+				}
+				return nil, assert.AnError
+			}),
 			app.WithListTopicSubscriptions(opts.listTopicSubFn),
 			app.WithOnTopicEventFn(func(ctx context.Context, in *rtv1.TopicEventRequest) (*rtv1.TopicEventResponse, error) {
 				select {
@@ -87,8 +103,10 @@ func (s *Subscriber) Run(t *testing.T, ctx context.Context) {
 
 func (s *Subscriber) Cleanup(t *testing.T) {
 	t.Helper()
-	close(s.closeCh)
-	s.app.Cleanup(t)
+	if s.closed.CompareAndSwap(false, true) {
+		close(s.closeCh)
+		s.app.Cleanup(t)
+	}
 }
 
 func (s *Subscriber) Port(t *testing.T) int {
@@ -155,4 +173,8 @@ func (s *Subscriber) ExpectPublishNoReceive(t *testing.T, ctx context.Context, d
 	_, err := daprd.GRPCClient(t, ctx).PublishEvent(ctx, req)
 	require.NoError(t, err)
 	s.AssertEventChanLen(t, 0)
+}
+
+func (s *Subscriber) SetHealth(healthy bool) {
+	s.healthy.Store(healthy)
 }

@@ -70,6 +70,7 @@ func newResiliencyMetrics() *resiliencyMetrics {
 func (m *resiliencyMetrics) Init(id string) error {
 	m.enabled = true
 	m.appID = id
+
 	return view.Register(
 		diagUtils.NewMeasureView(m.policiesLoadCount, []tag.Key{appIDKey, resiliencyNameKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(m.executionCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),

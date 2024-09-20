@@ -11,7 +11,7 @@
 # limitations under the License.
 #
 
-# E2E test app list
+# E2E test app list (folder name)
 # e.g. E2E_TEST_APPS=hellodapr state service_invocation
 E2E_TEST_APPS=actorjava \
 actordotnet \
@@ -19,6 +19,8 @@ actorpython \
 actorphp \
 healthapp \
 hellodapr \
+schedulerapp \
+schedulerapp_grpc \
 stateapp \
 secretapp \
 service_invocation \
@@ -68,22 +70,23 @@ E2E_TESTAPP_DIR=./tests/apps
 PERF_TESTAPP_DIR=./tests/apps/perf
 
 # PERFORMANCE tests
-PERF_TESTS=actor_timer \
-actor_reminder \
-actor_activation \
-service_invocation_http \
-service_invocation_grpc \
-state_get_grpc \
-state_get_http \
-pubsub_publish_grpc \
-pubsub_publish_http \
-pubsub_bulk_publish_grpc \
-pubsub_bulk_publish_http \
+PERF_TESTS=actor_activation \
 actor_double_activation \
 actor_id_scale \
+actor_reminder \
+actor_timer \
 actor_type_scale \
 configuration \
+pubsub_bulk_publish_grpc \
+pubsub_bulk_publish_http \
+pubsub_publish_grpc \
+pubsub_publish_http \
 pubsub_subscribe_http \
+scheduler \
+service_invocation_grpc \
+service_invocation_http \
+state_get_grpc \
+state_get_http \
 workflows \
 
 KUBECTL=kubectl
@@ -463,6 +466,7 @@ setup-test-env-redis:
 	  --wait \
 	  --timeout 5m0s \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
+	 --set master.persistence.size=1Gi \
 	  -f ./tests/config/redis_override.yaml
 
 delete-test-env-redis:
@@ -475,6 +479,9 @@ setup-test-env-kafka:
 	  --version 23.0.7 \
 	  -f ./tests/config/kafka_override.yaml \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --set broker.persistence.size=1Gi \
+	  --set broker.logPersistence.size=1Gi \
+	  --set zookeeper.persistence.size=1Gi \
 	  --timeout 10m0s
 
 # install rabbitmq to the cluster
@@ -485,6 +492,7 @@ setup-test-env-rabbitmq:
 	  --set auth.username='admin' \
 	  --set auth.password='admin' \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
+	  --set persistence.size=1Gi \
 	  --timeout 10m0s
 
 # install mqtt to the cluster
@@ -517,6 +525,7 @@ setup-test-env-postgres:
 	  --install dapr-postgres bitnami/postgresql \
 	  --version 12.8.0 \
 	  -f ./tests/config/postgres_override.yaml \
+	  --set primary.persistence.size=1Gi \
 	  --namespace $(DAPR_TEST_NAMESPACE) \
 	  --wait \
 	  --timeout 5m0s
@@ -556,6 +565,7 @@ setup-test-components: setup-app-configurations
 	$(KUBECTL) apply -f ./tests/config/kubernetes_secret_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_secret.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/kubernetes_redis_host_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
+	$(KUBECTL) apply -f ./tests/config/kubernetes_actor_reminder_scheduler_config.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_STATE_STORE)_state_actorstore.yaml --namespace $(DAPR_TEST_NAMESPACE)
 	$(KUBECTL) apply -f ./tests/config/dapr_$(DAPR_TEST_QUERY_STATE_STORE)_query_state.yaml --namespace $(DAPR_TEST_NAMESPACE)

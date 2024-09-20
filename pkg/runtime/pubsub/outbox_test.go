@@ -32,22 +32,29 @@ import (
 	"github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/outbox"
+	"github.com/dapr/dapr/pkg/runtime/pubsub/publisher/fake"
 	"github.com/dapr/kit/ptr"
 )
 
-func newTestOutbox() outbox.Outbox {
-	o := NewOutbox(func(ctx context.Context, req *contribPubsub.PublishRequest) error { return nil }, func(s string) (contribPubsub.PubSub, bool) { return nil, false }, func(s string) (state.Store, bool) { return nil, false }, func(m map[string]any, s string) string { return "" }, "")
-	return o
+func newTestOutbox(publishFn func(context.Context, *contribPubsub.PublishRequest) error) outbox.Outbox {
+	p := fake.New()
+	if publishFn != nil {
+		p.WithPublishFn(publishFn)
+	}
+	return NewOutbox(OptionsOutbox{
+		Publisher:             p,
+		CloudEventExtractorFn: extractCloudEventProperty,
+	})
 }
 
 func TestNewOutbox(t *testing.T) {
-	o := newTestOutbox()
+	o := newTestOutbox(nil)
 	assert.NotNil(t, o)
 }
 
 func TestEnabled(t *testing.T) {
 	t.Run("required config", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
+		o := newTestOutbox(nil).(*outboxImpl)
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
@@ -79,7 +86,7 @@ func TestEnabled(t *testing.T) {
 	})
 
 	t.Run("missing pubsub config", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
+		o := newTestOutbox(nil).(*outboxImpl)
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
@@ -103,7 +110,7 @@ func TestEnabled(t *testing.T) {
 	})
 
 	t.Run("missing topic config", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
+		o := newTestOutbox(nil).(*outboxImpl)
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
@@ -129,7 +136,7 @@ func TestEnabled(t *testing.T) {
 
 func TestAddOrUpdateOutbox(t *testing.T) {
 	t.Run("config values correct", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
+		o := newTestOutbox(nil).(*outboxImpl)
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
@@ -171,7 +178,7 @@ func TestAddOrUpdateOutbox(t *testing.T) {
 	})
 
 	t.Run("config default values correct", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
+		o := newTestOutbox(nil).(*outboxImpl)
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
@@ -207,8 +214,7 @@ func TestAddOrUpdateOutbox(t *testing.T) {
 
 func TestPublishInternal(t *testing.T) {
 	t.Run("valid operation, correct default parameters", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
-		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			var cloudEvent map[string]interface{}
 			err := json.Unmarshal(pr.Data, &cloudEvent)
 			require.NoError(t, err)
@@ -221,7 +227,7 @@ func TestPublishInternal(t *testing.T) {
 			assert.Equal(t, "a", cloudEvent["pubsubname"])
 
 			return nil
-		}
+		}).(*outboxImpl)
 
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
@@ -260,8 +266,7 @@ func TestPublishInternal(t *testing.T) {
 	})
 
 	t.Run("valid operation, correct overridden parameters", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
-		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			var cloudEvent map[string]interface{}
 			err := json.Unmarshal(pr.Data, &cloudEvent)
 			require.NoError(t, err)
@@ -274,7 +279,7 @@ func TestPublishInternal(t *testing.T) {
 			assert.Equal(t, "a", cloudEvent["pubsubname"])
 
 			return nil
-		}
+		}).(*outboxImpl)
 
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
@@ -314,8 +319,7 @@ func TestPublishInternal(t *testing.T) {
 	})
 
 	t.Run("valid operation, no datacontenttype", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
-		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			var cloudEvent map[string]interface{}
 			err := json.Unmarshal(pr.Data, &cloudEvent)
 			require.NoError(t, err)
@@ -328,7 +332,7 @@ func TestPublishInternal(t *testing.T) {
 			assert.Equal(t, "a", cloudEvent["pubsubname"])
 
 			return nil
-		}
+		}).(*outboxImpl)
 
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
@@ -373,8 +377,7 @@ func TestPublishInternal(t *testing.T) {
 	}
 
 	t.Run("valid operation, application/json datacontenttype", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
-		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			var cloudEvent map[string]interface{}
 			err := json.Unmarshal(pr.Data, &cloudEvent)
 			require.NoError(t, err)
@@ -393,7 +396,7 @@ func TestPublishInternal(t *testing.T) {
 			assert.Equal(t, "a", cloudEvent["pubsubname"])
 
 			return nil
-		}
+		}).(*outboxImpl)
 
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
@@ -440,7 +443,7 @@ func TestPublishInternal(t *testing.T) {
 	})
 
 	t.Run("missing state store", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
+		o := newTestOutbox(nil).(*outboxImpl)
 
 		_, err := o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
 			state.SetRequest{
@@ -452,11 +455,10 @@ func TestPublishInternal(t *testing.T) {
 	})
 
 	t.Run("no op when no transactions", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
-		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			assert.Fail(t, "unexptected message received")
 			return nil
-		}
+		}).(*outboxImpl)
 
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
@@ -490,10 +492,9 @@ func TestPublishInternal(t *testing.T) {
 	})
 
 	t.Run("error when pubsub fails", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
-		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			return errors.New("")
-		}
+		}).(*outboxImpl)
 
 		o.AddOrUpdateOutbox(v1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
@@ -534,9 +535,6 @@ func TestPublishInternal(t *testing.T) {
 
 func TestSubscribeToInternalTopics(t *testing.T) {
 	t.Run("correct configuration with trace, custom field and nonoverridable fields", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
-		o.cloudEventExtractorFn = extractCloudEventProperty
-
 		const outboxTopic = "test1outbox"
 
 		psMock := &outboxPubsubMock{
@@ -552,7 +550,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 
 		var closed bool
 
-		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			if pr.Topic == outboxTopic {
 				close(internalCalledCh)
 			} else if pr.Topic == "1" {
@@ -577,7 +575,9 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			assert.Contains(t, id, "outbox-")
 
 			return psMock.Publish(ctx, pr)
-		}
+		}).(*outboxImpl)
+		o.cloudEventExtractorFn = extractCloudEventProperty
+
 		o.getPubsubFn = func(s string) (contribPubsub.PubSub, bool) {
 			return psMock, true
 		}
@@ -678,8 +678,6 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 	})
 
 	t.Run("state store not present", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
-
 		const outboxTopic = "test1outbox"
 
 		psMock := &outboxPubsubMock{
@@ -687,9 +685,10 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			t:                   t,
 		}
 
-		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			return psMock.Publish(ctx, pr)
-		}
+		}).(*outboxImpl)
+
 		o.getPubsubFn = func(s string) (contribPubsub.PubSub, bool) {
 			return psMock, true
 		}
@@ -713,8 +712,6 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 	})
 
 	t.Run("outbox state not present", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
-
 		const outboxTopic = "test1outbox"
 
 		psMock := &outboxPubsubMock{
@@ -725,8 +722,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 
 		internalCalledCh := make(chan struct{})
 		externalCalledCh := make(chan struct{})
-
-		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			if pr.Topic == outboxTopic {
 				close(internalCalledCh)
 			} else if pr.Topic == "1" {
@@ -734,7 +730,8 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			}
 
 			return psMock.Publish(ctx, pr)
-		}
+		}).(*outboxImpl)
+
 		o.getPubsubFn = func(s string) (contribPubsub.PubSub, bool) {
 			return psMock, true
 		}
@@ -829,8 +826,6 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 	})
 
 	t.Run("outbox state not present with discard", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
-
 		const outboxTopic = "test1outbox"
 
 		psMock := &outboxPubsubMock{
@@ -845,7 +840,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		internalCalledCh := make(chan struct{})
 		externalCalledCh := make(chan struct{})
 
-		o.publishFn = func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
 			if pr.Topic == outboxTopic {
 				close(internalCalledCh)
 			} else if pr.Topic == "1" {
@@ -853,7 +848,8 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 			}
 
 			return psMock.Publish(ctx, pr)
-		}
+		}).(*outboxImpl)
+
 		o.getPubsubFn = func(s string) (contribPubsub.PubSub, bool) {
 			return psMock, true
 		}
@@ -1042,14 +1038,14 @@ func (o *outboxStateMock) Get(ctx context.Context, req *state.GetRequest) (*stat
 
 func TestOutboxTopic(t *testing.T) {
 	t.Run("not namespaced", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
+		o := newTestOutbox(nil).(*outboxImpl)
 		topic := outboxTopic("a", "b", o.namespace)
 
 		assert.Equal(t, "aboutbox", topic)
 	})
 
 	t.Run("namespaced", func(t *testing.T) {
-		o := newTestOutbox().(*outboxImpl)
+		o := newTestOutbox(nil).(*outboxImpl)
 		o.namespace = "default"
 
 		topic := outboxTopic("a", "b", o.namespace)
@@ -1071,6 +1067,10 @@ func (o *outboxStateMock) BulkSet(ctx context.Context, req []state.SetRequest, o
 }
 
 func (o *outboxStateMock) BulkDelete(ctx context.Context, req []state.DeleteRequest, opts state.BulkStoreOpts) error {
+	return nil
+}
+
+func (o *outboxStateMock) Close() error {
 	return nil
 }
 

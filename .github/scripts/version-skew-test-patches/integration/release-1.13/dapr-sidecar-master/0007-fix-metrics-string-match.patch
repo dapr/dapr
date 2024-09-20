@@ -1,0 +1,23 @@
+diff --git a/tests/integration/suite/daprd/metrics/http/cardinality/low.go b/tests/integration/suite/daprd/metrics/http/cardinality/low.go
+index 0e1712894..623249860 100644
+--- a/tests/integration/suite/daprd/metrics/http/cardinality/low.go
++++ b/tests/integration/suite/daprd/metrics/http/cardinality/low.go
+@@ -72,7 +72,7 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
+ 	t.Run("service invocation", func(t *testing.T) {
+ 		l.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
+ 		metrics := l.daprd.Metrics(t, ctx)
+-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:InvokeService/myapp|status:200"]))
++		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:|status:200"]))
+ 	})
+ 
+ 	t.Run("state stores", func(t *testing.T) {
+@@ -80,7 +80,7 @@ func (l *low) Run(t *testing.T, ctx context.Context) {
+ 		l.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore", strings.NewReader(body), "content-type", "application/json")
+ 		l.daprd.HTTPGet2xx(t, ctx, "/v1.0/state/mystore/myvalue")
+ 		metrics := l.daprd.Metrics(t, ctx)
+-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:SaveState|status:204"]))
+-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GetState|status:200"]))
++		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:|status:204"]))
++		assert.Equal(t, 2, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:|status:200"]))
+ 	})
+ }

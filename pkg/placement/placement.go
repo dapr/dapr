@@ -30,6 +30,7 @@ import (
 	"google.golang.org/grpc/status"
 	"k8s.io/utils/clock"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/placement/monitoring"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -145,8 +146,11 @@ type Service struct {
 	// clock keeps time. Mocked in tests.
 	clock clock.WithTicker
 
-	sec security.Provider
+	sec           security.Provider
+	port          int
+	listenAddress string
 
+	htarget  healthz.Target
 	running  atomic.Bool
 	closed   atomic.Bool
 	closedCh chan struct{}
@@ -155,10 +159,13 @@ type Service struct {
 
 // PlacementServiceOpts contains options for the NewPlacementService method.
 type PlacementServiceOpts struct {
-	RaftNode    *raft.Server
-	MaxAPILevel *uint32
-	MinAPILevel uint32
-	SecProvider security.Provider
+	RaftNode      *raft.Server
+	MaxAPILevel   *uint32
+	MinAPILevel   uint32
+	SecProvider   security.Provider
+	Port          int
+	ListenAddress string
+	Healthz       healthz.Healthz
 }
 
 // NewPlacementService returns a new placement service.
@@ -175,12 +182,17 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		disseminateLocks:    concurrency.NewMutexMap[string](),
 		memberUpdateCount:   *haxmap.New[string, *atomic.Uint32](),
 		disseminateNextTime: *haxmap.New[string, *atomic.Int64](),
+		port:                opts.Port,
+		listenAddress:       opts.ListenAddress,
+		htarget:             opts.Healthz.AddTarget(),
 	}
 }
 
-// Run starts the placement service gRPC server.
+// Start starts the placement service gRPC server.
 // Blocks until the service is closed and all connections are drained.
-func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
+func (p *Service) Start(ctx context.Context) error {
+	defer p.htarget.NotReady()
+
 	if p.closed.Load() {
 		return errors.New("placement service is closed")
 	}
@@ -194,7 +206,7 @@ func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 		return err
 	}
 
-	serverListener, err := net.Listen("tcp", fmt.Sprintf("%s:%s", listenAddress, port))
+	serverListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", p.listenAddress, p.port))
 	if err != nil {
 		return fmt.Errorf("failed to listen: %w", err)
 	}
@@ -215,6 +227,7 @@ func (p *Service) Run(ctx context.Context, listenAddress, port string) error {
 		log.Info("Placement service stopped")
 	}()
 
+	p.htarget.Ready()
 	<-ctx.Done()
 
 	if p.closed.CompareAndSwap(false, true) {
@@ -262,7 +275,26 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			req, err = firstMessage, nil
 			firstMessage = nil
 		} else {
-			req, err = stream.Recv()
+			errCh := make(chan error, 2)
+			receivedCh := make(chan struct{})
+
+			p.wg.Add(2)
+			go func() {
+				defer p.wg.Done()
+				var rerr error
+				req, rerr = stream.Recv()
+				close(receivedCh)
+				errCh <- rerr
+			}()
+			go func() {
+				defer p.wg.Done()
+				select {
+				case <-p.closedCh:
+					errCh <- errors.New("placement service is closed")
+				case <-receivedCh:
+				}
+			}()
+			err = <-errCh
 		}
 
 		switch err {
@@ -327,9 +359,13 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 			}
 
 			if isActorRuntime {
-				p.membershipCh <- hostMemberChange{
+				select {
+				case p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberRemove,
 					host:    raft.DaprHostMember{Name: registeredMemberID, Namespace: namespace},
+				}:
+				case <-p.closedCh:
+					return errors.New("placement service is closed")
 				}
 			}
 
@@ -337,7 +373,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		}
 	}
 
-	return status.Error(codes.FailedPrecondition, "only leader can serve the request")
+	return status.Errorf(codes.FailedPrecondition, "node id=%s is not a leader. Only the leader can serve requests", p.raftNode.GetID())
 }
 
 func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatusServer) (*spiffe.Parsed, error) {

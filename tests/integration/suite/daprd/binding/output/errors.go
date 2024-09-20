@@ -28,9 +28,9 @@ import (
 
 	"github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -71,8 +71,8 @@ spec:
 func (b *bindingerrors) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
 
+	httpClient := client.HTTP(t)
 	client := b.daprd.GRPCClient(t, ctx)
-	httpClient := util.HTTPClient(t)
 
 	assert.Eventually(t, func() bool {
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/github-http-binding-404", b.daprd.HTTPPort())

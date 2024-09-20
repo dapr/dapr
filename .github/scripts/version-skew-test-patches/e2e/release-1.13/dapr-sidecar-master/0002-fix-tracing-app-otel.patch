@@ -1,0 +1,45 @@
+diff --git a/tests/apps/tracingapp/app.go b/tests/apps/tracingapp/app.go
+index bb1107654..7362652e7 100644
+--- a/tests/apps/tracingapp/app.go
++++ b/tests/apps/tracingapp/app.go
+@@ -50,6 +50,13 @@ var (
+ 
+ 	tracer      trace.Tracer
+ 	propagators propagation.TextMapPropagator
++
++	otelRequiredAttributes = []string{
++		"http.request.method",
++		"server.address",
++		"server.port",
++		"url.full",
++	}
+ )
+ 
+ const (
+@@ -199,7 +206,7 @@ func doValidate(w http.ResponseWriter, r *http.Request) error {
+ 		return err
+ 	}
+ 
+-	remoteServiceName, err := findUniqueValueFromJSONPath("$..[?(@.parentId==\""+mainSpanID+"\")].remoteEndpoint.serviceName", v)
++	remoteServiceName, err := findUniqueValueFromJSONPath("$..[?(@.parentId==\""+mainSpanID+"\")].tags[\"net.peer.name\"]", v)
+ 	if err != nil {
+ 		return err
+ 	}
+@@ -209,6 +216,17 @@ func doValidate(w http.ResponseWriter, r *http.Request) error {
+ 		return errors.New("child span name is not correct, expected " + expectedDaprChildSpanName + ", actual " + childSpanName)
+ 	}
+ 
++	for _, otelAttr := range otelRequiredAttributes {
++		attrVal, err := findUniqueValueFromJSONPath("$..[?(@.parentId==\""+mainSpanID+"\")].tags[\""+otelAttr+"\"]", v)
++		if err != nil {
++			return err
++		}
++
++		if attrVal == "" {
++			return errors.New("required span's tag not found: " + otelAttr)
++		}
++	}
++
+ 	log.Printf("Tracing is correct for span with name=%s", mainSpanName)
+ 	return nil
+ }

@@ -17,6 +17,7 @@ import (
 	"context"
 
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
 )
 
@@ -32,18 +33,40 @@ func (p *Processor) AddPendingSubscription(ctx context.Context, subscriptions ..
 		return true
 	}
 
-	if err := p.compStore.AddDeclarativeSubscription(scopedSubs...); err != nil {
-		p.errorSubscriptions(ctx, err)
-		return false
-	}
-	if err := p.PubSub().ReloadSubscriptions(ctx); err != nil {
-		names := make([]string, len(scopedSubs))
-		for i, sub := range scopedSubs {
-			names[i] = sub.Name
+	for i := range scopedSubs {
+		comp := scopedSubs[i]
+		sub := rtpubsub.Subscription{
+			PubsubName:      comp.Spec.Pubsubname,
+			Topic:           comp.Spec.Topic,
+			DeadLetterTopic: comp.Spec.DeadLetterTopic,
+			Metadata:        comp.Spec.Metadata,
+			Scopes:          comp.Scopes,
+			BulkSubscribe: &rtpubsub.BulkSubscribe{
+				Enabled:            comp.Spec.BulkSubscribe.Enabled,
+				MaxMessagesCount:   comp.Spec.BulkSubscribe.MaxMessagesCount,
+				MaxAwaitDurationMs: comp.Spec.BulkSubscribe.MaxAwaitDurationMs,
+			},
 		}
-		p.compStore.DeleteDeclaraiveSubscription(names...)
-		p.errorSubscriptions(ctx, err)
-		return false
+		for _, rule := range comp.Spec.Routes.Rules {
+			erule, err := rtpubsub.CreateRoutingRule(rule.Match, rule.Path)
+			if err != nil {
+				p.errorSubscriptions(ctx, err)
+				return false
+			}
+			sub.Rules = append(sub.Rules, erule)
+		}
+		if len(comp.Spec.Routes.Default) > 0 {
+			sub.Rules = append(sub.Rules, &rtpubsub.Rule{
+				Path: comp.Spec.Routes.Default,
+			})
+		}
+
+		p.compStore.AddDeclarativeSubscription(&comp, sub)
+		if err := p.subscriber.ReloadDeclaredAppSubscription(comp.Name, comp.Spec.Pubsubname); err != nil {
+			p.compStore.DeleteDeclarativeSubscription(comp.Name)
+			p.errorSubscriptions(ctx, err)
+			return false
+		}
 	}
 
 	return true
@@ -60,14 +83,14 @@ func (p *Processor) scopeFilterSubscriptions(subs []subapi.Subscription) []subap
 	return scopedSubs
 }
 
-func (p *Processor) CloseSubscription(ctx context.Context, sub subapi.Subscription) error {
+func (p *Processor) CloseSubscription(ctx context.Context, sub *subapi.Subscription) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 	if _, ok := p.compStore.GetDeclarativeSubscription(sub.Name); !ok {
 		return nil
 	}
-	p.compStore.DeleteDeclaraiveSubscription(sub.Name)
-	if err := p.pubsub.ReloadSubscriptions(ctx); err != nil {
+	p.compStore.DeleteDeclarativeSubscription(sub.Name)
+	if err := p.subscriber.ReloadDeclaredAppSubscription(sub.Name, sub.Spec.Pubsubname); err != nil {
 		return err
 	}
 	return nil

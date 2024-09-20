@@ -151,6 +151,11 @@ func respondWithError(w http.ResponseWriter, err error) {
 		return
 	}
 
+	if kitErr, ok := err.(*kitErrors.Error); ok {
+		respondWithData(w, kitErr.HTTPStatusCode(), NewErrorResponse("ERROR", kitErr.Error()).JSONErrorValue())
+		return
+	}
+
 	// Respond with a generic error
 	msg := NewErrorResponse("ERROR", err.Error())
 	respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())

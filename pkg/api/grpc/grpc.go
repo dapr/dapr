@@ -51,6 +51,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/dapr/pkg/outbox"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -60,6 +61,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
+	kiterrors "github.com/dapr/kit/errors"
 	"github.com/dapr/kit/logger"
 )
 
@@ -88,6 +90,8 @@ type api struct {
 	directMessaging       invokev1.DirectMessaging
 	channels              *channels.Channels
 	pubsubAdapter         runtimePubsub.Adapter
+	pubsubAdapterStreamer runtimePubsub.AdapterStreamer
+	outbox                outbox.Outbox
 	sendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	tracingSpec           config.TracingSpec
 	accessControlList     *config.AccessControlList
@@ -102,7 +106,9 @@ type APIOpts struct {
 	Universal             *universal.Universal
 	Logger                logger.Logger
 	Channels              *channels.Channels
-	PubsubAdapter         runtimePubsub.Adapter
+	PubSubAdapter         runtimePubsub.Adapter
+	PubSubAdapterStreamer runtimePubsub.AdapterStreamer
+	Outbox                outbox.Outbox
 	DirectMessaging       invokev1.DirectMessaging
 	SendToOutputBindingFn func(ctx context.Context, name string, req *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
 	TracingSpec           config.TracingSpec
@@ -118,7 +124,9 @@ func NewAPI(opts APIOpts) API {
 		logger:                opts.Logger,
 		directMessaging:       opts.DirectMessaging,
 		channels:              opts.Channels,
-		pubsubAdapter:         opts.PubsubAdapter,
+		pubsubAdapter:         opts.PubSubAdapter,
+		pubsubAdapterStreamer: opts.PubSubAdapterStreamer,
+		outbox:                opts.Outbox,
 		sendToOutputBindingFn: opts.SendToOutputBindingFn,
 		tracingSpec:           opts.TracingSpec,
 		accessControlList:     opts.AccessControlList,
@@ -494,6 +502,21 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		req.Metadata[key] = val
 	}
 
+	// this is for the http binding, so dont need grpc-trace-bin
+	span := diagUtils.SpanFromContext(ctx)
+	sc := span.SpanContext()
+	tp := diag.SpanContextToW3CString(sc)
+	if span != nil {
+		if _, ok := req.Metadata[diag.TraceparentHeader]; !ok {
+			req.Metadata[diag.TraceparentHeader] = tp
+		}
+		if _, ok := req.Metadata[diag.TracestateHeader]; !ok {
+			if sc.TraceState().Len() > 0 {
+				req.Metadata[diag.TracestateHeader] = diag.TraceStateToW3CString(sc)
+			}
+		}
+	}
+
 	// Allow for distributed tracing by passing context metadata.
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {
@@ -636,7 +659,13 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
+		kerr, ok := kiterrors.FromError(err)
+		if ok {
+			err = kerr.GRPCStatus().Err()
+		} else {
+			err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
+		}
+
 		a.logger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -754,6 +783,11 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 		case state.ETagInvalid:
 			return status.Errorf(codes.InvalidArgument, format, args...)
 		}
+	}
+
+	kerr, ok := kiterrors.FromError(err)
+	if ok {
+		return kerr
 	}
 
 	return status.Errorf(codes.Internal, format, args...)
@@ -961,11 +995,11 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 		}
 	}
 
-	outboxEnabled := a.pubsubAdapter.Outbox().Enabled(in.GetStoreName())
+	outboxEnabled := a.outbox.Enabled(in.GetStoreName())
 	if outboxEnabled {
 		span := diagUtils.SpanFromContext(ctx)
 		corID, traceState := diag.TraceIDAndStateFromSpan(span)
-		ops, err := a.pubsubAdapter.Outbox().PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), corID, traceState)
+		ops, err := a.outbox.PublishInternal(ctx, in.GetStoreName(), operations, a.Universal.AppID(), corID, traceState)
 		if err != nil {
 			nerr := apierrors.PubSubOutbox(a.AppID(), err)
 			apiServerLogger.Debug(nerr)

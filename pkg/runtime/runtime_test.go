@@ -70,6 +70,7 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/config/protocol"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/security"
 
@@ -104,9 +105,14 @@ const (
 func TestNewRuntime(t *testing.T) {
 	// act
 	r, err := newDaprRuntime(context.Background(), nil, &internalConfig{
-		mode:            modes.StandaloneMode,
-		metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
-		registry:        registry.New(registry.NewOptions()),
+		mode: modes.StandaloneMode,
+		metricsExporter: metrics.New(metrics.Options{
+			Log:       log,
+			Namespace: metrics.DefaultMetricNamespace,
+			Healthz:   healthz.New(),
+		}),
+		registry: registry.New(registry.NewOptions()),
+		healthz:  healthz.New(),
 	}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 
 	// assert
@@ -830,7 +836,13 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 		gracefulShutdownDuration:     time.Second,
 		enableAPILogging:             ptr.Of(true),
 		disableBuiltinK8sSecretStore: false,
-		metricsExporter:              metrics.NewExporter(log, metrics.DefaultMetricNamespace),
+		metricsExporter: metrics.New(metrics.Options{
+			Log:       log,
+			Namespace: metrics.DefaultMetricNamespace,
+			Healthz:   healthz.New(),
+		}),
+		healthz:         healthz.New(),
+		outboundHealthz: healthz.New(),
 		registry: registry.New(registry.NewOptions().
 			WithStateStores(stateLoader.NewRegistry()).
 			WithSecretStores(secretstoresLoader.NewRegistry()).
@@ -895,9 +907,14 @@ func TestInitActors(t *testing.T) {
 
 	t.Run("placement enable = false", func(t *testing.T) {
 		r, err := newDaprRuntime(context.Background(), testSecurity(t), &internalConfig{
-			metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
-			mode:            modes.StandaloneMode,
-			registry:        registry.New(registry.NewOptions()),
+			metricsExporter: metrics.New(metrics.Options{
+				Log:       log,
+				Namespace: metrics.DefaultMetricNamespace,
+				Healthz:   healthz.New(),
+			}),
+			mode:     modes.StandaloneMode,
+			registry: registry.New(registry.NewOptions()),
+			healthz:  healthz.New(),
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
@@ -909,9 +926,14 @@ func TestInitActors(t *testing.T) {
 
 	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
 		r, err := newDaprRuntime(context.Background(), testSecurity(t), &internalConfig{
-			metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
-			mode:            modes.StandaloneMode,
-			registry:        registry.New(registry.NewOptions()),
+			metricsExporter: metrics.New(metrics.Options{
+				Log:       log,
+				Namespace: metrics.DefaultMetricNamespace,
+				Healthz:   healthz.New(),
+			}),
+			mode:     modes.StandaloneMode,
+			registry: registry.New(registry.NewOptions()),
+			healthz:  healthz.New(),
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
@@ -924,9 +946,14 @@ func TestInitActors(t *testing.T) {
 
 	t.Run("the actor store can not be initialized normally", func(t *testing.T) {
 		r, err := newDaprRuntime(context.Background(), testSecurity(t), &internalConfig{
-			metricsExporter: metrics.NewExporter(log, metrics.DefaultMetricNamespace),
-			mode:            modes.StandaloneMode,
-			registry:        registry.New(registry.NewOptions()),
+			metricsExporter: metrics.New(metrics.Options{
+				Log:       log,
+				Namespace: metrics.DefaultMetricNamespace,
+				Healthz:   healthz.New(),
+			}),
+			mode:     modes.StandaloneMode,
+			registry: registry.New(registry.NewOptions()),
+			healthz:  healthz.New(),
 		}, &config.Configuration{}, &config.AccessControlList{}, resiliency.New(logger.NewLogger("test")))
 		require.NoError(t, err)
 		defer stopRuntime(t, r)
@@ -1752,6 +1779,7 @@ func runGRPCApp(port int) (func(), error) {
 }
 
 func pingStreamClient(ctx context.Context, port int) (pb.TestService_PingStreamClient, error) {
+	//nolint:staticcheck
 	clientConn, err := grpc.DialContext(
 		ctx,
 		fmt.Sprintf("localhost:%d", port),
@@ -2138,9 +2166,12 @@ func testSecurity(t *testing.T) security.Handler {
 		OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
 			return []*x509.Certificate{nil}, nil
 		},
+		Healthz: healthz.New(),
 	})
 	require.NoError(t, err)
-	go secP.Run(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	go secP.Run(ctx)
 	sec, err := secP.Handler(context.Background())
 	require.NoError(t, err)
 

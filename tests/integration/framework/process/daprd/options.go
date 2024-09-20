@@ -19,10 +19,13 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
 )
 
@@ -35,7 +38,7 @@ type options struct {
 
 	appID                   string
 	namespace               *string
-	appPort                 int
+	appPort                 *int
 	grpcPort                int
 	httpPort                int
 	internalGRPCPort        int
@@ -60,6 +63,7 @@ type options struct {
 	gracefulShutdownSeconds *int
 	blockShutdownDuration   *string
 	controlPlaneTrustDomain *string
+	schedulerAddresses      []string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -88,14 +92,15 @@ func WithExit1() Option {
 	return WithExecOptions(
 		exec.WithExitCode(1),
 		exec.WithRunError(func(t *testing.T, err error) {
-			require.ErrorContains(t, err, "exit status 1")
+			//nolint:testifylint
+			assert.ErrorContains(t, err, "exit status 1")
 		}),
 	)
 }
 
 func WithAppPort(port int) Option {
 	return func(o *options) {
-		o.appPort = port
+		o.appPort = &port
 	}
 }
 
@@ -228,6 +233,12 @@ func WithPlacementAddresses(addresses ...string) Option {
 	}
 }
 
+func WithSchedulerAddresses(addresses ...string) Option {
+	return func(o *options) {
+		o.schedulerAddresses = append(o.schedulerAddresses, addresses...)
+	}
+}
+
 func WithLogLevel(logLevel string) Option {
 	return func(o *options) {
 		o.logLevel = logLevel
@@ -292,4 +303,18 @@ func WithAppAPIToken(t *testing.T, token string) Option {
 	return WithExecOptions(exec.WithEnvVars(t,
 		"APP_API_TOKEN", token,
 	))
+}
+
+func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
+	return func(o *options) {
+		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)))(o)
+		WithSentryAddress(sentry.Address())(o)
+		WithEnableMTLS(true)(o)
+	}
+}
+
+func WithScheduler(scheduler *scheduler.Scheduler) Option {
+	return func(o *options) {
+		WithSchedulerAddresses(scheduler.Address())(o)
+	}
 }

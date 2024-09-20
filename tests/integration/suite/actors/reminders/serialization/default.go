@@ -26,11 +26,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -74,7 +74,7 @@ func (d *defaultS) Run(t *testing.T, ctx context.Context) {
 	d.daprd.WaitUntilRunning(t, ctx)
 	require.NoError(t, d.handler.WaitForActorsReady(ctx))
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	baseURL := fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/myactorid", d.daprd.HTTPPort())
 
 	invokeActor(t, ctx, baseURL, client)

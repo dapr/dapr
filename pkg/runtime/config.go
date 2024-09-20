@@ -28,6 +28,7 @@ import (
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
@@ -70,7 +71,6 @@ const (
 )
 
 // Config holds the Dapr Runtime configuration.
-
 type Config struct {
 	AppID                         string
 	ControlPlaneAddress           string
@@ -97,6 +97,7 @@ type Config struct {
 	DaprBlockShutdownDuration     *time.Duration
 	ActorsService                 string
 	RemindersService              string
+	SchedulerAddress              []string
 	DaprAPIListenAddresses        string
 	AppHealthProbeInterval        int
 	AppHealthProbeTimeout         int
@@ -109,9 +110,10 @@ type Config struct {
 	DisableBuiltinK8sSecretStore  bool
 	AppHealthCheckPath            string
 	AppChannelAddress             string
-	Metrics                       *metrics.Options
+	Metrics                       metrics.Options
 	Registry                      *registry.Options
 	Security                      security.Handler
+	Healthz                       healthz.Healthz
 }
 
 type internalConfig struct {
@@ -129,6 +131,7 @@ type internalConfig struct {
 	mode                         modes.DaprMode
 	actorsService                string
 	remindersService             string
+	schedulerAddress             []string
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
 	kubernetes                   configmodes.KubernetesConfig
@@ -144,10 +147,16 @@ type internalConfig struct {
 	config                       []string
 	registry                     *registry.Registry
 	metricsExporter              metrics.Exporter
+	healthz                      healthz.Healthz
+	outboundHealthz              healthz.Healthz
 }
 
 func (i internalConfig) ActorsEnabled() bool {
 	return i.actorsService != ""
+}
+
+func (i internalConfig) SchedulerEnabled() bool {
+	return len(i.schedulerAddress) > 0
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.
@@ -171,7 +180,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		env.DaprPort:        strconv.Itoa(intc.internalGRPCPort),
 		env.DaprGRPCPort:    strconv.Itoa(intc.apiGRPCPort),
 		env.DaprHTTPPort:    strconv.Itoa(intc.httpPort),
-		env.DaprMetricsPort: intc.metricsExporter.Options().Port,
+		env.DaprMetricsPort: cfg.Metrics.Port,
 		env.DaprProfilePort: strconv.Itoa(intc.profilePort),
 	}
 
@@ -231,7 +240,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	// Initialize metrics only if MetricSpec is enabled.
 	metricsSpec := globalConfig.GetMetricsSpec()
 	if metricsSpec.GetEnabled() {
-		err = diag.InitMetrics(intc.id, namespace, metricsSpec.Rules, metricsSpec.GetHTTPIncreasedCardinality(log))
+		err = diag.InitMetrics(intc.id, namespace, metricsSpec)
 		if err != nil {
 			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
 		}
@@ -296,12 +305,15 @@ func (c *Config) toInternal() (*internalConfig, error) {
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
 		registry:                  registry.New(c.Registry),
-		metricsExporter:           metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, c.Metrics),
+		metricsExporter:           metrics.New(c.Metrics),
 		blockShutdownDuration:     c.DaprBlockShutdownDuration,
 		actorsService:             c.ActorsService,
 		remindersService:          c.RemindersService,
+		schedulerAddress:          c.SchedulerAddress,
 		publicListenAddress:       c.DaprPublicListenAddress,
 		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
+		healthz:                   c.Healthz,
+		outboundHealthz:           healthz.New(),
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {

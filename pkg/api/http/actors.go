@@ -66,11 +66,19 @@ func appendActorInvocationSpanAttributesFn(r *http.Request, m map[string]string)
 	m[diagConsts.DaprAPISpanNameInternal] = "CallActor/" + actorType + "/" + chi.URLParam(r, "method")
 }
 
-func actorInvocationMethodNameFn(r *http.Request) string {
+func actorInvocationMethodNameWithIDFn(r *http.Request) string {
 	return "InvokeActor/" + chi.URLParam(r, actorTypeParam) + "." + chi.URLParam(r, actorIDParam)
 }
 
+func actorInvocationMethodNameFn(r *http.Request) string {
+	return "InvokeActor/" + chi.URLParam(r, actorTypeParam)
+}
+
 func (a *api) constructActorEndpoints() []endpoints.Endpoint {
+	methodNameFn := actorInvocationMethodNameWithIDFn
+	if a.metricSpec != nil && !a.metricSpec.GetHTTPIncreasedCardinality(log) {
+		methodNameFn = actorInvocationMethodNameFn
+	}
 	return []endpoints.Endpoint{
 		{
 			Methods: []string{http.MethodPost, http.MethodPut},
@@ -90,7 +98,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 				Name:                 endpoints.EndpointGroupActors,
 				Version:              endpoints.EndpointGroupVersion1,
 				AppendSpanAttributes: appendActorInvocationSpanAttributesFn,
-				MethodName:           actorInvocationMethodNameFn,
+				MethodName:           methodNameFn,
 			},
 			Handler: a.onDirectActorMessage,
 			Settings: endpoints.EndpointSettings{

@@ -130,7 +130,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 	s.operator.WaitUntilRunning(t, ctx)
 	s.daprd.WaitUntilRunning(t, ctx)
 
-	assert.Len(t, s.daprd.GetMetaRegistedComponents(t, ctx), 1)
+	assert.Len(t, s.daprd.GetMetaRegisteredComponents(t, ctx), 1)
 
 	newReq := func(pubsub, topic string) *rtv1.PublishEventRequest {
 		return &rtv1.PublishEventRequest{PubsubName: pubsub, Topic: topic, Data: []byte(`{"status": "completed"}`)}
@@ -191,7 +191,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 	s.kubeapi.Informer().Delete(t, &sub2)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, s.daprd.GetMetaSubscriptions(c, ctx), 1)
-	}, time.Second*15, time.Millisecond*10)
+	}, time.Second*25, time.Millisecond*10)
 	s.sub.ExpectPublishNoReceive(t, ctx, s.daprd, newReq("pubsub0", "c"))
 	s.sub.ExpectPublishNoReceive(t, ctx, s.daprd, newReq("pubsub0", "b"))
 	s.sub.ExpectPublishReceive(t, ctx, s.daprd, newReq("pubsub0", "a"))

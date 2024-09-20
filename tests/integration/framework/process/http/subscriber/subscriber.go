@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,9 +29,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Option func(*options)
@@ -62,17 +63,20 @@ type PublishBulkRequest struct {
 }
 
 type Subscriber struct {
-	app     *app.App
-	client  *http.Client
-	inCh    chan *RouteEvent
-	inBulk  chan *pubsub.BulkSubscribeEnvelope
-	closeCh chan struct{}
+	app       *app.App
+	client    *http.Client
+	inCh      chan *RouteEvent
+	inBulk    chan *pubsub.BulkSubscribeEnvelope
+	closeCh   chan struct{}
+	closeOnce atomic.Bool
 }
 
 func New(t *testing.T, fopts ...Option) *Subscriber {
 	t.Helper()
 
-	var opts options
+	opts := options{
+		initHealth: true,
+	}
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
@@ -81,7 +85,7 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 	inBulk := make(chan *pubsub.BulkSubscribeEnvelope, 100)
 	closeCh := make(chan struct{})
 
-	appOpts := make([]app.Option, 0, len(opts.routes)+len(opts.bulkRoutes)+len(opts.handlerFuncs))
+	appOpts := make([]app.Option, 0, len(opts.routes)+len(opts.bulkRoutes)+len(opts.handlerFuncs)+1)
 	for _, route := range opts.routes {
 		appOpts = append(appOpts, app.WithHandlerFunc(route, func(w http.ResponseWriter, r *http.Request) {
 			var ce event.Event
@@ -126,10 +130,11 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 	}
 
 	appOpts = append(appOpts, opts.handlerFuncs...)
+	appOpts = append(appOpts, app.WithInitialHealth(opts.initHealth))
 
 	return &Subscriber{
 		app:     app.New(t, appOpts...),
-		client:  util.HTTPClient(t),
+		client:  client.HTTP(t),
 		inCh:    inCh,
 		inBulk:  inBulk,
 		closeCh: closeCh,
@@ -143,8 +148,10 @@ func (s *Subscriber) Run(t *testing.T, ctx context.Context) {
 
 func (s *Subscriber) Cleanup(t *testing.T) {
 	t.Helper()
-	close(s.closeCh)
-	s.app.Cleanup(t)
+	if s.closeOnce.CompareAndSwap(false, true) {
+		close(s.closeCh)
+		s.app.Cleanup(t)
+	}
 }
 
 func (s *Subscriber) Port() int {
@@ -181,8 +188,7 @@ func (s *Subscriber) ReceiveBulk(t *testing.T, ctx context.Context) *pubsub.Bulk
 	}
 }
 
-func (s *Subscriber) AssertEventChanLen(t *testing.T, l int) {
-	t.Helper()
+func (s *Subscriber) AssertEventChanLen(t assert.TestingT, l int) {
 	assert.Len(t, s.inCh, l)
 }
 
@@ -249,4 +255,8 @@ func (s *Subscriber) publishBulk(t *testing.T, ctx context.Context, req PublishB
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	return resp
+}
+
+func (s *Subscriber) SetHealth(health bool) {
+	s.app.SetHealth(health)
 }

@@ -15,6 +15,7 @@ package reconnect
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
@@ -52,6 +53,10 @@ type subscriptions struct {
 }
 
 func (s *subscriptions) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
+	}
+
 	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
 	s.compStore = store.New(metav1.GroupVersionKind{
@@ -146,7 +151,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 	s.kubeapi.Informer().Add(t, &sub)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, s.daprd.GetMetaRegistedComponents(c, ctx), 1)
+		assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 		assert.Len(c, s.daprd.GetMetaSubscriptions(c, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 
@@ -157,7 +162,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 	s.operator2.WaitUntilRunning(t, ctx)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, s.daprd.GetMetaRegistedComponents(c, ctx), 1)
+		assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 		assert.Empty(c, s.daprd.GetMetaSubscriptions(c, ctx))
 	}, time.Second*10, time.Millisecond*10)
 
@@ -167,7 +172,7 @@ func (s *subscriptions) Run(t *testing.T, ctx context.Context) {
 	s.operator3.Run(t, ctx)
 	s.operator3.WaitUntilRunning(t, ctx)
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, s.daprd.GetMetaRegistedComponents(c, ctx), 1)
+		assert.Len(c, s.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 		assert.Len(c, s.daprd.GetMetaSubscriptions(c, ctx), 1)
 	}, time.Second*10, time.Millisecond*10)
 

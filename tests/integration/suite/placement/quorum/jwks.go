@@ -34,6 +34,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -131,6 +132,7 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 		AppID:                   "app-1",
 		MTLSEnabled:             true,
 		SentryTokenFile:         ptr.Of(j.appTokenFile),
+		Healthz:                 healthz.New(),
 	})
 	require.NoError(t, err)
 
@@ -159,8 +161,8 @@ func (j *jwks) Run(t *testing.T, ctx context.Context) {
 			i = 0
 		}
 		host := j.places[i].Address()
-		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(),
-			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID),
+		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(), //nolint:staticcheck
+			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID), //nolint:staticcheck
 		)
 		if cerr != nil {
 			return false

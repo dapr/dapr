@@ -79,13 +79,13 @@ func newRequestFn(opts Options, trustAnchors trustanchors.Interface, cptd spiffe
 			)
 		}
 
-		conn, err := grpc.DialContext(ctx,
+		conn, err := grpc.DialContext(ctx, //nolint:staticcheck
 			sentryAddress,
 			grpc.WithTransportCredentials(
 				grpccredentials.TLSClientCredentials(trustAnchors, tlsconfig.AuthorizeID(sentryID)),
 			),
 			grpc.WithUnaryInterceptor(unaryClientInterceptor),
-			grpc.WithReturnConnectionError(),
+			grpc.WithReturnConnectionError(), //nolint:staticcheck
 		)
 		if err != nil {
 			diagnostics.DefaultMonitoring.MTLSWorkLoadCertRotationFailed("sentry_conn")
@@ -150,7 +150,8 @@ func isControlPlaneService(id string) bool {
 	case "dapr-operator",
 		"dapr-placement",
 		"dapr-injector",
-		"dapr-sentry":
+		"dapr-sentry",
+		"dapr-scheduler":
 		return true
 	default:
 		return false

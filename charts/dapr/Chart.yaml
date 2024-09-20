@@ -19,3 +19,6 @@ dependencies:
   - name: dapr_sentry
     version: '0.0.0'
     repository: "file://dapr_sentry"
+  - name: dapr_scheduler
+    version: '0.0.0'
+    repository: "file://dapr_scheduler"

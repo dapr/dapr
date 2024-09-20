@@ -26,15 +26,16 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -116,7 +117,7 @@ func (o *Operator) Cleanup(t *testing.T) {
 }
 
 func (o *Operator) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", o.healthzPort), nil)
 		if err != nil {
@@ -128,7 +129,7 @@ func (o *Operator) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusOK == resp.StatusCode
-	}, time.Second*5, 10*time.Millisecond)
+	}, time.Second*10, 10*time.Millisecond)
 }
 
 func (o *Operator) Port() int {
@@ -156,6 +157,7 @@ func (o *Operator) Dial(t *testing.T, ctx context.Context, sentry *sentry.Sentry
 		AppID:                   appID,
 		Mode:                    modes.StandaloneMode,
 		MTLSEnabled:             true,
+		Healthz:                 healthz.New(),
 	})
 	require.NoError(t, err)
 
@@ -174,7 +176,7 @@ func (o *Operator) Dial(t *testing.T, ctx context.Context, sentry *sentry.Sentry
 
 	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", o.namespace, "dapr-operator")
 	require.NoError(t, err)
-
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, "localhost:"+strconv.Itoa(o.Port()), sech.GRPCDialOptionMTLS(id))
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })

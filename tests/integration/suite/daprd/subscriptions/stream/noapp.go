@@ -60,11 +60,19 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
 	}))
+
+	resp, err := stream.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Len(c, n.daprd.GetMetaSubscriptions(c, ctx), 1)
@@ -79,14 +87,14 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 
 	event, err := stream.Recv()
 	require.NoError(t, err)
-	assert.Equal(t, "a", event.GetTopic())
-	assert.Equal(t, "mypub", event.GetPubsubName())
-	assert.JSONEq(t, `{"status": "completed"}`, string(event.GetData()))
+	assert.Equal(t, "a", event.GetEventMessage().GetTopic())
+	assert.Equal(t, "mypub", event.GetEventMessage().GetPubsubName())
+	assert.JSONEq(t, `{"status": "completed"}`, string(event.GetEventMessage().GetData()))
 
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-			EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-				Id:     event.GetId(),
+		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+			EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+				Id:     event.GetEventMessage().GetId(),
 				Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
 			},
 		},

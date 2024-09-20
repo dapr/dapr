@@ -36,8 +36,8 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) {
 	oldSub, exists := s.store.GetDeclarativeSubscription(sub.Name)
 
 	if exists {
-		log.Infof("Closing existing Subscription to reload: %s", oldSub.Name)
-		if err := s.proc.CloseSubscription(ctx, oldSub); err != nil {
+		log.Infof("Closing existing Subscription to reload: %s", *oldSub.Name)
+		if err := s.proc.CloseSubscription(ctx, oldSub.Comp); err != nil {
 			log.Errorf("Failed to close existing Subscription: %s", err)
 			return
 		}
@@ -53,7 +53,7 @@ func (s *subscriptions) update(ctx context.Context, sub subapi.Subscription) {
 
 //nolint:unused
 func (s *subscriptions) delete(ctx context.Context, sub subapi.Subscription) {
-	if err := s.proc.CloseSubscription(ctx, sub); err != nil {
+	if err := s.proc.CloseSubscription(ctx, &sub); err != nil {
 		log.Errorf("Failed to close Subscription: %s", err)
 	}
 }

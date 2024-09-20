@@ -37,8 +37,8 @@ import (
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
-	"github.com/dapr/dapr/pkg/security"
 	securityfake "github.com/dapr/dapr/pkg/security/fake"
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	cafake "github.com/dapr/dapr/pkg/sentry/server/ca/fake"
@@ -69,7 +69,7 @@ func TestRun(t *testing.T) {
 	crtPEM := pem.EncodeToMemory(&pem.Block{Type: "CERTIFICATE", Bytes: crt})
 
 	tests := map[string]struct {
-		sec security.Handler
+		sec *securityfake.Fake
 		val validator.Validator
 		ca  ca.Signer
 
@@ -274,7 +274,8 @@ func TestRun(t *testing.T) {
 					// This is an invalid validator that is just used for tests
 					-1: test.val,
 				},
-				CA: test.ca,
+				CA:      test.ca,
+				Healthz: healthz.New(),
 			}
 
 			serverClosed := make(chan struct{})
@@ -289,7 +290,7 @@ func TestRun(t *testing.T) {
 
 			go func() {
 				defer close(serverClosed)
-				require.NoError(t, Start(ctx, opts))
+				require.NoError(t, New(opts).Start(ctx))
 			}()
 
 			require.Eventually(t, func() bool {
@@ -301,7 +302,7 @@ func TestRun(t *testing.T) {
 				return err == nil
 			}, time.Second, 10*time.Millisecond)
 
-			conn, err := grpc.DialContext(ctx, fmt.Sprintf("127.0.0.1:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials()))
+			conn, err := grpc.DialContext(ctx, fmt.Sprintf("127.0.0.1:%d", port), grpc.WithTransportCredentials(insecure.NewCredentials())) //nolint:staticcheck
 			require.NoError(t, err)
 			t.Cleanup(func() {
 				require.NoError(t, conn.Close())

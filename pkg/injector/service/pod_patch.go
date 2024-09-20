@@ -17,6 +17,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	jsonpatch "github.com/evanphx/json-patch/v5"
 	admissionv1 "k8s.io/api/admission/v1"
@@ -68,6 +69,8 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.OperatorAddress = operatorAddress
 	sidecar.SentryAddress = sentryAddress
 	sidecar.RunAsNonRoot = i.config.GetRunAsNonRoot()
+	sidecar.RunAsUser = i.config.GetRunAsUser()
+	sidecar.RunAsGroup = i.config.GetRunAsGroup()
 	sidecar.ReadOnlyRootFilesystem = i.config.GetReadOnlyRootFilesystem()
 	sidecar.EnableK8sDownwardAPIs = i.config.GetEnableK8sDownwardAPIs()
 	sidecar.SidecarDropALLCapabilities = i.config.GetDropCapabilities()
@@ -105,6 +108,12 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	if useRemindersSvc {
 		// Set the reminders-service CLI flag with "<name>:<address>"
 		sidecar.RemindersService = remindersSvcName + ":" + remindersSvc.Address(i.config.Namespace, i.config.KubeClusterDomain)
+	}
+
+	if sidecar.SchedulerAddress == "" {
+		allSchedulerAddresses := patcher.ServiceScheduler.AddressAllInstances(
+			i.schedulerReplicaCount, i.config.Namespace, i.config.KubeClusterDomain)
+		sidecar.SchedulerAddress = strings.Join(allSchedulerAddresses, ",")
 	}
 
 	// Default value for the sidecar image, which can be overridden by annotations

@@ -31,6 +31,8 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/pkg/healthz"
 )
 
 func Test_Start(t *testing.T) {
@@ -98,6 +100,7 @@ func Test_Start(t *testing.T) {
 			OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
 				return []*x509.Certificate{workloadCert}, nil
 			},
+			Healthz: healthz.New(),
 		})
 		require.NoError(t, err)
 

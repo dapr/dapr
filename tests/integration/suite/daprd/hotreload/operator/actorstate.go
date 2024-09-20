@@ -32,7 +32,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -159,9 +158,7 @@ func (a *actorstate) Run(t *testing.T, ctx context.Context) {
 	a.daprdUpdate.WaitUntilRunning(t, ctx)
 	a.daprdDelete.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
-
-	comps := util.GetMetaComponents(t, ctx, httpClient, a.daprdCreate.HTTPPort())
+	comps := a.daprdCreate.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{}, comps)
 	inmemStore := compapi.Component{
 		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
@@ -175,7 +172,7 @@ func (a *actorstate) Run(t *testing.T, ctx context.Context) {
 	a.operatorCreate.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &inmemStore, EventType: operatorv1.ResourceEventType_CREATED})
 	a.loglineCreate.EventuallyFoundAll(t)
 
-	comps = util.GetMetaComponents(t, ctx, httpClient, a.daprdUpdate.HTTPPort())
+	comps = a.daprdUpdate.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
@@ -187,7 +184,7 @@ func (a *actorstate) Run(t *testing.T, ctx context.Context) {
 	a.operatorUpdate.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &inmemStore, EventType: operatorv1.ResourceEventType_UPDATED})
 	a.loglineUpdate.EventuallyFoundAll(t)
 
-	comps = util.GetMetaComponents(t, ctx, httpClient, a.daprdDelete.HTTPPort())
+	comps = a.daprdDelete.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",

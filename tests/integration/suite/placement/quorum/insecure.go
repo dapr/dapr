@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -85,6 +86,7 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 		TrustAnchors:            i.sentry.CABundle().TrustAnchors,
 		AppID:                   "app-1",
 		MTLSEnabled:             true,
+		Healthz:                 healthz.New(),
 	})
 	require.NoError(t, err)
 
@@ -113,8 +115,8 @@ func (i *insecure) Run(t *testing.T, ctx context.Context) {
 			j = 0
 		}
 		host := i.places[j].Address()
-		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(),
-			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID),
+		conn, cerr := grpc.DialContext(ctx, host, grpc.WithBlock(), //nolint:staticcheck
+			grpc.WithReturnConnectionError(), sec.GRPCDialOptionMTLS(placeID), //nolint:staticcheck
 		)
 		if cerr != nil {
 			return false

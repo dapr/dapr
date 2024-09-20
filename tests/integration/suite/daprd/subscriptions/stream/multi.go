@@ -64,38 +64,71 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, stream1.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
 	}))
+	resp, err := stream1.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
+
 	stream2, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
 	require.NoError(t, stream2.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "b",
 			},
 		},
 	}))
+	resp, err = stream2.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
+
 	stream3, err := client.SubscribeTopicEventsAlpha1(ctx)
 	require.NoError(t, err)
 	require.NoError(t, stream3.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "c",
 			},
 		},
 	}))
+	resp, err = stream3.Recv()
+	require.NoError(t, err)
+	switch resp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Failf(t, "unexpected response", "got (%T) %v", resp.GetSubscribeTopicEventsResponseType(), resp)
+	}
+
 	t.Cleanup(func() {
 		require.NoError(t, stream1.CloseSend())
 		require.NoError(t, stream2.CloseSend())
 		require.NoError(t, stream3.CloseSend())
 	})
 
+	var subsInMeta []daprd.MetadataResponsePubsubSubscription
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, m.daprd.GetMetaSubscriptions(c, ctx), 3)
-	}, time.Second*10, time.Millisecond*10)
+		subsInMeta = m.daprd.GetMetaSubscriptions(c, ctx)
+		assert.Len(c, subsInMeta, 3)
+	}, time.Second*5, time.Millisecond*10)
+	assert.ElementsMatch(t, []daprd.MetadataResponsePubsubSubscription{
+		{PubsubName: "mypub", Topic: "a", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/"}}, Type: rtv1.PubsubSubscriptionType_STREAMING.String()},
+		{PubsubName: "mypub", Topic: "c", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/"}}, Type: rtv1.PubsubSubscriptionType_STREAMING.String()},
+		{PubsubName: "mypub", Topic: "b", Rules: []daprd.MetadataResponsePubsubSubscriptionRule{{Path: "/"}}, Type: rtv1.PubsubSubscriptionType_STREAMING.String()},
+	},
+		subsInMeta,
+	)
 
 	for _, topic := range []string{"a", "b", "c"} {
 		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
@@ -113,6 +146,6 @@ func (m *multi) Run(t *testing.T, ctx context.Context) {
 	} {
 		event, err := stream.Recv()
 		require.NoError(t, err)
-		assert.Equal(t, topic, event.GetTopic())
+		assert.Equal(t, topic, event.GetEventMessage().GetTopic())
 	}
 }
