@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal"
 )
 
@@ -62,7 +63,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		log.Errorf("error scheduling job %s: %s", req.GetName(), err)
 		return nil, err
 	}
-
+	monitoring.RecordJobsScheduledCount(req.GetMetadata())
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
 }
 
