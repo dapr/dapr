@@ -22,7 +22,7 @@ import (
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
-	testpb "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc/proto"
+	testpb "github.com/dapr/dapr/tests/integration/framework/process/grpc/app/proto"
 )
 
 type (
