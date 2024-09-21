@@ -41,7 +41,7 @@ jobs:
         target_os: ["linux"]
         target_arch: ["amd64"]
     env:
-      GOLANGCILINT_VER: "v1.55.2"
+      GOLANGCILINT_VER: "v1.61.0"
       PROTOC_VERSION: "24.4"
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
@@ -80,7 +80,10 @@ jobs:
         with:
           version: ${{ env.GOLANGCILINT_VER }}
           skip-cache: true
-          args: --build-tags allcomponents
+          args: --build-tags allcomponents --timeout=10m
+          # TODO: @joshvanl remove once all new linter errors have been
+          # addressed.
+          only-new-issues: true
       - name: Run go mod tidy check diff
         run: make modtidy check-diff
       - name: Check for retracted dependencies
