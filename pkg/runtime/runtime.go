@@ -18,7 +18,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"reflect"
@@ -973,7 +972,6 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 
 func (a *DaprRuntime) initNameResolution(ctx context.Context) (err error) {
 	var (
-		resolver         nr.Resolver
 		resolverMetadata nr.Metadata
 		resolverName     string
 		resolverVersion  string
@@ -1001,7 +999,7 @@ func (a *DaprRuntime) initNameResolution(ctx context.Context) (err error) {
 	}
 
 	fName := utils.ComponentLogName("nr", resolverName, resolverVersion)
-	resolver, err = a.runtimeConfig.registry.NameResolutions().Create(resolverName, resolverVersion, fName)
+	a.nameResolver, err = a.runtimeConfig.registry.NameResolutions().Create(resolverName, resolverVersion, fName)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "creation", resolverName)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
@@ -1028,18 +1026,14 @@ func (a *DaprRuntime) initNameResolution(ctx context.Context) (err error) {
 		Namespace:        a.namespace,
 	}
 
-	err = resolver.Init(ctx, resolverMetadata)
+	err = a.nameResolver.Init(ctx, resolverMetadata)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "init", resolverName)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
-	a.nameResolver = resolver
-	if nrCloser, ok := resolver.(io.Closer); ok {
-		err = a.runnerCloser.AddCloser(nrCloser)
-		if err != nil {
-			return err
-		}
+	if err = a.runnerCloser.AddCloser(a.nameResolver); err != nil {
+		return err
 	}
 
 	log.Infof("Initialized name resolution to %s", resolverName)
