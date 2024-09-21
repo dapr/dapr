@@ -17,7 +17,6 @@ import (
 	"context"
 	"encoding/base64"
 	"encoding/json"
-	"io"
 	"os"
 	"strings"
 	"sync"
@@ -100,11 +99,8 @@ func (s *secret) Close(comp compapi.Component) error {
 
 	defer s.compStore.DeleteSecretStore(comp.Name)
 
-	closer, ok := sec.(io.Closer)
-	if ok && closer != nil {
-		if err := closer.Close(); err != nil {
-			return err
-		}
+	if err := sec.Close(); err != nil {
+		return err
 	}
 
 	return nil
