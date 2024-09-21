@@ -34,16 +34,16 @@ var log = logger.NewLogger("dapr.runtime.scheduler")
 type Options struct {
 	Namespace string
 	AppID     string
-	Clients   *clients.Clients
 	Channels  *channels.Channels
+	Clients   *clients.Clients
 }
 
 // Manager manages connections to multiple schedulers.
 type Manager struct {
 	clients   *clients.Clients
+	actors    actors.ActorRuntime
 	namespace string
 	appID     string
-	actors    actors.ActorRuntime
 	channels  *channels.Channels
 
 	stopStartCh chan struct{}
@@ -54,18 +54,14 @@ type Manager struct {
 	wg          sync.WaitGroup
 }
 
-func New(opts Options) (*Manager, error) {
+func New(opts Options) *Manager {
 	return &Manager{
 		namespace:   opts.Namespace,
 		appID:       opts.AppID,
-		clients:     opts.Clients,
 		channels:    opts.Channels,
+		clients:     opts.Clients,
 		stopStartCh: make(chan struct{}, 1),
-	}, nil
-}
-
-func (m *Manager) SetClients(clients *clients.Clients) {
-	m.clients = clients
+	}
 }
 
 // Run starts watching for job triggers from all scheduler clients.
@@ -120,7 +116,11 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 		},
 	}
 
-	clients := m.clients.All()
+	clients, err := m.clients.All(ctx)
+	if err != nil {
+		return err
+	}
+
 	runners := make([]concurrency.Runner, len(clients)+1)
 
 	for i := 0; i < len(clients); i++ {

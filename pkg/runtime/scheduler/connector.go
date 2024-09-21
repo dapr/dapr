@@ -17,8 +17,6 @@ import (
 	"context"
 	"time"
 
-	retry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
-
 	"github.com/dapr/dapr/pkg/actors"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
@@ -35,10 +33,7 @@ type connector struct {
 // to WatchJobs on non-terminal errors.
 func (c *connector) run(ctx context.Context) error {
 	for {
-		stream, err := c.client.WatchJobs(ctx,
-			retry.WithMax(3),
-			retry.WithPerRetryTimeout(time.Second/2),
-		)
+		stream, err := c.client.WatchJobs(ctx)
 		if ctx.Err() != nil {
 			return ctx.Err()
 		}

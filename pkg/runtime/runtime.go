@@ -110,8 +110,8 @@ type DaprRuntime struct {
 	daprHTTPAPI           http.API
 	daprGRPCAPI           grpc.API
 	operatorClient        operatorv1pb.OperatorClient
-	schedulerManager      *scheduler.Manager
 	schedulerClients      *clients.Clients
+	jobsManager           *scheduler.Manager
 	isAppHealthy          chan struct{}
 	appHealth             *apphealth.AppHealth
 	appHealthReady        func(context.Context) error // Invoked the first time the app health becomes ready
@@ -260,6 +260,12 @@ func newDaprRuntime(ctx context.Context,
 		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
 	}
 
+	schedulerClients := clients.New(clients.Options{
+		Addresses: runtimeConfig.schedulerAddress,
+		Security:  sec,
+		Healthz:   runtimeConfig.healthz,
+	})
+
 	rt := &DaprRuntime{
 		runtimeConfig:         runtimeConfig,
 		globalConfig:          globalConfig,
@@ -281,10 +287,17 @@ func newDaprRuntime(ctx context.Context,
 		reloader:              reloader,
 		namespace:             namespace,
 		podName:               podName,
-		initComplete:          make(chan struct{}),
-		isAppHealthy:          make(chan struct{}),
-		clock:                 new(clock.RealClock),
-		httpMiddleware:        httpMiddleware,
+		schedulerClients:      schedulerClients,
+		jobsManager: scheduler.New(scheduler.Options{
+			Namespace: namespace,
+			AppID:     runtimeConfig.id,
+			Channels:  channels,
+			Clients:   schedulerClients,
+		}),
+		initComplete:   make(chan struct{}),
+		isAppHealthy:   make(chan struct{}),
+		clock:          new(clock.RealClock),
+		httpMiddleware: httpMiddleware,
 	}
 	close(rt.isAppHealthy)
 
@@ -298,6 +311,8 @@ func newDaprRuntime(ctx context.Context,
 		rt.runtimeConfig.metricsExporter.Start,
 		rt.processor.Process,
 		rt.reloader.Run,
+		rt.schedulerClients.Run,
+		rt.jobsManager.Run,
 		func(ctx context.Context) error {
 			start := time.Now()
 			log.Infof("%s mode configured", rt.runtimeConfig.mode)
@@ -384,31 +399,8 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 			return nil
 		})
 	}
-	if a.runtimeConfig.SchedulerEnabled() {
-		log.Info("Initializing connection to Scheduler in the background")
-		if err := a.initScheduler(ctx); err != nil {
-			log.Errorf("Scheduler failed to start due to: %s", err.Error())
-		}
-		log.Info("Scheduler client connections created")
-	}
 
 	return a.runnerCloser.Run(ctx)
-}
-
-func continuouslyRetrySchedulerClient(ctx context.Context, opts clients.Options) (*clients.Clients, error) {
-	for {
-		cli, err := clients.New(ctx, opts)
-		if err == nil {
-			return cli, nil
-		}
-
-		log.Errorf("Failed to initialize scheduler clients: %s. Retrying...", err)
-		select {
-		case <-time.After(time.Second):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
 }
 
 func getPodName() string {
@@ -695,7 +687,7 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 	}
 
 	if a.runtimeConfig.SchedulerEnabled() {
-		a.schedulerManager.Start(a.actor)
+		a.jobsManager.Start(a.actor)
 	}
 
 	return nil
@@ -790,7 +782,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		}
 
 		if a.runtimeConfig.SchedulerEnabled() {
-			a.schedulerManager.Start(a.actor)
+			a.jobsManager.Start(a.actor)
 		}
 
 	case apphealth.AppStatusUnhealthy:
@@ -805,39 +797,11 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		a.processor.Binding().StopReadingFromBindings(false)
 
 		if a.runtimeConfig.SchedulerEnabled() {
-			if a.schedulerManager != nil {
-				a.schedulerManager.Stop()
+			if a.jobsManager != nil {
+				a.jobsManager.Stop()
 			}
 		}
 	}
-}
-
-func (a *DaprRuntime) initScheduler(ctx context.Context) error {
-	var schedError error
-	a.schedulerManager, schedError = scheduler.New(scheduler.Options{
-		Namespace: a.namespace,
-		AppID:     a.runtimeConfig.id,
-		Channels:  a.channels,
-	})
-	if schedError != nil {
-		return schedError
-	}
-
-	if err := a.runnerCloser.Add(a.schedulerManager.Run); err != nil {
-		return err
-	}
-
-	opts := clients.Options{
-		Addresses: a.runtimeConfig.schedulerAddress,
-		Security:  a.sec,
-	}
-	a.schedulerClients, schedError = continuouslyRetrySchedulerClient(ctx, opts)
-	if schedError != nil {
-		log.Errorf("failed to create scheduler clients: could not connect to scheduler: %s", schedError)
-	}
-	a.schedulerManager.SetClients(a.schedulerClients)
-
-	return nil
 }
 
 func (a *DaprRuntime) populateSecretsConfiguration() {
