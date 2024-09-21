@@ -15,7 +15,6 @@ package inmemory
 
 import (
 	"context"
-	"io"
 	"sync"
 	"testing"
 
@@ -127,7 +126,7 @@ func (w *Wrapped) Close() error {
 	defer w.lock.Unlock()
 	if !w.hasClosed {
 		w.hasClosed = true
-		return w.Store.(io.Closer).Close()
+		return w.Store.Close()
 	}
 	return nil
 }
