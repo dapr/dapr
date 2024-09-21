@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/components-contrib/metadata"
+
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 
