@@ -711,7 +711,7 @@ jobs:
         with:
           path: dapr
       - name: Checkout the longhaul tests repo
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: dapr/${{ env.LONG_HAUL_REPO }}
           token: ${{ steps.get_workflow_token.outputs.token }}
