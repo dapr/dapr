@@ -9,6 +9,7 @@ Dapr metric name starts with `dapr_` prefix except for health metrics.
   * [Dapr Sentry metrics](#dapr-sentry-metrics)
   * [Dapr Runtime metrics](#dapr-runtime-metrics)
   * [Dapr Component metrics](#dapr-component-metrics)
+  * [Dapr Scheduler metrics](#dapr-scheduler-metrics)
 
 ## Dapr Common metrics
 
@@ -53,6 +54,15 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_sentry_servercert_issue_failed_total: The number of server TLS certificate issuance failures.
 * dapr_sentry_issuercert_changed_total: The number of issuer cert updates, when issuer cert or key is changed
 * dapr_sentry_issuercert_expiry_timestamp: The unix timestamp, in seconds, when issuer/root cert will expire.
+
+## Dapr Scheduler metrics
+
+[monitoring metrics](../../pkg/scheduler/monitoring/metrics.go)
+
+* dapr_scheduler_sidecars_connected_total: The total number of dapr sidecars connected to the scheduler service.
+* dapr_scheduler_jobs_created_total: The total number of jobs scheduled (and therefore created).
+* dapr_scheduler_jobs_triggered_total: The total number of successfully triggered jobs.
+* dapr_scheduler_trigger_duration_total: The total time it takes to trigger a job from the scheduler service.
 
 ## Dapr Runtime metrics
 
