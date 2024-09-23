@@ -14,14 +14,16 @@ limitations under the License.
 package clients
 
 import (
+	"context"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-func Test_Next(t *testing.T) {
+func Test_Next_multiple(t *testing.T) {
 	client1 := schedulerv1pb.NewSchedulerClient(nil)
 	client2 := schedulerv1pb.NewSchedulerClient(nil)
 	client3 := schedulerv1pb.NewSchedulerClient(nil)
@@ -39,10 +41,16 @@ func Test_Next(t *testing.T) {
 	}
 	c := &Clients{
 		clients: clients,
+		readyCh: make(chan struct{}),
+		closeCh: make(chan struct{}),
 	}
+	close(c.readyCh)
 
-	assert.Equal(t, clients, c.All())
-	cl := c.Next()
+	all, err := c.All(context.Background())
+	require.NoError(t, err)
+	assert.Equal(t, clients, all)
+	cl, err := c.Next(context.Background())
+	require.NoError(t, err)
 	assert.NotSame(t, client1, cl)
 	assert.Same(t, client2, cl)
 	assert.NotSame(t, client3, cl)
@@ -50,18 +58,53 @@ func Test_Next(t *testing.T) {
 	assert.NotSame(t, client5, cl)
 	assert.NotSame(t, client6, cl)
 
-	assert.Same(t, client3, c.Next())
-	assert.Same(t, client4, c.Next())
-	assert.Same(t, client5, c.Next())
-	assert.Same(t, client6, c.Next())
-	assert.Same(t, client1, c.Next())
-	assert.Same(t, client2, c.Next())
+	cl, err = c.Next(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, client3, cl)
 
-	c = &Clients{
+	cl, err = c.Next(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, client4, cl)
+
+	cl, err = c.Next(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, client5, cl)
+
+	cl, err = c.Next(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, client6, cl)
+
+	cl, err = c.Next(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, client1, cl)
+
+	cl, err = c.Next(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, client2, cl)
+}
+
+func Test_Next_one(t *testing.T) {
+	client1 := schedulerv1pb.NewSchedulerClient(nil)
+	c := &Clients{
 		clients: []schedulerv1pb.SchedulerClient{client1},
+		readyCh: make(chan struct{}),
+		closeCh: make(chan struct{}),
 	}
-	assert.Same(t, client1, c.Next())
-	assert.Same(t, client1, c.Next())
-	assert.Same(t, client1, c.Next())
-	assert.Same(t, client1, c.Next())
+	close(c.readyCh)
+
+	cl, err := c.Next(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, client1, cl)
+	cl, err = c.Next(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, client1, cl)
+	cl, err = c.Next(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, client1, cl)
+	cl, err = c.Next(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, client1, cl)
+	cl, err = c.Next(context.Background())
+	require.NoError(t, err)
+	assert.Same(t, client1, cl)
 }
