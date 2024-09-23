@@ -15,6 +15,7 @@ package monitoring
 
 import (
 	"context"
+	"time"
 
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
@@ -37,14 +38,14 @@ var (
 		"scheduler/jobs_created_total",
 		"The total number of jobs scheduled (and therefore created).",
 		stats.UnitDimensionless)
-	triggerDurationTotal = stats.Int64(
-		"scheduler/trigger_duration_total",
-		"The total time it takes to trigger a job.",
-		stats.UnitDimensionless)
 	jobsTriggeredTotal = stats.Int64(
 		"scheduler/jobs_triggered_total",
 		"The total number of successfully triggered jobs.",
 		stats.UnitDimensionless)
+	triggerDurationTotal = stats.Float64(
+		"scheduler/trigger_duration_total",
+		"The total time it takes to trigger a job from the scheduler service.",
+		stats.UnitMilliseconds)
 
 	// appIDKey is a tag key for App ID.
 	appIDKey = tag.MustNewKey(appID)
@@ -75,15 +76,19 @@ func RecordJobsTriggeredCount(ns string, appID string) {
 	stats.RecordWithTags(context.Background(), diagUtils.WithTags(jobsTriggeredTotal.Name(), appIDKey, ns, appID), jobsTriggeredTotal.M(1))
 }
 
-//TODO ADD: triggerDurationTotal
+// RecordTriggerDuration records the time it takes to send the job to dapr from the scheduler service
+func RecordTriggerDuration(ns string, appID string, start time.Time) {
+	elapsed := time.Since(start).Milliseconds()
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(triggerDurationTotal.Name(), appIDKey, ns, appID), triggerDurationTotal.M(float64(elapsed)))
+}
 
 // InitMetrics initialize the scheduler service metrics.
 func InitMetrics() error {
 	err := view.Register(
 		diagUtils.NewMeasureView(sidecarsConnectedTotal, []tag.Key{appIDKey}, view.Count()),
 		diagUtils.NewMeasureView(jobsScheduledTotal, []tag.Key{appIDKey}, view.Count()),
-		diagUtils.NewMeasureView(triggerDurationTotal, []tag.Key{appIDKey}, view.Count()),
 		diagUtils.NewMeasureView(jobsTriggeredTotal, []tag.Key{appIDKey}, view.Count()),
+		diagUtils.NewMeasureView(triggerDurationTotal, []tag.Key{appIDKey}, view.Distribution(0, 100, 500, 1000, 5000, 10000)),
 	)
 
 	return err

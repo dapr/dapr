@@ -144,6 +144,7 @@ func (j *jobstriggered) Run(t *testing.T, ctx context.Context) {
 	client := j.daprd.GRPCClient(t, ctx)
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
+			startTime := time.Now()
 			_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 				Job: &runtimev1pb.Job{
 					Name:    name,
@@ -155,10 +156,23 @@ func (j *jobstriggered) Run(t *testing.T, ctx context.Context) {
 
 			select {
 			case job := <-j.jobChan:
+				receivedJobElapsed := time.Since(startTime).Milliseconds()
 				assert.NotNil(t, job)
 				assert.Equal(t, "job/"+name, job.GetMethod())
 				assert.Equal(t, commonv1pb.HTTPExtension_POST, job.GetHttpExtension().GetVerb())
 				j.assertMetricExists(t, ctx, frameworkClient, "dapr_scheduler_jobs_triggered_total", int(j.jobstriggeredCount.Load()))
+
+				// with duration metrics, the following metrics can be found:
+				// dapr_scheduler_trigger_duration_total_bucket
+				// dapr_scheduler_trigger_duration_total_sum
+				triggeredElapsed := j.getMetricVal(t, ctx, frameworkClient, "dapr_scheduler_trigger_duration_total")
+
+				// ensure the trigger duration is less than 1 second (1000 milliseconds)
+				assert.Less(t, triggeredElapsed, int64(1000), "Trigger duration should be less than 1 second")
+
+				// triggered time should be less than the total round trip time of a job being scheduled and sent back to the app
+				assert.Less(t, triggeredElapsed, receivedJobElapsed, "Trigger time should be less than the total elapsed time to receive the scheduled job")
+
 				test.exp(t, job)
 			case <-time.After(time.Second * 10):
 				assert.Fail(t, "timed out waiting for triggered job")
@@ -195,7 +209,7 @@ func (j *jobstriggered) assertMetricExists(t *testing.T, ctx context.Context, cl
 				continue
 			}
 
-			// dapr_scheduler_jobs_created_total{app_id="appid"}
+			// dapr_scheduler_jobs_triggered_total{app_id="appid"}
 			metricName := string(split[0])
 			metricVal := string(split[1])
 			if !strings.Contains(metricName, expectedMetric) {
@@ -211,4 +225,54 @@ func (j *jobstriggered) assertMetricExists(t *testing.T, ctx context.Context, cl
 		}
 		assert.True(c, foundMetric, "Expected metric %s not found", expectedMetric)
 	}, time.Second*1, time.Millisecond*10, "Expected metric %s not found or the count was incorrect", expectedMetric)
+}
+
+// for duration metrics, send back the value
+func (j *jobstriggered) getMetricVal(t *testing.T, ctx context.Context, client *http.Client, expectedMetric string) int64 {
+	t.Helper()
+
+	var metricValue int64
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		metricReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/metrics", j.scheduler.MetricsPort()), nil)
+		require.NoError(t, err)
+
+		resp, err := client.Do(metricReq)
+		require.NoError(t, err)
+
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		foundMetric := false
+
+		for _, line := range bytes.Split(respBody, []byte("\n")) {
+			if len(line) == 0 || line[0] == '#' {
+				continue
+			}
+
+			split := bytes.Split(line, []byte(" "))
+			if len(split) != 2 {
+				continue
+			}
+
+			metricName := string(split[0])
+			metricVal := string(split[1])
+
+			if !strings.Contains(metricName, expectedMetric) {
+				continue
+			}
+
+			// dapr_scheduler_trigger_duration_total_bucket
+			// dapr_scheduler_trigger_duration_total_sum
+			if strings.Contains(metricName, expectedMetric) {
+				metricElapsed, err := strconv.ParseFloat(metricVal, 64)
+				require.NoError(t, err)
+				metricValue = int64(metricElapsed)
+				foundMetric = true
+
+			}
+		}
+		assert.True(c, foundMetric, "Expected metric %s not found", expectedMetric)
+	}, time.Second*1, time.Millisecond*10, "Expected metric %s not found or the value was incorrect", expectedMetric)
+	return metricValue
 }

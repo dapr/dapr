@@ -174,6 +174,7 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 		return true
 	}
 
+	now := time.Now()
 	if err := s.connectionPool.Send(ctx, &internal.JobEvent{
 		Name:     req.GetName()[idx+2:],
 		Data:     req.GetPayload(),
@@ -183,6 +184,7 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 		// another long running go routine that accepts this job on a channel
 		log.Errorf("Error sending job to connection stream: %s", err)
 	}
+	monitoring.RecordTriggerDuration(meta.GetNamespace(), meta.GetAppId(), now)
 
 	monitoring.RecordJobsTriggeredCount(meta.GetNamespace(), meta.GetAppId())
 	return true
