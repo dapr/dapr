@@ -269,7 +269,6 @@ func (j *jobstriggered) getMetricVal(t *testing.T, ctx context.Context, client *
 				require.NoError(t, err)
 				metricValue = int64(metricElapsed)
 				foundMetric = true
-
 			}
 		}
 		assert.True(c, foundMetric, "Expected metric %s not found", expectedMetric)
