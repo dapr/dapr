@@ -36,7 +36,7 @@ var (
 		stats.UnitDimensionless)
 	jobsScheduledTotal = stats.Int64(
 		"scheduler/jobs_created_total",
-		"The total number of jobs scheduled (and therefore created).",
+		"The total number of jobs scheduled.",
 		stats.UnitDimensionless)
 	jobsTriggeredTotal = stats.Int64(
 		"scheduler/jobs_triggered_total",
