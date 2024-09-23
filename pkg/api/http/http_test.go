@@ -32,6 +32,7 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"github.com/valyala/fasthttp"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/test/bufconn"
 	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -44,6 +45,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	workflowContrib "github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/actors"
+	daprerrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/api/universal"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -4678,6 +4680,15 @@ func TestStateStoreErrors(t *testing.T) {
 		assert.Equal(t, 400, c)
 		assert.Equal(t, "invalid etag value: error", m)
 	})
+
+	t.Run("standardized error", func(t *testing.T) {
+		a := &api{}
+		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, gohttp.StatusNotFound, "", "testReason")
+		c, m, r := a.stateErrorResponse(standardizedErr, "ERR_STATE_SAVE")
+		assert.Equal(t, 404, c)
+		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", m)
+		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+	})
 }
 
 func TestExtractEtag(t *testing.T) {
@@ -4717,4 +4728,16 @@ func TestExtractEtag(t *testing.T) {
 func matchContextInterface(v any) bool {
 	_, ok := v.(context.Context)
 	return ok
+}
+
+func (c fakeConfigurationStore) Close() error {
+	return nil
+}
+
+func (l fakeLockStore) Close() error {
+	return nil
+}
+
+func (c fakeStateStore) Close() error {
+	return nil
 }

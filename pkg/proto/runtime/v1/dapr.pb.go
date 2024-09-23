@@ -6461,7 +6461,7 @@ type Job struct {
 	//
 	// Systemd timer style cron accepts 6 fields:
 	// seconds | minutes | hours | day of month | month        | day of week
-	// 0-59    | 0-59    | 0-23  | 1-31         | 1-12/jan-dec | 0-7/sun-sat
+	// 0-59    | 0-59    | 0-23  | 1-31         | 1-12/jan-dec | 0-6/sun-sat
 	//
 	// "0 30 * * * *" - every hour on the half hour
 	// "0 15 3 * * *" - every day at 03:15
