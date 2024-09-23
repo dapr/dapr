@@ -16,9 +16,7 @@ package apps
 import (
 	"context"
 	"fmt"
-	// "io"
 	"net/http"
-	// "strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -27,9 +25,9 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -38,10 +36,10 @@ func init() {
 }
 
 type defaultcircuitbreaker struct {
-	daprdClient    *daprd.Daprd
-	daprdServer    *daprd.Daprd
-	callCount1 *atomic.Int32
-	callCount2 *atomic.Int32
+	daprdClient *daprd.Daprd
+	daprdServer *daprd.Daprd
+	callCount1  *atomic.Int32
+	callCount2  *atomic.Int32
 }
 
 func (d *defaultcircuitbreaker) Setup(t *testing.T) []framework.Option {
@@ -92,7 +90,6 @@ spec:
 	d.daprdServer = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppID("server"),
-		
 	)
 	// log.Print(d.daprdClient.Metrics(t, context.Background()))
 
@@ -126,7 +123,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		
+
 		// assert cb execution,activation,and current state counts
 		mtc := d.daprdClient.Metrics(t, context.Background())
 		assert.Equal(t, float64(4), mtc["dapr_resiliency_count|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"])
@@ -158,7 +155,7 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		
+
 		// assert cb execution,activation,and current state counts
 		mtc := d.daprdClient.Metrics(t, context.Background())
 		assert.Equal(t, float64(7), mtc["dapr_resiliency_count|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"])

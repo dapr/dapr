@@ -32,10 +32,10 @@ type PolicyType string
 type PolicyFlowDirection string
 
 type resiliencyMetrics struct {
-	policiesLoadCount       *stats.Int64Measure
-	executionCount          *stats.Int64Measure
-	activationsCount        *stats.Int64Measure
-	circuitbreakerState     *stats.Int64Measure
+	policiesLoadCount   *stats.Int64Measure
+	executionCount      *stats.Int64Measure
+	activationsCount    *stats.Int64Measure
+	circuitbreakerState *stats.Int64Measure
 
 	appID   string
 	ctx     context.Context
@@ -95,36 +95,38 @@ func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace s
 	if m.enabled {
 		// Common tags for all metrics
 		commonTags := []interface{}{
-			appIDKey, m.appID, 
-			resiliencyNameKey, resiliencyName, 
+			appIDKey, m.appID,
+			resiliencyNameKey, resiliencyName,
 			policyKey, string(policy),
-			namespaceKey, namespace, 
-			flowDirectionKey, string(flowDirection), 
-			targetKey, target, 
-			statusKey, status,
+			namespaceKey, namespace,
+			flowDirectionKey, string(flowDirection),
+			targetKey, target,
+			statusKey, //status appened on each recording
 		}
 
+		// Record count metric for all resiliency executions
 		_ = stats.RecordWithTags(
 			m.ctx,
-			diagUtils.WithTags(m.executionCount.Name(), commonTags...),
+			diagUtils.WithTags(m.executionCount.Name(), append(commonTags, status)...),
 			m.executionCount.M(1),
 		)
 
-		// Record 4 metrics, one for each cb state, with the active state having a value of 1
+		// Record cb gauge, 4 metrics, one for each cb state, with the active state having a value of 1, otherwise 0
 		if policy == CircuitBreakerPolicy {
 			for _, s := range cbStatuses {
-				//Use correct status tag
-				commonTags = append(commonTags[:len(commonTags)-1], s)
-				stateActive := int64(0)
 				if s == status {
-					stateActive = int64(1)
+					_ = stats.RecordWithTags(
+						m.ctx,
+						diagUtils.WithTags(m.circuitbreakerState.Name(), append(commonTags, s)...),
+						m.circuitbreakerState.M(1),
+					)
+				} else {
+					_ = stats.RecordWithTags(
+						m.ctx,
+						diagUtils.WithTags(m.circuitbreakerState.Name(), append(commonTags, s)...),
+						m.circuitbreakerState.M(0),
+					)
 				}
-
-				_ = stats.RecordWithTags(
-					m.ctx,
-					diagUtils.WithTags(m.circuitbreakerState.Name(), commonTags...),
-					m.circuitbreakerState.M(stateActive),
-				)
 			}
 		}
 	}
