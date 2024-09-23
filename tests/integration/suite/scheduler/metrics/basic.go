@@ -56,7 +56,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 	require.NoError(t, err)
 	b.idPrefix = uuid.String()
 
-	fp := ports.Reserve(t, 2)
+	fp := ports.Reserve(t, 2) // nolint:mnd
 	port1 := fp.Port(t)
 	port2 := fp.Port(t)
 
@@ -84,7 +84,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	var err error
 	b.etcdClient, err = clientv3.New(clientv3.Config{
 		Endpoints:   []string{fmt.Sprintf("localhost:%d", b.etcdPort)},
-		DialTimeout: 5 * time.Second,
+		DialTimeout: 5 * time.Second, // nolint:mnd
 	})
 	require.NoError(t, err)
 	t.Cleanup(func() {
@@ -165,7 +165,7 @@ func (b *basic) assertMetricExists(t *testing.T, ctx context.Context, client *ht
 		}
 
 		split := bytes.Split(line, []byte(" "))
-		if len(split) != 2 {
+		if len(split) != 2 { // nolint:mnd
 			continue
 		}
 

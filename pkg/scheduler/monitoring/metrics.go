@@ -88,7 +88,7 @@ func InitMetrics() error {
 		diagUtils.NewMeasureView(sidecarsConnectedTotal, []tag.Key{appIDKey}, view.Count()),
 		diagUtils.NewMeasureView(jobsScheduledTotal, []tag.Key{appIDKey}, view.Count()),
 		diagUtils.NewMeasureView(jobsTriggeredTotal, []tag.Key{appIDKey}, view.Count()),
-		diagUtils.NewMeasureView(triggerDurationTotal, []tag.Key{appIDKey}, view.Distribution(0, 100, 500, 1000, 5000, 10000)),
+		diagUtils.NewMeasureView(triggerDurationTotal, []tag.Key{appIDKey}, view.Distribution(0, 100, 500, 1000, 5000, 10000)), // nolint:mnd
 	)
 
 	return err

@@ -33,8 +33,7 @@ import (
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	clients "github.com/dapr/dapr/tests/integration/framework/client"
-	frameworkclient "github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -66,9 +65,9 @@ metadata:
 spec:
   features:
   - name: SchedulerReminders
-    enabled: true`), 0o600))
+    enabled: true`), 0o600)) // nolint:mnd
 
-	fp := ports.Reserve(t, 2)
+	fp := ports.Reserve(t, 2) // nolint:mnd
 	port1 := fp.Port(t)
 	port2 := fp.Port(t)
 	m.etcdPort = port2
@@ -111,13 +110,13 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	m.place.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilRunning(t, ctx)
 
-	frameworkClient := frameworkclient.HTTP(t)
+	httpClient := client.HTTP(t)
 
-	client := m.daprd.GRPCClient(t, ctx)
+	grpcClient := m.daprd.GRPCClient(t, ctx)
 
-	etcdClient := clients.Etcd(t, clientv3.Config{
+	etcdClient := client.Etcd(t, clientv3.Config{
 		Endpoints:   []string{fmt.Sprintf("localhost:%d", m.etcdPort)},
-		DialTimeout: 5 * time.Second,
+		DialTimeout: 5 * time.Second, // nolint:mnd
 	})
 
 	// Use "path/filepath" import, it is using OS specific path separator unlike "path"
@@ -127,19 +126,19 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Empty(c, keys)
-	}, time.Second*10, 10*time.Millisecond)
+	}, time.Second*10, 10*time.Millisecond) // nolint:mnd
 
 	// assert false, since count is 0 here
-	m.assertMetricExists(t, ctx, frameworkClient, "dapr_scheduler_jobs_created_total", 0)
+	m.assertMetricExists(t, ctx, httpClient, "dapr_scheduler_jobs_created_total", 0)
 
-	_, err := client.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
+	_, err := grpcClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
 		ActorType: "myactortype",
 		ActorId:   "myactorid",
 		Method:    "foo",
 	})
 	require.NoError(t, err)
 
-	_, err = client.RegisterActorReminder(ctx, &runtimev1pb.RegisterActorReminderRequest{
+	_, err = grpcClient.RegisterActorReminder(ctx, &runtimev1pb.RegisterActorReminderRequest{
 		ActorType: "myactortype",
 		ActorId:   "myactorid",
 		Name:      "remindermethod",
@@ -152,14 +151,14 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Len(c, keys, 1)
-	}, time.Second*10, 10*time.Millisecond)
+	}, time.Second*10, 10*time.Millisecond) // nolint:mnd
 
 	// true, since count is 1
-	m.assertMetricExists(t, ctx, frameworkClient, "dapr_scheduler_jobs_created_total", 1)
+	m.assertMetricExists(t, ctx, httpClient, "dapr_scheduler_jobs_created_total", 1)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, m.triggered.Load(), int64(1))
-	}, 30*time.Second, 10*time.Millisecond, fmt.Sprintf("failed to wait for 'triggered' to be greatrer or equal 1, actual value %d", m.triggered.Load()))
+	}, 30*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greatrer or equal 1, actual value %d", m.triggered.Load()) // nolint:mnd
 }
 
 // assert the metric exists and the count is correct
@@ -184,7 +183,7 @@ func (m *metrics) assertMetricExists(t *testing.T, ctx context.Context, client *
 		}
 
 		split := bytes.Split(line, []byte(" "))
-		if len(split) != 2 {
+		if len(split) != 2 { // nolint:mnd
 			continue
 		}
 

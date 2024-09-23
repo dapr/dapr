@@ -107,7 +107,7 @@ func (c *daprconnections) assertMetricExists(t *testing.T, ctx context.Context, 
 		}
 
 		split := bytes.Split(line, []byte(" "))
-		if len(split) != 2 {
+		if len(split) != 2 { // nolint:mnd
 			continue
 		}
 
