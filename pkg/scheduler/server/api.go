@@ -146,7 +146,7 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 	}
 
 	s.connectionPool.Add(req.GetInitial(), stream)
-	monitoring.RecordSidecarsConnectedCount(req.GetInitial().GetNamespace(), req.GetInitial().GetAppId())
+	monitoring.RecordSidecarsConnectedCount()
 
 	select {
 	case <-s.closeCh:
@@ -186,7 +186,7 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 	}
 	monitoring.RecordTriggerDuration(meta.GetNamespace(), meta.GetAppId(), now)
 
-	monitoring.RecordJobsTriggeredCount(meta.GetNamespace(), meta.GetAppId())
+	monitoring.RecordJobsTriggeredCount(&meta)
 	return true
 }
 

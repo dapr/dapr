@@ -165,7 +165,7 @@ func (j *jobstriggered) Run(t *testing.T, ctx context.Context) {
 				// with duration metrics, the following metrics can be found:
 				// dapr_scheduler_trigger_duration_total_bucket
 				// dapr_scheduler_trigger_duration_total_sum
-				triggeredElapsed := j.getMetricVal(t, ctx, frameworkClient, "dapr_scheduler_trigger_duration_total")
+				triggeredElapsed := j.getMetricVal(t, ctx, frameworkClient, "dapr_scheduler_trigger_latency")
 
 				// ensure the trigger duration is less than 1 second (1000 milliseconds)
 				assert.Less(t, triggeredElapsed, int64(1000), "Trigger duration should be less than 1 second") // nolint:mnd
@@ -262,8 +262,8 @@ func (j *jobstriggered) getMetricVal(t *testing.T, ctx context.Context, client *
 				continue
 			}
 
-			// dapr_scheduler_trigger_duration_total_bucket
-			// dapr_scheduler_trigger_duration_total_sum
+			// dapr_scheduler_trigger_latency_bucket
+			// dapr_scheduler_trigger_latency_sum
 			if strings.Contains(metricName, expectedMetric) {
 				metricElapsed, err := strconv.ParseFloat(metricVal, 64)
 				require.NoError(t, err)

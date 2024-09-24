@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheduler
+package metrics
 
 import (
 	"bytes"
@@ -36,7 +36,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -50,7 +49,7 @@ type metrics struct {
 	scheduler *scheduler.Scheduler
 	triggered atomic.Int64
 
-	daprd    *daprd.Daprd
+	daprd *daprd.Daprd
 }
 
 func (m *metrics) Setup(t *testing.T) []framework.Option {
@@ -65,19 +64,7 @@ spec:
   - name: SchedulerReminders
     enabled: true`), 0o600)) // nolint:mnd
 
-	fp := ports.Reserve(t, 2) // nolint:mnd
-	port1 := fp.Port(t)
-	port2 := fp.Port(t)
-	m.etcdPort = port2
-	clientPorts := []string{
-		"scheduler-0=" + strconv.Itoa(m.etcdPort),
-	}
-	m.scheduler = scheduler.New(t,
-		scheduler.WithID("scheduler-0"),
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d", port1)),
-		scheduler.WithInitialClusterPorts(port1),
-		scheduler.WithEtcdClientPorts(clientPorts),
-	)
+	m.scheduler = scheduler.New(t)
 
 	app := app.New(t,
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/remindermethod", func(http.ResponseWriter, *http.Request) {
@@ -159,7 +146,7 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, m.triggered.Load(), int64(1))
-	}, 30*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greatrer or equal 1, actual value %d", m.triggered.Load()) // nolint:mnd
+	}, 30*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greater or equal 1, actual value %d", m.triggered.Load()) // nolint:mnd
 }
 
 // assert the metric exists and the count is correct

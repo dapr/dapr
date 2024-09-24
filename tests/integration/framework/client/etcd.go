@@ -64,3 +64,17 @@ func (c *EtcdClient) ListAllKeys(ctx context.Context, prefix string) ([]string, 
 
 	return r, nil
 }
+
+func (c *EtcdClient) Get(ctx context.Context, prefix string, opts ...clientv3.OpOption) ([]string, error) {
+	resp, err := c.client.Get(ctx, prefix, opts...)
+	if err != nil {
+		return nil, err
+	}
+
+	var keys []string
+	for _, kv := range resp.Kvs {
+		keys = append(keys, string(kv.Key))
+	}
+
+	return keys, nil
+}

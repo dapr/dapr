@@ -15,11 +15,9 @@ package api
 
 import (
 	"context"
-	"fmt"
 	"strconv"
 	"strings"
 	"testing"
-	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
@@ -29,7 +27,6 @@ import (
 
 	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
@@ -43,9 +40,7 @@ func init() {
 type jobs struct {
 	scheduler *scheduler.Scheduler
 
-	etcdPort   int
-	etcdClient *clientv3.Client
-	idPrefix   string
+	idPrefix string
 }
 
 func (j *jobs) Setup(t *testing.T) []framework.Option {
@@ -53,40 +48,15 @@ func (j *jobs) Setup(t *testing.T) []framework.Option {
 	require.NoError(t, err)
 	j.idPrefix = uuid.String()
 
-	fp := ports.Reserve(t, 2)
-	port1 := fp.Port(t)
-	port2 := fp.Port(t)
+	j.scheduler = scheduler.New(t)
 
-	j.etcdPort = port2
-
-	clientPorts := []string{
-		"scheduler-0=" + strconv.Itoa(j.etcdPort),
-	}
-	j.scheduler = scheduler.New(t,
-		scheduler.WithID("scheduler-0"),
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d", port1)),
-		scheduler.WithInitialClusterPorts(port1),
-		scheduler.WithEtcdClientPorts(clientPorts),
-	)
-
-	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(fp, j.scheduler),
+		framework.WithProcesses(j.scheduler),
 	}
 }
 
 func (j *jobs) Run(t *testing.T, ctx context.Context) {
 	j.scheduler.WaitUntilRunning(t, ctx)
-
-	var err error
-	j.etcdClient, err = clientv3.New(clientv3.Config{
-		Endpoints:   []string{fmt.Sprintf("localhost:%d", j.etcdPort)},
-		DialTimeout: 5 * time.Second,
-	})
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, j.etcdClient.Close())
-	})
 
 	client := j.scheduler.Client(t, ctx)
 
@@ -161,11 +131,11 @@ func (j *jobs) etcdHasJob(t *testing.T, ctx context.Context, key string) bool {
 	t.Helper()
 
 	// Get keys with prefix
-	resp, err := j.etcdClient.Get(ctx, "", clientv3.WithPrefix())
+	keys, err := j.scheduler.ETCDClient(t).Get(ctx, "", clientv3.WithPrefix())
 	require.NoError(t, err)
 
-	for _, kv := range resp.Kvs {
-		if strings.HasSuffix(string(kv.Key), "||"+key) {
+	for _, k := range keys {
+		if strings.HasSuffix(k, "||"+key) {
 			return true
 		}
 	}
