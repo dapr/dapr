@@ -26,11 +26,9 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	clientv3 "go.etcd.io/etcd/client/v3"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	clients "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -109,16 +107,11 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 
 	client := r.daprd.GRPCClient(t, ctx)
 
-	etcdClient := clients.Etcd(t, clientv3.Config{
-		Endpoints:   []string{fmt.Sprintf("localhost:%d", r.etcdPort)},
-		DialTimeout: 5 * time.Second,
-	})
-
 	// Use "path/filepath" import, it is using OS specific path separator unlike "path"
 	etcdKeysPrefix := filepath.Join("dapr", "jobs")
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
+		keys, rerr := r.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Empty(c, keys)
 	}, time.Second*10, 10*time.Millisecond)
@@ -140,7 +133,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
+		keys, rerr := r.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Len(c, keys, 1)
 	}, time.Second*10, 10*time.Millisecond)
@@ -157,7 +150,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
+		keys, rerr := r.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Empty(c, keys)
 	}, time.Second*10, 10*time.Millisecond)

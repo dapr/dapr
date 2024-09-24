@@ -29,6 +29,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -213,6 +214,17 @@ func (s *Scheduler) EtcdClientPort() string {
 
 func (s *Scheduler) DataDir() string {
 	return s.dataDir
+}
+
+func (s *Scheduler) ETCDClient(t *testing.T) *client.EtcdClient {
+	t.Helper()
+
+	client := client.Etcd(t, clientv3.Config{
+		Endpoints:   []string{fmt.Sprintf("127.0.0.1:%s", s.EtcdClientPort())},
+		DialTimeout: 40 * time.Second, // nolint:mnd
+	})
+
+	return client
 }
 
 func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
