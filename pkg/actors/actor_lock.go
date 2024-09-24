@@ -45,8 +45,8 @@ func (a *ActorLock) Lock(requestID *string) error {
 	}
 
 	if currentRequest == nil || *currentRequest != *requestID {
-		//a.methodLock.Lock()
 		a.lockChan <- struct{}{}
+		//a.methodLock.Lock()
 		a.setCurrentID(requestID)
 		a.stackDepth.Add(1)
 	} else {
@@ -60,8 +60,8 @@ func (a *ActorLock) Unlock() {
 	a.stackDepth.Add(-1)
 	if a.stackDepth.Load() == 0 {
 		a.clearCurrentID()
-		//a.methodLock.Unlock()
 		<-a.lockChan
+		//a.methodLock.Unlock()
 	}
 }
 
