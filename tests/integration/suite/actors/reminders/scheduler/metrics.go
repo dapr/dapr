@@ -51,7 +51,6 @@ type metrics struct {
 	triggered atomic.Int64
 
 	daprd    *daprd.Daprd
-	etcdPort int
 }
 
 func (m *metrics) Setup(t *testing.T) []framework.Option {
@@ -91,14 +90,22 @@ spec:
 	m.place = placement.New(t)
 
 	m.daprd = daprd.New(t,
-		daprd.WithConfigs(configFile),
+		daprd.WithConfigManifests(t, `
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: schedulerreminders
+spec:
+  features:
+  - name: SchedulerReminders
+    enabled: false
+`),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(m.place.Address()),
 		daprd.WithSchedulerAddresses(m.scheduler.Address()),
 		daprd.WithAppPort(app.Port()),
 	)
 
-	fp.Free(t)
 	return []framework.Option{
 		framework.WithProcesses(app, m.scheduler, m.place, m.daprd),
 	}

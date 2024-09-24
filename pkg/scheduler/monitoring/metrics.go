@@ -25,9 +25,6 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
-const (
-	appID = "app_id"
-)
 
 var (
 	sidecarsConnectedTotal = stats.Int64(
@@ -42,18 +39,16 @@ var (
 		"scheduler/jobs_triggered_total",
 		"The total number of successfully triggered jobs.",
 		stats.UnitDimensionless)
-	triggerDurationTotal = stats.Float64(
-		"scheduler/trigger_duration_total",
+	triggerLatency = stats.Float64(
+		"scheduler/trigger_latency",
 		"The total time it takes to trigger a job from the scheduler service.",
 		stats.UnitMilliseconds)
 
-	// appIDKey is a tag key for App ID.
-	appIDKey = tag.MustNewKey(appID)
 )
 
 // RecordSidecarsConnectedCount records the number of dapr sidecars connected to the scheduler service
-func RecordSidecarsConnectedCount(ns string, appID string) {
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(sidecarsConnectedTotal.Name(), appIDKey, ns, appID), sidecarsConnectedTotal.M(1))
+func RecordSidecarsConnectedCount( {
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(sidecarsConnectedTotal.Name()), sidecarsConnectedTotal.M(1))
 }
 
 // RecordJobsScheduledCount records the number of jobs scheduled to the scheduler service
@@ -68,7 +63,7 @@ func RecordJobsScheduledCount(jobMetadata *schedulerv1pb.JobMetadata) {
 		jobType = "unknown"
 	}
 
-	stats.RecordWithTags(context.Background(), diagUtils.WithTags(jobsScheduledTotal.Name(), appIDKey, jobMetadata.GetAppId(), jobType), jobsScheduledTotal.M(1))
+	stats.RecordWithTags(context.Background(), diagUtils.WithTags(jobsScheduledTotal.Name(), jobType), jobsScheduledTotal.M(1))
 }
 
 // RecordJobsTriggeredCount records the total number of jobs successfully triggered from the scheduler service
