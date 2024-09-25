@@ -35,8 +35,8 @@ import (
 
 var (
 	tr            *runner.TestRunner
-	backends      = []string{"actors", "sqlite"}
-	appNamePrefix = "workflowsapp"
+	backends      = []string{"actors", "sqlite", "scheduler"}
+	appNamePrefix = "workflowapp"
 )
 
 func TestMain(m *testing.M) {
@@ -45,14 +45,55 @@ func TestMain(m *testing.M) {
 
 	// This test can be run outside of Kubernetes too
 	// Run the workflow e2e app using, for example, the Dapr CLI:
-	//   ASPNETCORE_URLS=http://*:3000 dapr run --app-id workflowsapp --resources-path ./resources -- dotnet run
+	//   ASPNETCORE_URLS=http://*:3000 dapr run --app-id workflowapp --resources-path ./resources -- dotnet run
 	// Then run this test with the env var "WORKFLOW_APP_ENDPOINT" pointing to the address of the app. For example:
 	//   WORKFLOW_APP_ENDPOINT=http://localhost:3000 DAPR_E2E_TEST="workflows" make test-clean test-e2e-all |& tee test.log
 	if os.Getenv("WORKFLOW_APP_ENDPOINT") == "" {
 		// Set the configuration as environment variables for the test app.
-		var testApps []kube.AppDescription
-		for _, backend := range backends {
-			testApps = append(testApps, getTestApp(backend))
+		testApps := []kube.AppDescription{
+			{
+				AppName:             appNamePrefix + "-" + backends[0],
+				DaprEnabled:         true,
+				ImageName:           "e2e-workflowapp",
+				Replicas:            1,
+				IngressEnabled:      true,
+				IngressPort:         3000,
+				DaprMemoryLimit:     "200Mi",
+				DaprMemoryRequest:   "100Mi",
+				AppMemoryLimit:      "200Mi",
+				AppMemoryRequest:    "100Mi",
+				AppPort:             -1,
+				DebugLoggingEnabled: true,
+			},
+			{
+				AppName:             appNamePrefix + "-" + backends[1],
+				DaprEnabled:         true,
+				ImageName:           "e2e-workflowapp",
+				Replicas:            1,
+				IngressEnabled:      true,
+				IngressPort:         3000,
+				DaprMemoryLimit:     "200Mi",
+				DaprMemoryRequest:   "100Mi",
+				AppMemoryLimit:      "200Mi",
+				AppMemoryRequest:    "100Mi",
+				AppPort:             -1,
+				DebugLoggingEnabled: true,
+			},
+			{
+				AppName:             appNamePrefix + "-" + backends[2],
+				DaprEnabled:         true,
+				ImageName:           "e2e-workflowapp",
+				Replicas:            1,
+				IngressEnabled:      true,
+				IngressPort:         3000,
+				DaprMemoryLimit:     "200Mi",
+				DaprMemoryRequest:   "100Mi",
+				AppMemoryLimit:      "200Mi",
+				AppMemoryRequest:    "100Mi",
+				AppPort:             -1,
+				DebugLoggingEnabled: true,
+				Config:              "featureactorreminderscheduler",
+			},
 		}
 
 		comps := []kube.ComponentDescription{
@@ -66,30 +107,11 @@ func TestMain(m *testing.M) {
 			},
 		}
 
-		tr = runner.NewTestRunner("workflowsapp", testApps, comps, nil)
+		tr = runner.NewTestRunner("workflowapp", testApps, comps, nil)
 		os.Exit(tr.Start(m))
 	} else {
 		os.Exit(m.Run())
 	}
-}
-
-func getTestApp(backend string) kube.AppDescription {
-	testApps := kube.AppDescription{
-		AppName:             appNamePrefix + "-" + backend,
-		DaprEnabled:         true,
-		ImageName:           "e2e-workflowsapp",
-		Replicas:            1,
-		IngressEnabled:      true,
-		IngressPort:         3000,
-		DaprMemoryLimit:     "200Mi",
-		DaprMemoryRequest:   "100Mi",
-		AppMemoryLimit:      "200Mi",
-		AppMemoryRequest:    "100Mi",
-		AppPort:             -1,
-		DebugLoggingEnabled: true,
-	}
-
-	return testApps
 }
 
 func getAppEndpoint(testAppName string) string {
