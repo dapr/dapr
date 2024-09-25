@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -161,5 +162,11 @@ func (p *pki) Run(t *testing.T, ctx context.Context) {
 	body, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	assert.Contains(t, string(body), "tls: failed to verify certificate: x509: certificate signed by unknown authority")
+	// if macOS, the error message is different https://github.com/golang/go/blob/release-branch.go1.22/src/crypto/x509/platform_test.go#L172-L173
+	if runtime.GOOS == "darwin" {
+		// NOTE: there is a special quote surrounding the hostname
+		assert.Contains(t, string(body), "tls: failed to verify certificate: x509: “localhost” certificate is not trusted")
+	} else {
+		assert.Contains(t, string(body), "tls: failed to verify certificate: x509: certificate signed by unknown authority")
+	}
 }
