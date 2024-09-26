@@ -14,8 +14,6 @@ limitations under the License.
 package testing
 
 import (
-	"fmt"
-
 	v1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -31,8 +29,8 @@ func GetFakeProperties() map[string]string {
 		"host":                    "localhost",
 		"password":                "fakePassword",
 		"consumerID":              TestRuntimeConfigID,
-		scopes.SubscriptionScopes: fmt.Sprintf("%s=topic0,topic1,topic10,topic11", TestRuntimeConfigID),
-		scopes.PublishingScopes:   fmt.Sprintf("%s=topic0,topic1,topic10,topic11", TestRuntimeConfigID),
+		scopes.SubscriptionScopes: TestRuntimeConfigID + "=topic0,topic1,topic10,topic11",
+		scopes.PublishingScopes:   TestRuntimeConfigID + "=topic0,topic1,topic10,topic11",
 		scopes.ProtectedTopics:    "topic10,topic11,topic12",
 	}
 }
@@ -67,7 +65,7 @@ func GetFakeMetadataItems() []commonapi.NameValuePair {
 			Name: scopes.SubscriptionScopes,
 			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
-					Raw: []byte(fmt.Sprintf("%s=topic0,topic1,topic10,topic11", TestRuntimeConfigID)),
+					Raw: []byte(TestRuntimeConfigID + "=topic0,topic1,topic10,topic11"),
 				},
 			},
 		},
@@ -75,7 +73,7 @@ func GetFakeMetadataItems() []commonapi.NameValuePair {
 			Name: scopes.PublishingScopes,
 			Value: commonapi.DynamicValue{
 				JSON: v1.JSON{
-					Raw: []byte(fmt.Sprintf("%s=topic0,topic1,topic10,topic11", TestRuntimeConfigID)),
+					Raw: []byte(TestRuntimeConfigID + "=topic0,topic1,topic10,topic11"),
 				},
 			},
 		},
