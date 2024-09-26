@@ -139,7 +139,7 @@ spec:
 			i--
 		}
 	}
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz.Fuzz(&f.saveReqBinaries[i])
 		fz.Fuzz(&f.saveReqStrings[i])
 		fz.Fuzz(&f.saveReqAnys[i])
@@ -162,7 +162,6 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	t.Run("get", func(t *testing.T) {
 		pt := parallel.New(t)
 		for i := range f.getFuzzKeys {
-			i := i
 			pt.Add(func(t *assert.CollectT) {
 				getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(f.getFuzzKeys[i]))
 				// t.Log("URL", getURL)
@@ -182,8 +181,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	})
 
 	pt := parallel.New(t)
-	for i := 0; i < len(f.getFuzzKeys); i++ {
-		i := i
+	for i := range len(f.getFuzzKeys) {
 		pt.Add(func(t *assert.CollectT) {
 			for _, req := range []any{f.saveReqBinaries[i], f.saveReqStrings[i]} {
 				postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName))

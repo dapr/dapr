@@ -15,7 +15,6 @@ package utils
 
 import (
 	"bytes"
-	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -107,7 +106,7 @@ func HTTPDelete(url string) ([]byte, error) {
 
 func sanitizeHTTPURL(url string) string {
 	if !strings.Contains(url, "http") {
-		url = fmt.Sprintf("http://%s", url)
+		url = "http://%s" + url
 	}
 
 	return url

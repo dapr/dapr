@@ -334,7 +334,7 @@ func performBulkPublishHTTP(reqID string, pubsubToPublish, topic string, jsonVal
 	if len(reqMeta) > 0 {
 		params := netUrl.Values{}
 		for k, v := range reqMeta {
-			params.Set(fmt.Sprintf("metadata.%s", k), v)
+			params.Set("metadata."+k, v)
 		}
 		url = url + "?" + params.Encode()
 	}
@@ -402,7 +402,7 @@ func performPublish(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// based on commandBody.Topic, send to the appropriate topic
-	resp := appResponse{Message: fmt.Sprintf("%s is not supported", commandBody.Topic)}
+	resp := appResponse{Message: commandBody.Topic + " is not supported"}
 
 	jsonValue, err := json.Marshal(commandBody.Data)
 	if err != nil {
@@ -464,7 +464,7 @@ func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentTyp
 	if len(metadata) > 0 {
 		params := netUrl.Values{}
 		for k, v := range metadata {
-			params.Set(fmt.Sprintf("metadata.%s", k), v)
+			params.Set("metadata.%s"+k, v)
 		}
 		url = url + "?" + params.Encode()
 	}

@@ -38,7 +38,6 @@ func Run(t *testing.T, ctx context.Context, opts ...Option) {
 	t.Logf("starting %d processes", len(o.procs))
 
 	for i, proc := range o.procs {
-		i := i
 		proc.Run(t, ctx)
 		t.Cleanup(func() { o.procs[i].Cleanup(t) })
 	}

@@ -102,7 +102,7 @@ func (h *deactivateOnPlacementFail) Run(t *testing.T, ctx context.Context) {
 	client := client.HTTP(t)
 
 	// Activate 2 actors
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		assert.EventuallyWithT(t, func(t *assert.CollectT) {
 			daprdURL := fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/myactor%d/method/foo", h.daprd.HTTPPort(), i)
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL, nil)
@@ -118,7 +118,7 @@ func (h *deactivateOnPlacementFail) Run(t *testing.T, ctx context.Context) {
 
 	// Validate invocations
 	invoked := make([]string, 2)
-	for i := 0; i < 2; i++ {
+	for i := range 2 {
 		select {
 		case invoked[i] = <-h.invokedActorsCh:
 		case <-time.After(time.Second * 5):

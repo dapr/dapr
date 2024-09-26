@@ -128,7 +128,7 @@ spec:
 			i--
 		}
 	}
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		var (
 			srb     []saveReqBinary
 			srbHTTP []saveReqBinary
@@ -178,7 +178,6 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	t.Run("get", func(t *testing.T) {
 		pt := parallel.New(t)
 		for i := range f.getFuzzKeys {
-			i := i
 			pt.Add(func(t *assert.CollectT) {
 				resp, err := client.GetState(ctx, &rtv1.GetStateRequest{
 					StoreName: f.storeName,
@@ -193,8 +192,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	httpClient := fclient.HTTP(t)
 
 	pt := parallel.New(t)
-	for i := 0; i < len(f.getFuzzKeys); i++ {
-		i := i
+	for i := range len(f.getFuzzKeys) {
 		pt.Add(func(t *assert.CollectT) {
 			for _, req := range [][]*commonv1.StateItem{f.saveReqBinaries[i], f.saveReqStrings[i]} {
 				_, err := client.SaveState(ctx, &rtv1.SaveStateRequest{

@@ -93,9 +93,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		var operations1 []string
 		go func() {
-			require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
 				placementOrder, streamErr := stream1.Recv()
-				//nolint:testifylint
 				assert.NoError(c, streamErr)
 				if placementOrder.GetOperation() == lockOperation {
 					operations1 = append(operations1, lockOperation)
@@ -122,9 +121,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		var operations2 []string
 		go func() {
-			require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
 				placementOrder, streamErr := stream2.Recv()
-				//nolint:testifylint
 				assert.NoError(c, streamErr)
 				if placementOrder.GetOperation() == lockOperation {
 					operations2 = append(operations2, lockOperation)
@@ -155,9 +153,8 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		var operations3 []string
 		go func() {
-			require.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
 				placementOrder, streamErr := stream3.Recv()
-				//nolint:testifylint
 				assert.NoError(c, streamErr)
 				if placementOrder.GetOperation() == lockOperation {
 					operations3 = append(operations3, lockOperation)
@@ -388,14 +385,14 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	var (
 		overArr       [testClients]int64
 		overArrLock   sync.RWMutex
-		clientConns   []*grpc.ClientConn
-		clientStreams []v1pb.Placement_ReportDaprStatusClient
+		clientConns   = make([]*grpc.ClientConn, 0, 10)
+		clientStreams = make([]v1pb.Placement_ReportDaprStatusClient, 0, 10)
 		wg            sync.WaitGroup
 	)
 	startFlag := atomic.Bool{}
 	startFlag.Store(false)
 	wg.Add(testClients)
-	for i := 0; i < testClients; i++ {
+	for i := range testClients {
 		conn, _, stream := newTestClient(t, serverAddress)
 		clientConns = append(clientConns, conn)
 		clientStreams = append(clientStreams, stream)
@@ -435,7 +432,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	}
 
 	// register
-	for i := 0; i < testClients; i++ {
+	for i := range testClients {
 		host := &v1pb.Host{
 			Name:     fmt.Sprintf("127.0.0.1:5010%d", i),
 			Entities: []string{"DogActor", "CatActor"},
@@ -475,7 +472,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	overArrLock.RUnlock()
 
 	// clean up resources.
-	for i := 0; i < testClients; i++ {
+	for i := range testClients {
 		require.NoError(t, clientConns[i].Close())
 	}
 	cleanup()
@@ -483,7 +480,7 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 }
 
 func TestPerformTableUpdatePerf(t *testing.T) {
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		fmt.Println("max cost time(ns)", PerformTableUpdateCostTime(t))
 	}
 }

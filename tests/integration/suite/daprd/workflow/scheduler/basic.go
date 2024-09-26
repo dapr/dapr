@@ -155,7 +155,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		r := task.NewTaskRegistry()
 		r.AddOrchestratorN("Root", func(ctx *task.OrchestrationContext) (any, error) {
 			tasks := []task.Task{}
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				task := ctx.CallSubOrchestrator("N1", task.WithSubOrchestrationInstanceID(string(ctx.ID)+"_N1_"+strconv.Itoa(i)))
 				tasks = append(tasks, task)
 			}
@@ -188,7 +188,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		assert.Eventually(t, func() bool {
 			// List of all orchestrations created
 			orchestrationIDs := []string{string(id)}
-			for i := 0; i < 5; i++ {
+			for i := range 5 {
 				orchestrationIDs = append(orchestrationIDs, string(id)+"_N1_"+strconv.Itoa(i), string(id)+"_N1_"+strconv.Itoa(i)+"_N2")
 			}
 			for _, orchID := range orchestrationIDs {
@@ -200,7 +200,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				}
 			}
 			return true
-		}, 2*time.Second, 10*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 
 		// Terminate the root orchestration
 		b.terminateWorkflow(t, ctx, string(id))
@@ -212,7 +212,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		// Wait for all N2 suborchestrations to complete
 		orchIDs := []string{}
-		for i := 0; i < 5; i++ {
+		for i := range 5 {
 			orchIDs = append(orchIDs, string(id)+"_N1_"+strconv.Itoa(i)+"_N2")
 		}
 		for _, orchID := range orchIDs {

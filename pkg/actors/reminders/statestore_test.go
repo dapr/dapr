@@ -143,7 +143,7 @@ func TestReminderCountFiring(t *testing.T) {
 	testReminders.Init(context.Background())
 
 	const numReminders = 6
-	for i := 0; i < numReminders; i++ {
+	for i := range numReminders {
 		req := internal.CreateReminderRequest{
 			ActorType: actorType,
 			ActorID:   actorID,
@@ -159,7 +159,7 @@ func TestReminderCountFiring(t *testing.T) {
 	time.Sleep(100 * time.Millisecond)
 
 	const numPeriods = 8
-	for i := 0; i < numPeriods; i++ {
+	for range numPeriods {
 		advanceTickers(t, clock, 10*time.Second)
 		time.Sleep(100 * time.Millisecond)
 	}
@@ -340,7 +340,7 @@ func TestCreateReminder(t *testing.T) {
 			Data:      nil,
 		}
 		err := testReminders.CreateReminder(ctx, &req)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}()
 	go func() {
 		defer wg.Done()
@@ -354,7 +354,7 @@ func TestCreateReminder(t *testing.T) {
 			Data:      nil,
 		}
 		err := testReminders.CreateReminder(ctx, &req)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}()
 	wg.Wait()
 
@@ -808,7 +808,7 @@ func TestDeleteReminder(t *testing.T) {
 			req := createReminderData(actorID, actorType, "reminder2", "1s", "1s", "", "")
 			errs <- testReminders.CreateReminder(ctx, &req)
 		}()
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			require.NoError(t, <-errs)
 		}
 		assert.Len(t, testReminders.reminders[actorType], 2)
@@ -829,7 +829,7 @@ func TestDeleteReminder(t *testing.T) {
 				ActorType: actorType,
 			})
 		}()
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			require.NoError(t, <-errs)
 		}
 		assert.Empty(t, testReminders.reminders[actorType])
@@ -1027,21 +1027,34 @@ func TestReminderRepeats(t *testing.T) {
 				ticker := clock.NewTicker(time.Second)
 				defer ticker.Stop()
 
-				for i := 0; i < 10; i++ {
+				check := func() bool {
+					select {
+					case request := <-requestC:
+						// Decrease i since time hasn't increased.
+						assert.Equal(t, string(reminder.Data), "\""+request.Data.(string)+"\"")
+						return false
+					case <-ticker.C():
+						return true
+					}
+				}
+
+				var i int
+				for {
 					if test.delAfterSeconds > 0 && clock.Now().Sub(start).Seconds() >= test.delAfterSeconds {
-						require.NoError(t, testReminders.DeleteReminder(ctx, internal.DeleteReminderRequest{
+						assert.NoError(t, testReminders.DeleteReminder(ctx, internal.DeleteReminderRequest{
 							Name:      reminder.Name,
 							ActorID:   reminder.ActorID,
 							ActorType: reminder.ActorType,
 						}))
 					}
-					select {
-					case request := <-requestC:
-						// Decrease i since time hasn't increased.
-						i--
-						assert.Equal(t, string(reminder.Data), "\""+request.Data.(string)+"\"")
+
+					if !check() {
 						count++
-					case <-ticker.C():
+						continue
+					}
+					i++
+					if i == 10 {
+						break
 					}
 				}
 			}()
@@ -1148,15 +1161,28 @@ func TestReminderTTL(t *testing.T) {
 				ticker := clock.NewTicker(time.Second)
 				defer ticker.Stop()
 
-				for i := 0; i < 10; i++ {
+				check := func() bool {
 					select {
 					case request := <-requestC:
 						// Decrease i since time hasn't increased.
-						i--
 						assert.Equal(t, string(req.Data), "\""+request.Data.(string)+"\"")
-						count++
+						return false
 					case <-ctx.Done():
 					case <-ticker.C():
+					}
+					return true
+				}
+
+				var i int
+				for {
+					if !check() {
+						count++
+						continue
+					}
+
+					i++
+					if i == 10 {
+						break
 					}
 				}
 			}()
@@ -1376,12 +1402,12 @@ func TestCreateReminderGoroutineLeak(t *testing.T) {
 	initialCount := runtime.NumGoroutine()
 
 	// Create 10 reminders with unique names
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		require.NoError(t, createFn(i, false, "2s"))
 	}
 
 	// Create 5 reminders that override the first ones
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		require.NoError(t, createFn(i, false, "2s"))
 	}
 
