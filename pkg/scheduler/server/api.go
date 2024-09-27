@@ -115,7 +115,7 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 	}
 
 	if job == nil {
-		return nil, fmt.Errorf("job not found: %s", jobName)
+		return nil, fmt.Errorf("job not found: %s", req.GetName())
 	}
 
 	return &schedulerv1pb.GetJobResponse{
@@ -127,6 +127,48 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 			Repeats:  job.Repeats,
 			Data:     job.GetPayload(),
 		},
+	}, nil
+}
+
+func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-s.readyCh:
+	}
+
+	if err := s.authz.Metadata(ctx, req.GetMetadata()); err != nil {
+		return nil, err
+	}
+
+	prefix, err := buildJobPrefix(req.GetMetadata())
+	if err != nil {
+		return nil, err
+	}
+
+	list, err := s.cron.List(ctx, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query job list: %w", err)
+	}
+
+	var jobs []*schedulerv1pb.NamedJob
+	for _, job := range list.Jobs {
+		jobs = append(jobs, &schedulerv1pb.NamedJob{
+			Name: job.GetName()[strings.LastIndex(job.GetName(), "||")+2:],
+			//nolint:protogetter
+			Job: &schedulerv1pb.Job{
+				Schedule: job.GetJob().Schedule,
+				DueTime:  job.GetJob().DueTime,
+				Ttl:      job.GetJob().Ttl,
+				Repeats:  job.GetJob().Repeats,
+				Data:     job.GetJob().GetPayload(),
+			},
+		})
+	}
+
+	return &schedulerv1pb.ListJobsResponse{
+		Jobs:    jobs,
+		HasMore: list.More,
 	}, nil
 }
 
@@ -192,10 +234,6 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 }
 
 func buildJobName(name string, meta *schedulerv1pb.JobMetadata) (string, error) {
-	joinStrings := func(ss ...string) string {
-		return strings.Join(ss, "||")
-	}
-
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Actor:
 		actor := t.GetActor()
@@ -205,4 +243,24 @@ func buildJobName(name string, meta *schedulerv1pb.JobMetadata) (string, error) 
 	default:
 		return "", fmt.Errorf("unknown job type: %v", t)
 	}
+}
+
+func buildJobPrefix(meta *schedulerv1pb.JobMetadata) (string, error) {
+	switch t := meta.GetTarget(); t.GetType().(type) {
+	case *schedulerv1pb.JobTargetMetadata_Actor:
+		actor := t.GetActor()
+		s := joinStrings("actorreminder", meta.GetNamespace(), actor.GetType())
+		if len(actor.GetId()) > 0 {
+			s = joinStrings(s, actor.GetId())
+		}
+		return s, nil
+	case *schedulerv1pb.JobTargetMetadata_Job:
+		return joinStrings("app", meta.GetNamespace(), meta.GetAppId()), nil
+	default:
+		return "", fmt.Errorf("unknown job type: %v", t)
+	}
+}
+
+func joinStrings(ss ...string) string {
+	return strings.Join(ss, "||")
 }
