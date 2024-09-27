@@ -1,8 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.23
-
-toolchain go1.23.1
+go 1.23.1
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -13,7 +11,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.14.1-0.20240919155322-be7c19b742b1
-	github.com/dapr/kit v0.13.1-0.20240909215017-3823663aa4bb
+	github.com/dapr/kit v0.13.1-0.20240924041040-2d6ff15a9744
 	github.com/diagridio/go-etcd-cron v0.2.3
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
@@ -495,3 +493,5 @@ replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
+
+replace github.com/diagridio/go-etcd-cron => github.com/joshvanl/go-etcd-cron v0.0.0-20240926235224-7f01c6835517
