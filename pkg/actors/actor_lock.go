@@ -27,7 +27,10 @@ type ActorLock struct {
 	activeRequest *string
 	stackDepth    atomic.Int32
 	maxStackDepth int32
-	lockChan      chan struct{}
+	// lockChan is used instead of a sync.Mutex to enforce FIFO ordering of method execution.
+	// We use a buffered channel to ensure that requests are processed
+	// in the order they arrive, which sync.Mutex does not guarantee.
+	lockChan chan struct{}
 }
 
 func NewActorLock(maxStackDepth int32) *ActorLock {
@@ -46,7 +49,6 @@ func (a *ActorLock) Lock(requestID *string) error {
 
 	if currentRequest == nil || *currentRequest != *requestID {
 		a.lockChan <- struct{}{}
-		//a.methodLock.Lock()
 		a.setCurrentID(requestID)
 		a.stackDepth.Add(1)
 	} else {
@@ -61,7 +63,6 @@ func (a *ActorLock) Unlock() {
 	if a.stackDepth.Load() == 0 {
 		a.clearCurrentID()
 		<-a.lockChan
-		//a.methodLock.Unlock()
 	}
 }
 
