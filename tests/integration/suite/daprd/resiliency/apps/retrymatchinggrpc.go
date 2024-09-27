@@ -34,6 +34,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -83,22 +84,24 @@ spec:
           gRPCStatusCodes: 1,2,5-7
           httpStatusCodes: 500-599
 `
-	srv := newGRPCServer(t, onInvoke)
+	srv1 := app.New(t, app.WithOnInvokeFn(onInvoke))
+	srv2 := app.New(t, app.WithOnInvokeFn(onInvoke))
+
 	d.daprd1 = daprd.New(t,
 		daprd.WithAppProtocol("grpc"),
-		daprd.WithAppPort(srv.Port(t)),
+		daprd.WithAppPort(srv1.Port(t)),
 		daprd.WithResourceFiles(resiliency),
 	)
 	d.daprd2 = daprd.New(t,
 		daprd.WithAppProtocol("grpc"),
-		daprd.WithAppPort(srv.Port(t)),
+		daprd.WithAppPort(srv2.Port(t)),
 		daprd.WithResourceFiles(resiliency),
 	)
 
 	d.counters = sync.Map{}
 
 	return []framework.Option{
-		framework.WithProcesses(srv, d.daprd1, d.daprd2),
+		framework.WithProcesses(srv1, srv2, d.daprd1, d.daprd2),
 	}
 }
 
