@@ -4673,7 +4673,7 @@ func TestExtractEtag(t *testing.T) {
 	})
 
 	t.Run("empty etag exists", func(t *testing.T) {
-		r, err := nethttp.NewRequest("GET", "http://localhost", nil)
+		r, err := nethttp.NewRequest("GET", "http://127.0.0.1", nil)
 		require.NoError(t, err)
 		r.Header.Add("If-Match", "")
 
