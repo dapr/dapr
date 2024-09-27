@@ -59,30 +59,32 @@ var (
 	jobsMutex     sync.Mutex
 )
 
-func scheduleJobHTTP(name string, jsonValue []byte) (int, error) {
-	log.Printf("Scheduling job named: %s", name)
-
-	url := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", daprPortHTTP, name)
-
+func makeHTTPCall(jobName string, body []byte, methodType string) ([]byte, int, error) {
+	url := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/jobs/%s", daprPortHTTP, jobName)
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, bytes.NewBuffer(jsonValue))
+	req, err := http.NewRequestWithContext(ctx, methodType, url, bytes.NewBuffer(body))
 	if err != nil {
-		return 0, err
+		return nil, 0, err
 	}
 
 	req.Header.Set("Content-Type", "application/json")
-
 	resp, err := httpClient.Do(req)
 	if err != nil {
 		if resp != nil {
-			return resp.StatusCode, err
+			return nil, resp.StatusCode, err
 		}
-		return http.StatusInternalServerError, err
+		return nil, http.StatusInternalServerError, err
 	}
 	defer resp.Body.Close()
-	return resp.StatusCode, nil
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, resp.StatusCode, err
+	}
+
+	return respBody, resp.StatusCode, nil
 }
 
 // scheduleJobHandler is to schedule a job with the Daprd sidecar
@@ -104,7 +106,8 @@ func scheduleJobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	statusCode, err := scheduleJobHTTP(jobName, jsonData)
+	log.Printf("Scheduling job named: %s", jobName)
+	_, statusCode, err := makeHTTPCall(jobName, jsonData, http.MethodPost)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error scheduling job: %v", err), statusCode)
 		return
@@ -145,6 +148,47 @@ func getTriggeredJobs(w http.ResponseWriter, r *http.Request) {
 	}
 }
 
+// deleteJobHandler is to delete a job with the Daprd sidecar
+func deleteJobHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract the job name from the URL path parameters
+	vars := mux.Vars(r)
+	jobName := vars["name"]
+
+	log.Printf("Deleting job named: %s", jobName)
+	_, statusCode, err := makeHTTPCall(jobName, nil, http.MethodDelete)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error scheduling job: %v", err), statusCode)
+		return
+	}
+	w.WriteHeader(statusCode)
+}
+
+// getJobHandler is to delete a job with the Daprd sidecar
+func getJobHandler(w http.ResponseWriter, r *http.Request) {
+	// Extract the job name from the URL path parameters
+	vars := mux.Vars(r)
+	jobName := vars["name"]
+
+	log.Printf("Getting job named: %s", jobName)
+	responseBody, statusCode, err := makeHTTPCall(jobName, nil, http.MethodGet)
+	if err != nil {
+		http.Error(w, fmt.Sprintf("error scheduling job: %v", err), statusCode)
+		return
+	}
+
+	// Write the response body
+	if statusCode == http.StatusOK {
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(statusCode)
+		_, err := w.Write(responseBody)
+		if err != nil {
+			log.Printf("failed to write response body: %s", err)
+		}
+	} else {
+		w.WriteHeader(statusCode)
+	}
+}
+
 // jobHandler is to receive the job at trigger time
 func jobHandler(w http.ResponseWriter, r *http.Request) {
 	reqBody, err := io.ReadAll(r.Body)
@@ -179,7 +223,13 @@ func appRouter() http.Handler {
 	// Log requests and their processing time
 	router.Use(utils.LoggerMiddleware)
 
+	// schedule the job to the daprd sidecar
 	router.HandleFunc("/scheduleJob/{name}", scheduleJobHandler).Methods(http.MethodPost)
+	// get the scheduled job from the daprd sidecar
+	router.HandleFunc("/getJob/{name}", getJobHandler).Methods(http.MethodGet)
+	// delete the job from the daprd sidecar
+	router.HandleFunc("/deleteJob/{name}", deleteJobHandler).Methods(http.MethodDelete)
+
 	// receive triggered job from daprd sidecar
 	router.HandleFunc("/job/{name}", jobHandler).Methods(http.MethodPost)
 	// get the triggered jobs back for testing purposes
