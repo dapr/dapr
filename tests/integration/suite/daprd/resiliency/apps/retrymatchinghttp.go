@@ -78,8 +78,6 @@ func (d *retrymatchinghttp) Setup(t *testing.T) []framework.Option {
 		w.Write([]byte{})
 	})
 
-	srv := prochttp.New(t, prochttp.WithHandler(handler))
-
 	resiliency := `
 apiVersion: dapr.io/v1alpha1
 kind: Resiliency
@@ -96,18 +94,22 @@ spec:
           httpStatusCodes: "100,101,102,200,304,403,505,501-503,509,546,547"
           gRPCStatusCodes: "1-5"
 `
+
+	srv1 := prochttp.New(t, prochttp.WithHandler(handler))
+	srv2 := prochttp.New(t, prochttp.WithHandler(handler))
+
 	d.daprd1 = daprd.New(t,
-		daprd.WithAppPort(srv.Port()),
+		daprd.WithAppPort(srv1.Port()),
 		daprd.WithResourceFiles(resiliency),
 	)
 	d.daprd2 = daprd.New(t,
-		daprd.WithAppPort(srv.Port()),
+		daprd.WithAppPort(srv2.Port()),
 		daprd.WithResourceFiles(resiliency),
 	)
 	d.counters = sync.Map{}
 
 	return []framework.Option{
-		framework.WithProcesses(srv, d.daprd1, d.daprd2),
+		framework.WithProcesses(srv1, srv2, d.daprd1, d.daprd2),
 	}
 }
 
