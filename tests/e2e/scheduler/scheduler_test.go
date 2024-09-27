@@ -25,7 +25,7 @@ import (
 	"sync"
 	"testing"
 	"time"
-	
+
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -97,17 +97,17 @@ func TestMain(m *testing.M) {
 			MetricsEnabled:      true,
 		},
 		// GRPC test
-		//{
-		//	AppName:             appNameGRPC,
-		//	DaprEnabled:         true,
-		//	DebugLoggingEnabled: true,
-		//	ImageName:           "e2e-schedulerapp_grpc",
-		//	Replicas:            1,
-		//	IngressEnabled:      true,
-		//	MetricsEnabled:      true,
-		//	AppProtocol:         "grpc",
-		//	AppPort:             appPortGRPC,
-		//},
+		{
+			AppName:             appNameGRPC,
+			DaprEnabled:         true,
+			DebugLoggingEnabled: true,
+			ImageName:           "e2e-schedulerapp_grpc",
+			Replicas:            1,
+			IngressEnabled:      true,
+			MetricsEnabled:      true,
+			AppProtocol:         "grpc",
+			AppPort:             appPortGRPC,
+		},
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
@@ -252,7 +252,6 @@ func TestJobs(t *testing.T) {
 			}(iteration)
 		}
 		deleteWg.Wait()
-
 		t.Log("Done.")
 	})
 }

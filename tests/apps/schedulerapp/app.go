@@ -94,13 +94,13 @@ func scheduleJobHandler(w http.ResponseWriter, r *http.Request) {
 	jobName := vars["name"]
 
 	// Extract job data from the request body
-	var jobData job
-	if err := json.NewDecoder(r.Body).Decode(&jobData); err != nil {
+	var j job
+	if err := json.NewDecoder(r.Body).Decode(&j); err != nil {
 		http.Error(w, fmt.Sprintf("error decoding JSON: %v", err), http.StatusBadRequest)
 		return
 	}
 
-	jsonData, err := json.Marshal(jobData)
+	jsonData, err := json.Marshal(j)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error encoding JSON: %v", err), http.StatusInternalServerError)
 		return
@@ -163,7 +163,7 @@ func deleteJobHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(statusCode)
 }
 
-// getJobHandler is to delete a job with the Daprd sidecar
+// getJobHandler is to get a job from the Daprd sidecar
 func getJobHandler(w http.ResponseWriter, r *http.Request) {
 	// Extract the job name from the URL path parameters
 	vars := mux.Vars(r)
