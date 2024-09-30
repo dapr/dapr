@@ -28,5 +28,7 @@ webhooks:
   failurePolicy: {{ .Values.webhookFailurePolicy}}
   sideEffects: None
   admissionReviewVersions: ["v1", "v1beta1"]
+  {{- if .Values.webhookNamespaceSelectors}}
   namespaceSelector: {{ .Values.webhookNamespaceSelectors}}
+  {{- end }}
 {{- end }}
