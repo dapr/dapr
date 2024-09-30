@@ -16,11 +16,6 @@ package metrics
 import (
 	"bytes"
 	"context"
-	"fmt"
-	"io"
-	"net/http"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -34,7 +29,6 @@ import (
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	frameworkclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app/proto"
@@ -48,8 +42,9 @@ func init() {
 }
 
 type jobstriggered struct {
-	daprd              *daprd.Daprd
-	scheduler          *scheduler.Scheduler
+	daprd     *daprd.Daprd
+	scheduler *scheduler.Scheduler
+
 	jobChan            chan *runtimev1pb.JobEventRequest
 	jobstriggeredCount atomic.Int32
 }
@@ -140,7 +135,6 @@ func (j *jobstriggered) Run(t *testing.T, ctx context.Context) {
 		},
 	}
 
-	frameworkClient := frameworkclient.HTTP(t)
 	client := j.daprd.GRPCClient(t, ctx)
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -160,18 +154,24 @@ func (j *jobstriggered) Run(t *testing.T, ctx context.Context) {
 				assert.NotNil(t, job)
 				assert.Equal(t, "job/"+name, job.GetMethod())
 				assert.Equal(t, commonv1pb.HTTPExtension_POST, job.GetHttpExtension().GetVerb())
-				j.assertMetricExists(t, ctx, frameworkClient, "dapr_scheduler_jobs_triggered_total", int(j.jobstriggeredCount.Load()))
 
-				// with duration metrics, the following metrics can be found:
-				// dapr_scheduler_trigger_duration_total_bucket
-				// dapr_scheduler_trigger_duration_total_sum
-				triggeredElapsed := j.getMetricVal(t, ctx, frameworkClient, "dapr_scheduler_trigger_latency")
+				assert.EventuallyWithT(t, func(c *assert.CollectT) {
+					metrics := j.scheduler.Metrics(t, ctx)
+					assert.Equal(t, int(j.jobstriggeredCount.Load()), int(metrics["dapr_scheduler_jobs_triggered_total"]))
 
-				// ensure the trigger duration is less than 1 second (1000 milliseconds)
-				assert.Less(t, triggeredElapsed, int64(1000), "Trigger duration should be less than 1 second") // nolint:mnd
+					// with duration metrics, the following metrics can be found:
+					// dapr_scheduler_trigger_duration_total_bucket
+					// dapr_scheduler_trigger_duration_total_sum
+					// dapr_scheduler_trigger_latency_count
+					avgTriggerLatency := metrics["dapr_scheduler_trigger_latency_sum"] / metrics["dapr_scheduler_trigger_latency_count"]
+					assert.Equal(t, int(j.jobstriggeredCount.Load()), int(metrics["dapr_scheduler_trigger_latency_count"]))
 
-				// triggered time should be less than the total round trip time of a job being scheduled and sent back to the app
-				assert.Less(t, triggeredElapsed, receivedJobElapsed, "Trigger time should be less than the total elapsed time to receive the scheduled job")
+					// ensure the trigger duration is less than 1 second (1000 milliseconds)
+					assert.Less(t, avgTriggerLatency, float64(1000), "Trigger duration should be less than 1 second") // nolint:mnd
+
+					// triggered time should be less than the total round trip time of a job being scheduled and sent back to the app
+					assert.Less(t, int64(avgTriggerLatency), receivedJobElapsed, "Trigger time should be less than the total elapsed time to receive the scheduled job")
+				}, time.Second*3, 10*time.Millisecond) // nolint:mnd
 
 				test.exp(t, job)
 			case <-time.After(time.Second * 10): // nolint:mnd
@@ -180,98 +180,4 @@ func (j *jobstriggered) Run(t *testing.T, ctx context.Context) {
 		})
 	}
 	assert.Equal(t, len(tests), int(j.jobstriggeredCount.Load()))
-}
-
-// assert the metric exists and the count is correct
-func (j *jobstriggered) assertMetricExists(t *testing.T, ctx context.Context, client *http.Client, expectedMetric string, expectedCount int) {
-	t.Helper()
-
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		metricReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/metrics", j.scheduler.MetricsPort()), nil)
-		require.NoError(t, err)
-
-		resp, err := client.Do(metricReq)
-		require.NoError(t, err)
-
-		respBody, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
-
-		foundMetric := false
-
-		for _, line := range bytes.Split(respBody, []byte("\n")) {
-			if len(line) == 0 || line[0] == '#' {
-				continue
-			}
-
-			split := bytes.Split(line, []byte(" "))
-			if len(split) != 2 {
-				continue
-			}
-
-			// dapr_scheduler_jobs_triggered_total{app_id="appid"}
-			metricName := string(split[0])
-			metricVal := string(split[1])
-			if !strings.Contains(metricName, expectedMetric) {
-				continue
-			}
-			if strings.Contains(metricName, expectedMetric) {
-				metricCount, err := strconv.Atoi(metricVal)
-				require.NoError(t, err)
-				assert.Equal(t, expectedCount, metricCount)
-				foundMetric = true
-				break
-			}
-		}
-		assert.True(c, foundMetric, "Expected metric %s not found", expectedMetric)
-	}, time.Second*1, time.Millisecond*10, "Expected metric %s not found or the count was incorrect", expectedMetric)
-}
-
-// for duration metrics, send back the value
-func (j *jobstriggered) getMetricVal(t *testing.T, ctx context.Context, client *http.Client, expectedMetric string) int64 {
-	t.Helper()
-
-	var metricValue int64
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		metricReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/metrics", j.scheduler.MetricsPort()), nil)
-		require.NoError(t, err)
-
-		resp, err := client.Do(metricReq)
-		require.NoError(t, err)
-
-		respBody, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
-
-		foundMetric := false
-
-		for _, line := range bytes.Split(respBody, []byte("\n")) {
-			if len(line) == 0 || line[0] == '#' {
-				continue
-			}
-
-			split := bytes.Split(line, []byte(" "))
-			if len(split) != 2 {
-				continue
-			}
-
-			metricName := string(split[0])
-			metricVal := string(split[1])
-
-			if !strings.Contains(metricName, expectedMetric) {
-				continue
-			}
-
-			// dapr_scheduler_trigger_latency_bucket
-			// dapr_scheduler_trigger_latency_sum
-			if strings.Contains(metricName, expectedMetric) {
-				metricElapsed, err := strconv.ParseFloat(metricVal, 64)
-				require.NoError(t, err)
-				metricValue = int64(metricElapsed)
-				foundMetric = true
-			}
-		}
-		assert.True(c, foundMetric, "Expected metric %s not found", expectedMetric)
-	}, time.Second*1, time.Millisecond*10, "Expected metric %s not found or the value was incorrect", expectedMetric)
-	return metricValue
 }

@@ -14,15 +14,9 @@ limitations under the License.
 package metrics
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"io"
 	"net/http"
-	"os"
 	"path/filepath"
-	"strconv"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -32,7 +26,6 @@ import (
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -41,10 +34,10 @@ import (
 )
 
 func init() {
-	suite.Register(new(metrics))
+	suite.Register(new(actors))
 }
 
-type metrics struct {
+type actors struct {
 	place     *placement.Placement
 	scheduler *scheduler.Scheduler
 	triggered atomic.Int64
@@ -52,31 +45,19 @@ type metrics struct {
 	daprd *daprd.Daprd
 }
 
-func (m *metrics) Setup(t *testing.T) []framework.Option {
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: schedulerreminders
-spec:
-  features:
-  - name: SchedulerReminders
-    enabled: true`), 0o600)) // nolint:mnd
-
-	m.scheduler = scheduler.New(t)
+func (a *actors) Setup(t *testing.T) []framework.Option {
+	a.scheduler = scheduler.New(t)
 
 	app := app.New(t,
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/remindermethod", func(http.ResponseWriter, *http.Request) {
-			m.triggered.Add(1)
+			a.triggered.Add(1)
 		}),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/foo", func(http.ResponseWriter, *http.Request) {}),
 		app.WithConfig(`{"entities": ["myactortype"]}`),
 	)
 
-	m.place = placement.New(t)
-
-	m.daprd = daprd.New(t,
+	a.place = placement.New(t)
+	a.daprd = daprd.New(t,
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -85,39 +66,37 @@ metadata:
 spec:
   features:
   - name: SchedulerReminders
-    enabled: false
+    enabled: true
 `),
 		daprd.WithInMemoryActorStateStore("mystore"),
-		daprd.WithPlacementAddresses(m.place.Address()),
-		daprd.WithSchedulerAddresses(m.scheduler.Address()),
+		daprd.WithPlacementAddresses(a.place.Address()),
+		daprd.WithSchedulerAddresses(a.scheduler.Address()),
 		daprd.WithAppPort(app.Port()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, m.scheduler, m.place, m.daprd),
+		framework.WithProcesses(app, a.scheduler, a.place, a.daprd),
 	}
 }
 
-func (m *metrics) Run(t *testing.T, ctx context.Context) {
-	m.scheduler.WaitUntilRunning(t, ctx)
-	m.place.WaitUntilRunning(t, ctx)
-	m.daprd.WaitUntilRunning(t, ctx)
+func (a *actors) Run(t *testing.T, ctx context.Context) {
+	a.scheduler.WaitUntilRunning(t, ctx)
+	a.place.WaitUntilRunning(t, ctx)
+	a.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := client.HTTP(t)
-
-	grpcClient := m.daprd.GRPCClient(t, ctx)
+	grpcClient := a.daprd.GRPCClient(t, ctx)
 
 	// Use "path/filepath" import, it is using OS specific path separator unlike "path"
 	etcdKeysPrefix := filepath.Join("dapr", "jobs")
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := m.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
+		keys, rerr := a.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Empty(c, keys)
 	}, time.Second*10, 10*time.Millisecond) // nolint:mnd
 
-	// assert false, since count is 0 here
-	m.assertMetricExists(t, ctx, httpClient, "dapr_scheduler_jobs_created_total", 0)
+	metrics := a.scheduler.Metrics(t, ctx)
+	assert.Equal(t, 0, int(metrics["dapr_scheduler_jobs_created_total"]))
 
 	_, err := grpcClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
 		ActorType: "myactortype",
@@ -135,63 +114,16 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
+	metrics = a.scheduler.Metrics(t, ctx)
+	assert.Equal(t, 1, int(metrics["dapr_scheduler_jobs_created_total"]))
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := m.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
+		keys, rerr := a.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Len(c, keys, 1)
 	}, time.Second*10, 10*time.Millisecond) // nolint:mnd
 
-	// true, since count is 1
-	m.assertMetricExists(t, ctx, httpClient, "dapr_scheduler_jobs_created_total", 1)
-
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(c, m.triggered.Load(), int64(1))
-	}, 30*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greater or equal 1, actual value %d", m.triggered.Load()) // nolint:mnd
-}
-
-// assert the metric exists and the count is correct
-func (m *metrics) assertMetricExists(t *testing.T, ctx context.Context, client *http.Client, expectedMetric string, expectedCount int) {
-	t.Helper()
-
-	metricReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/metrics", m.scheduler.MetricsPort()), nil)
-	require.NoError(t, err)
-
-	resp, err := client.Do(metricReq)
-	require.NoError(t, err)
-
-	respBody, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-
-	foundMetric := false
-
-	for _, line := range bytes.Split(respBody, []byte("\n")) {
-		if len(line) == 0 || line[0] == '#' {
-			continue
-		}
-
-		split := bytes.Split(line, []byte(" "))
-		if len(split) != 2 { // nolint:mnd
-			continue
-		}
-
-		// dapr_scheduler_jobs_created_total{app_id="appid"}
-		metricName := string(split[0])
-		metricVal := string(split[1])
-		if !strings.Contains(metricName, expectedMetric) {
-			continue
-		}
-		if strings.Contains(metricName, expectedMetric) {
-			metricCount, err := strconv.Atoi(metricVal)
-			require.NoError(t, err)
-			assert.Equal(t, expectedCount, metricCount)
-			foundMetric = true
-			break
-		}
-	}
-	if expectedCount > 0 {
-		assert.True(t, foundMetric, "Expected metric %s not found", expectedMetric)
-	} else {
-		assert.False(t, foundMetric)
-	}
+		assert.GreaterOrEqual(c, a.triggered.Load(), int64(1))
+	}, 30*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greater or equal 1, actual value %d", a.triggered.Load()) // nolint:mnd
 }

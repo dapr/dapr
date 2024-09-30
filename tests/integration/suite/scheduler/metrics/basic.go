@@ -14,11 +14,7 @@ limitations under the License.
 package metrics
 
 import (
-	"bytes"
 	"context"
-	"fmt"
-	"io"
-	"net/http"
 	"strconv"
 	"strings"
 	"testing"
@@ -31,7 +27,6 @@ import (
 
 	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	frameworkclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
@@ -61,8 +56,6 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.scheduler.WaitUntilRunning(t, ctx)
-
-	frameworkClient := frameworkclient.HTTP(t)
 	client := b.scheduler.Client(t, ctx)
 
 	t.Run("create 10 jobs, ensure metrics", func(t *testing.T) {
@@ -92,8 +85,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 
 			assert.True(t, b.etcdHasJob(t, ctx, name))
-
-			b.assertMetricExists(t, ctx, frameworkClient, "dapr_scheduler_jobs_created_total", i)
+			metrics := b.scheduler.Metrics(t, ctx)
+			assert.Equal(t, i, int(metrics["dapr_scheduler_jobs_created_total"]))
 		}
 	})
 }
@@ -112,47 +105,4 @@ func (b *basic) etcdHasJob(t *testing.T, ctx context.Context, key string) bool {
 	}
 
 	return false
-}
-
-// assert the metric exists and the count is correct
-func (b *basic) assertMetricExists(t *testing.T, ctx context.Context, client *http.Client, expectedMetric string, expectedCount int) {
-	t.Helper()
-
-	metricReq, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/metrics", b.scheduler.MetricsPort()), nil)
-	require.NoError(t, err)
-
-	resp, err := client.Do(metricReq)
-	require.NoError(t, err)
-
-	respBody, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-
-	foundMetric := false
-
-	for _, line := range bytes.Split(respBody, []byte("\n")) {
-		if len(line) == 0 || line[0] == '#' {
-			continue
-		}
-
-		split := bytes.Split(line, []byte(" "))
-		if len(split) != 2 { // nolint:mnd
-			continue
-		}
-
-		// dapr_scheduler_jobs_created_total{app_id="appid"}
-		metricName := string(split[0])
-		metricVal := string(split[1])
-		if !strings.Contains(metricName, expectedMetric) {
-			continue
-		}
-		if strings.Contains(metricName, expectedMetric) {
-			metricCount, err := strconv.Atoi(metricVal)
-			require.NoError(t, err)
-			assert.Equal(t, expectedCount, metricCount)
-			foundMetric = true
-			break
-		}
-	}
-	assert.True(t, foundMetric, "Expected metric %s not found", expectedMetric)
 }
