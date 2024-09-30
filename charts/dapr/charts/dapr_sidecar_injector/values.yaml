@@ -24,6 +24,14 @@ service:
 nameOverride: ""
 fullnameOverride: ""
 webhookFailurePolicy: Ignore
+# Optional selector configuration for the mutation webhook. Used to specify what namespaces the api-server should watch send webhook events for.
+# Example
+#  webhookNamespaceSelectors: |-
+#     matchExpressions:
+#    - key: control-plane
+#      operator: NotIn
+#      values:
+#      - "true"
 webhookNamespaceSelectors: ""
 sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
