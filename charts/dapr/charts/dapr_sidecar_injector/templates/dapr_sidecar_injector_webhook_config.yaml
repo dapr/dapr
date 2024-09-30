@@ -29,6 +29,9 @@ webhooks:
   sideEffects: None
   admissionReviewVersions: ["v1", "v1beta1"]
   {{- if .Values.webhookNamespaceSelectors}}
-  namespaceSelector: {{ .Values.webhookNamespaceSelectors}}
-  {{- end }}
+  namespaceSelector: 
+        {{- with .Values.webhookNamespaceSelectors}}
+        {{- toYaml . | nindent 4 }}
+        {{- end }}
+  {{- end}}
 {{- end }}
