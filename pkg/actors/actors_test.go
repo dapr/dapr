@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc/codes"
@@ -42,6 +43,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -1645,4 +1647,58 @@ func TestIsActorLocal(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFIFOActorInvocation(t *testing.T) {
+	// Initialize the mock actors with a reasonable max stack depth
+	mockActors := NewMockActors(5)
+	numCalls := 50
+
+	// Expected order of method IDs
+	var expectedOrder []string
+	for i := 0; i < numCalls; i++ {
+		expectedOrder = append(expectedOrder, fmt.Sprintf("TestFIFO%d", i))
+	}
+
+	var wg sync.WaitGroup
+
+	mockActors.On("Call", mock.Anything, mock.Anything).Return(nil, nil).Times(numCalls)
+
+	// Simulate invoking methods concurrently
+	for _, methodName := range expectedOrder {
+		wg.Add(1)
+		go func(methodName string) {
+			defer wg.Done()
+
+			// Create a mock InternalInvokeRequest
+			req := &internalsv1pb.InternalInvokeRequest{
+				Message: &commonv1pb.InvokeRequest{
+					Method: methodName,
+				},
+			}
+
+			// Call the mock actor
+			_, err := mockActors.Call(context.Background(), req)
+			assert.NoError(t, err, "Call should not return an error")
+		}(methodName)
+
+		// Slight delay to ensure order of invocation
+		time.Sleep(10 * time.Millisecond)
+	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	// Verify the call order
+	mockActors.receivedCallOrderLock.Lock()
+	receivedCallOrder := make([]string, len(mockActors.receivedCallOrder))
+	copy(receivedCallOrder, mockActors.receivedCallOrder)
+	mockActors.receivedCallOrderLock.Unlock()
+
+	mockActors.processedCallOrderLock.Lock()
+	processedCallOrder := make([]string, len(mockActors.processedCallOrder))
+	copy(processedCallOrder, mockActors.processedCallOrder)
+	mockActors.processedCallOrderLock.Unlock()
+
+	assert.Equal(t, processedCallOrder, receivedCallOrder, "Actor methods were not called in FIFO order")
 }
