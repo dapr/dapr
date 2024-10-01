@@ -101,7 +101,7 @@ func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace s
 			namespaceKey, namespace,
 			flowDirectionKey, string(flowDirection),
 			targetKey, target,
-			statusKey, //status appened on each recording
+			statusKey, // status appened on each recording
 		}
 
 		// Record count metric for all resiliency executions

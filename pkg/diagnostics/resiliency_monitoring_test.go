@@ -204,10 +204,10 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 
 func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 	tests := []struct {
-		name                string
-		unitFn              func()
-		wantNumberOfRows    int
-		wantCbStateTagCount map[tag.Tag]int64
+		name                 string
+		unitFn               func()
+		wantNumberOfRows     int
+		wantCbStateTagCount  map[tag.Tag]int64
 		wantCbStateLastValue tag.Tag
 	}{
 		{
@@ -222,8 +222,8 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 					})
 				}
 			},
-			wantNumberOfRows:    3,
-			wantCbStateTagCount: map[tag.Tag]int64{diag.NewTag(diag.StatusKey.Name(), "closed"): 2},
+			wantNumberOfRows:     3,
+			wantCbStateTagCount:  map[tag.Tag]int64{diag.NewTag(diag.StatusKey.Name(), "closed"): 2},
 			wantCbStateLastValue: diag.NewTag(diag.StatusKey.Name(), "closed"),
 		},
 		{
@@ -283,9 +283,9 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, rows, test.wantNumberOfRows)
 
-			rows_cb_state, err2 := view.RetrieveData(resiliencyCBStateViewName)
+			rowsCbState, err2 := view.RetrieveData(resiliencyCBStateViewName)
 			require.NoError(t, err2)
-			require.NotNil(t, rows_cb_state)
+			require.NotNil(t, rowsCbState)
 
 			wantedTags := []tag.Tag{
 				diag.NewTag("app_id", testAppID),
@@ -304,11 +304,11 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				gotCount := diag.GetCountValueForObservationWithTagSet(
 					rows, map[tag.Tag]bool{cbTag: true, diag.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
 				require.Equal(t, wantCount, gotCount)
-				
-				//Current (last value) state should have a value of 1, others should be 0
+
+				// Current (last value) state should have a value of 1, others should be 0
 				found, gotValue := diag.GetLastValueForObservationWithTagset(
-					rows_cb_state, map[tag.Tag]bool{cbTag: true, diag.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
-				require.Equal(t, true, found)
+					rowsCbState, map[tag.Tag]bool{cbTag: true, diag.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
+				require.True(t, found)
 				if cbTag.Value == test.wantCbStateLastValue.Value {
 					require.Equal(t, float64(1), gotValue)
 				} else {
