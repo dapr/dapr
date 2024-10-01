@@ -244,6 +244,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("bad PKI", func(t *testing.T) {
 		invokeTests(t, http.StatusInternalServerError, func(t *testing.T, body string) {
+			t.Logf("received body: %s", body)
 			assert.Contains(t, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
 			assert.Contains(t, body, "tls: unknown certificate authority")
 		}, h.daprd2)
