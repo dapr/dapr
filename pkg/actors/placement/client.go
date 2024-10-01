@@ -96,12 +96,13 @@ func (c *placementClient) connectToServer(ctx context.Context, serverAddr string
 
 // drain the grpc stream as described in the documentation
 // https://github.com/grpc/grpc-go/blob/be1fb4f27549f736b9b4ec26104c7c6b29845ad0/stream.go#L109
-func (c *placementClient) drain(stream grpc.ClientStream, conn *grpc.ClientConn) {
+func (c *placementClient) drain(stream grpc.ClientStream, closeConn bool) {
 	c.sendLock.Lock()
 	stream.CloseSend() // CloseSend cannot be invoked concurrently with Send()
 	c.sendLock.Unlock()
-	if conn != nil {
-		conn.Close()
+	if closeConn && c.clientConn != nil {
+		c.clientConn.Close()
+		c.clientConn = nil
 	}
 
 	c.recvLock.Lock()
@@ -130,11 +131,7 @@ func (c *placementClient) disconnectFn(insideLockFn func(), closeConnection bool
 		return
 	}
 
-	if closeConnection {
-		c.drain(c.clientStream, c.clientConn)
-	} else {
-		c.drain(c.clientStream, nil)
-	}
+	c.drain(c.clientStream, closeConnection)
 
 	c.streamConnAlive = false
 	c.streamConnectedCond.Broadcast()
