@@ -156,9 +156,10 @@ func (_m *MockActors) Call(ctx context.Context, req *internalsv1pb.InternalInvok
 
 	_m.receivedCallOrderLock.Lock()
 	_m.receivedCallOrder = append(_m.receivedCallOrder, req.GetMessage().GetMethod())
-	_m.receivedCallOrderLock.Unlock()
 
 	err := _m.actorLock.Lock(nil)
+	_m.receivedCallOrderLock.Unlock()
+
 	if err != nil {
 		return nil, err
 	}

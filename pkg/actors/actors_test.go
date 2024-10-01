@@ -1652,7 +1652,7 @@ func TestIsActorLocal(t *testing.T) {
 func TestFIFOActorInvocation(t *testing.T) {
 	// Initialize the mock actors with a reasonable max stack depth
 	mockActors := NewMockActors(5)
-	numCalls := 5000
+	numCalls := 10000
 
 	// Expected order of method IDs
 	var expectedOrder []string
