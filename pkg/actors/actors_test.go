@@ -1652,7 +1652,7 @@ func TestIsActorLocal(t *testing.T) {
 func TestFIFOActorInvocation(t *testing.T) {
 	// Initialize the mock actors with a reasonable max stack depth
 	mockActors := NewMockActors(5)
-	numCalls := 50
+	numCalls := 5000
 
 	// Expected order of method IDs
 	var expectedOrder []string
@@ -1679,11 +1679,8 @@ func TestFIFOActorInvocation(t *testing.T) {
 
 			// Call the mock actor
 			_, err := mockActors.Call(context.Background(), req)
-			assert.NoError(t, err, "Call should not return an error")
+			require.NoError(t, err, "Call should not return an error")
 		}(methodName)
-
-		// Slight delay to ensure order of invocation
-		time.Sleep(10 * time.Millisecond)
 	}
 
 	// Wait for all goroutines to finish
@@ -1700,5 +1697,6 @@ func TestFIFOActorInvocation(t *testing.T) {
 	copy(processedCallOrder, mockActors.processedCallOrder)
 	mockActors.processedCallOrderLock.Unlock()
 
-	assert.Equal(t, processedCallOrder, receivedCallOrder, "Actor methods were not called in FIFO order")
+	require.Equal(t, len(expectedOrder), len(receivedCallOrder), "Number of received and processed calls should match")
+	require.Equal(t, processedCallOrder, receivedCallOrder, "Actor methods were not called in FIFO order")
 }
