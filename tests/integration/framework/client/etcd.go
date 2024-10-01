@@ -72,8 +72,8 @@ func (c *EtcdClient) Get(ctx context.Context, prefix string, opts ...clientv3.Op
 	}
 
 	keys := make([]string, len(resp.Kvs))
-	for _, kv := range resp.Kvs {
-		keys = append(keys, string(kv.Key))
+	for i, kv := range resp.Kvs {
+		keys[i] = string(kv.Key)
 	}
 
 	return keys, nil
