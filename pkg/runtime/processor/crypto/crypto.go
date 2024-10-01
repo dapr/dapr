@@ -15,7 +15,6 @@ package crypto
 
 import (
 	"context"
-	"io"
 	"sync"
 
 	contribcrypto "github.com/dapr/components-contrib/crypto"
@@ -86,11 +85,8 @@ func (c *crypto) Close(comp compapi.Component) error {
 		return nil
 	}
 
-	closer, ok := crypto.(io.Closer)
-	if ok && closer != nil {
-		if err := closer.Close(); err != nil {
-			return err
-		}
+	if err := crypto.Close(); err != nil {
+		return err
 	}
 
 	return nil
