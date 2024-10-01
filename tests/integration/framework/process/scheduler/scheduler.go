@@ -223,8 +223,8 @@ func (s *Scheduler) ETCDClient(t *testing.T) *client.EtcdClient {
 	t.Helper()
 
 	client := client.Etcd(t, clientv3.Config{
-		Endpoints:   []string{fmt.Sprintf("127.0.0.1:%s", s.EtcdClientPort())},
-		DialTimeout: 40 * time.Second, // nolint:mnd
+		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
+		DialTimeout: 40 * time.Second, //nolint:mnd
 	})
 
 	return client

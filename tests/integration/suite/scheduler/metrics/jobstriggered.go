@@ -121,7 +121,7 @@ func (j *jobstriggered) Run(t *testing.T, ctx context.Context) {
 		},
 		"ping": {
 			data: func(t *testing.T) *anypb.Any {
-				anyB, err := anypb.New(&proto.PingResponse{Value: "pong", Counter: 123}) // nolint:mnd
+				anyB, err := anypb.New(&proto.PingResponse{Value: "pong", Counter: 123}) //nolint:mnd
 				require.NoError(t, err)
 				return anyB
 			},
@@ -130,7 +130,7 @@ func (j *jobstriggered) Run(t *testing.T, ctx context.Context) {
 				var ping proto.PingResponse
 				require.NoError(t, job.GetData().UnmarshalTo(&ping))
 				assert.Equal(t, "pong", ping.GetValue())
-				assert.Equal(t, int32(123), ping.GetCounter()) // nolint:mnd
+				assert.Equal(t, int32(123), ping.GetCounter()) //nolint:mnd
 			},
 		},
 	}
@@ -167,14 +167,14 @@ func (j *jobstriggered) Run(t *testing.T, ctx context.Context) {
 					assert.Equal(t, int(j.jobstriggeredCount.Load()), int(metrics["dapr_scheduler_trigger_latency_count"]))
 
 					// ensure the trigger duration is less than 1 second (1000 milliseconds)
-					assert.Less(t, avgTriggerLatency, float64(1000), "Trigger duration should be less than 1 second") // nolint:mnd
+					assert.Less(t, avgTriggerLatency, float64(1000), "Trigger duration should be less than 1 second") //nolint:mnd
 
 					// triggered time should be less than the total round trip time of a job being scheduled and sent back to the app
 					assert.Less(t, int64(avgTriggerLatency), receivedJobElapsed, "Trigger time should be less than the total elapsed time to receive the scheduled job")
-				}, time.Second*3, 10*time.Millisecond) // nolint:mnd
+				}, time.Second*3, 10*time.Millisecond) //nolint:mnd
 
 				test.exp(t, job)
-			case <-time.After(time.Second * 10): // nolint:mnd
+			case <-time.After(time.Second * 10): //nolint:mnd
 				assert.Fail(t, "timed out waiting for triggered job")
 			}
 		})
