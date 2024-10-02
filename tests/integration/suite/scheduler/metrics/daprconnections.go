@@ -80,27 +80,27 @@ func (c *daprconnections) Run(t *testing.T, ctx context.Context) {
 		c.daprdA.Run(t, ctx)
 		t.Cleanup(func() { c.daprdA.Cleanup(t) })
 		c.daprdA.WaitUntilRunning(t, ctx)
-		metrics = c.scheduler.Metrics(t, ctx)
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(t, 1, int(metrics["dapr_scheduler_sidecars_connected_total"]))
+		assert.EventuallyWithT(t, func(ct *assert.CollectT) {
+			metrics = c.scheduler.Metrics(t, ctx)
+			assert.Equal(ct, 1, int(metrics["dapr_scheduler_sidecars_connected_total"]))
 		}, 15*time.Second, 10*time.Millisecond, "daprdA sidecar didn't connect to Scheduler in time") //nolint:mnd
 
 		// 2 sidecars connected
 		c.daprdB.Run(t, ctx)
 		t.Cleanup(func() { c.daprdB.Cleanup(t) })
 		c.daprdB.WaitUntilRunning(t, ctx)
-		metrics = c.scheduler.Metrics(t, ctx)
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(t, 2, int(metrics["dapr_scheduler_sidecars_connected_total"])) //nolint:mnd
+		assert.EventuallyWithT(t, func(ct *assert.CollectT) {
+			metrics = c.scheduler.Metrics(t, ctx)
+			assert.Equal(ct, 2, int(metrics["dapr_scheduler_sidecars_connected_total"])) //nolint:mnd
 		}, 15*time.Second, 10*time.Millisecond, "daprdB sidecar didn't connect to Scheduler in time") //nolint:mnd
 
 		// 3 sidecars connected
 		c.daprdC.Run(t, ctx)
 		t.Cleanup(func() { c.daprdC.Cleanup(t) })
 		c.daprdC.WaitUntilRunning(t, ctx)
-		metrics = c.scheduler.Metrics(t, ctx)
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			assert.Equal(t, 3, int(metrics["dapr_scheduler_sidecars_connected_total"])) //nolint:mnd
+		assert.EventuallyWithT(t, func(ct *assert.CollectT) {
+			metrics = c.scheduler.Metrics(t, ctx)
+			assert.Equal(ct, 3, int(metrics["dapr_scheduler_sidecars_connected_total"])) //nolint:mnd
 		}, 15*time.Second, 10*time.Millisecond, "daprdC sidecar didn't connect to Scheduler in time") //nolint:mnd
 	})
 }
