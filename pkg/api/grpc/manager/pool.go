@@ -124,7 +124,7 @@ func (p *ConnectionPool) Share() grpc.ClientConnInterface {
 // This needs to be wrapped in a (read/write) lock.
 func (p *ConnectionPool) doShare() grpc.ClientConnInterface {
 	// If there's more than 1 connection, grab the first one whose reference count is less or equal than 100 (grpcMaxConcurrentStreams)
-	for i := 0; i < len(p.connections); i++ {
+	for i := range len(p.connections) {
 		// Check if the connection is still valid first
 		// First we check if the referenceCount is 0, and then we check if the connection has expired
 		// This should be safe for concurrent use
@@ -193,7 +193,7 @@ func (p *ConnectionPool) DestroyAll() {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
-	for i := 0; i < len(p.connections); i++ {
+	for i := range len(p.connections) {
 		if closer, ok := p.connections[i].conn.(interface{ Close() error }); ok {
 			_ = closer.Close()
 		}
