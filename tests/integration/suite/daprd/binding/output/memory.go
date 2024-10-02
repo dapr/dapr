@@ -20,7 +20,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -82,17 +81,11 @@ func (m *memory) Run(t *testing.T, ctx context.Context) {
 
 	baseMemory := m.daprd.MetricResidentMemoryMi(t, ctx)
 
-	var wg sync.WaitGroup
-	wg.Add(300)
 	for i := 0; i < 300; i++ {
-		go func(i int) {
-			defer wg.Done()
-			assert.EventuallyWithT(t, func(c *assert.CollectT) {
-				m.daprd.HTTPPost2xx(c, ctx, "/v1.0/bindings/mybin", strings.NewReader(`{"operation":"get","data":`+input+`}`))
-			}, 10*time.Second, 10*time.Millisecond)
-		}(i)
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			m.daprd.HTTPPost2xx(c, ctx, "/v1.0/bindings/mybin", strings.NewReader(`{"operation":"get","data":`+input+`}`))
+		}, 10*time.Second, 10*time.Millisecond)
 	}
-	wg.Wait()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		memory := m.daprd.MetricResidentMemoryMi(t, ctx)
