@@ -24,7 +24,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/google/uuid"
 	mock "github.com/stretchr/testify/mock"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -479,8 +478,8 @@ func (_m *MockActorFIFOInvocation) Call(ctx context.Context, req *internalsv1pb.
 	_m.receivedCallOrderLock.Lock()
 	_m.receivedCallOrder = append(_m.receivedCallOrder, req.GetMessage().GetMethod())
 
-	// Generate a unique requestID
-	uniqueRequestID := uuid.New().String()
+	// Reuse the method name as a unique requestID so we don't spend cycles on generating UIDs
+	uniqueRequestID := req.GetMessage().GetMethod()
 	err := _m.actorLock.Lock(&uniqueRequestID)
 	_m.receivedCallOrderLock.Unlock()
 
