@@ -110,6 +110,7 @@ spec:
 }
 
 func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
+	const mypubsub = "mypubsub"
 	e.daprd.WaitUntilRunning(t, ctx)
 	//nolint:staticcheck
 	conn, connErr := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", e.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
@@ -185,7 +186,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.PubSubTopicEmpty()
 	t.Run("pubsub topic empty", func(t *testing.T) {
-		name := "mypubsub"
+		name := mypubsub
 		req := &rtv1.PublishEventRequest{
 			PubsubName: name,
 			Topic:      "",
@@ -228,7 +229,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.PubSubMetadataDeserialize()
 	t.Run("pubsub metadata deserialization", func(t *testing.T) {
-		name := "mypubsub"
+		name := mypubsub
 		metadata := map[string]string{"rawPayload": "invalidBooleanValue"}
 		req := &rtv1.PublishEventRequest{
 			PubsubName: name,
@@ -273,7 +274,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.PubSubCloudEventCreation()
 	t.Run("pubsub cloud event creation issue", func(t *testing.T) {
-		name := "mypubsub"
+		name := mypubsub
 		metadata := map[string]string{"rawPayload": "false"}
 		invalidData := []byte(`{"missing_quote: invalid}`)
 
@@ -322,7 +323,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.PubSubMarshalEvents()
 	t.Run("pubsub marshal events issue", func(t *testing.T) {
-		name := "mypubsub"
+		name := mypubsub
 		topic := "topic"
 
 		req := &rtv1.BulkPublishRequest{

@@ -113,6 +113,7 @@ spec:
 }
 
 func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
+	const mypubsub = "mypubsub"
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	httpClient := client.HTTP(t)
@@ -166,7 +167,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("pubsub unmarshal events", func(t *testing.T) {
-		name := "mypubsub"
+		name := mypubsub
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/publish/bulk/%s/topic", e.daprd.HTTPPort(), name)
 		payload := `{"entryID": "}`
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
@@ -235,7 +236,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.PubSubMetadataDeserialize()
 	t.Run("pubsub metadata deserialization", func(t *testing.T) {
-		name := "mypubsub"
+		name := mypubsub
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/topic?metadata.rawPayload=invalidBooleanValue", e.daprd.HTTPPort(), name)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(""))
@@ -305,7 +306,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	// Covers apierrors.PubSubCloudEventCreation()
 	t.Run("pubsub cloud event creation issue", func(t *testing.T) {
 		payload := `{"}`
-		name := "mypubsub"
+		name := mypubsub
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s/topic?metadata.rawPayload=false", e.daprd.HTTPPort(), name)
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
@@ -375,7 +376,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 
 	// Covers apierrors.PubSubMarshalEvents()
 	t.Run("pubsub marshal events issue", func(t *testing.T) {
-		name := "mypubsub"
+		name := mypubsub
 		endpoint := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/publish/bulk/%s/topic", e.daprd.HTTPPort(), name)
 		payload := `{"entryID": ""}`
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, strings.NewReader(payload))
