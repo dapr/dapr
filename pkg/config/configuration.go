@@ -242,7 +242,8 @@ type OtelSpec struct {
 	Protocol        string `json:"protocol,omitempty" yaml:"protocol,omitempty"`
 	EndpointAddress string `json:"endpointAddress,omitempty" yaml:"endpointAddress,omitempty"`
 	// Defaults to true
-	IsSecure *bool `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
+	IsSecure *bool             `json:"isSecure,omitempty" yaml:"isSecure,omitempty"`
+	Headers  map[string]string `json:"headers,omitempty" yaml:"headers,omitempty"`
 }
 
 // GetIsSecure returns true if the connection should be secured.
@@ -559,6 +560,20 @@ func SetTracingSpecFromEnv(conf *Configuration) {
 
 		if insecure := os.Getenv(env.OtlpExporterInsecure); insecure == "true" {
 			conf.Spec.TracingSpec.Otel.IsSecure = ptr.Of(false)
+		}
+	}
+
+	if headers := os.Getenv(env.OTEL_EXPORTER_OTLP_HEADERS); headers != "" {
+		for _, pair := range strings.Split(headers, ",") {
+			pair = strings.TrimSpace(pair)
+			// We do not validate any env variable values in this function so ignore
+			// invalid key-value pairs.
+			if key, value, ok := strings.Cut(pair, "="); ok {
+				if conf.Spec.TracingSpec.Otel.Headers == nil {
+					conf.Spec.TracingSpec.Otel.Headers = make(map[string]string)
+				}
+				conf.Spec.TracingSpec.Otel.Headers[strings.TrimSpace(key)] = strings.TrimSpace(value)
+			}
 		}
 	}
 }

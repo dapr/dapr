@@ -615,6 +615,7 @@ func TestSetupTracing(t *testing.T) {
 				EndpointAddress: "foo.bar",
 				IsSecure:        ptr.Of(false),
 				Protocol:        "http",
+				Headers:         map[string]string{"authorization": "Bearer foo"},
 			},
 		},
 		expectedExporters: []sdktrace.SpanExporter{&otlptrace.Exporter{}},

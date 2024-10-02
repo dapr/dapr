@@ -454,11 +454,17 @@ func (a *DaprRuntime) setupTracing(ctx context.Context, hostAddress string, tpSt
 			if !tracingSpec.Otel.GetIsSecure() {
 				clientOptions = append(clientOptions, otlptracehttp.WithInsecure())
 			}
+			if tracingSpec.Otel.Headers != nil {
+				clientOptions = append(clientOptions, otlptracehttp.WithHeaders(tracingSpec.Otel.Headers))
+			}
 			client = otlptracehttp.NewClient(clientOptions...)
 		} else {
 			clientOptions := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
 			if !tracingSpec.Otel.GetIsSecure() {
 				clientOptions = append(clientOptions, otlptracegrpc.WithInsecure())
+			}
+			if tracingSpec.Otel.Headers != nil {
+				clientOptions = append(clientOptions, otlptracegrpc.WithHeaders(tracingSpec.Otel.Headers))
 			}
 			client = otlptracegrpc.NewClient(clientOptions...)
 		}

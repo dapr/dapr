@@ -479,6 +479,7 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otlpendpoint:1234")
 	t.Setenv("OTEL_EXPORTER_OTLP_INSECURE", "true")
 	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/json")
+	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "authorization=Bearer token,  User-Agent = dapr,x-api-key= 1234 ,x-debug =no")
 
 	// get default configuration
 	conf := LoadDefaultConfiguration()
@@ -488,6 +489,12 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 
 	assert.Equal(t, "otlpendpoint:1234", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "http", conf.Spec.TracingSpec.Otel.Protocol)
+	assert.Equal(t, map[string]string{
+		"authorization": "Bearer token",
+		"User-Agent":    "dapr",
+		"x-api-key":     "1234",
+		"x-debug":       "no",
+	}, conf.Spec.TracingSpec.Otel.Headers)
 	require.False(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
 
 	// Spec from config file should not be overridden
@@ -501,6 +508,7 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 
 	assert.Equal(t, "configfileendpoint:4321", conf.Spec.TracingSpec.Otel.EndpointAddress)
 	assert.Equal(t, "grpc", conf.Spec.TracingSpec.Otel.Protocol)
+	assert.Nil(t, conf.Spec.TracingSpec.Otel.Headers)
 	require.True(t, conf.Spec.TracingSpec.Otel.GetIsSecure())
 }
 
