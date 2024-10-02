@@ -54,7 +54,7 @@ helm uninstall dapr -n dapr-system
 
 ## Upgrade the charts
 
-Follow the upgrade HowTo instructions in [Upgrading Dapr with Helm](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/#upgrading-dapr-with-helm).
+Follow the upgrade HowTo instructions in [Upgrading Dapr with Helm](https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-production/#upgrade-dapr-with-helm).
 
 
 ## Resource configuration
