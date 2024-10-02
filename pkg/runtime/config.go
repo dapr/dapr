@@ -451,7 +451,10 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	}
 
 	// Also check to ensure no overflow with int32
+	// TODO: fix types
+	//nolint:gosec
 	healthThreshold := int32(c.AppHealthThreshold)
+	//nolint:gosec
 	if c.AppHealthThreshold < 1 || int32(c.AppHealthThreshold+1) < 0 {
 		healthThreshold = config.AppHealthConfigDefaultThreshold
 	}
