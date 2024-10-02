@@ -238,7 +238,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 
 	if opts.SchedulerReminders {
 		if opts.Config.SchedulerClients == nil {
-			return nil, fmt.Errorf("scheduler reminders are enabled, but no Scheduler clients are available")
+			return nil, errors.New("scheduler reminders are enabled, but no Scheduler clients are available")
 		}
 		log.Debug("Using Scheduler service for reminders.")
 		a.actorsReminders = reminders.NewScheduler(reminders.SchedulerOptions{
@@ -436,7 +436,7 @@ func (a *actorsRuntime) haltAllActors() error {
 
 	// Collect all errors, which also waits for all goroutines to return
 	errs := []error{}
-	for i := int32(0); i < count.Load(); i++ {
+	for range count.Load() {
 		err := <-errCh
 		if err != nil {
 			errs = append(errs, err)
