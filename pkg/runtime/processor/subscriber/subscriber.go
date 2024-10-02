@@ -256,7 +256,6 @@ func (s *Subscriber) StartAppSubscriptions() error {
 
 	var errs []error
 	for name, ps := range s.compStore.ListPubSubs() {
-		ps := ps
 		for _, sub := range s.compStore.ListSubscriptionsAppByPubSub(name) {
 			ss, err := s.startSubscription(ps, sub, false)
 			if err != nil {
