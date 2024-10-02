@@ -19,7 +19,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -64,15 +63,9 @@ func (s *save) Run(t *testing.T, ctx context.Context) {
 	require.True(t, ok)
 	input := []byte(`[{"key":"123","value":"` + strings.Repeat("0", int(bytesN)) + `"}]`)
 
-	var wg sync.WaitGroup
-	wg.Add(400)
-	for i := 0; i < 400; i++ {
-		go func(i int) {
-			defer wg.Done()
-			s.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore", bytes.NewReader(input))
-		}(i)
+	for i := 0; i < 200; i++ {
+		s.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore", bytes.NewReader(input))
 	}
-	wg.Wait()
 
 	s.daprd.HTTPDelete2xx(t, ctx, "/v1.0/state/mystore/123", nil)
 

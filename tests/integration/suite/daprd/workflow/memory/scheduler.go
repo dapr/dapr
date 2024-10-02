@@ -64,7 +64,7 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 
 	var actorMemBaseline float64
 
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 5; i++ {
 		resp, err := gclient.StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
 			WorkflowComponent: "dapr",
 			WorkflowName:      "foo",

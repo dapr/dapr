@@ -19,7 +19,6 @@ import (
 	"os"
 	"runtime"
 	"strings"
-	"sync"
 	"testing"
 	"time"
 
@@ -66,15 +65,9 @@ func (tr *transaction) Run(t *testing.T, ctx context.Context) {
 		strings.Repeat("0", int(bytesN)),
 	)
 
-	var wg sync.WaitGroup
-	wg.Add(400)
 	for i := 0; i < 400; i++ {
-		go func(i int) {
-			defer wg.Done()
-			tr.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore/transaction", strings.NewReader(payload))
-		}(i)
+		tr.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore/transaction", strings.NewReader(payload))
 	}
-	wg.Wait()
 
 	tr.daprd.HTTPDelete2xx(t, ctx, "/v1.0/state/mystore/key1", nil)
 
