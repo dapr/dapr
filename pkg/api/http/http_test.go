@@ -204,14 +204,14 @@ func TestPubSubEndpoints(t *testing.T) {
 		}
 	})
 
-	t.Run("Publish unsuccessfully - 500 InternalError", func(t *testing.T) {
+	t.Run("Publish unsuccessfully - 400 Bad Request", func(t *testing.T) {
 		apiPath := fmt.Sprintf("%s/publish/errorpubsub/topic", apiVersionV1)
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, []byte(`{"key": "value"}`), nil)
 			// assert
-			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, gohttp.StatusBadRequest, resp.StatusCode, "expected bad request as response")
 			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
 		}
 	})
@@ -459,7 +459,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			// act
 			resp := fakeServer.DoRequest(method, apiPath, errReqBytes, nil)
 			// assert
-			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
+			assert.Equal(t, gohttp.StatusBadRequest, resp.StatusCode, "expected bad request as response")
 			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
 
 			bulkResp := BulkPublishResponse{}
