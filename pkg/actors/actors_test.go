@@ -1651,12 +1651,12 @@ func TestIsActorLocal(t *testing.T) {
 
 func TestFIFOActorInvocation(t *testing.T) {
 	// Initialize the mock actors with a reasonable max stack depth
-	mockActors := NewMockActors(5)
+	mockActors := NewMockActorFIFOInvocation(5)
 	numCalls := 10000
 
 	// Expected order of method IDs
 	var expectedOrder []string
-	for i := 0; i < numCalls; i++ {
+	for i := range numCalls {
 		expectedOrder = append(expectedOrder, fmt.Sprintf("TestFIFO%d", i))
 	}
 
@@ -1679,7 +1679,7 @@ func TestFIFOActorInvocation(t *testing.T) {
 
 			// Call the mock actor
 			_, err := mockActors.Call(context.Background(), req)
-			require.NoError(t, err, "Call should not return an error")
+			assert.NoError(t, err, "Call should not return an error")
 		}(methodName)
 	}
 
