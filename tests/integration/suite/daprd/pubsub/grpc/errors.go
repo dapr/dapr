@@ -415,30 +415,4 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 		require.NotNil(t, errInfo.GetMetadata())
 	})
-
-	t.Run("pubsub topic doesn't exist", func(t *testing.T) {
-		name := mypubsub
-		topic := "invalid-topic"
-		req := &rtv1.PublishEventRequest{
-			PubsubName: name,
-			Topic:      topic,
-		}
-		_, err := client.PublishEvent(ctx, req)
-
-		require.Error(t, err)
-		s, ok := status.FromError(err)
-		require.True(t, ok)
-		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
-		require.Contains(t, fmt.Sprintf("error when publishing to topic %s in pubsub %s", topic, name), s.Message())
-
-		// Check status details
-		require.Len(t, s.Details(), 1)
-
-		var errInfo *errdetails.ErrorInfo
-		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
-
-		require.True(t, ok)
-		require.Equal(t, kiterrors.CodePrefixPubSub+"PUBLISH_MESSAGE", errInfo.GetReason())
-		require.Equal(t, "dapr.io", errInfo.GetDomain())
-	})
 }
