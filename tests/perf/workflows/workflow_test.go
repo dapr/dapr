@@ -41,6 +41,7 @@ import (
 
 var tr *runner.TestRunner
 var appNamePrefix = "perf-workflowsapp"
+var backend = os.Getenv("DAPR_PERF_WORKFLOW_BACKEND_NAME")
 
 type K6RunConfig struct {
 	TARGET_URL     string
@@ -51,8 +52,6 @@ type K6RunConfig struct {
 }
 
 func TestMain(m *testing.M) {
-	backend := os.Getenv("DAPR_PERF_WORKFLOW_BACKEND_NAME")
-
 	utils.SetupLogs("workflow_test")
 	testApps := []kube.AppDescription{
 		{
@@ -249,7 +248,7 @@ func TestWorkflowWithConstantVUs(t *testing.T) {
 	inputs := []string{"100"}
 	scenarios := []string{"t_30_300", "t_30_300", "t_30_300"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
-	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, false, false)
+	testWorkflow(t, workflowName, appNamePrefix+backend, inputs, scenarios, rateChecks, false, false)
 }
 
 func TestWorkflowWithConstantIterations(t *testing.T) {
@@ -257,7 +256,7 @@ func TestWorkflowWithConstantIterations(t *testing.T) {
 	inputs := []string{"100"}
 	scenarios := []string{"t_30_300", "t_60_300", "t_90_300"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1", "rate==1", "rate==1"}}
-	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
+	testWorkflow(t, workflowName, appNamePrefix+backend, inputs, scenarios, rateChecks, true, false)
 }
 
 // Runs tests for `sum_series_wf` with Max VUs
@@ -266,7 +265,7 @@ func TestSeriesWorkflowWithMaxVUs(t *testing.T) {
 	inputs := []string{"100"}
 	scenarios := []string{"t_350_1400"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1"}}
-	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
+	testWorkflow(t, workflowName, appNamePrefix+backend, inputs, scenarios, rateChecks, true, false)
 }
 
 // Runs tests for `sum_parallel_wf` with Max VUs
@@ -275,7 +274,7 @@ func TestParallelWorkflowWithMaxVUs(t *testing.T) {
 	inputs := []string{"100"}
 	scenarios := []string{"t_110_440"} // t_workflowCount_iterations
 	rateChecks := [][]string{{"rate==1"}}
-	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, false)
+	testWorkflow(t, workflowName, appNamePrefix+backend, inputs, scenarios, rateChecks, true, false)
 }
 
 // Runs tests for `state_wf` with different Payload
@@ -284,5 +283,5 @@ func TestWorkflowWithDifferentPayloads(t *testing.T) {
 	scenarios := []string{"t_30_300"} // t_workflowCount_iterations
 	inputs := []string{"10000", "50000", "100000"}
 	rateChecks := [][]string{{"rate==1"}, {"rate==1"}, {"rate==1"}}
-	testWorkflow(t, workflowName, appNamePrefix, inputs, scenarios, rateChecks, true, true)
+	testWorkflow(t, workflowName, appNamePrefix+backend, inputs, scenarios, rateChecks, true, true)
 }
