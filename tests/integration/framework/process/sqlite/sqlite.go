@@ -44,6 +44,7 @@ type SQLite struct {
 	metadata          map[string]string
 	migrations        []string
 	isActorStateStore bool
+	tableName         *string
 	execs             []string
 	conn              *sql.DB
 }
@@ -69,6 +70,7 @@ func New(t *testing.T, fopts ...Option) *SQLite {
 		metadata:          opts.metadata,
 		migrations:        opts.migrations,
 		isActorStateStore: opts.isActorStateStore,
+		tableName:         opts.tableName,
 		execs:             opts.execs,
 	}
 }
@@ -102,8 +104,23 @@ func (s *SQLite) GetConnection(t *testing.T) *sql.DB {
 	return conn
 }
 
+// GetTableName returns the connection to the SQLite database.
+func (s *SQLite) GetTableName(t *testing.T) string {
+	require.NotNil(t, s.tableName)
+	return *s.tableName
+}
+
 // GetComponent returns the Component resource.
 func (s *SQLite) GetComponent(t *testing.T) string {
+	metadata := []commonapi.NameValuePair{
+		{Name: "connectionString", Value: toDynamicValue(t, "file:"+s.dbPath)},
+		{Name: "actorStateStore", Value: toDynamicValue(t, strconv.FormatBool(s.isActorStateStore))},
+	}
+
+	if s.tableName != nil {
+		metadata = append(metadata, commonapi.NameValuePair{Name: "tableName", Value: toDynamicValue(t, *s.tableName)})
+	}
+
 	c := componentsv1alpha1.Component{
 		TypeMeta: metav1.TypeMeta{
 			Kind:       "Component",
@@ -113,12 +130,9 @@ func (s *SQLite) GetComponent(t *testing.T) string {
 			Name: s.name,
 		},
 		Spec: componentsv1alpha1.ComponentSpec{
-			Type:    "state.sqlite",
-			Version: "v1",
-			Metadata: []commonapi.NameValuePair{
-				{Name: "connectionString", Value: toDynamicValue(t, "file:"+s.dbPath)},
-				{Name: "actorStateStore", Value: toDynamicValue(t, strconv.FormatBool(s.isActorStateStore))},
-			},
+			Type:     "state.sqlite",
+			Version:  "v1",
+			Metadata: metadata,
 		},
 	}
 
