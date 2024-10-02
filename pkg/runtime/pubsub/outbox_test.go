@@ -1070,6 +1070,10 @@ func (o *outboxStateMock) BulkDelete(ctx context.Context, req []state.DeleteRequ
 	return nil
 }
 
+func (o *outboxStateMock) Close() error {
+	return nil
+}
+
 func extractCloudEventProperty(cloudEvent map[string]any, property string) string {
 	if cloudEvent == nil {
 		return ""

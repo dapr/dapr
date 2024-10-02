@@ -7,3 +7,12 @@ https://github.com/dapr/quickstarts
 
 For more information on running Dapr, visit:
 https://dapr.io
+
+{{- if eq .Values.dapr_scheduler.cluster.storageSize "1Gi" }}
+> Warning: The default storage size for the Scheduler is 1Gi, which may not be sufficient for production deployments.
+> You may want to consider reinstalling Dapr with a larger Scheduler storage of at least 16Gi.
+>
+> --set dapr_scheduler.cluster.storageSize=16Gi --set dapr_scheduler.etcdSpaceQuota=16Gi
+>
+> For more information, see https://docs.dapr.io/operations/hosting/kubernetes/kubernetes-persisting-scheduler
+{{- end }}

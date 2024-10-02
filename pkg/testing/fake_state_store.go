@@ -220,6 +220,10 @@ func (f *FakeStateStore) MultiMaxSize() int {
 	return f.MaxOperations
 }
 
+func (f *FakeStateStore) Close() error {
+	return nil
+}
+
 // Adapted from https://github.com/dapr/components-contrib/blob/a4b27ae49b7c99820c6e921d3891f03334692714/state/utils/utils.go#L16
 func marshal(val interface{}) ([]byte, error) {
 	var err error = nil

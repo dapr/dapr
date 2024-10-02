@@ -16,7 +16,6 @@ package lock
 import (
 	"context"
 	"fmt"
-	"io"
 
 	contriblock "github.com/dapr/components-contrib/lock"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -96,11 +95,8 @@ func (l *lock) Close(comp compapi.Component) error {
 
 	defer l.compStore.DeleteLock(comp.ObjectMeta.Name)
 
-	closer, ok := lock.(io.Closer)
-	if ok && closer != nil {
-		if err := closer.Close(); err != nil {
-			return err
-		}
+	if err := lock.Close(); err != nil {
+		return err
 	}
 
 	return nil
