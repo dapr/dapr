@@ -381,7 +381,7 @@ func (p *actorPlacement) doLookupActor(ctx context.Context, actorType, actorID s
 	}
 	host, err := t.GetHost(actorID)
 	if err != nil || host == nil {
-		return "", "", nil //nolint:nilerr
+		return "", "", nil
 	}
 	return host.Name, host.AppID, nil
 }
@@ -435,6 +435,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			}
 
 			// Try a different instance of the placement service
+			//nolint:gosec
 			p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
 
 			// Halt all active actors, then reset the placement tables
@@ -468,6 +469,7 @@ func (p *actorPlacement) onPlacementError(err error) {
 	s, ok := status.FromError(err)
 	// If the current server is not leader, then it will try to the next server.
 	if ok && s.Code() == codes.FailedPrecondition {
+		//nolint:gosec
 		p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
 	}
 }

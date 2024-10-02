@@ -66,7 +66,7 @@ func New(opts Options) *Authorizer {
 func (a *Authorizer) GetAuthorizedObjects(objects any, authorizer func(any) bool) any {
 	reflectValue := reflect.ValueOf(objects)
 	authorized := reflect.MakeSlice(reflectValue.Type(), 0, reflectValue.Len())
-	for i := 0; i < reflectValue.Len(); i++ {
+	for i := range reflectValue.Len() {
 		object := reflectValue.Index(i).Interface()
 		if authorizer(object) {
 			authorized = reflect.Append(authorized, reflect.ValueOf(object))

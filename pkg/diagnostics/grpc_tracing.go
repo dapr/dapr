@@ -213,8 +213,10 @@ func StartGRPCProducerSpanChildFromParent(ct context.Context, parentSpan trace.S
 	netCtx := trace.ContextWithRemoteSpanContext(ct, parentSpan.SpanContext())
 	spanKind := trace.WithSpanKind(trace.SpanKindProducer)
 
+	//nolint:spancheck
 	ctx, span := tracer.Start(netCtx, spanName, spanKind)
 
+	//nolint:spancheck
 	return ctx, span
 }
 
