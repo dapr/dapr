@@ -148,8 +148,7 @@ func (n *notls) checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb
 	t.Helper()
 
 	// Use "path" import, to have the same path separator across OS
-	jobPrefix := path.Join("dapr", "jobs")
-
+	jobPrefix := path.Join("dapr", "jobs", "app")
 	found := false
 	for _, kv := range keys {
 		if string(kv.Key) == fmt.Sprintf("%s||%s||%s||%s", jobPrefix, "ns", "appid", jobName) {
