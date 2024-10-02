@@ -2434,7 +2434,7 @@ func TestPublishTopic(t *testing.T) {
 			PubsubName: "pubsub",
 			Topic:      "error-topic",
 		})
-		assert.Equal(t, codes.Internal, status.Code(err))
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("err: publish event request with err-not-found topic and pubsub", func(t *testing.T) {
@@ -2524,7 +2524,7 @@ func TestPublishTopic(t *testing.T) {
 			PubsubName: "pubsub",
 			Topic:      "error-topic",
 		})
-		assert.Equal(t, codes.Internal, status.Code(err))
+		assert.Equal(t, codes.InvalidArgument, status.Code(err))
 	})
 
 	t.Run("err: bulk publish event request with err-not-found topic and pubsub", func(t *testing.T) {
