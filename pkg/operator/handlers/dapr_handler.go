@@ -308,7 +308,9 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 					Name:       daprSidecarInternalGRPCPortName,
 				},
 				{
-					Protocol:   corev1.ProtocolTCP,
+					Protocol: corev1.ProtocolTCP,
+					// TODO: update types
+					//nolint:gosec
 					Port:       int32(metricsPort),
 					TargetPort: intstr.FromInt(metricsPort),
 					Name:       daprSidecarMetricsPortName,
