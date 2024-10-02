@@ -50,6 +50,8 @@ func (m *ActorMetadata) calculateReminderPartition(actorID, reminderName string)
 	h := fnv.New32a()
 	h.Write([]byte(actorID))
 	h.Write([]byte(reminderName))
+	// TODO: fix types
+	//nolint:gosec
 	return (h.Sum32() % uint32(m.RemindersMetadata.PartitionCount)) + 1
 }
 

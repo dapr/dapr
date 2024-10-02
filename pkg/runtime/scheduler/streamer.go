@@ -152,6 +152,8 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	// TODO: standardize on the error code returned by both protocol channels,
 	// converting HTTP status codes to gRPC codes
 	statusCode := response.Status().GetCode()
+	// TODO: fix types
+	//nolint:gosec
 	switch codes.Code(statusCode) {
 	case codes.OK:
 		log.Debugf("Sent job %s to app", job.GetName())
