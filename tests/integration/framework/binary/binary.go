@@ -44,10 +44,11 @@ func BuildAll(t *testing.T) {
 	var wg sync.WaitGroup
 	wg.Add(len(binaryNames))
 	wg.Add(len(helperBinaryNames))
+	rootDir := RootDir(t)
 	for _, name := range binaryNames {
 		if runtime.GOOS == "windows" {
 			build(t, name, options{
-				dir:  RootDir(t),
+				dir:  rootDir,
 				tags: []string{"allcomponents", "wfbackendsqlite"},
 			})
 			wg.Done()
@@ -55,16 +56,18 @@ func BuildAll(t *testing.T) {
 			go func(name string) {
 				defer wg.Done()
 				build(t, name, options{
-					dir:  RootDir(t),
+					dir:  rootDir,
 					tags: []string{"allcomponents", "wfbackendsqlite"},
 				})
 			}(name)
 		}
 	}
+
+	helperRootDir := helperRootDir(t)
 	for _, name := range helperBinaryNames {
 		if runtime.GOOS == "windows" {
 			build(t, name, options{
-				dir:      helperRootDir(t),
+				dir:      helperRootDir,
 				buildDir: name,
 			})
 			wg.Done()
@@ -72,7 +75,7 @@ func BuildAll(t *testing.T) {
 			go func(name string) {
 				defer wg.Done()
 				build(t, name, options{
-					dir:      helperRootDir(t),
+					dir:      helperRootDir,
 					buildDir: name,
 				})
 			}(name)
@@ -100,7 +103,9 @@ func helperRootDir(t *testing.T) string {
 func build(t *testing.T, name string, opts options) {
 	t.Helper()
 
-	require.NotEmpty(t, opts.dir)
+	if !assert.NotEmpty(t, opts.dir) {
+		return
+	}
 
 	if _, ok := os.LookupEnv(EnvKey(name)); !ok {
 		t.Logf("%q not set, building %q binary", EnvKey(name), name)

@@ -151,8 +151,8 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 		return nil, fmt.Errorf("failed to query job list: %w", err)
 	}
 
-	var jobs []*schedulerv1pb.NamedJob
-	for _, job := range list.Jobs {
+	jobs := make([]*schedulerv1pb.NamedJob, 0, len(list.GetJobs()))
+	for _, job := range list.GetJobs() {
 		jobs = append(jobs, &schedulerv1pb.NamedJob{
 			Name: job.GetName()[strings.LastIndex(job.GetName(), "||")+2:],
 			//nolint:protogetter
@@ -167,8 +167,7 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 	}
 
 	return &schedulerv1pb.ListJobsResponse{
-		Jobs:    jobs,
-		HasMore: list.More,
+		Jobs: jobs,
 	}, nil
 }
 

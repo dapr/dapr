@@ -179,7 +179,4 @@ message ListJobsRequest {
 message ListJobsResponse {
   // The list of jobs.
   repeated NamedJob jobs = 1;
-
-  // Whether there are more jobs to list.
-  bool has_more = 2;
 }

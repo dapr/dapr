@@ -225,9 +225,8 @@ func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.Sche
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, s.Address(),
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(math.MaxInt32), grpc.MaxCallRecvMsgSize(math.MaxInt32)),
-		//grpc.WithBlock(), grpc.WithReturnConnectionError(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithMaxMsgSize(math.MaxInt32),
+		grpc.WithBlock(), grpc.WithReturnConnectionError(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -341,7 +340,7 @@ func (s *Scheduler) EtcdClient(t *testing.T) *clientv3.Client {
 	t.Helper()
 
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{fmt.Sprintf("127.0.0.1:%s", s.EtcdClientPort())},
+		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
 		DialTimeout: 15 * time.Second,
 	})
 	require.NoError(t, err)
