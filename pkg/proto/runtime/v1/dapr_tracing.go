@@ -204,3 +204,6 @@ func (*UnregisterActorTimerRequest) AppendSpanAttributes(rpcMethod string, m map
 func (*UnsubscribeConfigurationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
+func (*ConversationAlpha1Request) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
