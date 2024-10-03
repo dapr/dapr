@@ -64,7 +64,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Inputs: []string{"well hello there"},
 		})
 		require.NoError(t, err)
-		require.Equal(t, "well hello there", resp.Outputs[0].Result)
-
+		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetResult())
 	})
 }

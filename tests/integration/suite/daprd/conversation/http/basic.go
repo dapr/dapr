@@ -85,6 +85,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 }
