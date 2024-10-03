@@ -76,7 +76,7 @@ jobs:
       - name: Check for disallowed changes in go.mod
         run: node ./.github/scripts/check_go_mod.mjs
       - name: golangci-lint
-        uses: golangci/golangci-lint-action@v3.7.0
+        uses: golangci/golangci-lint-action@v6.1.1
         with:
           version: ${{ env.GOLANGCILINT_VER }}
           skip-cache: true
