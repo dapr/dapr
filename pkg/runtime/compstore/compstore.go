@@ -20,6 +20,7 @@ import (
 
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/secretstores"
@@ -58,6 +59,8 @@ type ComponentStore struct {
 		store state.Store
 	}
 
+	conversations map[string]conversation.Conversation
+
 	compPendingLock sync.Mutex
 	compPending     *compsv1alpha1.Component
 }
@@ -81,5 +84,6 @@ func New() *ComponentStore {
 			declaratives: make(map[string]*DeclarativeSubscription),
 			streams:      make(map[string]*DeclarativeSubscription),
 		},
+		conversations: make(map[string]conversation.Conversation),
 	}
 }
