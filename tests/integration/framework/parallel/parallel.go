@@ -50,7 +50,7 @@ func New(t *testing.T, fns ...func(*assert.CollectT)) *Test {
 			require.NoError(t, err)
 		}
 
-		for i := 0; i < workers; i++ {
+		for range workers {
 			go p.worker(jobs)
 		}
 
@@ -59,7 +59,6 @@ func New(t *testing.T, fns ...func(*assert.CollectT)) *Test {
 		var wg sync.WaitGroup
 		wg.Add(len(p.fns))
 		for i := range p.fns {
-			i := i
 			collects[i] = new(assert.CollectT)
 			jobs <- func() {
 				defer wg.Done()

@@ -52,7 +52,7 @@ func (c *components) close() error {
 }
 
 //nolint:unused
-func (c *components) recv() (*loader.Event[componentsapi.Component], error) {
+func (c *components) recv(context.Context) (*loader.Event[componentsapi.Component], error) {
 	event, err := c.Operator_ComponentUpdateClient.Recv()
 	if err != nil {
 		return nil, err

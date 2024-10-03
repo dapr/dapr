@@ -14,6 +14,7 @@ limitations under the License.
 package iowriter
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"sync"
@@ -51,6 +52,45 @@ func TestNew(t *testing.T) {
 		_, ok := writer.(*stdwriter)
 		assert.True(t, ok)
 	})
+
+	var buf bytes.Buffer
+	logger := &mockLogger{failed: true}
+	t.Run("should flush on Cleanup (failed)", func(t *testing.T) {
+		logger.t = t
+		writer := New(logger, "proc").(*stdwriter)
+		writer.buf = buf
+		writer.Write([]byte("test"))
+		assert.Equal(t, "test", writer.buf.String())
+	})
+	_ = assert.Len(t, logger.msgs, 1) &&
+		assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
+	assert.Empty(t, buf.Len())
+
+	buf = bytes.Buffer{}
+	logger = &mockLogger{failed: false}
+	t.Run("should flush on Cleanup (env)", func(t *testing.T) {
+		t.Setenv("DAPR_INTEGRATION_LOGS", "true")
+		logger.t = t
+		writer := New(logger, "proc").(*stdwriter)
+		writer.buf = buf
+		writer.Write([]byte("test"))
+		assert.Equal(t, "test", writer.buf.String())
+	})
+	_ = assert.Len(t, logger.msgs, 1) &&
+		assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
+	assert.Empty(t, buf.Len())
+
+	buf = bytes.Buffer{}
+	logger = &mockLogger{failed: false}
+	t.Run("should not flush on Cleanup by default", func(t *testing.T) {
+		logger.t = t
+		writer := New(logger, "proc").(*stdwriter)
+		writer.buf = buf
+		writer.Write([]byte("test"))
+		assert.Equal(t, "test", writer.buf.String())
+	})
+	assert.Empty(t, logger.msgs)
+	assert.Empty(t, buf.Len())
 }
 
 func TestWrite(t *testing.T) {
@@ -63,7 +103,7 @@ func TestWrite(t *testing.T) {
 		assert.Equal(t, "test", writer.buf.String())
 	})
 
-	t.Run("should not flush on newline but on close", func(t *testing.T) {
+	t.Run("should not flush on newline or on close", func(t *testing.T) {
 		logger := &mockLogger{t: t, failed: true}
 		writer := New(logger, "proc").(*stdwriter)
 
@@ -76,7 +116,7 @@ func TestWrite(t *testing.T) {
 
 		require.NoError(t, writer.Close())
 
-		_ = assert.Len(t, logger.msgs, 1) && assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
+		assert.Equal(t, 5, writer.buf.Len())
 	})
 
 	t.Run("should not return error on write when closed", func(t *testing.T) {
@@ -90,51 +130,13 @@ func TestWrite(t *testing.T) {
 }
 
 func TestClose(t *testing.T) {
-	t.Run("should flush and close", func(t *testing.T) {
+	t.Run("should be a noop", func(t *testing.T) {
 		logger := &mockLogger{t: t, failed: true}
 		writer := New(logger, "proc").(*stdwriter)
 		writer.Write([]byte("test"))
 		writer.Close()
 
-		assert.Equal(t, 0, writer.buf.Len())
-		_ = assert.Len(t, logger.msgs, 1) &&
-			assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
-	})
-}
-
-func TestNotFailed(t *testing.T) {
-	t.Run("if test has not failed it should not print output", func(t *testing.T) {
-		logger := &mockLogger{t: t, failed: false}
-		writer := New(logger, "proc").(*stdwriter)
-		writer.Write([]byte("test"))
-		writer.Close()
-
-		assert.Equal(t, 0, writer.buf.Len())
-		assert.Empty(t, logger.msgs)
-	})
-
-	t.Run("if test has not failed but `DAPR_INTEGRATION_LOGS=true`, print output", func(t *testing.T) {
-		t.Setenv("DAPR_INTEGRATION_LOGS", "true")
-		logger := &mockLogger{t: t, failed: false}
-		writer := New(logger, "proc").(*stdwriter)
-		writer.Write([]byte("test"))
-		writer.Close()
-
-		assert.Equal(t, 0, writer.buf.Len())
-		_ = assert.Len(t, logger.msgs, 1) &&
-			assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
-	})
-
-	t.Run("if test has not failed but `DAPR_INTEGRATION_LOGS=TRUE`, print output", func(t *testing.T) {
-		t.Setenv("DAPR_INTEGRATION_LOGS", "true")
-		logger := &mockLogger{t: t, failed: false}
-		writer := New(logger, "proc").(*stdwriter)
-		writer.Write([]byte("test"))
-		writer.Close()
-
-		assert.Equal(t, 0, writer.buf.Len())
-		_ = assert.Len(t, logger.msgs, 1) &&
-			assert.Equal(t, "TestLogger/proc: test", logger.msgs[0])
+		assert.Equal(t, 4, writer.buf.Len())
 	})
 }
 
@@ -147,14 +149,14 @@ func TestConcurrency(t *testing.T) {
 
 		go func() {
 			defer wg.Done()
-			for i := 0; i < 1000; i++ {
+			for i := range 1000 {
 				fmt.Fprintf(writer, "test %d\n", i)
 			}
 		}()
 
 		go func() {
 			defer wg.Done()
-			for i := 0; i < 1000; i++ {
+			for i := range 1000 {
 				fmt.Fprintf(writer, "test %d\n", i)
 			}
 		}()
@@ -163,6 +165,7 @@ func TestConcurrency(t *testing.T) {
 
 		require.NoError(t, writer.Close())
 
+		writer.flush()
 		assert.Equal(t, 0, writer.buf.Len())
 		assert.Len(t, logger.msgs, 2000)
 

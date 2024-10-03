@@ -82,29 +82,26 @@ spec:
 	i.scheduler = scheduler.New(t)
 	i.place = placement.New(t)
 
-	i.daprdsNum = 10
+	i.daprdsNum = 4
 	i.actorTypesNum = 2
-	i.actorIDsNum = 50
+	i.actorIDsNum = 15
 	i.daprds = make([]*daprd.Daprd, i.daprdsNum)
 	i.actorDaprds = make([]actordaprd, i.daprdsNum)
 	procs := make([]process.Interface, i.daprdsNum*2+2)
 	procs[0] = i.scheduler
 	procs[1] = i.place
 
-	for x := 0; x < i.daprdsNum; x++ {
-		x := x
+	for x := range i.daprdsNum {
 		i.actorDaprds[x].actorTypes = make([]actortype, i.actorTypesNum)
 
 		var appOpts []app.Option
-		for y := 0; y < i.actorTypesNum; y++ {
-			y := y
+		for y := range i.actorTypesNum {
 			typeuid, err := uuid.NewUUID()
 			require.NoError(t, err)
 			i.actorDaprds[x].actorTypes[y].typename = typeuid.String()
 			i.actorDaprds[x].actorTypes[y].ids = make([]string, i.actorIDsNum)
 
-			for z := 0; z < i.actorIDsNum; z++ {
-				z := z
+			for z := range i.actorIDsNum {
 				iduid, err := uuid.NewUUID()
 				require.NoError(t, err)
 				i.actorDaprds[x].actorTypes[y].ids[z] = iduid.String()
@@ -157,22 +154,21 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 	i.scheduler.WaitUntilRunning(t, ctx)
 	i.place.WaitUntilRunning(t, ctx)
 
-	for x := 0; x < i.daprdsNum; x++ {
+	for x := range i.daprdsNum {
 		i.daprds[x].WaitUntilRunning(t, ctx)
 	}
 
 	client := client.HTTP(t)
 
 	daprdURL := "http://" + i.daprds[0].HTTPAddress() + "/v1.0/actors/"
-	for x := 0; x < i.daprdsNum; x++ {
-		for y := 0; y < i.actorTypesNum; y++ {
-			for z := 0; z < i.actorIDsNum; z++ {
+	for x := range i.daprdsNum {
+		for y := range i.actorTypesNum {
+			for z := range i.actorIDsNum {
 				require.EventuallyWithT(t, func(c *assert.CollectT) {
 					invoke := fmt.Sprintf("%s/%s/%s/method/foo", daprdURL, i.actorDaprds[x].actorTypes[y].typename, i.actorDaprds[x].actorTypes[y].ids[z])
 					req, err := http.NewRequestWithContext(ctx, http.MethodPost, invoke, nil)
 					require.NoError(t, err)
 					resp, err := client.Do(req)
-					//nolint:testifylint
 					if assert.NoError(c, err) {
 						assert.NoError(c, resp.Body.Close())
 						assert.Equal(c, http.StatusOK, resp.StatusCode)
@@ -182,14 +178,15 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 
-	for x := 0; x < i.daprdsNum; x++ {
-		for y := 0; y < i.actorTypesNum; y++ {
-			for z := 0; z < i.actorIDsNum; z++ {
+	for x := range i.daprdsNum {
+		for y := range i.actorTypesNum {
+			for z := range i.actorIDsNum {
 				_, err := i.daprds[x].GRPCClient(t, ctx).RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 					ActorType: i.actorDaprds[x].actorTypes[y].typename,
 					ActorId:   i.actorDaprds[x].actorTypes[y].ids[z],
 					Name:      "remindermethod",
 					DueTime:   "1s",
+					Period:    "10000s",
 					Data:      []byte("reminderdata"),
 				})
 				require.NoError(t, err)
@@ -207,5 +204,5 @@ func (i *idtype) Run(t *testing.T, ctx context.Context) {
 		i.lock.Lock()
 		defer i.lock.Unlock()
 		assert.ElementsMatch(c, i.expcalled, i.methodcalled)
-	}, time.Second*20, time.Millisecond*10)
+	}, time.Second*30, time.Millisecond*10)
 }

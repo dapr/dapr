@@ -65,7 +65,6 @@ func Raft(t *testing.T) *raft.Server {
 	t.Cleanup(cancel)
 
 	// Wait until test raft node become a leader.
-	//nolint:staticcheck
 	for range time.Tick(time.Microsecond) {
 		clock.Step(time.Second * 2)
 		if testRaftServer.IsLeader() {
@@ -82,4 +81,54 @@ func Raft(t *testing.T) *raft.Server {
 	time.Sleep(time.Second * 3)
 
 	return testRaftServer
+}
+
+func RaftCluster(t *testing.T, parentCtx context.Context) ([]*raft.Server, error) {
+	t.Helper()
+
+	ports, err := daprtesting.GetFreePorts(3)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get test server ports %v", err)
+	}
+
+	clocks := make([]*clocktesting.FakeClock, 3)
+	for i := range 3 {
+		clocks[i] = clocktesting.NewFakeClock(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
+	}
+
+	raftIDs := []string{"testnode1", "testnode2", "testnode3"}
+	peerInfo := make([]raft.PeerInfo, 0, len(raftIDs))
+	for i, id := range raftIDs {
+		peerInfo = append(peerInfo, raft.PeerInfo{
+			ID:      id,
+			Address: fmt.Sprintf("127.0.0.1:%d", ports[i]),
+		})
+	}
+
+	testRaftServers := make([]*raft.Server, 0, len(raftIDs))
+	for i, id := range raftIDs {
+		testRaftServer := raft.New(raft.Options{
+			ID:           id,
+			InMem:        true,
+			Peers:        peerInfo,
+			LogStorePath: "",
+			Clock:        clocks[i],
+			Security:     fake.New(),
+			Healthz:      healthz.New(),
+		})
+		testRaftServers = append(testRaftServers, testRaftServer)
+	}
+
+	ctx, cancel := context.WithCancel(parentCtx)
+
+	for _, testRaftServer := range testRaftServers {
+		go func(server *raft.Server) {
+			if err := server.StartRaft(ctx); err != nil {
+				log.Fatalf("error running test raft server: %v", err)
+			}
+		}(testRaftServer)
+	}
+	t.Cleanup(cancel)
+
+	return testRaftServers, nil
 }

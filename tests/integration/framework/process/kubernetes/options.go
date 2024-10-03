@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -117,6 +118,14 @@ func WithSecretGet(t *testing.T, secret *corev1.Secret) Option {
 	return handleGetResource(t, "/api/v1", "secrets", secret.Namespace, secret.Name, secret)
 }
 
+func WithStatefulSetGet(t *testing.T, statefulset *appsv1.StatefulSet) Option {
+	return handleGetResource(t, "/apis/apps/v1", "statefulsets", statefulset.Namespace, statefulset.Name, statefulset)
+}
+
+func WithSecretList(t *testing.T, secrets *corev1.SecretList) Option {
+	return handleClusterListResource(t, "/api/v1/secrets", secrets)
+}
+
 func WithDaprResiliencyGet(t *testing.T, ns, name string, res *resapi.Resiliency) Option {
 	return handleGetResource(t, "/apis/dapr.io/v1alpha1", "resiliencies", ns, name, res)
 }
@@ -174,7 +183,7 @@ func handleGetResource(t *testing.T, apigv, resource, ns, name string, obj runti
 func handleObj(t *testing.T, obj runtime.Object) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		objB, err := json.Marshal(obj)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		w.Header().Add("Content-Length", strconv.Itoa(len(objB)))
 		w.Header().Add("Content-Type", "application/json")
 		w.Write(objB)
@@ -184,7 +193,7 @@ func handleObj(t *testing.T, obj runtime.Object) http.HandlerFunc {
 func handleObjFromStore(t *testing.T, store *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		objB, err := json.Marshal(store.Objects())
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		w.Header().Add("Content-Length", strconv.Itoa(len(objB)))
 		w.Header().Add("Content-Type", "application/json")
 		w.Write(objB)

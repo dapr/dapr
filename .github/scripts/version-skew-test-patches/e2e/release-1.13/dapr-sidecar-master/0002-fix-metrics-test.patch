@@ -1,0 +1,39 @@
+diff --git a/tests/e2e/metrics/metrics_test.go b/tests/e2e/metrics/metrics_test.go
+index 2670af5e2..e2508a5d6 100644
+--- a/tests/e2e/metrics/metrics_test.go
++++ b/tests/e2e/metrics/metrics_test.go
+@@ -201,7 +201,7 @@ func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response)
+ 
+ 	// This test will loop through each of the metrics and look for a specifc
+ 	// metric `dapr_http_server_request_count`.
+-	var foundHealthz, foundInvocation bool
++	var foundGet, foundPost bool
+ 	for {
+ 		mf := &io_prometheus_client.MetricFamily{}
+ 		err := decoder.Decode(mf)
+@@ -231,10 +231,10 @@ func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response)
+ 					case "method":
+ 						if count.GetValue() > 0 {
+ 							switch val {
+-							case "Healthz":
+-								foundHealthz = true
+-							case "InvokeService/httpmetrics":
+-								foundInvocation = true
++							case "GET":
++								foundGet = true
++							case "POST":
++								foundPost = true
+ 							}
+ 						}
+ 					}
+@@ -244,8 +244,8 @@ func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response)
+ 	}
+ 
+ 	if foundMetric {
+-		require.True(t, foundHealthz)
+-		require.True(t, foundInvocation)
++		require.True(t, foundGet)
++		require.True(t, foundPost)
+ 	}
+ 
+ 	return foundMetric

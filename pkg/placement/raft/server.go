@@ -130,7 +130,7 @@ func (s *Server) tryResolveRaftAdvertiseAddr(ctx context.Context, bindAddr strin
 	// to look up the address after StatefulSet POD is deployed.
 	var err error
 	var addr *net.TCPAddr
-	for retry := 0; retry < nameResolveMaxRetry; retry++ {
+	for range nameResolveMaxRetry {
 		addr, err = net.ResolveTCPAddr("tcp", bindAddr)
 		if err == nil {
 			return addr, nil
@@ -344,6 +344,10 @@ func (s *Server) raftStorePath() string {
 	return s.raftLogStorePath
 }
 
+func (s *Server) GetID() string {
+	return s.id
+}
+
 // FSM returns fsm.
 func (s *Server) FSM() *FSM {
 	return s.fsm
@@ -389,4 +393,8 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 
 	resp := future.Response()
 	return resp.(bool), nil
+}
+
+func (s *Server) GetRaftBind() string {
+	return s.raftBind
 }

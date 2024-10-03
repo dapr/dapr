@@ -47,6 +47,13 @@ const (
 	ActivityNameLabelKey = "activity"
 )
 
+type runCompleted bool
+
+const (
+	runCompletedFalse runCompleted = false
+	runCompletedTrue  runCompleted = true
+)
+
 // actorsBackendConfig is the configuration for the workflow engine's actors backend
 type actorsBackendConfig struct {
 	AppID             string

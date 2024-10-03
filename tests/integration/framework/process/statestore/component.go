@@ -16,7 +16,6 @@ package statestore
 import (
 	"context"
 	"fmt"
-	"io"
 	"testing"
 
 	"github.com/dapr/components-contrib/metadata"
@@ -28,15 +27,34 @@ import (
 // interface.
 type component struct {
 	impl state.Store
+
+	getErr        error
+	bulkGetErr    error
+	bulkDeleteErr error
+	queryErr      error
+	bulkSetErr    error
+	deleteErr     error
+	setErr        error
 }
 
 func newComponent(t *testing.T, opts options) *component {
 	return &component{
-		impl: opts.statestore,
+		impl:          opts.statestore,
+		getErr:        opts.getErr,
+		bulkGetErr:    opts.bulkGetErr,
+		bulkDeleteErr: opts.bulkDeleteErr,
+		queryErr:      opts.queryErr,
+		bulkSetErr:    opts.bulkSetErr,
+		deleteErr:     opts.deleteErr,
+		setErr:        opts.setErr,
 	}
 }
 
 func (c *component) BulkDelete(ctx context.Context, req *compv1pb.BulkDeleteRequest) (*compv1pb.BulkDeleteResponse, error) {
+	if c.bulkDeleteErr != nil {
+		return nil, c.bulkDeleteErr
+	}
+
 	dr := make([]state.DeleteRequest, len(req.GetItems()))
 	for i, item := range req.GetItems() {
 		dr[i] = state.DeleteRequest{
@@ -59,6 +77,10 @@ func (c *component) BulkDelete(ctx context.Context, req *compv1pb.BulkDeleteRequ
 }
 
 func (c *component) BulkGet(ctx context.Context, req *compv1pb.BulkGetRequest) (*compv1pb.BulkGetResponse, error) {
+	if c.bulkGetErr != nil {
+		return nil, c.bulkGetErr
+	}
+
 	gr := make([]state.GetRequest, len(req.GetItems()))
 	for i, item := range req.GetItems() {
 		gr[i] = state.GetRequest{
@@ -96,6 +118,10 @@ func (c *component) BulkGet(ctx context.Context, req *compv1pb.BulkGetRequest) (
 }
 
 func (c *component) Query(ctx context.Context, req *compv1pb.QueryRequest) (*compv1pb.QueryResponse, error) {
+	if c.queryErr != nil {
+		return nil, c.queryErr
+	}
+
 	// TODO: @joshvanl implement query API transformation, rather than just
 	// sending nothing and returning error.
 	_, err := c.impl.(state.Querier).Query(ctx, &state.QueryRequest{})
@@ -109,6 +135,10 @@ func (c *component) MultiMaxSize(context.Context, *compv1pb.MultiMaxSizeRequest)
 }
 
 func (c *component) BulkSet(ctx context.Context, req *compv1pb.BulkSetRequest) (*compv1pb.BulkSetResponse, error) {
+	if c.bulkSetErr != nil {
+		return nil, c.bulkSetErr
+	}
+
 	sr := make([]state.SetRequest, len(req.GetItems()))
 	for i, item := range req.GetItems() {
 		var etag *string
@@ -136,6 +166,10 @@ func (c *component) BulkSet(ctx context.Context, req *compv1pb.BulkSetRequest) (
 }
 
 func (c *component) Delete(ctx context.Context, req *compv1pb.DeleteRequest) (*compv1pb.DeleteResponse, error) {
+	if c.deleteErr != nil {
+		return nil, c.deleteErr
+	}
+
 	var etag *string
 	if req.GetEtag() != nil && len(req.GetEtag().GetValue()) > 0 {
 		etag = &req.GetEtag().Value
@@ -167,6 +201,10 @@ func (c *component) Features(context.Context, *compv1pb.FeaturesRequest) (*compv
 }
 
 func (c *component) Get(ctx context.Context, req *compv1pb.GetRequest) (*compv1pb.GetResponse, error) {
+	if c.getErr != nil {
+		return nil, c.getErr
+	}
+
 	resp, err := c.impl.Get(ctx, &state.GetRequest{
 		Key:      req.GetKey(),
 		Metadata: req.GetMetadata(),
@@ -202,7 +240,7 @@ func (c *component) Init(ctx context.Context, req *compv1pb.InitRequest) (*compv
 }
 
 func (c *component) Close() error {
-	return c.impl.(io.Closer).Close()
+	return c.impl.Close()
 }
 
 func (c *component) Ping(ctx context.Context, req *compv1pb.PingRequest) (*compv1pb.PingResponse, error) {
@@ -210,6 +248,10 @@ func (c *component) Ping(ctx context.Context, req *compv1pb.PingRequest) (*compv
 }
 
 func (c *component) Set(ctx context.Context, req *compv1pb.SetRequest) (*compv1pb.SetResponse, error) {
+	if c.setErr != nil {
+		return nil, c.setErr
+	}
+
 	var etag *string
 	if req.GetEtag() != nil && len(req.GetEtag().GetValue()) > 0 {
 		etag = &req.GetEtag().Value

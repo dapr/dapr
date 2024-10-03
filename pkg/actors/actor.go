@@ -64,8 +64,10 @@ func newActor(actorType, actorID string, maxReentrancyDepth *int, idleTimeout ti
 	}
 
 	a := &actor{
-		actorType:   actorType,
-		actorID:     actorID,
+		actorType: actorType,
+		actorID:   actorID,
+		// TODO: fix types
+		//nolint:gosec
 		actorLock:   NewActorLock(int32(*maxReentrancyDepth)),
 		clock:       cl,
 		idleTimeout: idleTimeout,

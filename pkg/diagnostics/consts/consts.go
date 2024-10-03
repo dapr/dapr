@@ -25,7 +25,7 @@ const (
 	DaprAPISpanNameInternal = DaprInternalSpanAttrPrefix + "spanname"
 
 	// Span attribute keys
-	// Reference trace semantics https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
+	// Reference trace semantics https://opentelemetry.io/docs/specs/semconv/general/trace
 	DBSystemSpanAttributeKey             = string(semconv.DBSystemKey)
 	DBNameSpanAttributeKey               = string(semconv.DBNameKey)
 	DBStatementSpanAttributeKey          = string(semconv.DBStatementKey)

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
@@ -127,7 +128,7 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 	switch resp.Status().GetCode() {
 	case http.StatusOK:
 		err = json.NewDecoder(resp.RawData()).Decode(&subscriptionItems)
-		if err != nil {
+		if err != nil && !errors.Is(err, io.EOF) {
 			err = fmt.Errorf(deserializeTopicsError, err)
 			log.Error(err)
 			return nil, err
@@ -365,7 +366,7 @@ func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMes
 	if iTraceID != nil {
 		if traceID, ok := iTraceID.(string); ok {
 			sc, _ := diag.SpanContextFromW3CString(traceID)
-			spanName := fmt.Sprintf("pubsub/%s", msg.Topic)
+			spanName := "pubsub/" + msg.Topic
 
 			// no ops if trace is off
 			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)

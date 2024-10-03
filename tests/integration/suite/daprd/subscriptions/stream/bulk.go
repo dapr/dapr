@@ -64,7 +64,7 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
 		SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_InitialRequest{
-			InitialRequest: &rtv1.SubscribeTopicEventsInitialRequestAlpha1{
+			InitialRequest: &rtv1.SubscribeTopicEventsRequestInitialAlpha1{
 				PubsubName: "mypub", Topic: "a",
 			},
 		},
@@ -72,6 +72,14 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() {
 		require.NoError(t, stream.CloseSend())
 	})
+
+	sresp, err := stream.Recv()
+	require.NoError(t, err)
+	switch sresp.GetSubscribeTopicEventsResponseType().(type) {
+	case *rtv1.SubscribeTopicEventsResponseAlpha1_InitialResponse:
+	default:
+		require.Fail(t, "unexpected response type")
+	}
 
 	var subsInMeta []daprd.MetadataResponsePubsubSubscription
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -82,13 +90,13 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 
 	errCh := make(chan error, 8)
 	go func() {
-		for i := 0; i < 4; i++ {
+		for range 4 {
 			event, serr := stream.Recv()
 			errCh <- serr
 			errCh <- stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
-				SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventResponse{
-					EventResponse: &rtv1.SubscribeTopicEventsResponseAlpha1{
-						Id:     event.GetId(),
+				SubscribeTopicEventsRequestType: &rtv1.SubscribeTopicEventsRequestAlpha1_EventProcessed{
+					EventProcessed: &rtv1.SubscribeTopicEventsRequestProcessedAlpha1{
+						Id:     event.GetEventMessage().GetId(),
 						Status: &rtv1.TopicEventResponse{Status: rtv1.TopicEventResponse_SUCCESS},
 					},
 				},
@@ -107,9 +115,9 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
-	assert.Empty(t, len(resp.GetFailedEntries()))
+	assert.Empty(t, resp.GetFailedEntries())
 
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		require.NoError(t, <-errCh)
 	}
 }

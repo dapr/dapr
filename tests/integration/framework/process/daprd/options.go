@@ -19,10 +19,12 @@ import (
 	"path/filepath"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/framework/socket"
 )
@@ -36,7 +38,7 @@ type options struct {
 
 	appID                   string
 	namespace               *string
-	appPort                 int
+	appPort                 *int
 	grpcPort                int
 	httpPort                int
 	internalGRPCPort        int
@@ -90,14 +92,14 @@ func WithExit1() Option {
 	return WithExecOptions(
 		exec.WithExitCode(1),
 		exec.WithRunError(func(t *testing.T, err error) {
-			require.ErrorContains(t, err, "exit status 1")
+			assert.ErrorContains(t, err, "exit status 1")
 		}),
 	)
 }
 
 func WithAppPort(port int) Option {
 	return func(o *options) {
-		o.appPort = port
+		o.appPort = &port
 	}
 }
 
@@ -307,5 +309,11 @@ func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
 		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)))(o)
 		WithSentryAddress(sentry.Address())(o)
 		WithEnableMTLS(true)(o)
+	}
+}
+
+func WithScheduler(scheduler *scheduler.Scheduler) Option {
+	return func(o *options) {
+		WithSchedulerAddresses(scheduler.Address())(o)
 	}
 }

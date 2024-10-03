@@ -156,7 +156,7 @@ func (*StartWorkflowRequest) AppendSpanAttributes(rpcMethod string, m map[string
 func (*SubscribeConfigurationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
-func (*SubscribeTopicEventsInitialRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+func (*SubscribeTopicEventsRequestInitialAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }
 func (*SubscribeTopicEventsRequestAlpha1) AppendSpanAttributes(rpcMethod string, m map[string]string) {
@@ -202,5 +202,8 @@ func (*UnregisterActorTimerRequest) AppendSpanAttributes(rpcMethod string, m map
 	// TODO
 }
 func (*UnsubscribeConfigurationRequest) AppendSpanAttributes(rpcMethod string, m map[string]string) {
+	// TODO
+}
+func (*ConversationAlpha1Request) AppendSpanAttributes(rpcMethod string, m map[string]string) {
 	// TODO
 }

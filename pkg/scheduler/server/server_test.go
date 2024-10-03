@@ -15,11 +15,13 @@ package server
 
 import (
 	"net/url"
+	"runtime"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 )
 
@@ -81,6 +83,7 @@ func TestServerConf(t *testing.T) {
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
+			Healthz:                 healthz.New(),
 		}
 
 		s, err := New(opts)
@@ -123,6 +126,7 @@ func TestServerConf(t *testing.T) {
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
+			Healthz:                 healthz.New(),
 		}
 
 		s, err := New(opts)
@@ -133,7 +137,11 @@ func TestServerConf(t *testing.T) {
 		config := s.config
 
 		assert.Equal(t, "id1=http://localhost:5001,id2=http://localhost:5002", config.InitialCluster)
-		assert.Equal(t, "./data-default-id2", config.Dir)
+		if runtime.GOOS == "windows" {
+			assert.Equal(t, "data\\default-id2", config.Dir)
+		} else {
+			assert.Equal(t, "data/default-id2", config.Dir)
+		}
 
 		clientURL := url.URL{
 			Scheme: "http",
@@ -166,6 +174,7 @@ func TestServerConf(t *testing.T) {
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
+			Healthz:                 healthz.New(),
 		}
 
 		s, err := New(opts)
@@ -185,6 +194,80 @@ func TestServerConf(t *testing.T) {
 		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
 
+		assert.Empty(t, config.ListenClientHttpUrls)
+	})
+
+	t.Run("StandaloneMode listen on 0.0.0.0 when a host", func(t *testing.T) {
+		opts := Options{
+			Security:                nil,
+			ListenAddress:           "",
+			Port:                    0,
+			Mode:                    modes.StandaloneMode,
+			ReplicaCount:            0,
+			ReplicaID:               0,
+			DataDir:                 "./data",
+			EtcdID:                  "id2",
+			EtcdInitialPeers:        []string{"id1=http://hello1:5001", "id2=http://hello2:5002"},
+			EtcdClientPorts:         []string{"id1=5001", "id2=5002"},
+			EtcdClientHTTPPorts:     nil,
+			EtcdSpaceQuota:          0,
+			EtcdCompactionMode:      "",
+			EtcdCompactionRetention: "",
+			Healthz:                 healthz.New(),
+		}
+
+		s, err := New(opts)
+		if err != nil {
+			t.Fatalf("failed to create server: %s", err)
+		}
+
+		config := s.config
+
+		assert.Equal(t, "id1=http://hello1:5001,id2=http://hello2:5002", config.InitialCluster)
+
+		clientURL := url.URL{
+			Scheme: "http",
+			Host:   "0.0.0.0:5002",
+		}
+		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
+		assert.Equal(t, clientURL, config.ListenClientUrls[0])
+		assert.Empty(t, config.ListenClientHttpUrls)
+	})
+
+	t.Run("StandaloneMode listen on IP when an IP", func(t *testing.T) {
+		opts := Options{
+			Security:                nil,
+			ListenAddress:           "",
+			Port:                    0,
+			Mode:                    modes.StandaloneMode,
+			ReplicaCount:            0,
+			ReplicaID:               0,
+			DataDir:                 "./data",
+			EtcdID:                  "id2",
+			EtcdInitialPeers:        []string{"id1=http://1.2.3.4:5001", "id2=http://1.2.3.4:5002"},
+			EtcdClientPorts:         []string{"id1=5001", "id2=5002"},
+			EtcdClientHTTPPorts:     nil,
+			EtcdSpaceQuota:          0,
+			EtcdCompactionMode:      "",
+			EtcdCompactionRetention: "",
+			Healthz:                 healthz.New(),
+		}
+
+		s, err := New(opts)
+		if err != nil {
+			t.Fatalf("failed to create server: %s", err)
+		}
+
+		config := s.config
+
+		assert.Equal(t, "id1=http://1.2.3.4:5001,id2=http://1.2.3.4:5002", config.InitialCluster)
+
+		clientURL := url.URL{
+			Scheme: "http",
+			Host:   "1.2.3.4:5002",
+		}
+		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
+		assert.Equal(t, clientURL, config.ListenClientUrls[0])
 		assert.Empty(t, config.ListenClientHttpUrls)
 	})
 }

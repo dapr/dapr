@@ -150,6 +150,20 @@ spec:
         # Configuration for injected sidecars
         - name: SIDECAR_RUN_AS_NON_ROOT
           value: {{ .Values.sidecarRunAsNonRoot | toString | toYaml }}
+{{- if and (.Values.sidecarRunAsUser) (gt (.Values.sidecarRunAsUser | int) 0) }}
+        - name: SIDECAR_RUN_AS_USER
+          value: {{ .Values.sidecarRunAsUser | toString | toYaml }}
+{{- end }}
+{{- if and (eq .Values.sidecarRunAsNonRoot false) (ne (.Values.sidecarRunAsUser | int) 0) }}
+{{- fail "sidecarRunAsUser must be 0 or value ommited when sidecarRunAsNonRoot is false"  }}
+{{- end }}
+{{- if and (eq .Values.sidecarRunAsNonRoot true) (and (hasKey .Values "sidecarRunAsUser") (le (.Values.sidecarRunAsUser | int) 0)) }}
+{{- fail "sidecarRunAsUser must positive when sidecarRunAsNonRoot is true (or default)"  }}
+{{- end }}
+{{- if and (.Values.sidecarRunAsGroup) (gt (.Values.sidecarRunAsGroup | int) 0) }}
+        - name: SIDECAR_RUN_AS_GROUP
+          value: {{ .Values.sidecarRunAsGroup | toString | toYaml }}
+{{- end }}
         - name: ENABLE_K8S_DOWNWARD_APIS
           value: {{ .Values.enableK8sDownwardAPIs | toString | toYaml }}
         - name: SIDECAR_DROP_ALL_CAPABILITIES

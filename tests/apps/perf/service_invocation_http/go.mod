@@ -1,3 +1,3 @@
 module github.com/dapr/dapr/tests/apps/perf/service_invocation_http
 
-go 1.22.3
+go 1.23.1

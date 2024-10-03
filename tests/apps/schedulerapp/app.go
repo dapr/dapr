@@ -34,18 +34,14 @@ const (
 	daprPortHTTP = 3500
 )
 
-type JobWrapper struct {
-	Job job `json:"job"`
-}
-
 type triggeredJob struct {
 	TypeURL string `json:"type_url"`
 	Value   string `json:"value"`
 }
 
 type jobData struct {
-	DataType   string `json:"@type"`
-	Expression string `json:"expression"`
+	DataType string `json:"@type"`
+	Value    string `json:"value"`
 }
 
 type job struct {
@@ -102,8 +98,7 @@ func scheduleJobHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	jobWrapper := JobWrapper{Job: jobData}
-	jsonData, err := json.Marshal(jobWrapper)
+	jsonData, err := json.Marshal(jobData)
 	if err != nil {
 		http.Error(w, fmt.Sprintf("error encoding JSON: %v", err), http.StatusInternalServerError)
 		return

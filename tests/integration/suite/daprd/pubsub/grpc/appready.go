@@ -143,19 +143,22 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 		return resp.StatusCode == http.StatusOK
 	}, time.Second*5, 10*time.Millisecond)
 
-	_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
-		PubsubName: "mypubsub",
-		Topic:      "mytopic",
-		Data:       []byte(`{"status": "completed"}`),
-	})
-	require.NoError(t, err)
+	assert.Eventually(t, func() bool {
+		_, err = client.PublishEvent(ctx, &rtv1.PublishEventRequest{
+			PubsubName: "mypubsub",
+			Topic:      "mytopic",
+			Data:       []byte(`{"status": "completed"}`),
+		})
+		require.NoError(t, err)
 
-	select {
-	case resp := <-a.topicChan:
-		assert.Equal(t, "/myroute", resp)
-	case <-time.After(time.Second * 5):
-		assert.Fail(t, "timeout waiting for topic to return")
-	}
+		select {
+		case resp := <-a.topicChan:
+			assert.Equal(t, "/myroute", resp)
+			return true
+		case <-time.After(time.Second):
+			return false
+		}
+	}, time.Second*5, time.Millisecond*10)
 
 	// Should stop sending messages to subscribed app when it becomes unhealthy.
 	a.appHealthy.Store(false)

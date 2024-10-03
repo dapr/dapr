@@ -283,7 +283,7 @@ spec:
 
 	require.NoError(t, os.Remove(filepath.Join(h.resDir2, "pubsub.yaml")))
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, h.daprd.GetMetaRegisteredComponents(t, ctx), 1)
+		assert.Len(c, h.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 	}, time.Second*5, time.Millisecond*10)
 	h.sub.ExpectPublishReceive(t, ctx, newReq(h.daprd, "pubsub0", "d"))
 	h.sub.ExpectPublishError(t, ctx, newReq(h.daprd, "pubsub1", "c"))

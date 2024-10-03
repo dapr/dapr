@@ -15,7 +15,6 @@ package client
 
 import (
 	"context"
-	"time"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
@@ -25,10 +24,6 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/security"
-)
-
-const (
-	dialTimeout = 30 * time.Second
 )
 
 // New returns a new scheduler client and the underlying connection.
@@ -49,11 +44,8 @@ func New(ctx context.Context, address string, sec security.Handler) (schedulerv1
 
 	opts := []grpc.DialOption{
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
-		sec.GRPCDialOptionMTLS(schedulerID), grpc.WithReturnConnectionError(), //nolint:staticcheck
+		sec.GRPCDialOptionMTLS(schedulerID),
 	}
-
-	ctx, cancel := context.WithTimeout(ctx, dialTimeout)
-	defer cancel()
 
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, address, opts...)

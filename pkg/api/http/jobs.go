@@ -21,6 +21,7 @@ import (
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
@@ -67,23 +68,19 @@ func (a *api) constructJobsEndpoints() []endpoints.Endpoint {
 
 func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 	return UniversalHTTPHandler(
-		a.universal.ScheduleJobAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.ScheduleJobRequest, *runtimev1pb.ScheduleJobResponse]{
-			InModifier: func(r *http.Request, in *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobRequest, error) {
+		a.universal.ScheduleJobAlpha1HTTP,
+		UniversalHTTPHandlerOpts[*internalsv1pb.JobHTTPRequest, *runtimev1pb.ScheduleJobResponse]{
+			InModifier: func(r *http.Request, in *internalsv1pb.JobHTTPRequest) (*internalsv1pb.JobHTTPRequest, error) {
 				// Users should set the name in the url, and not in the url and body
 				name := strings.TrimSpace(chi.URLParam(r, nameParam))
 				if len(name) == 0 {
 					apierrors.Empty("Job", map[string]string{"appID": a.universal.AppID()}, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
 				}
-				if in.GetJob().GetName() != "" {
+				if in.GetName() != "" {
 					return nil, apierrors.SchedulerURLName(map[string]string{"appID": a.universal.AppID()})
 				}
 
-				if in.GetJob() == nil {
-					in.Job = new(runtimev1pb.Job)
-				}
-
-				in.Job.Name = name
+				in.Name = name
 
 				return in, nil
 			},
