@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/buildinfo"
 	bindingsLoader "github.com/dapr/dapr/pkg/components/bindings"
 	configurationLoader "github.com/dapr/dapr/pkg/components/configuration"
+	conversationLoader "github.com/dapr/dapr/pkg/components/conversation"
 	cryptoLoader "github.com/dapr/dapr/pkg/components/crypto"
 	lockLoader "github.com/dapr/dapr/pkg/components/lock"
 	httpMiddlewareLoader "github.com/dapr/dapr/pkg/components/middleware/http"
@@ -100,6 +101,7 @@ func Run() {
 	bindingsLoader.DefaultRegistry.Logger = logContrib
 	workflowsLoader.DefaultRegistry.Logger = logContrib
 	wfbeLoader.DefaultRegistry.Logger = logContrib
+	conversationLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
 	reg := registry.NewOptions().
@@ -113,7 +115,8 @@ func Run() {
 		WithCryptoProviders(cryptoLoader.DefaultRegistry).
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
 		WithWorkflows(workflowsLoader.DefaultRegistry).
-		WithWorkflowBackends(wfbeLoader.DefaultRegistry)
+		WithWorkflowBackends(wfbeLoader.DefaultRegistry).
+		WithConversations(conversationLoader.DefaultRegistry)
 
 	ctx := signals.Context()
 	healthz := healthz.New()
