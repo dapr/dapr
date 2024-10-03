@@ -15,7 +15,6 @@ package main
 
 import (
 	"encoding/json"
-	"fmt"
 	"log"
 	"net/http"
 	"os"
@@ -199,8 +198,8 @@ func appRouter() http.Handler {
 	router.Use(utils.LoggerMiddleware)
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
-	router.HandleFunc(fmt.Sprintf("/%s", topicName), testTopicHandler).Methods("POST", "OPTIONS")
-	router.HandleFunc(fmt.Sprintf("/%s", topicCustomPath), testRoutedTopicHandler).Methods("POST", "OPTIONS")
+	router.HandleFunc("/"+topicName, testTopicHandler).Methods("POST", "OPTIONS")
+	router.HandleFunc("/"+topicCustomPath, testRoutedTopicHandler).Methods("POST", "OPTIONS")
 	router.HandleFunc("/tests/get_received_topics", testHandler).Methods("POST")
 
 	router.Use(mux.CORSMethodMiddleware(router))

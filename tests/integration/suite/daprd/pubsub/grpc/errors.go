@@ -197,7 +197,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		s, ok := status.FromError(err)
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
-		require.Equal(t, fmt.Sprintf("topic is empty in pubsub mypubsub"), s.Message())
+		require.Equal(t, "topic is empty in pubsub mypubsub", s.Message())
 
 		// Check status details
 		require.Len(t, s.Details(), 2)
@@ -243,7 +243,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		require.True(t, ok)
 		require.Equal(t, grpcCodes.InvalidArgument, s.Code())
 		expectedErr := "rawPayload value must be a valid boolean: actual is 'invalidBooleanValue'"
-		require.Equal(t, fmt.Sprintf("failed deserializing metadata. Error: %s", expectedErr), s.Message())
+		require.Equal(t, "failed deserializing metadata. Error: "+expectedErr, s.Message())
 		// Check status details
 		require.Len(t, s.Details(), 2)
 

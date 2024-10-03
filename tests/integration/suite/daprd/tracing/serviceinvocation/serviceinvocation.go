@@ -173,8 +173,8 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 		}
 
 		tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-02"
-		ctx = grpcMetadata.AppendToOutgoingContext(ctx, "traceparent", tp)
-		svcresp, err := client.InvokeService(ctx, &svcreq)
+		tctx := grpcMetadata.AppendToOutgoingContext(ctx, "traceparent", tp)
+		svcresp, err := client.InvokeService(tctx, &svcreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
 		assert.True(t, i.traceparent.Load())
@@ -193,9 +193,9 @@ func (i *invoke) Run(t *testing.T, ctx context.Context) {
 		}
 
 		tp = "00-4bf92f3577b34da6a3ce929d0e0e4736-00f067aa0ba902b7-03"
-		ctx = grpcMetadata.AppendToOutgoingContext(ctx, "traceparent", tp)
-		grpcclient := i.grpcdaprd.GRPCClient(t, ctx)
-		svcresp, err = grpcclient.InvokeService(ctx, &grpcappreq)
+		tctx = grpcMetadata.AppendToOutgoingContext(tctx, "traceparent", tp)
+		grpcclient := i.grpcdaprd.GRPCClient(t, tctx)
+		svcresp, err = grpcclient.InvokeService(tctx, &grpcappreq)
 		require.NoError(t, err)
 		require.NotNil(t, svcresp)
 		assert.True(t, i.grpctracectxkey.Load()) // this is set for grpc, instead of traceparent

@@ -156,7 +156,7 @@ func deactivateActorHandler(w http.ResponseWriter, r *http.Request) {
 	_, ok := actors.Load(actorID)
 	log.Printf("loading returned:%t\n", ok)
 
-	if ok && r.Method == "DELETE" {
+	if ok && r.Method == http.MethodDelete {
 		action = "deactivation"
 		actors.Delete(actorID)
 	}

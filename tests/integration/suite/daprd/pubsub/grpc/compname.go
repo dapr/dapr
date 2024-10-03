@@ -65,7 +65,7 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 	c.pubsubNames = make([]string, numTests)
 	c.topicNames = make([]string, numTests)
 	files := make([]string, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz.Fuzz(&c.pubsubNames[i])
 		fz.Fuzz(&c.topicNames[i])
 
@@ -108,7 +108,6 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 				Topic:      topicName,
 				Data:       []byte(`{"status": "completed"}`),
 			})
-			//nolint:testifylint
 			assert.NoError(col, err)
 		})
 	}
