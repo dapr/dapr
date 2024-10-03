@@ -464,7 +464,7 @@ func performPublishHTTP(reqID string, topic string, jsonValue []byte, contentTyp
 	if len(metadata) > 0 {
 		params := netUrl.Values{}
 		for k, v := range metadata {
-			params.Set("metadata.%s"+k, v)
+			params.Set("metadata."+k, v)
 		}
 		url = url + "?" + params.Encode()
 	}
