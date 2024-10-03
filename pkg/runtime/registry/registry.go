@@ -16,6 +16,7 @@ package registry
 import (
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/configuration"
+	"github.com/dapr/dapr/pkg/components/conversation"
 	"github.com/dapr/dapr/pkg/components/crypto"
 	"github.com/dapr/dapr/pkg/components/lock"
 	"github.com/dapr/dapr/pkg/components/middleware/http"
@@ -49,6 +50,7 @@ type Registry struct {
 	workflow        *workflows.Registry
 	workflowBackend *wfbe.Registry
 	crypto          *crypto.Registry
+	conversations   *conversation.Registry
 	componentCb     ComponentsCallback
 }
 
@@ -65,6 +67,7 @@ func New(opts *Options) *Registry {
 		workflow:        opts.workflow,
 		workflowBackend: opts.workflowBackend,
 		crypto:          opts.crypto,
+		conversations:   opts.conversation,
 		componentCb:     opts.componentsCallback,
 	}
 }
@@ -111,6 +114,10 @@ func (r *Registry) WorkflowBackends() *wfbe.Registry {
 
 func (r *Registry) Crypto() *crypto.Registry {
 	return r.crypto
+}
+
+func (r *Registry) Conversations() *conversation.Registry {
+	return r.conversations
 }
 
 func (r *Registry) ComponentsCallback() ComponentsCallback {

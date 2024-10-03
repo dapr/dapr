@@ -23,7 +23,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -49,7 +48,7 @@ func (a *api) Setup(t *testing.T) []framework.Option {
 	app := app.New(t,
 		app.WithHandlerFunc("/job/", func(w http.ResponseWriter, r *http.Request) {
 			body, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			a.dataCh <- body
 		}),
 	)
