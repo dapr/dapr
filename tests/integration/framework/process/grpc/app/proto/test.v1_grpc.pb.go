@@ -56,8 +56,7 @@ type TestServiceServer interface {
 }
 
 // UnimplementedTestServiceServer must be embedded to have forward compatible implementations.
-type UnimplementedTestServiceServer struct {
-}
+type UnimplementedTestServiceServer struct{}
 
 func (UnimplementedTestServiceServer) Ping(context.Context, *PingRequest) (*PingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Ping not implemented")

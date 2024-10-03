@@ -89,7 +89,7 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 	for _, route := range opts.routes {
 		appOpts = append(appOpts, app.WithHandlerFunc(route, func(w http.ResponseWriter, r *http.Request) {
 			var ce event.Event
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&ce))
+			assert.NoError(t, json.NewDecoder(r.Body).Decode(&ce))
 			select {
 			case inCh <- &RouteEvent{Route: r.URL.Path, Event: &ce}:
 			case <-closeCh:
@@ -100,7 +100,7 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 	for _, route := range opts.bulkRoutes {
 		appOpts = append(appOpts, app.WithHandlerFunc(route, func(w http.ResponseWriter, r *http.Request) {
 			var ce pubsub.BulkSubscribeEnvelope
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&ce))
+			assert.NoError(t, json.NewDecoder(r.Body).Decode(&ce))
 			select {
 			case inBulk <- &ce:
 			case <-closeCh:
@@ -125,7 +125,7 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 
 	if opts.progSubs != nil {
 		appOpts = append(appOpts, app.WithHandlerFunc("/dapr/subscribe", func(w http.ResponseWriter, r *http.Request) {
-			require.NoError(t, json.NewEncoder(w).Encode(*opts.progSubs))
+			assert.NoError(t, json.NewEncoder(w).Encode(*opts.progSubs))
 		}))
 	}
 

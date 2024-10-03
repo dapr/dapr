@@ -457,7 +457,7 @@ func (r *Resiliency) decodeTargets(c *resiliencyV1alpha.Resiliency) (err error) 
 
 	for name, t := range targets.Actors {
 		if t.CircuitBreakerScope == "" && t.CircuitBreaker != "" {
-			return fmt.Errorf("actor circuit breakers must include scope")
+			return errors.New("actor circuit breakers must include scope")
 		}
 
 		if t.CircuitBreaker != "" {

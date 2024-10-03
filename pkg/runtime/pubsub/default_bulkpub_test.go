@@ -16,7 +16,6 @@ package pubsub
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -77,7 +76,7 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		t.Run(fmt.Sprintf(tc.name), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			// Create publish requests for each message in the bulk request.
 			var pubReqs []*contribPubsub.PublishRequest
 			for _, entry := range req.Entries {
