@@ -17,17 +17,17 @@ import (
 	"context"
 	"testing"
 
-	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
-	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/dapr/kit/ptr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -55,9 +55,9 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 	data2, err := anypb.New(wrapperspb.String("hello world 2"))
 	require.NoError(t, err)
 
-	_, err = client.ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
+	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name: "test1",
-		Job: &schedulerv1.Job{
+		Job: &schedulerv1pb.Job{
 			Repeats:  ptr.Of(uint32(10)),
 			Schedule: ptr.Of("@every 20s"),
 			DueTime:  ptr.Of("100s"),
@@ -75,9 +75,9 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	_, err = client.ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
+	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name: "test2",
-		Job: &schedulerv1.Job{
+		Job: &schedulerv1pb.Job{
 			Repeats:  ptr.Of(uint32(20)),
 			Schedule: ptr.Of("@every 40s"),
 			DueTime:  ptr.Of("200s"),
@@ -97,7 +97,7 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	resp, err := client.ListJobs(ctx, &schedulerv1.ListJobsRequest{
+	resp, err := client.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
 		Metadata: &schedulerv1pb.JobMetadata{
 			Namespace: "default", AppId: "test",
 			Target: &schedulerv1pb.JobTargetMetadata{
@@ -108,9 +108,8 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
-	require.Len(t, resp.Jobs, 1)
-	assert.False(t, resp.GetHasMore())
-	namedJob := resp.Jobs[0]
+	require.Len(t, resp.GetJobs(), 1)
+	namedJob := resp.GetJobs()[0]
 	assert.Equal(t, "test1", namedJob.GetName())
 	job := namedJob.GetJob()
 	assert.Equal(t, uint32(10), job.GetRepeats())
@@ -119,7 +118,7 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "200s", job.GetTtl())
 	assert.True(t, proto.Equal(data1, job.GetData()))
 
-	resp, err = client.ListJobs(ctx, &schedulerv1.ListJobsRequest{
+	resp, err = client.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
 		Metadata: &schedulerv1pb.JobMetadata{
 			Namespace: "default", AppId: "test",
 			Target: &schedulerv1pb.JobTargetMetadata{
@@ -132,9 +131,8 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
-	require.Len(t, resp.Jobs, 1)
-	assert.False(t, resp.GetHasMore())
-	namedJob = resp.Jobs[0]
+	require.Len(t, resp.GetJobs(), 1)
+	namedJob = resp.GetJobs()[0]
 	assert.Equal(t, "test2", namedJob.GetName())
 	job = namedJob.GetJob()
 	assert.Equal(t, uint32(20), job.GetRepeats())

@@ -19,16 +19,16 @@ import (
 	"strconv"
 	"testing"
 
-	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
+
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/anypb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func init() {
@@ -54,9 +54,9 @@ func (s *size) Run(t *testing.T, ctx context.Context) {
 	data, err := anypb.New(wrapperspb.Bytes(bytes.Repeat([]byte{0x01}, 2e+6)))
 	require.NoError(t, err)
 	for i := range 100 {
-		_, err = client.ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
+		_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 			Name: "test-" + strconv.Itoa(i),
-			Job: &schedulerv1.Job{
+			Job: &schedulerv1pb.Job{
 				DueTime: ptr.Of("1000s"),
 				Data:    data,
 			},
@@ -72,7 +72,7 @@ func (s *size) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	resp, err := client.ListJobs(ctx, &schedulerv1.ListJobsRequest{
+	resp, err := client.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
 		Metadata: &schedulerv1pb.JobMetadata{
 			Namespace: "default", AppId: "test",
 			Target: &schedulerv1pb.JobTargetMetadata{
