@@ -14,7 +14,6 @@ limitations under the License.
 package options
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -145,7 +144,7 @@ func TestValidateFlags(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			_, err := New([]string{"--" + tt.arg, tt.value})
 			require.Error(t, err)
-			require.Contains(t, err.Error(), fmt.Sprintf("invalid value for %s", tt.arg))
+			require.Contains(t, err.Error(), "invalid value for "+tt.arg)
 		})
 	}
 }
