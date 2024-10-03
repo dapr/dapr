@@ -283,9 +283,9 @@ func scheduleJobHandler(w http.ResponseWriter, r *http.Request) {
 	vars := mux.Vars(r)
 	jobName := vars["name"]
 
-	bodyBytes, err := io.ReadAll(r.Body)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("error reading body: %v", err), http.StatusInternalServerError)
+	bodyBytes, rerr := io.ReadAll(r.Body)
+	if rerr != nil {
+		http.Error(w, fmt.Sprintf("error reading body: %v", rerr), http.StatusInternalServerError)
 		return
 	}
 	r.Body = io.NopCloser(bytes.NewBuffer(bodyBytes))
@@ -298,7 +298,7 @@ func scheduleJobHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	jobWrapper := JobWrapper{Job: j}
-	err = scheduleJobGRPC(jobName, jobWrapper)
+	err := scheduleJobGRPC(jobName, jobWrapper)
 	if err != nil {
 		log.Printf("Error scheduling job to dapr via grpc protocol: %s", err)
 		return
