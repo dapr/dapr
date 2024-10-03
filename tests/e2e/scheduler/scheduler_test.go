@@ -184,7 +184,7 @@ func TestJobs(t *testing.T) {
 			Data:     data,
 			Schedule: "@every 60s",
 			Repeats:  1,
-			DueTime:  "60s", // higher due time bc we already test triggering above
+			DueTime:  "180s", // higher due time bc we already test triggering above
 
 		}
 		jobBody, err := json.Marshal(scheduledJob)
