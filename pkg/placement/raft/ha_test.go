@@ -59,16 +59,16 @@ func TestRaftHA(t *testing.T) {
 	ready := make([]<-chan struct{}, 3)
 	raftServerCancel := make([]context.CancelFunc, 3)
 	peers := make([]PeerInfo, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		peers[i] = PeerInfo{
 			ID:      fmt.Sprintf("mynode-%d", i),
 			Address: fmt.Sprintf("127.0.0.1:%d", ports[i]),
 		}
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		raftServers[i], ready[i], raftServerCancel[i] = createRaftServer(t, i, peers)
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		select {
 		case <-ready[i]:
 			// nop
@@ -159,7 +159,7 @@ func TestRaftHA(t *testing.T) {
 		}
 
 		var running int
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if raftServers[i] != nil {
 				running++
 			}
@@ -186,13 +186,13 @@ func TestRaftHA(t *testing.T) {
 	time.Sleep(time.Second * 3)
 
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
-		var oldSvr int
-		for oldSvr = 0; oldSvr < 3; oldSvr++ {
+		for oldSvr := range 3 {
 			if raftServers[oldSvr] == nil {
 				break
 			}
 		}
 
+		oldSvr := 2
 		raftServers[oldSvr], ready[oldSvr], raftServerCancel[oldSvr] = createRaftServer(t, oldSvr, peers)
 		select {
 		case <-ready[oldSvr]:
@@ -202,7 +202,7 @@ func TestRaftHA(t *testing.T) {
 		}
 
 		var running int
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if raftServers[i] != nil {
 				running++
 			}
@@ -258,11 +258,11 @@ func TestRaftHA(t *testing.T) {
 		time.Sleep(time.Second * 3)
 
 		// Restart all nodes
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			raftServers[i], ready[i], raftServerCancel[i] = createRaftServer(t, i, peers)
 		}
 
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			select {
 			case <-ready[i]:
 				// nop
@@ -315,7 +315,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-ch
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-		require.NoError(t, srv.StartRaft(ctx))
+		assert.NoError(t, srv.StartRaft(ctx))
 	}()
 
 	ready := make(chan struct{})
@@ -325,7 +325,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-ch
 			timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*5)
 			defer timeoutCancel()
 			r, err := srv.Raft(timeoutCtx)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			if r.State() == hcraft.Follower || r.State() == hcraft.Leader {
 				return
 			}

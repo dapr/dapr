@@ -197,7 +197,7 @@ func TestGrpcAPILoggingMiddlewares(t *testing.T) {
 			assert.True(t, ok)
 			assert.Less(t, dur, 10.0)
 
-			assert.Equal(t, float64(codes.OK), logData["code"])
+			assert.InDelta(t, float64(codes.OK), logData["code"], 0)
 		}
 	}
 

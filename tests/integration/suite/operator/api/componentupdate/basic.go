@@ -126,7 +126,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			event, err := stream.Recv()
-			//nolint:testifylint
 			if !assert.NoError(c, err) {
 				return
 			}
@@ -148,7 +147,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			event, err := stream.Recv()
-			//nolint:testifylint
 			if !assert.NoError(c, err) {
 				return
 			}
