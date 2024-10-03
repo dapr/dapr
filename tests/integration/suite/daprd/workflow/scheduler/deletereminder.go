@@ -84,7 +84,7 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	d.daprd.WaitUntilRunning(t, ctx)
 
 	etcdClient := clients.Etcd(t, clientv3.Config{
-		Endpoints:   []string{fmt.Sprintf("localhost:%s", d.scheduler.EtcdClientPort())},
+		Endpoints:   []string{"localhost:" + d.scheduler.EtcdClientPort()},
 		DialTimeout: 5 * time.Second,
 	})
 

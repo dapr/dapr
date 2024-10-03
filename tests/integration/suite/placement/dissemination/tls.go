@@ -157,7 +157,6 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Equal(t, "OK1", string(val1.GetData()))
 
@@ -166,7 +165,6 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			assert.Error(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -175,7 +173,6 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				Method:    "foo",
 			})
 
-			//nolint:testifylint
 			assert.Error(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -183,8 +180,7 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
-			assert.Error(c, err, err)
+			assert.Error(c, err)
 		}, time.Second*20, time.Millisecond*10, "actor not ready")
 	})
 
@@ -197,7 +193,6 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Equal(t, "OK3", string(val2.GetData()))
 
@@ -206,7 +201,6 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			assert.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -214,7 +208,6 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			assert.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -222,8 +215,7 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
-			assert.Error(c, err, err)
+			assert.Error(c, err)
 		}, time.Second*20, time.Millisecond*10, "actors not ready")
 	})
 
@@ -236,7 +228,6 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Equal(t, "OK3", string(val3.GetData()))
 
@@ -245,7 +236,6 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			assert.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -253,7 +243,6 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
 			assert.NoError(c, err)
 
 			_, err = client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
@@ -261,8 +250,7 @@ func (n *tls) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Method:    "foo",
 			})
-			//nolint:testifylint
-			assert.Error(c, err, err)
+			assert.Error(c, err)
 		}, time.Second*20, time.Millisecond*10, "actors not ready")
 	})
 }

@@ -148,7 +148,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, r.triggered.Load(), int64(1))
-	}, 30*time.Second, 10*time.Millisecond, fmt.Sprintf("failed to wait for 'triggered' to be greatrer or equal 1, actual value %d", r.triggered.Load()))
+	}, 30*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greatrer or equal 1, actual value %d", r.triggered.Load())
 
 	_, err = client.UnregisterActorReminder(ctx, &runtimev1pb.UnregisterActorReminderRequest{
 		ActorType: "myactortype",

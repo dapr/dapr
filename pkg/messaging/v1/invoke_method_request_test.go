@@ -453,7 +453,7 @@ func TestWithCustomHTTPMetadata(t *testing.T) {
 
 	numMetadata := 10
 	md := make(map[string]string, numMetadata)
-	for i := 0; i < numMetadata; i++ {
+	for i := range numMetadata {
 		md[customMetadataKey(i)] = customMetadataValue(i)
 	}
 
@@ -462,7 +462,7 @@ func TestWithCustomHTTPMetadata(t *testing.T) {
 	defer req.Close()
 
 	imrMd := req.Metadata()
-	for i := 0; i < numMetadata; i++ {
+	for i := range numMetadata {
 		val, ok := imrMd[customMetadataKey(i)]
 		assert.True(t, ok)
 		// We assume only 1 value per key as the input map can only support string -> string mapping.

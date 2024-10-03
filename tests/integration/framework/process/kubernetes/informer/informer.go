@@ -20,6 +20,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -56,11 +57,15 @@ func (i *Informer) Handler(t *testing.T, wrapped http.Handler) http.HandlerFunc 
 		}
 
 		i.lock.Lock()
+		defer i.lock.Unlock()
+
 		path := strings.TrimPrefix(strings.TrimPrefix(r.URL.Path, "/apis/"), "/api/")
 
 		var gvk schema.GroupVersionKind
 		split := strings.Split(path, "/")
-		require.GreaterOrEqual(t, len(split), 2, "invalid path: %s", path)
+		if !assert.GreaterOrEqual(t, len(split), 2, "invalid path: %s", path) {
+			return
+		}
 		if split[0] == "v1" {
 			gvk = schema.GroupVersionKind{Group: "", Version: "v1"}
 			split = split[1:]
@@ -82,7 +87,6 @@ func (i *Informer) Handler(t *testing.T, wrapped http.Handler) http.HandlerFunc 
 			i.active[gvk.String()] = i.active[gvk.String()][1:]
 		}
 		w.(http.Flusher).Flush()
-		i.lock.Unlock()
 	}
 }
 
