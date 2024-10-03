@@ -7,6 +7,7 @@ import (
 	"sync"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -171,16 +172,16 @@ func TestStateConfigRace(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < iterations; i++ {
+			for i := range iterations {
 				err := SaveStateConfiguration(fmt.Sprintf("store%d", i), map[string]string{strategyKey: strategyNone})
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			for i := 0; i < iterations; i++ {
+			for i := range iterations {
 				_, err := GetModifiedStateKey(key, fmt.Sprintf("store%d", i), "appid")
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}
 		}()
 		wg.Wait()
@@ -191,16 +192,16 @@ func TestStateConfigRace(t *testing.T) {
 		wg.Add(2)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < iterations; i++ {
+			for i := range iterations {
 				_, err := GetModifiedStateKey(key, fmt.Sprintf("store%d", i), "appid")
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}
 		}()
 		go func() {
 			defer wg.Done()
-			for i := 0; i < iterations; i++ {
+			for i := range iterations {
 				_, err := GetModifiedStateKey(key, fmt.Sprintf("store%d", i), "appid")
-				require.NoError(t, err)
+				assert.NoError(t, err)
 			}
 		}()
 		wg.Wait()
