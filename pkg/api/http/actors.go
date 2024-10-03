@@ -428,6 +428,8 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	// Construct response.
 	statusCode := int(res.GetStatus().GetCode())
 	if !res.IsHTTPResponse() {
+		// TODO: fix types
+		//nolint:gosec
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
 	respondWithData(w, statusCode, res.GetMessage().GetData().GetValue())

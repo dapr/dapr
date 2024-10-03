@@ -131,6 +131,8 @@ func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 		// Convert status code
 		respStatus := status.Convert(err)
 		// Prepare response
+		// TODO: fix types
+		//nolint:gosec
 		rsp = invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), respStatus.Proto().GetDetails())
 	} else {
 		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)
@@ -189,6 +191,8 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		// Convert status code
 		respStatus := status.Convert(err)
 		// Prepare response
+		// TODO: fix types
+		//nolint:gosec
 		rsp = invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), respStatus.Proto().GetDetails())
 	} else {
 		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)

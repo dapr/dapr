@@ -331,7 +331,7 @@ func (a *api) callLocalValidateACL(ctx context.Context, req *invokev1.InvokeMeth
 		callAllowed, errMsg := acl.ApplyAccessControlPolicies(ctx, operation, httpVerb, appProtocolIsHTTP, a.accessControlList)
 
 		if !callAllowed {
-			return status.Errorf(codes.PermissionDenied, errMsg)
+			return status.Error(codes.PermissionDenied, errMsg)
 		}
 	}
 

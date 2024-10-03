@@ -123,7 +123,7 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 
 	runners := make([]concurrency.Runner, len(clients)+1)
 
-	for i := 0; i < len(clients); i++ {
+	for i := range clients {
 		runners[i] = (&connector{
 			req:      req,
 			client:   clients[i],

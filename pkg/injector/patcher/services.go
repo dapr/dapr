@@ -14,6 +14,7 @@ limitations under the License.
 package patcher
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -50,7 +51,7 @@ func NewService(val string) (srv Service, err error) {
 
 	srv.port, err = strconv.Atoi(portStr)
 	if err != nil || srv.port <= 0 {
-		return srv, fmt.Errorf("service is not in the correct format '<name>:<port>': port is invalid")
+		return srv, errors.New("service is not in the correct format '<name>:<port>': port is invalid")
 	}
 
 	return srv, nil
@@ -64,7 +65,7 @@ func (svc Service) Address(namespace, clusterDomain string) string {
 // Address returns the address of a Dapr control plane service
 func (svc Service) AddressAllInstances(replicaCount int, namespace, clusterDomain string) []string {
 	allInstances := []string{}
-	for i := 0; i < replicaCount; i++ {
+	for i := range replicaCount {
 		allInstances = append(allInstances, fmt.Sprintf("%s-%d.%s.%s.svc.%s:%d", svc.name, i, svc.name, namespace, clusterDomain, svc.port))
 	}
 	return allInstances

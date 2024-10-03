@@ -61,7 +61,7 @@ func New(opts Options) *Clients {
 
 func (c *Clients) Run(ctx context.Context) error {
 	if !c.running.CompareAndSwap(false, true) {
-		return fmt.Errorf("scheduler clients already running")
+		return errors.New("scheduler clients already running")
 	}
 
 	for {
@@ -100,11 +100,12 @@ func (c *Clients) Next(ctx context.Context) (schedulerv1pb.SchedulerClient, erro
 	select {
 	case <-c.readyCh:
 	case <-c.closeCh:
-		return nil, fmt.Errorf("scheduler clients closed")
+		return nil, errors.New("scheduler clients closed")
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}
 
+	//nolint:gosec
 	return c.clients[int(c.lastUsedIdx.Add(1))%len(c.clients)], nil
 }
 
@@ -113,7 +114,7 @@ func (c *Clients) All(ctx context.Context) ([]schedulerv1pb.SchedulerClient, err
 	select {
 	case <-c.readyCh:
 	case <-c.closeCh:
-		return nil, fmt.Errorf("scheduler clients closed")
+		return nil, errors.New("scheduler clients closed")
 	case <-ctx.Done():
 		return nil, ctx.Err()
 	}

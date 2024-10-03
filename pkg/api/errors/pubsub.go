@@ -150,7 +150,7 @@ func (p *PubSubMetadataError) TopicEmpty() error {
 	return p.build(
 		codes.InvalidArgument,
 		http.StatusNotFound,
-		fmt.Sprintf("topic is empty in pubsub %s", p.p.name),
+		"topic is empty in pubsub "+p.p.name,
 		"ERR_TOPIC_NAME_EMPTY",
 		"TOPIC_NAME_EMPTY",
 	)

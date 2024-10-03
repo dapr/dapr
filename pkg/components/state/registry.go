@@ -57,7 +57,7 @@ func (s *Registry) RegisterComponentWithVersions(name string, versions component
 		// will happen at init time when registering components.
 		// An error here is impossible to resolve at runtime, and code change
 		// always needs to take place.
-		panic(fmt.Sprintf("default version not set for %s", name))
+		panic("default version not set for " + name)
 	}
 
 	s.stateStores[createFullVersionedName(name, versions.Preferred.Version)] = toConstructor(versions.Preferred)

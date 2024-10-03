@@ -130,7 +130,7 @@ func (s *Server) tryResolveRaftAdvertiseAddr(ctx context.Context, bindAddr strin
 	// to look up the address after StatefulSet POD is deployed.
 	var err error
 	var addr *net.TCPAddr
-	for retry := 0; retry < nameResolveMaxRetry; retry++ {
+	for range nameResolveMaxRetry {
 		addr, err = net.ResolveTCPAddr("tcp", bindAddr)
 		if err == nil {
 			return addr, nil

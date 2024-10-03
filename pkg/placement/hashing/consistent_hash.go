@@ -168,7 +168,7 @@ func (hc *VirtualNodesCache) setHashes(replicationFactor int64, host string) []u
 	hashMap := newHashMap()
 	hashMap.hashes[host] = make([]uint64, replicationFactor)
 
-	for i := 0; i < int(replicationFactor); i++ {
+	for i := range int(replicationFactor) {
 		hashMap.hashes[host][i] = hash(host + strconv.Itoa(i))
 	}
 
@@ -214,7 +214,7 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 	// vhosts in the store in v1.13.
 	// This should be removed in 1.15.
 	// --Start remove--
-	for i := 0; i < int(c.replicationFactor); i++ {
+	for i := range int(c.replicationFactor) {
 		h := hash(host + strconv.Itoa(i))
 		c.hosts[h] = host
 		c.sortedSet = append(c.sortedSet, h)
@@ -341,7 +341,7 @@ func (c *Consistent) Remove(host string) bool {
 	c.Lock()
 	defer c.Unlock()
 
-	for i := 0; i < int(c.replicationFactor); i++ {
+	for i := range int(c.replicationFactor) {
 		h := hash(host + strconv.Itoa(i))
 		delete(c.hosts, h)
 		c.delSlice(h)

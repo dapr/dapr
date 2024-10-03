@@ -286,6 +286,8 @@ func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*i
 
 	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, channelReq.URL.Path, strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
 
+	// TODO: fix type
+	//nolint:gosec
 	rsp.Status().Code = int32(invokev1.CodeFromHTTPStatus(resp.StatusCode))
 
 	return rsp, nil
@@ -490,6 +492,8 @@ func (h *Channel) parseChannelResponse(channelResp *http.Response) (*invokev1.In
 	}
 
 	// Convert status code
+	// TODO: fix type
+	//nolint:gosec
 	rsp := invokev1.
 		NewInvokeMethodResponse(int32(channelResp.StatusCode), "", nil).
 		WithHTTPHeaders(channelResp.Header).

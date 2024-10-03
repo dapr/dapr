@@ -190,8 +190,12 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 				// if we could not reconnect just create the response metrics for the connection error
 				if !reconnectionSucceeded && grpcDestinationAppID != "" {
 					if !isStream {
+						// TODO: Updates types to unit32
+						//nolint:gosec
 						diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, int32(code), requestStartedAt)
 					} else {
+						// TODO: Update types to uint32
+						//nolint:gosec
 						diagnostics.DefaultMonitoring.ServiceInvocationStreamingResponseReceived(grpcDestinationAppID, int32(code))
 					}
 				}
@@ -253,6 +257,8 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 		err = pr.run()
 		if grpcDestinationAppID != "" {
 			code := status.Code(err)
+			// TODO: Update types to uint32
+			//nolint:gosec
 			diagnostics.DefaultMonitoring.ServiceInvocationResponseReceived(grpcDestinationAppID, int32(code), requestStartedAt)
 		}
 

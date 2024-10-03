@@ -15,7 +15,6 @@ package errors
 
 import (
 	"errors"
-	"fmt"
 
 	"google.golang.org/grpc/codes"
 
@@ -34,11 +33,13 @@ type ActorError struct {
 
 func NewActorError(res *internalv1pb.InternalInvokeResponse) error {
 	if res == nil {
-		return fmt.Errorf("could not parse actor error: no response object")
+		return errors.New("could not parse actor error: no response object")
 	}
 
 	statusCode := int(res.GetStatus().GetCode())
 	if !res.IsHTTPResponse() {
+		// TODO: fix type
+		//nolint:gosec
 		statusCode = invokev1.HTTPStatusFromCode(codes.Code(statusCode))
 	}
 

@@ -107,8 +107,10 @@ func startTracingClientSpanFromHTTPRequest(r *http.Request, spanName string, spe
 	sc := SpanContextFromRequest(r)
 	ctx := trace.ContextWithRemoteSpanContext(r.Context(), sc)
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
+	//nolint:spancheck
 	_, span := tracer.Start(ctx, spanName, kindOption)
 	diagUtils.AddSpanToRequest(r, span)
+	//nolint:spancheck
 	return span
 }
 
@@ -116,7 +118,9 @@ func StartProducerSpanChildFromParent(ctx *fasthttp.RequestCtx, parentSpan trace
 	path := string(ctx.Request.URI().Path())
 	netCtx := trace.ContextWithRemoteSpanContext(ctx, parentSpan.SpanContext())
 	kindOption := trace.WithSpanKind(trace.SpanKindProducer)
+	//nolint:spancheck
 	_, span := tracer.Start(netCtx, path, kindOption)
+	//nolint:spancheck
 	return span
 }
 

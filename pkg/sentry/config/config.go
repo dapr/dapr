@@ -202,7 +202,7 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 			case int32(sentryv1pb.SignCertificateRequest_JWKS):
 				// All good - nop
 			case int32(sentryv1pb.SignCertificateRequest_KUBERNETES), int32(sentryv1pb.SignCertificateRequest_INSECURE):
-				return conf, fmt.Errorf("invalid token validator: the built-in 'kubernetes' and 'insecure' validators cannot be configured manually")
+				return conf, errors.New("invalid token validator: the built-in 'kubernetes' and 'insecure' validators cannot be configured manually")
 			default:
 				return conf, fmt.Errorf("invalid token validator name: '%s'; supported values: 'jwks'", v.Name)
 			}

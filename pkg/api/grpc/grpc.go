@@ -596,7 +596,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	bulkResp.Items = make([]*runtimev1pb.BulkStateItem, len(responses))
-	for i := 0; i < len(responses); i++ {
+	for i := range responses {
 		item := &runtimev1pb.BulkStateItem{
 			Key:      stateLoader.GetOriginalStateKey(responses[i].Key),
 			Data:     responses[i].Data,

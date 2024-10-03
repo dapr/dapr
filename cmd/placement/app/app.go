@@ -83,10 +83,13 @@ func Run() {
 		Peers:             opts.RaftPeers,
 		LogStorePath:      opts.RaftLogStorePath,
 		ReplicationFactor: int64(opts.ReplicationFactor),
-		MinAPILevel:       uint32(opts.MinAPILevel),
-		MaxAPILevel:       uint32(opts.MaxAPILevel),
-		Healthz:           healthz,
-		Security:          secProvider,
+		// TODO: fix types
+		//nolint:gosec
+		MinAPILevel: uint32(opts.MinAPILevel),
+		//nolint:gosec
+		MaxAPILevel: uint32(opts.MaxAPILevel),
+		Healthz:     healthz,
+		Security:    secProvider,
 	})
 	if raftServer == nil {
 		log.Fatal("Failed to create raft server.")
@@ -99,9 +102,13 @@ func Run() {
 		Healthz:     healthz,
 	}
 	if opts.MinAPILevel >= 0 && opts.MinAPILevel < math.MaxInt32 {
+		// TODO: fix types
+		//nolint:gosec
 		placementOpts.MinAPILevel = uint32(opts.MinAPILevel)
 	}
 	if opts.MaxAPILevel >= 0 && opts.MaxAPILevel < math.MaxInt32 {
+		// TODO: fix types
+		//nolint:gosec
 		placementOpts.MaxAPILevel = ptr.Of(uint32(opts.MaxAPILevel))
 	}
 	apiServer := placement.NewPlacementService(placementOpts)

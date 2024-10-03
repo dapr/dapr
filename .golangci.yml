@@ -4,7 +4,7 @@ run:
   concurrency: 4
 
   # timeout for analysis, e.g. 30s, 5m, default is 1m
-  deadline: 15m
+  timeout: 15m
 
   # exit code when at least one issue was found, default is 1
   issues-exit-code: 1
@@ -15,16 +15,8 @@ run:
   # list of build tags, all linters use it. Default is empty list.
   build-tags:
     - unit
-
-  # which dirs to skip: they won't be analyzed;
-  # can use regexp here: generated.*, regexp is applied on full path;
-  # default value is empty list, but next dirs are always skipped independently
-  # from this option's value:
-  # third_party$, testdata$, examples$, Godeps$, builtin$
-  skip-dirs:
-    - ^pkg.*client.*clientset.*versioned.*
-    - ^pkg.*client.*informers.*externalversions.*
-    - ^pkg.*proto.*
+    - allcomponents
+    - subtlecrypto
 
   # which files to skip: they will be analyzed, but issues from them
   # won't be reported. Default value is empty list, but there is
@@ -33,11 +25,23 @@ run:
   # skip-files:
   #  - ".*\\.my\\.go$"
   #  - lib/bad.go
-  
+
+issues:
+  # which dirs to skip: they won't be analyzed;
+  # can use regexp here: generated.*, regexp is applied on full path;
+  # default value is empty list, but next dirs are always skipped independently
+  # from this option's value:
+  # third_party$, testdata$, examples$, Godeps$, builtin$
+  exclude-dirs:
+    - ^pkg.*client.*clientset.*versioned.*
+    - ^pkg.*client.*informers.*externalversions.*
+    - ^pkg.*proto.*
+
 # output configuration options
 output:
   # colored-line-number|line-number|json|tab|checkstyle, default is "colored-line-number"
-  format: tab
+  formats:
+  - format: tab
 
   # print lines of code with issue, default is true
   print-issued-lines: true
@@ -57,10 +61,9 @@ linters-settings:
     # default is false: such cases aren't reported by default.
     check-blank: false
 
-    # [deprecated] comma-separated list of pairs of the form pkg:regex
-    # the regex is used to ignore names within pkg. (default "fmt:.*").
-    # see https://github.com/kisielk/errcheck#the-deprecated-method for details
-    ignore: fmt:.*,io/ioutil:^Read.*
+    exclude-functions:
+      - fmt:.*
+      - io/ioutil:^Read.*
 
     # path to a file containing a list of functions to exclude from checking
     # see https://github.com/kisielk/errcheck#excluding-functions for details
@@ -71,9 +74,6 @@ linters-settings:
     statements: 40
 
   govet:
-    # report about shadowed variables
-    check-shadowing: true
-
     # settings per analyzer
     settings:
       printf: # analyzer name, run `go tool vet help` to see all analyzers
@@ -86,13 +86,9 @@ linters-settings:
     # enable or disable analyzers by name
     enable:
       - atomicalign
-    enable-all: false
-    disable:
       - shadow
+    enable-all: false
     disable-all: false
-  golint:
-    # minimal confidence for issues, default is 0.8
-    min-confidence: 0.8
   revive:
     # minimal confidence for issues, default is 0.8
     confidence: 0.8
@@ -109,9 +105,6 @@ linters-settings:
   gocognit:
     # minimal code complexity to report, 30 by default (but we recommend 10-20)
     min-complexity: 10
-  maligned:
-    # print struct with more effective memory layout or not, false by default
-    suggest-new: true
   dupl:
     # tokens count to trigger issue, 150 by default
     threshold: 100
@@ -186,18 +179,6 @@ linters-settings:
     line-length: 120
     # tab width in spaces. Default to 1.
     tab-width: 1
-  unused:
-    # treat code as a program (not a library) and report unused exported identifiers; default is false.
-    # XXX: if you enable this setting, unused will report a lot of false-positives in text editors:
-    # if it's called for subdir of a project it can't find funcs usages. All text editor integrations
-    # with golangci-lint call it on a directory with the changed file.
-    check-exported: false
-  unparam:
-    # Inspect exported functions, default is false. Set to true if no external program/library imports your code.
-    # XXX: if you enable this setting, unparam will report a lot of false-positives in text editors:
-    # if it's called for subdir of a project it can't find external interfaces. All text editor integrations
-    # with golangci-lint call it on a directory with the changed file.
-    check-exported: false
   nakedret:
     # make an issue if func has more lines of code than this setting and it has naked returns; default is 30
     max-func-lines: 30
@@ -263,17 +244,19 @@ linters-settings:
     allow-assign-and-call: true
     # Allow multiline assignments to be cuddled. Default is true.
     allow-multiline-assign: true
-    # Allow case blocks to end with a whitespace.
-    allow-case-traling-whitespace: true
     # Allow declarations (var) to be cuddled.
     allow-cuddle-declarations: false
+    # If the number of lines in a case block is equal to or lager than this number,
+    # the case *must* end white a newline.
+    # https://github.com/bombsimon/wsl/blob/master/doc/configuration.md#force-case-trailing-whitespace
+    # Default: 0
+    force-case-trailing-whitespace: 1
 
 linters:
   fast: false
   enable-all: true
   disable:
     # TODO Enforce the below linters later
-    - nosnakecase
     - musttag
     - dupl
     - errcheck
@@ -283,28 +266,22 @@ linters:
     - gocyclo
     - gocognit
     - godox
-    - interfacer
     - lll
-    - maligned
-    - scopelint
     - unparam
     - wsl
     - gomnd
     - testpackage
-    - goerr113
     - nestif
     - nlreturn
     - exhaustive
     - exhaustruct
     - noctx
     - gci
-    - golint
     - tparallel
     - paralleltest
     - wrapcheck
     - tagliatelle
     - ireturn
-    - exhaustivestruct
     - errchkjson
     - contextcheck
     - gomoddirectives
@@ -313,7 +290,6 @@ linters:
     - varnamelen
     - errorlint
     - forcetypeassert
-    - ifshort
     - maintidx
     - nilnil
     - predeclared
@@ -326,8 +302,11 @@ linters:
     - asasalint
     - rowserrcheck
     - sqlclosecheck
-    - structcheck
-    - varcheck
-    - deadcode
     - inamedparam
     - tagalign
+    - mnd
+    - canonicalheader
+    - exportloopref
+    - execinquery
+    - err113
+    - fatcontext

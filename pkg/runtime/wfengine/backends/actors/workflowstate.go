@@ -284,7 +284,7 @@ func addPurgeStateOperations(req *actors.TransactionalRequest, keyPrefix string,
 	// TODO: Investigate whether Dapr state stores put limits on batch sizes. It seems some storage
 	//       providers have limits and we need to know if that impacts this algorithm:
 	//       https://learn.microsoft.com/azure/cosmos-db/nosql/transactional-batch#limitations
-	for i := 0; i < len(events); i++ {
+	for i := range events {
 		req.Operations = append(req.Operations, actors.TransactionalOperation{
 			Operation: actors.Delete,
 			Request:   actors.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, i)},
@@ -333,11 +333,11 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	var n int
 	bulkReq.Keys[n] = customStatusKey
 	n++
-	for i := 0; i < metadata.InboxLength; i++ {
+	for i := range metadata.InboxLength {
 		bulkReq.Keys[n] = getMultiEntryKeyName(inboxKeyPrefix, i)
 		n++
 	}
-	for i := 0; i < metadata.HistoryLength; i++ {
+	for i := range metadata.HistoryLength {
 		bulkReq.Keys[n] = getMultiEntryKeyName(historyKeyPrefix, i)
 		n++
 	}
@@ -351,7 +351,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 	// Parse responses
 	loadedRecords += len(bulkRes)
 	var key string
-	for i := 0; i < metadata.InboxLength; i++ {
+	for i := range metadata.InboxLength {
 		key = getMultiEntryKeyName(inboxKeyPrefix, i)
 		if bulkRes[key] == nil {
 			return nil, fmt.Errorf("failed to load inbox state key '%s': not found", key)
@@ -361,7 +361,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
 		}
 	}
-	for i := 0; i < metadata.HistoryLength; i++ {
+	for i := range metadata.HistoryLength {
 		key = getMultiEntryKeyName(historyKeyPrefix, i)
 		if bulkRes[key] == nil {
 			return nil, fmt.Errorf("failed to load history state key '%s': not found", key)

@@ -53,7 +53,7 @@ func ValidateSelfHostedAppID(appID string) error {
 }
 
 func serviceName(appID string) string {
-	return fmt.Sprintf("%s-dapr", appID)
+	return appID + "-dapr"
 }
 
 // The function was adapted from: https://github.com/kubernetes/apimachinery/blob/fc49b38c19f02a58ebc476347e622142f19820b9/pkg/util/validation/validation.go
