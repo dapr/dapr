@@ -283,7 +283,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	pt := parallel.New(t)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		pt.Add(func(c *assert.CollectT) {
 			host := b.daprd1.GRPCAddress()
 			//nolint:staticcheck

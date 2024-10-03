@@ -116,7 +116,7 @@ func ExampleNewRunnerWithOptions_disposer() {
 
 	// The disposer should be 3 times called with values 1, 2, 3
 	disposed := []int32{}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		disposed = append(disposed, <-disposerCalled)
 	}
 	slices.Sort(disposed)
@@ -352,7 +352,7 @@ func TestPolicyDisposer(t *testing.T) {
 
 	// The disposer should be 3 times called with values 1, 2, 3
 	disposed := []int32{}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		disposed = append(disposed, <-disposerCalled)
 	}
 	// Shouldn't have more messages coming in
