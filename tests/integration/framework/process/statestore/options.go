@@ -22,6 +22,14 @@ import (
 type options struct {
 	socket     *socket.Socket
 	statestore state.Store
+
+	getErr        error
+	bulkGetErr    error
+	bulkDeleteErr error
+	queryErr      error
+	bulkSetErr    error
+	deleteErr     error
+	setErr        error
 }
 
 func WithSocket(socket *socket.Socket) Option {
@@ -33,5 +41,47 @@ func WithSocket(socket *socket.Socket) Option {
 func WithStateStore(store state.Store) Option {
 	return func(o *options) {
 		o.statestore = store
+	}
+}
+
+func WithGetError(err error) Option {
+	return func(o *options) {
+		o.getErr = err
+	}
+}
+
+func WithBulkGetError(err error) Option {
+	return func(o *options) {
+		o.bulkGetErr = err
+	}
+}
+
+func WithBulkDeleteError(err error) Option {
+	return func(o *options) {
+		o.bulkDeleteErr = err
+	}
+}
+
+func WithQueryError(err error) Option {
+	return func(o *options) {
+		o.queryErr = err
+	}
+}
+
+func WithBulkSetError(err error) Option {
+	return func(o *options) {
+		o.bulkSetErr = err
+	}
+}
+
+func WithDeleteError(err error) Option {
+	return func(o *options) {
+		o.deleteErr = err
+	}
+}
+
+func WithSetError(err error) Option {
+	return func(o *options) {
+		o.setErr = err
 	}
 }

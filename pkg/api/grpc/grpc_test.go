@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"strconv"
 	"testing"
 	"time"
@@ -50,6 +51,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	daprerrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/api/universal"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -2911,6 +2913,14 @@ func TestStateStoreErrors(t *testing.T) {
 
 		assert.Equal(t, "rpc error: code = Internal desc = failed deleting state with key a: error", err2.Error())
 	})
+
+	t.Run("standardized error", func(t *testing.T) {
+		a := &api{}
+		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, http.StatusNotFound, "", "testReason")
+		err2 := a.stateErrorResponse(standardizedErr, messages.ErrStateSave, "a", standardizedErr.Error())
+
+		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", err2.Error())
+	})
 }
 
 func TestExtractEtag(t *testing.T) {
@@ -3846,6 +3856,10 @@ func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.Subs
 }
 
 func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
+	return nil
+}
+
+func (m *mockConfigStore) Close() error {
 	return nil
 }
 

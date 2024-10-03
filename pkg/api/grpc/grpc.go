@@ -61,6 +61,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
+	kiterrors "github.com/dapr/kit/errors"
 	"github.com/dapr/kit/logger"
 )
 
@@ -595,7 +596,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	bulkResp.Items = make([]*runtimev1pb.BulkStateItem, len(responses))
-	for i := 0; i < len(responses); i++ {
+	for i := range responses {
 		item := &runtimev1pb.BulkStateItem{
 			Key:      stateLoader.GetOriginalStateKey(responses[i].Key),
 			Data:     responses[i].Data,
@@ -658,7 +659,13 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
+		kerr, ok := kiterrors.FromError(err)
+		if ok {
+			err = kerr.GRPCStatus().Err()
+		} else {
+			err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
+		}
+
 		a.logger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -776,6 +783,11 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 		case state.ETagInvalid:
 			return status.Errorf(codes.InvalidArgument, format, args...)
 		}
+	}
+
+	kerr, ok := kiterrors.FromError(err)
+	if ok {
+		return kerr
 	}
 
 	return status.Errorf(codes.Internal, format, args...)

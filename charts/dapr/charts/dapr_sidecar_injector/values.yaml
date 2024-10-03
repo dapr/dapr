@@ -37,6 +37,8 @@ kubeClusterDomain: cluster.local
 ignoreEntrypointTolerations: "[{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"alibabacloud.com/eci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"azure.com/aci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"aws\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"huawei.com/cci\\\"}]"
 hostNetwork: false
 healthzPort: 8080
+objectSelector: {}
+namespaceSelector: {}
 
 livenessProbe:
   initialDelaySeconds: 3

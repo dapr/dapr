@@ -250,10 +250,8 @@ func (s *server) Close() error {
 	}
 
 	if s.api != nil {
-		if closer, ok := s.api.(io.Closer); ok {
-			if err := closer.Close(); err != nil {
-				return err
-			}
+		if err := s.api.Close(); err != nil {
+			return err
 		}
 	}
 
@@ -321,6 +319,8 @@ func (s *server) getGRPCServer() (*grpcGo.Server, error) {
 		opts = append(opts, s.grpcServerOpts...)
 	}
 
+	// TODO: fix types
+	//nolint:gosec
 	opts = append(opts,
 		grpcGo.MaxRecvMsgSize(s.config.MaxRequestBodySize),
 		grpcGo.MaxSendMsgSize(s.config.MaxRequestBodySize),
@@ -383,6 +383,8 @@ func (s *server) printAPILog(ctx context.Context, method string, duration time.D
 	}
 	// Report duration in milliseconds
 	fields["duration"] = duration.Milliseconds()
+	// TODO: fix types
+	//nolint:gosec
 	fields["code"] = int32(code)
 	s.infoLogger.WithFields(fields).Info("gRPC API Called")
 }

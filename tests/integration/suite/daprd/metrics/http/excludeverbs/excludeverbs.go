@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -71,7 +72,9 @@ func (h *excludeVerbs) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("service invocation - exclude http verbs", func(t *testing.T) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/orders/123")
-		metrics := h.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:|path:/v1.0/invoke/myapp/method/orders/123|status:200"]))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := h.daprd.Metrics(t, ctx)
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:|path:/v1.0/invoke/myapp/method/orders/123|status:200"]))
+		}, time.Second*10, time.Millisecond*10)
 	})
 }
