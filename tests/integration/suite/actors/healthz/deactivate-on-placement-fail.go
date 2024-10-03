@@ -118,7 +118,7 @@ func (h *deactivateOnPlacementFail) Run(t *testing.T, ctx context.Context) {
 
 	// Validate invocations
 	invoked := make([]string, 2)
-	for i := range 2 {
+	for i := range invoked {
 		select {
 		case invoked[i] = <-h.invokedActorsCh:
 		case <-time.After(time.Second * 5):

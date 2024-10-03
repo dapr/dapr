@@ -181,7 +181,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	})
 
 	pt := parallel.New(t)
-	for i := range len(f.getFuzzKeys) {
+	for i := range f.getFuzzKeys {
 		pt.Add(func(t *assert.CollectT) {
 			for _, req := range []any{f.saveReqBinaries[i], f.saveReqStrings[i]} {
 				postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName))

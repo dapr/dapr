@@ -131,7 +131,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*40, time.Millisecond*10, "failed to find job's key in etcd")
 
 	// ensure data exists on ALL schedulers
-	for i := range 3 {
+	for i := range n.schedulers {
 		diffScheduler := n.schedulers[i]
 
 		diffSchedulerPort := diffScheduler.EtcdClientPort()

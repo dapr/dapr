@@ -986,7 +986,7 @@ func TestTransactionalState(t *testing.T) {
 		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		ops := make([]TransactionalOperation, 20)
-		for i := range 20 {
+		for i := range ops {
 			ops[i] = TransactionalOperation{
 				Operation: Upsert,
 				Request: TransactionalUpsert{

@@ -192,7 +192,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	httpClient := fclient.HTTP(t)
 
 	pt := parallel.New(t)
-	for i := range len(f.getFuzzKeys) {
+	for i := range f.getFuzzKeys {
 		pt.Add(func(t *assert.CollectT) {
 			for _, req := range [][]*commonv1.StateItem{f.saveReqBinaries[i], f.saveReqStrings[i]} {
 				_, err := client.SaveState(ctx, &rtv1.SaveStateRequest{

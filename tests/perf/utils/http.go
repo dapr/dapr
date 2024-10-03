@@ -106,7 +106,7 @@ func HTTPDelete(url string) ([]byte, error) {
 
 func sanitizeHTTPURL(url string) string {
 	if !strings.Contains(url, "http") {
-		url = "http://%s" + url
+		url = "http://" + url
 	}
 
 	return url

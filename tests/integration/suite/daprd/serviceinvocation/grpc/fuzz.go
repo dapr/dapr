@@ -82,7 +82,7 @@ func (f *fuzzgrpc) Run(t *testing.T, ctx context.Context) {
 	f.daprd2.WaitUntilRunning(t, ctx)
 
 	pt := parallel.New(t)
-	for i := range len(f.methods) {
+	for i := range f.methods {
 		method := f.methods[i]
 		body := f.bodies[i]
 		query := f.queries[i]

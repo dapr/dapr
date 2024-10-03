@@ -1030,7 +1030,6 @@ func TestReminderRepeats(t *testing.T) {
 				check := func() bool {
 					select {
 					case request := <-requestC:
-						// Decrease i since time hasn't increased.
 						assert.Equal(t, string(reminder.Data), "\""+request.Data.(string)+"\"")
 						return false
 					case <-ticker.C():
@@ -1164,7 +1163,6 @@ func TestReminderTTL(t *testing.T) {
 				check := func() bool {
 					select {
 					case request := <-requestC:
-						// Decrease i since time hasn't increased.
 						assert.Equal(t, string(req.Data), "\""+request.Data.(string)+"\"")
 						return false
 					case <-ctx.Done():

@@ -2773,7 +2773,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 
 	tooManyOperations := make([]*runtimev1pb.TransactionalStateOperation, 20)
-	for i := range 20 {
+	for i := range tooManyOperations {
 		tooManyOperations[i] = &runtimev1pb.TransactionalStateOperation{
 			OperationType: string(state.OperationUpsert),
 			Request: &commonv1pb.StateItem{

@@ -61,7 +61,7 @@ func (j *jwks) Setup(t *testing.T) []framework.Option {
 	jwtPriv, jwtPub := j.genPrivateJWK(t)
 
 	tokenFiles := make([]string, 3)
-	for i := range 3 {
+	for i := range tokenFiles {
 		token := j.signJWT(t, jwtPriv, "spiffe://localhost/ns/default/dapr-placement")
 		tokenFiles[i] = filepath.Join(t.TempDir(), "token-"+strconv.Itoa(i))
 		require.NoError(t, os.WriteFile(tokenFiles[i], token, 0o600))

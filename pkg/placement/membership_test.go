@@ -385,8 +385,8 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	var (
 		overArr       [testClients]int64
 		overArrLock   sync.RWMutex
-		clientConns   = make([]*grpc.ClientConn, 0, 10)
-		clientStreams = make([]v1pb.Placement_ReportDaprStatusClient, 0, 10)
+		clientConns   = make([]*grpc.ClientConn, 0, testClients)
+		clientStreams = make([]v1pb.Placement_ReportDaprStatusClient, 0, testClients)
 		wg            sync.WaitGroup
 	)
 	startFlag := atomic.Bool{}
