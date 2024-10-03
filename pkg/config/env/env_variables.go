@@ -24,5 +24,5 @@ const (
 	// OpenTelemetry transport protocol (grpc, http/protobuf, http/json)
 	OtlpExporterProtocol string = "OTEL_EXPORTER_OTLP_PROTOCOL"
 	// OpenTelemetry headers to add to transport
-	OTEL_EXPORTER_OTLP_HEADERS string = "OTEL_EXPORTER_OTLP_HEADERS"
+	OtlpExporterHeaders string = "OTEL_EXPORTER_OTLP_HEADERS"
 )

@@ -479,6 +479,7 @@ func TestSetTracingSpecFromEnv(t *testing.T) {
 	t.Setenv("OTEL_EXPORTER_OTLP_ENDPOINT", "http://otlpendpoint:1234")
 	t.Setenv("OTEL_EXPORTER_OTLP_INSECURE", "true")
 	t.Setenv("OTEL_EXPORTER_OTLP_PROTOCOL", "http/json")
+	// Use various spacing within string to check trimming behavior.
 	t.Setenv("OTEL_EXPORTER_OTLP_HEADERS", "authorization=Bearer token,  User-Agent = dapr,x-api-key= 1234 ,x-debug =no")
 
 	// get default configuration

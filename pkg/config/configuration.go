@@ -563,7 +563,7 @@ func SetTracingSpecFromEnv(conf *Configuration) {
 		}
 	}
 
-	if headers := os.Getenv(env.OTEL_EXPORTER_OTLP_HEADERS); headers != "" {
+	if headers := os.Getenv(env.OtlpExporterHeaders); headers != "" {
 		for _, pair := range strings.Split(headers, ",") {
 			pair = strings.TrimSpace(pair)
 			// We do not validate any env variable values in this function so ignore
