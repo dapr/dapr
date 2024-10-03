@@ -19,7 +19,6 @@ import (
 	"io"
 	"strings"
 
-	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/metadata"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -101,18 +100,9 @@ func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodR
 	return imr
 }
 
-// WithFastHTTPHeaders populates HTTP response header to gRPC header metadata.
+// WithHTTPHeaders populates HTTP response header to gRPC header metadata.
 func (imr *InvokeMethodResponse) WithHTTPHeaders(headers map[string][]string) *InvokeMethodResponse {
 	imr.r.Headers = internalv1pb.MetadataToInternalMetadata(headers)
-	return imr
-}
-
-// WithFastHTTPHeaders populates fasthttp response header to gRPC header metadata.
-func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHeader) *InvokeMethodResponse {
-	md := internalv1pb.FastHTTPHeadersToInternalMetadata(header)
-	if len(md) > 0 {
-		imr.r.Headers = md
-	}
 	return imr
 }
 

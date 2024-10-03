@@ -26,7 +26,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
@@ -82,22 +81,22 @@ func TestForwardedHeaders(t *testing.T) {
 
 		dm.addForwardedHeadersToMetadata(req)
 
-		md := req.Metadata()[fasthttp.HeaderXForwardedFor]
+		md := req.Metadata()["X-Forwarded-For"]
 		assert.Equal(t, "1", md.GetValues()[0])
 
-		md = req.Metadata()[fasthttp.HeaderXForwardedHost]
+		md = req.Metadata()["X-Forwarded-Host"]
 		assert.Equal(t, "2", md.GetValues()[0])
 
-		md = req.Metadata()[fasthttp.HeaderForwarded]
+		md = req.Metadata()["Forwarded"]
 		assert.Equal(t, "for=1;by=1;host=2", md.GetValues()[0])
 	})
 
 	t.Run("forwarded headers get appended", func(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("GET").
 			WithMetadata(map[string][]string{
-				fasthttp.HeaderXForwardedFor:  {"originalXForwardedFor"},
-				fasthttp.HeaderXForwardedHost: {"originalXForwardedHost"},
-				fasthttp.HeaderForwarded:      {"originalForwarded"},
+				"X-Forwarded-For":  {"originalXForwardedFor"},
+				"X-Forwarded-Host": {"originalXForwardedHost"},
+				"Forwarded":        {"originalForwarded"},
 			})
 		defer req.Close()
 
@@ -107,15 +106,15 @@ func TestForwardedHeaders(t *testing.T) {
 
 		dm.addForwardedHeadersToMetadata(req)
 
-		md := req.Metadata()[fasthttp.HeaderXForwardedFor]
+		md := req.Metadata()["X-Forwarded-For"]
 		assert.Equal(t, "originalXForwardedFor", md.GetValues()[0])
 		assert.Equal(t, "1", md.GetValues()[1])
 
-		md = req.Metadata()[fasthttp.HeaderXForwardedHost]
+		md = req.Metadata()["X-Forwarded-Host"]
 		assert.Equal(t, "originalXForwardedHost", md.GetValues()[0])
 		assert.Equal(t, "2", md.GetValues()[1])
 
-		md = req.Metadata()[fasthttp.HeaderForwarded]
+		md = req.Metadata()["Forwarded"]
 		assert.Equal(t, "originalForwarded", md.GetValues()[0])
 		assert.Equal(t, "for=1;by=1;host=2", md.GetValues()[1])
 	})

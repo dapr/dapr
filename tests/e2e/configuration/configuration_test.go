@@ -183,7 +183,7 @@ func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType 
 	expectedItemsInBytes, _ := json.Marshal(items)
 	expectedItems := string(expectedItemsInBytes)
 	require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, appResp.Message)
-	require.Equalf(t, expectedItems, appResp.Message, "expected %s, got %s", expectedItems, appResp.Message)
+	require.JSONEq(t, expectedItems, appResp.Message, "expected %s, got %s", expectedItems, appResp.Message)
 }
 
 func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string, component componentType) {

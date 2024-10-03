@@ -24,8 +24,12 @@ import (
 // isolated when running in parallel.
 // The returned client will call CloseIdleConnections on test cleanup.
 func HTTP(t *testing.T) *http.Client {
+	return HTTPWithTimeout(t, time.Second*10)
+}
+
+func HTTPWithTimeout(t *testing.T, timeout time.Duration) *http.Client {
 	client := &http.Client{
-		Timeout:   time.Second * 10,
+		Timeout:   timeout,
 		Transport: http.DefaultTransport.(*http.Transport).Clone(),
 	}
 

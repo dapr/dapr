@@ -18,7 +18,6 @@ import (
 	"strconv"
 	"strings"
 
-	"github.com/valyala/fasthttp"
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
@@ -112,11 +111,10 @@ func startTracingClientSpanFromHTTPRequest(r *http.Request, spanName string, spe
 	return span
 }
 
-func StartProducerSpanChildFromParent(ctx *fasthttp.RequestCtx, parentSpan trace.Span) trace.Span {
-	path := string(ctx.Request.URI().Path())
-	netCtx := trace.ContextWithRemoteSpanContext(ctx, parentSpan.SpanContext())
+func StartProducerSpanChildFromParent(r *http.Request, parentSpan trace.Span) trace.Span {
+	netCtx := trace.ContextWithRemoteSpanContext(r.Context(), parentSpan.SpanContext())
 	kindOption := trace.WithSpanKind(trace.SpanKindProducer)
-	_, span := tracer.Start(netCtx, path, kindOption)
+	_, span := tracer.Start(netCtx, r.URL.Path, kindOption)
 	return span
 }
 

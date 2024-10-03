@@ -447,7 +447,7 @@ func (s *server) addEndpointCtx(e endpoints.Endpoint, next http.Handler) http.Ha
 }
 
 func (s *server) handle(e endpoints.Endpoint, path string, r chi.Router, unescapeParameters bool) {
-	handler := e.GetHandler()
+	handler := e.Handler
 
 	if unescapeParameters {
 		handler = s.unescapeRequestParametersHandler(handler)

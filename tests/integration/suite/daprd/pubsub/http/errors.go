@@ -194,7 +194,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
 		require.True(t, exists)
-		expectedErr := "unexpected end of JSON input"
+		expectedErr := "unexpected EOF"
 		require.Equal(t, fmt.Sprintf("error when unmarshaling the request for topic topic pubsub %s: %s", name, expectedErr), errMsg) //nolint:dupword
 
 		// Confirm that the 'details' field exists and has one element
