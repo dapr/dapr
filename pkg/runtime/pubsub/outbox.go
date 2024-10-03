@@ -178,6 +178,8 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 
 				if proj.ContentType != nil {
 					contentType = *proj.ContentType
+				} else if ct, ok := proj.Metadata[metadata.ContentType]; ok {
+					contentType = ct
 				}
 			} else {
 				payload = sr.Value
