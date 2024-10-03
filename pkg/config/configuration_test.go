@@ -547,7 +547,8 @@ func TestTracingTimeoutFromEnv(t *testing.T) {
 	t.Setenv(env.OtlpExporterTracesTimeout, "invalid")
 	conf := LoadDefaultConfiguration()
 	err := SetTracingSpecFromEnv(conf)
-	require.NoError(t, err)
+	require.Error(t, err)
+	require.Contains(t, err.Error(), "invalid syntax")
 	assert.Equal(t, 0, conf.Spec.TracingSpec.Otel.Timeout)
 
 	t.Setenv(env.OtlpExporterTracesTimeout, "-1")
