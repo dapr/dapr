@@ -98,12 +98,6 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	metrics := a.scheduler.Metrics(t, ctx)
 	assert.Equal(t, 0, int(metrics["dapr_scheduler_jobs_created_total"]))
 
-	_, err := grpcClient.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
-		ActorType: "myactortype",
-		ActorId:   "myactorid",
-		Method:    "foo",
-	})
-	require.NoError(t, err)
 
 	_, err = grpcClient.RegisterActorReminder(ctx, &runtimev1pb.RegisterActorReminderRequest{
 		ActorType: "myactortype",

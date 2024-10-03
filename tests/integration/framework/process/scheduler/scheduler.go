@@ -222,7 +222,7 @@ func (s *Scheduler) DataDir() string {
 func (s *Scheduler) ETCDClient(t *testing.T) *client.EtcdClient {
 	t.Helper()
 
-	client := client.Etcd(t, clientv3.Config{
+	return client.Etcd(t, clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
 		DialTimeout: 40 * time.Second, //nolint:mnd
 	})

@@ -65,16 +65,15 @@ func (c *EtcdClient) ListAllKeys(ctx context.Context, prefix string) ([]string, 
 	return r, nil
 }
 
-func (c *EtcdClient) Get(ctx context.Context, prefix string, opts ...clientv3.OpOption) ([]string, error) {
+func (c *EtcdClient) Get(t *testing.T, ctx context.Context, prefix string, opts ...clientv3.OpOption) error {
+	t.Helper()
 	resp, err := c.client.Get(ctx, prefix, opts...)
-	if err != nil {
-		return nil, err
-	}
+	require.NoError(t, err)
 
 	keys := make([]string, len(resp.Kvs))
 	for i, kv := range resp.Kvs {
 		keys[i] = string(kv.Key)
 	}
 
-	return keys, nil
+	return keys
 }

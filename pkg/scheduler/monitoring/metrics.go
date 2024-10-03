@@ -21,7 +21,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	 "github.com/dapr/dapr/pkg/diagnostics/utils"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
