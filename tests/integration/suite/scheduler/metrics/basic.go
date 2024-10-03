@@ -95,9 +95,7 @@ func (b *basic) etcdHasJob(t *testing.T, ctx context.Context, key string) bool {
 	t.Helper()
 
 	// Get keys with prefix
-	keys, err := b.scheduler.ETCDClient(t).Get(ctx, "", clientv3.WithPrefix())
-	require.NoError(t, err)
-
+	keys := b.scheduler.ETCDClient(t).Get(t, ctx, "", clientv3.WithPrefix())
 	for _, k := range keys {
 		if strings.HasSuffix(k, "||"+key) {
 			return true

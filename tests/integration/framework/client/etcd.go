@@ -65,7 +65,7 @@ func (c *EtcdClient) ListAllKeys(ctx context.Context, prefix string) ([]string, 
 	return r, nil
 }
 
-func (c *EtcdClient) Get(t *testing.T, ctx context.Context, prefix string, opts ...clientv3.OpOption) error {
+func (c *EtcdClient) Get(t *testing.T, ctx context.Context, prefix string, opts ...clientv3.OpOption) []string {
 	t.Helper()
 	resp, err := c.client.Get(ctx, prefix, opts...)
 	require.NoError(t, err)

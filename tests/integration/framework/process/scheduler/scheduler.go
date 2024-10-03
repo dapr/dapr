@@ -226,8 +226,6 @@ func (s *Scheduler) ETCDClient(t *testing.T) *client.EtcdClient {
 		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
 		DialTimeout: 40 * time.Second, //nolint:mnd
 	})
-
-	return client
 }
 
 func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
