@@ -57,6 +57,7 @@ const (
 	EndpointGroupHealth            EndpointGroupName = "healthz"
 	EndpointGroupJobs              EndpointGroupName = "jobs"
 	EndpointGroupShutdown          EndpointGroupName = "shutdown"
+	EndpointGroupConversation      EndpointGroupName = "conversation"
 )
 
 // EndpointGroupVersion is the version of an endpoint group.
