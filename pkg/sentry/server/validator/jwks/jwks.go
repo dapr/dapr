@@ -23,6 +23,7 @@ import (
 	"github.com/lestrrat-go/jwx/v2/jwt"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/sentry/server/validator"
 	"github.com/dapr/dapr/pkg/sentry/server/validator/internal"
@@ -43,6 +44,8 @@ type Options struct {
 	MinRefreshInterval time.Duration `mapstructure:"minRefreshInterval"`
 	// Timeout for network requests.
 	RequestTimeout time.Duration `mapstructure:"requestTimeout"`
+	// Healthz controls the healthz endpoint for the JWKS cache.
+	Healthz healthz.Healthz
 }
 
 // jwks implements the validator.Interface.
@@ -53,9 +56,10 @@ type Options struct {
 type jwks struct {
 	sentryAudience string
 	cache          *jwkscache.JWKSCache
+	htarget        healthz.Target
 }
 
-func New(ctx context.Context, opts Options) (validator.Validator, error) {
+func New(opts Options) (validator.Validator, error) {
 	cache := jwkscache.NewJWKSCache(opts.Source, log)
 
 	// Set options
@@ -72,10 +76,19 @@ func New(ctx context.Context, opts Options) (validator.Validator, error) {
 	return &jwks{
 		sentryAudience: opts.SentryID.String(),
 		cache:          cache,
+		htarget:        opts.Healthz.AddTarget(),
 	}, nil
 }
 
 func (j *jwks) Start(ctx context.Context) error {
+	defer j.htarget.NotReady()
+	go func() {
+		if err := j.cache.WaitForCacheReady(ctx); err != nil {
+			return
+		}
+		j.htarget.Ready()
+	}()
+
 	// Start the cache. Note this is a blocking call
 	err := j.cache.Start(ctx)
 	if err != nil {
@@ -85,26 +98,26 @@ func (j *jwks) Start(ctx context.Context) error {
 	return nil
 }
 
-func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (td spiffeid.TrustDomain, overrideDuration bool, err error) {
+func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
 	if req.GetToken() == "" {
-		return td, false, errors.New("the request does not contain a token")
+		return spiffeid.TrustDomain{}, errors.New("the request does not contain a token")
 	}
 
-	if err = j.cache.WaitForCacheReady(ctx); err != nil {
-		return td, false, errors.New("jwks validator not ready")
+	if err := j.cache.WaitForCacheReady(ctx); err != nil {
+		return spiffeid.TrustDomain{}, errors.New("jwks validator not ready")
 	}
 
 	// Validate the internal request
 	// This also returns the trust domain.
-	td, _, err = internal.Validate(ctx, req)
+	td, err := internal.Validate(ctx, req)
 	if err != nil {
-		return td, false, err
+		return spiffeid.TrustDomain{}, err
 	}
 
 	// Construct the expected value for the subject, which is the SPIFFE ID of the requestor
 	sub, err := spiffeid.FromSegments(td, "ns", req.GetNamespace(), req.GetId())
 	if err != nil {
-		return td, false, fmt.Errorf("failed to construct SPIFFE ID for requestor: %w", err)
+		return spiffeid.TrustDomain{}, fmt.Errorf("failed to construct SPIFFE ID for requestor: %w", err)
 	}
 
 	// Validate the authorization token
@@ -113,11 +126,12 @@ func (j *jwks) Validate(ctx context.Context, req *sentryv1pb.SignCertificateRequ
 		jwt.WithAcceptableSkew(5*time.Minute),
 		jwt.WithContext(ctx),
 		jwt.WithAudience(j.sentryAudience),
+		// TODO: @joshvanl: extract the trust domain from the subject.
 		jwt.WithSubject(sub.String()),
 	)
 	if err != nil {
-		return td, false, fmt.Errorf("token validation failed: %w", err)
+		return spiffeid.TrustDomain{}, fmt.Errorf("token validation failed: %w", err)
 	}
 
-	return td, false, nil
+	return td, nil
 }

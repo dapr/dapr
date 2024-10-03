@@ -42,8 +42,8 @@ import (
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	resiliencyapi "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
-	"github.com/dapr/dapr/pkg/health"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/api"
 	operatorcache "github.com/dapr/dapr/pkg/operator/cache"
@@ -52,14 +52,13 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.operator")
 
 // Operator is an Dapr Kubernetes Operator for managing components and sidecar lifecycle.
 type Operator interface {
-	Run(ctx context.Context) error
+	Start(ctx context.Context) error
 }
 
 // Options contains the options for `NewOperator`.
@@ -75,22 +74,32 @@ type Options struct {
 	WatchdogCanPatchPodLabels           bool
 	TrustAnchorsFile                    string
 	APIPort                             int
+	APIListenAddress                    string
 	HealthzPort                         int
+	HealthzListenAddress                string
 	WebhookServerPort                   int
+	WebhookServerListenAddress          string
+	Healthz                             healthz.Healthz
 }
 
 type operator struct {
 	apiServer api.Server
 
-	config *Config
-
+	config      *Config
 	mgr         ctrl.Manager
 	secProvider security.Provider
-	healthzPort int
+
+	secHealthz                  healthz.Target
+	apiServerHealthz            healthz.Target
+	webhookHealthz              healthz.Target
+	httpEndpointInformerHealthz healthz.Target
+	subInformerHealthz          healthz.Target
 }
 
 // NewOperator returns a new Dapr Operator.
 func NewOperator(ctx context.Context, opts Options) (Operator, error) {
+	htargets := opts.Healthz.AddTargetSet(5)
+
 	conf, err := ctrl.GetConfig()
 	if err != nil {
 		return nil, fmt.Errorf("unable to get controller runtime configuration, err: %s", err)
@@ -105,11 +114,12 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		SentryAddress:           config.SentryAddress,
 		ControlPlaneTrustDomain: config.ControlPlaneTrustDomain,
 		ControlPlaneNamespace:   security.CurrentNamespace(),
-		TrustAnchorsFile:        opts.TrustAnchorsFile,
+		TrustAnchorsFile:        &opts.TrustAnchorsFile,
 		AppID:                   "dapr-operator",
 		// mTLS is always enabled for the operator.
 		MTLSEnabled: true,
 		Mode:        modes.KubernetesMode,
+		Healthz:     opts.Healthz,
 	})
 	if err != nil {
 		return nil, err
@@ -126,6 +136,7 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 		Logger: logr.Discard(),
 		Scheme: scheme,
 		WebhookServer: webhook.NewServer(webhook.Options{
+			Host: opts.WebhookServerListenAddress,
 			Port: opts.WebhookServerPort,
 			TLSOpts: []func(*tls.Config){
 				func(tlsConfig *tls.Config) {
@@ -179,32 +190,21 @@ func NewOperator(ctx context.Context, opts Options) (Operator, error) {
 	}
 
 	return &operator{
-		mgr:         mgr,
-		secProvider: secProvider,
-		config:      config,
-		healthzPort: opts.HealthzPort,
+		mgr:                         mgr,
+		secProvider:                 secProvider,
+		config:                      config,
+		secHealthz:                  htargets[0],
+		apiServerHealthz:            htargets[1],
+		webhookHealthz:              htargets[2],
+		httpEndpointInformerHealthz: htargets[3],
+		subInformerHealthz:          htargets[4],
 		apiServer: api.NewAPIServer(api.Options{
-			Client:   mgrClient,
+			Client:   mgr.GetClient(),
+			Cache:    mgr.GetCache(),
 			Security: secProvider,
 			Port:     opts.APIPort,
 		}),
 	}, nil
-}
-
-func (o *operator) syncComponent(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
-	return func(obj interface{}) {
-		var c *componentsapi.Component
-		switch o := obj.(type) {
-		case *componentsapi.Component:
-			c = o
-		case cache.DeletedFinalStateUnknown:
-			c = o.Obj.(*componentsapi.Component)
-		}
-		if c != nil {
-			log.Debugf("Observed component to be synced: %s/%s", c.Namespace, c.Name)
-			o.apiServer.OnComponentUpdated(ctx, eventType, c)
-		}
-	}
 }
 
 func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
@@ -217,12 +217,24 @@ func (o *operator) syncHTTPEndpoint(ctx context.Context) func(obj interface{}) {
 	}
 }
 
-func (o *operator) Run(ctx context.Context) error {
+func (o *operator) syncSubscription(ctx context.Context, eventType operatorv1pb.ResourceEventType) func(obj interface{}) {
+	return func(obj interface{}) {
+		var s *subapi.Subscription
+		switch o := obj.(type) {
+		case *subapi.Subscription:
+			s = o
+		case cache.DeletedFinalStateUnknown:
+			s = o.Obj.(*subapi.Subscription)
+		}
+		if s != nil {
+			log.Debugf("Observed Subscription to be synced: %s/%s", s.Namespace, s.Name)
+			o.apiServer.OnSubscriptionUpdated(ctx, eventType, s)
+		}
+	}
+}
+
+func (o *operator) Start(ctx context.Context) error {
 	log.Info("Dapr Operator is starting")
-	healthzServer := health.NewServer(health.Options{
-		Log:     log,
-		Targets: ptr.Of(5),
-	})
 
 	/*
 		Make sure to set `ENABLE_WEBHOOKS=false` when we run locally.
@@ -236,7 +248,7 @@ func (o *operator) Run(ctx context.Context) error {
 			return fmt.Errorf("unable to create webhook Subscriptions v1alpha1: %w", err)
 		}
 		err = ctrl.NewWebhookManagedBy(o.mgr).
-			For(&subscriptionsapiV2alpha1.Subscription{}).
+			For(&subapi.Subscription{}).
 			Complete()
 		if err != nil {
 			return fmt.Errorf("unable to create webhook Subscriptions v2alpha1: %w", err)
@@ -253,32 +265,23 @@ func (o *operator) Run(ctx context.Context) error {
 			if rErr != nil {
 				return rErr
 			}
-			healthzServer.Ready()
+			o.secHealthz.Ready()
 			return o.mgr.Start(ctx)
-		},
-		func(ctx context.Context) error {
-			// start healthz server
-			if rErr := healthzServer.Run(ctx, o.healthzPort); rErr != nil {
-				return fmt.Errorf("failed to start healthz server: %w", rErr)
-			}
-			return nil
 		},
 		func(ctx context.Context) error {
 			if rErr := o.apiServer.Ready(ctx); rErr != nil {
 				return fmt.Errorf("API server did not become ready in time: %w", rErr)
 			}
-			healthzServer.Ready()
+			o.apiServerHealthz.Ready()
 			log.Infof("Dapr Operator started")
 			<-ctx.Done()
 			return nil
 		},
 		func(ctx context.Context) error {
 			if !enableConversionWebhooks {
-				healthzServer.Ready()
 				<-ctx.Done()
 				return nil
 			}
-
 			sec, rErr := o.secProvider.Handler(ctx)
 			if rErr != nil {
 				return rErr
@@ -288,7 +291,7 @@ func (o *operator) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			if !enableConversionWebhooks {
-				healthzServer.Ready()
+				o.webhookHealthz.Ready()
 				<-ctx.Done()
 				return nil
 			}
@@ -298,7 +301,7 @@ func (o *operator) Run(ctx context.Context) error {
 				return rErr
 			}
 
-			caBundle, rErr := sec.CurrentTrustAnchors()
+			caBundle, rErr := sec.CurrentTrustAnchors(ctx)
 			if rErr != nil {
 				return rErr
 			}
@@ -309,7 +312,7 @@ func (o *operator) Run(ctx context.Context) error {
 					return rErr
 				}
 
-				healthzServer.Ready()
+				o.webhookHealthz.Ready()
 
 				select {
 				case caBundle = <-caBundleCh:
@@ -331,29 +334,6 @@ func (o *operator) Run(ctx context.Context) error {
 				return errors.New("failed to wait for cache sync")
 			}
 
-			componentInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &componentsapi.Component{})
-			if rErr != nil {
-				return fmt.Errorf("unable to get setup components informer: %w", rErr)
-			}
-			_, rErr = componentInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
-				AddFunc: o.syncComponent(ctx, operatorv1pb.ResourceEventType_CREATED),
-				UpdateFunc: func(_, newObj interface{}) {
-					o.syncComponent(ctx, operatorv1pb.ResourceEventType_UPDATED)(newObj)
-				},
-				DeleteFunc: o.syncComponent(ctx, operatorv1pb.ResourceEventType_DELETED),
-			})
-			if rErr != nil {
-				return fmt.Errorf("unable to add components informer event handler: %w", rErr)
-			}
-			healthzServer.Ready()
-			<-ctx.Done()
-			return nil
-		},
-		func(ctx context.Context) error {
-			if !o.mgr.GetCache().WaitForCacheSync(ctx) {
-				return errors.New("failed to wait for cache sync")
-			}
-
 			httpEndpointInformer, rErr := o.mgr.GetCache().GetInformer(ctx, &httpendpointsapi.HTTPEndpoint{})
 			if rErr != nil {
 				return fmt.Errorf("unable to get http endpoint informer: %w", rErr)
@@ -368,7 +348,29 @@ func (o *operator) Run(ctx context.Context) error {
 			if rErr != nil {
 				return fmt.Errorf("unable to add http endpoint informer event handler: %w", rErr)
 			}
-			healthzServer.Ready()
+			o.httpEndpointInformerHealthz.Ready()
+			<-ctx.Done()
+			return nil
+		},
+		func(ctx context.Context) error {
+			if !o.mgr.GetCache().WaitForCacheSync(ctx) {
+				return errors.New("failed to wait for cache sync")
+			}
+			subscriptionInformer, rErr := o.mgr.GetCache().GetInformer(ctx, new(subapi.Subscription))
+			if rErr != nil {
+				return fmt.Errorf("unable to get setup subscriptions informer: %w", rErr)
+			}
+			_, rErr = subscriptionInformer.AddEventHandler(cache.ResourceEventHandlerFuncs{
+				AddFunc: o.syncSubscription(ctx, operatorv1pb.ResourceEventType_CREATED),
+				UpdateFunc: func(_, newObj interface{}) {
+					o.syncSubscription(ctx, operatorv1pb.ResourceEventType_UPDATED)(newObj)
+				},
+				DeleteFunc: o.syncSubscription(ctx, operatorv1pb.ResourceEventType_DELETED),
+			})
+			if rErr != nil {
+				return fmt.Errorf("unable to add subscriptions informer event handler: %w", rErr)
+			}
+			o.subInformerHealthz.Ready()
 			<-ctx.Done()
 			return nil
 		},
@@ -447,7 +449,7 @@ func buildScheme(opts Options) (*runtime.Scheme, error) {
 		resiliencyapi.AddToScheme,
 		httpendpointsapi.AddToScheme,
 		subscriptionsapiV1alpha1.AddToScheme,
-		subscriptionsapiV2alpha1.AddToScheme,
+		subapi.AddToScheme,
 	}
 
 	if opts.ArgoRolloutServiceReconcilerEnabled {

@@ -28,13 +28,15 @@ import (
 	"time"
 
 	fuzz "github.com/google/gofuzz"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -109,10 +111,9 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 		},
 	}
 
-	for f.storeName == "" ||
-		len(path.IsValidPathSegmentName(f.storeName)) > 0 {
-		fuzz.New().Fuzz(&f.storeName)
-	}
+	uid, err := uuid.NewRandom()
+	require.NoError(t, err)
+	f.storeName = uid.String()
 
 	f.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
@@ -152,14 +153,14 @@ spec:
 func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Len(c, util.GetMetaComponents(c, ctx, httpClient, f.daprd.HTTPPort()), 1)
+		assert.Len(c, f.daprd.GetMetaRegisteredComponents(c, ctx), 1)
 	}, time.Second*20, time.Millisecond*10)
 
 	t.Run("get", func(t *testing.T) {
-		pt := util.NewParallel(t)
+		pt := parallel.New(t)
 		for i := range f.getFuzzKeys {
 			i := i
 			pt.Add(func(t *assert.CollectT) {
@@ -180,7 +181,7 @@ func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 		}
 	})
 
-	pt := util.NewParallel(t)
+	pt := parallel.New(t)
 	for i := 0; i < len(f.getFuzzKeys); i++ {
 		i := i
 		pt.Add(func(t *assert.CollectT) {

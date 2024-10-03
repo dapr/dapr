@@ -6,11 +6,13 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 func initWorkflowMetrics() *workflowMetrics {
 	w := newWorkflowMetrics()
-	w.Init("test", "default")
+	_ = w.Init("test", "default", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log))
 
 	return w
 }

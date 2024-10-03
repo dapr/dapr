@@ -51,10 +51,13 @@ type Options struct {
 	WatchdogCanPatchPodLabels          bool
 	TrustAnchorsFile                   string
 	Logger                             logger.Options
-	Metrics                            *metrics.Options
+	Metrics                            *metrics.FlagOptions
 	APIPort                            int
+	APIListenAddress                   string
 	HealthzPort                        int
+	HealthzListenAddress               string
 	WebhookServerPort                  int
+	WebhookServerListenAddress         string
 }
 
 func New() *Options {
@@ -79,13 +82,16 @@ func New() *Options {
 	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
 
 	flag.IntVar(&opts.APIPort, "port", 6500, "The port for the operator API server to listen on")
+	flag.StringVar(&opts.APIListenAddress, "listen-address", "", "The listening address for the operator API server")
 	flag.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
+	flag.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 	flag.IntVar(&opts.WebhookServerPort, "webhook-server-port", 19443, "The port for the webhook server to listen on")
+	flag.StringVar(&opts.WebhookServerListenAddress, "webhook-server-listen-address", "", "The listening address for the webhook server")
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
-	opts.Metrics = metrics.DefaultMetricOptions()
+	opts.Metrics = metrics.DefaultFlagOptions()
 	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
 
 	flag.Parse()

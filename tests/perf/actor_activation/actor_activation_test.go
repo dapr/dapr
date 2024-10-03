@@ -163,18 +163,6 @@ func TestActorActivate(t *testing.T) {
 	}
 	t.Logf("Actual QPS: %.2f, expected QPS: %d", daprResult.ActualQPS, p.QPS)
 
-	report := perf.NewTestReport(
-		[]perf.TestResult{daprResult},
-		"Actor Activation",
-		sidecarUsage,
-		appUsage)
-	report.SetTotalRestartCount(restarts)
-	err = utils.UploadAzureBlob(report)
-
-	if err != nil {
-		t.Error(err)
-	}
-
 	summary.ForTest(t).
 		Service(serviceApplicationName).
 		Client(clientApplicationName).

@@ -212,6 +212,8 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	securityContext := &corev1.SecurityContext{
 		AllowPrivilegeEscalation: ptr.Of(false),
 		RunAsNonRoot:             ptr.Of(c.RunAsNonRoot),
+		RunAsUser:                c.RunAsUser,
+		RunAsGroup:               c.RunAsGroup,
 		ReadOnlyRootFilesystem:   ptr.Of(c.ReadOnlyRootFilesystem),
 	}
 	if c.SidecarSeccompProfileType != "" {
@@ -266,6 +268,17 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			},
 		)
 	}
+
+	// Scheduler address could be empty if scheduler service is disabled
+	if c.SchedulerAddress != "" {
+		env = append(env,
+			corev1.EnvVar{
+				Name:  injectorConsts.SchedulerHostAddressEnvVar,
+				Value: c.SchedulerAddress,
+			},
+		)
+	}
+
 	container := &corev1.Container{
 		Name:            injectorConsts.SidecarContainerName,
 		Image:           c.SidecarImage,
@@ -290,24 +303,6 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			FailureThreshold:    c.SidecarLivenessProbeThreshold,
 		},
 	}
-
-	// TODO: @joshvanl: included for backwards compatibility with v1.11 daprd's
-	// which request these environment variables to be present when running in
-	// Kubernetes. Should be removed in v1.13.
-	container.Env = append(container.Env,
-		corev1.EnvVar{
-			Name:  securityConsts.CertChainEnvVar,
-			Value: c.CertChain,
-		},
-		corev1.EnvVar{
-			Name:  securityConsts.CertKeyEnvVar,
-			Value: c.CertKey,
-		},
-		corev1.EnvVar{
-			Name:  "SENTRY_LOCAL_IDENTITY",
-			Value: c.Identity,
-		},
-	)
 
 	// If the pod contains any of the tolerations specified by the configuration,
 	// the Command and Args are passed as is. Otherwise, the Command is passed as a part of Args.
@@ -346,6 +341,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			// However certain security scanner may complain about this.
 			container.SecurityContext.RunAsNonRoot = ptr.Of(false)
 			container.SecurityContext.ReadOnlyRootFilesystem = ptr.Of(false)
+
+			// Set RunAsUser and RunAsGroup to default nil to avoid the error when specific user or group is set previously via helm chart.
+			container.SecurityContext.RunAsUser = nil
+			container.SecurityContext.RunAsGroup = nil
 			break
 		}
 	}

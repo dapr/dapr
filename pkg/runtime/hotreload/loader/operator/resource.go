@@ -50,7 +50,7 @@ type resource[T differ.Resource] struct {
 type streamer[T differ.Resource] interface {
 	list(ctx context.Context, opclient operatorpb.OperatorClient, ns, podName string) ([][]byte, error)
 	close() error
-	recv() (*loader.Event[T], error)
+	recv(context.Context) (*loader.Event[T], error)
 	establish(context.Context, operatorpb.OperatorClient, string, string) error
 }
 
@@ -124,7 +124,7 @@ func (r *resource[T]) Stream(ctx context.Context) (*loader.StreamConn[T], error)
 func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 	for {
 		for {
-			event, err := r.streamer.recv()
+			event, err := r.streamer.recv(ctx)
 			if err != nil {
 				r.streamer.close()
 				// Retry on stream error.
@@ -137,6 +137,10 @@ func (r *resource[T]) stream(ctx context.Context, conn *loader.StreamConn[T]) {
 			case <-ctx.Done():
 				return
 			}
+		}
+
+		if ctx.Err() != nil {
+			return
 		}
 
 		if err := backoff.Retry(func() error {

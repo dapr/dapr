@@ -14,11 +14,13 @@ limitations under the License.
 package subscriber
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strings"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -26,9 +28,10 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/runtime/pubsub"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 )
 
 type Option func(*options)
@@ -46,25 +49,43 @@ type PublishRequest struct {
 	DataContentType *string
 }
 
+type PublishBulkRequestEntry struct {
+	EntryID     string `json:"entryId"`
+	Event       string `json:"event"`
+	ContentType string `json:"contentType,omitempty"`
+}
+
+type PublishBulkRequest struct {
+	Daprd      *daprd.Daprd
+	PubSubName string
+	Topic      string
+	Entries    []PublishBulkRequestEntry
+}
+
 type Subscriber struct {
-	app     *app.App
-	client  *http.Client
-	inCh    chan *RouteEvent
-	closeCh chan struct{}
+	app       *app.App
+	client    *http.Client
+	inCh      chan *RouteEvent
+	inBulk    chan *pubsub.BulkSubscribeEnvelope
+	closeCh   chan struct{}
+	closeOnce atomic.Bool
 }
 
 func New(t *testing.T, fopts ...Option) *Subscriber {
 	t.Helper()
 
-	var opts options
+	opts := options{
+		initHealth: true,
+	}
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
 
 	inCh := make(chan *RouteEvent, 100)
+	inBulk := make(chan *pubsub.BulkSubscribeEnvelope, 100)
 	closeCh := make(chan struct{})
 
-	appOpts := make([]app.Option, 0, len(opts.routes)+len(opts.handlerFuncs))
+	appOpts := make([]app.Option, 0, len(opts.routes)+len(opts.bulkRoutes)+len(opts.handlerFuncs)+1)
 	for _, route := range opts.routes {
 		appOpts = append(appOpts, app.WithHandlerFunc(route, func(w http.ResponseWriter, r *http.Request) {
 			var ce event.Event
@@ -76,13 +97,46 @@ func New(t *testing.T, fopts ...Option) *Subscriber {
 			}
 		}))
 	}
+	for _, route := range opts.bulkRoutes {
+		appOpts = append(appOpts, app.WithHandlerFunc(route, func(w http.ResponseWriter, r *http.Request) {
+			var ce pubsub.BulkSubscribeEnvelope
+			require.NoError(t, json.NewDecoder(r.Body).Decode(&ce))
+			select {
+			case inBulk <- &ce:
+			case <-closeCh:
+			case <-r.Context().Done():
+			}
+
+			type statusT struct {
+				EntryID string `json:"entryId"`
+				Status  string `json:"status"`
+			}
+			type respT struct {
+				Statuses []statusT `json:"statuses"`
+			}
+
+			var resp respT
+			for _, entry := range ce.Entries {
+				resp.Statuses = append(resp.Statuses, statusT{EntryID: entry.EntryId, Status: "SUCCESS"})
+			}
+			json.NewEncoder(w).Encode(resp)
+		}))
+	}
+
+	if opts.progSubs != nil {
+		appOpts = append(appOpts, app.WithHandlerFunc("/dapr/subscribe", func(w http.ResponseWriter, r *http.Request) {
+			require.NoError(t, json.NewEncoder(w).Encode(*opts.progSubs))
+		}))
+	}
 
 	appOpts = append(appOpts, opts.handlerFuncs...)
+	appOpts = append(appOpts, app.WithInitialHealth(opts.initHealth))
 
 	return &Subscriber{
 		app:     app.New(t, appOpts...),
-		client:  util.HTTPClient(t),
+		client:  client.HTTP(t),
 		inCh:    inCh,
+		inBulk:  inBulk,
 		closeCh: closeCh,
 	}
 }
@@ -94,8 +148,10 @@ func (s *Subscriber) Run(t *testing.T, ctx context.Context) {
 
 func (s *Subscriber) Cleanup(t *testing.T) {
 	t.Helper()
-	close(s.closeCh)
-	s.app.Cleanup(t)
+	if s.closeOnce.CompareAndSwap(false, true) {
+		close(s.closeCh)
+		s.app.Cleanup(t)
+	}
 }
 
 func (s *Subscriber) Port() int {
@@ -117,8 +173,22 @@ func (s *Subscriber) Receive(t *testing.T, ctx context.Context) *RouteEvent {
 	}
 }
 
-func (s *Subscriber) AssertEventChanLen(t *testing.T, l int) {
+func (s *Subscriber) ReceiveBulk(t *testing.T, ctx context.Context) *pubsub.BulkSubscribeEnvelope {
 	t.Helper()
+
+	ctx, cancel := context.WithTimeout(ctx, time.Second)
+	defer cancel()
+
+	select {
+	case <-ctx.Done():
+		require.Fail(t, "timed out waiting for event response")
+		return nil
+	case in := <-s.inBulk:
+		return in
+	}
+}
+
+func (s *Subscriber) AssertEventChanLen(t assert.TestingT, l int) {
 	assert.Len(t, s.inCh, l)
 }
 
@@ -151,6 +221,13 @@ func (s *Subscriber) Publish(t *testing.T, ctx context.Context, req PublishReque
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
+func (s *Subscriber) PublishBulk(t *testing.T, ctx context.Context, req PublishBulkRequest) {
+	t.Helper()
+	//nolint:bodyclose
+	resp := s.publishBulk(t, ctx, req)
+	require.Equal(t, http.StatusNoContent, resp.StatusCode)
+}
+
 func (s *Subscriber) publish(t *testing.T, ctx context.Context, req PublishRequest) *http.Response {
 	t.Helper()
 	reqURL := fmt.Sprintf("http://%s/v1.0/publish/%s/%s", req.Daprd.HTTPAddress(), req.PubSubName, req.Topic)
@@ -163,4 +240,23 @@ func (s *Subscriber) publish(t *testing.T, ctx context.Context, req PublishReque
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	return resp
+}
+
+func (s *Subscriber) publishBulk(t *testing.T, ctx context.Context, req PublishBulkRequest) *http.Response {
+	t.Helper()
+
+	payload, err := json.Marshal(req.Entries)
+	require.NoError(t, err)
+	reqURL := fmt.Sprintf("http://%s/v1.0-alpha1/publish/bulk/%s/%s", req.Daprd.HTTPAddress(), req.PubSubName, req.Topic)
+	hreq, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, bytes.NewReader(payload))
+	require.NoError(t, err)
+	hreq.Header.Add("Content-Type", "application/json")
+	resp, err := s.client.Do(hreq)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+	return resp
+}
+
+func (s *Subscriber) SetHealth(health bool) {
+	s.app.SetHealth(health)
 }

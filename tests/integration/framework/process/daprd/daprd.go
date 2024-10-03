@@ -37,22 +37,21 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
 type Daprd struct {
 	exec       process.Interface
-	appHTTP    process.Interface
-	freeport   *util.FreePort
+	ports      *ports.Ports
 	httpClient *http.Client
 
 	appID            string
 	namespace        string
 	appProtocol      string
-	appPort          int
+	appPort          *int
 	grpcPort         int
 	httpPort         int
 	internalGRPCPort int
@@ -67,19 +66,16 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	uid, err := uuid.NewRandom()
 	require.NoError(t, err)
 
-	appHTTP := prochttp.New(t)
-
-	fp := util.ReservePorts(t, 6)
+	fp := ports.Reserve(t, 6)
 	opts := options{
 		appID:            uid.String(),
-		appPort:          appHTTP.Port(),
 		appProtocol:      "http",
-		grpcPort:         fp.Port(t, 0),
-		httpPort:         fp.Port(t, 1),
-		internalGRPCPort: fp.Port(t, 2),
-		publicPort:       fp.Port(t, 3),
-		metricsPort:      fp.Port(t, 4),
-		profilePort:      fp.Port(t, 5),
+		grpcPort:         fp.Port(t),
+		httpPort:         fp.Port(t),
+		internalGRPCPort: fp.Port(t),
+		publicPort:       fp.Port(t),
+		metricsPort:      fp.Port(t),
+		profilePort:      fp.Port(t),
 		logLevel:         "info",
 		mode:             "standalone",
 	}
@@ -96,19 +92,26 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--app-id=" + opts.appID,
-		"--app-port=" + strconv.Itoa(opts.appPort),
 		"--app-protocol=" + opts.appProtocol,
 		"--dapr-grpc-port=" + strconv.Itoa(opts.grpcPort),
 		"--dapr-http-port=" + strconv.Itoa(opts.httpPort),
 		"--dapr-internal-grpc-port=" + strconv.Itoa(opts.internalGRPCPort),
+		"--dapr-internal-grpc-listen-address=127.0.0.1",
+		"--dapr-listen-addresses=127.0.0.1",
 		"--dapr-public-port=" + strconv.Itoa(opts.publicPort),
+		"--dapr-public-listen-address=127.0.0.1",
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
+		"--metrics-listen-address=127.0.0.1",
 		"--profile-port=" + strconv.Itoa(opts.profilePort),
 		"--enable-app-health-check=" + strconv.FormatBool(opts.appHealthCheck),
 		"--app-health-probe-interval=" + strconv.Itoa(opts.appHealthProbeInterval),
 		"--app-health-threshold=" + strconv.Itoa(opts.appHealthProbeThreshold),
 		"--mode=" + opts.mode,
 		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
+	}
+
+	if opts.appPort != nil {
+		args = append(args, "--app-port="+strconv.Itoa(*opts.appPort))
 	}
 	if opts.appHealthCheckPath != "" {
 		args = append(args, "--app-health-check-path="+opts.appHealthCheckPath)
@@ -142,6 +145,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	if opts.blockShutdownDuration != nil {
 		args = append(args, "--dapr-block-shutdown-duration="+*opts.blockShutdownDuration)
 	}
+	if len(opts.schedulerAddresses) > 0 {
+		args = append(args, "--scheduler-host-address="+strings.Join(opts.schedulerAddresses, ","))
+	}
+	if opts.controlPlaneTrustDomain != nil {
+		args = append(args, "--control-plane-trust-domain="+*opts.controlPlaneTrustDomain)
+	}
 
 	ns := "default"
 	if opts.namespace != nil {
@@ -151,9 +160,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
-		freeport:         fp,
-		httpClient:       util.HTTPClient(t),
-		appHTTP:          appHTTP,
+		ports:            fp,
+		httpClient:       client.HTTP(t),
 		appID:            opts.appID,
 		namespace:        ns,
 		appProtocol:      opts.appProtocol,
@@ -168,14 +176,12 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 }
 
 func (d *Daprd) Run(t *testing.T, ctx context.Context) {
-	d.appHTTP.Run(t, ctx)
-	d.freeport.Free(t)
+	d.ports.Free(t)
 	d.exec.Run(t, ctx)
 }
 
 func (d *Daprd) Cleanup(t *testing.T) {
 	d.exec.Cleanup(t)
-	d.appHTTP.Cleanup(t)
 }
 
 func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
@@ -187,11 +193,11 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 		}
 		net.Close()
 		return true
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 15*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
 	require.NoError(t, err)
 	require.Eventually(t, func() bool {
@@ -201,13 +207,13 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		}
 		defer resp.Body.Close()
 		return http.StatusNoContent == resp.StatusCode
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 30*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 	switch d.appProtocol {
 	case "http":
-		client := util.HTTPClient(t)
+		client := client.HTTP(t)
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
 		require.NoError(t, err)
 		assert.Eventually(t, func() bool {
@@ -221,7 +227,8 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 
 	case "grpc":
 		assert.Eventually(t, func() bool {
-			conn, err := grpc.Dial(d.AppAddress(),
+			//nolint:staticcheck
+			conn, err := grpc.Dial(d.AppAddress(t),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock())
 			if conn != nil {
@@ -240,6 +247,7 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, d.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(),
@@ -254,26 +262,6 @@ func (d *Daprd) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient {
 	return rtv1.NewDaprClient(d.GRPCConn(t, ctx))
 }
 
-//nolint:testifylint
-func (d *Daprd) RegistedComponents(t *assert.CollectT, ctx context.Context) []*rtv1.RegisteredComponents {
-	url := fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress())
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
-	if !assert.NoError(t, err) {
-		return nil
-	}
-
-	var meta struct {
-		Components []*rtv1.RegisteredComponents
-	}
-	resp, err := d.httpClient.Do(req)
-	if assert.NoError(t, err) {
-		defer resp.Body.Close()
-		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
-	}
-
-	return meta.Components
-}
-
 func (d *Daprd) AppID() string {
 	return d.appID
 }
@@ -286,12 +274,14 @@ func (d *Daprd) ipPort(port int) string {
 	return "127.0.0.1:" + strconv.Itoa(port)
 }
 
-func (d *Daprd) AppPort() int {
-	return d.appPort
+func (d *Daprd) AppPort(t *testing.T) int {
+	t.Helper()
+	require.NotNil(t, d.appPort, "no app port specified")
+	return *d.appPort
 }
 
-func (d *Daprd) AppAddress() string {
-	return d.ipPort(d.AppPort())
+func (d *Daprd) AppAddress(t *testing.T) string {
+	return d.ipPort(d.AppPort(t))
 }
 
 func (d *Daprd) GRPCPort() int {
@@ -334,7 +324,7 @@ func (d *Daprd) ProfilePort() int {
 	return d.profilePort
 }
 
-// Returns a subset of metrics scraped from the metrics endpoint
+// Metrics Returns a subset of metrics scraped from the metrics endpoint
 func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
 
@@ -354,11 +344,29 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	metrics := make(map[string]float64)
 	for _, mf := range metricFamilies {
 		for _, m := range mf.GetMetric() {
-			key := mf.GetName()
+			metricName := mf.GetName()
+			labels := ""
 			for _, l := range m.GetLabel() {
-				key += "|" + l.GetName() + ":" + l.GetValue()
+				labels += "|" + l.GetName() + ":" + l.GetValue()
 			}
-			metrics[key] = m.GetCounter().GetValue()
+			if counter := m.GetCounter(); counter != nil {
+				metrics[metricName+labels] = counter.GetValue()
+				continue
+			}
+			if gauge := m.GetGauge(); gauge != nil {
+				metrics[metricName+labels] = gauge.GetValue()
+				continue
+			}
+			h := m.GetHistogram()
+			if h == nil {
+				continue
+			}
+			for _, b := range h.GetBucket() {
+				bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.FormatUint(uint64(b.GetUpperBound()), 10)
+				metrics[bucketKey] = float64(b.GetCumulativeCount())
+			}
+			metrics[metricName+"_count"+labels] = float64(h.GetSampleCount())
+			metrics[metricName+"_sum"+labels] = h.GetSampleSum()
 		}
 	}
 
@@ -391,7 +399,73 @@ func (d *Daprd) http2xx(t *testing.T, ctx context.Context, method, path string, 
 
 	resp, err := d.httpClient.Do(req)
 	require.NoError(t, err)
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	require.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code")
-	require.Less(t, resp.StatusCode, 300, "expected 2xx status code")
+	require.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code: "+string(b))
+	require.Less(t, resp.StatusCode, 300, "expected 2xx status code: "+string(b))
+}
+
+func (d *Daprd) GetMetaRegisteredComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {
+	return d.meta(t, ctx).RegisteredComponents
+}
+
+func (d *Daprd) GetMetaSubscriptions(t assert.TestingT, ctx context.Context) []MetadataResponsePubsubSubscription {
+	return d.meta(t, ctx).Subscriptions
+}
+
+func (d *Daprd) GetMetaSubscriptionsWithType(t assert.TestingT, ctx context.Context, subType string) []MetadataResponsePubsubSubscription {
+	subs := d.GetMetaSubscriptions(t, ctx)
+	var filteredSubs []MetadataResponsePubsubSubscription
+	for _, sub := range subs {
+		if sub.Type == subType {
+			filteredSubs = append(filteredSubs, sub)
+		}
+	}
+	return filteredSubs
+}
+
+func (d *Daprd) GetMetaHTTPEndpoints(t assert.TestingT, ctx context.Context) []*rtv1.MetadataHTTPEndpoint {
+	return d.meta(t, ctx).HTTPEndpoints
+}
+
+// metaResponse is a subset of metadataResponse defined in pkg/api/http/metadata.go:160
+type metaResponse struct {
+	RegisteredComponents []*rtv1.RegisteredComponents         `json:"components,omitempty"`
+	Subscriptions        []MetadataResponsePubsubSubscription `json:"subscriptions,omitempty"`
+	HTTPEndpoints        []*rtv1.MetadataHTTPEndpoint         `json:"httpEndpoints,omitempty"`
+}
+
+// MetadataResponsePubsubSubscription copied from pkg/api/http/metadata.go:172 to be able to use in integration tests until we move to Proto format
+type MetadataResponsePubsubSubscription struct {
+	PubsubName      string                                   `json:"pubsubname"`
+	Topic           string                                   `json:"topic"`
+	Metadata        map[string]string                        `json:"metadata,omitempty"`
+	Rules           []MetadataResponsePubsubSubscriptionRule `json:"rules,omitempty"`
+	DeadLetterTopic string                                   `json:"deadLetterTopic"`
+	Type            string                                   `json:"type"`
+}
+
+type MetadataResponsePubsubSubscriptionRule struct {
+	Match string `json:"match,omitempty"`
+	Path  string `json:"path,omitempty"`
+}
+
+func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {
+	url := fmt.Sprintf("http://%s/v1.0/metadata", d.HTTPAddress())
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	//nolint:testifylint
+	if !assert.NoError(t, err) {
+		return metaResponse{}
+	}
+
+	var meta metaResponse
+	resp, err := d.httpClient.Do(req)
+	//nolint:testifylint
+	if assert.NoError(t, err) {
+		defer resp.Body.Close()
+		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
+	}
+
+	return meta
 }

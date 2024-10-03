@@ -107,8 +107,10 @@ func startTracingClientSpanFromHTTPRequest(r *http.Request, spanName string, spe
 	sc := SpanContextFromRequest(r)
 	ctx := trace.ContextWithRemoteSpanContext(r.Context(), sc)
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
+	//nolint:spancheck
 	_, span := tracer.Start(ctx, spanName, kindOption)
 	diagUtils.AddSpanToRequest(r, span)
+	//nolint:spancheck
 	return span
 }
 
@@ -116,7 +118,9 @@ func StartProducerSpanChildFromParent(ctx *fasthttp.RequestCtx, parentSpan trace
 	path := string(ctx.Request.URI().Path())
 	netCtx := trace.ContextWithRemoteSpanContext(ctx, parentSpan.SpanContext())
 	kindOption := trace.WithSpanKind(trace.SpanKindProducer)
+	//nolint:spancheck
 	_, span := tracer.Start(netCtx, path, kindOption)
+	//nolint:spancheck
 	return span
 }
 
@@ -188,7 +192,7 @@ func spanAttributesMapFromHTTPContext(rw responsewriter.ResponseWriter, r *http.
 	// Init with a worst-case initial capacity of 7, which is the maximum number of unique keys we expect to add.
 	// This is just a "hint" to the compiler so when the map is allocated, it has an initial capacity for 7 elements.
 	// It's a (minor) perf improvement that allows us to avoid re-allocations which are wasteful on the allocator and GC both.
-	m := make(map[string]string, 7)
+	m := make(map[string]string, 11)
 
 	// Check if the context contains an AppendSpanAttributes method
 	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
@@ -200,6 +204,16 @@ func spanAttributesMapFromHTTPContext(rw responsewriter.ResponseWriter, r *http.
 	m[diagConsts.DaprAPIProtocolSpanAttributeKey] = diagConsts.DaprAPIHTTPSpanAttrValue
 	m[diagConsts.DaprAPISpanAttributeKey] = r.Method + " " + r.URL.Path
 	m[diagConsts.DaprAPIStatusCodeSpanAttributeKey] = strconv.Itoa(rw.Status())
+
+	// OTel convention attributes
+	m[diagConsts.OtelSpanConvHTTPRequestMethodAttributeKey] = r.Method
+	m[diagConsts.OtelSpanConvURLFullAttributeKey] = r.RequestURI
+	addressAndPort := strings.Split(r.RemoteAddr, ":")
+	m[diagConsts.OtelSpanConvServerAddressAttributeKey] = addressAndPort[0]
+	if len(addressAndPort) > 1 {
+		// This should always be true for Dapr, adding this "if" just to be safe.
+		m[diagConsts.OtelSpanConvServerPortAttributeKey] = addressAndPort[1]
+	}
 
 	return m
 }

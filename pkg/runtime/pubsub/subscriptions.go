@@ -1,31 +1,34 @@
 package pubsub
 
 import (
-	"bytes"
 	"context"
+	"encoding/base64"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
-	"os"
-	"path/filepath"
 	"strings"
 
+	"go.opentelemetry.io/otel/trace"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/emptypb"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"sigs.k8s.io/yaml"
+	"google.golang.org/protobuf/types/known/structpb"
+	"k8s.io/apimachinery/pkg/util/sets"
 
-	subscriptionsapiV1alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v1alpha1"
-	subscriptionsapiV2alpha1 "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/components-contrib/contenttype"
+	contribpubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/dapr/pkg/channel"
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/expr"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	operatorv1pb "github.com/dapr/dapr/pkg/proto/operator/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/utils"
 )
 
 const (
@@ -36,6 +39,24 @@ const (
 
 	APIVersionV1alpha1 = "dapr.io/v1alpha1"
 	APIVersionV2alpha1 = "dapr.io/v2alpha1"
+
+	MetadataKeyPubSub = "pubsubName"
+)
+
+var (
+	// errUnexpectedEnvelopeData denotes that an unexpected data type was
+	// encountered when processing a cloud event's data property.
+	errUnexpectedEnvelopeData = errors.New("unexpected data type encountered in envelope")
+
+	cloudEventDuplicateKeys = sets.NewString(
+		contribpubsub.IDField,
+		contribpubsub.SourceField,
+		contribpubsub.DataContentTypeField,
+		contribpubsub.TypeField,
+		contribpubsub.SpecVersionField,
+		contribpubsub.DataField,
+		contribpubsub.DataBase64Field,
+	)
 )
 
 type (
@@ -63,6 +84,15 @@ type (
 	RuleJSON struct {
 		Match string `json:"match"`
 		Path  string `json:"path"`
+	}
+
+	SubscribedMessage struct {
+		CloudEvent map[string]interface{}
+		Data       []byte
+		Topic      string
+		Metadata   map[string]string
+		Path       string
+		PubSub     string
 	}
 )
 
@@ -98,7 +128,7 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 	switch resp.Status().GetCode() {
 	case http.StatusOK:
 		err = json.NewDecoder(resp.RawData()).Decode(&subscriptionItems)
-		if err != nil {
+		if err != nil && !errors.Is(err, io.EOF) {
 			err = fmt.Errorf(deserializeTopicsError, err)
 			log.Error(err)
 			return nil, err
@@ -111,7 +141,7 @@ func GetSubscriptionsHTTP(ctx context.Context, channel channel.AppChannel, log l
 			rules := make([]*Rule, len(si.Routes.Rules)+1)
 			n := 0
 			for _, r := range si.Routes.Rules {
-				rule, err := createRoutingRule(r.Match, r.Path)
+				rule, err := CreateRoutingRule(r.Match, r.Path)
 				if err != nil {
 					return nil, err
 				}
@@ -229,170 +259,6 @@ func GetSubscriptionsGRPC(ctx context.Context, channel runtimev1pb.AppCallbackCl
 	return subscriptions, nil
 }
 
-// DeclarativeLocal loads subscriptions from the given local resources path.
-func DeclarativeLocal(resourcesPaths []string, namespace string, log logger.Logger) (subs []Subscription) {
-	for _, path := range resourcesPaths {
-		res := declarativeFile(path, namespace, log)
-		if len(res) > 0 {
-			subs = append(subs, res...)
-		}
-	}
-	return subs
-}
-
-// Used by DeclarativeLocal to load a single path.
-func declarativeFile(resourcesPath string, namespace string, log logger.Logger) (subs []Subscription) {
-	if _, err := os.Stat(resourcesPath); os.IsNotExist(err) {
-		return subs
-	}
-
-	files, err := os.ReadDir(resourcesPath)
-	if err != nil {
-		log.Errorf("Failed to read subscriptions from path %s: %s", resourcesPath, err)
-		return subs
-	}
-
-	for _, f := range files {
-		if f.IsDir() {
-			continue
-		}
-
-		if !utils.IsYaml(f.Name()) {
-			log.Warnf("A non-YAML pubsub file %s was detected, it will not be loaded", f.Name())
-			continue
-		}
-
-		filePath := filepath.Join(resourcesPath, f.Name())
-		b, err := os.ReadFile(filePath)
-		if err != nil {
-			log.Warnf("Failed to read file %s: %v", f.Name(), err)
-			continue
-		}
-
-		bytesArray := bytes.Split(b, []byte("\n---"))
-		for _, item := range bytesArray {
-			// Skip empty items
-			item = bytes.TrimSpace(item)
-			if len(item) == 0 {
-				continue
-			}
-
-			subs, err = appendSubscription(subs, item, namespace)
-			if err != nil {
-				log.Warnf("Failed to add subscription from file %s: %v", f.Name(), err)
-				continue
-			}
-		}
-	}
-
-	return subs
-}
-
-func unmarshalSubscription(b []byte, namespace string) (*Subscription, error) {
-	// Parse only the type metadata first in order
-	// to filter out non-Subscriptions without other errors.
-	type typeInfo struct {
-		metav1.TypeMeta `json:",inline"`
-	}
-
-	var ti typeInfo
-	if err := yaml.Unmarshal(b, &ti); err != nil {
-		return nil, err
-	}
-
-	if ti.Kind != subscriptionKind {
-		return nil, nil
-	}
-
-	switch ti.APIVersion {
-	case APIVersionV2alpha1:
-		// "v2alpha1" is the CRD that introduces pubsub routing.
-		var sub subscriptionsapiV2alpha1.Subscription
-		if err := yaml.Unmarshal(b, &sub); err != nil {
-			return nil, err
-		}
-		if namespace != "" && sub.Namespace != "" && sub.Namespace != namespace {
-			return nil, nil
-		}
-
-		rules, err := parseRoutingRulesYAML(sub.Spec.Routes)
-		if err != nil {
-			return nil, err
-		}
-
-		return &Subscription{
-			Topic:           sub.Spec.Topic,
-			PubsubName:      sub.Spec.Pubsubname,
-			Rules:           rules,
-			Metadata:        sub.Spec.Metadata,
-			Scopes:          sub.Scopes,
-			DeadLetterTopic: sub.Spec.DeadLetterTopic,
-			BulkSubscribe: &BulkSubscribe{
-				Enabled:            sub.Spec.BulkSubscribe.Enabled,
-				MaxMessagesCount:   sub.Spec.BulkSubscribe.MaxMessagesCount,
-				MaxAwaitDurationMs: sub.Spec.BulkSubscribe.MaxAwaitDurationMs,
-			},
-		}, nil
-
-	default:
-		// assume "v1alpha1" for backward compatibility as this was
-		// not checked before the introduction of "v2alpha".
-		var sub subscriptionsapiV1alpha1.Subscription
-		if err := yaml.Unmarshal(b, &sub); err != nil {
-			return nil, err
-		}
-		if namespace != "" && sub.Namespace != "" && sub.Namespace != namespace {
-			return nil, nil
-		}
-
-		return &Subscription{
-			Topic:      sub.Spec.Topic,
-			PubsubName: sub.Spec.Pubsubname,
-			Rules: []*Rule{
-				{
-					Path: sub.Spec.Route,
-				},
-			},
-			Metadata:        sub.Spec.Metadata,
-			Scopes:          sub.Scopes,
-			DeadLetterTopic: sub.Spec.DeadLetterTopic,
-			BulkSubscribe: &BulkSubscribe{
-				Enabled:            sub.Spec.BulkSubscribe.Enabled,
-				MaxMessagesCount:   sub.Spec.BulkSubscribe.MaxMessagesCount,
-				MaxAwaitDurationMs: sub.Spec.BulkSubscribe.MaxAwaitDurationMs,
-			},
-		}, nil
-	}
-}
-
-func parseRoutingRulesYAML(routes subscriptionsapiV2alpha1.Routes) ([]*Rule, error) {
-	r := make([]*Rule, len(routes.Rules)+1)
-
-	var (
-		n   int
-		err error
-	)
-	for _, rule := range routes.Rules {
-		r[n], err = createRoutingRule(rule.Match, rule.Path)
-		if err != nil {
-			return nil, err
-		}
-		n++
-	}
-
-	// If a default path is set, add a rule with a nil `Match`,
-	// which is treated as `true` and always selected if
-	// no previous rules match.
-	if routes.Default != "" {
-		r[n] = &Rule{
-			Path: routes.Default,
-		}
-		n++
-	}
-
-	return r[:n], nil
-}
-
 func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 	if routes == nil {
 		return []*Rule{{
@@ -402,7 +268,7 @@ func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 	r := make([]*Rule, 0, len(routes.GetRules())+1)
 
 	for _, rule := range routes.GetRules() {
-		rr, err := createRoutingRule(rule.GetMatch(), rule.GetPath())
+		rr, err := CreateRoutingRule(rule.GetMatch(), rule.GetPath())
 		if err != nil {
 			return nil, err
 		}
@@ -429,7 +295,7 @@ func parseRoutingRulesGRPC(routes *runtimev1pb.TopicRoutes) ([]*Rule, error) {
 	return r, nil
 }
 
-func createRoutingRule(match, path string) (*Rule, error) {
+func CreateRoutingRule(match, path string) (*Rule, error) {
 	var e *expr.Expr
 	matchTrimmed := strings.TrimSpace(match)
 	if matchTrimmed != "" {
@@ -445,39 +311,172 @@ func createRoutingRule(match, path string) (*Rule, error) {
 	}, nil
 }
 
-// DeclarativeKubernetes loads subscriptions from the operator when running in Kubernetes.
-func DeclarativeKubernetes(ctx context.Context, client operatorv1pb.OperatorClient, podName string, namespace string, log logger.Logger) []Subscription {
-	var subs []Subscription
-	resp, err := client.ListSubscriptionsV2(ctx, &operatorv1pb.ListSubscriptionsRequest{
-		PodName:   podName,
-		Namespace: namespace,
-	})
-	if err != nil {
-		log.Errorf("Failed to list subscriptions from operator: %s", err)
-		return subs
+func GRPCEnvelopeFromSubscriptionMessage(ctx context.Context, msg *SubscribedMessage, log logger.Logger, tracingSpec *config.TracingSpec) (*runtimev1pb.TopicEventRequest, trace.Span, error) {
+	cloudEvent := msg.CloudEvent
+
+	envelope := &runtimev1pb.TopicEventRequest{
+		Id:              ExtractCloudEventProperty(cloudEvent, contribpubsub.IDField),
+		Source:          ExtractCloudEventProperty(cloudEvent, contribpubsub.SourceField),
+		DataContentType: ExtractCloudEventProperty(cloudEvent, contribpubsub.DataContentTypeField),
+		Type:            ExtractCloudEventProperty(cloudEvent, contribpubsub.TypeField),
+		SpecVersion:     ExtractCloudEventProperty(cloudEvent, contribpubsub.SpecVersionField),
+		Topic:           msg.Topic,
+		PubsubName:      msg.Metadata[MetadataKeyPubSub],
+		Path:            msg.Path,
 	}
 
-	for _, s := range resp.GetSubscriptions() {
-		// No namespace filtering here as it's been already filtered by the operator
-		subs, err = appendSubscription(subs, s, "")
-		if err != nil {
-			log.Warnf("Failed to add subscription from operator: %s", err)
-			continue
+	if data, ok := cloudEvent[contribpubsub.DataBase64Field]; ok && data != nil {
+		if dataAsString, ok := data.(string); ok {
+			decoded, decodeErr := base64.StdEncoding.DecodeString(dataAsString)
+			if decodeErr != nil {
+				log.Debugf("unable to base64 decode cloudEvent field data_base64: %s", decodeErr)
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
+
+				return nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(decodeErr))
+			}
+
+			envelope.Data = decoded
+		} else {
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
+			return nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(errUnexpectedEnvelopeData))
+		}
+	} else if data, ok := cloudEvent[contribpubsub.DataField]; ok && data != nil {
+		envelope.Data = nil
+
+		if contenttype.IsStringContentType(envelope.GetDataContentType()) {
+			switch v := data.(type) {
+			case string:
+				envelope.Data = []byte(v)
+			case []byte:
+				envelope.Data = v
+			default:
+				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
+				return nil, nil, fmt.Errorf("error returned from app while processing pub/sub event: %w", rterrors.NewRetriable(errUnexpectedEnvelopeData))
+			}
+		} else if contenttype.IsJSONContentType(envelope.GetDataContentType()) || contenttype.IsCloudEventContentType(envelope.GetDataContentType()) {
+			envelope.Data, _ = json.Marshal(data)
 		}
 	}
 
-	return subs
+	var span trace.Span
+	iTraceID := cloudEvent[contribpubsub.TraceParentField]
+	if iTraceID == nil {
+		iTraceID = cloudEvent[contribpubsub.TraceIDField]
+	}
+	if iTraceID != nil {
+		if traceID, ok := iTraceID.(string); ok {
+			sc, _ := diag.SpanContextFromW3CString(traceID)
+			spanName := "pubsub/" + msg.Topic
+
+			// no ops if trace is off
+			ctx, span = diag.StartInternalCallbackSpan(ctx, spanName, sc, tracingSpec)
+			// span is nil if tracing is disabled (sampling rate is 0)
+			if span != nil {
+				ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+			}
+		} else {
+			log.Warnf("ignored non-string traceid value: %v", iTraceID)
+		}
+	}
+
+	extensions, extensionsErr := ExtractCloudEventExtensions(cloudEvent)
+	if extensionsErr != nil {
+		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, 0)
+		return nil, nil, extensionsErr
+	}
+	envelope.Extensions = extensions
+
+	return envelope, span, nil
 }
 
-func appendSubscription(list []Subscription, subBytes []byte, namespace string) ([]Subscription, error) {
-	sub, err := unmarshalSubscription(subBytes, namespace)
-	if err != nil {
-		return nil, err
+func ExtractCloudEventProperty(cloudEvent map[string]any, property string) string {
+	if cloudEvent == nil {
+		return ""
+	}
+	iValue, ok := cloudEvent[property]
+	if ok {
+		if value, ok := iValue.(string); ok {
+			return value
+		}
 	}
 
-	if sub != nil {
-		list = append(list, *sub)
+	return ""
+}
+
+func ExtractCloudEventExtensions(cloudEvent map[string]any) (*structpb.Struct, error) {
+	// Assemble Cloud Event Extensions:
+	// Create copy of the cloud event with duplicated data removed
+
+	extensions := make(map[string]any)
+	for key, value := range cloudEvent {
+		if !cloudEventDuplicateKeys.Has(key) {
+			extensions[key] = value
+		}
+	}
+	extensionsStruct := structpb.Struct{}
+	extensionBytes, jsonMarshalErr := json.Marshal(extensions)
+	if jsonMarshalErr != nil {
+		return &extensionsStruct, fmt.Errorf("error processing internal cloud event data: unable to marshal cloudEvent extensions: %s", jsonMarshalErr)
 	}
 
-	return list, nil
+	protoUnmarshalErr := protojson.Unmarshal(extensionBytes, &extensionsStruct)
+	if protoUnmarshalErr != nil {
+		return &extensionsStruct, fmt.Errorf("error processing internal cloud event data: unable to unmarshal cloudEvent extensions to proto struct: %s", protoUnmarshalErr)
+	}
+	return &extensionsStruct, nil
+}
+
+func FetchEntry(rawPayload bool, entry *contribpubsub.BulkMessageEntry, cloudEvent map[string]interface{}) (*runtimev1pb.TopicEventBulkRequestEntry, error) {
+	if rawPayload {
+		return &runtimev1pb.TopicEventBulkRequestEntry{
+			EntryId:     entry.EntryId,
+			Event:       &runtimev1pb.TopicEventBulkRequestEntry_Bytes{Bytes: entry.Event}, //nolint:nosnakecase
+			ContentType: entry.ContentType,
+			Metadata:    entry.Metadata,
+		}, nil
+	} else {
+		eventLocal, err := extractCloudEvent(cloudEvent)
+		if err != nil {
+			return nil, err
+		}
+		return &runtimev1pb.TopicEventBulkRequestEntry{
+			EntryId:     entry.EntryId,
+			Event:       &eventLocal,
+			ContentType: entry.ContentType,
+			Metadata:    entry.Metadata,
+		}, nil
+	}
+}
+
+func extractCloudEvent(event map[string]interface{}) (runtimev1pb.TopicEventBulkRequestEntry_CloudEvent, error) { //nolint:nosnakecase
+	envelope := &runtimev1pb.TopicEventCERequest{
+		Id:              ExtractCloudEventProperty(event, contribpubsub.IDField),
+		Source:          ExtractCloudEventProperty(event, contribpubsub.SourceField),
+		DataContentType: ExtractCloudEventProperty(event, contribpubsub.DataContentTypeField),
+		Type:            ExtractCloudEventProperty(event, contribpubsub.TypeField),
+		SpecVersion:     ExtractCloudEventProperty(event, contribpubsub.SpecVersionField),
+	}
+
+	if data, ok := event[contribpubsub.DataField]; ok && data != nil {
+		envelope.Data = nil
+
+		if contenttype.IsStringContentType(envelope.GetDataContentType()) {
+			switch v := data.(type) {
+			case string:
+				envelope.Data = []byte(v)
+			case []byte:
+				envelope.Data = v
+			default:
+				return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, errUnexpectedEnvelopeData //nolint:nosnakecase
+			}
+		} else if contenttype.IsJSONContentType(envelope.GetDataContentType()) || contenttype.IsCloudEventContentType(envelope.GetDataContentType()) {
+			envelope.Data, _ = json.Marshal(data)
+		}
+	}
+	extensions, extensionsErr := ExtractCloudEventExtensions(event)
+	if extensionsErr != nil {
+		return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{}, extensionsErr
+	}
+	envelope.Extensions = extensions
+	return runtimev1pb.TopicEventBulkRequestEntry_CloudEvent{CloudEvent: envelope}, nil //nolint:nosnakecase
 }

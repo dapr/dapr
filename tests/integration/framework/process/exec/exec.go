@@ -21,6 +21,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -29,13 +30,13 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/iowriter"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec/kill"
+	"github.com/dapr/dapr/tests/integration/framework/tee"
 )
 
 type Option func(*options)
 
 type exec struct {
-	lock sync.Mutex
-	cmd  *oexec.Cmd
+	cmd *oexec.Cmd
 
 	args       []string
 	binPath    string
@@ -44,6 +45,9 @@ type exec struct {
 	envs       map[string]string
 	stdoutpipe io.WriteCloser
 	stderrpipe io.WriteCloser
+
+	wg   sync.WaitGroup
+	once atomic.Bool
 }
 
 func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
@@ -56,8 +60,6 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 	}
 
 	opts := options{
-		stdout: iowriter.New(t, filepath.Base(binPath)),
-		stderr: iowriter.New(t, filepath.Base(binPath)),
 		runErrorFn: func(t *testing.T, err error) {
 			t.Helper()
 			if runtime.GOOS == "windows" {
@@ -87,16 +89,41 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 
 func (e *exec) Run(t *testing.T, ctx context.Context) {
 	t.Helper()
-	e.lock.Lock()
-	defer e.lock.Unlock()
 
 	t.Logf("Running %q with args: %s %s", filepath.Base(e.binPath), e.binPath, strings.Join(e.args, " "))
 
 	//nolint:gosec
 	e.cmd = oexec.CommandContext(ctx, e.binPath, e.args...)
 
-	e.cmd.Stdout = e.stdoutpipe
-	e.cmd.Stderr = e.stderrpipe
+	iow := iowriter.New(t, filepath.Base(e.binPath))
+	for _, pipe := range []struct {
+		cmdPipeFn func() (io.ReadCloser, error)
+		procPipe  io.WriteCloser
+	}{
+		{cmdPipeFn: e.cmd.StdoutPipe, procPipe: e.stdoutpipe},
+		{cmdPipeFn: e.cmd.StderrPipe, procPipe: e.stderrpipe},
+	} {
+		cmdPipe, err := pipe.cmdPipeFn()
+		require.NoError(t, err)
+
+		pipe := tee.WriteCloser(iow, pipe.procPipe)
+
+		e.wg.Add(1)
+		pipeErrCh := make(chan error, 1)
+		go func() {
+			defer e.wg.Done()
+			io.Copy(pipe, cmdPipe)
+			pipeErrCh <- pipe.Close()
+		}()
+		t.Cleanup(func() {
+			select {
+			case err := <-pipeErrCh:
+				require.NoError(t, err)
+			case <-ctx.Done():
+				require.Fail(t, "context cancelled before exec pipe closed")
+			}
+		})
+	}
 
 	// Wait for a few seconds before killing the process completely.
 	e.cmd.WaitDelay = time.Second * 5
@@ -109,16 +136,15 @@ func (e *exec) Run(t *testing.T, ctx context.Context) {
 }
 
 func (e *exec) Cleanup(t *testing.T) {
-	t.Helper()
-	e.lock.Lock()
-	defer e.lock.Unlock()
+	e.wg.Add(1)
+	defer func() { e.wg.Done(); e.wg.Wait() }()
+
+	if !e.once.CompareAndSwap(false, true) {
+		return
+	}
 
 	kill.Kill(t, e.cmd)
-
 	e.checkExit(t)
-
-	require.NoError(t, e.stderrpipe.Close())
-	require.NoError(t, e.stdoutpipe.Close())
 }
 
 func (e *exec) checkExit(t *testing.T) {

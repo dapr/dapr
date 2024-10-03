@@ -27,6 +27,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"k8s.io/utils/clock"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -74,7 +75,9 @@ type Server struct {
 
 	raftLogStorePath string
 
-	clock clock.Clock
+	sec     security.Provider
+	htarget healthz.Target
+	clock   clock.Clock
 }
 
 type Options struct {
@@ -86,6 +89,9 @@ type Options struct {
 	ReplicationFactor int64
 	MinAPILevel       uint32
 	MaxAPILevel       uint32
+	Healthz           healthz.Healthz
+	Security          security.Provider
+	Config            *raft.Config
 }
 
 // New creates Raft server node.
@@ -108,6 +114,9 @@ func New(opts Options) *Server {
 		raftLogStorePath: opts.LogStorePath,
 		clock:            cl,
 		raftReady:        make(chan struct{}),
+		htarget:          opts.Healthz.AddTarget(),
+		sec:              opts.Security,
+		config:           opts.Config,
 		fsm: newFSM(DaprHostMemberStateConfig{
 			replicationFactor: opts.ReplicationFactor,
 			minAPILevel:       opts.MinAPILevel,
@@ -121,7 +130,7 @@ func (s *Server) tryResolveRaftAdvertiseAddr(ctx context.Context, bindAddr strin
 	// to look up the address after StatefulSet POD is deployed.
 	var err error
 	var addr *net.TCPAddr
-	for retry := 0; retry < nameResolveMaxRetry; retry++ {
+	for range nameResolveMaxRetry {
 		addr, err = net.ResolveTCPAddr("tcp", bindAddr)
 		if err == nil {
 			return addr, nil
@@ -150,14 +159,19 @@ func (s *spiffeStreamLayer) Dial(address raft.ServerAddress, timeout time.Durati
 
 // StartRaft starts Raft node with Raft protocol configuration. if config is nil,
 // the default config will be used.
-func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *raft.Config) error {
+func (s *Server) StartRaft(ctx context.Context) error {
+	sec, err := s.sec.Handler(ctx)
+	if err != nil {
+		return err
+	}
+
 	// If we have an unclean exit then attempt to close the Raft store.
 	defer func() {
 		s.lock.RLock()
 		defer s.lock.RUnlock()
 		if s.raft == nil && s.raftStore != nil {
-			if err := s.raftStore.Close(); err != nil {
-				logging.Errorf("failed to close log storage: %v", err)
+			if rerr := s.raftStore.Close(); rerr != nil {
+				logging.Errorf("failed to close log storage: %v", rerr)
 			}
 		}
 	}()
@@ -217,7 +231,7 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 	}
 
 	// Setup Raft configuration.
-	if config == nil {
+	if s.config == nil {
 		// Set default configuration for raft
 		if len(s.peers) == 1 {
 			s.config = &raft.Config{
@@ -227,9 +241,9 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 				CommitTimeout:      5 * time.Millisecond,
 				MaxAppendEntries:   64,
 				ShutdownOnRemove:   true,
-				TrailingLogs:       10240,
-				SnapshotInterval:   120 * time.Second,
-				SnapshotThreshold:  8192,
+				TrailingLogs:       500,
+				SnapshotInterval:   60 * time.Second,
+				SnapshotThreshold:  1000,
 				LeaderLeaseTimeout: 5 * time.Millisecond,
 			}
 		} else {
@@ -240,14 +254,12 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 				CommitTimeout:      100 * time.Millisecond,
 				MaxAppendEntries:   64,
 				ShutdownOnRemove:   true,
-				TrailingLogs:       10240,
-				SnapshotInterval:   120 * time.Second,
-				SnapshotThreshold:  8192,
+				TrailingLogs:       1000,
+				SnapshotInterval:   30 * time.Second,
+				SnapshotThreshold:  2000,
 				LeaderLeaseTimeout: 2 * time.Second,
 			}
 		}
-	} else {
-		s.config = config
 	}
 
 	// Use LoggerAdapter to integrate with Dapr logger. Log level relies on placement log level.
@@ -276,6 +288,7 @@ func (s *Server) StartRaft(ctx context.Context, sec security.Handler, config *ra
 		return err
 	}
 	close(s.raftReady)
+	s.htarget.Ready()
 
 	logging.Infof("Raft server is starting on %s...", s.raftBind)
 	<-ctx.Done()
@@ -331,6 +344,10 @@ func (s *Server) raftStorePath() string {
 	return s.raftLogStorePath
 }
 
+func (s *Server) GetID() string {
+	return s.id
+}
+
 // FSM returns fsm.
 func (s *Server) FSM() *FSM {
 	return s.fsm
@@ -376,4 +393,8 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 
 	resp := future.Response()
 	return resp.(bool), nil
+}
+
+func (s *Server) GetRaftBind() string {
+	return s.raftBind
 }

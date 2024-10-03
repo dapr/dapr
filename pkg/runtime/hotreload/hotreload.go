@@ -16,7 +16,10 @@ package hotreload
 import (
 	"context"
 
-	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
+	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/authorizer"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -26,49 +29,80 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload/reconciler"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/logger"
 )
 
+var log = logger.NewLogger("dapr.runtime.hotreload")
+
 type OptionsReloaderDisk struct {
+	Config         *config.Configuration
+	AppID          string
 	Dirs           []string
 	ComponentStore *compstore.ComponentStore
 	Authorizer     *authorizer.Authorizer
 	Processor      *processor.Processor
+	Healthz        healthz.Healthz
 }
 
 type OptionsReloaderOperator struct {
 	PodName        string
 	Namespace      string
 	Client         operatorv1.OperatorClient
+	Config         *config.Configuration
 	ComponentStore *compstore.ComponentStore
 	Authorizer     *authorizer.Authorizer
 	Processor      *processor.Processor
+	Healthz        healthz.Healthz
 }
 
 type Reloader struct {
-	componentsLoader     loader.Interface
-	componentsReconciler *reconciler.Reconciler[componentsapi.Component]
+	isEnabled               bool
+	loader                  loader.Interface
+	componentsReconciler    *reconciler.Reconciler[compapi.Component]
+	subscriptionsReconciler *reconciler.Reconciler[subapi.Subscription]
 }
 
 func NewDisk(opts OptionsReloaderDisk) (*Reloader, error) {
+	isEnabled := opts.Config.IsFeatureEnabled(config.HotReload)
+	if !isEnabled {
+		return &Reloader{isEnabled: false}, nil
+	}
+
 	loader, err := disk.New(disk.Options{
+		AppID:          opts.AppID,
 		Dirs:           opts.Dirs,
 		ComponentStore: opts.ComponentStore,
 	})
 	if err != nil {
 		return nil, err
 	}
+
 	return &Reloader{
-		componentsLoader: loader,
-		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
+		isEnabled: isEnabled,
+		loader:    loader,
+		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
 			Processor:  opts.Processor,
 			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
+		}),
+		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
 		}),
 	}, nil
 }
 
 func NewOperator(opts OptionsReloaderOperator) *Reloader {
+	isEnabled := opts.Config.IsFeatureEnabled(config.HotReload)
+	if !isEnabled {
+		return &Reloader{isEnabled: false}
+	}
+
 	loader := operator.New(operator.Options{
 		PodName:        opts.PodName,
 		Namespace:      opts.Namespace,
@@ -77,19 +111,37 @@ func NewOperator(opts OptionsReloaderOperator) *Reloader {
 	})
 
 	return &Reloader{
-		componentsLoader: loader,
-		componentsReconciler: reconciler.NewComponent(reconciler.Options[componentsapi.Component]{
+		isEnabled: isEnabled,
+		loader:    loader,
+		componentsReconciler: reconciler.NewComponents(reconciler.Options[compapi.Component]{
 			Loader:     loader,
 			CompStore:  opts.ComponentStore,
 			Processor:  opts.Processor,
 			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
+		}),
+		subscriptionsReconciler: reconciler.NewSubscriptions(reconciler.Options[subapi.Subscription]{
+			Loader:     loader,
+			CompStore:  opts.ComponentStore,
+			Processor:  opts.Processor,
+			Authorizer: opts.Authorizer,
+			Healthz:    opts.Healthz,
 		}),
 	}
 }
 
 func (r *Reloader) Run(ctx context.Context) error {
+	if !r.isEnabled {
+		log.Debug("Hot reloading disabled")
+		<-ctx.Done()
+		return nil
+	}
+
+	log.Info("Hot reloading enabled. Daprd will reload 'Component' and 'Subscription' resources on change.")
+
 	return concurrency.NewRunnerManager(
-		r.componentsLoader.Run,
+		r.loader.Run,
 		r.componentsReconciler.Run,
+		r.subscriptionsReconciler.Run,
 	).Run(ctx)
 }

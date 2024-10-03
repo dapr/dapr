@@ -24,12 +24,14 @@ import (
 	"google.golang.org/grpc/codes"
 	grpcMetadata "google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -38,26 +40,28 @@ import (
 
 // Channel is a concrete AppChannel implementation for interacting with gRPC based user code.
 type Channel struct {
-	appCallbackClient  runtimev1pb.AppCallbackClient
-	conn               *grpc.ClientConn
-	baseAddress        string
-	ch                 chan struct{}
-	tracingSpec        config.TracingSpec
-	appMetadataToken   string
-	maxRequestBodySize int
-	appHealth          *apphealth.AppHealth
+	appCallbackClient      runtimev1pb.AppCallbackClient
+	appCallbackAlphaClient runtimev1pb.AppCallbackAlphaClient
+	conn                   *grpc.ClientConn
+	baseAddress            string
+	ch                     chan struct{}
+	tracingSpec            config.TracingSpec
+	appMetadataToken       string
+	maxRequestBodySize     int
+	appHealth              *apphealth.AppHealth
 }
 
 // CreateLocalChannel creates a gRPC connection with user code.
 func CreateLocalChannel(port, maxConcurrency int, conn *grpc.ClientConn, spec config.TracingSpec, maxRequestBodySize int, readBufferSize int, baseAddress string) *Channel {
 	// readBufferSize is unused
 	c := &Channel{
-		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
-		conn:               conn,
-		baseAddress:        net.JoinHostPort(baseAddress, strconv.Itoa(port)),
-		tracingSpec:        spec,
-		appMetadataToken:   security.GetAppToken(),
-		maxRequestBodySize: maxRequestBodySize,
+		appCallbackClient:      runtimev1pb.NewAppCallbackClient(conn),
+		appCallbackAlphaClient: runtimev1pb.NewAppCallbackAlphaClient(conn),
+		conn:                   conn,
+		baseAddress:            net.JoinHostPort(baseAddress, strconv.Itoa(port)),
+		tracingSpec:            spec,
+		appMetadataToken:       security.GetAppToken(),
+		maxRequestBodySize:     maxRequestBodySize,
 	}
 	if maxConcurrency > 0 {
 		c.ch = make(chan struct{}, maxConcurrency)
@@ -86,11 +90,71 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 	}
 }
 
+// TriggerJob sends the triggered job to the app via gRPC.
+func (g *Channel) TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+	if g.appHealth != nil && g.appHealth.GetStatus() != apphealth.AppStatusHealthy {
+		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
+	}
+
+	return g.sendJob(ctx, name, data)
+}
+
+func (g *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+	if g.ch != nil {
+		g.ch <- struct{}{}
+	}
+
+	defer func() {
+		if g.ch != nil {
+			<-g.ch
+		}
+	}()
+
+	var header, trailer grpcMetadata.MD
+
+	_, err := g.appCallbackAlphaClient.OnJobEventAlpha1(ctx,
+		&runtimev1pb.JobEventRequest{
+			Name:          name,
+			Data:          data,
+			Method:        "job/" + name,
+			ContentType:   data.GetTypeUrl(),
+			HttpExtension: &commonv1pb.HTTPExtension{Verb: commonv1pb.HTTPExtension_POST},
+		},
+		grpc.Header(&header),
+		grpc.Trailer(&trailer),
+		grpc.MaxCallSendMsgSize(g.maxRequestBodySize),
+		grpc.MaxCallRecvMsgSize(g.maxRequestBodySize),
+	)
+
+	var rsp *invokev1.InvokeMethodResponse
+	if err != nil {
+		// Convert status code
+		respStatus := status.Convert(err)
+		// Prepare response
+		// TODO: fix types
+		//nolint:gosec
+		rsp = invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), respStatus.Proto().GetDetails())
+	} else {
+		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)
+	}
+
+	rsp.WithHeaders(header).
+		WithTrailers(trailer)
+
+	return rsp, nil
+}
+
 // invokeMethodV1 calls user applications using daprclient v1.
 func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
 	if g.ch != nil {
 		g.ch <- struct{}{}
 	}
+
+	defer func() {
+		if g.ch != nil {
+			<-g.ch
+		}
+	}()
 
 	// Read the request, including the data
 	pd, err := req.ProtoWithData()
@@ -127,6 +191,8 @@ func (g *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		// Convert status code
 		respStatus := status.Convert(err)
 		// Prepare response
+		// TODO: fix types
+		//nolint:gosec
 		rsp = invokev1.NewInvokeMethodResponse(int32(respStatus.Code()), respStatus.Message(), respStatus.Proto().GetDetails())
 	} else {
 		rsp = invokev1.NewInvokeMethodResponse(int32(codes.OK), "", nil)

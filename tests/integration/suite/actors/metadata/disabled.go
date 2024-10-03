@@ -22,9 +22,9 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -61,7 +61,7 @@ func (m *disabled) Run(t *testing.T, ctx context.Context) {
 
 	m.daprd.WaitUntilTCPReady(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := fclient.HTTP(t)
 
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
 		res := getMetadata(t, ctx, client, m.daprd.HTTPPort())

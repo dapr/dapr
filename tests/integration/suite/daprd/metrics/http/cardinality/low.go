@@ -19,12 +19,14 @@ import (
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -35,20 +37,30 @@ func init() {
 // low tests daprd metrics for the HTTP server configured with low cardinality
 type low struct {
 	daprd *daprd.Daprd
+	place *placement.Placement
 }
 
 func (l *low) Setup(t *testing.T) []framework.Option {
 	app := app.New(t,
+		app.WithHandlerFunc("/", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`OK`))
+		}),
 		app.WithHandlerFunc("/hi", func(w http.ResponseWriter, _ *http.Request) {
 			fmt.Fprint(w, "OK")
 		}),
+		app.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
+			w.Write([]byte(`{"entities": ["myactortype"]}`))
+		}),
 	)
+
+	l.place = placement.New(t)
 
 	l.daprd = daprd.New(t,
 		daprd.WithAppPort(app.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithAppID("myapp"),
-		daprd.WithInMemoryStateStore("mystore"),
+		daprd.WithPlacementAddresses(l.place.Address()),
+		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -62,25 +74,42 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(app, l.daprd),
+		framework.WithProcesses(app, l.daprd, l.place),
 	}
 }
 
 func (l *low) Run(t *testing.T, ctx context.Context) {
 	l.daprd.WaitUntilRunning(t, ctx)
+	l.place.WaitUntilRunning(t, ctx)
 
 	t.Run("service invocation", func(t *testing.T) {
 		l.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
-		metrics := l.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:InvokeService/myapp|status:200"]))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := l.daprd.Metrics(t, ctx)
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:|status:200"]))
+			assert.Equal(c, 1, int(metrics["dapr_http_client_completed_count|app_id:myapp|method:GET|path:/dapr/config|status:200"]))
+			assert.NotContains(c, metrics, "dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/hi|status:200")
+			assert.NotContains(c, metrics, "dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/healthz|status:204 1.000000")
+		}, time.Second*5, time.Millisecond*10)
 	})
 
 	t.Run("state stores", func(t *testing.T) {
 		body := `[{"key":"myvalue", "value":"hello world"}]`
 		l.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore", strings.NewReader(body), "content-type", "application/json")
 		l.daprd.HTTPGet2xx(t, ctx, "/v1.0/state/mystore/myvalue")
-		metrics := l.daprd.Metrics(t, ctx)
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:SaveState|status:204"]))
-		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GetState|status:200"]))
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := l.daprd.Metrics(t, ctx)
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:|status:204"]))
+			assert.Equal(c, 2, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:|status:200"]))
+		}, time.Second*5, time.Millisecond*10)
+	})
+
+	t.Run("actor invocation", func(t *testing.T) {
+		l.daprd.HTTPPost2xx(t, ctx, "/v1.0/actors/myactortype/myactorid/method/foo", nil, "content-type", "application/json")
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := l.daprd.Metrics(t, ctx)
+			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:POST|path:|status:200"]))
+			assert.NotContains(c, metrics, "method:InvokeActor/myactortype.")
+		}, time.Second*5, time.Millisecond*10)
 	})
 }

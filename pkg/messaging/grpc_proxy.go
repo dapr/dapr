@@ -120,7 +120,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		if p.acl != nil {
 			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, false, p.acl) //nolint:nosnakecase
 			if !ok {
-				return ctx, nil, nil, nopTeardown, status.Errorf(codes.PermissionDenied, authError)
+				return ctx, nil, nil, nopTeardown, status.Error(codes.PermissionDenied, authError)
 			}
 		}
 
@@ -129,6 +129,12 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		if err != nil {
 			return ctx, nil, nil, nopTeardown, err
 		}
+
+		appMetadataToken := security.GetAppToken()
+		if appMetadataToken != "" {
+			outCtx = metadata.AppendToOutgoingContext(outCtx, securityConsts.APITokenHeader, appMetadataToken)
+		}
+
 		return outCtx, appClient.(*grpc.ClientConn), nil, nopTeardown, nil
 	}
 
@@ -138,11 +144,6 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 	)
 	outCtx = p.telemetryFn(outCtx)
 	outCtx = metadata.AppendToOutgoingContext(outCtx, invokev1.CallerIDHeader, p.appID, invokev1.CalleeIDHeader, target.id)
-
-	appMetadataToken := security.GetAppToken()
-	if appMetadataToken != "" {
-		outCtx = metadata.AppendToOutgoingContext(outCtx, securityConsts.APITokenHeader, appMetadataToken)
-	}
 
 	pt := &grpcProxy.ProxyTarget{
 		ID:        target.id,

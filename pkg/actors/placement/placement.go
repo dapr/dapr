@@ -61,6 +61,7 @@ const (
 type actorPlacement struct {
 	actorTypes []string
 	config     internal.Config
+	namespace  string
 
 	// client is the placement client.
 	client *placementClient
@@ -128,6 +129,7 @@ func NewActorPlacement(opts internal.ActorsProviderOptions) internal.PlacementSe
 		closeCh:           make(chan struct{}),
 		resiliency:        opts.Resiliency,
 		virtualNodesCache: hashing.NewVirtualNodesCache(),
+		namespace:         opts.Namespace,
 	}
 }
 
@@ -226,9 +228,16 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 
 			// TODO: we may need to handle specific errors later.
 			if err != nil {
+				closeConnection := true
+				if s, ok := status.FromError(err); ok && s.Code() == codes.FailedPrecondition {
+					// If the current server is not leader, then it will try the next server
+					// without closing the connection because we might need to reuse it if we're
+					// dialing the placement headless service
+					closeConnection = false
+				}
 				p.client.disconnectFn(func() {
 					p.onPlacementError(err) // depending on the returned error a new server could be used
-				})
+				}, closeConnection)
 			} else {
 				p.onPlacementOrder(resp)
 			}
@@ -276,7 +285,8 @@ func (p *actorPlacement) Start(ctx context.Context) error {
 				Pod:      p.config.PodName,
 				// Port is redundant because Name should include port number
 				// Port: 0,
-				ApiLevel: internal.ActorAPILevel,
+				ApiLevel:  internal.ActorAPILevel,
+				Namespace: p.namespace,
 			}
 
 			err := p.client.send(&host)
@@ -310,7 +320,7 @@ func (p *actorPlacement) Close() error {
 	return nil
 }
 
-// WaitUntilReady waits until placement table is until table lock is unlocked.
+// WaitUntilReady waits until placement table is unlocked.
 func (p *actorPlacement) WaitUntilReady(ctx context.Context) error {
 	p.placementTableLock.RLock()
 	hasTablesCh := p.hasPlacementTablesCh
@@ -371,7 +381,7 @@ func (p *actorPlacement) doLookupActor(ctx context.Context, actorType, actorID s
 	}
 	host, err := t.GetHost(actorID)
 	if err != nil || host == nil {
-		return "", "", nil //nolint:nilerr
+		return "", "", nil
 	}
 	return host.Name, host.AppID, nil
 }
@@ -425,6 +435,7 @@ func (p *actorPlacement) establishStreamConn(ctx context.Context) (established b
 			}
 
 			// Try a different instance of the placement service
+			//nolint:gosec
 			p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
 
 			// Halt all active actors, then reset the placement tables
@@ -458,6 +469,7 @@ func (p *actorPlacement) onPlacementError(err error) {
 	s, ok := status.FromError(err)
 	// If the current server is not leader, then it will try to the next server.
 	if ok && s.Code() == codes.FailedPrecondition {
+		//nolint:gosec
 		p.serverIndex.Store((p.serverIndex.Load() + 1) % int32(len(p.serverAddr)))
 	}
 }
@@ -474,6 +486,7 @@ func (p *actorPlacement) onPlacementOrder(in *v1pb.PlacementOrder) {
 	case lockOperation:
 		p.blockPlacements()
 
+		// If we don't receive an unlock in 5 seconds, unlock the table
 		go func() {
 			// TODO: Use lock-free table update.
 			// current implementation is distributed two-phase locking algorithm.

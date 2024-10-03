@@ -24,10 +24,13 @@ import (
 )
 
 type Options struct {
-	HealthzPort int
-	Kubeconfig  string
-	Logger      logger.Options
-	Metrics     *metrics.Options
+	HealthzPort          int
+	HealthzListenAddress string
+	Kubeconfig           string
+	Port                 int
+	ListenAddress        string
+	Logger               logger.Options
+	Metrics              *metrics.FlagOptions
 }
 
 func New(origArgs []string) *Options {
@@ -53,6 +56,9 @@ func New(origArgs []string) *Options {
 	fs.SortFlags = true
 
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port used for health checks")
+	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
+	fs.IntVar(&opts.Port, "port", 4000, "The port used for the injector service")
+	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The listen address for the injector service")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
@@ -63,7 +69,7 @@ func New(origArgs []string) *Options {
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
-	opts.Metrics = metrics.DefaultMetricOptions()
+	opts.Metrics = metrics.DefaultFlagOptions()
 	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
 	// Ignore errors; flagset is set for ExitOnError

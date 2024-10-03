@@ -23,7 +23,7 @@ GIT_COMMIT  = $(shell git rev-list -1 HEAD)
 GIT_VERSION ?= $(shell git describe --always --abbrev=7 --dirty)
 # By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
 CGO         ?= 0
-BINARIES    ?= daprd placement operator injector sentry
+BINARIES    ?= daprd placement operator injector sentry scheduler
 HA_MODE     ?= false
 # Force in-memory log for placement
 FORCE_INMEM ?= true
@@ -84,6 +84,7 @@ ifeq ($(LOCAL_OS),Linux)
    TARGET_OS_LOCAL = linux
 else ifeq ($(LOCAL_OS),Darwin)
    TARGET_OS_LOCAL = darwin
+   PATH := $(PATH):$(HOME)/go/bin/darwin_$(GOARCH)
 else
    TARGET_OS_LOCAL = windows
    PROTOC_GEN_GO_NAME := "protoc-gen-go.exe"
@@ -105,7 +106,7 @@ else
 	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go run .
 endif
 
-# Default docker container and e2e test targst.
+# Default docker container and e2e test target.
 TARGET_OS ?= linux
 TARGET_ARCH ?= amd64
 TEST_OUTPUT_FILE_PREFIX ?= ./test_report
@@ -130,6 +131,8 @@ HELM:=helm
 RELEASE_NAME?=dapr
 DAPR_NAMESPACE?=dapr-system
 DAPR_MTLS_ENABLED?=true
+DAPR_SCHEDULER_REPLICAS?=1
+DAPR_SCHEDULER_IN_MEMORY_STORAGE?=false
 HELM_CHART_ROOT:=./charts
 HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
@@ -144,7 +147,7 @@ BASE_PACKAGE_NAME := github.com/dapr/dapr
 LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
 # Comma-separated list of features to enable
-ENABLED_FEATURES ?= 
+ENABLED_FEATURES ?=
 
 DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitcommit=$(GIT_COMMIT) \
   -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitversion=$(GIT_VERSION) \
@@ -275,7 +278,8 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 		--set dapr_placement.image.name=$(RELEASE_NAME) \
 		--set dapr_sentry.image.name=$(RELEASE_NAME) \
 		--set dapr_sidecar_injector.image.name=$(RELEASE_NAME) \
-		--set dapr_sidecar_injector.injectorImage.name=$(RELEASE_NAME)
+		--set dapr_sidecar_injector.injectorImage.name=$(RELEASE_NAME) \
+		--set dapr_scheduler.image.name=$(RELEASE_NAME)
 endif
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
@@ -289,6 +293,9 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set global.imagePullPolicy=$(PULL_POLICY) --set global.imagePullSecrets=${DAPR_TEST_REGISTRY_SECRET} \
 		--set global.mtls.enabled=${DAPR_MTLS_ENABLED} \
 		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) \
+		--set dapr_scheduler.replicaCount=$(DAPR_SCHEDULER_REPLICAS) \
+		--set dapr_scheduler.cluster.storageSize=100Mi \
+		--set dapr_scheduler.cluster.inMemoryStorage=$(DAPR_SCHEDULER_IN_MEMORY_STORAGE) \
 		$(ADDITIONAL_HELM_SET) $(HELM_CHART_DIR)
 
 ################################################################################
@@ -349,6 +356,7 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/retry/... \
 ./pkg/resiliency/... \
 ./pkg/runtime/... \
+./pkg/scheduler/... \
 ./pkg/scopes/... \
 ./pkg/security/... \
 ./pkg/sentry/... \
@@ -382,8 +390,8 @@ test-integration-parallel: test-deps
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.55.2 , otherwise you might encounter errors.
-# You can download version v1.55.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.55.2
+# Please use golangci-lint version v1.61.0 , otherwise you might encounter errors.
+# You can download version v1.61.0 at https://github.com/golangci/golangci-lint/releases/tag/v1.61.0
 .PHONY: lint
 lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
@@ -405,7 +413,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.21; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.23.1; cd -
 endef
 
 # Generate modtidy target action for each go.mod file

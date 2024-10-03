@@ -21,7 +21,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"sync"
 	"sync/atomic"
 	"time"
 
@@ -46,6 +45,13 @@ const (
 	defaultNamespace     = "default"
 	WorkflowNameLabelKey = "workflow"
 	ActivityNameLabelKey = "activity"
+)
+
+type runCompleted bool
+
+const (
+	runCompletedFalse runCompleted = false
+	runCompletedTrue  runCompleted = true
 )
 
 // actorsBackendConfig is the configuration for the workflow engine's actors backend
@@ -75,7 +81,6 @@ func (c *actorsBackendConfig) String() string {
 type ActorBackend struct {
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
-	startedOnce               sync.Once
 	config                    actorsBackendConfig
 	activityActorOpts         activityActorOpts
 	workflowActorOpts         workflowActorOpts
@@ -388,11 +393,11 @@ func (abe *ActorBackend) PurgeOrchestrationState(ctx context.Context, id api.Ins
 
 // Start implements backend.Backend
 func (abe *ActorBackend) Start(ctx context.Context) error {
-	var err error
-	abe.startedOnce.Do(func() {
-		err = abe.validateConfiguration()
-	})
-	return err
+	err := abe.validateConfiguration()
+	if err != nil {
+		return err
+	}
+	return nil
 }
 
 // Stop implements backend.Backend

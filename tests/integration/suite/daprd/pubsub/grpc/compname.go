@@ -29,8 +29,8 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -92,11 +92,12 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
-	pt := util.NewParallel(t)
+	pt := parallel.New(t)
 	for i := range c.pubsubNames {
 		pubsubName := c.pubsubNames[i]
 		topicName := c.topicNames[i]
 		pt.Add(func(col *assert.CollectT) {
+			//nolint:staticcheck
 			conn, err := grpc.DialContext(ctx, c.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 			require.NoError(col, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })

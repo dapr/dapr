@@ -36,8 +36,6 @@ type SidecarConfig struct {
 
 	Mode                        injectorConsts.DaprMode `default:"kubernetes"`
 	Namespace                   string
-	CertChain                   string
-	CertKey                     string
 	MTLSEnabled                 bool
 	Identity                    string
 	IgnoreEntrypointTolerations []corev1.Toleration
@@ -45,6 +43,8 @@ type SidecarConfig struct {
 	OperatorAddress             string
 	SentryAddress               string
 	RunAsNonRoot                bool
+	RunAsUser                   *int64
+	RunAsGroup                  *int64
 	EnableK8sDownwardAPIs       bool
 	ReadOnlyRootFilesystem      bool
 	SidecarDropALLCapabilities  bool
@@ -109,6 +109,7 @@ type SidecarConfig struct {
 	AppHealthProbeTimeout               int32   `annotation:"dapr.io/app-health-probe-timeout" default:"500"` // In milliseconds
 	AppHealthThreshold                  int32   `annotation:"dapr.io/app-health-threshold" default:"3"`
 	PlacementAddress                    string  `annotation:"dapr.io/placement-host-address"`
+	SchedulerAddress                    string  `annotation:"dapr.io/scheduler-host-address"`
 	PluggableComponents                 string  `annotation:"dapr.io/pluggable-components"`
 	PluggableComponentsSocketsFolder    string  `annotation:"dapr.io/pluggable-components-sockets-folder"`
 	ComponentContainer                  string  `annotation:"dapr.io/component-container"`
@@ -134,7 +135,7 @@ func (c *SidecarConfig) SetFromPodAnnotations() {
 func (c *SidecarConfig) setDefaultValues() {
 	// Iterate through the fields using reflection
 	val := reflect.ValueOf(c).Elem()
-	for i := 0; i < val.NumField(); i++ {
+	for i := range val.NumField() {
 		fieldT := val.Type().Field(i)
 		fieldV := val.Field(i)
 		def := fieldT.Tag.Get("default")
@@ -151,7 +152,7 @@ func (c *SidecarConfig) setDefaultValues() {
 func (c *SidecarConfig) setFromAnnotations(an map[string]string) {
 	// Iterate through the fields using reflection
 	val := reflect.ValueOf(c).Elem()
-	for i := 0; i < val.NumField(); i++ {
+	for i := range val.NumField() {
 		fieldV := val.Field(i)
 		fieldT := val.Type().Field(i)
 		key := fieldT.Tag.Get("annotation")
@@ -217,7 +218,7 @@ func (c *SidecarConfig) toString(includeAll bool) string {
 
 	// Iterate through the fields using reflection
 	val := reflect.ValueOf(c).Elem()
-	for i := 0; i < val.NumField(); i++ {
+	for i := range val.NumField() {
 		fieldT := val.Type().Field(i)
 		fieldV := val.Field(i)
 		key := fieldT.Tag.Get("annotation")

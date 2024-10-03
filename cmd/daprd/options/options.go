@@ -18,6 +18,7 @@ import (
 	"math"
 	"os"
 	"strconv"
+	"strings"
 	"time"
 
 	"github.com/spf13/pflag"
@@ -35,49 +36,52 @@ import (
 )
 
 type Options struct {
-	AppID                        string
-	ComponentsPath               string
-	ControlPlaneAddress          string
-	ControlPlaneTrustDomain      string
-	ControlPlaneNamespace        string
-	SentryAddress                string
-	TrustAnchors                 []byte
-	AllowedOrigins               string
-	EnableProfiling              bool
-	AppMaxConcurrency            int
-	EnableMTLS                   bool
-	AppSSL                       bool
-	MaxRequestSize               int // In bytes
-	ResourcesPath                []string
-	AppProtocol                  string
-	EnableAPILogging             *bool
-	RuntimeVersion               bool
-	BuildInfo                    bool
-	WaitCommand                  bool
-	DaprHTTPPort                 string
-	DaprAPIGRPCPort              string
-	ProfilePort                  string
-	DaprInternalGRPCPort         string
-	DaprPublicPort               string
-	AppPort                      string
-	DaprGracefulShutdownSeconds  int
-	DaprBlockShutdownDuration    *time.Duration
-	ActorsService                string
-	RemindersService             string
-	DaprAPIListenAddresses       string
-	AppHealthProbeInterval       int
-	AppHealthProbeTimeout        int
-	AppHealthThreshold           int
-	EnableAppHealthCheck         bool
-	Mode                         string
-	Config                       []string
-	UnixDomainSocket             string
-	ReadBufferSize               int // In bytes
-	DisableBuiltinK8sSecretStore bool
-	AppHealthCheckPath           string
-	AppChannelAddress            string
-	Logger                       logger.Options
-	Metrics                      *metrics.Options
+	AppID                         string
+	ComponentsPath                string
+	ControlPlaneAddress           string
+	ControlPlaneTrustDomain       string
+	ControlPlaneNamespace         string
+	SentryAddress                 string
+	TrustAnchors                  []byte
+	AllowedOrigins                string
+	EnableProfiling               bool
+	AppMaxConcurrency             int
+	EnableMTLS                    bool
+	AppSSL                        bool
+	MaxRequestSize                int // In bytes
+	ResourcesPath                 []string
+	AppProtocol                   string
+	EnableAPILogging              *bool
+	RuntimeVersion                bool
+	BuildInfo                     bool
+	WaitCommand                   bool
+	DaprHTTPPort                  string
+	DaprAPIGRPCPort               string
+	ProfilePort                   string
+	DaprInternalGRPCPort          string
+	DaprInternalGRPCListenAddress string
+	DaprPublicPort                string
+	DaprPublicListenAddress       string
+	AppPort                       string
+	DaprGracefulShutdownSeconds   int
+	DaprBlockShutdownDuration     *time.Duration
+	ActorsService                 string
+	RemindersService              string
+	SchedulerAddress              []string
+	DaprAPIListenAddresses        string
+	AppHealthProbeInterval        int
+	AppHealthProbeTimeout         int
+	AppHealthThreshold            int
+	EnableAppHealthCheck          bool
+	Mode                          string
+	Config                        []string
+	UnixDomainSocket              string
+	ReadBufferSize                int // In bytes
+	DisableBuiltinK8sSecretStore  bool
+	AppHealthCheckPath            string
+	AppChannelAddress             string
+	Logger                        logger.Options
+	Metrics                       *metrics.FlagOptions
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -117,8 +121,10 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.DaprHTTPPort, "dapr-http-port", strconv.Itoa(runtime.DefaultDaprHTTPPort), "HTTP port for Dapr API to listen on")
 	fs.StringVar(&opts.DaprAPIListenAddresses, "dapr-listen-addresses", runtime.DefaultAPIListenAddress, "One or more addresses for the Dapr API to listen on, CSV limited")
 	fs.StringVar(&opts.DaprPublicPort, "dapr-public-port", "", "Public port for Dapr Health and Metadata to listen on")
+	fs.StringVar(&opts.DaprPublicListenAddress, "dapr-public-listen-address", "", "Public listen address for Dapr Health and Metadata")
 	fs.StringVar(&opts.DaprAPIGRPCPort, "dapr-grpc-port", strconv.Itoa(runtime.DefaultDaprAPIGRPCPort), "gRPC port for the Dapr API to listen on")
 	fs.StringVar(&opts.DaprInternalGRPCPort, "dapr-internal-grpc-port", "", "gRPC port for the Dapr Internal API to listen on")
+	fs.StringVar(&opts.DaprInternalGRPCListenAddress, "dapr-internal-grpc-listen-address", "", "gRPC listen address for the Dapr Internal API")
 	fs.StringVar(&opts.AppPort, "app-port", "", "The port the application is listening on")
 	fs.StringVar(&opts.ProfilePort, "profile-port", strconv.Itoa(runtime.DefaultProfilePort), "The port for the profile server")
 	fs.StringVar(&opts.AppProtocol, "app-protocol", string(protocol.HTTPProtocol), "Protocol for the application: grpc, grpcs, http, https, h2c")
@@ -162,6 +168,7 @@ func New(origArgs []string) (*Options, error) {
 	// --placement-host-address is a legacy (but not deprecated) flag that is translated to the actors-service flag
 	var placementServiceHostAddr string
 	fs.StringVar(&placementServiceHostAddr, "placement-host-address", "", "Addresses for Dapr Actor Placement servers (overrides actors-service)")
+	fs.StringSliceVar(&opts.SchedulerAddress, "scheduler-host-address", nil, "Addresses of the Scheduler service instance(s), as comma separated host:port pairs")
 	fs.StringVar(&opts.ActorsService, "actors-service", "", "Type and address of the actors service, in the format 'type:address'")
 	fs.StringVar(&opts.RemindersService, "reminders-service", "", "Type and address of the reminders service, in the format 'type:address'")
 
@@ -169,7 +176,7 @@ func New(origArgs []string) (*Options, error) {
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
-	opts.Metrics = metrics.DefaultMetricOptions()
+	opts.Metrics = metrics.DefaultFlagOptions()
 	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
 	// Ignore errors; flagset is set for ExitOnError
@@ -242,6 +249,13 @@ func New(origArgs []string) (*Options, error) {
 
 	if !fs.Changed("dapr-block-shutdown-duration") {
 		opts.DaprBlockShutdownDuration = nil
+	}
+
+	if !fs.Changed("scheduler-host-address") {
+		addr, ok := os.LookupEnv(consts.SchedulerHostAddressEnvVar)
+		if ok {
+			opts.SchedulerAddress = strings.Split(addr, ",")
+		}
 	}
 
 	return &opts, nil

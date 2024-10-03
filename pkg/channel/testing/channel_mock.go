@@ -7,6 +7,7 @@ import (
 	"sync"
 
 	mock "github.com/stretchr/testify/mock"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/apphealth"
 	"github.com/dapr/dapr/pkg/config"
@@ -18,6 +19,11 @@ type MockAppChannel struct {
 	mock.Mock
 	requestsReceived map[string][]byte
 	mutex            sync.Mutex
+}
+
+// TriggerJob - TODO implement
+func (_m *MockAppChannel) TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+	return nil, nil
 }
 
 // GetAppConfig provides a mock function with given fields:

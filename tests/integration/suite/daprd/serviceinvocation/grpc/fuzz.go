@@ -30,8 +30,9 @@ import (
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -57,7 +58,7 @@ func (f *fuzzgrpc) Setup(t *testing.T) []framework.Option {
 		}, nil
 	}
 
-	srv := newGRPCServer(t, onInvoke)
+	srv := app.New(t, app.WithOnInvokeFn(onInvoke))
 	f.daprd1 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv.Port(t)))
 	f.daprd2 = procdaprd.New(t)
 
@@ -80,7 +81,7 @@ func (f *fuzzgrpc) Run(t *testing.T, ctx context.Context) {
 	f.daprd1.WaitUntilRunning(t, ctx)
 	f.daprd2.WaitUntilRunning(t, ctx)
 
-	pt := util.NewParallel(t)
+	pt := parallel.New(t)
 	for i := 0; i < len(f.methods); i++ {
 		method := f.methods[i]
 		body := f.bodies[i]
@@ -91,6 +92,7 @@ func (f *fuzzgrpc) Run(t *testing.T, ctx context.Context) {
 		}
 
 		pt.Add(func(c *assert.CollectT) {
+			//nolint:staticcheck
 			conn, err := grpc.DialContext(ctx, fmt.Sprintf("127.0.0.1:%d", f.daprd2.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 			require.NoError(c, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })

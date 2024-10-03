@@ -37,7 +37,7 @@ env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.27.6"
+  KUBECTLVER: "v1.30.0"
   # If not empty, uses cloud resources for testing
   TEST_CLOUD_ENV: "azure"
   # Version of Helm
@@ -51,7 +51,7 @@ env:
   # Enable tests on ARM64
   ENABLE_ARM: "false"
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
-  AZURE_REGIONS: "westus3"
+  AZURE_REGIONS: "eastus"
   AZURE_ARM_REGIONS: "eastus"
   # Container registry where to cache e2e test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
@@ -64,8 +64,8 @@ env:
   DAPR_GO_BUILD_TAGS: "subtlecrypto,wfbackendsqlite"
   # Useful for upgrade/downgrade/compatibility tests
   # TODO: Make this auto-populated based on GitHub's releases.
-  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.12.0"
-  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.11.4"
+  DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.13.0"
+  DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.12.5"
 
 jobs:
   deploy-infrastructure:
@@ -168,8 +168,8 @@ jobs:
                 location2=${REGION2} \
                 location3=${REGION3} \
                 dateTag="${DATE_TAG}" \
-                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
-                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
+                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID_EAST }}" \
+                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID_EAST }}" \
                 armDiagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_ARM_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
                 armDiagStorageResourceId="${{ secrets.AZURE_ARM_DIAG_STORAGE_ID }}" \
               && success=true \

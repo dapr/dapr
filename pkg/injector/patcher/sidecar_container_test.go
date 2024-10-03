@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestParseEnvString(t *testing.T) {
@@ -329,8 +330,6 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Identity = "pod_identity"
 		c.ControlPlaneNamespace = "my-namespace"
 		c.ControlPlaneTrustDomain = "test.example.com"
-		c.CertChain = "my-cert-chain"
-		c.CertKey = "my-cert-key"
 
 		c.SetFromPodAnnotations()
 
@@ -362,7 +361,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		// Command should be empty, image's entrypoint to be used.
 		assert.Empty(t, container.Command)
-		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_CERT_CHAIN","value":"my-cert-chain"},{"name":"DAPR_CERT_KEY","value":"my-cert-key"},{"name":"SENTRY_LOCAL_IDENTITY","value":"pod_identity"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
+		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -394,8 +393,6 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Identity = "pod_identity"
 		c.ControlPlaneNamespace = "my-namespace"
 		c.ControlPlaneTrustDomain = "test.example.com"
-		c.CertChain = "my-cert-chain"
-		c.CertKey = "my-cert-key"
 		c.EnableK8sDownwardAPIs = true
 
 		c.SetFromPodAnnotations()
@@ -436,7 +433,7 @@ func TestGetSidecarContainer(t *testing.T) {
 
 		// Command should be empty, image's entrypoint to be used.
 		assert.Empty(t, container.Command)
-		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_HOST_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},{"name":"DAPR_CERT_CHAIN","value":"my-cert-chain"},{"name":"DAPR_CERT_KEY","value":"my-cert-key"},{"name":"SENTRY_LOCAL_IDENTITY","value":"pod_identity"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
+		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_HOST_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -852,6 +849,58 @@ func TestGetSidecarContainer(t *testing.T) {
 				assert.NotNil(t, container.SecurityContext.Capabilities, "SecurityContext.Capabilities should not be nil")
 				assert.Equal(t, corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}, *container.SecurityContext.Capabilities, "SecurityContext.Capabilities should drop all capabilities")
 				assert.Nil(t, container.SecurityContext.SeccompProfile)
+			},
+		},
+		{
+			name: "set run as non root explicitly true",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsNonRoot = true
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
+				assert.Equal(t, ptr.Of(true), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be true")
+			},
+		},
+		{
+			name: "set run as non root explicitly false",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsNonRoot = false
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
+				assert.Equal(t, ptr.Of(false), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be false")
+			},
+		},
+		{
+			name: "set run as user 1000",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsUser = ptr.Of(int64(1000))
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should not be nil")
+				assert.Equal(t, ptr.Of(int64(1000)), container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be 1000")
+			},
+		},
+		{
+			name: "do not set run as user leave it as default",
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be nil")
+			},
+		},
+		{
+			name: "set run as group 3000",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsGroup = ptr.Of(int64(3000))
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should not be nil")
+				assert.Equal(t, ptr.Of(int64(3000)), container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be 3000")
+			},
+		},
+		{
+			name: "do not set run as group leave it as default",
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be nil")
 			},
 		},
 	}))

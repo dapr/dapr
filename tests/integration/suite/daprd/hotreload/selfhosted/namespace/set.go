@@ -57,7 +57,7 @@ spec:
 	s.resDir = t.TempDir()
 
 	s.logline = logline.New(t, logline.WithStdoutLineContains(
-		`"Fatal error from runtime: failed to load resources from disk: duplicate definition of component name foo (state.in-memory/v1) with existing foo (pubsub.in-memory/v1)"`,
+		`"Fatal error from runtime: failed to load resources from disk: duplicate definition of Component name foo (state.in-memory/v1) with existing foo (pubsub.in-memory/v1)"`,
 	))
 
 	s.daprd = daprd.New(t,
@@ -92,7 +92,7 @@ func (s *set) Run(t *testing.T, ctx context.Context) {
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 			},
-		}, s.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.GetMetaRegisteredComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
@@ -106,7 +106,7 @@ spec:
  version: v1
 `), 0o600))
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
-		assert.Empty(t, s.daprd.RegistedComponents(t, ctx))
+		assert.Empty(t, s.daprd.GetMetaRegisteredComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
@@ -124,7 +124,7 @@ spec:
 				Name: "123", Type: "pubsub.in-memory", Version: "v1",
 				Capabilities: []string{"SUBSCRIBE_WILDCARDS"},
 			},
-		}, s.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.GetMetaRegisteredComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
@@ -143,7 +143,7 @@ spec:
 				Name: "123", Type: "state.in-memory", Version: "v1",
 				Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
 			},
-		}, s.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.GetMetaRegisteredComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`
@@ -171,7 +171,7 @@ spec:
 				Name: "123", Type: "pubsub.in-memory", Version: "v1",
 				Capabilities: []string{"SUBSCRIBE_WILDCARDS"},
 			},
-		}, s.daprd.RegistedComponents(t, ctx))
+		}, s.daprd.GetMetaRegisteredComponents(t, ctx))
 	}, 5*time.Second, 10*time.Millisecond)
 
 	require.NoError(t, os.WriteFile(filepath.Join(s.resDir, "1.yaml"), []byte(`

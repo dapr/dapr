@@ -54,8 +54,11 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 	// App connection information
 	appConnectionProperties := &runtimev1pb.AppConnectionProperties{
 		ChannelAddress: a.appConnectionConfig.ChannelAddress,
-		Port:           int32(a.appConnectionConfig.Port),
-		Protocol:       string(a.appConnectionConfig.Protocol),
+		// TODO: Update Ports and MaxConcurrency in runtime to use uint32
+		//nolint:gosec
+		Port:     int32(a.appConnectionConfig.Port),
+		Protocol: string(a.appConnectionConfig.Protocol),
+		//nolint:gosec
 		MaxConcurrency: int32(a.appConnectionConfig.MaxConcurrency),
 	}
 
@@ -86,7 +89,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 	}
 
 	// Subscriptions
-	subscriptions := a.compStore.ListSubscriptions()
+	subscriptions := a.compStore.ListTypedSubscriptions()
 	ps := make([]*runtimev1pb.PubsubSubscription, len(subscriptions))
 	for i, s := range subscriptions {
 		ps[i] = &runtimev1pb.PubsubSubscription{
@@ -95,6 +98,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 			Metadata:        s.Metadata,
 			DeadLetterTopic: s.DeadLetterTopic,
 			Rules:           metadataConvertPubSubSubscriptionRules(s.Rules),
+			Type:            s.Type,
 		}
 	}
 

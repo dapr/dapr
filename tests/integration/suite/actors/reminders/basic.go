@@ -29,10 +29,10 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -45,7 +45,8 @@ type basic struct {
 	daprd *daprd.Daprd
 	place *placement.Placement
 
-	methodcalled atomic.Int64
+	reminderCalled     atomic.Int64
+	stopReminderCalled atomic.Int64
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
@@ -57,7 +58,12 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		w.WriteHeader(http.StatusOK)
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/remind/remindermethod", func(w http.ResponseWriter, r *http.Request) {
-		b.methodcalled.Add(1)
+		b.reminderCalled.Add(1)
+	})
+	handler.HandleFunc("/actors/myactortype/myactorid/method/remind/stopreminder", func(w http.ResponseWriter, r *http.Request) {
+		b.stopReminderCalled.Add(1)
+		w.Header().Set("X-DaprReminderCancel", "true")
+		w.WriteHeader(http.StatusOK)
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/foo", func(w http.ResponseWriter, r *http.Request) {})
 
@@ -78,51 +84,82 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.place.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	daprdURL := "http://localhost:" + strconv.Itoa(b.daprd.HTTPPort()) + "/v1.0/actors/myactortype/myactorid"
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/method/foo", nil)
-	require.NoError(t, err)
+	t.Run("actor ready", func(t *testing.T) {
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/method/foo", nil)
+		require.NoError(t, err)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, rErr := client.Do(req)
-		//nolint:testifylint
-		if assert.NoError(c, rErr) {
-			assert.NoError(c, resp.Body.Close())
-			assert.Equal(c, http.StatusOK, resp.StatusCode)
-		}
-	}, time.Second*10, time.Millisecond*10, "actor not ready in time")
-
-	body := `{"dueTime": "0ms"}`
-	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/reminders/remindermethod", strings.NewReader(body))
-	require.NoError(t, err)
-
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-
-	assert.Eventually(t, func() bool {
-		return b.methodcalled.Load() == 1
-	}, time.Second*3, time.Millisecond*10)
-
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			resp, rErr := client.Do(req)
+			//nolint:testifylint
+			if assert.NoError(c, rErr) {
+				assert.NoError(c, resp.Body.Close())
+				assert.Equal(c, http.StatusOK, resp.StatusCode)
+			}
+		}, 10*time.Second, 10*time.Millisecond, "actor not ready in time")
+	})
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, b.daprd.GRPCAddress(),
-		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(),
+		grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	gclient := rtv1.NewDaprClient(conn)
 
-	_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-		ActorType: "myactortype",
-		ActorId:   "myactorid",
-		Name:      "remindermethod",
-		DueTime:   "0ms",
-	})
-	require.NoError(t, err)
+	t.Run("schedule reminder via HTTP", func(t *testing.T) {
+		const body = `{"dueTime": "0ms"}`
+		var (
+			req  *http.Request
+			resp *http.Response
+		)
+		req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/reminders/remindermethod", strings.NewReader(body))
+		require.NoError(t, err)
 
-	assert.Eventually(t, func() bool {
-		return b.methodcalled.Load() == 2
-	}, time.Second*3, time.Millisecond*10)
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+		assert.Eventually(t, func() bool {
+			return b.reminderCalled.Load() == 1
+		}, 3*time.Second, 10*time.Millisecond)
+	})
+
+	t.Run("schedule reminder via gRPC", func(t *testing.T) {
+		_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+			ActorType: "myactortype",
+			ActorId:   "myactorid",
+			Name:      "remindermethod",
+			DueTime:   "0ms",
+		})
+		require.NoError(t, err)
+
+		assert.Eventually(t, func() bool {
+			return b.reminderCalled.Load() == 2
+		}, 3*time.Second, 10*time.Millisecond)
+	})
+
+	t.Run("cancel recurring reminder", func(t *testing.T) {
+		// Register a reminder that repeats every second
+		_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+			ActorType: "myactortype",
+			ActorId:   "myactorid",
+			Name:      "stopreminder",
+			DueTime:   "0s",
+			Period:    "1s",
+		})
+		require.NoError(t, err)
+
+		// Should be invoked once
+		assert.Eventually(t, func() bool {
+			return b.stopReminderCalled.Load() == 1
+		}, 3*time.Second, 10*time.Millisecond)
+
+		// After 2s, should not have been invoked more
+		time.Sleep(2 * time.Second)
+		assert.Equal(t, int64(1), b.stopReminderCalled.Load())
+	})
 }

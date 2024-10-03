@@ -104,7 +104,7 @@ func PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta map[string]string) m
 func Filter[T any](items []T, test func(item T) bool) []T {
 	filteredItems := make([]T, len(items))
 	n := 0
-	for i := 0; i < len(items); i++ {
+	for i := range items {
 		if test(items[i]) {
 			filteredItems[n] = items[i]
 			n++

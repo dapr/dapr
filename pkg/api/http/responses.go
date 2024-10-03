@@ -97,7 +97,7 @@ func respondWithEmpty(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func respondWithHTTPRawResponse(w http.ResponseWriter, m *UniversalHTTPRawResponse, statusCode int) {
+func respondWithHTTPRawResponse(w http.ResponseWriter, m UniversalHTTPRawResponse, statusCode int) {
 	if m.StatusCode > 0 {
 		statusCode = m.StatusCode
 	}
@@ -151,7 +151,20 @@ func respondWithError(w http.ResponseWriter, err error) {
 		return
 	}
 
+	if kitErr, ok := err.(*kitErrors.Error); ok {
+		respondWithData(w, kitErr.HTTPStatusCode(), NewErrorResponse("ERROR", kitErr.Error()).JSONErrorValue())
+		return
+	}
+
 	// Respond with a generic error
 	msg := NewErrorResponse("ERROR", err.Error())
 	respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
+}
+
+// Set metadata as response headers, where each key has the "metadata." prefix
+func setResponseMetadataHeaders(w http.ResponseWriter, md map[string]string) {
+	h := w.Header()
+	for k, v := range md {
+		h.Set(metadataPrefix+k, v)
+	}
 }

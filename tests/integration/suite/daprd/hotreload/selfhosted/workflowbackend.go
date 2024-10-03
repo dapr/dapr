@@ -27,7 +27,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -140,9 +139,7 @@ func (w *workflowbackend) Run(t *testing.T, ctx context.Context) {
 	w.daprdUpdate.WaitUntilRunning(t, ctx)
 	w.daprdDelete.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
-
-	comps := util.GetMetaComponents(t, ctx, httpClient, w.daprdCreate.HTTPPort())
+	comps := w.daprdCreate.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{
 			Name: "mystore", Type: "state.in-memory", Version: "v1",
@@ -160,7 +157,7 @@ spec:
 `), 0o600))
 	w.loglineCreate.EventuallyFoundAll(t)
 
-	comps = util.GetMetaComponents(t, ctx, httpClient, w.daprdUpdate.HTTPPort())
+	comps = w.daprdUpdate.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
 		{
@@ -180,7 +177,7 @@ spec:
 `), 0o600))
 	w.loglineUpdate.EventuallyFoundAll(t)
 
-	comps = util.GetMetaComponents(t, ctx, httpClient, w.daprdDelete.HTTPPort())
+	comps = w.daprdDelete.GetMetaRegisteredComponents(t, ctx)
 	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
 		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
 		{

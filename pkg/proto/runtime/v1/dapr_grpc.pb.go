@@ -43,6 +43,7 @@ const (
 	Dapr_ExecuteStateTransaction_FullMethodName        = "/dapr.proto.runtime.v1.Dapr/ExecuteStateTransaction"
 	Dapr_PublishEvent_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/PublishEvent"
 	Dapr_BulkPublishEventAlpha1_FullMethodName         = "/dapr.proto.runtime.v1.Dapr/BulkPublishEventAlpha1"
+	Dapr_SubscribeTopicEventsAlpha1_FullMethodName     = "/dapr.proto.runtime.v1.Dapr/SubscribeTopicEventsAlpha1"
 	Dapr_InvokeBinding_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/InvokeBinding"
 	Dapr_GetSecret_FullMethodName                      = "/dapr.proto.runtime.v1.Dapr/GetSecret"
 	Dapr_GetBulkSecret_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/GetBulkSecret"
@@ -87,6 +88,9 @@ const (
 	Dapr_ResumeWorkflowBeta1_FullMethodName            = "/dapr.proto.runtime.v1.Dapr/ResumeWorkflowBeta1"
 	Dapr_RaiseEventWorkflowBeta1_FullMethodName        = "/dapr.proto.runtime.v1.Dapr/RaiseEventWorkflowBeta1"
 	Dapr_Shutdown_FullMethodName                       = "/dapr.proto.runtime.v1.Dapr/Shutdown"
+	Dapr_ScheduleJobAlpha1_FullMethodName              = "/dapr.proto.runtime.v1.Dapr/ScheduleJobAlpha1"
+	Dapr_GetJobAlpha1_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/GetJobAlpha1"
+	Dapr_DeleteJobAlpha1_FullMethodName                = "/dapr.proto.runtime.v1.Dapr/DeleteJobAlpha1"
 )
 
 // DaprClient is the client API for Dapr service.
@@ -114,6 +118,9 @@ type DaprClient interface {
 	PublishEvent(ctx context.Context, in *PublishEventRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEventAlpha1(ctx context.Context, in *BulkPublishRequest, opts ...grpc.CallOption) (*BulkPublishResponse, error)
+	// SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
+	// events from it.
+	SubscribeTopicEventsAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_SubscribeTopicEventsAlpha1Client, error)
 	// Invokes binding data to specific output bindings
 	InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -202,6 +209,12 @@ type DaprClient interface {
 	RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Create and schedule a job
+	ScheduleJobAlpha1(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error)
+	// Gets a scheduled job
+	GetJobAlpha1(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error)
+	// Delete a job
+	DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
 }
 
 type daprClient struct {
@@ -300,6 +313,37 @@ func (c *daprClient) BulkPublishEventAlpha1(ctx context.Context, in *BulkPublish
 		return nil, err
 	}
 	return out, nil
+}
+
+func (c *daprClient) SubscribeTopicEventsAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_SubscribeTopicEventsAlpha1Client, error) {
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[0], Dapr_SubscribeTopicEventsAlpha1_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &daprSubscribeTopicEventsAlpha1Client{stream}
+	return x, nil
+}
+
+type Dapr_SubscribeTopicEventsAlpha1Client interface {
+	Send(*SubscribeTopicEventsRequestAlpha1) error
+	Recv() (*SubscribeTopicEventsResponseAlpha1, error)
+	grpc.ClientStream
+}
+
+type daprSubscribeTopicEventsAlpha1Client struct {
+	grpc.ClientStream
+}
+
+func (x *daprSubscribeTopicEventsAlpha1Client) Send(m *SubscribeTopicEventsRequestAlpha1) error {
+	return x.ClientStream.SendMsg(m)
+}
+
+func (x *daprSubscribeTopicEventsAlpha1Client) Recv() (*SubscribeTopicEventsResponseAlpha1, error) {
+	m := new(SubscribeTopicEventsResponseAlpha1)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func (c *daprClient) InvokeBinding(ctx context.Context, in *InvokeBindingRequest, opts ...grpc.CallOption) (*InvokeBindingResponse, error) {
@@ -411,7 +455,7 @@ func (c *daprClient) GetConfiguration(ctx context.Context, in *GetConfigurationR
 }
 
 func (c *daprClient) SubscribeConfigurationAlpha1(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationAlpha1Client, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[0], Dapr_SubscribeConfigurationAlpha1_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[1], Dapr_SubscribeConfigurationAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -443,7 +487,7 @@ func (x *daprSubscribeConfigurationAlpha1Client) Recv() (*SubscribeConfiguration
 }
 
 func (c *daprClient) SubscribeConfiguration(ctx context.Context, in *SubscribeConfigurationRequest, opts ...grpc.CallOption) (Dapr_SubscribeConfigurationClient, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[1], Dapr_SubscribeConfiguration_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[2], Dapr_SubscribeConfiguration_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -511,7 +555,7 @@ func (c *daprClient) UnlockAlpha1(ctx context.Context, in *UnlockRequest, opts .
 }
 
 func (c *daprClient) EncryptAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_EncryptAlpha1Client, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[2], Dapr_EncryptAlpha1_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[3], Dapr_EncryptAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -542,7 +586,7 @@ func (x *daprEncryptAlpha1Client) Recv() (*EncryptResponse, error) {
 }
 
 func (c *daprClient) DecryptAlpha1(ctx context.Context, opts ...grpc.CallOption) (Dapr_DecryptAlpha1Client, error) {
-	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[3], Dapr_DecryptAlpha1_FullMethodName, opts...)
+	stream, err := c.cc.NewStream(ctx, &Dapr_ServiceDesc.Streams[4], Dapr_DecryptAlpha1_FullMethodName, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -788,6 +832,33 @@ func (c *daprClient) Shutdown(ctx context.Context, in *ShutdownRequest, opts ...
 	return out, nil
 }
 
+func (c *daprClient) ScheduleJobAlpha1(ctx context.Context, in *ScheduleJobRequest, opts ...grpc.CallOption) (*ScheduleJobResponse, error) {
+	out := new(ScheduleJobResponse)
+	err := c.cc.Invoke(ctx, Dapr_ScheduleJobAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) GetJobAlpha1(ctx context.Context, in *GetJobRequest, opts ...grpc.CallOption) (*GetJobResponse, error) {
+	out := new(GetJobResponse)
+	err := c.cc.Invoke(ctx, Dapr_GetJobAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error) {
+	out := new(DeleteJobResponse)
+	err := c.cc.Invoke(ctx, Dapr_DeleteJobAlpha1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // DaprServer is the server API for Dapr service.
 // All implementations should embed UnimplementedDaprServer
 // for forward compatibility
@@ -813,6 +884,9 @@ type DaprServer interface {
 	PublishEvent(context.Context, *PublishEventRequest) (*emptypb.Empty, error)
 	// Bulk Publishes multiple events to the specified topic.
 	BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error)
+	// SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
+	// events from it.
+	SubscribeTopicEventsAlpha1(Dapr_SubscribeTopicEventsAlpha1Server) error
 	// Invokes binding data to specific output bindings
 	InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error)
 	// Gets secrets from secret stores.
@@ -901,6 +975,12 @@ type DaprServer interface {
 	RaiseEventWorkflowBeta1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error)
 	// Shutdown the sidecar
 	Shutdown(context.Context, *ShutdownRequest) (*emptypb.Empty, error)
+	// Create and schedule a job
+	ScheduleJobAlpha1(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error)
+	// Gets a scheduled job
+	GetJobAlpha1(context.Context, *GetJobRequest) (*GetJobResponse, error)
+	// Delete a job
+	DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -936,6 +1016,9 @@ func (UnimplementedDaprServer) PublishEvent(context.Context, *PublishEventReques
 }
 func (UnimplementedDaprServer) BulkPublishEventAlpha1(context.Context, *BulkPublishRequest) (*BulkPublishResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method BulkPublishEventAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) SubscribeTopicEventsAlpha1(Dapr_SubscribeTopicEventsAlpha1Server) error {
+	return status.Errorf(codes.Unimplemented, "method SubscribeTopicEventsAlpha1 not implemented")
 }
 func (UnimplementedDaprServer) InvokeBinding(context.Context, *InvokeBindingRequest) (*InvokeBindingResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method InvokeBinding not implemented")
@@ -1068,6 +1151,15 @@ func (UnimplementedDaprServer) RaiseEventWorkflowBeta1(context.Context, *RaiseEv
 }
 func (UnimplementedDaprServer) Shutdown(context.Context, *ShutdownRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
+}
+func (UnimplementedDaprServer) ScheduleJobAlpha1(context.Context, *ScheduleJobRequest) (*ScheduleJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ScheduleJobAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) GetJobAlpha1(context.Context, *GetJobRequest) (*GetJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetJobAlpha1 not implemented")
+}
+func (UnimplementedDaprServer) DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method DeleteJobAlpha1 not implemented")
 }
 
 // UnsafeDaprServer may be embedded to opt out of forward compatibility for this service.
@@ -1259,6 +1351,32 @@ func _Dapr_BulkPublishEventAlpha1_Handler(srv interface{}, ctx context.Context, 
 		return srv.(DaprServer).BulkPublishEventAlpha1(ctx, req.(*BulkPublishRequest))
 	}
 	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_SubscribeTopicEventsAlpha1_Handler(srv interface{}, stream grpc.ServerStream) error {
+	return srv.(DaprServer).SubscribeTopicEventsAlpha1(&daprSubscribeTopicEventsAlpha1Server{stream})
+}
+
+type Dapr_SubscribeTopicEventsAlpha1Server interface {
+	Send(*SubscribeTopicEventsResponseAlpha1) error
+	Recv() (*SubscribeTopicEventsRequestAlpha1, error)
+	grpc.ServerStream
+}
+
+type daprSubscribeTopicEventsAlpha1Server struct {
+	grpc.ServerStream
+}
+
+func (x *daprSubscribeTopicEventsAlpha1Server) Send(m *SubscribeTopicEventsResponseAlpha1) error {
+	return x.ServerStream.SendMsg(m)
+}
+
+func (x *daprSubscribeTopicEventsAlpha1Server) Recv() (*SubscribeTopicEventsRequestAlpha1, error) {
+	m := new(SubscribeTopicEventsRequestAlpha1)
+	if err := x.ServerStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
 }
 
 func _Dapr_InvokeBinding_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
@@ -2075,6 +2193,60 @@ func _Dapr_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(inter
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_ScheduleJobAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ScheduleJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ScheduleJobAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_ScheduleJobAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ScheduleJobAlpha1(ctx, req.(*ScheduleJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_GetJobAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetJobAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_GetJobAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetJobAlpha1(ctx, req.(*GetJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_DeleteJobAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(DeleteJobRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).DeleteJobAlpha1(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_DeleteJobAlpha1_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).DeleteJobAlpha1(ctx, req.(*DeleteJobRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Dapr_ServiceDesc is the grpc.ServiceDesc for Dapr service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -2282,8 +2454,26 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 			MethodName: "Shutdown",
 			Handler:    _Dapr_Shutdown_Handler,
 		},
+		{
+			MethodName: "ScheduleJobAlpha1",
+			Handler:    _Dapr_ScheduleJobAlpha1_Handler,
+		},
+		{
+			MethodName: "GetJobAlpha1",
+			Handler:    _Dapr_GetJobAlpha1_Handler,
+		},
+		{
+			MethodName: "DeleteJobAlpha1",
+			Handler:    _Dapr_DeleteJobAlpha1_Handler,
+		},
 	},
 	Streams: []grpc.StreamDesc{
+		{
+			StreamName:    "SubscribeTopicEventsAlpha1",
+			Handler:       _Dapr_SubscribeTopicEventsAlpha1_Handler,
+			ServerStreams: true,
+			ClientStreams: true,
+		},
 		{
 			StreamName:    "SubscribeConfigurationAlpha1",
 			Handler:       _Dapr_SubscribeConfigurationAlpha1_Handler,

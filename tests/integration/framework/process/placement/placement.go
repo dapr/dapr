@@ -16,9 +16,7 @@ package placement
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
-	"io"
 	"net/http"
 	"strconv"
 	"sync/atomic"
@@ -37,15 +35,16 @@ import (
 
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
 type Placement struct {
-	exec     process.Interface
-	freeport *util.FreePort
-	running  atomic.Bool
+	exec    process.Interface
+	ports   *ports.Ports
+	running atomic.Bool
 
 	id                  string
 	port                int
@@ -61,15 +60,16 @@ func New(t *testing.T, fopts ...Option) *Placement {
 	uid, err := uuid.NewUUID()
 	require.NoError(t, err)
 
-	fp := util.ReservePorts(t, 4)
+	fp := ports.Reserve(t, 4)
+	port := fp.Port(t)
 	opts := options{
 		id:                  uid.String(),
 		logLevel:            "info",
-		port:                fp.Port(t, 0),
-		healthzPort:         fp.Port(t, 1),
-		metricsPort:         fp.Port(t, 2),
-		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(fp.Port(t, 3)),
-		initialClusterPorts: []int{fp.Port(t, 3)},
+		port:                fp.Port(t),
+		healthzPort:         fp.Port(t),
+		metricsPort:         fp.Port(t),
+		initialCluster:      uid.String() + "=127.0.0.1:" + strconv.Itoa(port),
+		initialClusterPorts: []int{port},
 		metadataEnabled:     false,
 	}
 
@@ -81,8 +81,11 @@ func New(t *testing.T, fopts ...Option) *Placement {
 		"--log-level=" + opts.logLevel,
 		"--id=" + opts.id,
 		"--port=" + strconv.Itoa(opts.port),
+		"--listen-address=127.0.0.1",
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
+		"--healthz-listen-address=127.0.0.1",
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
+		"--metrics-listen-address=127.0.0.1",
 		"--initial-cluster=" + opts.initialCluster,
 		"--tls-enabled=" + strconv.FormatBool(opts.tlsEnabled),
 		"--metadata-enabled=" + strconv.FormatBool(opts.metadataEnabled),
@@ -102,7 +105,7 @@ func New(t *testing.T, fopts ...Option) *Placement {
 
 	return &Placement{
 		exec:                exec.New(t, binary.EnvValue("placement"), args, opts.execOpts...),
-		freeport:            fp,
+		ports:               fp,
 		id:                  opts.id,
 		port:                opts.port,
 		healthzPort:         opts.healthzPort,
@@ -117,7 +120,7 @@ func (p *Placement) Run(t *testing.T, ctx context.Context) {
 		t.Fatal("Process is already running")
 	}
 
-	p.freeport.Free(t)
+	p.ports.Free(t)
 	p.exec.Run(t, ctx)
 }
 
@@ -130,19 +133,19 @@ func (p *Placement) Cleanup(t *testing.T) {
 }
 
 func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := util.HTTPClient(t)
-	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", p.healthzPort), nil)
-		if err != nil {
-			return false
-		}
+	t.Helper()
+
+	client := client.HTTP(t)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", p.healthzPort), nil)
+	require.NoError(t, err)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.Do(req)
-		if err != nil {
-			return false
+		//nolint:testifylint
+		if assert.NoError(c, err) {
+			defer resp.Body.Close()
+			assert.Equal(c, http.StatusOK, resp.StatusCode)
 		}
-		defer resp.Body.Close()
-		return http.StatusOK == resp.StatusCode
-	}, time.Second*5, 10*time.Millisecond)
+	}, time.Second*25, 10*time.Millisecond)
 }
 
 func (p *Placement) ID() string {
@@ -178,6 +181,7 @@ func (p *Placement) CurrentActorsAPILevel() int {
 }
 
 func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host, contextMetadata map[string]string) chan *placementv1pb.PlacementTables {
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(parentCtx, p.Address(),
 		grpc.WithBlock(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -232,7 +236,7 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 			case <-ctx.Done():
 				doneCh <- stream.CloseSend()
 				return
-			case <-time.After(time.Second):
+			case <-time.After(500 * time.Millisecond):
 				if err := stream.Send(msg); err != nil {
 					doneCh <- err
 					return
@@ -247,10 +251,6 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 		for {
 			in, err := stream.Recv()
 			if err != nil {
-				if ctx.Err() != nil || errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) || status.Code(err) == codes.Canceled {
-					return
-				}
-				require.NoError(t, err)
 				return
 			}
 
@@ -284,9 +284,9 @@ func (p *Placement) AssertRegisterHostFails(t *testing.T, ctx context.Context, a
 		Id:       "myapp",
 		ApiLevel: uint32(apiLevel),
 	}
-
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, p.Address(),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 	)
 	require.NoError(t, err)

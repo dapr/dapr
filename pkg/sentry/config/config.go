@@ -57,6 +57,7 @@ const (
 // Config holds the configuration for the Certificate Authority.
 type Config struct {
 	Port             int
+	ListenAddress    string
 	TrustDomain      string
 	CAStore          string
 	WorkloadCertTTL  time.Duration
@@ -93,6 +94,7 @@ func IsKubernetesHosted() bool {
 func getDefaultConfig() Config {
 	return Config{
 		Port:             DefaultPort,
+		ListenAddress:    "0.0.0.0",
 		WorkloadCertTTL:  defaultWorkloadCertTTL,
 		AllowedClockSkew: defaultAllowedClockSkew,
 		TrustDomain:      defaultTrustDomain,
@@ -200,7 +202,7 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 			case int32(sentryv1pb.SignCertificateRequest_JWKS):
 				// All good - nop
 			case int32(sentryv1pb.SignCertificateRequest_KUBERNETES), int32(sentryv1pb.SignCertificateRequest_INSECURE):
-				return conf, fmt.Errorf("invalid token validator: the built-in 'kubernetes' and 'insecure' validators cannot be configured manually")
+				return conf, errors.New("invalid token validator: the built-in 'kubernetes' and 'insecure' validators cannot be configured manually")
 			default:
 				return conf, fmt.Errorf("invalid token validator name: '%s'; supported values: 'jwks'", v.Name)
 			}

@@ -98,6 +98,7 @@ func (a *authz) Run(t *testing.T, ctx context.Context) {
 	a.op.WaitUntilRunning(t, ctx)
 
 	t.Run("no client auth should error", func(t *testing.T) {
+		//nolint:staticcheck
 		conn, err := grpc.DialContext(ctx,
 			"localhost:"+strconv.Itoa(a.op.Port()),
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -114,7 +115,7 @@ func (a *authz) Run(t *testing.T, ctx context.Context) {
 		assert.Nil(t, resp)
 	})
 
-	client := a.op.Dial(t, ctx, "default", a.sentry)
+	client := a.op.Dial(t, ctx, a.sentry, "myapp")
 
 	type tcase struct {
 		funcGoodNamespace func() (any, error)
