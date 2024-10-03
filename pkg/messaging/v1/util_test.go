@@ -334,7 +334,7 @@ func TestWithCustomGrpcMetadata(t *testing.T) {
 
 	numMetadata := 10
 	md := make(map[string]string, numMetadata)
-	for i := 0; i < numMetadata; i++ {
+	for i := range numMetadata {
 		md[customMetadataKey(i)] = customMetadataValue(i)
 	}
 
@@ -344,7 +344,7 @@ func TestWithCustomGrpcMetadata(t *testing.T) {
 	ctxMd, ok := metadata.FromOutgoingContext(ctx)
 	assert.True(t, ok)
 
-	for i := 0; i < numMetadata; i++ {
+	for i := range numMetadata {
 		val, ok := ctxMd[strings.ToLower(customMetadataKey(i))]
 		assert.True(t, ok)
 		// We assume only 1 value per key as the input map can only support string -> string mapping.

@@ -50,7 +50,7 @@ func TestLockBypassWithMatchingID(t *testing.T) {
 	lock := NewActorLock(32)
 	requestID := &baseID
 
-	for i := 1; i < 5; i++ {
+	for i := uint32(1); i < 5; i++ {
 		err := lock.Lock(requestID)
 
 		require.NoError(t, err)

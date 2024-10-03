@@ -56,6 +56,7 @@ func TestSpanFromContext(t *testing.T) {
 		assert.NotNil(t, gotSp)
 		assert.Equal(t, expectedTraceID, gotSp.SpanContext().TraceID())
 		assert.Equal(t, expectedSpanID, gotSp.SpanContext().SpanID())
+		sp.End()
 	})
 
 	t.Run("nil span for context", func(t *testing.T) {
@@ -67,6 +68,7 @@ func TestSpanFromContext(t *testing.T) {
 		expectedType := "trace.noopSpan"
 		gotType := reflect.TypeOf(sp).String()
 		assert.Equal(t, expectedType, gotType)
+		sp.End()
 	})
 
 	t.Run("nil", func(t *testing.T) {
@@ -78,6 +80,7 @@ func TestSpanFromContext(t *testing.T) {
 		expectedType := "trace.noopSpan"
 		gotType := reflect.TypeOf(sp).String()
 		assert.Equal(t, expectedType, gotType)
+		sp.End()
 	})
 }
 
