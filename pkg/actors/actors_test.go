@@ -1655,7 +1655,7 @@ func TestFIFOActorInvocation(t *testing.T) {
 	numCalls := 10000
 
 	// Expected order of method IDs
-	var expectedOrder []string
+	expectedOrder := make([]string, 0, numCalls)
 	for i := range numCalls {
 		expectedOrder = append(expectedOrder, fmt.Sprintf("TestFIFO%d", i))
 	}
