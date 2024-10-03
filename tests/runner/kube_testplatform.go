@@ -15,6 +15,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -25,7 +26,7 @@ import (
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 
 	corev1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -86,7 +87,7 @@ func (c *KubeTestPlatform) TearDown() error {
 // addComponents adds component to disposable Resource queues.
 func (c *KubeTestPlatform) AddComponents(comps []kube.ComponentDescription) error {
 	if c.KubeClient == nil {
-		return fmt.Errorf("kubernetes cluster needs to be setup")
+		return errors.New("kubernetes cluster needs to be setup")
 	}
 
 	for _, comp := range comps {
@@ -104,7 +105,7 @@ func (c *KubeTestPlatform) AddComponents(comps []kube.ComponentDescription) erro
 // AddSecrets adds secrets to disposable Resource queues.
 func (c *KubeTestPlatform) AddSecrets(secrets []kube.SecretDescription) error {
 	if c.KubeClient == nil {
-		return fmt.Errorf("kubernetes cluster needs to be setup")
+		return errors.New("kubernetes cluster needs to be setup")
 	}
 
 	for _, secret := range secrets {
@@ -122,7 +123,7 @@ func (c *KubeTestPlatform) AddSecrets(secrets []kube.SecretDescription) error {
 // addApps adds test apps to disposable App Resource queues.
 func (c *KubeTestPlatform) AddApps(apps []kube.AppDescription) error {
 	if c.KubeClient == nil {
-		return fmt.Errorf("kubernetes cluster needs to be setup before calling BuildAppResources")
+		return errors.New("kubernetes cluster needs to be setup before calling BuildAppResources")
 	}
 
 	dt := c.disableTelemetry()
@@ -277,7 +278,7 @@ func (c *KubeTestPlatform) GetOrCreateNamespace(parentCtx context.Context, names
 	ns, err := namespaceClient.Get(ctx, namespace, metav1.GetOptions{})
 	cancel()
 
-	if err != nil && errors.IsNotFound(err) {
+	if err != nil && apierrors.IsNotFound(err) {
 		log.Printf("Creating namespace %q ...", namespace)
 		obj := &corev1.Namespace{ObjectMeta: metav1.ObjectMeta{Name: namespace}}
 		ctx, cancel = context.WithTimeout(parentCtx, 30*time.Second)
@@ -373,7 +374,7 @@ func (c *KubeTestPlatform) PortForwardToApp(appName string, targetPorts ...int) 
 	}
 
 	if targetPorts == nil {
-		return nil, fmt.Errorf("cannot open connection with no target ports")
+		return nil, errors.New("cannot open connection with no target ports")
 	}
 	return appManager.DoPortForwarding("", targetPorts...)
 }

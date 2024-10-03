@@ -1,0 +1,33 @@
+/*
+Copyright 2024 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+syntax = "proto3";
+
+package dapr.proto.internals.v1;
+
+import "google/protobuf/struct.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/internals/v1;internals";
+
+// JobHTTPRequest is a request object for creating a job when using the HTTP
+// Dapr Job API. Specifically used so `data` is always serialized as a JSON
+// object (google.protobuf.Struct).
+// For field docmentation see `dapr/proto/runtime/v1/dapr.proto`.
+message JobHTTPRequest {
+  string name = 1 [json_name = "name"];
+  optional string schedule = 2 [json_name = "schedule"];
+  optional uint32 repeats = 3 [json_name = "repeats"];
+  optional string due_time = 4 [json_name = "dueTime"];
+  optional string ttl = 5 [json_name = "ttl"];
+  google.protobuf.Value data = 6 [json_name = "data"];
+}

@@ -83,6 +83,10 @@ func (*mockInternalActor) InvokeTimer(ctx context.Context, timer InternalActorRe
 	panic("unimplemented")
 }
 
+func (ia *mockInternalActor) Completed() bool {
+	panic("unimplemented")
+}
+
 // newTestActorsRuntimeWithInternalActors creates and initializes an actors runtime with a specified set of internal actors
 func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalActorFactory) (*actorsRuntime, error) {
 	spec := config.TracingSpec{SamplingRate: "1"}
@@ -142,7 +146,6 @@ func TestInternalActorCall(t *testing.T) {
 	require.NoError(t, err)
 
 	// Need this nolint due to a bug in the linter
-	//nolint:protogetter
 	req := internals.NewInternalInvokeRequest(testMethod).
 		WithActor(testActorType, testActorID).
 		WithData([]byte(testInput)).

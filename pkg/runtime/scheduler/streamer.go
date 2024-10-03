@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"sync"
 
 	"github.com/golang/protobuf/ptypes/wrappers"
@@ -26,7 +25,6 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/kit/concurrency"
@@ -142,12 +140,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		return errors.New("received job, but app channel not initialized")
 	}
 
-	req := invokev1.NewInvokeMethodRequest("job/"+job.GetName()).
-		WithHTTPExtension(http.MethodPost, "").
-		WithDataObject(job.GetData())
-	defer req.Close()
-
-	response, err := appChannel.TriggerJob(ctx, req)
+	response, err := appChannel.TriggerJob(ctx, job.GetName(), job.GetData())
 	if err != nil {
 		// TODO(Cassie): add an orphaned job go routine to retry sending job at a later time
 		return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
@@ -159,6 +152,8 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	// TODO: standardize on the error code returned by both protocol channels,
 	// converting HTTP status codes to gRPC codes
 	statusCode := response.Status().GetCode()
+	// TODO: fix types
+	//nolint:gosec
 	switch codes.Code(statusCode) {
 	case codes.OK:
 		log.Debugf("Sent job %s to app", job.GetName())

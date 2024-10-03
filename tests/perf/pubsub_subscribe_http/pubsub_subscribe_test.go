@@ -81,14 +81,14 @@ func getAppDescription(pubsubComponent Component, pubsubType string) kube.AppDes
 func TestMain(m *testing.M) {
 	utils.SetupLogs(testLabel)
 
-	//Read env variable for pubsub test config file, this will decide whether to run single component or all the components.
+	// Read env variable for pubsub test config file, this will decide whether to run single component or all the components.
 	pubsubTestConfigFileName := os.Getenv("DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME")
 
 	if pubsubTestConfigFileName == "" {
 		pubsubTestConfigFileName = "test_kafka.yaml"
 	}
 
-	//Read the config file for individual components
+	// Read the config file for individual components
 	data, err := os.ReadFile(pubsubTestConfigFileName)
 	if err != nil {
 		fmt.Printf("error reading %v: %v\n", pubsubTestConfigFileName, err)
@@ -99,17 +99,17 @@ func TestMain(m *testing.M) {
 
 	err = yaml.Unmarshal(data, &configs)
 
-	//set the configuration as environment variables for the test app.
+	// set the configuration as environment variables for the test app.
 	var testApps []kube.AppDescription
 
 	for _, pubsubComponent := range configs.Components {
-		//normal pubsub app
+		// normal pubsub app
 		if slices.Contains(pubsubComponent.Operations, normalPubsubType) {
 			fmt.Println("image used: ", pubsubComponent.ImageName, pubsubComponent.TestAppName, pubsubComponent.Name, normalPubsubType)
 			testApps = append(testApps, getAppDescription(pubsubComponent, normalPubsubType))
 		}
 
-		//bulk pubsub app
+		// bulk pubsub app
 		if slices.Contains(pubsubComponent.Operations, bulkPubsubType) {
 			fmt.Println("image used: ", pubsubComponent.ImageName, pubsubComponent.TestAppName, pubsubComponent.Name, bulkPubsubType)
 			testApps = append(testApps, getAppDescription(pubsubComponent, bulkPubsubType))
@@ -126,7 +126,7 @@ func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurati
 	k6Test := loadtest.NewK6("./test.js",
 		loadtest.WithParallelism(1),
 		loadtest.WithAppID("k6-tester-pubsub-subscribe-http"),
-		//loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
+		// loadtest.EnableLog(), // uncomment this to enable k6 logs, this however breaks reporting, only for debugging.
 		loadtest.WithRunnerEnvVar("TARGET_URL", testAppURL),
 		loadtest.WithRunnerEnvVar("PUBSUB_NAME", component.Name),
 		loadtest.WithRunnerEnvVar("PUBLISH_TYPE", publishType),
@@ -142,7 +142,7 @@ func runTest(t *testing.T, testAppURL, publishType, subscribeType, httpReqDurati
 	require.NoError(t, err)
 	require.NotNil(t, sm)
 
-	var testAppName = component.TestAppName + "-" + subscribeType
+	testAppName := component.TestAppName + "-" + subscribeType
 
 	appUsage, err := tr.Platform.GetAppUsage(testAppName)
 	require.NoError(t, err)

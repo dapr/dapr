@@ -20,7 +20,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	authapi "k8s.io/api/authentication/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -80,8 +79,10 @@ func kubeAPI(t *testing.T, opts kubeAPIOptions) *prockube.Kubernetes {
 			assert.Equal(t, "POST", r.Method)
 			assert.Equal(t, "application/json", r.Header.Get("Content-Type"))
 			var request *authapi.TokenReview
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&request))
-			require.Len(t, request.Spec.Audiences, 2)
+			assert.NoError(t, json.NewDecoder(r.Body).Decode(&request))
+			if !assert.Len(t, request.Spec.Audiences, 2) {
+				return
+			}
 			assert.Equal(t, "dapr.io/sentry", request.Spec.Audiences[0])
 			assert.Equal(t, "spiffe://integration.test.dapr.io/ns/sentrynamespace/dapr-sentry", request.Spec.Audiences[1])
 
@@ -91,7 +92,7 @@ func kubeAPI(t *testing.T, opts kubeAPIOptions) *prockube.Kubernetes {
 					User:          authapi.UserInfo{Username: fmt.Sprintf("system:serviceaccount:%s:%s", opts.namespace, opts.serviceAccount)},
 				},
 			})
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			w.Header().Add("Content-Type", "application/json")
 			w.Write(resp)
 		}),

@@ -278,7 +278,6 @@ func TestHandleRequest(t *testing.T) {
 	defer ts.Close()
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			requestBytes, err := json.Marshal(tc.request)
 			require.NoError(t, err)

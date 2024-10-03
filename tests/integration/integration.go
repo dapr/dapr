@@ -65,7 +65,6 @@ func RunIntegrationTests(t *testing.T) {
 	})
 
 	for _, tcase := range focusedTests {
-		tcase := tcase
 		t.Run(tcase.Name(), func(t *testing.T) {
 			if *parallelFlag {
 				t.Parallel()

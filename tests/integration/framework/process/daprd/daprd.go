@@ -193,7 +193,7 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 		}
 		net.Close()
 		return true
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 15*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -399,9 +399,11 @@ func (d *Daprd) http2xx(t *testing.T, ctx context.Context, method, path string, 
 
 	resp, err := d.httpClient.Do(req)
 	require.NoError(t, err)
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	require.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code")
-	require.Less(t, resp.StatusCode, 300, "expected 2xx status code")
+	require.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code: "+string(b))
+	require.Less(t, resp.StatusCode, 300, "expected 2xx status code: "+string(b))
 }
 
 func (d *Daprd) GetMetaRegisteredComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {
@@ -459,7 +461,6 @@ func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {
 
 	var meta metaResponse
 	resp, err := d.httpClient.Do(req)
-	//nolint:testifylint
 	if assert.NoError(t, err) {
 		defer resp.Body.Close()
 		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))

@@ -84,7 +84,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		for _, body := range []string{
 			`{"schedule": "@daily"}`,
 			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s"}`,
-			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": {"@type": "type.googleapis.com/google.protobuf.StringValue", "value": "Hello, World!"}}`,
+			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "{\"@type\": \"type.googleapis.com/google.protobuf.StringValue\", \"value\": \"Hello, World!\"}"}`,
+			`{"schedule": "@daily", "repeats": 3, "due_time": "10s", "ttl": "11s", "data": "Hello, World!"}`,
 		} {
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 			require.NoError(t, err)
