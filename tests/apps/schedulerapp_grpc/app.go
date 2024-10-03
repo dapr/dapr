@@ -187,15 +187,15 @@ func getJobHandler(w http.ResponseWriter, r *http.Request) {
 
 	jobData := job.GetJob().GetData()
 	var jo triggeredJob
-	if err := json.Unmarshal(jobData.GetValue(), &jo); err != nil {
-		log.Printf("Error unmarshalling decoded job data: %v", err)
+	if uerr := json.Unmarshal(jobData.GetValue(), &jo); uerr != nil {
+		log.Printf("Error unmarshalling decoded job data: %v", uerr)
 		http.Error(w, "Failed to decode job JSON", http.StatusInternalServerError)
 		return
 	}
 
-	decodedbytes, err := base64.StdEncoding.DecodeString(jo.Value)
-	if err != nil {
-		log.Printf("Error decoding base64 job data: %v", err)
+	decodedbytes, derr := base64.StdEncoding.DecodeString(jo.Value)
+	if derr != nil {
+		log.Printf("Error decoding base64 job data: %v", derr)
 		http.Error(w, "Failed to decode base64 job data", http.StatusInternalServerError)
 		return
 	}
@@ -225,9 +225,9 @@ func getJobHandler(w http.ResponseWriter, r *http.Request) {
 		},
 	}
 
-	respBody, err := json.Marshal(rjob)
-	if err != nil {
-		http.Error(w, fmt.Sprintf("error marshalling job response: %v", err), http.StatusInternalServerError)
+	respBody, merr := json.Marshal(rjob)
+	if merr != nil {
+		http.Error(w, fmt.Sprintf("error marshalling job response: %v", merr), http.StatusInternalServerError)
 		return
 	}
 
