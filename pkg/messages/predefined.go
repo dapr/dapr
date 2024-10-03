@@ -126,4 +126,9 @@ var (
 	ErrPauseWorkflow                 = APIError{"error pausing workflow %s: %s", "ERR_PAUSE_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrResumeWorkflow                = APIError{"error resuming workflow %s: %s", "ERR_RESUME_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrPurgeWorkflow                 = APIError{"error purging workflow %s: %s", "ERR_PURGE_WORKFLOW", http.StatusInternalServerError, grpcCodes.Internal}
+
+	// Conversation
+	ErrConversationNotFound      = APIError{"failed finding conversation component %s", "ERR_CONVERSATION_NOT_FOUND", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationInvalidParams = APIError{"failed valid params %s", "ERR_CONVERSATION_INVALID_PARMS", http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrConversationInvoke        = APIError{"failed conversing with component %s: %s", "ERR_CONVERSATION_INVOKE", http.StatusInternalServerError, grpcCodes.Internal}
 )
