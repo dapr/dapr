@@ -15,7 +15,6 @@ package config
 
 import (
 	"bytes"
-	env "github.com/dapr/dapr/pkg/config/env"
 	"io"
 	"os"
 	"reflect"
@@ -28,6 +27,7 @@ import (
 	"golang.org/x/exp/maps"
 
 	"github.com/dapr/dapr/pkg/buildinfo"
+	env "github.com/dapr/dapr/pkg/config/env"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 )

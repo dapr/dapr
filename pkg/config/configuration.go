@@ -856,7 +856,6 @@ func StringToHeader(value string) (map[string]string, error) {
 		// Validate the key.
 		if !isValidHeaderKey(trimmedName) {
 			return nil, errors.New("invalid header key" + trimmedName)
-
 		}
 
 		// Only decode the value.
