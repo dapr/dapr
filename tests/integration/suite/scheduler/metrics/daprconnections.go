@@ -46,21 +46,18 @@ func (c *daprconnections) Setup(t *testing.T) []framework.Option {
 		daprd.WithSchedulerAddresses(c.scheduler.Address()),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srv.Port(t)),
-		daprd.WithAppID("A"),
 	)
 
 	c.daprdB = daprd.New(t,
 		daprd.WithSchedulerAddresses(c.scheduler.Address()),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srv.Port(t)),
-		daprd.WithAppID("B"),
 	)
 
 	c.daprdC = daprd.New(t,
 		daprd.WithSchedulerAddresses(c.scheduler.Address()),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srv.Port(t)),
-		daprd.WithAppID("C"),
 	)
 
 	return []framework.Option{
