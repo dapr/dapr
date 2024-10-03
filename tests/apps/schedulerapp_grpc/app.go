@@ -70,7 +70,7 @@ type job struct {
 	Name     string  `json:"name,omitempty"`
 	Data     jobData `json:"data,omitempty"`
 	Schedule string  `json:"schedule,omitempty"`
-	Repeats  int     `json:"repeats,omitempty"`
+	Repeats  uint32  `json:"repeats,omitempty"`
 	DueTime  string  `json:"dueTime,omitempty"`
 	TTL      string  `json:"ttl,omitempty"`
 }
@@ -263,7 +263,7 @@ func scheduleJobGRPC(name string, jobWrapper JobWrapper) error {
 		Job: &runtimev1pb.Job{
 			Name:     name,
 			Schedule: ptr.Of(jobWrapper.Job.Schedule),
-			Repeats:  ptr.Of(uint32(jobWrapper.Job.Repeats)),
+			Repeats:  ptr.Of(jobWrapper.Job.Repeats),
 			DueTime:  ptr.Of(jobWrapper.Job.DueTime),
 			Data:     &anypb.Any{Value: jbytes},
 		},

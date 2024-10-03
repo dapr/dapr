@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net/http"
 	"os"
 	"time"
 
@@ -37,7 +38,7 @@ var httpClient = utils.NewHTTPClient()
 
 func stopSidecar() {
 	log.Printf("Shutting down the sidecar at %s", fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort))
-	for retryCount := 0; retryCount < 200; retryCount++ {
+	for range 200 {
 		r, err := httpClient.Post(fmt.Sprintf("http://localhost:%d/v1.0/shutdown", daprPort), "", bytes.NewBuffer([]byte{}))
 		if r != nil {
 			// Drain before closing
@@ -48,7 +49,7 @@ func stopSidecar() {
 			log.Printf("Error stopping the sidecar %s", err)
 		}
 
-		if r.StatusCode != 200 && r.StatusCode != 204 {
+		if r.StatusCode != http.StatusOK && r.StatusCode != http.StatusNoContent {
 			log.Printf("Received Non-200 from shutdown API. Code: %d", r.StatusCode)
 			time.Sleep(10 * time.Second)
 			continue
@@ -78,7 +79,7 @@ func publishMessagesToPubsub() error {
 }
 
 func main() {
-	for retryCount := 0; retryCount < publishRetries; retryCount++ {
+	for range publishRetries {
 		err := publishMessagesToPubsub()
 		if err != nil {
 			log.Printf("Unable to publish, retrying.")
