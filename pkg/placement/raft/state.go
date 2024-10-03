@@ -14,6 +14,7 @@ limitations under the License.
 package raft
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -25,7 +26,7 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-var ErrNamespaceNotFound = fmt.Errorf("namespace not found")
+var ErrNamespaceNotFound = errors.New("namespace not found")
 
 // DaprHostMember represents Dapr runtime actor host member which serve actor types.
 type DaprHostMember struct {

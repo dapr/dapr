@@ -1402,7 +1402,7 @@ func featureTypeToString(features interface{}) []string {
 	switch reflect.TypeOf(features).Kind() {
 	case reflect.Slice:
 		val := reflect.ValueOf(features)
-		for i := 0; i < val.Len(); i++ {
+		for i := range val.Len() {
 			featureStr = append(featureStr, val.Index(i).String())
 		}
 	}

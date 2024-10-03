@@ -150,6 +150,8 @@ func scheduleFromPeriod(period string) (*string, *uint32, error) {
 
 	var repeats *uint32
 	if repetition > 0 {
+		//TODO: fix types
+		//nolint:gosec
 		repeats = ptr.Of(uint32(repetition))
 	}
 
