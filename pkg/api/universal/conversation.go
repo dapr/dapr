@@ -40,8 +40,14 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 
 	// prepare request
 	request := &conversation.ConversationRequest{}
-	err := kmeta.DecodeMetadata(req.GetMetadata(), &req)
+	err := kmeta.DecodeMetadata(req.GetMetadata(), request)
 	if err != nil {
+		return nil, err
+	}
+
+	if len(req.GetInputs()) == 0 {
+		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+		a.logger.Debug(err)
 		return nil, err
 	}
 
@@ -65,10 +71,12 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	}
 
 	// handle response
-	var response *runtimev1pb.ConversationAlpha1Response
+	response := &runtimev1pb.ConversationAlpha1Response{}
 	a.logger.Debug(response)
 	if resp != nil {
-		response.ConversationContext = &resp.ConversationContext
+		if resp.ConversationContext != "" {
+			response.ConversationContext = &resp.ConversationContext
+		}
 
 		for i := range resp.Outputs {
 			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationAlpha1Result{
@@ -77,5 +85,6 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 			})
 		}
 	}
+
 	return response, nil
 }
