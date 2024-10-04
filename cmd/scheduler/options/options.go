@@ -14,6 +14,7 @@ limitations under the License.
 package options
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -139,7 +140,7 @@ func New(origArgs []string) (*Options, error) {
 
 	if fs.Changed("kubeconfig") {
 		if opts.Mode != string(modes.KubernetesMode) {
-			return nil, fmt.Errorf("kubeconfig flag is only valid in --mode=kubernetes")
+			return nil, errors.New("kubeconfig flag is only valid in --mode=kubernetes")
 		}
 		opts.KubeConfig = &opts.kubeconfig
 	}

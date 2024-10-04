@@ -15,6 +15,7 @@ package controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 
@@ -98,7 +99,7 @@ func New(opts Options) (concurrency.Runner, error) {
 				return fmt.Errorf("unable to get informer: %w", err)
 			}
 			if !mgr.GetCache().WaitForCacheSync(ctx) {
-				return fmt.Errorf("unable to sync cache")
+				return errors.New("unable to sync cache")
 			}
 			hzTarget.Ready()
 			log.Info("Controller ready")

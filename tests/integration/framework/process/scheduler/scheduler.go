@@ -347,7 +347,7 @@ func (s *Scheduler) ETCDClient(t *testing.T) *clientv3.Client {
 	t.Helper()
 
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{fmt.Sprintf("127.0.0.1:%s", s.EtcdClientPort())},
+		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
 		DialTimeout: 40 * time.Second,
 	})
 	require.NoError(t, err)
