@@ -60,7 +60,7 @@ spec:
 func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
 
-	postURL := fmt.Sprintf("http://localhost:%d/v1.0-alpha1/conversation/echo/converse", b.daprd.HTTPPort())
+	postURL := fmt.Sprintf("http://%sv1.0-alpha1/conversation/echo/converse", b.daprd.HTTPAddress())
 
 	httpClient := client.HTTP(t)
 
