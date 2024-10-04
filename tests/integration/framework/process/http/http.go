@@ -102,7 +102,7 @@ func (h *HTTP) Run(t *testing.T, ctx context.Context) {
 
 func (h *HTTP) Cleanup(t *testing.T) {
 	close(h.stopCh)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		require.NoError(t, <-h.srvErrCh)
 	}
 }

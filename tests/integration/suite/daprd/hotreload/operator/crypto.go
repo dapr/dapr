@@ -128,7 +128,6 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 1)
 		}, time.Second*10, time.Millisecond*10)
@@ -159,7 +158,6 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*10, time.Millisecond*10)
@@ -190,7 +188,6 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 3)
 		}, time.Second*10, time.Millisecond*10)
@@ -214,7 +211,6 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{Name: "crypto1", Type: "crypto.dapr.localstorage", Version: "v1"},
@@ -238,7 +234,6 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*10, time.Millisecond*10)
@@ -256,7 +251,6 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.ElementsMatch(c, []*rtv1.RegisteredComponents{
 				{
@@ -286,7 +280,6 @@ func (c *crypto) Run(t *testing.T, ctx context.Context) {
 
 		require.EventuallyWithT(t, func(c *assert.CollectT) {
 			resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.Len(c, resp.GetRegisteredComponents(), 2)
 		}, time.Second*10, time.Millisecond*10)

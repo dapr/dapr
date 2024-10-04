@@ -92,6 +92,8 @@ func (_m *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string
 		headers[k] = v.GetValues()
 	}
 	contentType := r.GetMessage().GetContentType()
+	// TODO: fix type
+	//nolint:gosec
 	resp := invokev1.
 		NewInvokeMethodResponse(int32(statusCode), http.StatusText(statusCode), nil).
 		WithRawDataBytes(r.GetMessage().GetData().GetValue()).

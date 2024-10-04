@@ -16,6 +16,7 @@ package kubernetes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"net"
@@ -26,7 +27,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	apiv1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -391,18 +392,18 @@ func (m *AppManager) IsDeploymentDone(deployment *appsv1.Deployment, err error) 
 
 // IsJobDeleted returns true if job does not exist.
 func (m *AppManager) IsJobDeleted(job *batchv1.Job, err error) bool {
-	return err != nil && errors.IsNotFound(err)
+	return err != nil && apierrors.IsNotFound(err)
 }
 
 // IsDeploymentDeleted returns true if deployment does not exist or current pod replica is zero.
 func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err error) bool {
-	return err != nil && errors.IsNotFound(err)
+	return err != nil && apierrors.IsNotFound(err)
 }
 
 // ValidateSidecar validates that dapr side car is running in dapr enabled pods.
 func (m *AppManager) ValidateSidecar() error {
 	if !m.app.DaprEnabled {
-		return fmt.Errorf("dapr is not enabled for this app")
+		return errors.New("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -442,7 +443,7 @@ func (m *AppManager) ValidateSidecar() error {
 // getSidecarInfo returns if sidecar is present and how many containers there are.
 func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 	if !m.app.DaprEnabled {
-		return false, 0, 0, fmt.Errorf("dapr is not enabled for this app")
+		return false, 0, 0, errors.New("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -698,7 +699,7 @@ func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 
 // IsServiceDeleted returns true if service does not exist.
 func (m *AppManager) IsServiceDeleted(svc *apiv1.Service, err error) bool {
-	return err != nil && errors.IsNotFound(err)
+	return err != nil && apierrors.IsNotFound(err)
 }
 
 func (m *AppManager) minikubeNodeIP() string {
@@ -755,7 +756,7 @@ func (m *AppManager) DeleteJob(ignoreNotFound bool) error {
 	defer cancel()
 	if err := jobsClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
-	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
+	}); err != nil && (ignoreNotFound && !apierrors.IsNotFound(err)) {
 		return err
 	}
 
@@ -771,7 +772,7 @@ func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 	defer cancel()
 	if err := deploymentsClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
-	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
+	}); err != nil && (ignoreNotFound && !apierrors.IsNotFound(err)) {
 		return err
 	}
 
@@ -787,7 +788,7 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	defer cancel()
 	if err := serviceClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
-	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
+	}); err != nil && (ignoreNotFound && !apierrors.IsNotFound(err)) {
 		return err
 	}
 
@@ -797,7 +798,7 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 // GetHostDetails returns the name and IP address of the pods running the app.
 func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	if !m.app.DaprEnabled {
-		return nil, fmt.Errorf("dapr is not enabled for this app")
+		return nil, errors.New("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -878,7 +879,7 @@ func (m *AppManager) GetCPUAndMemory(sidecar bool) (int64, float64, error) {
 // GetTotalRestarts returns the total number of restarts for the app or sidecar.
 func (m *AppManager) GetTotalRestarts() (int, error) {
 	if !m.app.DaprEnabled {
-		return 0, fmt.Errorf("dapr is not enabled for this app")
+		return 0, errors.New("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)

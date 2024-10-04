@@ -49,7 +49,7 @@ func (h *healthz) AddTarget() Target {
 
 func (h *healthz) AddTargetSet(n int) []Target {
 	targets := make([]Target, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		targets[i] = h.AddTarget()
 	}
 	return targets

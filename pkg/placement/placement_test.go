@@ -60,7 +60,7 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 		defer close(serverStopped)
 		err := testServer.Start(ctx)
 		if !errors.Is(err, grpc.ErrServerStopped) {
-			require.NoError(t, err)
+			assert.NoError(t, err)
 		}
 	}()
 
