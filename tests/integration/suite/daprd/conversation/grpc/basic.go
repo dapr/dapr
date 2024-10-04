@@ -22,7 +22,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
