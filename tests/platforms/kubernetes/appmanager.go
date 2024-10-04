@@ -674,7 +674,7 @@ func (m *AppManager) AcquireExternalURLFromService(svc *apiv1.Service) string {
 			return ""
 		}
 
-		address, port = host, int32(ports[0])
+		address, port = host, int32(ports[0]) //nolint:gosec
 	}
 	return fmt.Sprintf("%s:%d", address, port)
 }
