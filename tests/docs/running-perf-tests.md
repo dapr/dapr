@@ -11,7 +11,8 @@ Performance tests are designed to let you evaluate the latency, resource usage a
 
 * Kubernetes cluster (Minikube and Kind are valid options too).
   - To setup a new Kind cluster and local registry, run `make setup-kind`. 
-  - **NOTE**: `make setup-kind` command will create a new kind cluster with default name `kind-kind`. This name is used to automatically determine if the tests are running locally in a kind cluster or not. If you want to use a different name, you can set the `DAPR_TEST_KIND_CLUSTER_NAME` environment variable. For example, if you want to use `kind-mycluster` as the name of the kind cluster, you can run `export DAPR_TEST_KIND_CLUSTER_NAME=kind-mycluster` before running `make setup-kind` and later to run the tests.
+  - **NOTE**: `make setup-kind` command will create a new kind cluster with the default name `kind-kind`. This name is used to automatically determine if the tests are running locally in a kind cluster or not. If you want to use a different name, you can set the `DAPR_TEST_KIND_CLUSTER_NAME` environment variable. For example, if you want to use `mycluster` as the name of the kind cluster, this will result in the context name `kind-mycluster`, you can run `export DAPR_TEST_KIND_CLUSTER_NAME=mycluster` before running `make setup-kind` and later to run the tests.
+  - **NOTE**: On new macOS versions, starting with Ventura, the default port used for the local registry 5000, might be already taken by AirPlay Receiver service. To avoid this, you can set the `DAPR_TEST_REGISTRY_PORT` environment variable to a different port, for example `export DAPR_TEST_REGISTRY_PORT=5001` before running `make setup-kind`.
 * Set up [Dapr development environment](https://github.com/dapr/dapr/blob/master/docs/development/setup-dapr-development-env.md)
   - [Install the latest Helm v3](https://helm.sh/docs/intro/install/).
 * Create your DockerHub ID

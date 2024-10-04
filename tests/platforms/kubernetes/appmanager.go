@@ -53,8 +53,11 @@ const (
 	// maxSideCarDetectionRetries is the maximum number of retries to detect Dapr sidecar.
 	maxSideCarDetectionRetries = 3
 
+	// KindDefaultContextPrefix is the prefix of the default kind cluster
+	KindDefaultContextPrefix = "kind-"
+
 	// kindDefaultContextName is the name of the default kind cluster
-	kindDefaultContextName = "kind-kind"
+	kindDefaultContextName = "kind"
 
 	// kindClusterNameEnvVar is the environment variable name which will have the name of the kind cluster.
 	kindClusterNameEnvVar = "DAPR_TEST_KIND_CLUSTER_NAME"
@@ -709,9 +712,9 @@ func (m *AppManager) minikubeNodeIP() string {
 func (m *AppManager) isKindCluster() bool {
 	customClusterName := os.Getenv(kindClusterNameEnvVar)
 	if customClusterName != "" {
-		return m.client.RawConfig.CurrentContext == customClusterName
+		return m.client.RawConfig.CurrentContext == KindDefaultContextPrefix+customClusterName
 	}
-	return m.client.RawConfig.CurrentContext == kindDefaultContextName
+	return m.client.RawConfig.CurrentContext == KindDefaultContextPrefix+kindDefaultContextName
 }
 
 func (m *AppManager) isCurrentContextLocal() bool {
