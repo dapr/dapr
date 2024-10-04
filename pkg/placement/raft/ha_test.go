@@ -183,7 +183,7 @@ func TestRaftHA(t *testing.T) {
 	// means we have a _better_ chance of being in the right spot in the state
 	// machine. Ideally we should move to a different raft library that is more
 	// deterministic and reliable.
-	time.Sleep(time.Second * 3)
+	time.Sleep(time.Second * 5)
 
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
 		for oldSvr := range 3 {
