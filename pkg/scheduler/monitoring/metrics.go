@@ -15,6 +15,7 @@ package monitoring
 
 import (
 	"context"
+	"sync/atomic"
 	"time"
 
 	"go.opencensus.io/stats"
@@ -48,8 +49,8 @@ var (
 
 // RecordSidecarsConnectedCount records the number of dapr sidecars connected to the scheduler service
 func RecordSidecarsConnectedCount(change int) {
-	sidecarConnectionCount += int64(change)
-	stats.RecordWithTags(context.Background(), utils.WithTags(sidecarsConnectedGauge.Name()), sidecarsConnectedGauge.M(int64(sidecarConnectionCount)))
+	current := atomic.AddInt64(&sidecarConnectionCount, int64(change))
+	stats.RecordWithTags(context.Background(), utils.WithTags(sidecarsConnectedGauge.Name()), sidecarsConnectedGauge.M(current))
 }
 
 // RecordJobsScheduledCount records the number of jobs scheduled to the scheduler service
