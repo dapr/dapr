@@ -63,7 +63,6 @@ func Test_Reconcile(t *testing.T) {
 
 	req := ctrl.Request{NamespacedName: types.NamespacedName{Name: "test-ns"}}
 	for name, test := range tests {
-		test := test
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
