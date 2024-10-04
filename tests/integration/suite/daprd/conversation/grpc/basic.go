@@ -15,17 +15,13 @@ package http
 
 import (
 	"context"
-	"fmt"
-	"io"
-	"net/http"
-	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -59,32 +55,16 @@ spec:
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
-	postURL := fmt.Sprintf("http://%s/v1.0-alpha1/conversation/echo/converse", b.daprd.HTTPAddress())
 
-	httpClient := client.HTTP(t)
+	client := b.daprd.GRPCClient(t, ctx)
 
-	t.Run("good json", func(t *testing.T) {
-		body := `{"inputs": ["well hello there"] }`
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+	t.Run("good input", func(t *testing.T) {
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationAlpha1Request{
+			Name:   "echo",
+			Inputs: []string{"well hello there"},
+		})
 		require.NoError(t, err)
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		respBody, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
-		require.Equal(t, `{"outputs":[{"result":"well hello there"}]}`, string(respBody))
-	})
-
-	t.Run("invalid json", func(t *testing.T) {
-		body := `{"metadata": {"model": "daprGPT"} }`
-
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
-		require.NoError(t, err)
-		resp, err := httpClient.Do(req)
-		require.NoError(t, err)
-		require.NoError(t, resp.Body.Close())
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		require.Len(t, resp.GetOutputs(), 1)
+		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetResult())
 	})
 }
