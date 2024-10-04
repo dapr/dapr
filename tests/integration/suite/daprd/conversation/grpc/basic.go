@@ -31,7 +31,7 @@ func init() {
 }
 
 type basic struct {
-	daprd *procdaprd.Daprd
+	daprd *daprd.Daprd
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
