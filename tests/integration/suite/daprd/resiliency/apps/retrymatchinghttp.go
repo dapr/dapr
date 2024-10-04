@@ -31,7 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -46,12 +46,10 @@ type retrymatchinghttp struct {
 }
 
 func (d *retrymatchinghttp) Setup(t *testing.T) []framework.Option {
-	handler := http.NewServeMux()
-	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+	handlerFuncRoot := app.WithHandlerFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(r.Method))
 	})
-
-	handler.HandleFunc("/retry", func(w http.ResponseWriter, r *http.Request) {
+	handlerFuncRetry := app.WithHandlerFunc("/retry", func(w http.ResponseWriter, r *http.Request) {
 		body, err := io.ReadAll(r.Body)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -77,6 +75,8 @@ func (d *retrymatchinghttp) Setup(t *testing.T) []framework.Option {
 		w.WriteHeader(respStatusCode)
 		w.Write([]byte{})
 	})
+	app1 := app.New(t, handlerFuncRoot, handlerFuncRetry)
+	app2 := app.New(t, handlerFuncRoot, handlerFuncRetry)
 
 	resiliency := `
 apiVersion: dapr.io/v1alpha1
@@ -95,21 +95,18 @@ spec:
           gRPCStatusCodes: "1-5"
 `
 
-	srv1 := prochttp.New(t, prochttp.WithHandler(handler))
-	srv2 := prochttp.New(t, prochttp.WithHandler(handler))
-
 	d.daprd1 = daprd.New(t,
-		daprd.WithAppPort(srv1.Port()),
+		daprd.WithAppPort(app1.Port()),
 		daprd.WithResourceFiles(resiliency),
 	)
 	d.daprd2 = daprd.New(t,
-		daprd.WithAppPort(srv2.Port()),
+		daprd.WithAppPort(app2.Port()),
 		daprd.WithResourceFiles(resiliency),
 	)
 	d.counters = sync.Map{}
 
 	return []framework.Option{
-		framework.WithProcesses(srv1, srv2, d.daprd1, d.daprd2),
+		framework.WithProcesses(app1, app2, d.daprd1, d.daprd2),
 	}
 }
 

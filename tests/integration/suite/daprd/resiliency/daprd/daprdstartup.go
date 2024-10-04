@@ -24,15 +24,15 @@ import (
 )
 
 func init() {
-	suite.Register(new(resiliencysidecar))
+	suite.Register(new(daprdstartup))
 }
 
-type resiliencysidecar struct {
+type daprdstartup struct {
 	logline *logline.LogLine
 	dapr    *daprd.Daprd
 }
 
-func (s *resiliencysidecar) Setup(t *testing.T) []framework.Option {
+func (s *daprdstartup) Setup(t *testing.T) []framework.Option {
 	s.logline = logline.New(t, logline.WithStdoutLineContains(
 		"Could not read resiliency policy myresiliency",
 	))
@@ -63,7 +63,7 @@ spec:
 	}
 }
 
-func (s *resiliencysidecar) Run(t *testing.T, ctx context.Context) {
+func (s *daprdstartup) Run(t *testing.T, ctx context.Context) {
 	s.dapr.WaitUntilRunning(t, ctx)
 
 	t.Run("daprd process continue when resiliency is invalid", func(t *testing.T) {
