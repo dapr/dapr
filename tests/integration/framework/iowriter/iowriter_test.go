@@ -149,14 +149,14 @@ func TestConcurrency(t *testing.T) {
 
 		go func() {
 			defer wg.Done()
-			for i := 0; i < 1000; i++ {
+			for i := range 1000 {
 				fmt.Fprintf(writer, "test %d\n", i)
 			}
 		}()
 
 		go func() {
 			defer wg.Done()
-			for i := 0; i < 1000; i++ {
+			for i := range 1000 {
 				fmt.Fprintf(writer, "test %d\n", i)
 			}
 		}()

@@ -99,7 +99,6 @@ func (a *addapp) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		var err error
 		list, err = client.ListComponents(ctx, &operatorv1.ListComponentsRequest{Namespace: "default"})
-		//nolint:testifylint
 		if assert.NoError(c, err) {
 			assert.Len(c, list.GetComponents(), 1)
 		}
@@ -116,7 +115,6 @@ func (a *addapp) Run(t *testing.T, ctx context.Context) {
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			list, err := client.ListComponents(ctx, &operatorv1.ListComponentsRequest{Namespace: "default"})
-			//nolint:testifylint
 			if !assert.NoError(c, err) {
 				return
 			}

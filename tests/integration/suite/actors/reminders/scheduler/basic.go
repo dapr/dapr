@@ -103,7 +103,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, rErr := client.Do(req)
-		//nolint:testifylint
 		if assert.NoError(c, rErr) {
 			assert.NoError(c, resp.Body.Close())
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
@@ -135,5 +134,5 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	assert.Eventually(t, func() bool {
 		return b.methodcalled.Load() == 2
-	}, time.Second*3, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 }

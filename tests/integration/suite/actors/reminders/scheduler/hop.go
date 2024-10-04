@@ -70,7 +70,7 @@ spec:
 			w.WriteHeader(http.StatusOK)
 		})
 
-		for i := 0; i < 100; i++ {
+		for i := range 100 {
 			handler.HandleFunc("/actors/myactortype/foo/method/remind/"+strconv.Itoa(i), func(http.ResponseWriter, *http.Request) {
 				called.Add(1)
 			})
@@ -111,17 +111,15 @@ func (h *hop) Run(t *testing.T, ctx context.Context) {
 	h.daprd2.WaitUntilRunning(t, ctx)
 
 	gclient := h.daprd1.GRPCClient(t, ctx)
-	for i := 0; i < 100; i++ {
-		require.EventuallyWithT(t, func(c *assert.CollectT) {
-			_, err := gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
-				ActorType: "myactortype",
-				ActorId:   "foo",
-				Name:      strconv.Itoa(i),
-				DueTime:   "0s",
-				Data:      []byte("reminderdata"),
-			})
-			require.NoError(c, err)
-		}, time.Second*10, time.Millisecond*50)
+	for i := range 100 {
+		_, err := gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
+			ActorType: "myactortype",
+			ActorId:   "foo",
+			Name:      strconv.Itoa(i),
+			DueTime:   "0s",
+			Data:      []byte("reminderdata"),
+		})
+		require.NoError(t, err)
 	}
 
 	assert.Eventually(t, func() bool {

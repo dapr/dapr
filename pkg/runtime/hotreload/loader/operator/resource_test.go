@@ -82,7 +82,7 @@ func Test_generic(t *testing.T) {
 		assert.NotNil(t, ch)
 		require.NoError(t, err)
 
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			comp := new(loader.Event[componentsapi.Component])
 			select {
 			case recCh <- comp:

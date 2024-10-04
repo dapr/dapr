@@ -122,7 +122,12 @@ func (s *scheduler) CreateReminder(ctx context.Context, reminder *internal.Creat
 		},
 	}
 
-	_, err = s.clients.Next().ScheduleJob(ctx, internalScheduleJobReq)
+	client, err := s.clients.Next(ctx)
+	if err != nil {
+		return fmt.Errorf("error getting scheduler client: %w", err)
+	}
+
+	_, err = client.ScheduleJob(ctx, internalScheduleJobReq)
 	if err != nil {
 		log.Errorf("Error scheduling reminder job %s due to: %s", reminder.Name, err)
 	}
@@ -145,6 +150,8 @@ func scheduleFromPeriod(period string) (*string, *uint32, error) {
 
 	var repeats *uint32
 	if repetition > 0 {
+		//TODO: fix types
+		//nolint:gosec
 		repeats = ptr.Of(uint32(repetition))
 	}
 
@@ -176,7 +183,12 @@ func (s *scheduler) GetReminder(ctx context.Context, req *internal.GetReminderRe
 		},
 	}
 
-	job, err := s.clients.Next().GetJob(ctx, internalGetJobReq)
+	client, err := s.clients.Next(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("error getting scheduler client: %w", err)
+	}
+
+	job, err := client.GetJob(ctx, internalGetJobReq)
 	if err != nil {
 		errMetadata := map[string]string{
 			"appID":     s.appID,
@@ -225,7 +237,12 @@ func (s *scheduler) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 		},
 	}
 
-	_, err := s.clients.Next().DeleteJob(context.Background(), internalDeleteJobReq)
+	client, err := s.clients.Next(ctx)
+	if err != nil {
+		return fmt.Errorf("error getting scheduler client: %w", err)
+	}
+
+	_, err = client.DeleteJob(context.Background(), internalDeleteJobReq)
 	if err != nil {
 		log.Errorf("Error deleting reminder job %s due to: %s", req.Name, err)
 	}

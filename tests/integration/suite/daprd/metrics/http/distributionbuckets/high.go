@@ -20,6 +20,7 @@ import (
 	"sort"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -74,15 +75,17 @@ func (h *high) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("service invocation", func(t *testing.T) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/hi")
-		metrics := h.daprd.Metrics(t, ctx)
 		var httpServerLatencyBuckets []float64
-		for k := range metrics {
-			if strings.HasPrefix(k, "dapr_http_server_latency_bucket") && strings.Contains(k, "app_id:myapp") && strings.Contains(k, "status:200") {
-				bucket := getBucketFromKey(t, k)
-				httpServerLatencyBuckets = append(httpServerLatencyBuckets, bucket)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			metrics := h.daprd.Metrics(t, ctx)
+			for k := range metrics {
+				if strings.HasPrefix(k, "dapr_http_server_latency_bucket") && strings.Contains(k, "app_id:myapp") && strings.Contains(k, "status:200") {
+					bucket := getBucketFromKey(t, k)
+					httpServerLatencyBuckets = append(httpServerLatencyBuckets, bucket)
+				}
 			}
-		}
-		require.NotEmpty(t, httpServerLatencyBuckets)
+			assert.NotEmpty(c, httpServerLatencyBuckets)
+		}, time.Second*5, time.Millisecond*10)
 		sort.Slice(httpServerLatencyBuckets, func(i, j int) bool { return httpServerLatencyBuckets[i] < httpServerLatencyBuckets[j] })
 		// default copied from pkg/config/configuration.go:277
 		defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}

@@ -54,6 +54,9 @@ type Options struct {
 	EtcdSpaceQuota          int64
 	EtcdCompactionMode      string
 	EtcdCompactionRetention string
+	EtcdSnapshotCount       uint64
+	EtcdMaxSnapshots        uint
+	EtcdMaxWALs             uint
 }
 
 // Server is the gRPC server for the Scheduler service.

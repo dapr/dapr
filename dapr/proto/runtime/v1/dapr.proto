@@ -202,6 +202,9 @@ service Dapr {
 
   // Delete a job
   rpc DeleteJobAlpha1(DeleteJobRequest) returns (DeleteJobResponse) {}
+
+  // Converse with a LLM service
+  rpc ConverseAlpha1(ConversationAlpha1Request) returns (ConversationAlpha1Response) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -1206,7 +1209,7 @@ message Job {
   //
   // Systemd timer style cron accepts 6 fields:
   // seconds | minutes | hours | day of month | month        | day of week
-  // 0-59    | 0-59    | 0-23  | 1-31         | 1-12/jan-dec | 0-7/sun-sat
+  // 0-59    | 0-59    | 0-23  | 1-31         | 1-12/jan-dec | 0-6/sun-sat
   //
   // "0 30 * * * *" - every hour on the half hour
   // "0 15 3 * * *" - every day at 03:15
@@ -1274,4 +1277,39 @@ message DeleteJobRequest {
 // DeleteJobResponse is the message response to delete the job by name.
 message DeleteJobResponse {
   // Empty
+}
+
+// ConversationAlpha1Request is the request object for Conversation.
+message ConversationAlpha1Request {
+  // The name of Coverstaion component
+  string name = 1;
+
+  // Conversation context - the Id of an existing chat room (like in ChatGPT)
+  optional string conversationContext = 2;
+
+  // Inputs for the conversation, support multiple input in one time.
+  repeated string inputs = 3;
+
+  // Parameters for all custom fields.
+  map<string, google.protobuf.Any> parameters = 4;
+
+  // The metadata passing to conversation components.
+  map<string, string> metadata = 5;
+}
+
+// ConversationAlpha1Result is the result for one input.
+message ConversationAlpha1Result {
+  // Result for the one conversation input.
+  string result = 1;
+  // Parameters for all custom fields.
+  map<string, google.protobuf.Any> parameters = 2;
+}
+
+// ConversationAlpha1Response is the response for Conversation.
+message ConversationAlpha1Response {
+  // Conversation context - the Id of an existing chat room (like in ChatGPT)
+  optional string conversationContext = 1;
+
+  // An array of results.
+  repeated ConversationAlpha1Result outputs = 2;
 }

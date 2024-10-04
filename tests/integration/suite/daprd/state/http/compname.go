@@ -64,7 +64,7 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 
 	c.storeNames = make([]string, numTests)
 	files := make([]string, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz.Fuzz(&c.storeNames[i])
 
 		files[i] = fmt.Sprintf(`
@@ -94,7 +94,6 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 
 	pt := parallel.New(t)
 	for _, storeName := range c.storeNames {
-		storeName := storeName
 		pt.Add(func(t *assert.CollectT) {
 			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", c.daprd.HTTPPort(), url.QueryEscape(storeName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(`[{"key": "key1", "value": "value1"}]`))

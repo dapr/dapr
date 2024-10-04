@@ -73,7 +73,7 @@ func (u *uppercase) Setup(t *testing.T) []framework.Option {
 	handler.HandleFunc("/", func(nethttp.ResponseWriter, *nethttp.Request) {})
 	handler.HandleFunc("/foo", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 		_, err := io.Copy(w, r.Body)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	})
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 
