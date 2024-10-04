@@ -146,8 +146,9 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 	}
 
 	s.connectionPool.Add(req.GetInitial(), stream)
-	monitoring.RecordSidecarsConnectedCount()
 
+	monitoring.RecordSidecarsConnectedCount(1)
+	defer monitoring.RecordSidecarsConnectedCount(-1)
 	select {
 	case <-s.closeCh:
 		return errors.New("server is closing")

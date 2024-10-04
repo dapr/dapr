@@ -26,9 +26,11 @@ import (
 )
 
 var (
-	sidecarsConnectedTotal = stats.Int64(
-		"scheduler/sidecars_connected_total",
-		"The total number of dapr sidecars connected to the scheduler service.",
+	sidecarConnectionCount int64 = 0
+
+	sidecarsConnectedGauge = stats.Int64(
+		"scheduler/sidecars_connected",
+		"The number of dapr sidecars actively connected to the scheduler service.",
 		stats.UnitDimensionless)
 	jobsScheduledTotal = stats.Int64(
 		"scheduler/jobs_created_total",
@@ -45,8 +47,9 @@ var (
 )
 
 // RecordSidecarsConnectedCount records the number of dapr sidecars connected to the scheduler service
-func RecordSidecarsConnectedCount() {
-	stats.RecordWithTags(context.Background(), utils.WithTags(sidecarsConnectedTotal.Name()), sidecarsConnectedTotal.M(1))
+func RecordSidecarsConnectedCount(change int) {
+	sidecarConnectionCount += int64(change)
+	stats.RecordWithTags(context.Background(), utils.WithTags(sidecarsConnectedGauge.Name()), sidecarsConnectedGauge.M(int64(sidecarConnectionCount)))
 }
 
 // RecordJobsScheduledCount records the number of jobs scheduled to the scheduler service
@@ -88,7 +91,7 @@ func RecordTriggerDuration(ns string, appID string, start time.Time) {
 // InitMetrics initialize the scheduler service metrics.
 func InitMetrics() error {
 	err := view.Register(
-		utils.NewMeasureView(sidecarsConnectedTotal, []tag.Key{}, view.Count()),
+		utils.NewMeasureView(sidecarsConnectedGauge, []tag.Key{}, view.LastValue()),
 		utils.NewMeasureView(jobsScheduledTotal, []tag.Key{}, view.Count()),
 		utils.NewMeasureView(jobsTriggeredTotal, []tag.Key{}, view.Count()),
 		utils.NewMeasureView(triggerLatency, []tag.Key{}, view.Distribution(0, 100, 500, 1000, 5000, 10000)), //nolint:mnd
