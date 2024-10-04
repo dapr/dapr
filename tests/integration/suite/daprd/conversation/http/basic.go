@@ -26,7 +26,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -35,11 +35,11 @@ func init() {
 }
 
 type basic struct {
-	daprd *procdaprd.Daprd
+	daprd *daprd.Daprd
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	b.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
+	b.daprd = daprd.New(t, daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -59,8 +59,7 @@ spec:
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
-
-	postURL := fmt.Sprintf("http://%sv1.0-alpha1/conversation/echo/converse", b.daprd.HTTPAddress())
+	postURL := fmt.Sprintf("http://%s/v1.0-alpha1/conversation/echo/converse", b.daprd.HTTPAddress())
 
 	httpClient := client.HTTP(t)
 

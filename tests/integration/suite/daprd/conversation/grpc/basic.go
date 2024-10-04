@@ -35,7 +35,7 @@ type basic struct {
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	b.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
+	b.daprd = daprd.New(t, daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -64,7 +64,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Inputs: []string{"well hello there"},
 		})
 		require.NoError(t, err)
-		require.Len(t, "well hello there", resp.GetOutputs(), 1)
+		require.Len(t, resp.GetOutputs(), 1)
 		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetResult())
 	})
 }
