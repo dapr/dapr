@@ -819,6 +819,151 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 		assert.Equal(t, *expected, <-stateMock.receivedKey)
 	})
 
+	t.Run("correct configuration with trace, custom field and ovveride topic and nonoverridable fields", func(t *testing.T) {
+		const outboxTopic = "test1outbox"
+
+		psMock := &outboxPubsubMock{
+			expectedOutboxTopic: outboxTopic,
+			t:                   t,
+		}
+		stateMock := &outboxStateMock{
+			receivedKey: make(chan string, 1),
+		}
+
+		internalCalledCh := make(chan struct{})
+		externalCalledCh := make(chan struct{})
+
+		var closed bool
+
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			if pr.Topic == outboxTopic {
+				close(internalCalledCh)
+			} else if pr.Topic == "customTopic" {
+				if !closed {
+					close(externalCalledCh)
+					closed = true
+				}
+			}
+
+			ce := map[string]string{}
+			json.Unmarshal(pr.Data, &ce)
+
+			traceID := ce[contribPubsub.TraceIDField]
+			traceState := ce[contribPubsub.TraceStateField]
+			customField := ce["outbox.cloudevent.customfield"]
+			customTopic := ce[contribPubsub.TopicField]
+			data := ce[contribPubsub.DataField]
+			id := ce[contribPubsub.IDField]
+			assert.Equal(t, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", traceID)
+			assert.Equal(t, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", traceState)
+			assert.Equal(t, "a", customField)
+			assert.Equal(t, "hello", data)
+			assert.Equal(t, "customTopic", customTopic)
+			assert.Contains(t, id, "outbox-")
+
+			return psMock.Publish(ctx, pr)
+		}).(*outboxImpl)
+		o.cloudEventExtractorFn = extractCloudEventProperty
+
+		o.getPubsubFn = func(s string) (contribPubsub.PubSub, bool) {
+			return psMock, true
+		}
+		o.getStateFn = func(s string) (state.Store, bool) {
+			return stateMock, true
+		}
+
+		stateScan := "1s"
+
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		const appID = "test"
+		err := o.SubscribeToInternalTopics(context.Background(), appID)
+		require.NoError(t, err)
+
+		errCh := make(chan error, 1)
+		go func() {
+			trs, pErr := o.PublishInternal(context.Background(), "test", []state.TransactionalStateOperation{
+				state.SetRequest{
+					Key:      "1",
+					Value:    "hello",
+					Metadata: map[string]string{"outbox.cloudevent.customfield": "a", "topic": "customTopic", "data": "a", "id": "b"},
+				},
+			}, appID, "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01", "00-ecdf5aaa79bff09b62b201442c0f3061-d2597ed7bfd029e4-01")
+
+			trs = append(trs[:0], trs[0+1:]...)
+
+			if pErr != nil {
+				errCh <- pErr
+				return
+			}
+			if len(trs) != 1 {
+				errCh <- fmt.Errorf("expected trs to have len(1), but got: %d", len(trs))
+				return
+			}
+
+			errCh <- nil
+			stateMock.expectedKey.Store(ptr.Of(trs[0].GetKey()))
+		}()
+
+		d, err := time.ParseDuration(stateScan)
+		require.NoError(t, err)
+
+		start := time.Now()
+		doneCh := make(chan error, 2)
+		timeout := time.After(5 * time.Second)
+		go func() {
+			select {
+			case <-internalCalledCh:
+				doneCh <- nil
+			case <-timeout:
+				doneCh <- errors.New("timeout waiting for internalCalledCh")
+			}
+		}()
+		go func() {
+			select {
+			case <-externalCalledCh:
+				doneCh <- nil
+			case <-timeout:
+				doneCh <- errors.New("timeout waiting for externalCalledCh")
+			}
+		}()
+		for i := 0; i < 2; i++ {
+			require.NoError(t, <-doneCh)
+		}
+		require.GreaterOrEqual(t, time.Since(start), d)
+
+		// Publishing should not have errored
+		require.NoError(t, <-errCh)
+
+		expected := stateMock.expectedKey.Load()
+		require.NotNil(t, expected)
+		assert.Equal(t, *expected, <-stateMock.receivedKey)
+	})
+
 	t.Run("state store not present", func(t *testing.T) {
 		const outboxTopic = "test1outbox"
 
