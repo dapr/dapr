@@ -64,6 +64,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			Inputs: []string{"well hello there"},
 		})
 		require.NoError(t, err)
+		require.Len(t, "well hello there", resp.GetOutputs(), 1)
 		require.Equal(t, "well hello there", resp.GetOutputs()[0].GetResult())
 	})
 }
