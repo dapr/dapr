@@ -28,4 +28,5 @@ const (
 	CategoryCryptoProvider  Category = "crypto"
 	CategoryLock            Category = "lock"
 	CategoryNameResolution  Category = "nameresolution"
+	CategoryConversation    Category = "conversation"
 )

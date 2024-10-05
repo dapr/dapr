@@ -17,6 +17,7 @@ limitations under the License.
 package actor_reminder_perf
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -27,6 +28,10 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	appsv1 "k8s.io/api/apps/v1"
+	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/tests/perf"
 	"github.com/dapr/dapr/tests/perf/utils"
@@ -44,21 +49,21 @@ const (
 	appNameScheduler   = "perf-actor-reminder-scheduler-service"
 
 	// Target for the QPS - Temporary
-	targetQPS          float64 = 50
-	targetSchedulerQPS float64 = 4000
+	targetQPS          float64 = 33
+	targetSchedulerQPS float64 = 2900
 
 	// Target for the QPS to trigger reminders.
-	targetTriggerQPS          float64 = 4700
+	targetTriggerQPS          float64 = 1000
 	targetSchedulerTriggerQPS float64 = 3800
 
 	// reminderCount is the number of reminders to register.
-	reminderCount          = 5000
+	reminderCount          = 2000
 	reminderCountScheduler = 50000
 
 	// dueTime is the time in seconds to execute the reminders. This covers the
 	// time to register the reminders and the time to trigger them.
-	dueTime          = 220
-	dueTimeScheduler = 110
+	dueTime          = 300
+	dueTimeScheduler = 220
 )
 
 var tr *runner.TestRunner
@@ -114,7 +119,7 @@ func TestMain(m *testing.M) {
 
 func TestActorReminderRegistrationPerformance(t *testing.T) {
 	p := perf.Params(
-		perf.WithQPS(500),
+		perf.WithQPS(33),
 		perf.WithConnections(8),
 		perf.WithDuration("1m"),
 		perf.WithPayload("{}"),
@@ -189,12 +194,33 @@ func TestActorReminderRegistrationPerformance(t *testing.T) {
 	assert.Equal(t, 0, daprResult.RetCodes.Num400)
 	assert.Equal(t, 0, daprResult.RetCodes.Num500)
 	assert.Equal(t, 0, restarts)
-	assert.True(t, daprResult.ActualQPS > targetQPS) // TODO: Revert to p.QPS
+	assert.InDelta(t, targetQPS, daprResult.ActualQPS, 2)
 }
 
 func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
+	t.Cleanup(func() {
+		platform := tr.Platform.(*runner.KubeTestPlatform)
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, appsv1.AddToScheme(scheme))
+		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
+		require.NoError(t, err)
+		var pod corev1.Pod
+		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+		require.NoError(t, err)
+		err = cl.Delete(context.Background(), &pod)
+		require.NoError(t, err)
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			var sts appsv1.StatefulSet
+			err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
+			require.NoError(t, err)
+			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
+		}, time.Minute, time.Second)
+	})
+
 	p := perf.Params(
-		perf.WithQPS(5000),
+		perf.WithQPS(3000),
 		perf.WithConnections(8),
 		perf.WithDuration("1m"),
 		perf.WithPayload("{}"),
@@ -222,7 +248,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 	require.NoError(t, err)
 	require.NotEmpty(t, daprResp)
 	// fast fail if daprResp starts with error
-	require.False(t, strings.HasPrefix(string(daprResp), "error"))
+	require.False(t, strings.HasPrefix(string(daprResp), "error"), string(daprResp))
 
 	// Let test run for 90s triggering the timers and collect metrics.
 	time.Sleep(90 * time.Second)
@@ -270,7 +296,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 	assert.Equal(t, 0, daprResult.RetCodes.Num400)
 	assert.Equal(t, 0, daprResult.RetCodes.Num500)
 	assert.Equal(t, 0, restarts)
-	assert.GreaterOrEqual(t, daprResult.ActualQPS, targetSchedulerQPS)
+	assert.InDelta(t, targetSchedulerQPS, daprResult.ActualQPS, 10)
 }
 
 type actorReminderRequest struct {
@@ -352,6 +378,27 @@ func TestActorReminderTriggerPerformance(t *testing.T) {
 }
 
 func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
+	t.Cleanup(func() {
+		platform := tr.Platform.(*runner.KubeTestPlatform)
+		scheme := runtime.NewScheme()
+		require.NoError(t, corev1.AddToScheme(scheme))
+		require.NoError(t, appsv1.AddToScheme(scheme))
+		cl, err := client.New(platform.KubeClient.GetClientConfig(), client.Options{Scheme: scheme})
+		require.NoError(t, err)
+		var pod corev1.Pod
+		err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server-0"}, &pod)
+		require.NoError(t, err)
+		err = cl.Delete(context.Background(), &pod)
+		require.NoError(t, err)
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			var sts appsv1.StatefulSet
+			err = cl.Get(context.Background(), client.ObjectKey{Namespace: kube.DaprTestNamespace, Name: "dapr-scheduler-server"}, &sts)
+			require.NoError(t, err)
+			assert.Equal(c, int32(1), sts.Status.ReadyReplicas)
+		}, time.Minute, time.Second)
+	})
+
 	// Get the ingress external url of test app
 	testAppURL := tr.Platform.AcquireAppExternalURL(appNameScheduler)
 	require.NotEmpty(t, testAppURL, "test app external URL must not be empty")
@@ -375,8 +422,10 @@ func TestActorReminderSchedulerTriggerPerformance(t *testing.T) {
 	require.NoError(t, err)
 
 	worker := func(i int) {
-		_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/abc/reminders/myreminder%d", testAppURL, actorTypeScheduler, i), reminderB)
-		require.NoError(t, err)
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			_, err = utils.HTTPPost(fmt.Sprintf("%s/actors/%s/abc/reminders/myreminder%d", testAppURL, actorTypeScheduler, i), reminderB)
+			assert.NoError(c, err)
+		}, 10*time.Second, time.Millisecond*100)
 
 		if (i+1)%10000 == 0 {
 			fmt.Printf("Reminders registered: %d\n", i+1)

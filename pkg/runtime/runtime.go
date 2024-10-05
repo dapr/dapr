@@ -18,7 +18,6 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"reflect"
@@ -111,8 +110,8 @@ type DaprRuntime struct {
 	daprHTTPAPI           http.API
 	daprGRPCAPI           grpc.API
 	operatorClient        operatorv1pb.OperatorClient
-	schedulerManager      *scheduler.Manager
 	schedulerClients      *clients.Clients
+	jobsManager           *scheduler.Manager
 	isAppHealthy          chan struct{}
 	appHealth             *apphealth.AppHealth
 	appHealthReady        func(context.Context) error // Invoked the first time the app health becomes ready
@@ -210,26 +209,25 @@ func newDaprRuntime(ctx context.Context,
 	})
 
 	processor := processor.New(processor.Options{
-		ID:               runtimeConfig.id,
-		Namespace:        namespace,
-		IsHTTP:           runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
-		ActorsEnabled:    len(runtimeConfig.actorsService) > 0,
-		SchedulerEnabled: len(runtimeConfig.schedulerAddress) > 0,
-		Registry:         runtimeConfig.registry,
-		ComponentStore:   compStore,
-		Meta:             meta,
-		GlobalConfig:     globalConfig,
-		Resiliency:       resiliencyProvider,
-		Mode:             runtimeConfig.mode,
-		PodName:          podName,
-		OperatorClient:   operatorClient,
-		GRPC:             grpc,
-		Channels:         channels,
-		MiddlewareHTTP:   httpMiddleware,
-		Security:         sec,
-		Outbox:           outbox,
-		Adapter:          pubsubAdapter,
-		AdapterStreamer:  pubsubAdapterStreamer,
+		ID:              runtimeConfig.id,
+		Namespace:       namespace,
+		IsHTTP:          runtimeConfig.appConnectionConfig.Protocol.IsHTTP(),
+		ActorsEnabled:   len(runtimeConfig.actorsService) > 0,
+		Registry:        runtimeConfig.registry,
+		ComponentStore:  compStore,
+		Meta:            meta,
+		GlobalConfig:    globalConfig,
+		Resiliency:      resiliencyProvider,
+		Mode:            runtimeConfig.mode,
+		PodName:         podName,
+		OperatorClient:  operatorClient,
+		GRPC:            grpc,
+		Channels:        channels,
+		MiddlewareHTTP:  httpMiddleware,
+		Security:        sec,
+		Outbox:          outbox,
+		Adapter:         pubsubAdapter,
+		AdapterStreamer: pubsubAdapterStreamer,
 	})
 
 	var reloader *hotreload.Reloader
@@ -262,6 +260,12 @@ func newDaprRuntime(ctx context.Context,
 		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
 	}
 
+	schedulerClients := clients.New(clients.Options{
+		Addresses: runtimeConfig.schedulerAddress,
+		Security:  sec,
+		Healthz:   runtimeConfig.healthz,
+	})
+
 	rt := &DaprRuntime{
 		runtimeConfig:         runtimeConfig,
 		globalConfig:          globalConfig,
@@ -283,10 +287,17 @@ func newDaprRuntime(ctx context.Context,
 		reloader:              reloader,
 		namespace:             namespace,
 		podName:               podName,
-		initComplete:          make(chan struct{}),
-		isAppHealthy:          make(chan struct{}),
-		clock:                 new(clock.RealClock),
-		httpMiddleware:        httpMiddleware,
+		schedulerClients:      schedulerClients,
+		jobsManager: scheduler.New(scheduler.Options{
+			Namespace: namespace,
+			AppID:     runtimeConfig.id,
+			Channels:  channels,
+			Clients:   schedulerClients,
+		}),
+		initComplete:   make(chan struct{}),
+		isAppHealthy:   make(chan struct{}),
+		clock:          new(clock.RealClock),
+		httpMiddleware: httpMiddleware,
 	}
 	close(rt.isAppHealthy)
 
@@ -300,6 +311,8 @@ func newDaprRuntime(ctx context.Context,
 		rt.runtimeConfig.metricsExporter.Start,
 		rt.processor.Process,
 		rt.reloader.Run,
+		rt.schedulerClients.Run,
+		rt.jobsManager.Run,
 		func(ctx context.Context) error {
 			start := time.Now()
 			log.Infof("%s mode configured", rt.runtimeConfig.mode)
@@ -320,31 +333,6 @@ func newDaprRuntime(ctx context.Context,
 			return nil
 		},
 	)
-
-	if runtimeConfig.SchedulerEnabled() {
-		opts := clients.Options{
-			Addresses: runtimeConfig.schedulerAddress,
-			Security:  sec,
-		}
-
-		rt.schedulerClients, err = continuouslyRetrySchedulerClient(ctx, opts)
-		if err != nil {
-			return nil, err
-		}
-
-		rt.schedulerManager, err = scheduler.New(scheduler.Options{
-			Namespace: namespace,
-			AppID:     runtimeConfig.id,
-			Clients:   rt.schedulerClients,
-			Channels:  channels,
-		})
-		if err != nil {
-			return nil, err
-		}
-		if err := rt.runnerCloser.Add(rt.schedulerManager.Run); err != nil {
-			return nil, err
-		}
-	}
 
 	if err := rt.runnerCloser.AddCloser(
 		func() error {
@@ -413,22 +401,6 @@ func (a *DaprRuntime) Run(parentCtx context.Context) error {
 	}
 
 	return a.runnerCloser.Run(ctx)
-}
-
-func continuouslyRetrySchedulerClient(ctx context.Context, opts clients.Options) (*clients.Clients, error) {
-	for {
-		cli, err := clients.New(ctx, opts)
-		if err == nil {
-			return cli, nil
-		}
-
-		log.Errorf("Failed to initialize scheduler clients: %s. Retrying...", err)
-		select {
-		case <-time.After(time.Second):
-		case <-ctx.Done():
-			return nil, ctx.Err()
-		}
-	}
 }
 
 func getPodName() string {
@@ -651,10 +623,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		return err
 	}
 
-	if err := a.processor.Subscriber().InitProgramaticSubscriptions(ctx); err != nil {
-		return fmt.Errorf("failed to init programmatic subscriptions: %s", err)
-	}
-
 	if a.runtimeConfig.appConnectionConfig.MaxConcurrency > 0 {
 		log.Infof("app max concurrency set to %v", a.runtimeConfig.appConnectionConfig.MaxConcurrency)
 	}
@@ -716,6 +684,10 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) (err error) {
 		}); err != nil {
 			return fmt.Errorf("failed to register components with callback: %w", err)
 		}
+	}
+
+	if a.runtimeConfig.SchedulerEnabled() {
+		a.jobsManager.Start(a.actor)
 	}
 
 	return nil
@@ -793,13 +765,15 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			a.appHealthReady = nil
 		}
 
-		// Start subscribing to topics and reading from input bindings
-		if err := a.processor.Subscriber().StartAppSubscriptions(); err != nil {
-			log.Warnf("failed to subscribe to topics: %s ", err)
-		}
-		err := a.processor.Binding().StartReadingFromBindings(ctx)
-		if err != nil {
-			log.Warnf("failed to read from bindings: %s ", err)
+		if a.channels.AppChannel() != nil {
+			// Start subscribing to topics and reading from input bindings
+			if err := a.processor.Subscriber().StartAppSubscriptions(); err != nil {
+				log.Warnf("failed to subscribe to topics: %s ", err)
+			}
+			err := a.processor.Binding().StartReadingFromBindings(ctx)
+			if err != nil {
+				log.Warnf("failed to read from bindings: %s ", err)
+			}
 		}
 
 		// Start subscribing to outbox topics
@@ -808,7 +782,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		}
 
 		if a.runtimeConfig.SchedulerEnabled() {
-			a.schedulerManager.Start(a.actor)
+			a.jobsManager.Start(a.actor)
 		}
 
 	case apphealth.AppStatusUnhealthy:
@@ -823,7 +797,9 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		a.processor.Binding().StopReadingFromBindings(false)
 
 		if a.runtimeConfig.SchedulerEnabled() {
-			a.schedulerManager.Stop()
+			if a.jobsManager != nil {
+				a.jobsManager.Stop()
+			}
 		}
 	}
 }
@@ -996,7 +972,6 @@ func (a *DaprRuntime) getNewServerConfig(apiListenAddresses []string, port int) 
 
 func (a *DaprRuntime) initNameResolution(ctx context.Context) (err error) {
 	var (
-		resolver         nr.Resolver
 		resolverMetadata nr.Metadata
 		resolverName     string
 		resolverVersion  string
@@ -1024,7 +999,7 @@ func (a *DaprRuntime) initNameResolution(ctx context.Context) (err error) {
 	}
 
 	fName := utils.ComponentLogName("nr", resolverName, resolverVersion)
-	resolver, err = a.runtimeConfig.registry.NameResolutions().Create(resolverName, resolverVersion, fName)
+	a.nameResolver, err = a.runtimeConfig.registry.NameResolutions().Create(resolverName, resolverVersion, fName)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "creation", resolverName)
 		return rterrors.NewInit(rterrors.CreateComponentFailure, fName, err)
@@ -1051,18 +1026,14 @@ func (a *DaprRuntime) initNameResolution(ctx context.Context) (err error) {
 		Namespace:        a.namespace,
 	}
 
-	err = resolver.Init(ctx, resolverMetadata)
+	err = a.nameResolver.Init(ctx, resolverMetadata)
 	if err != nil {
 		diag.DefaultMonitoring.ComponentInitFailed("nameResolution", "init", resolverName)
 		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
 	}
 
-	a.nameResolver = resolver
-	if nrCloser, ok := resolver.(io.Closer); ok {
-		err = a.runnerCloser.AddCloser(nrCloser)
-		if err != nil {
-			return err
-		}
+	if err = a.runnerCloser.AddCloser(a.nameResolver); err != nil {
+		return err
 	}
 
 	log.Infof("Initialized name resolution to %s", resolverName)
@@ -1425,7 +1396,7 @@ func featureTypeToString(features interface{}) []string {
 	switch reflect.TypeOf(features).Kind() {
 	case reflect.Slice:
 		val := reflect.ValueOf(features)
-		for i := 0; i < val.Len(); i++ {
+		for i := range val.Len() {
 			featureStr = append(featureStr, val.Index(i).String())
 		}
 	}

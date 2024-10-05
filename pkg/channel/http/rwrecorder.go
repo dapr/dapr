@@ -107,5 +107,6 @@ func parseContentLength(cl string) int64 {
 	if err != nil {
 		return -1
 	}
+	//nolint:gosec
 	return int64(n)
 }

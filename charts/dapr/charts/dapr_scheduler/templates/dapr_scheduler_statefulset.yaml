@@ -1,4 +1,3 @@
-{{- if (eq .Values.global.scheduler.enabled true) }}
 apiVersion: apps/v1
 kind: StatefulSet
 metadata:
@@ -10,15 +9,18 @@ metadata:
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
 spec:
-  replicas: {{ .Values.replicaCount }}
+  {{- $replicas := include "dapr_scheduler.get-replicas" . }}
+  replicas: {{ $replicas }}
   serviceName: dapr-scheduler-server
   podManagementPolicy: Parallel
   selector:
     matchLabels:
       app: dapr-scheduler-server
-  {{- if .Values.cluster.storageClassName }}
+  {{- if not .Values.cluster.inMemoryStorage }}
   volumeClaimTemplates:
-  - metadata:
+  - apiVersion: v1
+    kind: PersistentVolumeClaim
+    metadata:
       name: dapr-scheduler-data-dir
     spec:
       accessModes: [ "ReadWriteOnce" ]
@@ -48,6 +50,8 @@ spec:
 {{ toYaml . | indent 8 }}
 {{- end }}
     spec:
+      securityContext:
+        fsGroup: {{ .Values.securityContext.fsGroup }}
       containers:
       - name: dapr-scheduler-server
         livenessProbe:
@@ -99,7 +103,7 @@ spec:
           {{- toYaml . | nindent 10 }}
         {{- end }}
         ports:
-          - containerPort: {{ .Values.ports.apiPort }}
+          - containerPort: 50006
             name: api
           - containerPort: {{ .Values.ports.etcdGRPCClientPort }}
             name: etcd-client
@@ -132,7 +136,11 @@ spec:
         - "--id"
         - "$(SCHEDULER_ID)"
         - "--replica-count"
-        - "{{ .Values.replicaCount }}"
+        {{- if (eq .Values.global.scheduler.enabled true) }}
+        - "{{ $replicas }}"
+        {{- else }}
+        - "0"
+        {{- end }}
         - "--initial-cluster"
         - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
         - "--etcd-client-ports"
@@ -154,9 +162,12 @@ spec:
         - "--enable-metrics=false"
 {{- end }}
         - "--etcd-data-dir={{ if eq .Values.global.daprControlPlaneOs "windows" }}{{ .Values.cluster.etcdDataDirWinPath }}{{- else }}{{ .Values.cluster.etcdDataDirPath }}{{- end }}/{{ .Release.Namespace }}/$(SCHEDULER_ID)"
-        - "--etcd-space-quota={{ int .Values.etcdSpaceQuota }}"
+        - "--etcd-space-quota={{ .Values.etcdSpaceQuota }}"
         - "--etcd-compaction-mode={{ .Values.etcdCompactionMode }}"
         - "--etcd-compaction-retention={{ .Values.etcdCompactionRetention }}"
+        - "--etcd-snapshot-count={{ .Values.etcdSnapshotCount }}"
+        - "--etcd-max-snapshots={{ .Values.etcdMaxSnapshots }}"
+        - "--etcd-max-wals={{ .Values.etcdMaxWals }}"
         - "--tls-enabled"
         - "--trust-domain={{ .Values.global.mtls.controlPlaneTrustDomain }}"
         - "--trust-anchors-file=/var/run/secrets/dapr.io/tls/ca.crt"
@@ -164,7 +175,7 @@ spec:
         - "--mode=kubernetes"
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
-          runAsNonRoot: {{ .Values.runAsNonRoot }}
+          runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:
             add: ["SYS_PTRACE"]
@@ -197,7 +208,7 @@ spec:
         {{- end }}
       serviceAccountName: dapr-scheduler
       volumes:
-      {{- if not .Values.cluster.storageClassName }}
+      {{- if .Values.cluster.inMemoryStorage }}
       - name: dapr-scheduler-data-dir
         emptyDir:
           medium: Memory
@@ -232,7 +243,7 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
-{{- if (gt (int .Values.replicaCount) 1) }}
+{{- if (gt (int $replicas) 1) }}
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
@@ -260,5 +271,4 @@ spec:
 {{- if .Values.global.priorityClassName }}
       priorityClassName:
 {{ toYaml .Values.global.priorityClassName | indent 8 }}
-{{- end }}
 {{- end }}

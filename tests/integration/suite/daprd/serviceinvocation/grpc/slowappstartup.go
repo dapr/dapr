@@ -32,9 +32,9 @@ import (
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
+	testpb "github.com/dapr/dapr/tests/integration/framework/process/grpc/app/proto"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/suite"
-	testpb "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc/proto"
 )
 
 func init() {
@@ -64,14 +64,16 @@ func (s *slowappstartup) Setup(t *testing.T) []framework.Option {
 	fp := ports.Reserve(t, 1)
 	port := fp.Port(t)
 
-	s.app = newGRPCServer(t, onInvoke, procgrpc.WithListener(func() (net.Listener, error) {
-		// Simulate a slow startup by not opening the listener until 2 seconds after
-		// the process starts. This sleep value must be more than the health probe
-		// interval.
-		time.Sleep(time.Second * 2)
-		return net.Listen("tcp", "localhost:"+strconv.Itoa(port))
-	}))
-
+	s.app = app.New(t, app.WithOnInvokeFn(onInvoke),
+		app.WithGRPCOptions(
+			procgrpc.WithListener(func() (net.Listener, error) {
+				// Simulate a slow startup by not opening the listener until 2 seconds after
+				// the process starts. This sleep value must be more than the health probe
+				// interval.
+				time.Sleep(time.Second * 2)
+				return net.Listen("tcp", "localhost:"+strconv.Itoa(port))
+			})),
+	)
 	s.daprd = procdaprd.New(t,
 		procdaprd.WithAppProtocol("grpc"),
 		procdaprd.WithAppPort(port),
@@ -111,7 +113,6 @@ func (s *slowappstartup) Run(t *testing.T, ctx context.Context) {
 		})
 		// This function must only return that the app is not in a healthy state
 		// until the app is in a healthy state.
-		//nolint:testifylint
 		if !assert.NoError(c, err) {
 			require.ErrorContains(c, err, "app is not in a healthy state")
 		}

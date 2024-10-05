@@ -100,7 +100,7 @@ func main() {
 	log.Printf("Initializing grpc")
 
 	/* #nosec */
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%s", appPort))
+	lis, err := net.Listen("tcp", ":"+appPort)
 	if err != nil {
 		log.Fatalf("failed to listen: %v", err)
 	}

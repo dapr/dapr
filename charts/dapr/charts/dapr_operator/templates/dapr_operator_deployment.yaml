@@ -176,7 +176,7 @@ spec:
       volumes:
         - name: dapr-operator-tmp
           emptyDir:
-            sizeLimit: 2Mi
+            sizeLimit: 64Mi
             medium: Memory
         - name: dapr-trust-bundle
           configMap:

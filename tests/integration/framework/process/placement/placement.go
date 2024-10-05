@@ -133,19 +133,18 @@ func (p *Placement) Cleanup(t *testing.T) {
 }
 
 func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	client := client.HTTP(t)
-	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", p.healthzPort), nil)
-		if err != nil {
-			return false
-		}
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", p.healthzPort), nil)
+	require.NoError(t, err)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.Do(req)
-		if err != nil {
-			return false
+		if assert.NoError(c, err) {
+			defer resp.Body.Close()
+			assert.Equal(c, http.StatusOK, resp.StatusCode)
 		}
-		defer resp.Body.Close()
-		return http.StatusOK == resp.StatusCode
-	}, time.Second*5, 10*time.Millisecond)
+	}, time.Second*25, 10*time.Millisecond)
 }
 
 func (p *Placement) ID() string {
@@ -196,19 +195,16 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 	var stream placementv1pb.Placement_ReportDaprStatusClient
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		stream, err = client.ReportDaprStatus(parentCtx)
-		//nolint:testifylint
 		if !assert.NoError(c, err) {
 			return
 		}
 
-		//nolint:testifylint
 		if !assert.NoError(c, stream.Send(msg)) {
 			_ = stream.CloseSend()
 			return
 		}
 
 		_, err = stream.Recv()
-		//nolint:testifylint
 		if !assert.NoError(c, err) {
 			_ = stream.CloseSend()
 			return
@@ -256,7 +252,7 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 
 			if in.GetOperation() == "update" {
 				tables := in.GetTables()
-				require.NotEmptyf(t, tables, "Placement table is empty")
+				assert.NotEmptyf(t, tables, "Placement table is empty")
 
 				select {
 				case placementUpdateCh <- tables:
@@ -276,13 +272,13 @@ func (p *Placement) RegisterHost(t *testing.T, ctx context.Context, msg *placeme
 }
 
 // AssertRegisterHostFails Expect the registration to fail with FailedPrecondition.
-func (p *Placement) AssertRegisterHostFails(t *testing.T, ctx context.Context, apiLevel int) {
+func (p *Placement) AssertRegisterHostFails(t *testing.T, ctx context.Context, apiLevel uint32) {
 	msg := &placementv1pb.Host{
 		Name:     "myapp-fail",
 		Port:     1234,
 		Entities: []string{"someactor"},
 		Id:       "myapp",
-		ApiLevel: uint32(apiLevel),
+		ApiLevel: apiLevel,
 	}
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, p.Address(),

@@ -61,6 +61,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/utils"
+	kiterrors "github.com/dapr/kit/errors"
 	"github.com/dapr/kit/logger"
 )
 
@@ -501,6 +502,21 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 		req.Metadata[key] = val
 	}
 
+	// this is for the http binding, so dont need grpc-trace-bin
+	span := diagUtils.SpanFromContext(ctx)
+	sc := span.SpanContext()
+	tp := diag.SpanContextToW3CString(sc)
+	if span != nil {
+		if _, ok := req.Metadata[diag.TraceparentHeader]; !ok {
+			req.Metadata[diag.TraceparentHeader] = tp
+		}
+		if _, ok := req.Metadata[diag.TracestateHeader]; !ok {
+			if sc.TraceState().Len() > 0 {
+				req.Metadata[diag.TracestateHeader] = diag.TraceStateToW3CString(sc)
+			}
+		}
+	}
+
 	// Allow for distributed tracing by passing context metadata.
 	if incomingMD, ok := metadata.FromIncomingContext(ctx); ok {
 		for key, val := range incomingMD {
@@ -580,7 +596,7 @@ func (a *api) GetBulkState(ctx context.Context, in *runtimev1pb.GetBulkStateRequ
 	}
 
 	bulkResp.Items = make([]*runtimev1pb.BulkStateItem, len(responses))
-	for i := 0; i < len(responses); i++ {
+	for i := range responses {
 		item := &runtimev1pb.BulkStateItem{
 			Key:      stateLoader.GetOriginalStateKey(responses[i].Key),
 			Data:     responses[i].Data,
@@ -643,7 +659,13 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
+		kerr, ok := kiterrors.FromError(err)
+		if ok {
+			err = kerr.GRPCStatus().Err()
+		} else {
+			err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
+		}
+
 		a.logger.Debug(err)
 		return &runtimev1pb.GetStateResponse{}, err
 	}
@@ -761,6 +783,11 @@ func (a *api) stateErrorResponse(err error, format string, args ...interface{}) 
 		case state.ETagInvalid:
 			return status.Errorf(codes.InvalidArgument, format, args...)
 		}
+	}
+
+	kerr, ok := kiterrors.FromError(err)
+	if ok {
+		return kerr
 	}
 
 	return status.Errorf(codes.Internal, format, args...)

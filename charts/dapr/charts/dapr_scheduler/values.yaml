@@ -21,22 +21,25 @@ service:
 
 ports:
   protocol: TCP
-  apiPort: 50006
   etcdGRPCClientPort: 2379
   etcdHTTPClientPort: 2330
   etcdGRPCPeerPort: 2380
 
-replicaCount: 1
+ha: false
 
 cluster:
   etcdDataDirPath: /var/run/data/dapr-scheduler
   etcdDataDirWinPath: C:\\dapr-scheduler
   storageClassName: ""
-  storageSize: 10Gi
+  storageSize: 1Gi
+  inMemoryStorage: false
 
-etcdSpaceQuota: 2147483648
+etcdSpaceQuota: 1Gi
 etcdCompactionMode: periodic
-etcdCompactionRetention: 24h
+etcdCompactionRetention: 10m
+etcdSnapshotCount: 10000
+etcdMaxSnapshots: 5
+etcdMaxWals: 5
 
 livenessProbe:
   initialDelaySeconds: 10
@@ -52,7 +55,10 @@ debug:
   port: 40000
   initialDelaySeconds: 30000
 
-runAsNonRoot: true
+securityContext:
+  runAsNonRoot: true
+  fsGroup: 65532
+
 resources: {}
 
 extraEnvVars: {}

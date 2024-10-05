@@ -15,9 +15,12 @@ package clients
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync/atomic"
+	"time"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
@@ -30,46 +33,107 @@ var log = logger.NewLogger("dapr.runtime.scheduler.clients")
 type Options struct {
 	Addresses []string
 	Security  security.Handler
+	Healthz   healthz.Healthz
 }
 
 // Clients builds Scheduler clients and provides those clients in a round-robin
 // fashion.
 type Clients struct {
+	addresses   []string
+	sec         security.Handler
 	clients     []schedulerv1pb.SchedulerClient
+	htarget     healthz.Target
 	lastUsedIdx atomic.Uint64
+	running     atomic.Bool
+	readyCh     chan struct{}
+	closeCh     chan struct{}
 }
 
-func New(ctx context.Context, opts Options) (*Clients, error) {
-	if len(opts.Addresses) == 0 {
-		return nil, fmt.Errorf("no addresses provided")
+func New(opts Options) *Clients {
+	return &Clients{
+		addresses: opts.Addresses,
+		sec:       opts.Security,
+		htarget:   opts.Healthz.AddTarget(),
+		readyCh:   make(chan struct{}),
+		closeCh:   make(chan struct{}),
+	}
+}
+
+func (c *Clients) Run(ctx context.Context) error {
+	if !c.running.CompareAndSwap(false, true) {
+		return errors.New("scheduler clients already running")
 	}
 
-	clients := make([]schedulerv1pb.SchedulerClient, len(opts.Addresses))
-	for i, address := range opts.Addresses {
-		log.Debugf("Attempting to connect to Scheduler at address: %s", address)
-		client, err := client.New(ctx, address, opts.Security)
-		if err != nil {
-			return nil, fmt.Errorf("scheduler client not initialized for address %s: %s", address, err)
+	for {
+		err := c.connectClients(ctx)
+		if err == nil {
+			break
 		}
+
+		log.Errorf("Failed to initialize scheduler clients: %s. Retrying...", err)
+
+		select {
+		case <-time.After(time.Second):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
+
+	if len(c.clients) > 0 {
+		log.Info("Scheduler clients initialized")
+	}
+
+	close(c.readyCh)
+	c.htarget.Ready()
+	<-ctx.Done()
+	close(c.closeCh)
+
+	return nil
+}
+
+// Next returns the next client in a round-robin manner.
+func (c *Clients) Next(ctx context.Context) (schedulerv1pb.SchedulerClient, error) {
+	if len(c.clients) == 0 {
+		return nil, errors.New("no scheduler client initialized")
+	}
+
+	select {
+	case <-c.readyCh:
+	case <-c.closeCh:
+		return nil, errors.New("scheduler clients closed")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+
+	//nolint:gosec
+	return c.clients[int(c.lastUsedIdx.Add(1))%len(c.clients)], nil
+}
+
+// All returns all scheduler clients.
+func (c *Clients) All(ctx context.Context) ([]schedulerv1pb.SchedulerClient, error) {
+	select {
+	case <-c.readyCh:
+	case <-c.closeCh:
+		return nil, errors.New("scheduler clients closed")
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+	return c.clients, nil
+}
+
+func (c *Clients) connectClients(ctx context.Context) error {
+	clients := make([]schedulerv1pb.SchedulerClient, len(c.addresses))
+	for i, address := range c.addresses {
+		log.Debugf("Attempting to connect to Scheduler at address: %s", address)
+		client, err := client.New(ctx, address, c.sec)
+		if err != nil {
+			return fmt.Errorf("scheduler client not initialized for address %s: %s", address, err)
+		}
+
 		log.Infof("Scheduler client initialized for address: %s", address)
 		clients[i] = client
 	}
 
-	return &Clients{
-		clients: clients,
-	}, nil
-}
-
-// Next returns the next client in a round-robin manner.
-func (c *Clients) Next() schedulerv1pb.SchedulerClient {
-	if len(c.clients) == 1 {
-		return c.clients[0]
-	}
-
-	return c.clients[int(c.lastUsedIdx.Add(1))%len(c.clients)]
-}
-
-// All returns all scheduler clients.
-func (c *Clients) All() []schedulerv1pb.SchedulerClient {
-	return c.clients
+	c.clients = clients
+	return nil
 }

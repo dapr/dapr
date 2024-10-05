@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"io"
 	"strings"
 	"sync"
 
@@ -152,11 +151,7 @@ func (b *binding) Close(comp compapi.Component) error {
 }
 
 func (b *binding) closeOutputBinding(binding bindings.OutputBinding) error {
-	closer, ok := binding.(io.Closer)
-	if ok && closer != nil {
-		return closer.Close()
-	}
-	return nil
+	return binding.Close()
 }
 
 func (b *binding) initInputBinding(ctx context.Context, comp compapi.Component) error {

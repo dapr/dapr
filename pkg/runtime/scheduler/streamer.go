@@ -18,14 +18,13 @@ import (
 	"errors"
 	"fmt"
 	"io"
-	"net/http"
 	"sync"
 
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/kit/concurrency"
@@ -109,7 +108,24 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 
 	case *schedulerv1pb.JobTargetMetadata_Actor:
 		if err := s.invokeActorReminder(ctx, job); err != nil {
-			log.Errorf("failed to invoke scheduled actor reminder: %s", err)
+			// this err is expected if the reminder was triggered once already, the next time it goes to get
+			// triggered by scheduler it sees that it's been canceled and does not invoke the 2nd time. This
+			// more relevant for workflows which currently has a repeat set to 2 since setting it to 1 caused
+			// issues. This will be updated in the future releases, but for now we will see this err. To not
+			// spam users only log if the error is not reminder canceled because this is expected for now.
+			if errors.Is(err, actors.ErrReminderCanceled) {
+				return
+			}
+
+			// If the actor was hosted on another instance, the error will be a gRPC status error,
+			// so we need to unwrap it and match on the error message
+			if st, ok := status.FromError(err); ok {
+				if st.Message() == actors.ErrReminderCanceled.Error() {
+					return
+				}
+			}
+
+			log.Errorf("failed to invoke scheduled actor reminder named: %s due to: %s", job.GetName(), err)
 		}
 
 	default:
@@ -124,12 +140,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		return errors.New("received job, but app channel not initialized")
 	}
 
-	req := invokev1.NewInvokeMethodRequest("job/"+job.GetName()).
-		WithHTTPExtension(http.MethodPost, "").
-		WithDataObject(job.GetData())
-	defer req.Close()
-
-	response, err := appChannel.TriggerJob(ctx, req)
+	response, err := appChannel.TriggerJob(ctx, job.GetName(), job.GetData())
 	if err != nil {
 		// TODO(Cassie): add an orphaned job go routine to retry sending job at a later time
 		return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
@@ -141,6 +152,8 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	// TODO: standardize on the error code returned by both protocol channels,
 	// converting HTTP status codes to gRPC codes
 	statusCode := response.Status().GetCode()
+	// TODO: fix types
+	//nolint:gosec
 	switch codes.Code(statusCode) {
 	case codes.OK:
 		log.Debugf("Sent job %s to app", job.GetName())

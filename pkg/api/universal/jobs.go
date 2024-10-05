@@ -15,20 +15,49 @@ package universal
 
 import (
 	"context"
+	"fmt"
 	"strings"
+	"time"
+
+	"google.golang.org/grpc"
+	"google.golang.org/protobuf/types/known/anypb"
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
+const (
+	rpcTimeout = time.Second * 30
+)
+
 func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.ScheduleJobRequest) (*runtimev1pb.ScheduleJobResponse, error) {
+	return a.scheduleJob(ctx, inReq.GetJob())
+}
+
+func (a *Universal) ScheduleJobAlpha1HTTP(ctx context.Context, job *internalsv1pb.JobHTTPRequest) (*runtimev1pb.ScheduleJobResponse, error) {
+	data, err := anypb.New(job.GetData())
+	if err != nil {
+		return &runtimev1pb.ScheduleJobResponse{}, fmt.Errorf("error creating storable job data from job: %w", err)
+	}
+
+	//nolint:protogetter
+	return a.scheduleJob(ctx, &runtimev1pb.Job{
+		Name:     job.GetName(),
+		Schedule: job.Schedule,
+		Repeats:  job.Repeats,
+		DueTime:  job.DueTime,
+		Ttl:      job.Ttl,
+		Data:     data,
+	})
+}
+
+func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*runtimev1pb.ScheduleJobResponse, error) {
 	errMetadata := map[string]string{
 		"appID":     a.AppID(),
 		"namespace": a.Namespace(),
 	}
-
-	job := inReq.GetJob()
 
 	if job == nil {
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Job", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
@@ -38,7 +67,6 @@ func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.Sc
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Name", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixJob, apierrors.InFixName, apierrors.PostFixEmpty))
 	}
 
-	//nolint:protogetter
 	if job.Schedule == nil && job.DueTime == nil {
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.Empty("Schedule", errMetadata, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.InFixSchedule, apierrors.PostFixEmpty))
 	}
@@ -63,9 +91,18 @@ func (a *Universal) ScheduleJobAlpha1(ctx context.Context, inReq *runtimev1pb.Sc
 		},
 	}
 
-	_, err := a.schedulerClients.Next().ScheduleJob(ctx, internalScheduleJobReq)
+	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	client, err := a.schedulerClients.Next(ctx)
 	if err != nil {
-		a.logger.Errorf("Error scheduling job %s due to: %s", inReq.GetJob().GetName(), err)
+		a.logger.Errorf("Error getting scheduler client: %s", err)
+		return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerScheduleJob(errMetadata, err)
+	}
+
+	_, err = client.ScheduleJob(schedCtx, internalScheduleJobReq, grpc.WaitForReady(true))
+	if err != nil {
+		a.logger.Errorf("Error scheduling job %s due to: %s", job.GetName(), err)
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerScheduleJob(errMetadata, err)
 	}
 
@@ -96,7 +133,16 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 		},
 	}
 
-	_, err := a.schedulerClients.Next().DeleteJob(ctx, internalDeleteJobReq)
+	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	client, err := a.schedulerClients.Next(ctx)
+	if err != nil {
+		a.logger.Errorf("Error getting scheduler client: %s", err)
+		return &runtimev1pb.DeleteJobResponse{}, apierrors.SchedulerDeleteJob(errMetadata, err)
+	}
+
+	_, err = client.DeleteJob(schedCtx, internalDeleteJobReq, grpc.WaitForReady(true))
 	if err != nil {
 		a.logger.Errorf("Error deleting job: %s due to: %s", inReq.GetName(), err)
 		return &runtimev1pb.DeleteJobResponse{}, apierrors.SchedulerDeleteJob(errMetadata, err)
@@ -129,7 +175,16 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 		},
 	}
 
-	resp, err := a.schedulerClients.Next().GetJob(ctx, internalGetJobReq)
+	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
+	defer cancel()
+
+	client, err := a.schedulerClients.Next(ctx)
+	if err != nil {
+		a.logger.Errorf("Error getting scheduler client: %s", err)
+		return nil, apierrors.SchedulerGetJob(errMetadata, err)
+	}
+
+	resp, err := client.GetJob(schedCtx, internalGetJobReq, grpc.WaitForReady(true))
 	if err != nil {
 		a.logger.Errorf("Error getting job %s due to: %s", inReq.GetName(), err)
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)

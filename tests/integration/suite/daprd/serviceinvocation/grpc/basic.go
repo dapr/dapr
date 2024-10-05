@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -94,8 +95,8 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		}
 	}
 
-	srv1 := newGRPCServer(t, onInvoke)
-	srv2 := newGRPCServer(t, onInvoke)
+	srv1 := app.New(t, app.WithOnInvokeFn(onInvoke))
+	srv2 := app.New(t, app.WithOnInvokeFn(onInvoke))
 	b.daprd1 = procdaprd.New(t,
 		procdaprd.WithAppProtocol("grpc"),
 		procdaprd.WithAppPort(srv1.Port(t)),
@@ -237,7 +238,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	pt := parallel.New(t)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		pt.Add(func(c *assert.CollectT) {
 			host := b.daprd1.GRPCAddress()
 			//nolint:staticcheck

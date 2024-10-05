@@ -43,7 +43,7 @@ func TestCircuitBreaker(t *testing.T) {
 	cb.Initialize(log)
 	assert.Equal(t, breaker.StateClosed, cb.State())
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		cb.Execute(func() (any, error) {
 			return nil, errors.New("test")
 		})

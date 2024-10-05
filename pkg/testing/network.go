@@ -37,7 +37,7 @@ func WaitForListeningAddress(t *testing.T, timeout time.Duration, addresses ...s
 // This code is retrofitted from freeport.GetFreePort().
 func GetFreePorts(num uint) ([]int, error) {
 	ports := make([]int, num)
-	for i := uint(0); i < num; i++ {
+	for i := range num {
 		addr, err := net.ResolveTCPAddr("tcp", "localhost:0")
 		if err != nil {
 			return nil, err

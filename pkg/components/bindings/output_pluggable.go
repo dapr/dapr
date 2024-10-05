@@ -90,6 +90,10 @@ func (b *grpcOutputBinding) Invoke(ctx context.Context, req *bindings.InvokeRequ
 	}, nil
 }
 
+func (b *grpcOutputBinding) Close() error {
+	return b.GRPCConnector.Close()
+}
+
 // outputFromConnector creates a new GRPC outputbinding using the given underlying connector.
 func outputFromConnector(_ logger.Logger, connector *pluggable.GRPCConnector[proto.OutputBindingClient]) *grpcOutputBinding {
 	return &grpcOutputBinding{

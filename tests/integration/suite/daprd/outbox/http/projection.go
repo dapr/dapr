@@ -160,7 +160,7 @@ func (o *projection) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		// validate projection data is reflected in final publish
-		req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%v/getValue", o.daprd.AppPort()), nil)
+		req, err = http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%v/getValue", o.daprd.AppPort(t)), nil)
 		require.NoError(c, err)
 		resp, err = httpClient.Do(req)
 		require.NoError(c, err)
@@ -172,7 +172,6 @@ func (o *projection) Run(t *testing.T, ctx context.Context) {
 
 		var ce map[string]string
 		err = json.Unmarshal(body, &ce)
-		//nolint:testifylint
 		assert.NoError(c, err)
 		assert.Equal(c, "3", ce["data"])
 	}, time.Second*10, time.Millisecond*10)

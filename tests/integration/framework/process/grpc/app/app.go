@@ -21,6 +21,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	procgrpc "github.com/dapr/dapr/tests/integration/framework/process/grpc"
+	testpb "github.com/dapr/dapr/tests/integration/framework/process/grpc/app/proto"
 )
 
 // Option is a function that configures the process.
@@ -50,10 +51,12 @@ func New(t *testing.T, fopts ...Option) *App {
 				listInputBindFn:    opts.listInputBindFn,
 				onBindingEventFn:   opts.onBindingEventFn,
 				healthCheckFn:      opts.healthCheckFn,
+				pingFn:             opts.pingFn,
 			}
 			rtv1.RegisterAppCallbackServer(s, srv)
 			rtv1.RegisterAppCallbackAlphaServer(s, srv)
 			rtv1.RegisterAppCallbackHealthCheckServer(s, srv)
+			testpb.RegisterTestServiceServer(s, srv)
 			if opts.withRegister != nil {
 				opts.withRegister(s)
 			}

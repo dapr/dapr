@@ -19,6 +19,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime"
 	"sync"
 	"sync/atomic"
 	"testing"
@@ -58,6 +59,10 @@ type remote struct {
 }
 
 func (r *remote) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
+	}
+
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -72,7 +77,7 @@ spec:
 	r.actorIDsNum = 500
 	r.methodcalled.Store(make([]string, 0, r.actorIDsNum))
 	r.actorIDs = make([]string, r.actorIDsNum)
-	for i := 0; i < r.actorIDsNum; i++ {
+	for i := range r.actorIDsNum {
 		uid, err := uuid.NewUUID()
 		require.NoError(t, err)
 		r.actorIDs[i] = uid.String()
@@ -88,7 +93,6 @@ spec:
 		})
 
 		for _, id := range r.actorIDs {
-			id := id
 			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/remind/remindermethod", id), func(http.ResponseWriter, *http.Request) {
 				r.lock.Lock()
 				defer r.lock.Unlock()

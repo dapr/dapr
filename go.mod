@@ -1,6 +1,8 @@
 module github.com/dapr/dapr
 
-go 1.22.4
+go 1.23
+
+toolchain go1.23.1
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -10,9 +12,9 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.14.0-rc.4
-	github.com/dapr/kit v0.13.1-0.20240523225705-106329e5839f
-	github.com/diagridio/go-etcd-cron v0.1.0
+	github.com/dapr/components-contrib v1.14.1-0.20240919155322-be7c19b742b1
+	github.com/dapr/kit v0.13.1-0.20240909215017-3823663aa4bb
+	github.com/diagridio/go-etcd-cron v0.2.3
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
@@ -69,7 +71,7 @@ require (
 	golang.org/x/sync v0.7.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240624140628-dc46fd24d27d
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20240624140628-dc46fd24d27d
-	google.golang.org/grpc v1.64.0
+	google.golang.org/grpc v1.64.1
 	google.golang.org/protobuf v1.34.2
 	gopkg.in/yaml.v3 v3.0.1
 	k8s.io/api v0.30.2
@@ -175,17 +177,18 @@ require (
 	github.com/boltdb/bolt v1.3.1 // indirect
 	github.com/bradfitz/gomemcache v0.0.0-20230905024940-24af94b03874 // indirect
 	github.com/bufbuild/protocompile v0.6.0 // indirect
-	github.com/bytedance/gopkg v0.0.0-20220817015305-b879a72dc90f // indirect
+	github.com/bytedance/gopkg v0.0.0-20240711085056-a03554c296f8 // indirect
 	github.com/camunda/zeebe/clients/go/v8 v8.2.12 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
 	github.com/cespare/xxhash/v2 v2.2.0 // indirect
 	github.com/chebyrash/promise v0.0.0-20230709133807-42ec49ba1459 // indirect
-	github.com/chenzhuoyu/iasm v0.9.1 // indirect
-	github.com/choleraehyq/pid v0.0.18 // indirect
+	github.com/choleraehyq/pid v0.0.19 // indirect
 	github.com/clbanning/mxj/v2 v2.5.6 // indirect
 	github.com/cloudevents/sdk-go/binding/format/protobuf/v2 v2.14.0 // indirect
 	github.com/cloudwego/fastpb v0.0.4-0.20230131074846-6fc453d58b96 // indirect
-	github.com/cloudwego/frugal v0.1.14 // indirect
+	github.com/cloudwego/frugal v0.2.0 // indirect
+	github.com/cloudwego/gopkg v0.1.0 // indirect
+	github.com/cloudwego/iasm v0.2.0 // indirect
 	github.com/cloudwego/kitex v0.5.0 // indirect
 	github.com/cloudwego/netpoll v0.3.2 // indirect
 	github.com/cloudwego/thriftgo v0.3.0 // indirect
@@ -343,7 +346,6 @@ require (
 	github.com/nats-io/nkeys v0.4.6 // indirect
 	github.com/nats-io/nuid v1.0.1 // indirect
 	github.com/ncruces/go-strftime v0.1.9 // indirect
-	github.com/oleiade/lane v1.0.1 // indirect
 	github.com/open-policy-agent/opa v0.55.0 // indirect
 	github.com/opentracing/opentracing-go v1.2.0 // indirect
 	github.com/openzipkin/zipkin-go v0.4.2 // indirect
@@ -367,6 +369,7 @@ require (
 	github.com/riferrei/srclient v0.6.0 // indirect
 	github.com/rs/zerolog v1.28.0 // indirect
 	github.com/santhosh-tekuri/jsonschema/v5 v5.0.0 // indirect
+	github.com/sashabaranov/go-openai v1.27.1 // indirect
 	github.com/segmentio/asm v1.2.0 // indirect
 	github.com/sendgrid/rest v2.6.9+incompatible // indirect
 	github.com/sendgrid/sendgrid-go v3.13.0+incompatible // indirect
@@ -421,7 +424,7 @@ require (
 	go.uber.org/atomic v1.10.0 // indirect
 	go.uber.org/multierr v1.11.0 // indirect
 	go.uber.org/zap v1.27.0 // indirect
-	golang.org/x/arch v0.3.0 // indirect
+	golang.org/x/arch v0.10.0 // indirect
 	golang.org/x/mod v0.18.0 // indirect
 	golang.org/x/oauth2 v0.18.0 // indirect
 	golang.org/x/sys v0.21.0 // indirect
