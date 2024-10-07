@@ -65,7 +65,6 @@ func Raft(t *testing.T) *raft.Server {
 	t.Cleanup(cancel)
 
 	// Wait until test raft node become a leader.
-	//nolint:staticcheck
 	for range time.Tick(time.Microsecond) {
 		clock.Step(time.Second * 2)
 		if testRaftServer.IsLeader() {
@@ -93,7 +92,7 @@ func RaftCluster(t *testing.T, parentCtx context.Context) ([]*raft.Server, error
 	}
 
 	clocks := make([]*clocktesting.FakeClock, 3)
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		clocks[i] = clocktesting.NewFakeClock(time.Date(2024, 1, 1, 0, 0, 0, 0, time.UTC))
 	}
 

@@ -139,14 +139,14 @@ func (f *fuzzpubsub) Setup(t *testing.T) []framework.Option {
 	f.respChan = make(map[string]chan []byte)
 
 	files := make([]string, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		psNameFz.Fuzz(&f.pubSubs[i].Name)
 
 		topicsB, err := rand.Int(rand.Reader, big.NewInt(30))
 		require.NoError(t, err)
 		topics := int(topicsB.Int64() + 1)
 		f.pubSubs[i].Topics = make([]testTopic, topics)
-		for j := 0; j < topics; j++ {
+		for j := range topics {
 			psTopicFz.Fuzz(&f.pubSubs[i].Topics[j].Name)
 			psRouteFz.Fuzz(&f.pubSubs[i].Topics[j].Route)
 			f.respChan[f.pubSubs[i].Topics[j].Route] = make(chan []byte, 0)
