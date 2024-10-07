@@ -31,11 +31,11 @@ func Test_toComparableObj(t *testing.T) {
 	components := make([]componentsapi.Component, numCases)
 
 	fz := fuzz.New()
-	for i := 0; i < numCases; i++ {
+	for i := range numCases {
 		fz.Fuzz(&components[i])
 	}
 
-	for i := 0; i < numCases; i++ {
+	for i := range numCases {
 		t.Run("Component", func(t *testing.T) {
 			compWithoutObject := components[i].DeepCopy()
 			compWithoutObject.ObjectMeta = metav1.ObjectMeta{
@@ -57,12 +57,12 @@ func Test_AreSame(t *testing.T) {
 	componentsDiff := make([]componentsapi.Component, numCases)
 
 	fz := fuzz.New()
-	for i := 0; i < numCases; i++ {
+	for i := range numCases {
 		fz.Fuzz(&components[i])
 		fz.Fuzz(&componentsDiff[i])
 	}
 
-	for i := 0; i < numCases; i++ {
+	for i := range numCases {
 		t.Run("Exact same resource should always return true", func(t *testing.T) {
 			t.Run("Component", func(t *testing.T) {
 				comp1 := components[i]
@@ -100,7 +100,7 @@ func Test_detectDiff(t *testing.T) {
 	componentsDiff := make([]componentsapi.Component, numCases)
 
 	fz := fuzz.New()
-	for i := 0; i < numCases; i++ {
+	for i := range numCases {
 		fz.Fuzz(&components[i])
 		fz.Fuzz(&componentsDiff[i])
 	}
@@ -137,7 +137,7 @@ func Test_detectDiff(t *testing.T) {
 
 		t.Run("Component", func(t *testing.T) {
 			expDiffComponents := make(map[string]componentsapi.Component)
-			for i := 0; i < numCases; i++ {
+			for i := range numCases {
 				expDiffComponents[componentsDiff[i].Name] = componentsDiff[i]
 			}
 			assert.Equal(t, expDiffComponents, detectDiff[componentsapi.Component](components, append(components, componentsDiff...), nil))
@@ -203,7 +203,7 @@ func Test_Diff(t *testing.T) {
 	}
 
 	fz := fuzz.New()
-	for i := 0; i < numCases; i++ {
+	for i := range numCases {
 		for forCh(components[i].Name) {
 			fz.Fuzz(&components[i])
 		}
@@ -316,7 +316,7 @@ func Test_Diff(t *testing.T) {
 
 		t.Run("Component", func(t *testing.T) {
 			remote := make([]componentsapi.Component, len(components))
-			for i := 0; i < len(components); i++ {
+			for i := range components {
 				comp := componentsDiff1[i].DeepCopy()
 				comp.Name = components[i].Name
 				remote[i] = *comp
@@ -338,7 +338,7 @@ func Test_Diff(t *testing.T) {
 
 		t.Run("Component", func(t *testing.T) {
 			remote := make([]componentsapi.Component, len(components)/2)
-			for i := 0; i < len(components)/2; i++ {
+			for i := range len(components) / 2 {
 				comp := componentsDiff1[i].DeepCopy()
 				comp.Name = components[i].Name
 				remote[i] = *comp
