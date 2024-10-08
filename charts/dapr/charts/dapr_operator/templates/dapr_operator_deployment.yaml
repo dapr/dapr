@@ -34,8 +34,8 @@ spec:
         prometheus.io/port: "{{ .Values.global.prometheus.port }}"
         prometheus.io/path: "/"
 {{- end }}
-{{- if .Values.deploymentAnnotations }}
-{{ toYaml .Values.deploymentAnnotations | indent 4}}
+{{- with .Values.deploymentAnnotations }}
+{{ toYaml . | indent 8 }}
 {{- end }}
     spec:
       containers:
@@ -75,6 +75,7 @@ spec:
           capabilities:
             add: ["SYS_PTRACE"]
   {{- else }}
+          readOnlyRootFilesystem: true
           capabilities:
             drop: ["ALL"]
   {{- end }}
@@ -88,6 +89,10 @@ spec:
           valueFrom:
             fieldRef:
               fieldPath: metadata.namespace
+        {{- range $name, $value := .Values.extraEnvVars }}
+        - name: "{{ $name }}"
+          value: "{{ $value }}"
+        {{- end }}
         ports:
         - containerPort: 6500
 {{- if eq .Values.global.prometheus.enabled true }}
@@ -110,6 +115,11 @@ spec:
         - name: dapr-identity-token
           mountPath: /var/run/secrets/dapr.io/sentrytoken
           readOnly: true
+      {{- end }}
+      {{- if eq .Values.debug.enabled false }}
+        # This is not needed in debug mode because the root FS is writable
+        - name: dapr-operator-tmp
+          mountPath: /tmp
       {{- end }}
       {{- with .Values.global.extraVolumeMounts.operator }}
         {{- toYaml . | nindent 8 }}
@@ -164,6 +174,10 @@ spec:
 {{- end }}
       serviceAccountName: dapr-operator
       volumes:
+        - name: dapr-operator-tmp
+          emptyDir:
+            sizeLimit: 64Mi
+            medium: Memory
         - name: dapr-trust-bundle
           configMap:
             name: dapr-trust-bundle
@@ -209,7 +223,7 @@ spec:
 {{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
-        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 }}
+        {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}
 {{- end }}
 {{- if .Values.global.nodeSelector }}
       nodeSelector:
@@ -218,4 +232,8 @@ spec:
 {{- if .Values.global.tolerations }}
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
+{{- end }}
+{{- if .Values.global.priorityClassName }}
+      priorityClassName:
+{{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}

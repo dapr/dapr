@@ -25,6 +25,8 @@ import (
 	"time"
 
 	"golang.org/x/net/http2"
+
+	"github.com/dapr/kit/utils"
 )
 
 const (
@@ -45,7 +47,7 @@ func InitHTTPClient(allowHTTP2 bool) {
 // This should not be used except in rare circumstances. Developers should use the shared httpClient instead to re-use sockets as much as possible.
 func NewHTTPClient(allowHTTP2 bool) *http.Client {
 	// HTTP/2 is allowed only if the DAPR_TESTS_HTTP2 env var is set
-	allowHTTP2 = allowHTTP2 && IsTruthy(os.Getenv("DAPR_TESTS_HTTP2"))
+	allowHTTP2 = allowHTTP2 && utils.IsTruthy(os.Getenv("DAPR_TESTS_HTTP2"))
 
 	if allowHTTP2 {
 		return &http.Client{
@@ -181,6 +183,17 @@ func HTTPGetRawNTimes(url string, n int) (*http.Response, error) {
 // HTTPGetRaw is a helper to make GET request call to url.
 func HTTPGetRaw(url string) (*http.Response, error) {
 	return httpClient.Get(SanitizeHTTPURL(url))
+}
+
+func HTTPGetRawWithHeaders(url string, header http.Header) (*http.Response, error) {
+	req, err := http.NewRequest(http.MethodGet, SanitizeHTTPURL(url), nil)
+	if err != nil {
+		return nil, err
+	}
+
+	req.Header = header
+
+	return httpClient.Do(req)
 }
 
 // HTTPPost is a helper to make POST request call to url.

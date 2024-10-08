@@ -29,6 +29,7 @@ import (
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -64,7 +65,7 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 	c.pubsubNames = make([]string, numTests)
 	c.topicNames = make([]string, numTests)
 	files := make([]string, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz.Fuzz(&c.pubsubNames[i])
 		fz.Fuzz(&c.topicNames[i])
 
@@ -91,14 +92,14 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
+	pt := parallel.New(t)
 	for i := range c.pubsubNames {
 		pubsubName := c.pubsubNames[i]
 		topicName := c.topicNames[i]
-		t.Run(pubsubName, func(t *testing.T) {
-			t.Parallel()
-
-			conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", c.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-			require.NoError(t, err)
+		pt.Add(func(col *assert.CollectT) {
+			//nolint:staticcheck
+			conn, err := grpc.DialContext(ctx, c.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+			require.NoError(col, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 			client := rtv1.NewDaprClient(conn)
@@ -107,7 +108,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 				Topic:      topicName,
 				Data:       []byte(`{"status": "completed"}`),
 			})
-			assert.NoError(t, err)
+			assert.NoError(col, err)
 		})
 	}
 }

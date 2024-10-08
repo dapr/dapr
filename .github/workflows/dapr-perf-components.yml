@@ -34,7 +34,7 @@ env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.25.2"
+  KUBECTLVER: "v1.30.0"
   # Version of Helm
   HELMVER: "v3.10.0"
   # Kubernetes namespace to use
@@ -90,7 +90,7 @@ jobs:
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -214,25 +214,15 @@ jobs:
             }
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
-      - name: Cache Go modules (perf)
-        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-perf-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-perf-
       - name: Login to Azure
         if: env.CHECKOUT_REPO != ''
         uses: azure/login@v1
@@ -258,6 +248,7 @@ jobs:
           echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-Perf-${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_GO_BUILD_TAGS=wfbackendsqlite" >> $GITHUB_ENV
         shell: bash
       - name: Build dapr and its docker image
         if: env.TEST_PREFIX != ''
@@ -368,31 +359,21 @@ jobs:
             }
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
-      - name: Cache Go modules (perf-test)
-        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-perf-test-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-perf-test-
-      - uses: azure/setup-kubectl@v1
+      - uses: azure/setup-kubectl@v3
         with:
           version: ${{ env.KUBECTLVER }}
         id: install
       - name: Set up Helm ${{ env.HELMVER }}
-        uses: azure/setup-helm@v1
+        uses: azure/setup-helm@v3
         with:
           version: ${{ env.HELMVER }}
       - name: Login to Azure
@@ -448,19 +429,19 @@ jobs:
           make save-dapr-control-plane-k8s-logs
       - name: Upload container logs
         if: always() && env.TEST_PREFIX != ''
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: perf_container_logs
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
       - name: Upload test logs
         if: always()
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: perf_test_logs
           path: ${{ env.DAPR_TEST_LOG_PATH }}
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: test_perf.json

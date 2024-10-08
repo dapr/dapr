@@ -21,13 +21,11 @@ var (
 	actorTypeKey        = tag.MustNewKey("actor_type")
 	trustDomainKey      = tag.MustNewKey("trustDomain")
 	namespaceKey        = tag.MustNewKey("namespace")
-	policyActionKey     = tag.MustNewKey("policyAction")
 	resiliencyNameKey   = tag.MustNewKey("name")
 	policyKey           = tag.MustNewKey("policy")
 	componentNameKey    = tag.MustNewKey("componentName")
 	destinationAppIDKey = tag.MustNewKey("dst_app_id")
 	sourceAppIDKey      = tag.MustNewKey("src_app_id")
-	methodKey           = tag.MustNewKey("method")
 	statusKey           = tag.MustNewKey("status")
 	flowDirectionKey    = tag.MustNewKey("flow_direction")
 	targetKey           = tag.MustNewKey("target")
@@ -211,9 +209,10 @@ func newServiceMetrics() *serviceMetrics {
 }
 
 // Init initialize metrics views for metrics.
-func (s *serviceMetrics) Init(appID string) error {
+func (s *serviceMetrics) Init(appID string, latencyDistribution *view.Aggregation) error {
 	s.appID = appID
 	s.enabled = true
+
 	return view.Register(
 		diagUtils.NewMeasureView(s.componentLoaded, []tag.Key{appIDKey}, view.Count()),
 		diagUtils.NewMeasureView(s.componentInitCompleted, []tag.Key{appIDKey, componentKey}, view.Count()),
@@ -236,16 +235,16 @@ func (s *serviceMetrics) Init(appID string) error {
 		diagUtils.NewMeasureView(s.actorReminderFiredTotal, []tag.Key{appIDKey, actorTypeKey, successKey}, view.Count()),
 		diagUtils.NewMeasureView(s.actorTimerFiredTotal, []tag.Key{appIDKey, actorTypeKey, successKey}, view.Count()),
 
-		diagUtils.NewMeasureView(s.appPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
-		diagUtils.NewMeasureView(s.globalPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
-		diagUtils.NewMeasureView(s.appPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
-		diagUtils.NewMeasureView(s.globalPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey, operationKey, httpMethodKey, policyActionKey}, view.Count()),
+		diagUtils.NewMeasureView(s.appPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
+		diagUtils.NewMeasureView(s.globalPolicyActionAllowed, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
+		diagUtils.NewMeasureView(s.appPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
+		diagUtils.NewMeasureView(s.globalPolicyActionBlocked, []tag.Key{appIDKey, trustDomainKey, namespaceKey}, view.Count()),
 
-		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey, typeKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationRequestReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationResponseSentTotal, []tag.Key{appIDKey, destinationAppIDKey, methodKey, statusKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, methodKey, statusKey, typeKey}, view.Count()),
-		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedLatency, []tag.Key{appIDKey, sourceAppIDKey, methodKey, statusKey}, defaultLatencyDistribution),
+		diagUtils.NewMeasureView(s.serviceInvocationRequestSentTotal, []tag.Key{appIDKey, destinationAppIDKey, typeKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationRequestReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationResponseSentTotal, []tag.Key{appIDKey, destinationAppIDKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedTotal, []tag.Key{appIDKey, sourceAppIDKey, statusKey, typeKey}, view.Count()),
+		diagUtils.NewMeasureView(s.serviceInvocationResponseReceivedLatency, []tag.Key{appIDKey, sourceAppIDKey, statusKey}, latencyDistribution),
 	)
 }
 
@@ -416,7 +415,7 @@ func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks 
 }
 
 // RequestAllowedByAppAction records the requests allowed due to a match with the action specified in the access control policy for the app.
-func (s *serviceMetrics) RequestAllowedByAppAction(spiffeID *spiffe.Parsed, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestAllowedByAppAction(spiffeID *spiffe.Parsed) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
@@ -424,16 +423,13 @@ func (s *serviceMetrics) RequestAllowedByAppAction(spiffeID *spiffe.Parsed, oper
 				s.appPolicyActionAllowed.Name(),
 				appIDKey, spiffeID.AppID(),
 				trustDomainKey, spiffeID.TrustDomain().String(),
-				namespaceKey, spiffeID.Namespace(),
-				operationKey, operation,
-				httpMethodKey, httpverb,
-				policyActionKey, policyAction),
+				namespaceKey, spiffeID.Namespace()),
 			s.appPolicyActionAllowed.M(1))
 	}
 }
 
 // RequestBlockedByAppAction records the requests blocked due to a match with the action specified in the access control policy for the app.
-func (s *serviceMetrics) RequestBlockedByAppAction(spiffeID *spiffe.Parsed, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestBlockedByAppAction(spiffeID *spiffe.Parsed) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
@@ -441,16 +437,13 @@ func (s *serviceMetrics) RequestBlockedByAppAction(spiffeID *spiffe.Parsed, oper
 				s.appPolicyActionBlocked.Name(),
 				appIDKey, spiffeID.AppID(),
 				trustDomainKey, spiffeID.TrustDomain().String(),
-				namespaceKey, spiffeID.Namespace(),
-				operationKey, operation,
-				httpMethodKey, httpverb,
-				policyActionKey, policyAction),
+				namespaceKey, spiffeID.Namespace()),
 			s.appPolicyActionBlocked.M(1))
 	}
 }
 
 // RequestAllowedByGlobalAction records the requests allowed due to a match with the global action in the access control policy.
-func (s *serviceMetrics) RequestAllowedByGlobalAction(spiffeID *spiffe.Parsed, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestAllowedByGlobalAction(spiffeID *spiffe.Parsed) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
@@ -458,16 +451,13 @@ func (s *serviceMetrics) RequestAllowedByGlobalAction(spiffeID *spiffe.Parsed, o
 				s.globalPolicyActionAllowed.Name(),
 				appIDKey, spiffeID.AppID(),
 				trustDomainKey, spiffeID.TrustDomain().String(),
-				namespaceKey, spiffeID.Namespace(),
-				operationKey, operation,
-				httpMethodKey, httpverb,
-				policyActionKey, policyAction),
+				namespaceKey, spiffeID.Namespace()),
 			s.globalPolicyActionAllowed.M(1))
 	}
 }
 
 // RequestBlockedByGlobalAction records the requests blocked due to a match with the global action in the access control policy.
-func (s *serviceMetrics) RequestBlockedByGlobalAction(spiffeID *spiffe.Parsed, operation, httpverb string, policyAction bool) {
+func (s *serviceMetrics) RequestBlockedByGlobalAction(spiffeID *spiffe.Parsed) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
@@ -475,16 +465,13 @@ func (s *serviceMetrics) RequestBlockedByGlobalAction(spiffeID *spiffe.Parsed, o
 				s.globalPolicyActionBlocked.Name(),
 				appIDKey, spiffeID.AppID(),
 				trustDomainKey, spiffeID.TrustDomain().String(),
-				namespaceKey, spiffeID.Namespace(),
-				operationKey, operation,
-				httpMethodKey, httpverb,
-				policyActionKey, policyAction),
+				namespaceKey, spiffeID.Namespace()),
 			s.globalPolicyActionBlocked.M(1))
 	}
 }
 
 // ServiceInvocationRequestSent records the number of service invocation requests sent.
-func (s *serviceMetrics) ServiceInvocationRequestSent(destinationAppID, method string) {
+func (s *serviceMetrics) ServiceInvocationRequestSent(destinationAppID string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
@@ -492,7 +479,6 @@ func (s *serviceMetrics) ServiceInvocationRequestSent(destinationAppID, method s
 				s.serviceInvocationRequestSentTotal.Name(),
 				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
-				methodKey, method,
 				typeKey, typeUnary,
 			),
 			s.serviceInvocationRequestSentTotal.M(1))
@@ -500,7 +486,7 @@ func (s *serviceMetrics) ServiceInvocationRequestSent(destinationAppID, method s
 }
 
 // ServiceInvocationRequestSent records the number of service invocation requests sent.
-func (s *serviceMetrics) ServiceInvocationStreamingRequestSent(destinationAppID, method string) {
+func (s *serviceMetrics) ServiceInvocationStreamingRequestSent(destinationAppID string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
@@ -508,28 +494,26 @@ func (s *serviceMetrics) ServiceInvocationStreamingRequestSent(destinationAppID,
 				s.serviceInvocationRequestSentTotal.Name(),
 				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
-				methodKey, method,
 				typeKey, typeStreaming),
 			s.serviceInvocationRequestSentTotal.M(1))
 	}
 }
 
 // ServiceInvocationRequestReceived records the number of service invocation requests received.
-func (s *serviceMetrics) ServiceInvocationRequestReceived(sourceAppID, method string) {
+func (s *serviceMetrics) ServiceInvocationRequestReceived(sourceAppID string) {
 	if s.enabled {
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(
 				s.serviceInvocationRequestReceivedTotal.Name(),
 				appIDKey, s.appID,
-				sourceAppIDKey, sourceAppID,
-				methodKey, method),
+				sourceAppIDKey, sourceAppID),
 			s.serviceInvocationRequestReceivedTotal.M(1))
 	}
 }
 
 // ServiceInvocationResponseSent records the number of service invocation responses sent.
-func (s *serviceMetrics) ServiceInvocationResponseSent(destinationAppID, method string, status int32) {
+func (s *serviceMetrics) ServiceInvocationResponseSent(destinationAppID string, status int32) {
 	if s.enabled {
 		statusCode := strconv.Itoa(int(status))
 		stats.RecordWithTags(
@@ -538,14 +522,13 @@ func (s *serviceMetrics) ServiceInvocationResponseSent(destinationAppID, method 
 				s.serviceInvocationResponseSentTotal.Name(),
 				appIDKey, s.appID,
 				destinationAppIDKey, destinationAppID,
-				methodKey, method,
 				statusKey, statusCode),
 			s.serviceInvocationResponseSentTotal.M(1))
 	}
 }
 
 // ServiceInvocationResponseReceived records the number of service invocation responses received.
-func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method string, status int32, start time.Time) {
+func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID string, status int32, start time.Time) {
 	if s.enabled {
 		statusCode := strconv.Itoa(int(status))
 		stats.RecordWithTags(
@@ -554,7 +537,6 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method s
 				s.serviceInvocationResponseReceivedTotal.Name(),
 				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
-				methodKey, method,
 				statusKey, statusCode,
 				typeKey, typeUnary),
 			s.serviceInvocationResponseReceivedTotal.M(1))
@@ -564,7 +546,6 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method s
 				s.serviceInvocationResponseReceivedLatency.Name(),
 				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
-				methodKey, method,
 				statusKey, statusCode),
 			s.serviceInvocationResponseReceivedLatency.M(ElapsedSince(start)))
 	}
@@ -572,7 +553,7 @@ func (s *serviceMetrics) ServiceInvocationResponseReceived(sourceAppID, method s
 
 // ServiceInvocationStreamingResponseReceived records the number of service invocation responses received for streaming operations.
 // this is mainly targeted to recording errors for proxying gRPC streaming calls
-func (s *serviceMetrics) ServiceInvocationStreamingResponseReceived(sourceAppID, method string, status int32) {
+func (s *serviceMetrics) ServiceInvocationStreamingResponseReceived(sourceAppID string, status int32) {
 	if s.enabled {
 		statusCode := strconv.Itoa(int(status))
 		stats.RecordWithTags(
@@ -581,7 +562,6 @@ func (s *serviceMetrics) ServiceInvocationStreamingResponseReceived(sourceAppID,
 				s.serviceInvocationResponseReceivedTotal.Name(),
 				appIDKey, s.appID,
 				sourceAppIDKey, sourceAppID,
-				methodKey, method,
 				statusKey, statusCode,
 				typeKey, typeStreaming),
 			s.serviceInvocationResponseReceivedTotal.M(1))

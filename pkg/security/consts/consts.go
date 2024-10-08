@@ -27,21 +27,12 @@ const (
 	// TrustBundleK8sSecretName is the name of the kubernetes secret that holds the trust bundle.
 	TrustBundleK8sSecretName = "dapr-trust-bundle" /* #nosec */
 
-	// ServiceAccountTokenAudience is the audience for the service account token.
-	ServiceAccountTokenAudience = "dapr.io/sentry" /* #nosec */
-
 	// TrustAnchorsEnvVar is the environment variable name for the trust anchors in the sidecar.
 	TrustAnchorsEnvVar = "DAPR_TRUST_ANCHORS"
-	// CertChainEnvVar is the environment variable name for the cert chain in the sidecar.
-	CertChainEnvVar = "DAPR_CERT_CHAIN"
-	// CertKeyEnvVar is the environment variable name for the cert key in the sidecar.
-	CertKeyEnvVar = "DAPR_CERT_KEY"
 
 	// EnvKeysEnvVar is the variable injected in the daprd container with the list of injected env vars.
 	EnvKeysEnvVar = "DAPR_ENV_KEYS"
 
-	// SentryLocalIdentityEnvVar is the environment variable for the local identity sent to Sentry.
-	SentryLocalIdentityEnvVar = "SENTRY_LOCAL_IDENTITY"
 	// SentryTokenFileEnvVar is the environment variable for the Sentry token file.
 	//nolint:gosec
 	SentryTokenFileEnvVar = "DAPR_SENTRY_TOKEN_FILE"
@@ -57,4 +48,10 @@ const (
 	// ControlPlaneAddressEnvVar is the daprd environment variable for
 	// configuring the control plane trust domain.
 	ControlPlaneTrustDomainEnvVar = "DAPR_CONTROLPLANE_TRUST_DOMAIN"
+
+	// ControlPlaneDefaultTrustAnchorsPath is the default path where the trust anchors are placed for control plane services.
+	ControlPlaneDefaultTrustAnchorsPath = "/var/run/secrets/dapr.io/tls/ca.crt"
+
+	// SchedulerAddressEnvVar is the env var for the scheduler addresses
+	SchedulerHostAddressEnvVar = "DAPR_SCHEDULER_HOST_ADDRESS"
 )

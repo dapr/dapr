@@ -198,11 +198,3 @@ func (req DeleteTimerRequest) ActorKey() string {
 func (req DeleteTimerRequest) Key() string {
 	return req.ActorType + daprSeparator + req.ActorID + daprSeparator + req.Name
 }
-
-// RenameReminderRequest is the request object for rename a reminder.
-type RenameReminderRequest struct {
-	OldName   string
-	ActorType string
-	ActorID   string
-	NewName   string
-}

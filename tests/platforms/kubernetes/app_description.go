@@ -19,7 +19,7 @@ import (
 
 	apiv1 "k8s.io/api/core/v1"
 
-	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/utils"
 )
 
 const (
@@ -69,6 +69,7 @@ type AppDescription struct {
 	PluggableComponents       []apiv1.Container               `json:",omitempty"`
 	InjectPluggableComponents bool                            `json:",omitempty"`
 	PlacementAddresses        []string                        `json:",omitempty"`
+	SchedulerAddresses        []string                        `json:",omitempty"`
 	EnableAppHealthCheck      bool                            `json:",omitempty"`
 	AppHealthCheckPath        string                          `json:",omitempty"`
 	AppHealthProbeInterval    int                             `json:",omitempty"` // In seconds

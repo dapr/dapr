@@ -18,10 +18,13 @@ import (
 	"errors"
 	"net"
 	"net/http"
+	"strconv"
 	"testing"
 
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
+
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
 // Option is a function that configures the process.
@@ -29,10 +32,11 @@ type Option func(*options)
 
 // GRPC is a GRPC server that can be used in integration tests.
 type GRPC struct {
-	server   *grpc.Server
-	listener net.Listener
-	srvErrCh chan error
-	stopCh   chan struct{}
+	registerFns []func(*grpc.Server)
+	serverOpts  []func(*testing.T, context.Context) grpc.ServerOption
+	listener    func() (net.Listener, error)
+	srvErrCh    chan error
+	stopCh      chan struct{}
 }
 
 func New(t *testing.T, fopts ...Option) *GRPC {
@@ -43,45 +47,66 @@ func New(t *testing.T, fopts ...Option) *GRPC {
 		fopt(&opts)
 	}
 
-	server := grpc.NewServer()
-	for _, rfs := range opts.registerFns {
-		rfs(server)
+	ln := opts.listener
+	if ln == nil {
+		fpln := ports.Reserve(t, 1).Listener(t)
+		ln = func() (net.Listener, error) {
+			return fpln, nil
+		}
 	}
 
-	// Start the listener in New so we can squat on the port immediately, and
-	// keep it for the entire test case.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
-
 	return &GRPC{
-		listener: listener,
-		server:   server,
-		srvErrCh: make(chan error),
-		stopCh:   make(chan struct{}),
+		listener:    ln,
+		registerFns: opts.registerFns,
+		serverOpts:  opts.serverOpts,
+		srvErrCh:    make(chan error),
+		stopCh:      make(chan struct{}),
 	}
 }
 
-func (g *GRPC) Port() int {
-	return g.listener.Addr().(*net.TCPAddr).Port
+func (g *GRPC) Port(t *testing.T) int {
+	ln, err := g.listener()
+	require.NoError(t, err)
+	return ln.Addr().(*net.TCPAddr).Port
+}
+
+func (g *GRPC) Address(t *testing.T) string {
+	return "127.0.0.1:" + strconv.Itoa(g.Port(t))
 }
 
 func (g *GRPC) Run(t *testing.T, ctx context.Context) {
+	ctx, cancel := context.WithCancel(ctx)
+
+	opts := make([]grpc.ServerOption, len(g.serverOpts))
+	for i, opt := range g.serverOpts {
+		opts[i] = opt(t, ctx)
+	}
+	server := grpc.NewServer(opts...)
+	for _, rfs := range g.registerFns {
+		rfs(server)
+	}
+
 	go func() {
-		err := g.server.Serve(g.listener)
-		if !errors.Is(err, http.ErrServerClosed) {
+		ln, err := g.listener()
+		if err != nil {
 			g.srvErrCh <- err
-		} else {
-			g.srvErrCh <- nil
+			return
 		}
+		g.srvErrCh <- server.Serve(ln)
 	}()
 
 	go func() {
 		<-g.stopCh
-		g.server.GracefulStop()
+		cancel()
+		server.GracefulStop()
 	}()
 }
 
 func (g *GRPC) Cleanup(t *testing.T) {
 	close(g.stopCh)
-	require.NoError(t, <-g.srvErrCh)
+	err := <-g.srvErrCh
+	if errors.Is(err, http.ErrServerClosed) || errors.Is(err, grpc.ErrServerStopped) {
+		err = nil
+	}
+	require.NoError(t, err)
 }

@@ -20,18 +20,20 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"strconv"
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const (
-	appName         = "actorinvocationapp"      // App name in Dapr.
-	numHealthChecks = 60                        // Number of get calls before starting tests.
-	callActorURL    = "%s/test/callActorMethod" // URL to force Actor registration
+	appName      = "actorinvocationapp"      // App name in Dapr.
+	callActorURL = "%s/test/callActorMethod" // URL to force Actor registration
 )
 
 type actorCallRequest struct {
@@ -44,82 +46,131 @@ type actorCallRequest struct {
 
 var tr *runner.TestRunner
 
-func getExternalURL(t *testing.T, appName string) string {
-	externalURL := tr.Platform.AcquireAppExternalURL(appName)
-	require.NotEmpty(t, externalURL, "external URL must not be empty!")
-	return externalURL
-}
-
-func healthCheckApp(t *testing.T, externalURL string, numHealthChecks int) {
-	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-	require.NoError(t, err)
-}
-
 func TestMain(m *testing.M) {
 	utils.SetupLogs("actor_invocation")
 	utils.InitHTTPClient(true)
 
-	// These apps will be deployed before starting actual test
-	// and will be cleaned up after all tests are finished automatically
-	testApps := []kube.AppDescription{
-		{
-			AppName:             "actor1",
-			DaprEnabled:         true,
-			ImageName:           "e2e-actorinvocationapp",
-			DebugLoggingEnabled: true,
-			Replicas:            1,
-			IngressEnabled:      true,
-			MetricsEnabled:      true,
-		},
-		{
-			AppName:             "actor2",
-			DaprEnabled:         true,
-			ImageName:           "e2e-actorinvocationapp",
-			DebugLoggingEnabled: true,
-			Replicas:            1,
-			IngressEnabled:      true,
-			MetricsEnabled:      true,
-		},
+	// This test can be run outside of Kubernetes too
+	// Run the actorinvocationapp e2e apps using, for example, the Dapr CLI:
+	//   PORT=3001 dapr run --app-id actor1 --resources-path ./resources --app-port 3001 -- go run .
+	//   PORT=3002 dapr run --app-id actor2 --resources-path ./resources --app-port 3002 -- go run .
+	// Then run this test with the env var "APP1_ENDPOINT" and "APP2_ENDPOINT" pointing to the addresses of the apps. For example:
+	//   APP1_ENDPOINT="http://localhost:3001" APP2_ENDPOINT="http://localhost:3002" DAPR_E2E_TEST="actor_invocation" make test-clean test-e2e-all |& tee test.log
+	if os.Getenv("APP1_ENDPOINT") == "" && os.Getenv("APP2_ENDPOINT") == "" {
+		testApps := []kube.AppDescription{
+			{
+				AppName:             "actor1",
+				DaprEnabled:         true,
+				ImageName:           "e2e-actorinvocationapp",
+				DebugLoggingEnabled: true,
+				Replicas:            1,
+				IngressEnabled:      true,
+				MetricsEnabled:      true,
+				AppEnv: map[string]string{
+					"TEST_APP_ACTOR_TYPES": "actor1,actor2,resiliencyInvokeActor",
+				},
+			},
+			{
+				AppName:             "actor2",
+				DaprEnabled:         true,
+				ImageName:           "e2e-actorinvocationapp",
+				DebugLoggingEnabled: true,
+				Replicas:            1,
+				IngressEnabled:      true,
+				MetricsEnabled:      true,
+				AppEnv: map[string]string{
+					"TEST_APP_ACTOR_TYPES": "actor1,actor2",
+				},
+			},
+		}
+
+		tr = runner.NewTestRunner(appName, testApps, nil, nil)
+		os.Exit(tr.Start(m))
+	} else {
+		os.Exit(m.Run())
+	}
+}
+
+func getAppEndpoint(t *testing.T, num int) string {
+	s := strconv.Itoa(num)
+	if env := os.Getenv("APP" + s + "_ENDPOINT"); env != "" {
+		return env
 	}
 
-	tr = runner.NewTestRunner(appName, testApps, nil, nil)
-	os.Exit(tr.Start(m))
+	u := tr.Platform.AcquireAppExternalURL("actor" + s)
+	require.NotEmptyf(t, u, "external URL for actor%d must not be empty", num)
+	return u
 }
 
 func TestActorInvocation(t *testing.T) {
-	firstActorURL := getExternalURL(t, "actor1")
-	secondActorURL := getExternalURL(t, "actor2")
+	firstActorURL := getAppEndpoint(t, 1)
+	secondActorURL := getAppEndpoint(t, 2)
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
-	healthCheckApp(t, firstActorURL, numHealthChecks)
-	healthCheckApp(t, secondActorURL, numHealthChecks)
+	require.NoError(t, utils.HealthCheckApps(firstActorURL, secondActorURL))
 
-	// This basic test is already covered in actor_feature_tests but serves as a sanity check here to ensure apps are up.
+	// This basic test is already covered in actor_feature_tests but serves as a sanity check here to ensure apps are up and the actor subsystem is ready.
 	t.Run("Actor remote invocation", func(t *testing.T) {
-		request := actorCallRequest{
+		body, _ := json.Marshal(actorCallRequest{
 			ActorType: "actor1",
 			ActorID:   "10",
 			Method:    "logCall",
+		})
+
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, firstActorURL), body)
+			require.NoError(t, err)
+			assert.Equal(t, 200, status)
+		}, 15*time.Second, 200*time.Millisecond)
+
+		body, _ = json.Marshal(actorCallRequest{
+			ActorType: "actor2",
+			ActorID:   "20",
+			Method:    "logCall",
+		})
+
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, secondActorURL), body)
+			require.NoError(t, err)
+			assert.Equal(t, 200, status)
+		}, 15*time.Second, 200*time.Millisecond)
+	})
+
+	// Validates special error handling for actors is working in runtime (.NET SDK case).
+	t.Run("Actor local invocation with X-DaprErrorResponseHeader + Resiliency", func(t *testing.T) {
+		request := actorCallRequest{
+			ActorType: "resiliencyInvokeActor",
+			ActorID:   "981",
+			Method:    "xDaprErrorResponseHeader",
 		}
 
 		body, _ := json.Marshal(request)
 
-		_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, firstActorURL), body)
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, firstActorURL), body)
 		require.NoError(t, err)
-		require.Equal(t, 200, status)
+		assert.Equal(t, 200, status)
+		assert.Equal(t,
+			"x-DaprErrorResponseHeader call with - actorType: resiliencyInvokeActor, actorId: 981",
+			string(resp))
+	})
 
-		request = actorCallRequest{
-			ActorType: "actor2",
-			ActorID:   "20",
-			Method:    "logCall",
+	// Validates special error handling for actors is working in runtime (.NET SDK case).
+	t.Run("Actor remote invocation with X-DaprErrorResponseHeader + Resiliency", func(t *testing.T) {
+		request := actorCallRequest{
+			ActorType: "resiliencyInvokeActor",
+			ActorID:   "789",
+			Method:    "xDaprErrorResponseHeader",
 		}
 
-		body, _ = json.Marshal(request)
+		body, _ := json.Marshal(request)
 
-		_, status, err = utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, secondActorURL), body)
+		resp, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(callActorURL, secondActorURL), body)
 		require.NoError(t, err)
-		require.Equal(t, 200, status)
+		assert.Equal(t, 200, status)
+		assert.Equal(t,
+			"x-DaprErrorResponseHeader call with - actorType: resiliencyInvokeActor, actorId: 789",
+			string(resp))
 	})
 
 	t.Run("Actor cross actor call (same pod)", func(t *testing.T) {
@@ -182,11 +233,11 @@ func TestActorInvocation(t *testing.T) {
 }
 
 func TestActorNegativeInvocation(t *testing.T) {
-	firstActorURL := getExternalURL(t, "actor1")
+	firstActorURL := getAppEndpoint(t, 1)
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
-	healthCheckApp(t, firstActorURL, numHealthChecks)
+	require.NoError(t, utils.HealthCheckApps(firstActorURL))
 
 	t.Run("Try actor call with non-bound method", func(t *testing.T) {
 		request := actorCallRequest{

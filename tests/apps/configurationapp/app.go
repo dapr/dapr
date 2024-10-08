@@ -214,7 +214,7 @@ func buildAddQuery(items map[string]*Item, configTable string) (string, []interf
 	paramWildcard := make([]string, 0, len(items))
 	params := make([]interface{}, 0, 4*len(items))
 	if len(items) == 0 {
-		return query, params, fmt.Errorf("empty list of items")
+		return query, params, errors.New("empty list of items")
 	}
 	var queryBuilder strings.Builder
 	queryBuilder.WriteString("INSERT INTO " + configTable + " (KEY, VALUE, VERSION, METADATA) VALUES ")
@@ -244,7 +244,7 @@ func (r *PostgresUpdater) AddKey(items map[string]*Item) error {
 
 func (r *PostgresUpdater) UpdateKey(items map[string]*Item) error {
 	if len(items) == 0 {
-		return fmt.Errorf("empty list of items")
+		return errors.New("empty list of items")
 	}
 	for key, item := range items {
 		var params []interface{}
@@ -384,7 +384,7 @@ func subscribeGRPC(keys []string, endpointType string, configStore string, compo
 	res, err := client.Recv()
 	if errors.Is(err, io.EOF) {
 		cancel()
-		return "", fmt.Errorf("error subscribe: stream closed before receiving ID")
+		return "", errors.New("error subscribe: stream closed before receiving ID")
 	}
 	if err != nil {
 		cancel()
@@ -416,8 +416,8 @@ func subscribeHandlerGRPC(client runtimev1pb.Dapr_SubscribeConfigurationClient) 
 		configurationItems := make(map[string]*Item)
 		for key, item := range rsp.GetItems() {
 			configurationItems[key] = &Item{
-				Value:   item.Value,
-				Version: item.Version,
+				Value:   item.GetValue(),
+				Version: item.GetVersion(),
 			}
 		}
 		receivedItemsInBytes, _ := json.Marshal(configurationItems)

@@ -22,19 +22,21 @@ import (
 	"io"
 	"net/http"
 	"net/url"
-	"strconv"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	fuzz "github.com/google/gofuzz"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -109,10 +111,9 @@ func (f *fuzzstate) Setup(t *testing.T) []framework.Option {
 		},
 	}
 
-	for f.storeName == "" ||
-		len(path.IsValidPathSegmentName(f.storeName)) > 0 {
-		fuzz.New().Fuzz(&f.storeName)
-	}
+	uid, err := uuid.NewRandom()
+	require.NoError(t, err)
+	f.storeName = uid.String()
 
 	f.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(fmt.Sprintf(`
 apiVersion: dapr.io/v1alpha1
@@ -138,7 +139,7 @@ spec:
 			i--
 		}
 	}
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz.Fuzz(&f.saveReqBinaries[i])
 		fz.Fuzz(&f.saveReqStrings[i])
 		fz.Fuzz(&f.saveReqAnys[i])
@@ -152,31 +153,36 @@ spec:
 func (f *fuzzstate) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, f.daprd.GetMetaRegisteredComponents(c, ctx), 1)
+	}, time.Second*20, time.Millisecond*10)
 
 	t.Run("get", func(t *testing.T) {
-		t.Parallel()
+		pt := parallel.New(t)
 		for i := range f.getFuzzKeys {
-			getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(f.getFuzzKeys[i]))
-			// t.Log("URL", getURL)
-			// t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
-			// t.Log("Key", f.getFuzzKeys[i], printRunes(f.getFuzzKeys[i]))
-			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
-			require.NoError(t, err)
-			resp, err := httpClient.Do(req)
-			require.NoError(t, err)
-			assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-			respBody, err := io.ReadAll(resp.Body)
-			require.NoError(t, err)
-			require.NoError(t, resp.Body.Close())
-			assert.Empty(t, string(respBody), "key: %s", f.getFuzzKeys[i])
+			pt.Add(func(t *assert.CollectT) {
+				getURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName), url.QueryEscape(f.getFuzzKeys[i]))
+				// t.Log("URL", getURL)
+				// t.Log("State store name", f.storeName, hex.EncodeToString([]byte(f.storeName)), printRunes(f.storeName))
+				// t.Log("Key", f.getFuzzKeys[i], printRunes(f.getFuzzKeys[i]))
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
+				require.NoError(t, err)
+				resp, err := httpClient.Do(req)
+				require.NoError(t, err)
+				assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+				respBody, err := io.ReadAll(resp.Body)
+				require.NoError(t, err)
+				require.NoError(t, resp.Body.Close())
+				assert.Empty(t, string(respBody), "key: %s", f.getFuzzKeys[i])
+			})
 		}
 	})
 
-	for i := 0; i < len(f.getFuzzKeys); i++ {
-		i := i
-		t.Run("save "+strconv.Itoa(i), func(t *testing.T) {
-			t.Parallel()
+	pt := parallel.New(t)
+	for i := range f.getFuzzKeys {
+		pt.Add(func(t *assert.CollectT) {
 			for _, req := range []any{f.saveReqBinaries[i], f.saveReqStrings[i]} {
 				postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", f.daprd.HTTPPort(), url.QueryEscape(f.storeName))
 				b := new(bytes.Buffer)

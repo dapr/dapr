@@ -15,22 +15,64 @@ package middleware
 
 import (
 	"context"
+	"fmt"
 
+	contribmiddle "github.com/dapr/components-contrib/middleware"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	compmiddlehttp "github.com/dapr/dapr/pkg/components/middleware/http"
+	"github.com/dapr/dapr/pkg/middleware/http"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
+	"github.com/dapr/dapr/pkg/runtime/meta"
 )
 
-// middleware is a component that implements the middleware interface. It's
-// currently a no-op.
-type middleware struct{}
+type Options struct {
+	// Metadata is the metadata helper.
+	Meta *meta.Meta
 
-func New() *middleware {
-	return new(middleware)
+	// RegistryHTTP is the HTTP middleware registry.
+	RegistryHTTP *compmiddlehttp.Registry
+
+	// HTTP is the HTTP middleware pipeline.
+	HTTP *http.HTTP
 }
 
-func (m *middleware) Init(_ context.Context, _ compapi.Component) error {
+// middleware is a component that implements the middleware interface.
+type middleware struct {
+	meta         *meta.Meta
+	registryHTTP *compmiddlehttp.Registry
+	http         *http.HTTP
+}
+
+func New(opts Options) *middleware {
+	return &middleware{
+		meta:         opts.Meta,
+		registryHTTP: opts.RegistryHTTP,
+		http:         opts.HTTP,
+	}
+}
+
+func (m *middleware) Init(_ context.Context, comp compapi.Component) error {
+	meta, err := m.meta.ToBaseMetadata(comp)
+	if err != nil {
+		return err
+	}
+
+	middle, err := m.registryHTTP.Create(comp.Spec.Type, comp.Spec.Version, contribmiddle.Metadata{Base: meta}, comp.LogName())
+	if err != nil {
+		return rterrors.NewInit(rterrors.CreateComponentFailure, comp.LogName(),
+			fmt.Errorf("process component %s error: %w", comp.Name, err),
+		)
+	}
+
+	m.http.Add(http.Spec{
+		Component:      comp,
+		Implementation: middle,
+	})
+
 	return nil
 }
 
-func (m *middleware) Close(_ compapi.Component) error {
+func (m *middleware) Close(comp compapi.Component) error {
+	m.http.Remove(comp.Name)
 	return nil
 }

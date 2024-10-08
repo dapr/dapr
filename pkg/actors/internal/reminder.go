@@ -97,7 +97,7 @@ func (r *Reminder) UpdateFromTrack(track *ReminderTrack) {
 
 // ScheduledTime returns the time the reminder is scheduled to be executed at.
 // This is implemented to comply with the queueable interface.
-func (r *Reminder) ScheduledTime() time.Time {
+func (r Reminder) ScheduledTime() time.Time {
 	return r.RegisteredTime
 }
 

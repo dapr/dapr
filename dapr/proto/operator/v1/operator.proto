@@ -34,10 +34,27 @@ service Operator {
   rpc ListResiliency (ListResiliencyRequest) returns (ListResiliencyResponse) {}
   // Returns a list of pub/sub subscriptions, ListSubscriptionsRequest to expose pod info
   rpc ListSubscriptionsV2 (ListSubscriptionsRequest) returns (ListSubscriptionsResponse) {}
+  // Sends events to Dapr sidecars upon subscription changes.
+  rpc SubscriptionUpdate (SubscriptionUpdateRequest) returns (stream SubscriptionUpdateEvent) {}
   // Returns a list of http endpoints
   rpc ListHTTPEndpoints (ListHTTPEndpointsRequest) returns (ListHTTPEndpointsResponse) {}
   // Sends events to Dapr sidecars upon http endpoint changes.
   rpc HTTPEndpointUpdate (HTTPEndpointUpdateRequest) returns (stream HTTPEndpointUpdateEvent) {}
+}
+
+// ResourceEventType is the type of event to a resource.
+enum ResourceEventType {
+  // UNKNOWN indicates that the event type is unknown.
+  UNKNOWN = 0;
+
+  // CREATED indicates that the resource has been created.
+  CREATED = 1;
+
+  // UPDATED indicates that the resource has been updated.
+  UPDATED = 2;
+
+  // DELETED indicates that the resource has been deleted.
+  DELETED = 3;
 }
 
 // ListComponentsRequest is the request to get components for a sidecar in namespace.
@@ -55,6 +72,9 @@ message ComponentUpdateRequest {
 // ComponentUpdateEvent includes the updated component event.
 message ComponentUpdateEvent {
   bytes component = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
 }
 
 // ListComponentResponse includes the list of available components.
@@ -77,6 +97,21 @@ message GetConfigurationResponse {
 // ListSubscriptionsResponse includes pub/sub subscriptions.
 message ListSubscriptionsResponse {
   repeated bytes subscriptions = 1;
+}
+
+// SubscriptionUpdateRequest is the request to get updates about new
+// subscriptions for a given namespace.
+message SubscriptionUpdateRequest {
+  string namespace = 1;
+  string podName = 2;
+}
+
+// SubscriptionUpdateEvent includes the updated subscription event.
+message SubscriptionUpdateEvent {
+  bytes subscription = 1;
+
+  // type is the type of event.
+  ResourceEventType type = 2;
 }
 
 // GetResiliencyRequest is the request to get a resiliency configuration.

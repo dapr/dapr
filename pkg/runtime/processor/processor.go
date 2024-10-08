@@ -15,16 +15,17 @@ package processor
 
 import (
 	"context"
-	"fmt"
-	"strings"
+	"errors"
 	"sync"
+	"sync/atomic"
+	"time"
 
-	"github.com/dapr/components-contrib/bindings"
-	contribpubsub "github.com/dapr/components-contrib/pubsub"
-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	grpcmanager "github.com/dapr/dapr/pkg/api/grpc/manager"
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
-	configmodes "github.com/dapr/dapr/pkg/config/modes"
+	"github.com/dapr/dapr/pkg/middleware/http"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/outbox"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
@@ -32,19 +33,29 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/meta"
-
-	grpcmanager "github.com/dapr/dapr/pkg/grpc/manager"
 	"github.com/dapr/dapr/pkg/runtime/processor/binding"
 	"github.com/dapr/dapr/pkg/runtime/processor/configuration"
+	"github.com/dapr/dapr/pkg/runtime/processor/conversation"
 	"github.com/dapr/dapr/pkg/runtime/processor/crypto"
 	"github.com/dapr/dapr/pkg/runtime/processor/lock"
 	"github.com/dapr/dapr/pkg/runtime/processor/middleware"
 	"github.com/dapr/dapr/pkg/runtime/processor/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
-	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
+	"github.com/dapr/dapr/pkg/runtime/processor/subscriber"
+	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
+	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
+	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/logger"
 )
+
+const (
+	defaultComponentInitTimeout = time.Second * 5
+)
+
+var log = logger.NewLogger("dapr.runtime.processor")
 
 type Options struct {
 	// ID is the ID of this Dapr instance.
@@ -59,9 +70,8 @@ type Options struct {
 	// PodName is the name of the pod.
 	PodName string
 
-	// PlacementEnabled indicates whether placement service is enabled in this
-	// Dapr cluster.
-	PlacementEnabled bool
+	// ActorsEnabled indicates whether placement service is enabled in this Dapr cluster.
+	ActorsEnabled bool
 
 	// IsHTTP indicates whether the connection to the application is using the
 	// HTTP protocol.
@@ -79,8 +89,6 @@ type Options struct {
 	// GlobalConfig is the global configuration.
 	GlobalConfig *config.Configuration
 
-	Standalone configmodes.StandaloneConfig
-
 	Resiliency resiliency.Provider
 
 	GRPC *grpcmanager.Manager
@@ -88,72 +96,69 @@ type Options struct {
 	Channels *channels.Channels
 
 	OperatorClient operatorv1.OperatorClient
-}
 
-// manager implements the life cycle events of a component category.
-type manager interface {
-	Init(context.Context, compapi.Component) error
-	Close(compapi.Component) error
-}
+	MiddlewareHTTP *http.HTTP
 
-type StateManager interface {
-	ActorStateStoreName() (string, bool)
-	manager
-}
+	Security security.Handler
 
-type PubsubManager interface {
-	Publish(context.Context, *contribpubsub.PublishRequest) error
-	BulkPublish(context.Context, *contribpubsub.BulkPublishRequest) (contribpubsub.BulkPublishResponse, error)
+	Outbox outbox.Outbox
 
-	StartSubscriptions(context.Context) error
-	StopSubscriptions()
-	Outbox() outbox.Outbox
-	manager
-}
-
-type BindingManager interface {
-	SendToOutputBinding(context.Context, string, *bindings.InvokeRequest) (*bindings.InvokeResponse, error)
-
-	StartReadingFromBindings(context.Context) error
-	StopReadingFromBindings()
-	manager
+	Adapter         rtpubsub.Adapter
+	AdapterStreamer rtpubsub.AdapterStreamer
 }
 
 // Processor manages the lifecycle of all components categories.
 type Processor struct {
-	compStore *compstore.ComponentStore
-	managers  map[components.Category]manager
-	state     StateManager
-	pubsub    PubsubManager
-	binding   BindingManager
+	appID           string
+	compStore       *compstore.ComponentStore
+	managers        map[components.Category]manager
+	state           StateManager
+	secret          SecretManager
+	binding         BindingManager
+	workflowBackend WorkflowBackendManager
+	security        security.Handler
+	subscriber      *subscriber.Subscriber
 
-	lock sync.RWMutex
+	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
+	pendingComponents          chan componentsapi.Component
+	pendingComponentsWaiting   sync.WaitGroup
+	pendingComponentDependents map[string][]componentsapi.Component
+	subErrCh                   chan error
+
+	lock     sync.RWMutex
+	chlock   sync.RWMutex
+	running  atomic.Bool
+	shutdown atomic.Bool
+	closedCh chan struct{}
 }
 
 func New(opts Options) *Processor {
-	ps := pubsub.New(pubsub.Options{
-		ID:             opts.ID,
-		Namespace:      opts.Namespace,
-		Mode:           opts.Mode,
-		PodName:        opts.PodName,
-		IsHTTP:         opts.IsHTTP,
-		Registry:       opts.Registry.PubSubs(),
-		ComponentStore: opts.ComponentStore,
-		Meta:           opts.Meta,
-		Resiliency:     opts.Resiliency,
-		TracingSpec:    opts.GlobalConfig.Spec.TracingSpec,
-		GRPC:           opts.GRPC,
-		Channels:       opts.Channels,
-		OperatorClient: opts.OperatorClient,
-		ResourcesPath:  opts.Standalone.ResourcesPath,
+	subscriber := subscriber.New(subscriber.Options{
+		AppID:           opts.ID,
+		Namespace:       opts.Namespace,
+		Resiliency:      opts.Resiliency,
+		TracingSpec:     opts.GlobalConfig.Spec.TracingSpec,
+		IsHTTP:          opts.IsHTTP,
+		Channels:        opts.Channels,
+		GRPC:            opts.GRPC,
+		CompStore:       opts.ComponentStore,
+		Adapter:         opts.Adapter,
+		AdapterStreamer: opts.AdapterStreamer,
 	})
 
 	state := state.New(state.Options{
-		PlacementEnabled: opts.PlacementEnabled,
-		Registry:         opts.Registry.StateStores(),
-		ComponentStore:   opts.ComponentStore,
-		Meta:             opts.Meta,
-		Outbox:           ps.Outbox(),
+		ActorsEnabled:  opts.ActorsEnabled,
+		Registry:       opts.Registry.StateStores(),
+		ComponentStore: opts.ComponentStore,
+		Meta:           opts.Meta,
+		Outbox:         opts.Outbox,
+	})
+
+	secret := secret.New(secret.Options{
+		Registry:       opts.Registry.SecretStores(),
+		ComponentStore: opts.ComponentStore,
+		Meta:           opts.Meta,
+		OperatorClient: opts.OperatorClient,
 	})
 
 	binding := binding.New(binding.Options{
@@ -167,11 +172,27 @@ func New(opts Options) *Processor {
 		Channels:       opts.Channels,
 	})
 
+	wfbe := wfbackend.New(wfbackend.Options{
+		AppID:          opts.ID,
+		Registry:       opts.Registry.WorkflowBackends(),
+		ComponentStore: opts.ComponentStore,
+		Meta:           opts.Meta,
+	})
+
 	return &Processor{
-		compStore: opts.ComponentStore,
-		state:     state,
-		pubsub:    ps,
-		binding:   binding,
+		appID:                      opts.ID,
+		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
+		pendingComponents:          make(chan componentsapi.Component),
+		pendingComponentDependents: make(map[string][]componentsapi.Component),
+		subErrCh:                   make(chan error),
+		closedCh:                   make(chan struct{}),
+		compStore:                  opts.ComponentStore,
+		state:                      state,
+		binding:                    binding,
+		secret:                     secret,
+		workflowBackend:            wfbe,
+		security:                   opts.Security,
+		subscriber:                 subscriber,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{
@@ -189,93 +210,49 @@ func New(opts Options) *Processor {
 				ComponentStore: opts.ComponentStore,
 				Meta:           opts.Meta,
 			}),
-			components.CategoryPubSub: ps,
-			components.CategorySecretStore: secret.New(secret.Options{
-				Registry:       opts.Registry.SecretStores(),
-				ComponentStore: opts.ComponentStore,
+			components.CategoryPubSub: pubsub.New(pubsub.Options{
+				AppID:          opts.ID,
+				Registry:       opts.Registry.PubSubs(),
 				Meta:           opts.Meta,
-			}),
-			components.CategoryStateStore: state,
-			components.CategoryWorkflow: workflow.New(workflow.Options{
-				Registry:       opts.Registry.Workflows(),
 				ComponentStore: opts.ComponentStore,
-				Meta:           opts.Meta,
+				Subscriber:     subscriber,
 			}),
-			components.CategoryMiddleware: middleware.New(),
+			components.CategorySecretStore:     secret,
+			components.CategoryStateStore:      state,
+			components.CategoryWorkflowBackend: wfbe,
+			components.CategoryMiddleware: middleware.New(middleware.Options{
+				Meta:         opts.Meta,
+				RegistryHTTP: opts.Registry.HTTPMiddlewares(),
+				HTTP:         opts.MiddlewareHTTP,
+			}),
+			components.CategoryConversation: conversation.New(conversation.Options{
+				Meta:     opts.Meta,
+				Registry: opts.Registry.Conversations(),
+				Store:    opts.ComponentStore,
+			}),
 		},
 	}
 }
 
-// Init initializes a component of a category.
-func (p *Processor) Init(ctx context.Context, comp compapi.Component) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	m, err := p.managerFromComp(comp)
-	if err != nil {
-		return err
+func (p *Processor) Process(ctx context.Context) error {
+	if !p.running.CompareAndSwap(false, true) {
+		return errors.New("processor is already running")
 	}
 
-	if err := m.Init(ctx, comp); err != nil {
-		return err
-	}
-
-	p.compStore.AddComponent(comp)
-
-	return nil
-}
-
-// Close closes the component.
-func (p *Processor) Close(comp compapi.Component) error {
-	p.lock.Lock()
-	defer p.lock.Unlock()
-
-	m, err := p.managerFromComp(comp)
-	if err != nil {
-		return err
-	}
-
-	if err := m.Close(comp); err != nil {
-		return err
-	}
-
-	p.compStore.DeleteComponent(comp.Spec.Type, comp.Name)
-
-	return nil
-}
-
-func (p *Processor) managerFromComp(comp compapi.Component) (manager, error) {
-	category := p.Category(comp)
-	m, ok := p.managers[category]
-	if !ok {
-		return nil, fmt.Errorf("unknown component category: %q", category)
-	}
-	return m, nil
-}
-
-func (p *Processor) Category(comp compapi.Component) components.Category {
-	for category := range p.managers {
-		if strings.HasPrefix(comp.Spec.Type, string(category)+".") {
-			return category
-		}
-	}
-	return ""
-}
-
-func (p *Processor) State() StateManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.state
-}
-
-func (p *Processor) PubSub() PubsubManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.pubsub
-}
-
-func (p *Processor) Binding() BindingManager {
-	p.lock.RLock()
-	defer p.lock.RUnlock()
-	return p.binding
+	return concurrency.NewRunnerManager(
+		p.processComponents,
+		p.processHTTPEndpoints,
+		p.processSubscriptions,
+		p.subscriber.Run,
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			close(p.closedCh)
+			p.chlock.Lock()
+			defer p.chlock.Unlock()
+			p.shutdown.Store(true)
+			close(p.pendingComponents)
+			close(p.pendingHTTPEndpoints)
+			return nil
+		},
+	).Run(ctx)
 }

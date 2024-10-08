@@ -19,6 +19,7 @@ import "google/protobuf/any.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/timestamp.proto";
 import "dapr/proto/common/v1/common.proto";
+import "dapr/proto/runtime/v1/appcallback.proto";
 
 option csharp_namespace = "Dapr.Client.Autogen.Grpc.v1";
 option java_outer_classname = "DaprProtos";
@@ -58,6 +59,10 @@ service Dapr {
   // Bulk Publishes multiple events to the specified topic.
   rpc BulkPublishEventAlpha1(BulkPublishRequest) returns (BulkPublishResponse) {}
 
+  // SubscribeTopicEventsAlpha1 subscribes to a PubSub topic and receives topic
+  // events from it.
+  rpc SubscribeTopicEventsAlpha1(stream SubscribeTopicEventsRequestAlpha1) returns (stream SubscribeTopicEventsResponseAlpha1) {}
+
   // Invokes binding data to specific output bindings
   rpc InvokeBinding(InvokeBindingRequest) returns (InvokeBindingResponse) {}
 
@@ -78,9 +83,6 @@ service Dapr {
 
   // Unregister an actor reminder.
   rpc UnregisterActorReminder(UnregisterActorReminderRequest) returns (google.protobuf.Empty) {}
-
-  // Rename an actor reminder.
-  rpc RenameActorReminder(RenameActorReminderRequest) returns (google.protobuf.Empty) {}
 
   // Gets the state for a specific actor.
   rpc GetActorState(GetActorStateRequest) returns (GetActorStateResponse) {}
@@ -122,7 +124,7 @@ service Dapr {
   rpc DecryptAlpha1(stream DecryptRequest) returns (stream DecryptResponse);
 
   // Gets metadata of the sidecar
-  rpc GetMetadata (google.protobuf.Empty) returns (GetMetadataResponse) {}
+  rpc GetMetadata (GetMetadataRequest) returns (GetMetadataResponse) {}
 
   // Sets value in extended metadata of the sidecar
   rpc SetMetadata (SetMetadataRequest) returns (google.protobuf.Empty) {}
@@ -190,7 +192,19 @@ service Dapr {
   // Raise an event to a running workflow instance
   rpc RaiseEventWorkflowBeta1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
   // Shutdown the sidecar
-  rpc Shutdown (google.protobuf.Empty) returns (google.protobuf.Empty) {}
+  rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
+
+  // Create and schedule a job
+  rpc ScheduleJobAlpha1(ScheduleJobRequest) returns (ScheduleJobResponse) {}
+
+  // Gets a scheduled job
+  rpc GetJobAlpha1(GetJobRequest) returns (GetJobResponse) {}
+
+  // Delete a job
+  rpc DeleteJobAlpha1(DeleteJobRequest) returns (DeleteJobResponse) {}
+
+  // Converse with a LLM service
+  rpc ConverseAlpha1(ConversationAlpha1Request) returns (ConversationAlpha1Response) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -407,13 +421,67 @@ message BulkPublishResponse {
 
 // BulkPublishResponseFailedEntry is the message containing the entryID and error of a failed event in BulkPublishEvent call
 message BulkPublishResponseFailedEntry {
-
   // The response scoped unique ID referring to this message
   string entry_id = 1;
 
   // The error message if any on failure
   string error = 2;
 }
+
+// SubscribeTopicEventsRequestAlpha1 is a message containing the details for
+// subscribing to a topic via streaming.
+// The first message must always be the initial request. All subsequent
+// messages must be event processed responses.
+message SubscribeTopicEventsRequestAlpha1 {
+  oneof subscribe_topic_events_request_type {
+    SubscribeTopicEventsRequestInitialAlpha1 initial_request = 1;
+    SubscribeTopicEventsRequestProcessedAlpha1 event_processed = 2;
+  }
+}
+
+// SubscribeTopicEventsRequestInitialAlpha1 is the initial message containing
+// the details for subscribing to a topic via streaming.
+message SubscribeTopicEventsRequestInitialAlpha1 {
+  // The name of the pubsub component
+  string pubsub_name = 1;
+
+  // The pubsub topic
+  string topic = 2;
+
+  // The metadata passing to pub components
+  //
+  // metadata property:
+  // - key : the key of the message.
+  map<string, string> metadata = 3;
+
+  // dead_letter_topic is the topic to which messages that fail to be processed
+  // are sent.
+  optional string dead_letter_topic = 4;
+}
+
+// SubscribeTopicEventsRequestProcessedAlpha1 is the message containing the
+// subscription to a topic.
+message SubscribeTopicEventsRequestProcessedAlpha1 {
+  // id is the unique identifier for the subscription request.
+  string id = 1;
+
+  // status is the result of the subscription request.
+  TopicEventResponse status = 2;
+}
+
+
+// SubscribeTopicEventsResponseAlpha1 is a message returned from daprd
+// when subscribing to a topic via streaming.
+message SubscribeTopicEventsResponseAlpha1 {
+  oneof subscribe_topic_events_response_type {
+    SubscribeTopicEventsResponseInitialAlpha1 initial_response = 1;
+    TopicEventRequest event_message = 2;
+  }
+}
+
+// SubscribeTopicEventsResponseInitialAlpha1 is the initial response from daprd
+// when subscribing to a topic.
+message SubscribeTopicEventsResponseInitialAlpha1 {}
 
 
 // InvokeBindingRequest is the message to send data to output bindings
@@ -428,6 +496,7 @@ message InvokeBindingRequest {
   //
   // Common metadata property:
   // - ttlInSeconds : the time to live in seconds for the message.
+  //
   // If set in the binding definition will cause all messages to
   // have a default time to live. The message ttl overrides any value
   // in the binding definition.
@@ -509,53 +578,45 @@ message ExecuteStateTransactionRequest {
 
 // RegisterActorTimerRequest is the message to register a timer for an actor of a given type and id.
 message RegisterActorTimerRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
-  string due_time = 4;
+  string due_time = 4 [json_name = "dueTime"];
   string period = 5;
   string callback = 6;
-  bytes  data = 7;
+  bytes data = 7;
   string ttl = 8;
 }
 
 // UnregisterActorTimerRequest is the message to unregister an actor timer
 message UnregisterActorTimerRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
 }
 
 // RegisterActorReminderRequest is the message to register a reminder for an actor of a given type and id.
 message RegisterActorReminderRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
-  string due_time = 4;
+  string due_time = 4 [json_name = "dueTime"];
   string period = 5;
-  bytes  data = 6;
+  bytes data = 6;
   string ttl = 7;
 }
 
 // UnregisterActorReminderRequest is the message to unregister an actor reminder.
 message UnregisterActorReminderRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string name = 3;
-}
-
-// RenameActorReminderRequest is the message to rename an actor reminder.
-message RenameActorReminderRequest {
-  string actor_type = 1;
-  string actor_id = 2;
-  string old_name = 3;
-  string new_name = 4;
 }
 
 // GetActorStateRequest is the message to get key-value states from specific actor.
 message GetActorStateRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string key = 3;
 }
 
@@ -569,8 +630,8 @@ message GetActorStateResponse {
 
 // ExecuteActorStateTransactionRequest is the message to execute multiple operations on a specified actor.
 message ExecuteActorStateTransactionRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   repeated TransactionalActorStateOperation operations = 3;
 }
 
@@ -588,8 +649,8 @@ message TransactionalActorStateOperation {
 
 // InvokeActorRequest is the message to call an actor.
 message InvokeActorRequest {
-  string actor_type = 1;
-  string actor_id = 2;
+  string actor_type = 1 [json_name = "actorType"];
+  string actor_id = 2 [json_name = "actorId"];
   string method = 3;
   bytes  data = 4;
   map<string, string> metadata = 5;
@@ -600,10 +661,16 @@ message InvokeActorResponse {
   bytes data = 1;
 }
 
-// GetMetadataResponse is a message that is returned on GetMetadata rpc call
+// GetMetadataRequest is the message for the GetMetadata request.
+message GetMetadataRequest {
+  // Empty
+}
+
+// GetMetadataResponse is a message that is returned on GetMetadata rpc call.
 message GetMetadataResponse {
   string id = 1;
-  repeated ActiveActorsCount active_actors_count = 2 [json_name = "actors"];
+  // Deprecated alias for actor_runtime.active_actors.
+  repeated ActiveActorsCount active_actors_count = 2 [json_name = "actors", deprecated = true];
   repeated RegisteredComponents registered_components = 3 [json_name = "components"];
   map<string, string> extended_metadata = 4 [json_name = "extended"];
   repeated PubsubSubscription subscriptions = 5 [json_name = "subscriptions"];
@@ -611,6 +678,29 @@ message GetMetadataResponse {
   AppConnectionProperties app_connection_properties = 7 [json_name = "appConnectionProperties"];
   string runtime_version = 8 [json_name = "runtimeVersion"];
   repeated string enabled_features = 9 [json_name = "enabledFeatures"];
+  ActorRuntime actor_runtime = 10 [json_name = "actorRuntime"];
+  //TODO: Cassie: probably add scheduler runtime status
+}
+
+message ActorRuntime {
+  enum ActorRuntimeStatus {
+    // Indicates that the actor runtime is still being initialized.
+    INITIALIZING = 0;
+    // Indicates that the actor runtime is disabled.
+    // This normally happens when Dapr is started without "placement-host-address"
+    DISABLED = 1;
+    // Indicates the actor runtime is running, either as an actor host or client.
+    RUNNING = 2;
+  }
+
+  // Contains an enum indicating whether the actor runtime has been initialized.
+  ActorRuntimeStatus runtime_status = 1 [json_name = "runtimeStatus"];
+  // Count of active actors per type.
+  repeated ActiveActorsCount active_actors = 2 [json_name = "activeActors"];
+  // Indicates whether the actor runtime is ready to host actors.
+  bool host_ready = 3 [json_name = "hostReady"];
+  // Custom message from the placement provider.
+  string placement = 4 [json_name = "placement"];
 }
 
 message ActiveActorsCount {
@@ -650,6 +740,19 @@ message PubsubSubscription {
   map<string,string> metadata = 3 [json_name = "metadata"];
   PubsubSubscriptionRules rules = 4 [json_name = "rules"];
   string dead_letter_topic = 5 [json_name = "deadLetterTopic"];
+  PubsubSubscriptionType type = 6 [json_name = "type"];
+}
+
+// PubsubSubscriptionType indicates the type of subscription
+enum PubsubSubscriptionType {
+  // UNKNOWN is the default value for the subscription type.
+  UNKNOWN = 0;
+  // Declarative subscription (k8s CRD)
+  DECLARATIVE = 1;
+  // Programmatically created subscription
+  PROGRAMMATIC = 2;
+  // Bidirectional Streaming subscription
+  STREAMING = 3;
 }
 
 message PubsubSubscriptionRules {
@@ -740,11 +843,11 @@ message TryLockRequest {
   //
   // The reason why we don't make it automatically generated is:
   // 1. If it is automatically generated,there must be a 'my_lock_owner_id' field in the response.
-  // This name is so weird that we think it is inappropriate to put it into the api spec
+  //   This name is so weird that we think it is inappropriate to put it into the api spec
   // 2. If we change the field 'my_lock_owner_id' in the response to 'lock_owner',which means the current lock owner of this lock,
-  // we find that in some lock services users can't get the current lock owner.Actually users don't need it at all.
+  //   we find that in some lock services users can't get the current lock owner.Actually users don't need it at all.
   // 3. When reentrant lock is needed,the existing lock_owner is required to identify client and check "whether this client can reenter this lock".
-  // So this field in the request shouldn't be removed.
+  //   So this field in the request shouldn't be removed.
   string lock_owner = 3 [json_name = "lockOwner"];
 
   // Required. The time before expiry.The time unit is second.
@@ -781,7 +884,7 @@ message SubtleGetKeyRequest {
     // JSON (JSON Web Key) as string
     JSON = 1;
   }
- 
+
   // Name of the component
   string component_name = 1 [json_name="componentName"];
   // Name (or name/version) of the key to use in the key vault
@@ -963,7 +1066,7 @@ message EncryptRequestOptions {
   // If true, the encrypted document does not contain a key reference.
   // In that case, calls to the Decrypt method must provide a key reference (name or name/version).
   // Defaults to false.
-  bool omit_decryption_key_name = 11 [json_name="omitDecryptionKeyName"]; 
+  bool omit_decryption_key_name = 11 [json_name="omitDecryptionKeyName"];
   // Key reference to embed in the encrypted document (name or name/version).
   // This is helpful if the reference of the key used to decrypt the document is different from the one used to encrypt it.
   // If unset, uses the reference of the key used to encrypt the document (this is the default behavior).
@@ -1087,4 +1190,126 @@ message PurgeWorkflowRequest {
   string instance_id = 1 [json_name = "instanceID"];
   // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
+}
+
+// ShutdownRequest is the request for Shutdown.
+message ShutdownRequest {
+  // Empty
+}
+
+// Job is the definition of a job. At least one of schedule or due_time must be
+// provided but can also be provided together.
+message Job {
+  // The unique name for the job.
+  string name = 1 [json_name = "name"];
+
+  // schedule is an optional schedule at which the job is to be run.
+  // Accepts both systemd timer style cron expressions, as well as human
+  // readable '@' prefixed period strings as defined below.
+  //
+  // Systemd timer style cron accepts 6 fields:
+  // seconds | minutes | hours | day of month | month        | day of week
+  // 0-59    | 0-59    | 0-23  | 1-31         | 1-12/jan-dec | 0-6/sun-sat
+  //
+  // "0 30 * * * *" - every hour on the half hour
+  // "0 15 3 * * *" - every day at 03:15
+  //
+  // Period string expressions:
+	// Entry                  | Description                                  | Equivalent To
+	// -----                  | -----------                                  | -------------
+  // @every `<duration>`    | Run every `<duration>` (e.g. '@every 1h30m') | N/A
+	// @yearly (or @annually) | Run once a year, midnight, Jan. 1st          | 0 0 0 1 1 *
+	// @monthly               | Run once a month, midnight, first of month   | 0 0 0 1 * *
+	// @weekly                | Run once a week, midnight on Sunday          | 0 0 0 * * 0
+	// @daily (or @midnight)  | Run once a day, midnight                     | 0 0 0 * * *
+	// @hourly                | Run once an hour, beginning of hour          | 0 0 * * * *
+  optional string schedule = 2 [json_name = "schedule"];
+
+  // repeats is the optional number of times in which the job should be
+  // triggered. If not set, the job will run indefinitely or until expiration.
+  optional uint32 repeats = 3 [json_name = "repeats"];
+
+  // due_time is the optional time at which the job should be active, or the
+  // "one shot" time if other scheduling type fields are not provided. Accepts
+  // a "point in time" string in the format of RFC3339, Go duration string
+  // (calculated from job creation time), or non-repeating ISO8601.
+  optional string due_time = 4 [json_name = "dueTime"];
+
+  // ttl is the optional time to live or expiration of the job. Accepts a
+  // "point in time" string in the format of RFC3339, Go duration string
+  // (calculated from job creation time), or non-repeating ISO8601.
+  optional string ttl = 5 [json_name = "ttl"];
+
+  // payload is the serialized job payload that will be sent to the recipient
+  // when the job is triggered.
+  google.protobuf.Any data = 6 [json_name = "data"];
+}
+
+// ScheduleJobRequest is the message to create/schedule the job.
+message ScheduleJobRequest {
+  // The job details.
+  Job job = 1;
+}
+
+// ScheduleJobResponse is the message response to create/schedule the job.
+message ScheduleJobResponse {
+  // Empty
+}
+
+// GetJobRequest is the message to retrieve a job.
+message GetJobRequest {
+  // The name of the job.
+  string name = 1;
+}
+
+// GetJobResponse is the message's response for a job retrieved.
+message GetJobResponse {
+  // The job details.
+  Job job = 1;
+}
+
+// DeleteJobRequest is the message to delete the job by name.
+message DeleteJobRequest {
+  // The name of the job.
+  string name = 1;
+}
+
+// DeleteJobResponse is the message response to delete the job by name.
+message DeleteJobResponse {
+  // Empty
+}
+
+// ConversationAlpha1Request is the request object for Conversation.
+message ConversationAlpha1Request {
+  // The name of Coverstaion component
+  string name = 1;
+
+  // Conversation context - the Id of an existing chat room (like in ChatGPT)
+  optional string conversationContext = 2;
+
+  // Inputs for the conversation, support multiple input in one time.
+  repeated string inputs = 3;
+
+  // Parameters for all custom fields.
+  map<string, google.protobuf.Any> parameters = 4;
+
+  // The metadata passing to conversation components.
+  map<string, string> metadata = 5;
+}
+
+// ConversationAlpha1Result is the result for one input.
+message ConversationAlpha1Result {
+  // Result for the one conversation input.
+  string result = 1;
+  // Parameters for all custom fields.
+  map<string, google.protobuf.Any> parameters = 2;
+}
+
+// ConversationAlpha1Response is the response for Conversation.
+message ConversationAlpha1Response {
+  // Conversation context - the Id of an existing chat room (like in ChatGPT)
+  optional string conversationContext = 1;
+
+  // An array of results.
+  repeated ConversationAlpha1Result outputs = 2;
 }

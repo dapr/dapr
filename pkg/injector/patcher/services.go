@@ -14,7 +14,10 @@ limitations under the License.
 package patcher
 
 import (
+	"errors"
 	"fmt"
+	"strconv"
+	"strings"
 )
 
 // Service represents a Dapr control plane service's information.
@@ -23,16 +26,47 @@ type Service struct {
 	port int
 }
 
+// Predefined services
 var (
 	// Dapr API service.
-	ServiceAPI = Service{"dapr-api", 80}
+	ServiceAPI = Service{"dapr-api", 443}
 	// Dapr placement service.
 	ServicePlacement = Service{"dapr-placement-server", 50005}
-	// Dapr sentry service.
+	// Dapr placement service.
+	ServiceScheduler = Service{"dapr-scheduler-server", 50006}
+	// Dapr Sentry service.
 	ServiceSentry = Service{"dapr-sentry", 443}
 )
 
-// ServiceAddress returns the address of a Dapr control plane service.
-func ServiceAddress(svc Service, namespace string, clusterDomain string) string {
+// NewService returns a Service with values from a string in the format "<name>:<port>"
+func NewService(val string) (srv Service, err error) {
+	var (
+		ok      bool
+		portStr string
+	)
+	srv.name, portStr, ok = strings.Cut(val, ":")
+	if !ok || srv.name == "" || portStr == "" {
+		return srv, fmt.Errorf("service is not in the correct format '<name>:<port>': %s", val)
+	}
+
+	srv.port, err = strconv.Atoi(portStr)
+	if err != nil || srv.port <= 0 {
+		return srv, errors.New("service is not in the correct format '<name>:<port>': port is invalid")
+	}
+
+	return srv, nil
+}
+
+// Address returns the address of a Dapr control plane service
+func (svc Service) Address(namespace, clusterDomain string) string {
 	return fmt.Sprintf("%s.%s.svc.%s:%d", svc.name, namespace, clusterDomain, svc.port)
+}
+
+// Address returns the address of a Dapr control plane service
+func (svc Service) AddressAllInstances(replicaCount int, namespace, clusterDomain string) []string {
+	allInstances := []string{}
+	for i := range replicaCount {
+		allInstances = append(allInstances, fmt.Sprintf("%s-%d.%s.%s.svc.%s:%d", svc.name, i, svc.name, namespace, clusterDomain, svc.port))
+	}
+	return allInstances
 }

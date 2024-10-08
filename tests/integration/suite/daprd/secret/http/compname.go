@@ -30,8 +30,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/file"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -63,11 +65,11 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 	})
 
 	c.secretStoreNames = make([]string, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz.Fuzz(&c.secretStoreNames[i])
 	}
 
-	secretFileNames := util.FileNames(t, numTests)
+	secretFileNames := file.Paths(t, numTests)
 	files := make([]string, numTests)
 	for i, secretFileName := range secretFileNames {
 		require.NoError(t, os.WriteFile(secretFileName, []byte("{}"), 0o600))
@@ -100,14 +102,15 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
+	client := client.HTTP(t)
+
+	pt := parallel.New(t)
 	for _, secretStoreName := range c.secretStoreNames {
-		secretStoreName := secretStoreName
-		t.Run(secretStoreName, func(t *testing.T) {
-			t.Parallel()
+		pt.Add(func(t *assert.CollectT) {
 			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/key1", c.daprd.HTTPPort(), url.QueryEscape(secretStoreName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
-			resp, err := util.HTTPClient(t).Do(req)
+			resp, err := client.Do(req)
 			require.NoError(t, err)
 			// TODO: @joshvanl: 500 is obviously the wrong status code here and
 			// should be changed.

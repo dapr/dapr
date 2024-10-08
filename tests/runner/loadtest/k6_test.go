@@ -168,16 +168,16 @@ func TestK6(t *testing.T) {
 			WithParallelism(parallelism),
 			WithName(fakeName),
 		)
-		assert.Equal(t, tester.script, script)
-		assert.Equal(t, tester.namespace, fakeNamespace)
+		assert.Equal(t, script, tester.script)
+		assert.Equal(t, fakeNamespace, tester.namespace)
 		assert.Len(t, tester.runnerEnv, 1)
-		assert.Equal(t, tester.runnerImage, fakeImg)
-		assert.Equal(t, tester.addDapr, false)
-		assert.Equal(t, tester.parallelism, parallelism)
-		assert.Equal(t, tester.name, fakeName)
+		assert.Equal(t, fakeImg, tester.runnerImage)
+		assert.False(t, tester.addDapr)
+		assert.Equal(t, parallelism, tester.parallelism)
+		assert.Equal(t, fakeName, tester.name)
 	})
 	t.Run("Dispose should return nil when not client was set", func(t *testing.T) {
-		assert.Nil(t, NewK6("").Dispose())
+		require.NoError(t, NewK6("").Dispose())
 	})
 	t.Run("Dispose should return nil when delete does not returns an error", func(t *testing.T) {
 		jobs := new(fakeJobClient)
@@ -196,7 +196,7 @@ func TestK6(t *testing.T) {
 		k6Client := new(fakeK6Client)
 		k6Client.On("Delete", mock.Anything, k6.name, mock.Anything).Return(nil)
 		k6.k6Client = k6Client
-		assert.Nil(t, k6.Dispose())
+		require.NoError(t, k6.Dispose())
 		k6Client.AssertNumberOfCalls(t, "Delete", 1)
 		jobs.AssertNumberOfCalls(t, "List", 1)
 	})
@@ -218,7 +218,7 @@ func TestK6(t *testing.T) {
 		k6Client := new(fakeK6Client)
 		k6Client.On("Delete", mock.Anything, k6.name, mock.Anything).Return(apierrors.NewNotFound(schema.GroupResource{}, "k6"))
 		k6.k6Client = k6Client
-		assert.Nil(t, k6.Dispose())
+		require.NoError(t, k6.Dispose())
 		k6Client.AssertNumberOfCalls(t, "Delete", 1)
 		jobs.AssertNumberOfCalls(t, "List", 1)
 	})
@@ -294,7 +294,7 @@ func TestK6(t *testing.T) {
 		fakeClient := fake.CreateHTTPClient(func(r *http.Request) (*http.Response, error) {
 			called++
 			return &http.Response{
-				Body:       io.NopCloser(bytes.NewBuffer([]byte(`{}`))),
+				Body:       io.NopCloser(bytes.NewBufferString("{}")),
 				StatusCode: http.StatusOK,
 			}, nil
 		})
@@ -327,10 +327,10 @@ func TestK6(t *testing.T) {
 
 		pods.On("List", mock.Anything, mock.Anything).Return(nil)
 		summary, err := K6ResultDefault(k6)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		pods.AssertNumberOfCalls(t, "List", 1)
 		jobs.AssertNumberOfCalls(t, "List", 1)
-		assert.Equal(t, called, 1)
+		assert.Equal(t, 1, called)
 		assert.True(t, summary.Pass)
 	})
 	t.Run("Result should return an error if pod get logs return an error", func(t *testing.T) {
@@ -340,7 +340,7 @@ func TestK6(t *testing.T) {
 		fakeClient := fake.CreateHTTPClient(func(r *http.Request) (*http.Response, error) {
 			called++
 			return &http.Response{
-				Body:       io.NopCloser(bytes.NewBuffer([]byte(`{}`))),
+				Body:       io.NopCloser(bytes.NewBufferString("{}")),
 				StatusCode: http.StatusInternalServerError,
 			}, nil
 		})
@@ -357,15 +357,15 @@ func TestK6(t *testing.T) {
 
 		pods.On("List", mock.Anything, mock.Anything).Return(nil)
 		_, err := K6ResultDefault(k6)
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		pods.AssertNumberOfCalls(t, "List", 1)
-		assert.Equal(t, called, 1)
+		assert.Equal(t, 1, called)
 	})
 	t.Run("k8sRun should return an error if file not exists", func(t *testing.T) {
 		const fileNotExists = "./not_exists.js"
 		k6 := NewK6(fileNotExists)
 		k6.setupOnce.Do(func() {}) // call once to avoid be called
-		assert.Error(t, k6.k8sRun(&runner.KubeTestPlatform{}))
+		require.Error(t, k6.k8sRun(&runner.KubeTestPlatform{}))
 	})
 
 	t.Run("k8sRun should return an error if createconfig returns an error", func(t *testing.T) {

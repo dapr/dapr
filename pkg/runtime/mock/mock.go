@@ -66,17 +66,22 @@ func (b *Binding) Read(ctx context.Context, handler bindings.Handler) error {
 		metadata = b.Metadata
 	}
 
-	go func() {
-		_, err := handler(context.Background(), &bindings.ReadResponse{
-			Metadata: metadata,
-			Data:     []byte(b.Data),
-		})
-		if b.ReadErrorCh != nil {
-			b.ReadErrorCh <- (err != nil)
-		}
-	}()
+	resp := &bindings.ReadResponse{
+		Metadata: metadata,
+		Data:     []byte(b.Data),
+	}
 
-	return nil
+	if b.ReadErrorCh != nil {
+		go func() {
+			_, err := handler(ctx, resp)
+			b.ReadErrorCh <- (err != nil)
+		}()
+
+		return nil
+	}
+
+	_, err := handler(ctx, resp)
+	return err
 }
 
 func (b *Binding) Operations() []bindings.OperationKind {
@@ -89,4 +94,61 @@ func (b *Binding) Invoke(ctx context.Context, req *bindings.InvokeRequest) (*bin
 
 func (b *Binding) Close() error {
 	return b.CloseErr
+}
+
+type MockKubernetesStateStore struct {
+	Callback func(context.Context) error
+	CloseFn  func() error
+}
+
+func (m *MockKubernetesStateStore) Init(ctx context.Context, metadata secretstores.Metadata) error {
+	if m.Callback != nil {
+		return m.Callback(ctx)
+	}
+	return nil
+}
+
+func (m *MockKubernetesStateStore) GetSecret(ctx context.Context, req secretstores.GetSecretRequest) (secretstores.GetSecretResponse, error) {
+	return secretstores.GetSecretResponse{
+		Data: map[string]string{
+			"key1":   "value1",
+			"_value": "_value_data",
+			"name1":  "value1",
+		},
+	}, nil
+}
+
+func (m *MockKubernetesStateStore) BulkGetSecret(ctx context.Context, req secretstores.BulkGetSecretRequest) (secretstores.BulkGetSecretResponse, error) {
+	response := map[string]map[string]string{}
+	response["k8s-secret"] = map[string]string{
+		"key1":   "value1",
+		"_value": "_value_data",
+		"name1":  "value1",
+	}
+	return secretstores.BulkGetSecretResponse{
+		Data: response,
+	}, nil
+}
+
+func (m *MockKubernetesStateStore) Close() error {
+	if m.CloseFn != nil {
+		return m.CloseFn()
+	}
+	return nil
+}
+
+func (m *MockKubernetesStateStore) Features() []secretstores.Feature {
+	return []secretstores.Feature{}
+}
+
+func NewMockKubernetesStore() secretstores.SecretStore {
+	return &MockKubernetesStateStore{}
+}
+
+func NewMockKubernetesStoreWithInitCallback(cb func(context.Context) error) secretstores.SecretStore {
+	return &MockKubernetesStateStore{Callback: cb}
+}
+
+func NewMockKubernetesStoreWithClose(closeFn func() error) secretstores.SecretStore {
+	return &MockKubernetesStateStore{CloseFn: closeFn}
 }

@@ -14,17 +14,19 @@ limitations under the License.
 package options
 
 import (
-	"flag"
 	"fmt"
 	"os"
 	"strings"
 
-	"github.com/dapr/dapr/utils"
-	"github.com/dapr/kit/logger"
+	"github.com/spf13/pflag"
 
 	"github.com/dapr/dapr/pkg/metrics"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/security"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/utils"
 )
 
 const (
@@ -39,69 +41,87 @@ const (
 type Options struct {
 	// Raft protocol configurations
 	RaftID           string
-	RaftPeerString   string
+	raftPeerFlag     []string
 	RaftPeers        []raft.PeerInfo
 	RaftInMemEnabled bool
 	RaftLogStorePath string
 
 	// Placement server configurations
-	PlacementPort   int
-	HealthzPort     int
-	MetadataEnabled bool
+	PlacementPort          int
+	PlacementListenAddress string
+	HealthzPort            int
+	HealthzListenAddress   string
+	MetadataEnabled        bool
+	MaxAPILevel            int
+	MinAPILevel            int
 
 	TLSEnabled       bool
 	TrustDomain      string
 	TrustAnchorsFile string
 	SentryAddress    string
+	Mode             string
 
 	ReplicationFactor int
 
 	// Log and metrics configurations
 	Logger  logger.Options
-	Metrics *metrics.Options
+	Metrics *metrics.FlagOptions
 }
 
-var log = logger.NewLogger("dapr.placement.options")
-
-func New() *Options {
-	// Default options
-	var opts Options
-
-	flag.StringVar(&opts.RaftID, "id", "dapr-placement-0", "Placement server ID.")
-	flag.StringVar(&opts.RaftPeerString, "initial-cluster", "dapr-placement-0=127.0.0.1:8201", "raft cluster peers")
-	flag.BoolVar(&opts.RaftInMemEnabled, "inmem-store-enabled", true, "Enable in-memory log and snapshot store unless --raft-logstore-path is set")
-	flag.StringVar(&opts.RaftLogStorePath, "raft-logstore-path", "", "raft log store path.")
-	flag.IntVar(&opts.PlacementPort, "port", defaultPlacementPort, "sets the gRPC port for the placement service")
-	flag.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
-	flag.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
-	flag.BoolVar(&opts.MetadataEnabled, "metadata-enabled", opts.MetadataEnabled, "Expose the placement tables on the healthz server")
-	flag.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
-
-	flag.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
-	flag.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", "/var/run/secrets/dapr.io/tls/ca.crt", "Filepath to the trust anchors for the Dapr control plane")
-	flag.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Filepath to the trust anchors for the Dapr control plane")
-
-	depCC := flag.String("certchain", "", "DEPRECATED")
-	depRCF := flag.String("issuer-ca-filename", "", "DEPRECATED")
-	depICF := flag.String("issuer-certificate-filename", "", "DEPRECATED")
-	depIKF := flag.String("issuer-key-filename", "", "DEPRECATED")
-
-	opts.Logger = logger.DefaultOptions()
-	opts.Logger.AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	opts.Metrics = metrics.DefaultMetricOptions()
-	opts.Metrics.AttachCmdFlags(flag.StringVar, flag.BoolVar)
-
-	// parse env variables before parsing flags, so the flags takes priority over env variables
-	opts.MetadataEnabled = utils.IsTruthy(os.Getenv(envMetadataEnabled))
-
-	flag.Parse()
-
-	if len(*depRCF) > 0 || len(*depICF) > 0 || len(*depIKF) > 0 || len(*depCC) > 0 {
-		log.Warn("--certchain, --issuer-ca-filename, --issuer-certificate-filename and --issuer-key-filename are deprecated and will be removed in v1.14.")
+func New(origArgs []string) *Options {
+	// We are using pflag to parse the CLI flags
+	// pflag is a drop-in replacement for the standard library's "flag" package, however…
+	// There's one key difference: with the stdlib's "flag" package, there are no short-hand options so options can be defined with a single slash (such as "daprd -mode").
+	// With pflag, single slashes are reserved for shorthands.
+	// So, we are doing this thing where we iterate through all args and double-up the slash if it's single
+	// This works *as long as* we don't start using shorthand flags (which haven't been in use so far).
+	args := make([]string, len(origArgs))
+	for i, a := range origArgs {
+		if len(a) > 2 && a[0] == '-' && a[1] != '-' {
+			args[i] = "-" + a
+		} else {
+			args[i] = a
+		}
 	}
 
-	opts.RaftPeers = parsePeersFromFlag(opts.RaftPeerString)
+	// Default options
+	opts := Options{
+		MetadataEnabled: utils.IsTruthy(os.Getenv(envMetadataEnabled)),
+	}
+
+	// Create a flag set
+	fs := pflag.NewFlagSet("sentry", pflag.ExitOnError)
+	fs.SortFlags = true
+
+	fs.StringVar(&opts.RaftID, "id", "dapr-placement-0", "Placement server ID")
+	fs.StringSliceVar(&opts.raftPeerFlag, "initial-cluster", []string{"dapr-placement-0=127.0.0.1:8201"}, "raft cluster peers")
+	fs.BoolVar(&opts.RaftInMemEnabled, "inmem-store-enabled", true, "Enable in-memory log and snapshot store unless --raft-logstore-path is set")
+	fs.StringVar(&opts.RaftLogStorePath, "raft-logstore-path", "", "raft log store path.")
+	fs.IntVar(&opts.PlacementPort, "port", defaultPlacementPort, "sets the gRPC port for the placement service")
+	fs.StringVar(&opts.PlacementListenAddress, "listen-address", "", "The listening address for the placement service")
+	fs.IntVar(&opts.HealthzPort, "healthz-port", defaultHealthzPort, "sets the HTTP port for the healthz server")
+	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
+	fs.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the placement gRPC server")
+	fs.BoolVar(&opts.MetadataEnabled, "metadata-enabled", opts.MetadataEnabled, "Expose the placement tables on the healthz server")
+	fs.IntVar(&opts.MaxAPILevel, "max-api-level", 10, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
+	fs.IntVar(&opts.MinAPILevel, "min-api-level", 0, "Enforces a minimum 'api-level' in the cluster")
+	fs.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
+
+	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
+	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
+	fs.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
+	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Placement")
+
+	opts.Logger = logger.DefaultOptions()
+	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)
+
+	opts.Metrics = metrics.DefaultFlagOptions()
+	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
+
+	// Ignore errors; flagset is set for ExitOnError
+	_ = fs.Parse(args)
+
+	opts.RaftPeers = parsePeersFromFlag(opts.raftPeerFlag)
 	if opts.RaftLogStorePath != "" {
 		opts.RaftInMemEnabled = false
 	}
@@ -109,21 +129,22 @@ func New() *Options {
 	return &opts
 }
 
-func parsePeersFromFlag(val string) []raft.PeerInfo {
-	peers := []raft.PeerInfo{}
+func parsePeersFromFlag(val []string) []raft.PeerInfo {
+	peers := make([]raft.PeerInfo, len(val))
 
-	p := strings.Split(val, ",")
-	for _, addr := range p {
-		peer := strings.Split(addr, "=")
+	i := 0
+	for _, addr := range val {
+		peer := strings.SplitN(addr, "=", 3)
 		if len(peer) != 2 {
 			continue
 		}
 
-		peers = append(peers, raft.PeerInfo{
+		peers[i] = raft.PeerInfo{
 			ID:      strings.TrimSpace(peer[0]),
 			Address: strings.TrimSpace(peer[1]),
-		})
+		}
+		i++
 	}
 
-	return peers
+	return peers[:i]
 }

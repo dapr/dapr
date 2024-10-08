@@ -20,7 +20,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/test/bufconn"
@@ -58,6 +58,7 @@ func TestServerFor[TServer any, TClient any](logger logger.Logger, registersvc f
 			}
 		}()
 		ctx := context.Background()
+		//nolint:staticcheck
 		conn, err := grpc.DialContext(ctx, "bufnet", grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return lis.Dial()
 		}), grpc.WithTransportCredentials(insecure.NewCredentials()))
@@ -90,6 +91,7 @@ func TestServerWithDialer[TServer any](logger logger.Logger, registersvc func(*g
 				opts = append(opts, grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 					return lis.Dial()
 				}), grpc.WithTransportCredentials(insecure.NewCredentials()))
+				//nolint:staticcheck
 				return grpc.DialContext(ctx, "bufnet", opts...)
 			}, func() {
 				lis.Close()
@@ -98,8 +100,8 @@ func TestServerWithDialer[TServer any](logger logger.Logger, registersvc func(*g
 }
 
 func StartTestAppCallbackGRPCServer(t *testing.T, port int, mockServer runtimev1pb.AppCallbackServer) *grpc.Server {
-	lis, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
-	assert.NoError(t, err)
+	lis, err := net.Listen("tcp", fmt.Sprintf("127.0.0.1:%d", port))
+	require.NoError(t, err)
 	grpcServer := grpc.NewServer()
 	go func() {
 		runtimev1pb.RegisterAppCallbackServer(grpcServer, mockServer)

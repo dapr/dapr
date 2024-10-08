@@ -21,16 +21,17 @@ import (
 	"fmt"
 	"os"
 	"testing"
+	"time"
 
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 const (
 	appName              = "reentrantactor"                         // App name in Dapr.
-	numHealthChecks      = 60                                       // Number of get calls before starting tests.
 	actorInvokeURLFormat = "%s/test/actors/reentrantActor/%s/%s/%s" // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat   = "%s/test/logs"                           // URL to fetch logs from test app.
 )
@@ -70,44 +71,76 @@ func TestMain(m *testing.M) {
 	utils.SetupLogs("actor_reentrancy")
 	utils.InitHTTPClient(true)
 
-	// These apps will be deployed before starting actual test
-	// and will be cleaned up after all tests are finished automatically
-	testApps := []kube.AppDescription{
-		{
-			AppName:             appName,
-			DaprEnabled:         true,
-			DebugLoggingEnabled: true,
-			ImageName:           "e2e-actorreentrancy",
-			Config:              "omithealthchecksconfig",
-			Replicas:            1,
-			IngressEnabled:      true,
-			MetricsEnabled:      true,
-			DaprCPULimit:        "2.0",
-			DaprCPURequest:      "0.1",
-			AppCPULimit:         "2.0",
-			AppCPURequest:       "0.1",
-			AppPort:             22222,
-		},
+	// This test can be run outside of Kubernetes too
+	// Run the actorreentrancy e2e app using, for example, the Dapr CLI:
+	//   PORT=22222 dapr run --app-id reentrantactor --resources-path ./resources --app-port 22222 -- go run .
+	// Then run this test with the env var "APP_ENDPOINT" pointing to the address of the app. For example:
+	//   APP_ENDPOINT="http://localhost:22222" DAPR_E2E_TEST="actor_reentrancy" make test-clean test-e2e-all |& tee test.log
+	if os.Getenv("APP_ENDPOINT") == "" {
+		testApps := []kube.AppDescription{
+			{
+				AppName:             appName,
+				DaprEnabled:         true,
+				DebugLoggingEnabled: true,
+				ImageName:           "e2e-actorreentrancy",
+				Config:              "omithealthchecksconfig",
+				Replicas:            1,
+				IngressEnabled:      true,
+				MetricsEnabled:      true,
+				DaprCPULimit:        "2.0",
+				DaprCPURequest:      "0.1",
+				AppCPULimit:         "2.0",
+				AppCPURequest:       "0.1",
+				AppPort:             22222,
+			},
+		}
+
+		tr = runner.NewTestRunner(appName, testApps, nil, nil)
+		os.Exit(tr.Start(m))
+	} else {
+		os.Exit(m.Run())
+	}
+}
+
+func getAppEndpoint(t *testing.T) string {
+	if env := os.Getenv("APP_ENDPOINT"); env != "" {
+		return env
 	}
 
-	tr = runner.NewTestRunner(appName, testApps, nil, nil)
-	os.Exit(tr.Start(m))
+	u := tr.Platform.AcquireAppExternalURL(appName)
+	require.NotEmpty(t, u, "external URL for for app must not be empty")
+	return u
 }
 
 func TestActorReentrancy(t *testing.T) {
-	reentrantURL := tr.Platform.AcquireAppExternalURL(appName)
-	require.NotEmpty(t, reentrantURL, "external URL must not be empty!")
+	reentrantURL := getAppEndpoint(t)
 
 	// This initial probe makes the test wait a little bit longer when needed,
 	// making this test less flaky due to delays in the deployment.
-	_, err := utils.HTTPGetNTimes(reentrantURL, numHealthChecks)
-	require.NoError(t, err)
+	require.NoError(t, utils.HealthCheckApps(reentrantURL))
 
-	firstActorID := "1"
-	secondActorID := "2"
-	actorType := "reentrantActor"
+	const (
+		firstActorID  = "1"
+		secondActorID = "2"
+		actorType     = "reentrantActor"
+	)
 
 	logsURL := fmt.Sprintf(actorlogsURLFormat, reentrantURL)
+
+	// This basic test makes it possible to assert that the actor subsystem is ready
+	t.Run("Readiness", func(t *testing.T) {
+		body, _ := json.Marshal(actorCall{
+			ActorType: "actor1",
+			ActorID:   "hi",
+			Method:    "helloMethod",
+		})
+
+		require.EventuallyWithT(t, func(t *assert.CollectT) {
+			_, status, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, "hi", "method", "helloMethod"), body)
+			require.NoError(t, err)
+			assert.Equal(t, 200, status)
+		}, 15*time.Second, 200*time.Millisecond)
+	})
 
 	t.Run("Same Actor Reentrancy", func(t *testing.T) {
 		utils.HTTPDelete(logsURL)
@@ -119,7 +152,7 @@ func TestActorReentrancy(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
+		_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
 		require.NoError(t, err)
 
 		resp, httpErr := utils.HTTPGet(logsURL)
@@ -128,7 +161,7 @@ func TestActorReentrancy(t *testing.T) {
 
 		logs := parseLogEntries(resp)
 
-		require.Len(t, logs, len(req.Calls)*2)
+		require.Lenf(t, logs, len(req.Calls)*2, "Logs: %v", logs)
 		index := 0
 		for i := 0; i < len(req.Calls); i++ {
 			require.Equal(t, fmt.Sprintf("Enter %s", req.Calls[i].Method), logs[index].Action)
@@ -156,7 +189,7 @@ func TestActorReentrancy(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
+		_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
 		require.NoError(t, err)
 
 		resp, httpErr := utils.HTTPGet(logsURL)
@@ -165,7 +198,7 @@ func TestActorReentrancy(t *testing.T) {
 
 		logs := parseLogEntries(resp)
 
-		require.Len(t, logs, len(req.Calls)*2)
+		require.Lenf(t, logs, len(req.Calls)*2, "Logs: %v", logs)
 
 		index := 0
 		for i := 0; i < len(req.Calls); i++ {
@@ -198,7 +231,7 @@ func TestActorReentrancy(t *testing.T) {
 		}
 
 		reqBody, _ := json.Marshal(req)
-		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
+		_, err := utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, reentrantURL, firstActorID, "method", "reentrantMethod"), reqBody)
 		require.NoError(t, err)
 
 		resp, err := utils.HTTPGet(logsURL)

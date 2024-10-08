@@ -27,9 +27,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -72,6 +73,7 @@ func (f *fuzzhttp) Setup(t *testing.T) []framework.Option {
 	f.daprd2 = procdaprd.New(t, procdaprd.WithLogLevel("info"))
 
 	var (
+		alphaNumeric     = "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789"
 		pathChars        = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~:/#[]@!$'()+,=")
 		headerNameChars  = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789-._~")
 		headerValueChars = []rune("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789a_ :;.,\\/\"'?!(){}[]@<>=-+*#$&`|~^%")
@@ -79,14 +81,14 @@ func (f *fuzzhttp) Setup(t *testing.T) []framework.Option {
 	)
 
 	methodFuzz := func(s *string, c fuzz.Continue) {
-		n := c.Rand.Intn(200)
+		n := c.Rand.Intn(100)
 		var sb strings.Builder
 		sb.Grow(n)
 		firstSegment := true
 		for i := 0; i < n; i++ {
 			c := pathChars[c.Rand.Intn(len(pathChars))]
-			// Prevent the first character being a '.'.
-			if c == '.' && firstSegment && (i == 0 || sb.String()[i-1] == '/') {
+			// Prevent the first character being a non alpha-numeric character.
+			if (i == 0 || sb.String()[i-1] == '/') && !strings.ContainsRune(alphaNumeric, c) {
 				i--
 				continue
 			}
@@ -95,12 +97,12 @@ func (f *fuzzhttp) Setup(t *testing.T) []framework.Option {
 				i--
 				continue
 			}
-			if c == '/' && !(i == 0 || (i > 0 && sb.String()[i-1] == '/')) {
+			if c == '/' {
 				firstSegment = false
 			}
 			sb.WriteRune(c)
-			// Prevent last character being a '.'.
-			if i == n-1 && c == '.' {
+			// Prevent last character being a '.' or a ','.
+			if i == n-1 && (c == '.' || c == ',') {
 				i--
 				continue
 			}
@@ -111,23 +113,23 @@ func (f *fuzzhttp) Setup(t *testing.T) []framework.Option {
 		n := c.Rand.Intn(100) + 1
 		var sb strings.Builder
 		sb.Grow(n)
-		for i := 0; i < n; i++ {
+		for range n {
 			sb.WriteRune(headerNameChars[c.Rand.Intn(len(headerNameChars))])
 		}
 		s.name = sb.String()
 		sb.Reset()
 		sb.Grow(n)
-		for i := 0; i < n; i++ {
+		for range n {
 			sb.WriteRune(headerValueChars[c.Rand.Intn(len(headerValueChars))])
 		}
 		s.value = sb.String()
 	}
 	queryFuzz := func(m map[string]string, c fuzz.Continue) {
-		n := c.Rand.Intn(100) + 1
-		for i := 0; i < n; i++ {
+		n := c.Rand.Intn(4) + 1
+		for range n {
 			var sb strings.Builder
 			sb.Grow(n)
-			for i := 0; i < n; i++ {
+			for range n {
 				sb.WriteRune(queryChars[c.Rand.Intn(len(queryChars))])
 			}
 			m[sb.String()] = sb.String()
@@ -138,16 +140,14 @@ func (f *fuzzhttp) Setup(t *testing.T) []framework.Option {
 	f.bodies = make([][]byte, numTests)
 	f.headers = make([][]header, numTests)
 	f.queries = make([]map[string]string, numTests)
-	t.Run("", func(t *testing.T) {
-		t.Parallel()
-		for i := 0; i < numTests; i++ {
-			fz := fuzz.New()
-			fz.NumElements(0, 100).Funcs(methodFuzz).Fuzz(&f.methods[i])
-			fz.NumElements(0, 100).Fuzz(&f.bodies[i])
-			fz.NumElements(0, 10).Funcs(headerFuzz).Fuzz(&f.headers[i])
-			fz.NumElements(0, 100).Funcs(queryFuzz).Fuzz(&f.queries[i])
-		}
-	})
+
+	for i := range numTests {
+		fz := fuzz.New()
+		fz.NumElements(0, 100).Funcs(methodFuzz).Fuzz(&f.methods[i])
+		fz.NumElements(0, 100).Fuzz(&f.bodies[i])
+		fz.NumElements(0, 10).Funcs(headerFuzz).Fuzz(&f.headers[i])
+		fz.NumElements(0, 100).Funcs(queryFuzz).Fuzz(&f.queries[i])
+	}
 
 	return []framework.Option{
 		framework.WithProcesses(f.daprd1, f.daprd2, srv),
@@ -158,15 +158,17 @@ func (f *fuzzhttp) Run(t *testing.T, ctx context.Context) {
 	f.daprd1.WaitUntilRunning(t, ctx)
 	f.daprd2.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
-	for i := 0; i < len(f.methods); i++ {
+	pt := parallel.New(t)
+
+	for i := range len(f.methods) {
 		method := f.methods[i]
 		body := f.bodies[i]
 		headers := f.headers[i]
 		query := f.queries[i]
-		t.Run("method="+method, func(t *testing.T) {
-			t.Parallel()
+
+		pt.Add(func(t *assert.CollectT) {
 			for _, ts := range []struct {
 				url     string
 				headers map[string]string

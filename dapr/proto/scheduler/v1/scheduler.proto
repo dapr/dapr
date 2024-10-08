@@ -1,0 +1,159 @@
+syntax = "proto3";
+
+package dapr.proto.scheduler.v1;
+
+import "google/protobuf/any.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
+
+service Scheduler {
+  // ScheduleJob is used by the daprd sidecar to schedule a job.
+  rpc ScheduleJob(ScheduleJobRequest) returns (ScheduleJobResponse) {}
+  // Get a job
+  rpc GetJob(GetJobRequest) returns (GetJobResponse) {}
+  // DeleteJob is used by the daprd sidecar to delete a job.
+  rpc DeleteJob(DeleteJobRequest) returns (DeleteJobResponse) {}
+  // WatchJobs is used by the daprd sidecar to connect to the Scheduler
+  // service to watch for jobs triggering back.
+  rpc WatchJobs(stream WatchJobsRequest) returns (stream WatchJobsResponse) {}
+}
+
+message Job {
+  // The schedule for the job.
+  optional string schedule = 1;
+
+  // Optional: jobs with fixed repeat counts (accounting for Actor Reminders).
+  optional uint32 repeats = 2;
+
+  // Optional: sets time at which or time interval before the callback is invoked for the first time.
+  optional string due_time = 3;
+
+  // Optional: Time To Live to allow for auto deletes (accounting for Actor Reminders).
+  optional string ttl = 4;
+
+  // Job data.
+  google.protobuf.Any data = 5;
+}
+
+// TargetJob is the message used by the daprd sidecar to schedule a job
+// from an App.
+message TargetJob {}
+
+// TargetActorReminder is the message used by the daprd sidecar to
+// schedule a job from an Actor Reminder.
+message TargetActorReminder {
+  // id is the actor ID.
+  string id = 1;
+
+  // type is the actor type.
+  string type = 2;
+}
+
+// JobTargetMetadata holds the typed metadata associated with the job for
+// different origins.
+message JobTargetMetadata {
+  oneof type {
+    TargetJob job = 1;
+    TargetActorReminder actor = 2;
+  }
+}
+
+// JobMetadata is the message used by the daprd sidecar to schedule/get/delete a
+// job.
+message JobMetadata {
+  // app_id is the App ID of the requester.
+  string app_id = 1;
+
+  // namespace is the namespace of the requester.
+  string namespace = 2;
+
+  // target is the type of the job.
+  JobTargetMetadata target = 3;
+}
+
+// WatchJobsRequest is the message used by the daprd sidecar to connect to the
+// Scheduler and send Job process results.
+message WatchJobsRequest {
+  oneof watch_job_request_type {
+    WatchJobsRequestInitial initial = 1;
+    WatchJobsRequestResult result = 2;
+  }
+}
+
+// WatchJobsRequestInitial is the initial request to start watching for jobs.
+message WatchJobsRequestInitial {
+  // app_id is the App ID of the requester.
+  string app_id = 1;
+
+  // namespace is the namespace of the requester.
+  string namespace = 2;
+
+  // actor_types is the optional list of actor types to watch for.
+  repeated string actor_types = 3;
+}
+
+// WatchJobsRequestResult is the result of a job execution to allow the job to
+// be marked as processed.
+message WatchJobsRequestResult {
+  // id is the id of the job that has finished processing, used as an incremental counter.
+  uint64 id = 1;
+}
+
+// WatchJobsResponse is the response message to convey the details of a job.
+message WatchJobsResponse {
+  // name is the name of the job which was triggered.
+  string name = 1;
+
+  // id is the id of the job trigger event which should be sent back from
+  // the client to be marked as processed, used as an incremental counter.
+  uint64 id = 2;
+
+  // Job data.
+  google.protobuf.Any data = 3;
+
+  // The metadata associated with the job.
+  JobMetadata metadata = 4;
+}
+
+message ScheduleJobRequest {
+  // name is the name of the job to create.
+  string name = 1;
+
+  // The job to be scheduled.
+  Job job = 2;
+
+  // The metadata associated with the job.
+  JobMetadata metadata = 3;
+}
+
+message ScheduleJobResponse {
+  // Empty
+}
+
+// GetJobRequest is the message used by the daprd sidecar to delete or get a job.
+message GetJobRequest {
+  // name is the name of the job.
+  string name = 1;
+
+  // The metadata associated with the job.
+  JobMetadata metadata = 2;
+}
+
+// GetJobResponse is the response message to convey the details of a job.
+message GetJobResponse {
+  // The job to be scheduled.
+  Job job = 1;
+}
+
+// DeleteJobRequest is the message used by the daprd sidecar to delete or get a job.
+message DeleteJobRequest {
+  string name = 1;
+
+  // The metadata associated with the job.
+  JobMetadata metadata = 2;
+}
+
+// DeleteJobRequest is the response message used by the daprd sidecar to delete or get a job.
+message DeleteJobResponse {
+  // Empty
+}

@@ -47,7 +47,7 @@ const (
 	// pollInterval is how frequently will poll for updates.
 	pollInterval = 5 * time.Second
 	// pollTimeout is how long the test should took.
-	pollTimeout = 10 * time.Minute
+	pollTimeout = 20 * time.Minute
 )
 
 // k6ConfigMapFor builds a unique config map for each test being executed.
@@ -274,6 +274,7 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 					File: scriptName,
 				},
 			},
+			//nolint:gosec
 			Parallelism: int32(k6.parallelism),
 			Arguments:   args,
 			Starter: k6api.Pod{
@@ -403,12 +404,13 @@ func isJobCompleted(job batchv1.Job) bool {
 func (k6 *K6) waitUntilJobsState(isState func(*batchv1.JobList, error) bool) error {
 	jobsClient := k6.kubeClient.BatchV1().Jobs(k6.namespace)
 
-	waitErr := wait.PollImmediate(pollInterval, pollTimeout, func() (bool, error) {
-		ctx, cancel := context.WithTimeout(k6.ctx, time.Minute)
+	ctx, cancel := context.WithTimeout(k6.ctx, pollTimeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextCancel(ctx, pollInterval, true, func(ctx context.Context) (bool, error) {
 		jobList, err := jobsClient.List(ctx, v1.ListOptions{
 			LabelSelector: k6.selector(),
 		})
-		cancel()
 
 		done := isState(jobList, err)
 		if done {
@@ -555,7 +557,7 @@ func NewK6(scriptPath string, opts ...K6Opt) *K6 {
 	log.Printf("starting %s k6 test", uniqueTestID)
 
 	k6Tester := &K6{
-		name:              fmt.Sprintf("k6-test-%s", uniqueTestID),
+		name:              "k6-test-" + uniqueTestID,
 		appID:             "k6-tester",
 		script:            scriptPath,
 		parallelism:       1,

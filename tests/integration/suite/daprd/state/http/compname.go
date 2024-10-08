@@ -29,8 +29,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -63,7 +64,7 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 
 	c.storeNames = make([]string, numTests)
 	files := make([]string, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz.Fuzz(&c.storeNames[i])
 
 		files[i] = fmt.Sprintf(`
@@ -89,12 +90,11 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
+	pt := parallel.New(t)
 	for _, storeName := range c.storeNames {
-		storeName := storeName
-		t.Run(storeName, func(t *testing.T) {
-			t.Parallel()
+		pt.Add(func(t *assert.CollectT) {
 			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", c.daprd.HTTPPort(), url.QueryEscape(storeName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(`[{"key": "key1", "value": "value1"}]`))
 			require.NoError(t, err)

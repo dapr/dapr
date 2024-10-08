@@ -5,18 +5,38 @@
 Integration tests are run against a live running daprd binary locally. Each test
 scenario is run against a new instance of daprd, where each scenario modifies
 the daprd configuration to suit the test. Tests are expected to complete within
-seconds, ideally less than 5, and should not take longer than 30. Daprd is
+seconds, ideally less than 5, and should not take longer than 30. Binaries are
 always built from source within the test.
+
+You can find out more about the background and design decisions of the integration tests through a talk by joshvanl [here](https://www.youtube.com/watch?v=CcaV5_rQBzY).
 
 
 ## Invoking the test
 
 ```bash
-go test -v -race -count -tags="integration" ./tests/integration` -run="Test_Integration/daprd/pubsub/http/fuzzpubsubNoRaw"
+go test -v -race -tags integration ./tests/integration
 ```
 
-Rather than building from source, you can also set a custom daprd binary path
-with the environment variable `DAPR_INTEGRATION_DAPRD_PATH`.
+You can also run a subset of tests by specifying the `-focus` flag, which takes a [Go regular expression](https://github.com/google/re2/wiki/Syntax).
+
+```bash
+# Run all sentry related tests.
+go test -v -race -tags integration ./tests/integration -focus sentry
+
+# Run all sentry related tests whilst skipping the sentry jwks validator test.
+go test -v -race -tags integration ./tests/integration -test.skip Test_Integration/sentry/validator/jwks -focus sentry
+```
+
+Rather than building from source, you can also set a custom daprd, sentry, or placement binary path with the environment variables:
+- `DAPR_INTEGRATION_DAPRD_PATH`
+- `DAPR_INTEGRATION_PLACEMENT_PATH`
+- `DAPR_INTEGRATION_SENTRY_PATH`
+
+By default, binary logs will not be printed unless the test fails. You can force
+logs to always be printed with the environment variable
+`DAPR_INTEGRATION_LOGS=true`.
+
+You can override the directory that is used to read the CRD definitions that are served by the Kubernetes process with the environment variable `DAPR_INTEGRATION_CRD_DIRECTORY`.
 
 ## Adding a new test
 

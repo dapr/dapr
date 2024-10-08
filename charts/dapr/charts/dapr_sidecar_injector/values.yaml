@@ -16,6 +16,11 @@ injectorImage:
   name: "injector"
 
 deploymentAnnotations: {}
+
+service:
+  type: ClusterIP
+  annotations: {}
+
 nameOverride: ""
 fullnameOverride: ""
 webhookFailurePolicy: Ignore
@@ -24,6 +29,7 @@ runAsNonRoot: true
 sidecarRunAsNonRoot: true
 sidecarReadOnlyRootFilesystem: true
 sidecarDropALLCapabilities: false
+enableK8sDownwardAPIs: false
 allowedServiceAccounts: ""
 allowedServiceAccountsPrefixNames: ""
 resources: {}
@@ -31,6 +37,8 @@ kubeClusterDomain: cluster.local
 ignoreEntrypointTolerations: "[{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"alibabacloud.com/eci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"azure.com/aci\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"aws\\\"},{\\\"effect\\\":\\\"NoSchedule\\\",\\\"key\\\":\\\"huawei.com/cci\\\"}]"
 hostNetwork: false
 healthzPort: 8080
+objectSelector: {}
+namespaceSelector: {}
 
 livenessProbe:
   initialDelaySeconds: 3
@@ -45,3 +53,5 @@ debug:
   enabled: false
   port: 40000
   initialDelaySeconds: 30000
+
+extraEnvVars: {}

@@ -1,0 +1,9 @@
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: daprsystem
+  namespace: default
+spec:
+  workflow:
+    maxConcurrentWorkflowInvocations: 32
+    maxConcurrentActivityInvocations: 64

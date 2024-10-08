@@ -22,18 +22,20 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	fuzz "github.com/google/gofuzz"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/file"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -53,24 +55,13 @@ type fuzzsecret struct {
 func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 	const numTests = 1000
 
-	reg, err := regexp.Compile("^([a-zA-Z].*)$")
-	require.NoError(t, err)
-
 	takenNames := make(map[string]bool)
-	fz := fuzz.New().Funcs(func(s *string, c fuzz.Continue) {
-		for *s == "" ||
-			takenNames[*s] ||
-			len(path.IsValidPathSegmentName(*s)) > 0 ||
-			!reg.MatchString(*s) ||
-			*s == "." {
-			*s = c.RandString()
-		}
-		takenNames[*s] = true
-	})
-	fz.Fuzz(&f.secretStoreName)
+	uid, err := uuid.NewRandom()
+	require.NoError(t, err)
+	f.secretStoreName = uid.String()
 
 	f.values = make(map[string]string)
-	for i := 0; i < numTests; i++ {
+	for range numTests {
 		var key, value string
 		for len(key) == 0 || takenNames[key] {
 			fuzz.New().Fuzz(&key)
@@ -86,7 +77,7 @@ func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 		takenNames[key] = true
 	}
 
-	secretFileName := util.FileNames(t, 1)[0]
+	secretFileName := file.Paths(t, 1)[0]
 
 	file, err := os.Create(secretFileName)
 	require.NoError(t, err)
@@ -117,15 +108,19 @@ spec:
 func (f *fuzzsecret) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
+	client := client.HTTP(t)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, f.daprd.GetMetaRegisteredComponents(t, ctx), 1)
+	}, time.Second*20, time.Millisecond*10)
+
+	pt := parallel.New(t)
 	for key, value := range f.values {
-		key := key
-		value := value
-		t.Run(key+":"+value, func(t *testing.T) {
-			t.Parallel()
+		pt.Add(func(t *assert.CollectT) {
 			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.secretStoreName), url.QueryEscape(key))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 			require.NoError(t, err)
-			resp, err := util.HTTPClient(t).Do(req)
+			resp, err := client.Do(req)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			respBody, err := io.ReadAll(resp.Body)

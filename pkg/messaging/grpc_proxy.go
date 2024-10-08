@@ -24,13 +24,15 @@ import (
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/acl"
+	grpcProxy "github.com/dapr/dapr/pkg/api/grpc/proxy"
+	codec "github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics"
-	grpcProxy "github.com/dapr/dapr/pkg/grpc/proxy"
-	codec "github.com/dapr/dapr/pkg/grpc/proxy/codec"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/security"
+	securityConsts "github.com/dapr/dapr/pkg/security/consts"
 )
 
 // Proxy is the interface for a gRPC transparent proxy.
@@ -118,7 +120,7 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		if p.acl != nil {
 			ok, authError := acl.ApplyAccessControlPolicies(ctx, fullName, common.HTTPExtension_NONE, false, p.acl) //nolint:nosnakecase
 			if !ok {
-				return ctx, nil, nil, nopTeardown, status.Errorf(codes.PermissionDenied, authError)
+				return ctx, nil, nil, nopTeardown, status.Error(codes.PermissionDenied, authError)
 			}
 		}
 
@@ -127,6 +129,12 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		if err != nil {
 			return ctx, nil, nil, nopTeardown, err
 		}
+
+		appMetadataToken := security.GetAppToken()
+		if appMetadataToken != "" {
+			outCtx = metadata.AppendToOutgoingContext(outCtx, securityConsts.APITokenHeader, appMetadataToken)
+		}
+
 		return outCtx, appClient.(*grpc.ClientConn), nil, nopTeardown, nil
 	}
 

@@ -3,26 +3,34 @@
 // TODO: Read owners from OWNERS file.
 const owners = [
     'addjuarez',
+    'antontroshin',
     'artursouza',
+    'ashiquemd',
     'berndverst',
+    'cicoyle',
     'daixiang0',
+    'elena-kolevska',
     'deepanshua',
     'halspang',
     'italypaleale',
     'johnewart',
     'joshvanl',
+    'kaibocai',
     'mcandeia',
+    'mikeee',
     'msfussell',
     'mukundansundar',
     'pkedy',
     'pruthvidhodda',
+    'rabollin',
     'robertojrojas',
     'ryanlettieri',
+    'shivamkm07',
     'shubham1172',
     'skyao',
     'taction',
     'tanvigour',
-    'yaron2',
+    'yaron2'
 ]
 
 const SDKs = [

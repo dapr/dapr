@@ -91,10 +91,9 @@ func TestParseVolumeMountsString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			mounts := parseVolumeMountsString(tc.mountStr, tc.readOnly)
-			assert.Equal(t, tc.expMountsLen, len(mounts))
+			assert.Len(t, mounts, tc.expMountsLen)
 			assert.Equal(t, tc.expMounts, mounts)
 		})
 	}
@@ -320,7 +319,7 @@ func TestAddVolumeToContainers(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.testName, func(t *testing.T) {
 			patchEnv := addVolumeMountToContainers(map[int]corev1.Container{0: tc.mockContainer}, tc.socketMount)
-			assert.Equal(t, tc.expOpsLen, len(patchEnv))
+			assert.Len(t, patchEnv, tc.expOpsLen)
 			assert.Equal(t, tc.expOps, patchEnv)
 		})
 	}

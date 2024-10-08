@@ -39,8 +39,9 @@ const (
 type InvokeMethodRequest struct {
 	replayableRequest
 
-	r          *internalv1pb.InternalInvokeRequest
-	dataObject any
+	r           *internalv1pb.InternalInvokeRequest
+	dataObject  any
+	dataTypeURL string
 }
 
 // NewInvokeMethodRequest creates InvokeMethodRequest object for method.
@@ -65,10 +66,10 @@ func FromInvokeRequestMessage(pb *commonv1pb.InvokeRequest) *InvokeMethodRequest
 	}
 }
 
-// InternalInvokeRequest creates InvokeMethodRequest object from InternalInvokeRequest pb object.
-func InternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMethodRequest, error) {
+// FromInternalInvokeRequest creates InvokeMethodRequest object from FromInternalInvokeRequest pb object.
+func FromInternalInvokeRequest(pb *internalv1pb.InternalInvokeRequest) (*InvokeMethodRequest, error) {
 	req := &InvokeMethodRequest{r: pb}
-	if pb.Message == nil {
+	if pb.GetMessage() == nil {
 		return nil, errors.New("field Message is nil")
 	}
 
@@ -83,19 +84,19 @@ func (imr *InvokeMethodRequest) WithActor(actorType, actorID string) *InvokeMeth
 
 // WithMetadata sets metadata.
 func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMethodRequest {
-	imr.r.Metadata = metadataToInternalMetadata(md)
+	imr.r.Metadata = internalv1pb.MetadataToInternalMetadata(md)
 	return imr
 }
 
-// WithHTTPHeaders sets HTTP request headers.
+// WithHTTPHeaders sets metadata from HTTP request headers.
 func (imr *InvokeMethodRequest) WithHTTPHeaders(header http.Header) *InvokeMethodRequest {
-	imr.r.Metadata = httpHeadersToInternalMetadata(header)
+	imr.r.Metadata = internalv1pb.HTTPHeadersToInternalMetadata(header)
 	return imr
 }
 
-// WithFastHTTPHeaders sets fasthttp request headers.
+// WithFastHTTPHeaders sets metadata from fasthttp request headers.
 func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHeader) *InvokeMethodRequest {
-	imr.r.Metadata = fasthttpHeadersToInternalMetadata(header)
+	imr.r.Metadata = internalv1pb.FastHTTPHeadersToInternalMetadata(header)
 	return imr
 }
 
@@ -131,6 +132,13 @@ func (imr *InvokeMethodRequest) WithContentType(contentType string) *InvokeMetho
 	return imr
 }
 
+// WithDataTypeURL sets the type_url property for the data.
+// When a type_url is set, the Content-Type automatically becomes the protobuf one.
+func (imr *InvokeMethodRequest) WithDataTypeURL(val string) *InvokeMethodRequest {
+	imr.dataTypeURL = val
+	return imr
+}
+
 // WithHTTPExtension sets new HTTP extension with verb and querystring.
 //
 //nolint:nosnakecase
@@ -151,7 +159,13 @@ func (imr *InvokeMethodRequest) WithHTTPExtension(verb string, querystring strin
 // WithCustomHTTPMetadata applies a metadata map to a InvokeMethodRequest.
 func (imr *InvokeMethodRequest) WithCustomHTTPMetadata(md map[string]string) *InvokeMethodRequest {
 	for k, v := range md {
-		if imr.r.Metadata == nil {
+		if strings.EqualFold(k, ContentLengthHeader) {
+			// There is no use of the original payload's content-length because
+			// the entire data is already in the cloud event.
+			continue
+		}
+
+		if imr.r.GetMetadata() == nil {
 			imr.r.Metadata = make(map[string]*internalv1pb.ListStringValue)
 		}
 
@@ -182,12 +196,12 @@ func (imr *InvokeMethodRequest) CanReplay() bool {
 
 // EncodeHTTPQueryString generates querystring for http using http extension object.
 func (imr *InvokeMethodRequest) EncodeHTTPQueryString() string {
-	m := imr.r.Message
-	if m == nil || m.HttpExtension == nil {
+	m := imr.r.GetMessage()
+	if m.GetHttpExtension() == nil {
 		return ""
 	}
 
-	return m.HttpExtension.Querystring
+	return m.GetHttpExtension().GetQuerystring()
 }
 
 // APIVersion gets API version of InvokeMethodRequest.
@@ -197,7 +211,7 @@ func (imr *InvokeMethodRequest) APIVersion() internalv1pb.APIVersion {
 
 // Metadata gets Metadata of InvokeMethodRequest.
 func (imr *InvokeMethodRequest) Metadata() DaprInternalMetadata {
-	return imr.r.Metadata
+	return imr.r.GetMetadata()
 }
 
 // Proto returns InternalInvokeRequest Proto object.
@@ -207,7 +221,7 @@ func (imr *InvokeMethodRequest) Proto() *internalv1pb.InternalInvokeRequest {
 
 // ProtoWithData returns a copy of the internal InternalInvokeRequest Proto object with the entire data stream read into the Data property.
 func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeRequest, error) {
-	if imr.r == nil || imr.r.Message == nil {
+	if imr.r == nil || imr.r.GetMessage() == nil {
 		return nil, errors.New("message is nil")
 	}
 
@@ -227,7 +241,8 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 		return m, err
 	}
 	m.Message.Data = &anypb.Any{
-		Value: data,
+		Value:   data,
+		TypeUrl: imr.dataTypeURL, // Could be empty
 	}
 
 	return m, nil
@@ -235,18 +250,18 @@ func (imr *InvokeMethodRequest) ProtoWithData() (*internalv1pb.InternalInvokeReq
 
 // Actor returns actor type and id.
 func (imr *InvokeMethodRequest) Actor() *internalv1pb.Actor {
-	return imr.r.Actor
+	return imr.r.GetActor()
 }
 
 // Message gets InvokeRequest Message object.
 func (imr *InvokeMethodRequest) Message() *commonv1pb.InvokeRequest {
-	return imr.r.Message
+	return imr.r.GetMessage()
 }
 
 // HasMessageData returns true if the message object contains a slice of data buffered.
 func (imr *InvokeMethodRequest) HasMessageData() bool {
-	m := imr.r.Message
-	return m != nil && m.Data != nil && len(m.Data.Value) > 0
+	m := imr.r.GetMessage()
+	return len(m.GetData().GetValue()) > 0
 }
 
 // ResetMessageData resets the data inside the message object if present.
@@ -255,14 +270,19 @@ func (imr *InvokeMethodRequest) ResetMessageData() {
 		return
 	}
 
-	imr.r.Message.Data.Reset()
+	imr.r.GetMessage().GetData().Reset()
 }
 
-// ContenType returns the content type of the message.
+// ContentType returns the content type of the message.
 func (imr *InvokeMethodRequest) ContentType() string {
-	m := imr.r.Message
+	m := imr.r.GetMessage()
 	if m == nil {
 		return ""
+	}
+
+	// If there's a proto data and that has a type URL, or if we have a dataTypeUrl in the object, then the content type is the protobuf one
+	if imr.dataTypeURL != "" || m.GetData().GetTypeUrl() != "" {
+		return ProtobufContentType
 	}
 
 	return m.GetContentType()
@@ -271,14 +291,14 @@ func (imr *InvokeMethodRequest) ContentType() string {
 // RawData returns the stream body.
 // Note: this method is not safe for concurrent use.
 func (imr *InvokeMethodRequest) RawData() (r io.Reader) {
-	m := imr.r.Message
+	m := imr.r.GetMessage()
 	if m == nil {
 		return nil
 	}
 
 	// If the message has a data property, use that
 	if imr.HasMessageData() {
-		return bytes.NewReader(m.Data.Value)
+		return bytes.NewReader(m.GetData().GetValue())
 	}
 
 	return imr.replayableRequest.RawData()
@@ -288,7 +308,7 @@ func (imr *InvokeMethodRequest) RawData() (r io.Reader) {
 func (imr *InvokeMethodRequest) RawDataFull() ([]byte, error) {
 	// If the message has a data property, use that
 	if imr.HasMessageData() {
-		return imr.r.Message.Data.Value, nil
+		return imr.r.GetMessage().GetData().GetValue(), nil
 	}
 
 	r := imr.RawData()
@@ -305,14 +325,14 @@ func (imr *InvokeMethodRequest) GetDataObject() any {
 
 // AddMetadata adds new metadata options to the existing set.
 func (imr *InvokeMethodRequest) AddMetadata(md map[string][]string) {
-	if imr.r.Metadata == nil {
+	if imr.r.GetMetadata() == nil {
 		imr.WithMetadata(md)
 		return
 	}
 
-	for key, val := range metadataToInternalMetadata(md) {
+	for key, val := range internalv1pb.MetadataToInternalMetadata(md) {
 		// We're only adding new values, not overwriting existing
-		if _, ok := imr.r.Metadata[key]; !ok {
+		if _, ok := imr.r.GetMetadata()[key]; !ok {
 			imr.r.Metadata[key] = val
 		}
 	}

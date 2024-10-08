@@ -101,6 +101,8 @@ const (
 	respondWithError
 	// respond with retry
 	respondWithRetry
+	// respond with drop
+	respondWithDrop
 	// respond with invalid status
 	respondWithInvalidStatus
 )
@@ -321,12 +323,24 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		// This case is triggered when there is multiple redelivery of same message or a message
 		// is thre for an unknown URL path
 
-		errorMessage := fmt.Sprintf("Unexpected/Multiple redelivery of message from %s", r.URL.String())
+		errorMessage := "Unexpected/Multiple redelivery of message from " + r.URL.String()
 		log.Printf("(%s) Responding with DROP. %s", reqID, errorMessage)
 		// Return success with DROP status to drop message
 		w.WriteHeader(http.StatusOK)
 		json.NewEncoder(w).Encode(appResponse{
 			Message: errorMessage,
+			Status:  "DROP",
+		})
+		return
+	}
+
+	// notice that dropped messages are also counted into received messages set
+	if desiredResponse == respondWithDrop {
+		log.Printf("(%s) Responding with DROP", reqID)
+		// Return success with DROP status to drop message
+		w.WriteHeader(http.StatusOK)
+		json.NewEncoder(w).Encode(appResponse{
+			Message: "consumed",
 			Status:  "DROP",
 		})
 		return
@@ -465,6 +479,8 @@ func appRouter() http.Handler {
 		setDesiredResponse(respondWithError, "set respond with error")).Methods("POST")
 	router.HandleFunc("/set-respond-retry",
 		setDesiredResponse(respondWithRetry, "set respond with retry")).Methods("POST")
+	router.HandleFunc("/set-respond-drop",
+		setDesiredResponse(respondWithDrop, "set respond with drop")).Methods("POST")
 	router.HandleFunc("/set-respond-empty-json",
 		setDesiredResponse(respondWithEmptyJSON, "set respond with empty json"))
 	router.HandleFunc("/set-respond-invalid-status",

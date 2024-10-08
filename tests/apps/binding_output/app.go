@@ -78,7 +78,6 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(indexHandlerResponse{Message: "OK"})
 }
 
-//nolint:gosec
 func testHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Entered testHandler")
 	var requestBody testCommandRequest
@@ -128,7 +127,6 @@ func sendGRPC(w http.ResponseWriter, r *http.Request) {
 	}
 
 	for _, message := range requestBody.Messages {
-		//nolint:gosec
 		body, _ := json.Marshal(&message)
 
 		log.Printf("Sending message: %s", body)
@@ -168,7 +166,7 @@ func getReceivedTopicsGRPC(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
 	}
-	w.Write(resp.Data.Value)
+	w.Write(resp.GetData().GetValue())
 }
 
 // appRouter initializes restful api router

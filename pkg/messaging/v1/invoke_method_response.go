@@ -32,7 +32,8 @@ import (
 // and provides the helpers to manage it.
 type InvokeMethodResponse struct {
 	replayableRequest
-	r *internalv1pb.InternalInvokeResponse
+	r           *internalv1pb.InternalInvokeResponse
+	dataTypeURL string
 }
 
 // NewInvokeMethodResponse returns new InvokeMethodResponse object with status.
@@ -48,10 +49,10 @@ func NewInvokeMethodResponse(statusCode int32, statusMessage string, statusDetai
 // InternalInvokeResponse returns InvokeMethodResponse for InternalInvokeResponse pb to use the helpers.
 func InternalInvokeResponse(pb *internalv1pb.InternalInvokeResponse) (*InvokeMethodResponse, error) {
 	rsp := &InvokeMethodResponse{r: pb}
-	if pb.Message == nil {
+	if pb.GetMessage() == nil {
 		pb.Message = &commonv1pb.InvokeResponse{Data: nil}
 	}
-	if pb.Headers == nil {
+	if pb.GetHeaders() == nil {
 		pb.Headers = map[string]*internalv1pb.ListStringValue{}
 	}
 
@@ -87,21 +88,28 @@ func (imr *InvokeMethodResponse) WithContentType(contentType string) *InvokeMeth
 	return imr
 }
 
+// WithDataTypeURL sets the type_url property for the data.
+// When a type_url is set, the Content-Type automatically becomes the protobuf one.
+func (imr *InvokeMethodResponse) WithDataTypeURL(val string) *InvokeMethodResponse {
+	imr.dataTypeURL = val
+	return imr
+}
+
 // WithHeaders sets gRPC response header metadata.
 func (imr *InvokeMethodResponse) WithHeaders(headers metadata.MD) *InvokeMethodResponse {
-	imr.r.Headers = metadataToInternalMetadata(headers)
+	imr.r.Headers = internalv1pb.MetadataToInternalMetadata(headers)
 	return imr
 }
 
 // WithFastHTTPHeaders populates HTTP response header to gRPC header metadata.
 func (imr *InvokeMethodResponse) WithHTTPHeaders(headers map[string][]string) *InvokeMethodResponse {
-	imr.r.Headers = metadataToInternalMetadata(headers)
+	imr.r.Headers = internalv1pb.MetadataToInternalMetadata(headers)
 	return imr
 }
 
 // WithFastHTTPHeaders populates fasthttp response header to gRPC header metadata.
 func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHeader) *InvokeMethodResponse {
-	md := fasthttpHeadersToInternalMetadata(header)
+	md := internalv1pb.FastHTTPHeadersToInternalMetadata(header)
 	if len(md) > 0 {
 		imr.r.Headers = md
 	}
@@ -110,7 +118,7 @@ func (imr *InvokeMethodResponse) WithFastHTTPHeaders(header *fasthttp.ResponseHe
 
 // WithTrailers sets Trailer in internal InvokeMethodResponse.
 func (imr *InvokeMethodResponse) WithTrailers(trailer metadata.MD) *InvokeMethodResponse {
-	imr.r.Trailers = metadataToInternalMetadata(trailer)
+	imr.r.Trailers = internalv1pb.MetadataToInternalMetadata(trailer)
 	return imr
 }
 
@@ -136,7 +144,7 @@ func (imr *InvokeMethodResponse) Status() *internalv1pb.Status {
 	if imr.r == nil {
 		return nil
 	}
-	return imr.r.Status
+	return imr.r.GetStatus()
 }
 
 // IsHTTPResponse returns true if response status code is http response status.
@@ -146,7 +154,7 @@ func (imr *InvokeMethodResponse) IsHTTPResponse() bool {
 	}
 	// gRPC status code <= 15 - https://github.com/grpc/grpc/blob/master/doc/statuscodes.md
 	// HTTP status code >= 100 - https://tools.ietf.org/html/rfc2616#section-10
-	return imr.r.Status.Code >= 100
+	return imr.r.GetStatus().GetCode() >= 100
 }
 
 // Proto returns the internal InvokeMethodResponse Proto object.
@@ -176,7 +184,8 @@ func (imr *InvokeMethodResponse) ProtoWithData() (*internalv1pb.InternalInvokeRe
 		return m, err
 	}
 	m.Message.Data = &anypb.Any{
-		Value: data,
+		Value:   data,
+		TypeUrl: imr.dataTypeURL, // Could be empty
 	}
 
 	return m, nil
@@ -187,7 +196,7 @@ func (imr *InvokeMethodResponse) Headers() DaprInternalMetadata {
 	if imr.r == nil {
 		return nil
 	}
-	return imr.r.Headers
+	return imr.r.GetHeaders()
 }
 
 // Trailers gets Trailers metadata.
@@ -195,7 +204,7 @@ func (imr *InvokeMethodResponse) Trailers() DaprInternalMetadata {
 	if imr.r == nil {
 		return nil
 	}
-	return imr.r.Trailers
+	return imr.r.GetTrailers()
 }
 
 // Message returns message field in InvokeMethodResponse.
@@ -203,13 +212,13 @@ func (imr *InvokeMethodResponse) Message() *commonv1pb.InvokeResponse {
 	if imr.r == nil {
 		return nil
 	}
-	return imr.r.Message
+	return imr.r.GetMessage()
 }
 
 // HasMessageData returns true if the message object contains a slice of data buffered.
 func (imr *InvokeMethodResponse) HasMessageData() bool {
-	m := imr.r.Message
-	return m != nil && m.Data != nil && len(m.Data.Value) > 0
+	m := imr.r.GetMessage()
+	return len(m.GetData().GetValue()) > 0
 }
 
 // ResetMessageData resets the data inside the message object if present.
@@ -218,20 +227,21 @@ func (imr *InvokeMethodResponse) ResetMessageData() {
 		return
 	}
 
-	imr.r.Message.Data.Reset()
+	imr.r.GetMessage().GetData().Reset()
 }
 
-// ContenType returns the content type of the message.
+// ContentType returns the content type of the message.
 func (imr *InvokeMethodResponse) ContentType() string {
-	m := imr.r.Message
+	m := imr.r.GetMessage()
 	if m == nil {
 		return ""
 	}
 
-	contentType := m.ContentType
+	contentType := m.GetContentType()
 
-	if m.Data != nil && m.Data.TypeUrl != "" {
-		contentType = ProtobufContentType
+	// If there's a proto data and that has a type URL, or if we have a dataTypeUrl in the object, then the content type is the protobuf one
+	if imr.dataTypeURL != "" || m.GetData().GetTypeUrl() != "" {
+		return ProtobufContentType
 	}
 
 	return contentType
@@ -242,7 +252,7 @@ func (imr *InvokeMethodResponse) RawData() (r io.Reader) {
 	// If the message has a data property, use that
 	if imr.HasMessageData() {
 		// HasMessageData() guarantees that the `imr.r.Message` and `imr.r.Message.Data` is not nil
-		return bytes.NewReader(imr.r.Message.Data.Value)
+		return bytes.NewReader(imr.r.GetMessage().GetData().GetValue())
 	}
 
 	return imr.replayableRequest.RawData()
@@ -252,7 +262,7 @@ func (imr *InvokeMethodResponse) RawData() (r io.Reader) {
 func (imr *InvokeMethodResponse) RawDataFull() ([]byte, error) {
 	// If the message has a data property, use that
 	if imr.HasMessageData() {
-		return imr.r.Message.Data.Value, nil
+		return imr.r.GetMessage().GetData().GetValue(), nil
 	}
 
 	r := imr.RawData()

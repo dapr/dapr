@@ -14,6 +14,7 @@ limitations under the License.
 package ca
 
 import (
+	"crypto"
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
@@ -32,18 +33,13 @@ type Bundle struct {
 	IssKey       any
 }
 
-func GenerateBundle(trustDomain string, allowedClockSkew time.Duration) (Bundle, error) {
-	rootKey, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
-	if err != nil {
-		return Bundle{}, err
-	}
-
-	rootCert, err := generateRootCert(trustDomain, allowedClockSkew)
+func GenerateBundle(rootKey crypto.Signer, trustDomain string, allowedClockSkew time.Duration, overrideCATTL *time.Duration) (Bundle, error) {
+	rootCert, err := generateRootCert(trustDomain, allowedClockSkew, overrideCATTL)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("failed to generate root cert: %w", err)
 	}
 
-	rootCertDER, err := x509.CreateCertificate(rand.Reader, rootCert, rootCert, &rootKey.PublicKey, rootKey)
+	rootCertDER, err := x509.CreateCertificate(rand.Reader, rootCert, rootCert, rootKey.Public(), rootKey)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("failed to sign root certificate: %w", err)
 	}
@@ -59,7 +55,7 @@ func GenerateBundle(trustDomain string, allowedClockSkew time.Duration) (Bundle,
 	}
 	issKeyPEM := pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: issKeyDer})
 
-	issCert, err := generateIssuerCert(trustDomain, allowedClockSkew)
+	issCert, err := generateIssuerCert(trustDomain, allowedClockSkew, overrideCATTL)
 	if err != nil {
 		return Bundle{}, fmt.Errorf("failed to generate issuer cert: %w", err)
 	}

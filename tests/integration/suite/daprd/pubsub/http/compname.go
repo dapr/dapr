@@ -29,8 +29,9 @@ import (
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -65,7 +66,7 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 	c.pubsubNames = make([]string, numTests)
 	c.topicNames = make([]string, numTests)
 	files := make([]string, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz.Fuzz(&c.pubsubNames[i])
 		fz.Fuzz(&c.topicNames[i])
 
@@ -92,14 +93,13 @@ spec:
 func (c *componentName) Run(t *testing.T, ctx context.Context) {
 	c.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
+	pt := parallel.New(t)
 	for i := range c.pubsubNames {
 		pubsubName := c.pubsubNames[i]
 		topicName := c.topicNames[i]
-		t.Run(pubsubName, func(t *testing.T) {
-			t.Parallel()
-
+		pt.Add(func(t *assert.CollectT) {
 			reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s", c.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(`{"status": "completed"}`))
 			require.NoError(t, err)

@@ -21,6 +21,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -28,10 +29,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -40,11 +41,15 @@ func init() {
 }
 
 type ttl struct {
-	daprd *daprd.Daprd
-	place *placement.Placement
+	daprd         *daprd.Daprd
+	place         *placement.Placement
+	healthzCalled chan struct{}
 }
 
 func (l *ttl) Setup(t *testing.T) []framework.Option {
+	l.healthzCalled = make(chan struct{})
+	var once sync.Once
+
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte(`
 apiVersion: dapr.io/v1alpha1
@@ -61,26 +66,22 @@ spec:
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
 	})
+	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
+		once.Do(func() {
+			close(l.healthzCalled)
+		})
+		w.WriteHeader(http.StatusOK)
+	})
 	handler.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`OK`))
 	})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	l.place = placement.New(t)
-	l.daprd = daprd.New(t, daprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-  metadata:
-  - name: actorStateStore
-    value: true
-`),
+	l.daprd = daprd.New(t,
+		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithConfigs(configFile),
-		daprd.WithPlacementAddresses("localhost:"+strconv.Itoa(l.place.Port())),
+		daprd.WithPlacementAddresses(l.place.Address()),
 		daprd.WithAppPort(srv.Port()),
 	)
 
@@ -93,52 +94,92 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 	l.place.WaitUntilRunning(t, ctx)
 	l.daprd.WaitUntilRunning(t, ctx)
 
-	client := util.HTTPClient(t)
+	select {
+	case <-l.healthzCalled:
+	case <-time.After(time.Second * 15):
+		t.Fatal("timed out waiting for healthz call")
+	}
+
+	client := client.HTTP(t)
 
 	daprdURL := "http://localhost:" + strconv.Itoa(l.daprd.HTTPPort())
 
 	req, err := http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/method/foo", nil)
 	require.NoError(t, err)
-	resp, err := client.Do(req)
-	require.NoError(t, err)
-	assert.NoError(t, resp.Body.Close())
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, rErr := client.Do(req)
+		if assert.NoError(c, rErr) {
+			require.NoError(c, resp.Body.Close())
+			assert.Equal(c, http.StatusOK, resp.StatusCode)
+		}
+	}, time.Second*20, time.Millisecond*10, "actor not ready")
 
 	now := time.Now()
-	reqBody := `[{"operation":"upsert","request":{"key":"key1","value":"value1","metadata":{"ttlInSeconds":"3"}}}]`
+
+	reqBody := `[{"operation":"upsert","request":{"key":"key1","value":"value1","metadata":{"ttlInSeconds":"2"}}}]`
 	req, err = http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/state", strings.NewReader(reqBody))
 	require.NoError(t, err)
-	resp, err = client.Do(req)
+	resp, err := client.Do(req)
 	require.NoError(t, err)
-	assert.NoError(t, resp.Body.Close())
+	require.NoError(t, resp.Body.Close())
 
 	t.Run("ensure the state key returns a ttlExpireTime header", func(t *testing.T) {
 		req, err = http.NewRequest(http.MethodGet, daprdURL+"/v1.0/actors/myactortype/myactorid/state/key1", nil)
 		require.NoError(t, err)
-		resp, err := client.Do(req)
+		//nolint:bodyclose
+		resp, err = client.Do(req)
 		require.NoError(t, err)
-		body, err := io.ReadAll(resp.Body)
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, `"value1"`, string(body))
 		ttlExpireTimeStr := resp.Header.Get("metadata.ttlExpireTime")
-		ttlExpireTime, err := time.Parse(time.RFC3339, ttlExpireTimeStr)
+		var ttlExpireTime time.Time
+		ttlExpireTime, err = time.Parse(time.RFC3339, ttlExpireTimeStr)
 		require.NoError(t, err)
-		assert.InDelta(t, now.Add(3*time.Second).Unix(), ttlExpireTime.Unix(), 1)
+		assert.InDelta(t, now.Add(2*time.Second).Unix(), ttlExpireTime.Unix(), 1)
+	})
+
+	t.Run("can update ttl with new value", func(t *testing.T) {
+		reqBody = `[{"operation":"upsert","request":{"key":"key1","value":"value1","metadata":{"ttlInSeconds":"3"}}}]`
+		req, err = http.NewRequest(http.MethodPost, daprdURL+"/v1.0/actors/myactortype/myactorid/state", strings.NewReader(reqBody))
+		require.NoError(t, err)
+		//nolint:bodyclose
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+
+		time.Sleep(time.Second * 2)
+
+		req, err = http.NewRequest(http.MethodGet, daprdURL+"/v1.0/actors/myactortype/myactorid/state/key1", nil)
+		require.NoError(t, err)
+		//nolint:bodyclose
+		resp, err = client.Do(req)
+		require.NoError(t, err)
+		var body []byte
+		body, err = io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, `"value1"`, string(body))
 	})
 
 	t.Run("ensure the state key is deleted after the ttl", func(t *testing.T) {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			req, err := http.NewRequest(http.MethodGet, daprdURL+"/v1.0/actors/myactortype/myactorid/state/key1", nil)
+			req, err = http.NewRequest(http.MethodGet, daprdURL+"/v1.0/actors/myactortype/myactorid/state/key1", nil)
 			require.NoError(c, err)
-			resp, err := client.Do(req)
+			//nolint:bodyclose
+			resp, err = client.Do(req)
 			require.NoError(c, err)
-			body, err := io.ReadAll(resp.Body)
+			var body []byte
+			body, err = io.ReadAll(resp.Body)
 			require.NoError(c, err)
-			assert.NoError(c, resp.Body.Close())
+			require.NoError(c, resp.Body.Close())
 			assert.Empty(c, string(body))
 			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 10*time.Millisecond)
 	})
 }

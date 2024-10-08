@@ -15,46 +15,74 @@ package integration
 
 import (
 	"context"
+	"flag"
+	"regexp"
 	"testing"
 	"time"
+
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
 	"github.com/dapr/dapr/tests/integration/suite"
+)
 
-	// Register all tests
-	_ "github.com/dapr/dapr/tests/integration/suite/actors"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd"
-	_ "github.com/dapr/dapr/tests/integration/suite/healthz"
-	_ "github.com/dapr/dapr/tests/integration/suite/httpserver"
-	_ "github.com/dapr/dapr/tests/integration/suite/metadata"
-	_ "github.com/dapr/dapr/tests/integration/suite/placement"
-	_ "github.com/dapr/dapr/tests/integration/suite/ports"
-	_ "github.com/dapr/dapr/tests/integration/suite/sentry"
+var (
+	focusF       = flag.String("focus", ".*", "Focus on specific test cases. Accepts regex.")
+	parallelFlag = flag.Bool("integration-parallel", true, "Disable running integration tests in parallel")
 )
 
 func RunIntegrationTests(t *testing.T) {
-	binary.BuildAll(t)
+	flag.Parse()
 
-	for name, tcase := range suite.All(t) {
-		t.Run(name, func(t *testing.T) {
-			t.Logf("setting up test case")
+	focus, err := regexp.Compile(*focusF)
+	require.NoError(t, err, "Invalid parameter focus")
+	t.Logf("running test suite with focus: %s", *focusF)
+
+	var binFailed bool
+	t.Run("build binaries", func(t *testing.T) {
+		t.Cleanup(func() {
+			binFailed = t.Failed()
+		})
+		binary.BuildAll(t)
+	})
+	require.False(t, binFailed, "building binaries must succeed")
+
+	focusedTests := make([]suite.NamedCase, 0)
+	for _, tcase := range suite.All(t) {
+		// Continue rather than using `t.Skip` to reduce the noise in the test
+		// output.
+		if !focus.MatchString(tcase.Name()) {
+			t.Logf("skipping test case due to focus %s", tcase.Name())
+			continue
+		}
+		focusedTests = append(focusedTests, tcase)
+	}
+
+	startTime := time.Now()
+	t.Cleanup(func() {
+		t.Logf("Total integration test execution time: [%d] %s", len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100))
+	})
+
+	for _, tcase := range focusedTests {
+		t.Run(tcase.Name(), func(t *testing.T) {
+			if *parallelFlag {
+				t.Parallel()
+			}
+
 			options := tcase.Setup(t)
 
-			ctx, cancel := context.WithTimeout(context.Background(), 180*time.Second)
+			t.Logf("setting up test case")
+
+			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			t.Cleanup(cancel)
 
-			f := framework.Run(t, ctx, options...)
+			framework.Run(t, ctx, options...)
 
 			t.Run("run", func(t *testing.T) {
 				t.Log("running test case")
 				tcase.Run(t, ctx)
 			})
-
-			t.Log("cleaning up framework")
-			f.Cleanup(t)
-
-			t.Log("done")
 		})
 	}
 }

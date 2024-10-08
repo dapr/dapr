@@ -31,9 +31,14 @@ func LoadConfiguration(ctx context.Context, name string, restConfig *rest.Config
 		return nil, fmt.Errorf("could not get Kubernetes API client: %w", err)
 	}
 
+	namespace, err := security.CurrentNamespaceOrError()
+	if err != nil {
+		return nil, err
+	}
+
 	var conf v1alpha1.Configuration
 	key := types.NamespacedName{
-		Namespace: security.CurrentNamespace(),
+		Namespace: namespace,
 		Name:      name,
 	}
 	if err := client.Get(ctx, key, &conf); err != nil {

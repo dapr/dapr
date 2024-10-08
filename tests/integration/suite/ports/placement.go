@@ -53,12 +53,12 @@ func (p *placement) Run(t *testing.T, ctx context.Context) {
 		"initialCluster": p.proc.InitialClusterPorts()[0],
 	} {
 		assert.Eventuallyf(t, func() bool {
-			conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("localhost:%d", port))
+			conn, err := dialer.DialContext(ctx, "tcp", fmt.Sprintf("127.0.0.1:%d", port))
 			if err != nil {
 				return false
 			}
 			require.NoError(t, conn.Close())
 			return true
-		}, time.Second*5, 100*time.Millisecond, "port %s (:%d) was not available in time", name, port)
+		}, time.Second*5, 10*time.Millisecond, "port %s (:%d) was not available in time", name, port)
 	}
 }

@@ -65,14 +65,6 @@ type actorReminder struct {
 	Callback string `json:"callback,omitempty"`
 }
 
-// renameReminderRequest is the request object for rename a reminder.
-type renameReminderRequest struct {
-	OldName   string
-	ActorType string
-	ActorID   string
-	NewName   string
-}
-
 type reminderResponse struct {
 	ActorID        string `json:"actorID,omitempty"`
 	ActorType      string `json:"actorType,omitempty"`

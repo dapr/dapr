@@ -27,7 +27,7 @@ import (
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	v1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
-	"github.com/dapr/dapr/utils"
+	"github.com/dapr/kit/utils"
 )
 
 const (
@@ -147,6 +147,9 @@ func buildDaprAnnotations(appDesc AppDescription) map[string]string {
 	}
 	if len(appDesc.PlacementAddresses) != 0 {
 		annotationObject["dapr.io/placement-host-address"] = strings.Join(appDesc.PlacementAddresses, ",")
+	}
+	if len(appDesc.SchedulerAddresses) != 0 {
+		annotationObject["dapr.io/scheduler-host-address"] = strings.Join(appDesc.SchedulerAddresses, ",")
 	}
 
 	if appDesc.InjectPluggableComponents {
@@ -333,8 +336,9 @@ func buildServiceObject(namespace string, appDesc AppDescription) *apiv1.Service
 			},
 			Ports: []apiv1.ServicePort{
 				{
-					Protocol:   apiv1.ProtocolTCP,
-					Port:       DefaultExternalPort,
+					Protocol: apiv1.ProtocolTCP,
+					Port:     DefaultExternalPort,
+					//nolint:gosec
 					TargetPort: intstr.IntOrString{IntVal: int32(targetPort)},
 				},
 			},

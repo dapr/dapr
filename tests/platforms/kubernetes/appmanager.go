@@ -16,6 +16,7 @@ package kubernetes
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log"
 	"os"
@@ -24,7 +25,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	apiv1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -236,11 +237,12 @@ func (m *AppManager) WaitUntilJobState(isState func(*batchv1.Job, error) bool) (
 
 	var lastJob *batchv1.Job
 
-	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
+	ctx, cancel := context.WithTimeout(m.ctx, PollTimeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextCancel(ctx, PollInterval, true, func(ctx context.Context) (bool, error) {
 		var err error
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		lastJob, err = jobsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
-		cancel()
 		done := isState(lastJob, err)
 		if !done && err != nil {
 			return true, err
@@ -280,10 +282,11 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 	var lastDeployment *appsv1.Deployment
 
-	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
+	ctx, cancel := context.WithTimeout(m.ctx, PollTimeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextCancel(ctx, PollInterval, true, func(ctx context.Context) (bool, error) {
 		var err error
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
-		defer cancel()
 		lastDeployment, err = deploymentsClient.Get(ctx, m.app.AppName, metav1.GetOptions{})
 		done := isState(lastDeployment, err)
 		if !done && err != nil {
@@ -341,7 +344,10 @@ func (m *AppManager) WaitUntilDeploymentState(isState func(*appsv1.Deployment, e
 
 // WaitUntilSidecarPresent waits until Dapr sidecar is present.
 func (m *AppManager) WaitUntilSidecarPresent() error {
-	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
+	ctx, cancel := context.WithTimeout(m.ctx, PollTimeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextCancel(ctx, PollInterval, true, func(ctx context.Context) (bool, error) {
 		allDaprd, minContainerCount, maxContainerCount, err := m.getContainerInfo()
 		log.Printf(
 			"Checking if Dapr sidecar is present on app %s (minContainerCount=%d, maxContainerCount=%d, allDaprd=%v): %v ...",
@@ -375,18 +381,18 @@ func (m *AppManager) IsDeploymentDone(deployment *appsv1.Deployment, err error) 
 
 // IsJobDeleted returns true if job does not exist.
 func (m *AppManager) IsJobDeleted(job *batchv1.Job, err error) bool {
-	return err != nil && errors.IsNotFound(err)
+	return err != nil && apierrors.IsNotFound(err)
 }
 
 // IsDeploymentDeleted returns true if deployment does not exist or current pod replica is zero.
 func (m *AppManager) IsDeploymentDeleted(deployment *appsv1.Deployment, err error) bool {
-	return err != nil && errors.IsNotFound(err)
+	return err != nil && apierrors.IsNotFound(err)
 }
 
 // ValidateSidecar validates that dapr side car is running in dapr enabled pods.
 func (m *AppManager) ValidateSidecar() error {
 	if !m.app.DaprEnabled {
-		return fmt.Errorf("dapr is not enabled for this app")
+		return errors.New("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -426,7 +432,7 @@ func (m *AppManager) ValidateSidecar() error {
 // getSidecarInfo returns if sidecar is present and how many containers there are.
 func (m *AppManager) getContainerInfo() (bool, int, int, error) {
 	if !m.app.DaprEnabled {
-		return false, 0, 0, fmt.Errorf("dapr is not enabled for this app")
+		return false, 0, 0, errors.New("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -589,6 +595,7 @@ func (m *AppManager) AcquireExternalURL() string {
 	log.Printf("Waiting until service ingress is ready for %s...\n", m.app.AppName)
 	svc, err := m.WaitUntilServiceState(m.app.AppName, m.IsServiceIngressReady)
 	if err != nil {
+		log.Printf("Service ingress for %s is not ready: %s", m.app.AppName, err)
 		return ""
 	}
 
@@ -602,11 +609,12 @@ func (m *AppManager) WaitUntilServiceState(svcName string, isState func(*apiv1.S
 	serviceClient := m.client.Services(m.namespace)
 	var lastService *apiv1.Service
 
-	waitErr := wait.PollImmediate(PollInterval, PollTimeout, func() (bool, error) {
+	ctx, cancel := context.WithTimeout(m.ctx, PollTimeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextCancel(ctx, PollInterval, true, func(ctx context.Context) (bool, error) {
 		var err error
-		ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
 		lastService, err = serviceClient.Get(ctx, svcName, metav1.GetOptions{})
-		cancel()
 		done := isState(lastService, err)
 		if !done && err != nil {
 			log.Printf("wait for %s: %s", svcName, err)
@@ -667,7 +675,7 @@ func (m *AppManager) IsServiceIngressReady(svc *apiv1.Service, err error) bool {
 
 // IsServiceDeleted returns true if service does not exist.
 func (m *AppManager) IsServiceDeleted(svc *apiv1.Service, err error) bool {
-	return err != nil && errors.IsNotFound(err)
+	return err != nil && apierrors.IsNotFound(err)
 }
 
 func (m *AppManager) minikubeNodeIP() string {
@@ -687,7 +695,7 @@ func (m *AppManager) DeleteJob(ignoreNotFound bool) error {
 	defer cancel()
 	if err := jobsClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
-	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
+	}); err != nil && (ignoreNotFound && !apierrors.IsNotFound(err)) {
 		return err
 	}
 
@@ -703,7 +711,7 @@ func (m *AppManager) DeleteDeployment(ignoreNotFound bool) error {
 	defer cancel()
 	if err := deploymentsClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
-	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
+	}); err != nil && (ignoreNotFound && !apierrors.IsNotFound(err)) {
 		return err
 	}
 
@@ -719,7 +727,7 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 	defer cancel()
 	if err := serviceClient.Delete(ctx, m.app.AppName, metav1.DeleteOptions{
 		PropagationPolicy: &deletePolicy,
-	}); err != nil && (ignoreNotFound && !errors.IsNotFound(err)) {
+	}); err != nil && (ignoreNotFound && !apierrors.IsNotFound(err)) {
 		return err
 	}
 
@@ -729,7 +737,7 @@ func (m *AppManager) DeleteService(ignoreNotFound bool) error {
 // GetHostDetails returns the name and IP address of the pods running the app.
 func (m *AppManager) GetHostDetails() ([]PodInfo, error) {
 	if !m.app.DaprEnabled {
-		return nil, fmt.Errorf("dapr is not enabled for this app")
+		return nil, errors.New("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)
@@ -810,7 +818,7 @@ func (m *AppManager) GetCPUAndMemory(sidecar bool) (int64, float64, error) {
 // GetTotalRestarts returns the total number of restarts for the app or sidecar.
 func (m *AppManager) GetTotalRestarts() (int, error) {
 	if !m.app.DaprEnabled {
-		return 0, fmt.Errorf("dapr is not enabled for this app")
+		return 0, errors.New("dapr is not enabled for this app")
 	}
 
 	podClient := m.client.Pods(m.namespace)

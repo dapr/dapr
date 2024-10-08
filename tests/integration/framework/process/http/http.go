@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
 // Option is a function that configures the process.
@@ -38,21 +40,27 @@ type HTTP struct {
 func New(t *testing.T, fopts ...Option) *HTTP {
 	t.Helper()
 
-	opts := options{
-		handler: http.NewServeMux(),
-	}
-
+	var opts options
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
 
-	// Start the listener in New so we can squat on the port immediately, and
-	// keep it for the entire test case.
-	listener, err := net.Listen("tcp", "127.0.0.1:0")
-	require.NoError(t, err)
+	require.False(t, len(opts.handlerFuncs) > 0 && opts.handler != nil,
+		"handler and handlerFuncs are mutually exclusive, handlerFuncs: %d, handler: %v",
+		len(opts.handlerFuncs), opts.handler)
+
+	if opts.handler == nil {
+		handler := http.NewServeMux()
+		for path, fn := range opts.handlerFuncs {
+			handler.HandleFunc(path, fn)
+		}
+		opts.handler = handler
+	}
+
+	fp := ports.Reserve(t, 1)
 
 	return &HTTP{
-		listener: listener,
+		listener: fp.Listener(t),
 		srvErrCh: make(chan error, 2),
 		stopCh:   make(chan struct{}),
 		server: &http.Server{
@@ -94,7 +102,7 @@ func (h *HTTP) Run(t *testing.T, ctx context.Context) {
 
 func (h *HTTP) Cleanup(t *testing.T) {
 	close(h.stopCh)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		require.NoError(t, <-h.srvErrCh)
 	}
 }

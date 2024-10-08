@@ -29,10 +29,11 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
 	"github.com/dapr/components-contrib/bindings"
+	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	componentsV1alpha1 "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
-	"github.com/dapr/dapr/pkg/grpc/manager"
+	"github.com/dapr/dapr/pkg/healthz"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -130,7 +131,7 @@ func TestStartReadingFromBindings(t *testing.T) {
 		b.compStore.AddInputBinding("test", m)
 		err := b.StartReadingFromBindings(context.Background())
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
 	})
 
@@ -153,7 +154,7 @@ func TestStartReadingFromBindings(t *testing.T) {
 		}
 
 		b.compStore.AddInputBinding("test", m)
-		b.compStore.AddComponent(componentsV1alpha1.Component{
+		require.NoError(t, b.compStore.AddPendingComponentForCommit(componentsV1alpha1.Component{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: "test",
 			},
@@ -168,11 +169,11 @@ func TestStartReadingFromBindings(t *testing.T) {
 					},
 				},
 			},
-		})
+		}))
+		require.NoError(t, b.compStore.CommitPendingComponent())
 		err := b.StartReadingFromBindings(context.Background())
-
-		assert.NoError(t, err)
-		assert.True(t, mockAppChannel.AssertNotCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
+		require.NoError(t, err)
+		assert.True(t, mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything))
 	})
 }
 
@@ -183,9 +184,10 @@ func TestGetSubscribedBindingsGRPC(t *testing.T) {
 		ControlPlaneTrustDomain: "test.example.com",
 		ControlPlaneNamespace:   "default",
 		MTLSEnabled:             false,
-		OverrideCertRequestSource: func(context.Context, []byte) ([]*x509.Certificate, error) {
+		OverrideCertRequestFn: func(context.Context, []byte) ([]*x509.Certificate, error) {
 			return []*x509.Certificate{nil}, nil
 		},
+		Healthz: healthz.New(),
 	})
 	require.NoError(t, err)
 	go secP.Run(context.Background())
@@ -417,7 +419,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 		_, err := b.SendToOutputBinding(context.Background(), "mockBinding", &bindings.InvokeRequest{
 			Data: []byte(""),
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, "operation field is missing from request", err.Error())
 	})
 
@@ -437,7 +439,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 			Data:      []byte(""),
 			Operation: bindings.CreateOperation,
 		})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("output binding invalid operation", func(t *testing.T) {
@@ -456,7 +458,7 @@ func TestInvokeOutputBindings(t *testing.T) {
 			Data:      []byte(""),
 			Operation: bindings.GetOperation,
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, "binding mockBinding does not support operation get. supported operations:create list", err.Error())
 	})
 }
@@ -475,12 +477,12 @@ func TestBindingTracingHttp(t *testing.T) {
 		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		_, err := b.sendBindingEventToApp(context.Background(), "mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
 		assert.Len(t, mockAppChannel.Calls, 1)
 		req := mockAppChannel.Calls[0].Arguments.Get(1).(*invokev1.InvokeMethodRequest)
 		assert.Contains(t, req.Metadata(), "traceparent")
-		assert.Contains(t, req.Metadata()["traceparent"].Values, "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01")
+		assert.Contains(t, req.Metadata()["traceparent"].GetValues(), "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01")
 	})
 
 	t.Run("traceparent passed through with response status code 204", func(t *testing.T) {
@@ -489,12 +491,12 @@ func TestBindingTracingHttp(t *testing.T) {
 		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		_, err := b.sendBindingEventToApp(context.Background(), "mockBinding", []byte(""), map[string]string{"traceparent": "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01"})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
 		assert.Len(t, mockAppChannel.Calls, 1)
 		req := mockAppChannel.Calls[0].Arguments.Get(1).(*invokev1.InvokeMethodRequest)
 		assert.Contains(t, req.Metadata(), "traceparent")
-		assert.Contains(t, req.Metadata()["traceparent"].Values, "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01")
+		assert.Contains(t, req.Metadata()["traceparent"].GetValues(), "00-d97eeaf10b4d00dc6ba794f3a41c5268-09462d216dd14deb-01")
 	})
 
 	t.Run("bad traceparent does not fail request", func(t *testing.T) {
@@ -503,7 +505,7 @@ func TestBindingTracingHttp(t *testing.T) {
 		b.channels = new(channels.Channels).WithAppChannel(mockAppChannel)
 
 		_, err := b.sendBindingEventToApp(context.Background(), "mockBinding", []byte(""), map[string]string{"traceparent": "I am not a traceparent"})
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		mockAppChannel.AssertCalled(t, "InvokeMethod", mock.Anything, mock.Anything)
 		assert.Len(t, mockAppChannel.Calls, 1)
 	})
@@ -559,7 +561,7 @@ func TestBindingResiliency(t *testing.T) {
 	output.ObjectMeta.Name = "failOutput"
 	output.Spec.Type = "bindings.failingoutput"
 	err := b.Init(context.TODO(), output)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	t.Run("output binding retries on failure with resiliency", func(t *testing.T) {
 		req := &bindings.InvokeRequest{
@@ -568,7 +570,7 @@ func TestBindingResiliency(t *testing.T) {
 		}
 		_, err := b.SendToOutputBinding(context.Background(), "failOutput", req)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingBinding.Failure.CallCount("outputFailingKey"))
 	})
 
@@ -581,7 +583,7 @@ func TestBindingResiliency(t *testing.T) {
 		_, err := b.SendToOutputBinding(context.Background(), "failOutput", req)
 		end := time.Now()
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingBinding.Failure.CallCount("outputTimeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
@@ -589,7 +591,7 @@ func TestBindingResiliency(t *testing.T) {
 	t.Run("input binding retries on failure with resiliency", func(t *testing.T) {
 		_, err := b.sendBindingEventToApp(context.Background(), "failingInputBinding", []byte("inputFailingKey"), map[string]string{})
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, 2, failingChannel.Failure.CallCount("inputFailingKey"))
 	})
 
@@ -598,7 +600,7 @@ func TestBindingResiliency(t *testing.T) {
 		_, err := b.sendBindingEventToApp(context.Background(), "failingInputBinding", []byte("inputTimeoutKey"), map[string]string{})
 		end := time.Now()
 
-		assert.Error(t, err)
+		require.Error(t, err)
 		assert.Equal(t, 2, failingChannel.Failure.CallCount("inputTimeoutKey"))
 		assert.Less(t, end.Sub(start), time.Second*10)
 	})
@@ -606,7 +608,7 @@ func TestBindingResiliency(t *testing.T) {
 
 func matchDaprRequestMethod(method string) any {
 	return mock.MatchedBy(func(req *invokev1.InvokeMethodRequest) bool {
-		if req == nil || req.Message() == nil || req.Message().Method != method {
+		if req == nil || req.Message() == nil || req.Message().GetMethod() != method {
 			return false
 		}
 		return true

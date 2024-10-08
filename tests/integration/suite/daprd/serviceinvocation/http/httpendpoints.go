@@ -15,21 +15,23 @@ package http
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
-	testsutil "github.com/dapr/dapr/tests/util"
+	cryptotest "github.com/dapr/kit/crypto/test"
 )
 
 func init() {
@@ -43,8 +45,8 @@ type httpendpoints struct {
 }
 
 func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
-	pki1 := testsutil.GenPKIT(t, "localhost")
-	pki2 := testsutil.GenPKIT(t, "localhost")
+	pki1 := cryptotest.GenPKI(t, cryptotest.PKIOptions{LeafDNS: "localhost"})
+	pki2 := cryptotest.GenPKI(t, cryptotest.PKIOptions{LeafDNS: "localhost"})
 
 	newHTTPServer := func() *prochttp.HTTP {
 		handler := http.NewServeMux()
@@ -65,7 +67,7 @@ func (h *httpendpoints) Setup(t *testing.T) []framework.Option {
 			w.Write([]byte("ok-TLS"))
 		})
 
-		return prochttp.New(t, prochttp.WithHandler(handler), prochttp.WithTLS(t, pki1.RootCertPEM, pki1.LeafCertPEM, pki1.LeafPKPEM))
+		return prochttp.New(t, prochttp.WithHandler(handler), prochttp.WithMTLS(t, pki1.RootCertPEM, pki1.LeafCertPEM, pki1.LeafPKPEM))
 	}
 
 	srv1 := newHTTPServer()
@@ -137,9 +139,29 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 	h.daprd1.WaitUntilRunning(t, ctx)
 	h.daprd2.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
-	invokeTests := func(t *testing.T, expTLSCode int, assertBody func(t *testing.T, body string), daprd *procdaprd.Daprd) {
+	invokeTests := func(t *testing.T, expTLSCode int, assertBody func(c *assert.CollectT, body string), daprd *procdaprd.Daprd) {
+		for _, port := range []int{
+			h.daprd1.HTTPPort(),
+			h.daprd2.HTTPPort(),
+		} {
+			assert.EventuallyWithT(t, func(t *assert.CollectT) {
+				url := fmt.Sprintf("http://localhost:%d/v1.0/metadata", port)
+				req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+				require.NoError(t, err)
+
+				resp, err := httpClient.Do(req)
+				require.NoError(t, err)
+
+				body := make(map[string]any)
+				require.NoError(t, json.NewDecoder(resp.Body).Decode(&body))
+				require.NoError(t, resp.Body.Close())
+				endpoints, ok := body["httpEndpoints"]
+				_ = assert.True(t, ok) && assert.Len(t, endpoints.([]any), 2)
+			}, time.Second*5, time.Millisecond*10)
+		}
+
 		t.Run("invoke http endpoint", func(t *testing.T) {
 			doReq := func(method, url string, headers map[string]string) (int, string) {
 				req, err := http.NewRequestWithContext(ctx, method, url, nil)
@@ -192,24 +214,26 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 				{url: fmt.Sprintf("http://localhost:%d/v1.0/invoke/mywebsitetls/method/hello", daprd.HTTPPort())},
 			} {
 				t.Run(fmt.Sprintf("url %d", i), func(t *testing.T) {
-					status, body := doReq(http.MethodGet, ts.url, ts.headers)
-					assert.Equal(t, expTLSCode, status)
-					assertBody(t, body)
+					assert.EventuallyWithT(t, func(c *assert.CollectT) {
+						status, body := doReq(http.MethodGet, ts.url, ts.headers)
+						assert.Equal(t, expTLSCode, status)
+						assertBody(c, body)
+					}, time.Second*5, time.Millisecond*10)
 				})
 			}
 		})
 	}
 
 	t.Run("good PKI", func(t *testing.T) {
-		invokeTests(t, http.StatusOK, func(t *testing.T, body string) {
-			assert.Equal(t, "ok-TLS", body)
+		invokeTests(t, http.StatusOK, func(c *assert.CollectT, body string) {
+			assert.Equal(c, "ok-TLS", body)
 		}, h.daprd1)
 	})
 
 	t.Run("bad PKI", func(t *testing.T) {
-		invokeTests(t, http.StatusInternalServerError, func(t *testing.T, body string) {
-			assert.Contains(t, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
-			assert.Contains(t, body, "tls: bad certificate")
+		invokeTests(t, http.StatusInternalServerError, func(c *assert.CollectT, body string) {
+			assert.Contains(c, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
+			assert.Contains(c, body, "tls: unknown certificate authority")
 		}, h.daprd2)
 	})
 }

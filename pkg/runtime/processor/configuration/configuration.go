@@ -15,7 +15,6 @@ package configuration
 
 import (
 	"context"
-	"io"
 	"sync"
 
 	contribconfig "github.com/dapr/components-contrib/configuration"
@@ -86,13 +85,11 @@ func (c *configuration) Close(comp compapi.Component) error {
 		return nil
 	}
 
-	closer, ok := conf.(io.Closer)
-	if ok && closer != nil {
-		if err := closer.Close(); err != nil {
-			return err
-		}
+	defer c.compStore.DeleteConfiguration(comp.ObjectMeta.Name)
+
+	if err := conf.Close(); err != nil {
+		return err
 	}
 
-	c.compStore.DeleteConfiguration(comp.ObjectMeta.Name)
 	return nil
 }

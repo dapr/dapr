@@ -53,37 +53,16 @@ func TestSetEnvVariables(t *testing.T) {
 		err := SetEnvVariables(map[string]string{
 			"testKey": "testValue",
 		})
-		assert.Nil(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "testValue", os.Getenv("testKey"))
 	})
 	t.Run("set environment variables failed", func(t *testing.T) {
 		err := SetEnvVariables(map[string]string{
 			"": "testValue",
 		})
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.NotEqual(t, "testValue", os.Getenv(""))
 	})
-}
-
-func TestIsYaml(t *testing.T) {
-	testCases := []struct {
-		input    string
-		expected bool
-	}{
-		{
-			input:    "a.yaml",
-			expected: true,
-		}, {
-			input:    "a.yml",
-			expected: true,
-		}, {
-			input:    "a.txt",
-			expected: false,
-		},
-	}
-	for _, tc := range testCases {
-		assert.Equal(t, IsYaml(tc.input), tc.expected)
-	}
 }
 
 func TestGetIntValFromStringVal(t *testing.T) {
@@ -122,7 +101,7 @@ func TestEnvOrElse(t *testing.T) {
 		const elseValue, fakeEnVar = "fakeValue", "envVarThatDoesntExists"
 		require.NoError(t, os.Unsetenv(fakeEnVar))
 
-		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), elseValue)
+		assert.Equal(t, elseValue, GetEnvOrElse(fakeEnVar, elseValue))
 	})
 
 	t.Run("envOrElse should return env var value when env var is present", func(t *testing.T) {
@@ -130,7 +109,7 @@ func TestEnvOrElse(t *testing.T) {
 		defer os.Unsetenv(fakeEnVar)
 
 		require.NoError(t, os.Setenv(fakeEnVar, fakeEnvVarValue))
-		assert.Equal(t, GetEnvOrElse(fakeEnVar, elseValue), fakeEnvVarValue)
+		assert.Equal(t, fakeEnvVarValue, GetEnvOrElse(fakeEnVar, elseValue))
 	})
 }
 
@@ -174,7 +153,7 @@ func TestPopulateMetadataForBulkPublishEntry(t *testing.T) {
 			"key2":       "val2",
 		}
 		resMeta := PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta)
-		assert.Equal(t, 4, len(resMeta), "expected length to match")
+		assert.Len(t, resMeta, 4, "expected length to match")
 		assert.Contains(t, resMeta, "key1", "expected key to be present")
 		assert.Equal(t, "val1", resMeta["key1"], "expected val to be equal")
 		assert.Contains(t, resMeta, "key2", "expected key to be present")
@@ -190,7 +169,7 @@ func TestPopulateMetadataForBulkPublishEntry(t *testing.T) {
 			"key2": "val2",
 		}
 		resMeta := PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta)
-		assert.Equal(t, 3, len(resMeta), "expected length to match")
+		assert.Len(t, resMeta, 3, "expected length to match")
 		assert.Contains(t, resMeta, "key1", "expected key to be present")
 		assert.Equal(t, "val1", resMeta["key1"], "expected val to be equal")
 		assert.Contains(t, resMeta, "key2", "expected key to be present")
@@ -206,8 +185,8 @@ func TestFilter(t *testing.T) {
 		out := Filter(in, func(s string) bool {
 			return s != ""
 		})
-		assert.Equal(t, 6, cap(in))
-		assert.Equal(t, 3, cap(out))
+		assert.Len(t, in, 6)
+		assert.Len(t, out, 3)
 		assert.Equal(t, []string{"a", "b", "c"}, out)
 	})
 	t.Run("should filter out empty values and return empty collection if all values are filtered out", func(t *testing.T) {
@@ -215,9 +194,8 @@ func TestFilter(t *testing.T) {
 		out := Filter(in, func(s string) bool {
 			return s != ""
 		})
-		assert.Equal(t, 3, cap(in))
-		assert.Equal(t, 0, cap(out))
-		assert.Equal(t, []string{}, out)
+		assert.Len(t, in, 3)
+		assert.Empty(t, out)
 	})
 }
 
@@ -282,4 +260,45 @@ func TestGetNamespaceOrDefault(t *testing.T) {
 		ns := GetNamespaceOrDefault("default")
 		assert.Equal(t, "testNs", ns)
 	})
+}
+
+func BenchmarkFilter(b *testing.B) {
+	vals := make([]int, 100)
+	for i := 0; i < len(vals); i++ {
+		vals[i] = i
+	}
+
+	filterFn := func(n int) bool {
+		return n < 50
+	}
+
+	for n := 0; n < b.N; n++ {
+		Filter(vals, filterFn)
+	}
+}
+
+func TestParseServiceAddr(t *testing.T) {
+	testCases := []struct {
+		addr string
+		out  []string
+	}{
+		{
+			addr: "localhost:1020",
+			out:  []string{"localhost:1020"},
+		},
+		{
+			addr: "placement1:50005,placement2:50005,placement3:50005",
+			out:  []string{"placement1:50005", "placement2:50005", "placement3:50005"},
+		},
+		{
+			addr: "placement1:50005, placement2:50005, placement3:50005",
+			out:  []string{"placement1:50005", "placement2:50005", "placement3:50005"},
+		},
+	}
+
+	for _, tc := range testCases {
+		t.Run(tc.addr, func(t *testing.T) {
+			assert.EqualValues(t, tc.out, ParseServiceAddr(tc.addr))
+		})
+	}
 }

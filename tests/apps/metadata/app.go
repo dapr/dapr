@@ -28,7 +28,6 @@ import (
 	chi "github.com/go-chi/chi/v5"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/protobuf/types/known/emptypb"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/apps/utils"
@@ -78,15 +77,16 @@ type mockRegisteredComponent struct {
 }
 
 func newMockMetadataFromGrpc(res *runtimev1pb.GetMetadataResponse) mockMetadata {
+	activeActors := res.GetActorRuntime().GetActiveActors()
 	metadata := mockMetadata{
 		ID:                   res.GetId(),
-		ActiveActorsCount:    make([]activeActorsCount, len(res.GetActiveActorsCount())),
+		ActiveActorsCount:    make([]activeActorsCount, len(activeActors)),
 		Extended:             res.GetExtendedMetadata(),
 		RegisteredComponents: make([]mockRegisteredComponent, len(res.GetRegisteredComponents())),
 		EnabledFeatures:      res.GetEnabledFeatures(),
 	}
 
-	for i, v := range res.GetActiveActorsCount() {
+	for i, v := range activeActors {
 		metadata.ActiveActorsCount[i] = activeActorsCount{
 			Type:  v.GetType(),
 			Count: int(v.GetCount()),
@@ -180,7 +180,7 @@ func getMetadataHTTP(ctx context.Context) (metadata mockMetadata, err error) {
 func getMetadataGRPC(ctx context.Context) (metadata mockMetadata, err error) {
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
-	res, err := grpcClient.GetMetadata(ctx, &emptypb.Empty{})
+	res, err := grpcClient.GetMetadata(ctx, &runtimev1pb.GetMetadataRequest{})
 	if err != nil {
 		return metadata, fmt.Errorf("failed to get sidecar metadata from gRPC: %w", err)
 	}
@@ -266,14 +266,14 @@ func main() {
 	)
 	grpcSocketAddr := os.Getenv("DAPR_GRPC_SOCKET_ADDR")
 	if grpcSocketAddr != "" {
-		conn, err = grpc.Dial(
+		conn, err = grpc.Dial( //nolint:staticcheck
 			"unix://"+grpcSocketAddr,
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 		)
 	} else {
 		ctx, cancel := context.WithTimeout(context.Background(), time.Minute)
 		defer cancel()
-
+		//nolint:staticcheck
 		conn, err = grpc.DialContext(ctx, "localhost:50001",
 			grpc.WithTransportCredentials(insecure.NewCredentials()),
 			grpc.WithBlock(),

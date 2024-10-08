@@ -14,35 +14,48 @@ limitations under the License.
 package internal
 
 import (
+	"net"
 	"net/http"
+	"strconv"
 	"sync"
 	"time"
 
 	"golang.org/x/exp/maps"
 
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
 )
 
 // Config is the actor runtime configuration.
 type Config struct {
-	HostAddress                   string
-	AppID                         string
-	PlacementAddresses            []string
-	HostedActorTypes              *hostedActors
-	Port                          int
-	HeartbeatInterval             time.Duration
-	ActorDeactivationScanInterval time.Duration
-	ActorIdleTimeout              time.Duration
-	DrainOngoingCallTimeout       time.Duration
-	DrainRebalancedActors         bool
-	Namespace                     string
-	Reentrancy                    daprAppConfig.ReentrancyConfig
-	RemindersStoragePartitions    int
-	EntityConfigs                 map[string]EntityConfig
-	HealthHTTPClient              *http.Client
-	HealthEndpoint                string
-	AppChannelAddress             string
-	PodName                       string
+	HostAddress             string
+	AppID                   string
+	ActorsService           string
+	RemindersService        string
+	SchedulerClients        *clients.Clients
+	HostedActorTypes        *hostedActors
+	Port                    int
+	HeartbeatInterval       time.Duration
+	ActorIdleTimeout        time.Duration
+	DrainOngoingCallTimeout time.Duration
+	DrainRebalancedActors   bool
+	Namespace               string
+	// Reentrancy allows for actors to be reentrant if they are in the same call context chain.
+	// For example, Actor A sends a message to Actor B, who sends a message to Actor C.
+	// As part of the message processing, if Actor C calls Actor A, the message is reentrant,
+	// so it will be allowed. Any other messages that are part of a different call context will
+	// be blocked on Actor A until it finishes processing.
+	Reentrancy                 daprAppConfig.ReentrancyConfig
+	RemindersStoragePartitions int
+	EntityConfigs              map[string]EntityConfig
+	HealthHTTPClient           *http.Client
+	HealthEndpoint             string
+	AppChannelAddress          string
+	PodName                    string
+}
+
+func (c Config) GetRuntimeHostname() string {
+	return net.JoinHostPort(c.HostAddress, strconv.Itoa(c.Port))
 }
 
 // Remap of daprAppConfig.EntityConfig but with more useful types for actors.go.

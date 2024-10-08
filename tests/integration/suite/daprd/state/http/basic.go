@@ -25,8 +25,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -39,15 +39,7 @@ type basic struct {
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	b.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-`))
+	b.daprd = procdaprd.New(t, procdaprd.WithInMemoryActorStateStore("mystore"))
 
 	return []framework.Option{
 		framework.WithProcesses(b.daprd),
@@ -59,7 +51,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/mystore", b.daprd.HTTPPort())
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	t.Run("bad json", func(t *testing.T) {
 		for _, body := range []string{
@@ -73,17 +65,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			`[{"key": "key1", "value": "value1", "etag": 123}]`,
 			`[{"ey": "key0", "value": "value1"}]`,
 		} {
-			t.Run(body, func(t *testing.T) {
-				req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
-				require.NoError(t, err)
-				resp, err := httpClient.Do(req)
-				require.NoError(t, err)
-				assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-				body, err := io.ReadAll(resp.Body)
-				require.NoError(t, err)
-				require.NoError(t, resp.Body.Close())
-				assert.Contains(t, string(body), "ERR_MALFORMED_REQUEST")
-			})
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			assert.Contains(t, string(body), "ERR_MALFORMED_REQUEST")
 		}
 	})
 
@@ -95,17 +85,15 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			`[{"key": "key1", "value": "value1"},{"key": "key2", "value": "value1"}]`,
 			`[{"key": "key1", "value": "value1"},{"key": "key2", "value": "value1"},  {"key": "key1", "value": "value1"},{"key": "key2", "value": "value1"}]`,
 		} {
-			t.Run(body, func(t *testing.T) {
-				req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
-				require.NoError(t, err)
-				resp, err := httpClient.Do(req)
-				require.NoError(t, err)
-				assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-				body, err := io.ReadAll(resp.Body)
-				require.NoError(t, err)
-				require.NoError(t, resp.Body.Close())
-				assert.Empty(t, string(body))
-			})
+			req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
+			require.NoError(t, err)
+			resp, err := httpClient.Do(req)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+			body, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			assert.Empty(t, string(body))
 		}
 	})
 }

@@ -23,7 +23,7 @@ GIT_COMMIT  = $(shell git rev-list -1 HEAD)
 GIT_VERSION ?= $(shell git describe --always --abbrev=7 --dirty)
 # By default, disable CGO_ENABLED. See the details on https://golang.org/cmd/cgo
 CGO         ?= 0
-BINARIES    ?= daprd placement operator injector sentry
+BINARIES    ?= daprd placement operator injector sentry scheduler
 HA_MODE     ?= false
 # Force in-memory log for placement
 FORCE_INMEM ?= true
@@ -46,8 +46,8 @@ PROTOC ?=protoc
 
 # Version of "protoc" to use
 # We must also specify a protobuf "suite" version from https://github.com/protocolbuffers/protobuf/releases
-PROTOC_VERSION = 3.21.12
-PROTOBUF_SUITE_VERSION = 21.12
+PROTOC_VERSION = 24.4
+PROTOBUF_SUITE_VERSION = 24.4
 
 # name of protoc-gen-go when protoc-gen-go --version is run.
 PROTOC_GEN_GO_NAME = "protoc-gen-go"
@@ -84,16 +84,17 @@ ifeq ($(LOCAL_OS),Linux)
    TARGET_OS_LOCAL = linux
 else ifeq ($(LOCAL_OS),Darwin)
    TARGET_OS_LOCAL = darwin
+   PATH := $(PATH):$(HOME)/go/bin/darwin_$(GOARCH)
 else
    TARGET_OS_LOCAL = windows
    PROTOC_GEN_GO_NAME := "protoc-gen-go.exe"
 endif
 export GOOS ?= $(TARGET_OS_LOCAL)
 
-PROTOC_GEN_GO_VERSION = v1.28.1
+PROTOC_GEN_GO_VERSION = v1.32.0
 PROTOC_GEN_GO_NAME+= $(PROTOC_GEN_GO_VERSION)
 
-PROTOC_GEN_GO_GRPC_VERSION = 1.2.0
+PROTOC_GEN_GO_GRPC_VERSION = 1.3.0
 
 ifeq ($(TARGET_OS_LOCAL),windows)
 	BUILD_TOOLS_BIN ?= build-tools.exe
@@ -105,11 +106,12 @@ else
 	RUN_BUILD_TOOLS ?= cd .build-tools; GOOS=$(TARGET_OS_LOCAL) GOARCH=$(TARGET_ARCH_LOCAL) go run .
 endif
 
-# Default docker container and e2e test targst.
+# Default docker container and e2e test target.
 TARGET_OS ?= linux
 TARGET_ARCH ?= amd64
 TEST_OUTPUT_FILE_PREFIX ?= ./test_report
 
+GOLANGCI_LINT_TAGS=allcomponents,subtlecrypto
 ifeq ($(GOOS),windows)
 BINARY_EXT_LOCAL:=.exe
 GOLANGCI_LINT:=golangci-lint.exe
@@ -129,6 +131,8 @@ HELM:=helm
 RELEASE_NAME?=dapr
 DAPR_NAMESPACE?=dapr-system
 DAPR_MTLS_ENABLED?=true
+DAPR_SCHEDULER_REPLICAS?=1
+DAPR_SCHEDULER_IN_MEMORY_STORAGE?=false
 HELM_CHART_ROOT:=./charts
 HELM_CHART_DIR:=$(HELM_CHART_ROOT)/dapr
 HELM_OUT_DIR:=$(OUT_DIR)/install
@@ -143,7 +147,7 @@ BASE_PACKAGE_NAME := github.com/dapr/dapr
 LOGGER_PACKAGE_NAME := github.com/dapr/kit/logger
 
 # Comma-separated list of features to enable
-ENABLED_FEATURES ?= 
+ENABLED_FEATURES ?=
 
 DEFAULT_LDFLAGS:=-X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitcommit=$(GIT_COMMIT) \
   -X $(BASE_PACKAGE_NAME)/pkg/buildinfo.gitversion=$(GIT_VERSION) \
@@ -250,7 +254,7 @@ dapr.yaml: check-docker-env
 		--include-crds=true  --set global.ha.enabled=$(HA_MODE) --set dapr_config.dapr_config_chart_included=false --set-string global.tag=$(DAPR_TAG) --set-string global.registry=$(DAPR_REGISTRY) $(HELM_CHART_DIR) > $(HELM_MANIFEST_FILE)
 
 ################################################################################
-# Target: upload-helmchart
+# Target: upload-helmchart													   #
 ################################################################################
 
 # Upload helm charts to Helm Registry
@@ -274,7 +278,8 @@ ifeq ($(ONLY_DAPR_IMAGE),true)
 		--set dapr_placement.image.name=$(RELEASE_NAME) \
 		--set dapr_sentry.image.name=$(RELEASE_NAME) \
 		--set dapr_sidecar_injector.image.name=$(RELEASE_NAME) \
-		--set dapr_sidecar_injector.injectorImage.name=$(RELEASE_NAME)
+		--set dapr_sidecar_injector.injectorImage.name=$(RELEASE_NAME) \
+		--set dapr_scheduler.image.name=$(RELEASE_NAME)
 endif
 docker-deploy-k8s: check-docker-env check-arch
 	$(info Deploying ${DAPR_REGISTRY}/${RELEASE_NAME}:${DAPR_TAG} to the current K8S context...)
@@ -288,6 +293,9 @@ docker-deploy-k8s: check-docker-env check-arch
 		--set global.imagePullPolicy=$(PULL_POLICY) --set global.imagePullSecrets=${DAPR_TEST_REGISTRY_SECRET} \
 		--set global.mtls.enabled=${DAPR_MTLS_ENABLED} \
 		--set dapr_placement.cluster.forceInMemoryLog=$(FORCE_INMEM) \
+		--set dapr_scheduler.replicaCount=$(DAPR_SCHEDULER_REPLICAS) \
+		--set dapr_scheduler.cluster.storageSize=100Mi \
+		--set dapr_scheduler.cluster.inMemoryStorage=$(DAPR_SCHEDULER_IN_MEMORY_STORAGE) \
 		$(ADDITIONAL_HELM_SET) $(HELM_CHART_DIR)
 
 ################################################################################
@@ -326,7 +334,6 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/channel/... \
 ./pkg/client/... \
 ./pkg/components/... \
-./pkg/concurrency/... \
 ./pkg/config/... \
 ./pkg/cors/... \
 ./pkg/diagnostics/... \
@@ -349,10 +356,10 @@ TEST_WITH_RACE=./pkg/acl/... \
 ./pkg/retry/... \
 ./pkg/resiliency/... \
 ./pkg/runtime/... \
+./pkg/scheduler/... \
 ./pkg/scopes/... \
 ./pkg/security/... \
 ./pkg/sentry/... \
-./pkg/signals/... \
 ./pkg/validation/... \
 ./utils/...
 
@@ -362,7 +369,7 @@ test-race:
 		go test -tags="allcomponents unit" -race
 
 ################################################################################
-# Target: test-integration                                                                 #
+# Target: test-integration                                                     #
 ################################################################################
 .PHONY: test-integration
 test-integration: test-deps
@@ -370,16 +377,33 @@ test-integration: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -count=1 -v -tags="integration"
+			./tests/integration -timeout=20m -count=1 -v -tags="integration" -integration-parallel=false
+
+.PHONY: test-integration-parallel
+test-integration-parallel: test-deps
+		CGO_ENABLED=1 gotestsum \
+			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
+			--format testname \
+			-- \
+			./tests/integration -timeout=20m -count=1 -v -tags="integration" -integration-parallel=true
 
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.51.2 , otherwise you might encounter errors.
-# You can download version v1.51.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.51.2
+# Please use golangci-lint version v1.61.0 , otherwise you might encounter errors.
+# You can download version v1.61.0 at https://github.com/golangci/golangci-lint/releases/tag/v1.61.0
 .PHONY: lint
-lint:
-	$(GOLANGCI_LINT) run --build-tags=allcomponents --timeout=20m
+lint: check-linter
+	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
+
+
+################################################################################
+# Target: check-linter                                                         #
+################################################################################
+.SILENT: check-linter # Silence output other than the application run
+.PHONY: check-linter
+check-linter:
+	$(RUN_BUILD_TOOLS) check-linter
 
 ################################################################################
 # Target: modtidy-all                                                          #
@@ -389,7 +413,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.20; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.23.1; cd -
 endef
 
 # Generate modtidy target action for each go.mod file
@@ -410,21 +434,21 @@ modtidy:
 	go mod tidy
 
 ################################################################################
-# Target: format                                                              #
+# Target: format                                                               #
 ################################################################################
 .PHONY: format
 format: modtidy-all
 	gofumpt -l -w . && goimports -local github.com/dapr/ -w $(shell find ./pkg -type f -name '*.go' -not -path "./pkg/proto/*")
 
 ################################################################################
-# Target: check                                                              #
+# Target: check                                                                #
 ################################################################################
 .PHONY: check
 check: format test lint
 	git status && [[ -z `git status -s` ]]
 
 ################################################################################
-# Target: init-proto                                                            #
+# Target: init-proto                                                           #
 ################################################################################
 .PHONY: init-proto
 init-proto:
@@ -434,7 +458,7 @@ init-proto:
 ################################################################################
 # Target: gen-proto                                                            #
 ################################################################################
-GRPC_PROTOS:=common internals operator placement runtime sentry components
+GRPC_PROTOS:=$(shell ls dapr/proto)
 PROTO_PREFIX:=github.com/dapr/dapr
 
 # Generate archive files for each binary
@@ -469,7 +493,7 @@ check-diff:
 	git diff --exit-code ./go.sum # check no changes
 
 ################################################################################
-# Target: check-proto-version                                                         #
+# Target: check-proto-version                                                  #
 ################################################################################
 .PHONY: check-proto-version
 check-proto-version: ## Checking the version of proto related tools
@@ -483,7 +507,7 @@ check-proto-version: ## Checking the version of proto related tools
 	|| { echo "please use protoc-gen-go $(PROTOC_GEN_GO_VERSION) to generate proto, see https://github.com/dapr/dapr/blob/master/dapr/README.md#proto-client-generation"; exit 1; }
 
 ################################################################################
-# Target: check-proto-diff                                                           #
+# Target: check-proto-diff                                                     #
 ################################################################################
 .PHONY: check-proto-diff
 check-proto-diff:
@@ -499,7 +523,7 @@ check-proto-diff:
 
 
 ################################################################################
-# Target: compile-build-tools                                                              #
+# Target: compile-build-tools                                                  #
 ################################################################################
 compile-build-tools:
 ifeq (,$(wildcard $(BUILD_TOOLS)))

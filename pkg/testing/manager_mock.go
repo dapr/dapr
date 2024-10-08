@@ -15,7 +15,7 @@ import (
 
 	"sigs.k8s.io/controller-runtime/pkg/cache"
 	"sigs.k8s.io/controller-runtime/pkg/client"
-	"sigs.k8s.io/controller-runtime/pkg/config/v1alpha1"
+	"sigs.k8s.io/controller-runtime/pkg/config"
 	"sigs.k8s.io/controller-runtime/pkg/healthz"
 	"sigs.k8s.io/controller-runtime/pkg/manager"
 	"sigs.k8s.io/controller-runtime/pkg/webhook"
@@ -62,6 +62,10 @@ func (m *MockManager) SetFields(interface{}) error {
 	return nil
 }
 
+func (m *MockManager) AddMetricsServerExtraHandler(path string, handler http.Handler) error {
+	return nil
+}
+
 func (m *MockManager) AddMetricsExtraHandler(path string, handler http.Handler) error {
 	return nil
 }
@@ -82,8 +86,8 @@ func (m *MockManager) GetConfig() *rest.Config {
 	return nil
 }
 
-func (m *MockManager) GetControllerOptions() v1alpha1.ControllerConfigurationSpec {
-	return v1alpha1.ControllerConfigurationSpec{}
+func (m *MockManager) GetControllerOptions() config.Controller {
+	return config.Controller{}
 }
 
 func (m *MockManager) GetScheme() *runtime.Scheme {
@@ -114,12 +118,16 @@ func (m *MockManager) GetAPIReader() client.Reader {
 	return nil
 }
 
-func (m *MockManager) GetWebhookServer() *webhook.Server {
+func (m *MockManager) GetWebhookServer() webhook.Server {
 	return nil
 }
 
 func (m *MockManager) GetLogger() logr.Logger {
 	return m.log
+}
+
+func (m *MockManager) GetHTTPClient() *http.Client {
+	return http.DefaultClient
 }
 
 func (t *MockFieldIndexer) IndexField(ctx context.Context, obj client.Object, field string, extractValue client.IndexerFunc) error {

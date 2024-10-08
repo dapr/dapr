@@ -12,12 +12,19 @@ fullnameOverride: ""
 
 statefulsetAnnotations: {}
 
+service:
+  annotations: {}
+
 ports:
   protocol: TCP
   apiPort: 50005
   raftRPCPort: 8201
 
+scaleZero: false
 ha: false
+
+maxActorApiLevel: 10
+minActorApiLevel: 0
 
 cluster:
   forceInMemoryLog: false
@@ -48,3 +55,6 @@ debug:
 
 runAsNonRoot: true
 resources: {}
+
+extraEnvVars: {}
+

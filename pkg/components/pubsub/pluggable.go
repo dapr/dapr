@@ -59,8 +59,8 @@ func (p *grpcPubSub) Init(ctx context.Context, metadata pubsub.Metadata) error {
 		return err
 	}
 
-	p.features = make([]pubsub.Feature, len(featureResponse.Features))
-	for idx, f := range featureResponse.Features {
+	p.features = make([]pubsub.Feature, len(featureResponse.GetFeatures()))
+	for idx, f := range featureResponse.GetFeatures() {
 		p.features[idx] = pubsub.Feature(f)
 	}
 
@@ -103,11 +103,11 @@ func (p *grpcPubSub) BulkPublish(ctx context.Context, req *pubsub.BulkPublishReq
 		return pubsub.BulkPublishResponse{}, err
 	}
 
-	failedEntries := make([]pubsub.BulkPublishResponseFailedEntry, len(response.FailedEntries))
-	for i, failedEntry := range response.FailedEntries {
+	failedEntries := make([]pubsub.BulkPublishResponseFailedEntry, len(response.GetFailedEntries()))
+	for i, failedEntry := range response.GetFailedEntries() {
 		failedEntries[i] = pubsub.BulkPublishResponseFailedEntry{
-			EntryId: failedEntry.EntryId,
-			Error:   errors.New(failedEntry.Error),
+			EntryId: failedEntry.GetEntryId(),
+			Error:   errors.New(failedEntry.GetError()),
 		}
 	}
 
@@ -123,15 +123,15 @@ func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSu
 	safeSend := &sync.Mutex{}
 	return func(msg *proto.PullMessagesResponse) {
 		m := pubsub.NewMessage{
-			Data:        msg.Data,
+			Data:        msg.GetData(),
 			ContentType: &msg.ContentType,
-			Topic:       msg.TopicName,
-			Metadata:    msg.Metadata,
+			Topic:       msg.GetTopicName(),
+			Metadata:    msg.GetMetadata(),
 		}
 		var ackError *proto.AckMessageError
 
 		if err := handler(ctx, &m); err != nil {
-			p.logger.Errorf("error when handling message on topic %s", msg.TopicName)
+			p.logger.Errorf("error when handling message on topic %s", msg.GetTopicName())
 			ackError = &proto.AckMessageError{
 				Message: err.Error(),
 			}
@@ -147,10 +147,10 @@ func (p *grpcPubSub) adaptHandler(ctx context.Context, streamingPull proto.PubSu
 		defer safeSend.Unlock()
 
 		if err := streamingPull.Send(&proto.PullMessagesRequest{
-			AckMessageId: msg.Id,
+			AckMessageId: msg.GetId(),
 			AckError:     ackError,
 		}); err != nil {
-			p.logger.Errorf("error when ack'ing message %s from topic %s", msg.Id, msg.TopicName)
+			p.logger.Errorf("error when ack'ing message %s from topic %s", msg.GetId(), msg.GetTopicName())
 		}
 	}
 }
@@ -171,7 +171,7 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, topic *proto.Topic, handl
 
 	cleanup := func() {
 		if closeErr := pull.CloseSend(); closeErr != nil {
-			p.logger.Warnf("could not close pull stream of topic %s: %v", topic.Name, closeErr)
+			p.logger.Warnf("could not close pull stream of topic %s: %v", topic.GetName(), closeErr)
 		}
 		cancel()
 	}
@@ -196,7 +196,7 @@ func (p *grpcPubSub) pullMessages(ctx context.Context, topic *proto.Topic, handl
 				return
 			}
 
-			p.logger.Debugf("received message from stream on topic %s", msg.TopicName)
+			p.logger.Debugf("received message from stream on topic %s", msg.GetTopicName())
 
 			go handle(msg)
 		}

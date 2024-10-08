@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/tests/runner"
 	io_prometheus_client "github.com/prometheus/client_model/go"
 	"github.com/prometheus/common/expfmt"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -60,17 +61,16 @@ func TestMain(m *testing.M) {
 			AppName:        "httpmetrics",
 			DaprEnabled:    true,
 			ImageName:      "e2e-hellodapr",
+			Config:         "metrics-config",
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
 		},
 		{
-			AppName: "grpcmetrics",
-			// TODO: Some AKS clusters created before do not support CRD defaulting even
-			// if Kubernetes version is 1.16/1.17 later.
-			// Config:         "obs-defaultmetric",
+			AppName:        "grpcmetrics",
 			DaprEnabled:    true,
 			ImageName:      "e2e-stateapp",
+			Config:         "metrics-config",
 			Replicas:       1,
 			IngressEnabled: true,
 			MetricsEnabled: true,
@@ -178,37 +178,30 @@ func invokeDaprHTTP(t *testing.T, app string, n, daprPort int) {
 func testHTTPMetrics(t *testing.T, app string, res *http.Response) {
 	require.NotNil(t, res)
 
-	foundMetric, foundPath := findHTTPMetricFromPrometheus(t, app, res)
+	foundMetric := findHTTPMetricFromPrometheus(t, app, res)
 
 	// Check metric was found
 	require.True(t, foundMetric)
-	// Check metric with method was found
-	require.True(t, foundPath)
 }
 
 func testMetricDisabled(t *testing.T, app string, res *http.Response) {
 	require.NotNil(t, res)
 
-	foundMetric, foundPath := findHTTPMetricFromPrometheus(t, app, res)
+	foundMetric := findHTTPMetricFromPrometheus(t, app, res)
 
 	// Check metric was found
 	require.False(t, foundMetric)
-	// Check metric with method was found
-	require.False(t, foundPath)
 }
 
-func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) (bool, bool) {
+func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) (foundMetric bool) {
 	rfmt := expfmt.ResponseFormat(res.Header)
 	require.NotEqual(t, rfmt, expfmt.FmtUnknown)
 
 	decoder := expfmt.NewDecoder(res.Body, rfmt)
 
 	// This test will loop through each of the metrics and look for a specifc
-	// metric `dapr_http_server_request_count`. Once it finds the metric
-	// it will check the `path` label is as expected for the invoked action.
-	var foundMetric bool
-	var foundPath bool
-
+	// metric `dapr_http_server_request_count`.
+	var foundGet, foundPost bool
 	for {
 		mf := &io_prometheus_client.MetricFamily{}
 		err := decoder.Decode(mf)
@@ -217,38 +210,45 @@ func findHTTPMetricFromPrometheus(t *testing.T, app string, res *http.Response) 
 		}
 		require.NoError(t, err)
 
-		if strings.EqualFold(mf.GetName(), "dapr_http_server_request_count") {
+		if strings.ToLower(mf.GetName()) == "dapr_http_server_request_count" {
 			foundMetric = true
+
 			for _, m := range mf.GetMetric() {
 				if m == nil {
 					continue
 				}
+				count := m.GetCounter()
+
 				// check metrics with expected method exists
 				for _, l := range m.GetLabel() {
 					if l == nil {
 						continue
 					}
-					if strings.EqualFold(l.GetName(), "path") {
-						foundPath = true
-
-						if strings.Contains(l.GetValue(), "healthz") {
-							if strings.Contains(l.GetValue(), "outbound") {
-								require.Equal(t, "/v1.0/healthz/outbound", l.GetValue())
-							} else {
-								require.Equal(t, "/v1.0/healthz", l.GetValue())
+					val := l.GetValue()
+					switch strings.ToLower(l.GetName()) {
+					case "app_id":
+						assert.Equal(t, "httpmetrics", val)
+					case "method":
+						if count.GetValue() > 0 {
+							switch val {
+							case "GET":
+								foundGet = true
+							case "POST":
+								foundPost = true
 							}
-						} else {
-							require.Equal(t, fmt.Sprintf("/v1.0/invoke/%s/method/tests/green", app), l.GetValue())
 						}
-
-						break
 					}
 				}
 			}
 		}
 	}
 
-	return foundMetric, foundPath
+	if foundMetric {
+		require.True(t, foundGet)
+		require.True(t, foundPost)
+	}
+
+	return foundMetric
 }
 
 func invokeDaprGRPC(t *testing.T, app string, n, daprPort int) {

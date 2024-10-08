@@ -23,11 +23,9 @@
 name: dapr-perf
 
 on:
-  # Run at minute 44 past hour 6, 14, and 22 on every day-of-week from Monday through Friday.
-  # Run at 23:44 on Sunday and Saturday.
+  # Run at 23:44 every day
   schedule:
-    - cron: "44 6,14,22 * * 1-5"
-    - cron: "44 23 * * 0,6"
+    - cron: "44 23 * * *"
   # Manual trigger
   workflow_dispatch:
     inputs:
@@ -43,7 +41,7 @@ env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.25.2"
+  KUBECTLVER: "v1.30.0"
   # Version of Helm
   HELMVER: "v3.10.0"
   # Kubernetes namespace to use
@@ -51,7 +49,7 @@ env:
   # Timeout for tests
   MAX_TEST_TIMEOUT: 5400
   # Space-separated of supported Azure regions: one will be picked randomly for each cluster
-  AZURE_REGIONS: "westus3"
+  AZURE_REGIONS: "eastus"
   # Container registry where to cache perf test images
   DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
 
@@ -105,7 +103,7 @@ jobs:
             Commit ref: ${{ env.CHECKOUT_REF }}
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
@@ -158,8 +156,8 @@ jobs:
                 namePrefix="${{ env.TEST_PREFIX }}" \
                 location=${REGION} \
                 linuxVMSize=Standard_D8s_v4 \
-                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID }}" \
-                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID }}" \
+                diagLogAnalyticsWorkspaceResourceId="${{ secrets.AZURE_DIAG_LOG_ANALYTICS_WORKSPACE_ID_EAST }}" \
+                diagStorageResourceId="${{ secrets.AZURE_DIAG_STORAGE_ID_EAST }}" \
               && success=true \
               && break \
               || sleep 120
@@ -236,25 +234,15 @@ jobs:
             }
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
-      - name: Cache Go modules (perf)
-        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-perf-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-perf-
       - name: Login to Azure
         if: env.CHECKOUT_REPO != ''
         uses: azure/login@v1
@@ -280,6 +268,7 @@ jobs:
           echo "DAPR_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "DAPR_TEST_TAG=${TEST_PREFIX}" >> $GITHUB_ENV
           echo "TEST_RESOURCE_GROUP=Dapr-Perf-${TEST_PREFIX}" >> $GITHUB_ENV
+          echo "DAPR_GO_BUILD_TAGS=wfbackendsqlite" >> $GITHUB_ENV
         shell: bash
       - name: Build dapr and its docker image
         if: env.TEST_PREFIX != ''
@@ -349,6 +338,10 @@ jobs:
       GOARCH: amd64
       AZURE_STORAGE_ACCOUNT: ${{ secrets.PERF_AZURE_STORAGE_ACCOUNT }}
       AZURE_STORAGE_ACCESS_KEY: ${{ secrets.PERF_AZURE_STORAGE_KEY }}
+      DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_URL: ${{ secrets.DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_URL }}
+      DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_USERNAME: ${{ secrets.DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_USERNAME }}
+      DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_PASSWORD: ${{ secrets.DAPR_PERF_METRICS_PROMETHEUS_PUSHGATEWAY_PASSWORD }}
+      DAPR_SCHEDULER_IN_MEMORY_STORAGE: true
       PULL_POLICY: IfNotPresent
     steps:
       - name: Setup test output
@@ -399,25 +392,15 @@ jobs:
             }
       - name: Check out code
         if: env.CHECKOUT_REPO != ''
-        uses: actions/checkout@v3
+        uses: actions/checkout@v4
         with:
           repository: ${{ env.CHECKOUT_REPO }}
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v3
+        uses: actions/setup-go@v5
         with:
           go-version-file: 'go.mod'
-      - name: Cache Go modules (perf-test)
-        if: env.CHECKOUT_REPO != '' && runner.os == 'Linux'
-        uses: actions/cache@v3
-        with:
-          path: |
-            ~/.cache/go-build
-            ~/go/pkg/mod
-          key: ${{ runner.os }}-go-perf-test-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-perf-test-
       - uses: azure/setup-kubectl@v3
         with:
           version: ${{ env.KUBECTLVER }}
@@ -476,19 +459,19 @@ jobs:
           make save-dapr-control-plane-k8s-logs
       - name: Upload container logs
         if: always() && env.TEST_PREFIX != ''
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: perf_container_logs
           path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
       - name: Upload test logs
         if: always()
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           name: perf_test_logs
           path: ${{ env.DAPR_TEST_LOG_PATH }}
       - name: Upload test results
         if: always()
-        uses: actions/upload-artifact@master
+        uses: actions/upload-artifact@v4
         with:
           #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
           name: test_perf.json

@@ -25,11 +25,11 @@ func TestParamsOpts(t *testing.T) {
 	t.Run("default params should be used when env vars and params are absent", func(t *testing.T) {
 		p := Params()
 
-		assert.Equal(t, p.ClientConnections, defaultClientConnections)
-		assert.Equal(t, p.Payload, defaultPayload)
-		assert.Equal(t, p.PayloadSizeKB, defaultPayloadSizeKB)
-		assert.Equal(t, p.QPS, defaultQPS)
-		assert.Equal(t, p.TestDuration, defaultTestDuration)
+		assert.Equal(t, defaultClientConnections, p.ClientConnections)
+		assert.Equal(t, defaultPayload, p.Payload)
+		assert.Equal(t, defaultPayloadSizeKB, p.PayloadSizeKB)
+		assert.Equal(t, defaultQPS, p.QPS)
+		assert.Equal(t, defaultTestDuration, p.TestDuration)
 	})
 	t.Run("manually-set params should be used when specified", func(t *testing.T) {
 		clientConnections := defaultClientConnections + 1

@@ -8,13 +8,30 @@ metadata:
     {{- range $key, $value := .Values.global.k8sLabels }}
     {{ $key }}: {{ tpl $value $ }}
     {{- end }}
+{{- if or .Values.service.annotations .Values.global.prometheus.enabled }}
+  annotations:
+    {{- if .Values.global.prometheus.enabled }}
+    prometheus.io/scrape: "true"
+    prometheus.io/port: "{{ .Values.global.prometheus.port }}"
+    prometheus.io/path: "/"
+    {{- end }}
+  {{- if .Values.service.annotations }}
+  {{- .Values.service.annotations | toYaml | nindent 4 }}
+  {{- end }}
+  {{- end }}
 spec:
-  type: ClusterIP
+  selector:
+    app: dapr-sidecar-injector
+  type: {{ .Values.service.type }}
   ports:
   - port: 443
     targetPort: https
     protocol: TCP
     name: https
-  selector:
-    app: dapr-sidecar-injector
+  {{- if eq .Values.global.prometheus.enabled true }}
+  - name: metrics
+    port: {{ .Values.global.prometheus.port }}
+    targetPort: {{ .Values.global.prometheus.port }}
+    protocol: TCP
+  {{- end}}
 {{- end }}

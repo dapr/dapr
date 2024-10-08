@@ -28,9 +28,11 @@ import (
 	configmodes "github.com/dapr/dapr/pkg/config/modes"
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/operator/client"
+	"github.com/dapr/dapr/pkg/ports"
 	operatorV1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	resiliencyConfig "github.com/dapr/dapr/pkg/resiliency"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
@@ -52,12 +54,14 @@ const (
 	DefaultProfilePort = 7777
 	// DefaultMetricsPort is the default port for metrics endpoints.
 	DefaultMetricsPort = 9090
-	// DefaultMaxRequestBodySize is the default option for the maximum body size in MB for Dapr HTTP servers.
-	DefaultMaxRequestBodySize = 4
+	// DefaultMaxRequestBodySize is the default option for the maximum body size in bytes for Dapr HTTP servers.
+	// Equal to 4MB
+	DefaultMaxRequestBodySize = 4 << 20
 	// DefaultAPIListenAddress is which address to listen for the Dapr HTTP and GRPC APIs. Empty string is all addresses.
 	DefaultAPIListenAddress = ""
-	// DefaultReadBufferSize is the default option for the maximum header size in KB for Dapr HTTP servers.
-	DefaultReadBufferSize = 4
+	// DefaultReadBufferSize is the default option for the maximum header size in bytes for Dapr HTTP servers.
+	// Equal to 4KB
+	DefaultReadBufferSize = 4 << 10
 	// DefaultGracefulShutdownDuration is the default option for the duration of the graceful shutdown.
 	DefaultGracefulShutdownDuration = time.Second * 5
 	// DefaultAppHealthCheckPath is the default path for HTTP health checks.
@@ -67,72 +71,92 @@ const (
 )
 
 // Config holds the Dapr Runtime configuration.
-
 type Config struct {
-	AppID                        string
-	ControlPlaneAddress          string
-	SentryAddress                string
-	AllowedOrigins               string
-	EnableProfiling              bool
-	AppMaxConcurrency            int
-	EnableMTLS                   bool
-	AppSSL                       bool
-	DaprHTTPMaxRequestSize       int
-	ResourcesPath                []string
-	ComponentsPath               string
-	AppProtocol                  string
-	EnableAPILogging             *bool
-	DaprHTTPPort                 string
-	DaprAPIGRPCPort              string
-	ProfilePort                  string
-	DaprInternalGRPCPort         string
-	DaprPublicPort               string
-	ApplicationPort              string
-	DaprGracefulShutdownSeconds  int
-	PlacementServiceHostAddr     string
-	DaprAPIListenAddresses       string
-	AppHealthProbeInterval       int
-	AppHealthProbeTimeout        int
-	AppHealthThreshold           int
-	EnableAppHealthCheck         bool
-	Mode                         string
-	Config                       []string
-	UnixDomainSocket             string
-	DaprHTTPReadBufferSize       int
-	DisableBuiltinK8sSecretStore bool
-	AppHealthCheckPath           string
-	AppChannelAddress            string
-	Metrics                      *metrics.Options
-	Registry                     *registry.Options
-	Security                     security.Handler
+	AppID                         string
+	ControlPlaneAddress           string
+	SentryAddress                 string
+	AllowedOrigins                string
+	EnableProfiling               bool
+	AppMaxConcurrency             int
+	EnableMTLS                    bool
+	AppSSL                        bool
+	MaxRequestSize                int // In bytes
+	ResourcesPath                 []string
+	ComponentsPath                string
+	AppProtocol                   string
+	EnableAPILogging              *bool
+	DaprHTTPPort                  string
+	DaprAPIGRPCPort               string
+	ProfilePort                   string
+	DaprInternalGRPCPort          string
+	DaprInternalGRPCListenAddress string
+	DaprPublicPort                string
+	DaprPublicListenAddress       string
+	ApplicationPort               string
+	DaprGracefulShutdownSeconds   int
+	DaprBlockShutdownDuration     *time.Duration
+	ActorsService                 string
+	RemindersService              string
+	SchedulerAddress              []string
+	DaprAPIListenAddresses        string
+	AppHealthProbeInterval        int
+	AppHealthProbeTimeout         int
+	AppHealthThreshold            int
+	EnableAppHealthCheck          bool
+	Mode                          string
+	Config                        []string
+	UnixDomainSocket              string
+	ReadBufferSize                int // In bytes
+	DisableBuiltinK8sSecretStore  bool
+	AppHealthCheckPath            string
+	AppChannelAddress             string
+	Metrics                       metrics.Options
+	Registry                      *registry.Options
+	Security                      security.Handler
+	Healthz                       healthz.Healthz
 }
 
 type internalConfig struct {
 	id                           string
 	httpPort                     int
 	publicPort                   *int
+	publicListenAddress          string
 	profilePort                  int
 	enableProfiling              bool
 	apiGRPCPort                  int
 	internalGRPCPort             int
+	internalGRPCListenAddress    string
 	apiListenAddresses           []string
 	appConnectionConfig          config.AppConnectionConfig
 	mode                         modes.DaprMode
-	placementAddresses           []string
+	actorsService                string
+	remindersService             string
+	schedulerAddress             []string
 	allowedOrigins               string
 	standalone                   configmodes.StandaloneConfig
 	kubernetes                   configmodes.KubernetesConfig
 	mTLSEnabled                  bool
 	sentryServiceAddress         string
-	maxRequestBodySize           int
 	unixDomainSocket             string
-	readBufferSize               int
+	maxRequestBodySize           int // In bytes
+	readBufferSize               int // In bytes
 	gracefulShutdownDuration     time.Duration
+	blockShutdownDuration        *time.Duration
 	enableAPILogging             *bool
 	disableBuiltinK8sSecretStore bool
 	config                       []string
 	registry                     *registry.Registry
 	metricsExporter              metrics.Exporter
+	healthz                      healthz.Healthz
+	outboundHealthz              healthz.Healthz
+}
+
+func (i internalConfig) ActorsEnabled() bool {
+	return i.actorsService != ""
+}
+
+func (i internalConfig) SchedulerEnabled() bool {
+	return len(i.schedulerAddress) > 0
 }
 
 // FromConfig creates a new Dapr Runtime from a configuration.
@@ -156,7 +180,7 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		env.DaprPort:        strconv.Itoa(intc.internalGRPCPort),
 		env.DaprGRPCPort:    strconv.Itoa(intc.apiGRPCPort),
 		env.DaprHTTPPort:    strconv.Itoa(intc.httpPort),
-		env.DaprMetricsPort: intc.metricsExporter.Options().Port,
+		env.DaprMetricsPort: cfg.Metrics.Port,
 		env.DaprProfilePort: strconv.Itoa(intc.profilePort),
 	}
 
@@ -216,8 +240,9 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	// Initialize metrics only if MetricSpec is enabled.
 	metricsSpec := globalConfig.GetMetricsSpec()
 	if metricsSpec.GetEnabled() {
-		if mErr := diag.InitMetrics(intc.id, namespace, metricsSpec.Rules); mErr != nil {
-			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", mErr).Error())
+		err = diag.InitMetrics(intc.id, namespace, metricsSpec)
+		if err != nil {
+			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
 		}
 	}
 
@@ -271,16 +296,24 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		mTLSEnabled:                  c.EnableMTLS,
 		disableBuiltinK8sSecretStore: c.DisableBuiltinK8sSecretStore,
 		unixDomainSocket:             c.UnixDomainSocket,
-		maxRequestBodySize:           c.DaprHTTPMaxRequestSize,
-		readBufferSize:               c.DaprHTTPReadBufferSize,
+		maxRequestBodySize:           c.MaxRequestSize,
+		readBufferSize:               c.ReadBufferSize,
 		enableAPILogging:             c.EnableAPILogging,
 		appConnectionConfig: config.AppConnectionConfig{
 			ChannelAddress:      c.AppChannelAddress,
 			HealthCheckHTTPPath: c.AppHealthCheckPath,
 			MaxConcurrency:      c.AppMaxConcurrency,
 		},
-		registry:        registry.New(c.Registry),
-		metricsExporter: metrics.NewExporterWithOptions(log, metrics.DefaultMetricNamespace, c.Metrics),
+		registry:                  registry.New(c.Registry),
+		metricsExporter:           metrics.New(c.Metrics),
+		blockShutdownDuration:     c.DaprBlockShutdownDuration,
+		actorsService:             c.ActorsService,
+		remindersService:          c.RemindersService,
+		schedulerAddress:          c.SchedulerAddress,
+		publicListenAddress:       c.DaprPublicListenAddress,
+		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
+		healthz:                   c.Healthz,
+		outboundHealthz:           healthz.New(),
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
@@ -319,7 +352,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		// acquired using a deterministic algorithm that returns the same value if
 		// the same app is restarted
 		// Otherwise, the port will be random.
-		intc.internalGRPCPort, err = utils.GetStablePort(47300, intc.id)
+		intc.internalGRPCPort, err = ports.GetStablePort(47300, intc.id)
 		if err != nil {
 			return nil, fmt.Errorf("failed to get free port for internal grpc server: %w", err)
 		}
@@ -361,10 +394,6 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		intc.gracefulShutdownDuration = DefaultGracefulShutdownDuration
 	} else {
 		intc.gracefulShutdownDuration = time.Duration(c.DaprGracefulShutdownSeconds) * time.Second
-	}
-
-	if c.PlacementServiceHostAddr != "" {
-		intc.placementAddresses = parsePlacementAddr(c.PlacementServiceHostAddr)
 	}
 
 	if intc.appConnectionConfig.MaxConcurrency == -1 {
@@ -422,7 +451,10 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	}
 
 	// Also check to ensure no overflow with int32
+	// TODO: fix types
+	//nolint:gosec
 	healthThreshold := int32(c.AppHealthThreshold)
+	//nolint:gosec
 	if c.AppHealthThreshold < 1 || int32(c.AppHealthThreshold+1) < 0 {
 		healthThreshold = config.AppHealthConfigDefaultThreshold
 	}
@@ -437,13 +469,4 @@ func (c *Config) toInternal() (*internalConfig, error) {
 	}
 
 	return intc, nil
-}
-
-func parsePlacementAddr(val string) []string {
-	parsed := []string{}
-	p := strings.Split(val, ",")
-	for _, addr := range p {
-		parsed = append(parsed, strings.TrimSpace(addr))
-	}
-	return parsed
 }

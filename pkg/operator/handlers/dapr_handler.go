@@ -21,8 +21,8 @@ import (
 	"github.com/dapr/dapr/pkg/operator/meta"
 	"github.com/dapr/dapr/pkg/operator/monitoring"
 	"github.com/dapr/dapr/pkg/validation"
-	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/utils"
 )
 
 const (
@@ -308,7 +308,9 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 					Name:       daprSidecarInternalGRPCPortName,
 				},
 				{
-					Protocol:   corev1.ProtocolTCP,
+					Protocol: corev1.ProtocolTCP,
+					// TODO: update types
+					//nolint:gosec
 					Port:       int32(metricsPort),
 					TargetPort: intstr.FromInt(metricsPort),
 					Name:       daprSidecarMetricsPortName,

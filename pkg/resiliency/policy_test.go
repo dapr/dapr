@@ -21,7 +21,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
@@ -114,7 +116,7 @@ func ExampleNewRunnerWithOptions_disposer() {
 
 	// The disposer should be 3 times called with values 1, 2, 3
 	disposed := []int32{}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		disposed = append(disposed, <-disposerCalled)
 	}
 	slices.Sort(disposed)
@@ -238,21 +240,28 @@ func TestPolicyRetry(t *testing.T) {
 		t.Run(test.name, func(t *testing.T) {
 			called := atomic.Int32{}
 			maxCalls := test.maxCalls
-			fn := func(ctx context.Context) (any, error) {
+			fn := func(ctx context.Context) (struct{}, error) {
 				v := called.Add(1)
-				if v <= maxCalls {
-					return nil, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls)
+				attempt := GetAttempt(ctx)
+				if attempt != v {
+					return struct{}{}, backoff.Permanent(fmt.Errorf("expected attempt in context to be %d but got %d", v, attempt))
 				}
-				return nil, nil
+				if v <= maxCalls {
+					return struct{}{}, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls)
+				}
+				return struct{}{}, nil
 			}
 
-			policy := NewRunner[any](context.Background(), &PolicyDefinition{
+			policy := NewRunner[struct{}](context.Background(), &PolicyDefinition{
 				log:  testLog,
 				name: "retry",
 				t:    10 * time.Millisecond,
 				r:    &retry.Config{MaxRetries: test.maxRetries},
 			})
-			policy(fn)
+			_, err := policy(fn)
+			if err != nil {
+				assert.NotContains(t, err.Error(), "expected attempt in context to be")
+			}
 			assert.Equal(t, test.expected, called.Load())
 		})
 	}
@@ -301,9 +310,9 @@ func TestPolicyAccumulator(t *testing.T) {
 	// Sleep a bit to ensure that things in the background aren't continuing
 	time.Sleep(100 * time.Millisecond)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	// res should contain only the last result, i.e. 4
-	assert.Equal(t, res, int32(4))
+	assert.Equal(t, int32(4), res)
 	assert.Equal(t, 3, accumulatorCalled)
 	assert.Equal(t, int32(5), fnCalled.Load())
 	assert.Equal(t, []int32{1, 3, 4}, received)
@@ -337,13 +346,13 @@ func TestPolicyDisposer(t *testing.T) {
 	})
 	res, err := policy(fn)
 
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	// res should contain only the last result, i.e. 4
-	assert.Equal(t, res, int32(4))
+	assert.Equal(t, int32(4), res)
 
 	// The disposer should be 3 times called with values 1, 2, 3
 	disposed := []int32{}
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		disposed = append(disposed, <-disposerCalled)
 	}
 	// Shouldn't have more messages coming in

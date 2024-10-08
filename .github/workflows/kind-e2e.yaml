@@ -52,11 +52,12 @@ jobs:
       DAPR_NAMESPACE: dapr-tests
       # Useful for upgrade/downgrade/compatibility tests
       # TODO: Make this auto-populated based on GitHub's releases.
-      DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.11.1"
-      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.10.8"
+      DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.13.0"
+      DAPR_TEST_N_MINUS_2_IMAGE: "ghcr.io/dapr/daprd:1.12.5"
       # Container registry where to cache e2e test images
       DAPR_CACHE_REGISTRY: "dapre2eacr.azurecr.io"
       PULL_POLICY: IfNotPresent
+      DAPR_GO_BUILD_TAGS: wfbackendsqlite
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
@@ -88,10 +89,10 @@ jobs:
           mode: non-ha
     steps:
     - name: Check out code
-      uses: actions/checkout@v3
+      uses: actions/checkout@v4
     - name: Set up Go
       id: setup-go
-      uses: actions/setup-go@v3
+      uses: actions/setup-go@v5
       with:
         go-version-file: 'go.mod'
     - name: Configure KinD
@@ -209,6 +210,23 @@ jobs:
     - name: Free up some diskspace
       run: |
         docker image prune -a -f
+        # Clean up some more
+        echo "Listing 100 largest packages"
+        dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
+        df -h
+        echo "Removing large packages"
+        sudo apt-get remove -y '^dotnet-.*'
+        sudo apt-get remove -y '^llvm-.*'
+        sudo apt-get remove -y 'php.*'
+        sudo apt-get remove -y 'temurin-*'
+        sudo apt-get remove -y microsoft-edge-stable azure-cli google-chrome-stable firefox powershell mono-devel
+        sudo apt-get autoremove -y
+        sudo apt-get clean
+        df -h
+        echo "Removing large directories"
+        # deleting 15GB
+        rm -rf /usr/share/dotnet/
+        df -h
 
     - name: Run tests
       run: |
@@ -231,21 +249,23 @@ jobs:
 
     - name: Upload container logs
       if: always()
-      uses: actions/upload-artifact@master
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_container_logs
         path: ${{ env.DAPR_CONTAINER_LOG_PATH }}
+        compression-level: 0 # Content is already compressed
 
     - name: Upload test logs
       if: always()
-      uses: actions/upload-artifact@master
+      uses: actions/upload-artifact@v4
       with:
         name: ${{ matrix.k8s-version }}_${{ matrix.mode}}_test_logs
         path: ${{ env.DAPR_TEST_LOG_PATH }}
+        compression-level: 0 # Content is already compressed
 
     - name: Upload test results
       if: always()
-      uses: actions/upload-artifact@master
+      uses: actions/upload-artifact@v4
       with:
         #TODO: .json suffix can be removed from artifact name after test analytics scripts are updated
         name: ${{ matrix.k8s-version }}_${{ matrix.mode }}_test_e2e.json

@@ -15,9 +15,16 @@ package v1alpha1
 
 import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"sigs.k8s.io/controller-runtime/pkg/client"
 
 	"github.com/dapr/dapr/pkg/apis/common"
+	"github.com/dapr/dapr/pkg/apis/components"
 	"github.com/dapr/dapr/utils"
+)
+
+const (
+	Kind    = "Component"
+	Version = "v1alpha1"
 )
 
 //+genclient
@@ -41,6 +48,20 @@ func (Component) Kind() string {
 	return "Component"
 }
 
+func (Component) APIVersion() string {
+	return components.GroupName + "/" + Version
+}
+
+// GetName returns the component name.
+func (c Component) GetName() string {
+	return c.Name
+}
+
+// GetNamespace returns the component namespace.
+func (c Component) GetNamespace() string {
+	return c.Namespace
+}
+
 // LogName returns the name of the component that can be used in logging.
 func (c Component) LogName() string {
 	return utils.ComponentLogName(c.ObjectMeta.Name, c.Spec.Type, c.Spec.Version)
@@ -54,6 +75,26 @@ func (c Component) GetSecretStore() string {
 // NameValuePairs returns the component's metadata as name/value pairs
 func (c Component) NameValuePairs() []common.NameValuePair {
 	return c.Spec.Metadata
+}
+
+func (c Component) ClientObject() client.Object {
+	return &c
+}
+
+func (c Component) GetScopes() []string {
+	return c.Scopes
+}
+
+// EmptyMetaDeepCopy returns a new instance of the component type with the
+// TypeMeta's Kind and APIVersion fields set.
+func (c Component) EmptyMetaDeepCopy() metav1.Object {
+	n := c.DeepCopy()
+	n.TypeMeta = metav1.TypeMeta{
+		Kind:       Kind,
+		APIVersion: components.GroupName + "/" + Version,
+	}
+	n.ObjectMeta = metav1.ObjectMeta{Name: c.Name}
+	return n
 }
 
 // ComponentSpec is the spec for a component.

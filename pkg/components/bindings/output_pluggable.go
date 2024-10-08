@@ -79,15 +79,19 @@ func (b *grpcOutputBinding) Invoke(ctx context.Context, req *bindings.InvokeRequ
 	}
 
 	var contentType *string
-	if len(resp.ContentType) != 0 {
+	if len(resp.GetContentType()) != 0 {
 		contentType = &resp.ContentType
 	}
 
 	return &bindings.InvokeResponse{
-		Data:        resp.Data,
-		Metadata:    resp.Metadata,
+		Data:        resp.GetData(),
+		Metadata:    resp.GetMetadata(),
 		ContentType: contentType,
 	}, nil
+}
+
+func (b *grpcOutputBinding) Close() error {
+	return b.GRPCConnector.Close()
 }
 
 // outputFromConnector creates a new GRPC outputbinding using the given underlying connector.

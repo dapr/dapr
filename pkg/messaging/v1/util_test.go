@@ -17,14 +17,12 @@ import (
 	"context"
 	"encoding/base64"
 	"fmt"
-	"net/http"
 	"sort"
 	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 	epb "google.golang.org/genproto/googleapis/rpc/errdetails"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
@@ -60,25 +58,6 @@ func TestInternalMetadataToHTTPHeader(t *testing.T) {
 	sort.Strings(savedHeaderKeyNames)
 
 	assert.Equal(t, expectedKeyNames, savedHeaderKeyNames)
-}
-
-func TestGrpcMetadataToInternalMetadata(t *testing.T) {
-	keyBinValue := []byte{101, 200}
-	testMD := metadata.Pairs(
-		"key", "key value",
-		"key-bin", string(keyBinValue),
-	)
-	testMD.Append("multikey", "ciao", "mamma")
-	internalMD := metadataToInternalMetadata(testMD)
-
-	require.Equal(t, 1, len(internalMD["key"].GetValues()))
-	assert.Equal(t, "key value", internalMD["key"].GetValues()[0])
-
-	require.Equal(t, 1, len(internalMD["key-bin"].GetValues()))
-	assert.Equal(t, base64.StdEncoding.EncodeToString(keyBinValue), internalMD["key-bin"].GetValues()[0], "binary metadata must be saved")
-
-	require.Equal(t, 2, len(internalMD["multikey"].GetValues()))
-	assert.Equal(t, []string{"ciao", "mamma"}, internalMD["multikey"].GetValues())
 }
 
 func TestIsJSONContentType(t *testing.T) {
@@ -243,7 +222,7 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		err := ErrorFromHTTPResponseCode(200, "OK")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("Created", func(t *testing.T) {
@@ -251,7 +230,7 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		err := ErrorFromHTTPResponseCode(201, "Created")
 
 		// assert
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("NotFound", func(t *testing.T) {
@@ -291,7 +270,7 @@ func TestErrorFromHTTPResponseCode(t *testing.T) {
 		// assert
 		s, _ := status.FromError(err)
 		errInfo := (s.Details()[0]).(*epb.ErrorInfo)
-		assert.Equal(t, 63, len(errInfo.GetMetadata()[errorInfoHTTPErrorMetadata]))
+		assert.Len(t, errInfo.GetMetadata()[errorInfoHTTPErrorMetadata], 63)
 	})
 }
 
@@ -307,9 +286,9 @@ func TestErrorFromInternalStatus(t *testing.T) {
 	)
 
 	internal := &internalv1pb.Status{
-		Code:    expected.Proto().Code,
-		Message: expected.Proto().Message,
-		Details: expected.Proto().Details,
+		Code:    expected.Proto().GetCode(),
+		Message: expected.Proto().GetMessage(),
+		Details: expected.Proto().GetDetails(),
 	}
 
 	expected.Message()
@@ -334,7 +313,7 @@ func TestProtobufToJSON(t *testing.T) {
 	}
 
 	jsonBody, err := ProtobufToJSON(tpb)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	t.Log(string(jsonBody))
 
 	// protojson produces different indentation space based on OS
@@ -355,7 +334,7 @@ func TestWithCustomGrpcMetadata(t *testing.T) {
 
 	numMetadata := 10
 	md := make(map[string]string, numMetadata)
-	for i := 0; i < numMetadata; i++ {
+	for i := range numMetadata {
 		md[customMetadataKey(i)] = customMetadataValue(i)
 	}
 
@@ -365,44 +344,10 @@ func TestWithCustomGrpcMetadata(t *testing.T) {
 	ctxMd, ok := metadata.FromOutgoingContext(ctx)
 	assert.True(t, ok)
 
-	for i := 0; i < numMetadata; i++ {
+	for i := range numMetadata {
 		val, ok := ctxMd[strings.ToLower(customMetadataKey(i))]
 		assert.True(t, ok)
 		// We assume only 1 value per key as the input map can only support string -> string mapping.
 		assert.Equal(t, customMetadataValue(i), val[0])
 	}
-}
-
-func TestFasthttpHeadersToInternalMetadata(t *testing.T) {
-	header := &fasthttp.RequestHeader{}
-	header.Add("foo", "test")
-	header.Add("bar", "test2")
-	header.Add("bar", "test3")
-
-	imd := fasthttpHeadersToInternalMetadata(header)
-
-	require.NotEmpty(t, imd)
-	require.NotEmpty(t, imd["Foo"])
-	require.NotEmpty(t, imd["Foo"].Values)
-	assert.Equal(t, []string{"test"}, imd["Foo"].Values)
-	require.NotEmpty(t, imd["Bar"])
-	require.NotEmpty(t, imd["Bar"].Values)
-	assert.Equal(t, []string{"test2", "test3"}, imd["Bar"].Values)
-}
-
-func TestHttpHeadersToInternalMetadata(t *testing.T) {
-	header := http.Header{}
-	header.Add("foo", "test")
-	header.Add("bar", "test2")
-	header.Add("bar", "test3")
-
-	imd := httpHeadersToInternalMetadata(header)
-
-	require.NotEmpty(t, imd)
-	require.NotEmpty(t, imd["Foo"])
-	require.NotEmpty(t, imd["Foo"].Values)
-	assert.Equal(t, []string{"test"}, imd["Foo"].Values)
-	require.NotEmpty(t, imd["Bar"])
-	require.NotEmpty(t, imd["Bar"].Values)
-	assert.Equal(t, []string{"test2", "test3"}, imd["Bar"].Values)
 }

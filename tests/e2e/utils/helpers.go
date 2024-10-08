@@ -18,7 +18,6 @@ import (
 	"fmt"
 	"os"
 	"runtime"
-	"strings"
 	"time"
 
 	guuid "github.com/google/uuid"
@@ -93,17 +92,6 @@ func FormatDuration(d time.Duration) string {
 	return fmt.Sprintf("%dms", d.Truncate(100*time.Microsecond).Milliseconds())
 }
 
-// IsTruthy returns true if a string is a truthy value.
-// Truthy values are "y", "yes", "true", "t", "on", "1" (case-insensitive); everything else is false.
-func IsTruthy(val string) bool {
-	switch strings.ToLower(strings.TrimSpace(val)) {
-	case "y", "yes", "true", "t", "on", "1":
-		return true
-	default:
-		return false
-	}
-}
-
 // HealthCheckApps performs healthchecks for multiple apps, waiting for them to be ready.
 func HealthCheckApps(urls ...string) error {
 	count := len(urls)
@@ -122,7 +110,7 @@ func HealthCheckApps(urls ...string) error {
 
 	// Collect all errors
 	errs := make([]error, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		errs[i] = <-errCh
 	}
 

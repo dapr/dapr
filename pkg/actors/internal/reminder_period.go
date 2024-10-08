@@ -52,13 +52,22 @@ func NewEmptyReminderPeriod() ReminderPeriod {
 	}
 }
 
+// NewSchedulerReminderPeriod returns a new reminder period from the Scheduler service job schedule.
+func NewSchedulerReminderPeriod(val string, repeats uint32) ReminderPeriod {
+	p := NewEmptyReminderPeriod()
+	p.repeats = int(repeats)
+	p.value = val
+
+	return p
+}
+
 // HasRepeats returns true if the period will repeat.
 func (p ReminderPeriod) HasRepeats() bool {
 	return p.repeats != 0 &&
 		(p.years != 0 || p.months != 0 || p.days != 0 || p.period != 0)
 }
 
-// GetNext returns the next time the periodic reminder should fire after a given time.
+// GetFollowing returns the next time the periodic reminder should fire after a given time.
 func (p ReminderPeriod) GetFollowing(t time.Time) time.Time {
 	return t.AddDate(p.years, p.months, p.days).Add(p.period)
 }

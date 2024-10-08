@@ -50,7 +50,7 @@ func TestSelhosted_store(t *testing.T) {
 			},
 		}
 
-		assert.NoError(t, s.store(context.Background(), Bundle{
+		require.NoError(t, s.store(context.Background(), Bundle{
 			TrustAnchors: []byte("root"),
 			IssChainPEM:  []byte("issuer"),
 			IssKeyPEM:    []byte("key"),
@@ -61,27 +61,27 @@ func TestSelhosted_store(t *testing.T) {
 		require.FileExists(t, keyFile)
 
 		info, err := os.Stat(rootFile)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, writePerm, info.Mode().Perm())
 
 		info, err = os.Stat(issuerFile)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, writePerm, info.Mode().Perm())
 
 		info, err = os.Stat(keyFile)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, writePerm, info.Mode().Perm())
 
 		b, err := os.ReadFile(rootFile)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "root", string(b))
 
 		b, err = os.ReadFile(issuerFile)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "issuer", string(b))
 
 		b, err = os.ReadFile(keyFile)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, "key", string(b))
 	})
 }

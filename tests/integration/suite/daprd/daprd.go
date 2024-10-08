@@ -14,11 +14,27 @@ limitations under the License.
 package daprd
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/binding"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/conversation"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/hotreload"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/httpendpoints"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/httpserver"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metadata"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/metrics"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/middleware"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/mtls"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/multipleconfigs"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/outbox"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pluggable"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/pubsub"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resiliency"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/resources"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/secret"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/shutdown"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/state"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/subscriptions"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/tracing"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow"
 )

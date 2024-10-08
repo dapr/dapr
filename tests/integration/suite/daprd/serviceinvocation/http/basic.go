@@ -26,9 +26,10 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -108,7 +109,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.daprd1.WaitUntilRunning(t, ctx)
 	b.daprd2.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 
 	t.Run("invoke url", func(t *testing.T) {
 		doReq := func(method, url string, headers map[string]string) (int, string) {
@@ -125,7 +126,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			return resp.StatusCode, string(body)
 		}
 
-		for i, ts := range []struct {
+		for _, ts := range []struct {
 			url     string
 			headers map[string]string
 		}{
@@ -138,27 +139,25 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				"dapr-app-id": b.daprd2.AppID(),
 			}},
 		} {
-			t.Run(fmt.Sprintf("url %d", i), func(t *testing.T) {
-				status, body := doReq(http.MethodGet, ts.url, ts.headers)
-				assert.Equal(t, http.StatusOK, status)
-				assert.Equal(t, "GET", body)
+			status, body := doReq(http.MethodGet, ts.url, ts.headers)
+			assert.Equal(t, http.StatusOK, status)
+			assert.Equal(t, "GET", body)
 
-				status, body = doReq(http.MethodPost, ts.url, ts.headers)
-				assert.Equal(t, http.StatusCreated, status)
-				assert.Equal(t, "POST", body)
+			status, body = doReq(http.MethodPost, ts.url, ts.headers)
+			assert.Equal(t, http.StatusCreated, status)
+			assert.Equal(t, "POST", body)
 
-				status, body = doReq(http.MethodPut, ts.url, ts.headers)
-				assert.Equal(t, http.StatusAccepted, status)
-				assert.Equal(t, "PUT", body)
+			status, body = doReq(http.MethodPut, ts.url, ts.headers)
+			assert.Equal(t, http.StatusAccepted, status)
+			assert.Equal(t, "PUT", body)
 
-				status, body = doReq(http.MethodDelete, ts.url, ts.headers)
-				assert.Equal(t, http.StatusConflict, status)
-				assert.Equal(t, "DELETE", body)
+			status, body = doReq(http.MethodDelete, ts.url, ts.headers)
+			assert.Equal(t, http.StatusConflict, status)
+			assert.Equal(t, "DELETE", body)
 
-				status, body = doReq(http.MethodPatch, ts.url, ts.headers)
-				assert.Equal(t, http.StatusBadGateway, status)
-				assert.Equal(t, "PATCH", body)
-			})
+			status, body = doReq(http.MethodPatch, ts.url, ts.headers)
+			assert.Equal(t, http.StatusBadGateway, status)
+			assert.Equal(t, "PATCH", body)
 		}
 	})
 
@@ -167,63 +166,63 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader("hello"))
 		require.NoError(t, err)
 		req.Header.Set("foo", "bar")
-		resp, err := util.HTTPClient(t).Do(req)
+		resp, err := client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 	})
 
 	t.Run("method doesn't exist", func(t *testing.T) {
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/doesntexist", b.daprd1.HTTPPort(), b.daprd2.AppID())
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 		require.NoError(t, err)
-		resp, err := util.HTTPClient(t).Do(req)
+		resp, err := client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 	})
 
 	t.Run("no method", func(t *testing.T) {
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s", b.daprd1.HTTPPort(), b.daprd2.AppID())
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 		require.NoError(t, err)
-		resp, err := util.HTTPClient(t).Do(req)
+		resp, err := client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 
 		reqURL = fmt.Sprintf("http://localhost:%d/", b.daprd1.HTTPPort())
 		req, err = http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 		require.NoError(t, err)
 		req.Header.Set("dapr-app-id", b.daprd2.AppID())
-		resp, err = util.HTTPClient(t).Do(req)
+		resp, err = client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 	})
 
 	t.Run("multiple segments", func(t *testing.T) {
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/multiple/segments", b.daprd1.HTTPPort(), b.daprd2.AppID())
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, nil)
 		require.NoError(t, err)
-		resp, err := util.HTTPClient(t).Do(req)
+		resp, err := client.HTTP(t).Do(req)
 		require.NoError(t, err)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		assert.Equal(t, "ok", string(body))
-		assert.NoError(t, resp.Body.Close())
 	})
 
-	for i := 0; i < 100; i++ {
-		t.Run("parallel requests", func(t *testing.T) {
-			t.Parallel()
+	client := client.HTTP(t)
+	pt := parallel.New(t)
+	for range 100 {
+		pt.Add(func(t *assert.CollectT) {
 			u := uuid.New().String()
 			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/echo", b.daprd1.HTTPPort(), b.daprd2.AppID())
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, reqURL, strings.NewReader(u))
 			require.NoError(t, err)
-			resp, err := util.HTTPClient(t).Do(req)
+			resp, err := client.Do(req)
 			require.NoError(t, err)
 			assert.Equal(t, http.StatusOK, resp.StatusCode)
 			body, err := io.ReadAll(resp.Body)
@@ -231,7 +230,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, resp.Body.Close())
 			assert.Equal(t, "POST", resp.Header.Get("x-method"))
 			assert.Equal(t, u, string(body))
-			assert.NoError(t, resp.Body.Close())
 		})
 	}
 }

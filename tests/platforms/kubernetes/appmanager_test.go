@@ -19,6 +19,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	autoscalingv1 "k8s.io/api/autoscaling/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -70,7 +71,7 @@ func TestDeployApp(t *testing.T) {
 
 	// act
 	_, err := appManager.Deploy()
-	assert.NoError(t, err)
+	require.NoError(t, err)
 
 	// assert
 	deploymentClient := client.Deployments(testNamespace)
@@ -126,12 +127,12 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 
 		// act
 		_, err := appManager.Deploy()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// assert
 		d, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, testApp.Replicas, d.Status.ReadyReplicas)
 		assert.Equal(t, expectedGetVerbCalled, getVerbCalled)
 	})
@@ -179,12 +180,12 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 
 		// act
 		_, err := appManager.Deploy()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		// assert
 		d, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDeleted)
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Nil(t, d)
 		assert.Equal(t, expectedGetVerbCalled, getVerbCalled)
 	})
@@ -228,22 +229,22 @@ func TestScaleDeploymentReplica(t *testing.T) {
 
 	t.Run("lower bound check", func(t *testing.T) {
 		err := appManager.ScaleDeploymentReplica(-1)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("upper bound check", func(t *testing.T) {
 		err := appManager.ScaleDeploymentReplica(maxReplicas + 1)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("same replicas", func(t *testing.T) {
 		err := appManager.ScaleDeploymentReplica(1)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("new replicas", func(t *testing.T) {
 		err := appManager.ScaleDeploymentReplica(3)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -294,7 +295,7 @@ func TestValidateSidecar(t *testing.T) {
 		appManager := NewAppManager(client, testNamespace, testApp)
 		err := appManager.ValidateSidecar()
 
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("Sidecar is not injected", func(t *testing.T) {
@@ -328,7 +329,7 @@ func TestValidateSidecar(t *testing.T) {
 
 		appManager := NewAppManager(client, testNamespace, testApp)
 		err := appManager.ValidateSidecar()
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("Pod is not found", func(t *testing.T) {
@@ -350,7 +351,7 @@ func TestValidateSidecar(t *testing.T) {
 
 		appManager := NewAppManager(client, testNamespace, testApp)
 		err := appManager.ValidateSidecar()
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -363,7 +364,7 @@ func TestCreateIngressService(t *testing.T) {
 		appManager := NewAppManager(client, testNamespace, testApp)
 
 		_, err := appManager.CreateIngressService()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		// assert
 		serviceClient := client.Services(testNamespace)
 		obj, _ := serviceClient.Get(context.TODO(), testApp.AppName, metav1.GetOptions{})
@@ -379,7 +380,7 @@ func TestCreateIngressService(t *testing.T) {
 		appManager := NewAppManager(client, testNamespace, testApp)
 
 		_, err := appManager.CreateIngressService()
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		// assert
 		serviceClient := client.Services(testNamespace)
 		obj, _ := serviceClient.Get(context.TODO(), testApp.AppName, metav1.GetOptions{})
@@ -422,7 +423,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 
 		appManager := NewAppManager(client, testNamespace, testApp)
 		svcObj, err := appManager.WaitUntilServiceState(appManager.app.AppName, appManager.IsServiceIngressReady)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		externalURL := appManager.AcquireExternalURLFromService(svcObj)
 		assert.Equal(t, externalURL, fmt.Sprintf("%s:%d", fakeMinikubeNodeIP, fakeNodePort))
@@ -473,7 +474,7 @@ func TestWaitUntilServiceStateAndGetExternalURL(t *testing.T) {
 
 		appManager := NewAppManager(client, testNamespace, testApp)
 		svcObj, err := appManager.WaitUntilServiceState(appManager.app.AppName, appManager.IsServiceIngressReady)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 
 		externalURL := appManager.AcquireExternalURLFromService(svcObj)
 		assert.Equal(t, fmt.Sprintf("%s:%d", fakeExternalIP, fakeNodePort), externalURL)
@@ -504,7 +505,7 @@ func TestWaitUntilServiceStateDeleted(t *testing.T) {
 
 	appManager := NewAppManager(client, testNamespace, testApp)
 	svcObj, err := appManager.WaitUntilServiceState(appManager.app.AppName, appManager.IsServiceDeleted)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Nil(t, svcObj)
 }
 
@@ -546,7 +547,7 @@ func TestDeleteDeployment(t *testing.T) {
 			client.ClientSet.(*fake.Clientset).AddReactor("delete", "deployments", tt.actionFunc)
 			appManager := NewAppManager(client, testNamespace, testApp)
 			err := appManager.DeleteDeployment(false)
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		})
 	}
 }
@@ -590,7 +591,7 @@ func TestDeleteService(t *testing.T) {
 			appManager := NewAppManager(client, testNamespace, testApp)
 			err := appManager.DeleteService(false)
 
-			assert.NoError(t, err)
+			require.NoError(t, err)
 		})
 	}
 }

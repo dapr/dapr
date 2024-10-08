@@ -24,8 +24,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procsentry "github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -49,7 +49,7 @@ func (s *sentry) Run(t *testing.T, ctx context.Context) {
 	s.proc.WaitUntilRunning(t, ctx)
 
 	reqURL := fmt.Sprintf("http://127.0.0.1:%d/healthz", s.proc.HealthzPort())
-	httpClient := util.HTTPClient(t)
+	httpClient := client.HTTP(t)
 	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 		require.NoError(t, err)
@@ -57,5 +57,5 @@ func (s *sentry) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
 		return http.StatusOK == resp.StatusCode
-	}, time.Second*10, 100*time.Millisecond)
+	}, time.Second*10, 10*time.Millisecond)
 }

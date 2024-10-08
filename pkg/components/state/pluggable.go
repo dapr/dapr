@@ -18,7 +18,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"strconv"
+	"sync"
+	"time"
+
+	"github.com/dapr/kit/ptr"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/components-contrib/state/query"
@@ -45,6 +50,8 @@ var (
 	GRPCCodeETagMismatch          = codes.FailedPrecondition
 	GRPCCodeETagInvalid           = codes.InvalidArgument
 	GRPCCodeBulkDeleteRowMismatch = codes.Internal
+
+	log = logger.NewLogger("state-pluggable-logger")
 )
 
 const (
@@ -144,7 +151,9 @@ var (
 type grpcStateStore struct {
 	*pluggable.GRPCConnector[stateStoreClient]
 	// features is the list of state store implemented features.
-	features []state.Feature
+	features     []state.Feature
+	multiMaxSize *int
+	lock         sync.RWMutex
 }
 
 // Init initializes the grpc state passing out the metadata to the grpc component.
@@ -172,8 +181,8 @@ func (ss *grpcStateStore) Init(ctx context.Context, metadata state.Metadata) err
 		return err
 	}
 
-	ss.features = make([]state.Feature, len(featureResponse.Features))
-	for idx, f := range featureResponse.Features {
+	ss.features = make([]state.Feature, len(featureResponse.GetFeatures()))
+	for idx, f := range featureResponse.GetFeatures() {
 		ss.features[idx] = state.Feature(f)
 	}
 
@@ -189,6 +198,10 @@ func (ss *grpcStateStore) Features() []state.Feature {
 func (ss *grpcStateStore) Delete(ctx context.Context, req *state.DeleteRequest) error {
 	_, err := ss.Client.Delete(ctx, toDeleteRequest(req))
 
+	if kerr, ok := pluggable.KitErrorFromGrpcError(err); ok {
+		return kerr
+	}
+
 	return mapDeleteErrs(err)
 }
 
@@ -196,7 +209,7 @@ func (ss *grpcStateStore) Delete(ctx context.Context, req *state.DeleteRequest) 
 func (ss *grpcStateStore) Get(ctx context.Context, req *state.GetRequest) (*state.GetResponse, error) {
 	response, err := ss.Client.Get(ctx, toGetRequest(req))
 	if err != nil {
-		return nil, err
+		return nil, pluggable.KitErrorFromGrpcErrorIgnore(err)
 	}
 
 	if response == nil {
@@ -213,6 +226,11 @@ func (ss *grpcStateStore) Set(ctx context.Context, req *state.SetRequest) error 
 		return err
 	}
 	_, err = ss.Client.Set(ctx, protoRequest)
+
+	if kerr, ok := pluggable.KitErrorFromGrpcError(err); ok {
+		return kerr
+	}
+
 	return mapSetErrs(err)
 }
 
@@ -232,6 +250,11 @@ func (ss *grpcStateStore) BulkDelete(ctx context.Context, reqs []state.DeleteReq
 	}
 
 	_, err := ss.Client.BulkDelete(ctx, bulkDeleteRequest)
+
+	if kerr, ok := pluggable.KitErrorFromGrpcError(err); ok {
+		return kerr
+	}
+
 	return mapBulkDeleteErrs(err)
 }
 
@@ -251,18 +274,18 @@ func (ss *grpcStateStore) BulkGet(ctx context.Context, req []state.GetRequest, o
 
 	bulkGetResponse, err := ss.Client.BulkGet(ctx, bulkGetRequest)
 	if err != nil {
-		return nil, err
+		return nil, pluggable.KitErrorFromGrpcErrorIgnore(err)
 	}
 
-	items := make([]state.BulkGetResponse, len(bulkGetResponse.Items))
-	for idx, resp := range bulkGetResponse.Items {
+	items := make([]state.BulkGetResponse, len(bulkGetResponse.GetItems()))
+	for idx, resp := range bulkGetResponse.GetItems() {
 		items[idx] = state.BulkGetResponse{
 			Key:         resp.GetKey(),
 			Data:        resp.GetData(),
 			ETag:        fromETagResponse(resp.GetEtag()),
 			Metadata:    resp.GetMetadata(),
-			Error:       resp.Error,
-			ContentType: strNilIfEmpty(resp.ContentType),
+			Error:       resp.GetError(),
+			ContentType: strNilIfEmpty(resp.GetContentType()),
 		}
 	}
 	return items, nil
@@ -284,6 +307,11 @@ func (ss *grpcStateStore) BulkSet(ctx context.Context, req []state.SetRequest, o
 			Parallelism: int64(opts.Parallelism),
 		},
 	})
+
+	if kerr, ok := pluggable.KitErrorFromGrpcError(err); ok {
+		return kerr
+	}
+
 	return mapBulkSetErrs(err)
 }
 
@@ -299,7 +327,7 @@ func (ss *grpcStateStore) Query(ctx context.Context, req *state.QueryRequest) (*
 		Metadata: req.Metadata,
 	})
 	if err != nil {
-		return nil, err
+		return nil, pluggable.KitErrorFromGrpcErrorIgnore(err)
 	}
 	return fromQueryResponse(resp), nil
 }
@@ -318,7 +346,54 @@ func (ss *grpcStateStore) Multi(ctx context.Context, request *state.Transactiona
 		Operations: operations,
 		Metadata:   request.Metadata,
 	})
+
+	if kerr, ok := pluggable.KitErrorFromGrpcError(err); ok {
+		return kerr
+	}
+
 	return err
+}
+
+// MultiMaxSize returns the maximum number of operations allowed in a transactional request.
+func (ss *grpcStateStore) MultiMaxSize() int {
+	ss.lock.RLock()
+	multiMaxSize := ss.multiMaxSize
+	ss.lock.RUnlock()
+
+	if multiMaxSize != nil {
+		return *multiMaxSize
+	}
+
+	ss.lock.Lock()
+	defer ss.lock.Unlock()
+
+	// Check the cached value again in case another goroutine set it
+	if multiMaxSize != nil {
+		return *multiMaxSize
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+
+	resp, err := ss.Client.MultiMaxSize(ctx, new(proto.MultiMaxSizeRequest))
+	if err != nil {
+		log.Error("failed to get multi max size from state store", err)
+		ss.multiMaxSize = ptr.Of(-1)
+		return *ss.multiMaxSize
+	}
+
+	// If the pluggable component is on a 64bit system and the dapr runtime is on a 32bit system,
+	// the response could be larger than the maximum int32 value.
+	// In this case, we set the max size to the maximum possible value for a 32bit system.
+	is32bitSystem := math.MaxInt == math.MaxInt32
+	if is32bitSystem && resp.GetMaxSize() > int64(math.MaxInt32) {
+		log.Warnf("multi max size %d is too large for 32bit systems, setting to max possible", resp.GetMaxSize())
+		ss.multiMaxSize = ptr.Of(math.MaxInt32)
+		return *ss.multiMaxSize
+	}
+
+	ss.multiMaxSize = ptr.Of(int(resp.GetMaxSize()))
+	return *ss.multiMaxSize
 }
 
 // mappers and helpers.
@@ -370,23 +445,23 @@ func toQuery(req query.Query) (*proto.Query, error) {
 }
 
 func fromQueryResponse(resp *proto.QueryResponse) *state.QueryResponse {
-	results := make([]state.QueryItem, len(resp.Items))
+	results := make([]state.QueryItem, len(resp.GetItems()))
 
-	for idx, item := range resp.Items {
+	for idx, item := range resp.GetItems() {
 		itemIdx := state.QueryItem{
-			Key:         item.Key,
-			Data:        item.Data,
-			ETag:        fromETagResponse(item.Etag),
-			Error:       item.Error,
-			ContentType: strNilIfEmpty(item.ContentType),
+			Key:         item.GetKey(),
+			Data:        item.GetData(),
+			ETag:        fromETagResponse(item.GetEtag()),
+			Error:       item.GetError(),
+			ContentType: strNilIfEmpty(item.GetContentType()),
 		}
 
 		results[idx] = itemIdx
 	}
 	return &state.QueryResponse{
 		Results:  results,
-		Token:    resp.Token,
-		Metadata: resp.Metadata,
+		Token:    resp.GetToken(),
+		Metadata: resp.GetMetadata(),
 	}
 }
 
@@ -445,7 +520,7 @@ func fromGetResponse(resp *proto.GetResponse) *state.GetResponse {
 		Data:        resp.GetData(),
 		ETag:        fromETagResponse(resp.GetEtag()),
 		Metadata:    resp.GetMetadata(),
-		ContentType: strNilIfEmpty(resp.ContentType),
+		ContentType: strNilIfEmpty(resp.GetContentType()),
 	}
 }
 
@@ -526,6 +601,7 @@ type stateStoreClient struct {
 	proto.StateStoreClient
 	proto.TransactionalStateStoreClient
 	proto.QueriableStateStoreClient
+	proto.TransactionalStoreMultiMaxSizeClient
 }
 
 // strNilIfEmpty returns nil if string is empty
@@ -547,9 +623,10 @@ func strValueIfNotNil(str *string) string {
 // newStateStoreClient creates a new stateStore client instance.
 func newStateStoreClient(cc grpc.ClientConnInterface) stateStoreClient {
 	return stateStoreClient{
-		StateStoreClient:              proto.NewStateStoreClient(cc),
-		TransactionalStateStoreClient: proto.NewTransactionalStateStoreClient(cc),
-		QueriableStateStoreClient:     proto.NewQueriableStateStoreClient(cc),
+		StateStoreClient:                     proto.NewStateStoreClient(cc),
+		TransactionalStateStoreClient:        proto.NewTransactionalStateStoreClient(cc),
+		QueriableStateStoreClient:            proto.NewQueriableStateStoreClient(cc),
+		TransactionalStoreMultiMaxSizeClient: proto.NewTransactionalStoreMultiMaxSizeClient(cc),
 	}
 }
 

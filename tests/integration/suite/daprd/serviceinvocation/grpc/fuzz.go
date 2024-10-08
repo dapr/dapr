@@ -16,6 +16,7 @@ package grpc
 import (
 	"context"
 	"fmt"
+	"net/url"
 	"strings"
 	"testing"
 
@@ -29,7 +30,9 @@ import (
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -51,26 +54,23 @@ func (f *fuzzgrpc) Setup(t *testing.T) []framework.Option {
 
 	onInvoke := func(ctx context.Context, in *commonv1.InvokeRequest) (*commonv1.InvokeResponse, error) {
 		return &commonv1.InvokeResponse{
-			Data: &anypb.Any{Value: in.Data.Value},
+			Data: &anypb.Any{Value: in.GetData().GetValue()},
 		}, nil
 	}
 
-	srv := newGRPCServer(t, onInvoke)
-	f.daprd1 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv.Port()))
+	srv := app.New(t, app.WithOnInvokeFn(onInvoke))
+	f.daprd1 = procdaprd.New(t, procdaprd.WithAppProtocol("grpc"), procdaprd.WithAppPort(srv.Port(t)))
 	f.daprd2 = procdaprd.New(t)
 
 	f.methods = make([]string, numTests)
 	f.bodies = make([][]byte, numTests)
 	f.queries = make([]map[string]string, numTests)
-	t.Run("", func(t *testing.T) {
-		t.Parallel()
-		for i := 0; i < numTests; i++ {
-			fz := fuzz.New()
-			fz.NumElements(0, 100).Fuzz(&f.methods[i])
-			fz.NumElements(0, 100).Fuzz(&f.bodies[i])
-			fz.NumElements(0, 100).Fuzz(&f.queries[i])
-		}
-	})
+	for i := range numTests {
+		fz := fuzz.New()
+		fz.NumElements(0, 100).Fuzz(&f.methods[i])
+		fz.NumElements(0, 100).Fuzz(&f.bodies[i])
+		fz.NumElements(0, 100).Fuzz(&f.queries[i])
+	}
 
 	return []framework.Option{
 		framework.WithProcesses(f.daprd1, f.daprd2, srv),
@@ -81,7 +81,8 @@ func (f *fuzzgrpc) Run(t *testing.T, ctx context.Context) {
 	f.daprd1.WaitUntilRunning(t, ctx)
 	f.daprd2.WaitUntilRunning(t, ctx)
 
-	for i := 0; i < len(f.methods); i++ {
+	pt := parallel.New(t)
+	for i := range f.methods {
 		method := f.methods[i]
 		body := f.bodies[i]
 		query := f.queries[i]
@@ -90,24 +91,28 @@ func (f *fuzzgrpc) Run(t *testing.T, ctx context.Context) {
 			queryString = append(queryString, fmt.Sprintf("%s=%s", k, v))
 		}
 
-		t.Run("method="+method, func(t *testing.T) {
-			t.Parallel()
+		pt.Add(func(c *assert.CollectT) {
+			//nolint:staticcheck
 			conn, err := grpc.DialContext(ctx, fmt.Sprintf("127.0.0.1:%d", f.daprd2.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
-			require.NoError(t, err)
+			require.NoError(c, err)
 			t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 			resp, err := rtv1.NewDaprClient(conn).InvokeService(ctx, &rtv1.InvokeServiceRequest{
 				Id: f.daprd1.AppID(),
 				Message: &commonv1.InvokeRequest{
-					Method: method,
+					Method: url.QueryEscape(method),
+					Data:   &anypb.Any{Value: body},
 					HttpExtension: &commonv1.HTTPExtension{
 						Verb:        commonv1.HTTPExtension_POST,
 						Querystring: strings.Join(queryString, "&"),
 					},
 				},
 			})
-			require.NoError(t, err)
-			assert.Equal(t, body, resp.Data.Value)
+			require.NoError(c, err)
+			if len(body) == 0 {
+				body = nil
+			}
+			assert.Equal(c, body, resp.GetData().GetValue())
 		})
 	}
 }

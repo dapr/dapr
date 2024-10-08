@@ -16,7 +16,6 @@ package security
 import (
 	"context"
 	"crypto/tls"
-	"crypto/x509"
 	"errors"
 	"fmt"
 	"net"
@@ -28,20 +27,19 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/spiffe/go-spiffe/v2/spiffetls/tlsconfig"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/credentials"
 	"google.golang.org/grpc/credentials/insecure"
-	"k8s.io/utils/clock"
 
-	"github.com/dapr/dapr/pkg/concurrency"
 	"github.com/dapr/dapr/pkg/diagnostics"
-	"github.com/dapr/dapr/pkg/security/legacy"
-	"github.com/dapr/kit/fswatcher"
+	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/crypto/spiffe"
+	spiffecontext "github.com/dapr/kit/crypto/spiffe/context"
+	"github.com/dapr/kit/crypto/spiffe/trustanchors"
 	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.runtime.security")
-
-type RequestFn func(ctx context.Context, der []byte) ([]*x509.Certificate, error)
 
 // Handler implements middleware for client and server connection security.
 //
@@ -58,8 +56,10 @@ type Handler interface {
 
 	ControlPlaneTrustDomain() spiffeid.TrustDomain
 	ControlPlaneNamespace() string
-	CurrentTrustAnchors() ([]byte, error)
+	CurrentTrustAnchors(context.Context) ([]byte, error)
+	WithSVIDContext(context.Context) context.Context
 
+	MTLSEnabled() bool
 	WatchTrustAnchors(context.Context, chan<- []byte)
 }
 
@@ -90,7 +90,7 @@ type Options struct {
 	// TrustAnchorsFile is the path to the X.509 PEM encoded CA certificates for
 	// this Dapr installation. Prefer this over TrustAnchors so changes to the
 	// file are automatically picked up. Cannot be used with TrustAnchors.
-	TrustAnchorsFile string
+	TrustAnchorsFile *string
 
 	// AppID is the application ID of this workload.
 	AppID string
@@ -98,22 +98,27 @@ type Options struct {
 	// MTLS is true if mTLS is enabled.
 	MTLSEnabled bool
 
-	// OverrideCertRequestSource is used to override where certificates are requested
+	// OverrideCertRequestFn is used to override where certificates are requested
 	// from. Default to an implementation requesting from Sentry.
-	OverrideCertRequestSource RequestFn
+	OverrideCertRequestFn spiffe.RequestSVIDFn
 
-	// WriteSVIDoDir is the directory to write the X.509 SVID certificate private
-	// key pair to. This is highly discouraged since it results in the private
-	// key being written to file.
-	WriteSVIDToDir *string
+	// Mode is the operation mode of this security instance (self-hosted or
+	// Kubernetes).
+	Mode modes.DaprMode
+
+	// SentryTokenFile is an optional file containing the token to authenticate
+	// to sentry.
+	SentryTokenFile *string
+
+	// Healthz is used to signal the health of the security provider.
+	Healthz healthz.Healthz
 }
 
 type provider struct {
-	sec *security
-
-	running          atomic.Bool
-	readyCh          chan struct{}
-	trustAnchorsFile string
+	sec     *security
+	running atomic.Bool
+	htarget healthz.Target
+	readyCh chan struct{}
 }
 
 // security implements the Security interface.
@@ -121,8 +126,9 @@ type security struct {
 	controlPlaneTrustDomain spiffeid.TrustDomain
 	controlPlaneNamespace   string
 
-	source *x509source
-	mtls   bool
+	trustAnchors trustanchors.Interface
+	spiffe       *spiffe.SPIFFE
+	mtls         bool
 }
 
 func New(ctx context.Context, opts Options) (Provider, error) {
@@ -130,37 +136,62 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 		return nil, errors.New("control plane trust domain is required")
 	}
 
-	td, err := spiffeid.TrustDomainFromString(opts.ControlPlaneTrustDomain)
+	htarget := opts.Healthz.AddTarget()
+
+	cptd, err := spiffeid.TrustDomainFromString(opts.ControlPlaneTrustDomain)
 	if err != nil {
 		return nil, fmt.Errorf("invalid control plane trust domain: %w", err)
 	}
 
-	var source *x509source
-	if opts.MTLSEnabled {
-		if len(opts.TrustAnchors) > 0 && len(opts.TrustAnchorsFile) > 0 {
+	// Always request certificates from Sentry if mTLS is enabled or running in
+	// Kubernetes. In Kubernetes, Daprd always communicates mTLS with the control
+	// plane.
+	var spf *spiffe.SPIFFE
+	var trustAnchors trustanchors.Interface
+	if opts.MTLSEnabled || opts.Mode == modes.KubernetesMode {
+		if len(opts.TrustAnchors) > 0 && opts.TrustAnchorsFile != nil {
 			return nil, errors.New("trust anchors cannot be specified in both TrustAnchors and TrustAnchorsFile")
 		}
 
-		if len(opts.TrustAnchors) == 0 && len(opts.TrustAnchorsFile) == 0 {
+		if len(opts.TrustAnchors) == 0 && opts.TrustAnchorsFile == nil {
 			return nil, errors.New("trust anchors are required")
 		}
 
-		var err error
-		source, err = newX509Source(ctx, clock.RealClock{}, td, opts)
-		if err != nil {
-			return nil, err
+		switch {
+		case len(opts.TrustAnchors) > 0:
+			trustAnchors, err = trustanchors.FromStatic(opts.TrustAnchors)
+			if err != nil {
+				return nil, err
+			}
+		case opts.TrustAnchorsFile != nil:
+			trustAnchors = trustanchors.FromFile(trustanchors.OptionsFile{
+				Log:  log,
+				Path: *opts.TrustAnchorsFile,
+			})
 		}
+
+		var reqFn spiffe.RequestSVIDFn
+		if opts.OverrideCertRequestFn != nil {
+			reqFn = opts.OverrideCertRequestFn
+		} else {
+			reqFn, err = newRequestFn(opts, trustAnchors, cptd)
+			if err != nil {
+				return nil, err
+			}
+		}
+		spf = spiffe.New(spiffe.Options{Log: log, RequestSVIDFn: reqFn})
 	} else {
 		log.Warn("mTLS is disabled. Skipping certificate request and tls validation")
 	}
 
 	return &provider{
-		readyCh:          make(chan struct{}),
-		trustAnchorsFile: opts.TrustAnchorsFile,
+		htarget: htarget,
+		readyCh: make(chan struct{}),
 		sec: &security{
-			source:                  source,
+			trustAnchors:            trustAnchors,
+			spiffe:                  spf,
 			mtls:                    opts.MTLSEnabled,
-			controlPlaneTrustDomain: td,
+			controlPlaneTrustDomain: cptd,
 			controlPlaneNamespace:   opts.ControlPlaneNamespace,
 		},
 	}, nil
@@ -169,64 +200,33 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 // Run is a blocking function which starts the security provider, handling
 // rotation of credentials.
 func (p *provider) Run(ctx context.Context) error {
+	defer p.htarget.NotReady()
 	if !p.running.CompareAndSwap(false, true) {
 		return errors.New("security provider already started")
 	}
 
-	if !p.sec.mtls {
+	// If spiffe has not been initialized, then just wait to exit.
+	if p.sec.spiffe == nil {
 		close(p.readyCh)
+		p.htarget.Ready()
 		<-ctx.Done()
 		return nil
 	}
 
-	if p.sec.source.requestFn == nil {
-		p.sec.source.requestFn = p.sec.source.requestFromSentry
-		log.Infof("Fetching initial identity certificate from %s", p.sec.source.sentryAddress)
-	}
-
-	initialCert, err := p.sec.source.renewIdentityCertificate(ctx)
-	if err != nil {
-		return fmt.Errorf("failed to retrieve the initial identity certificate: %w", err)
-	}
-
-	mngr := concurrency.NewRunnerManager(func(ctx context.Context) error {
-		p.sec.source.startRotation(ctx, p.sec.source.renewIdentityCertificate, initialCert)
-		return nil
-	})
-
-	if len(p.trustAnchorsFile) > 0 {
-		caEvent := make(chan struct{})
-
-		err = mngr.Add(
-			func(ctx context.Context) error {
-				log.Infof("Watching trust anchors file '%s' for changes", p.trustAnchorsFile)
-				return fswatcher.Watch(ctx, p.trustAnchorsFile, caEvent)
-			},
-			func(ctx context.Context) error {
-				for {
-					select {
-					case <-ctx.Done():
-						return nil
-					case <-caEvent:
-						log.Info("Trust anchors file changed, reloading trust anchors")
-
-						if uErr := p.sec.source.updateTrustAnchorFromFile(ctx, p.trustAnchorsFile); uErr != nil {
-							log.Errorf("Failed to read trust anchors file '%s': %v", p.trustAnchorsFile, uErr)
-						}
-					}
-				}
-			},
-		)
-		if err != nil {
-			return err
-		}
-	}
-
-	diagnostics.DefaultMonitoring.MTLSInitCompleted()
-	close(p.readyCh)
-	log.Infof("Security is initialized successfully")
-
-	return mngr.Run(ctx)
+	return concurrency.NewRunnerManager(
+		p.sec.spiffe.Run,
+		p.sec.trustAnchors.Run,
+		func(ctx context.Context) error {
+			if err := p.sec.spiffe.Ready(ctx); err != nil {
+				return err
+			}
+			close(p.readyCh)
+			diagnostics.DefaultMonitoring.MTLSInitCompleted()
+			p.htarget.Ready()
+			<-ctx.Done()
+			return nil
+		},
+	).Run(ctx)
 }
 
 // Handler returns a ready handler from the security provider. Blocks until
@@ -243,12 +243,17 @@ func (p *provider) Handler(ctx context.Context) (Handler, error) {
 // GRPCDialOptionMTLS returns a gRPC dial option which instruments client
 // authentication using the current signed client certificate.
 func (s *security) GRPCDialOptionMTLS(appID spiffeid.ID) grpc.DialOption {
-	if !s.mtls {
+	// If source has not been initialized, then just return an insecure dial
+	// option. We don't check on `mtls` here as we still want to use mTLS with
+	// control plane peers when running in Kubernetes mode even if mTLS is
+	// disabled.
+	if s.spiffe == nil {
 		return grpc.WithTransportCredentials(insecure.NewCredentials())
 	}
-	return grpc.WithTransportCredentials(credentials.NewTLS(
-		legacy.NewDialClient(s.source, s.source, tlsconfig.AuthorizeID(appID)),
-	))
+
+	return grpc.WithTransportCredentials(
+		grpccredentials.MTLSClientCredentials(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(appID)),
+	)
 }
 
 // GRPCServerOptionMTLS returns a gRPC server option which instruments
@@ -261,7 +266,7 @@ func (s *security) GRPCServerOptionMTLS() grpc.ServerOption {
 	return grpc.Creds(
 		// TODO: It would be better if we could give a subset of trust domains in
 		// which this server authorizes.
-		grpccredentials.MTLSServerCredentials(s.source, s.source, tlsconfig.AuthorizeAny()),
+		grpccredentials.MTLSServerCredentials(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeAny()),
 	)
 }
 
@@ -269,7 +274,7 @@ func (s *security) GRPCServerOptionMTLS() grpc.ServerOption {
 // authentication of clients using the current trust anchors. Doesn't require
 // clients to present a certificate.
 func (s *security) GRPCServerOptionNoClientAuth() grpc.ServerOption {
-	return grpc.Creds(grpccredentials.TLSServerCredentials(s.source))
+	return grpc.Creds(grpccredentials.TLSServerCredentials(s.spiffe.SVIDSource()))
 }
 
 // GRPCDialOptionMTLSUnknownTrustDomain returns a gRPC dial option which
@@ -290,23 +295,26 @@ func (s *security) GRPCDialOptionMTLSUnknownTrustDomain(ns, appID string) grpc.D
 		return nil
 	}
 
-	return grpc.WithTransportCredentials(credentials.NewTLS(
-		legacy.NewDialClient(s.source, s.source, tlsconfig.AdaptMatcher(matcher)),
-	))
+	return grpc.WithTransportCredentials(
+		grpccredentials.MTLSClientCredentials(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AdaptMatcher(matcher)),
+	)
 }
 
 // CurrentTrustAnchors returns the current trust anchors for this Dapr
 // installation.
-func (s *security) CurrentTrustAnchors() ([]byte, error) {
-	if s.source == nil {
+func (s *security) CurrentTrustAnchors(ctx context.Context) ([]byte, error) {
+	if s.spiffe == nil {
 		return nil, nil
 	}
-	ta, err := s.source.trustAnchors.Marshal()
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal trust anchors: %w", err)
-	}
 
-	return ta, nil
+	return s.trustAnchors.CurrentTrustAnchors(ctx)
+}
+
+// WatchTrustAnchors watches for changes to the trust domains and returns the
+// PEM encoded trust domain roots.
+// Returns when the given context is canceled.
+func (s *security) WatchTrustAnchors(ctx context.Context, trustAnchors chan<- []byte) {
+	s.trustAnchors.Watch(ctx, trustAnchors)
 }
 
 // ControlPlaneTrustDomain returns the trust domain of the control plane.
@@ -319,39 +327,11 @@ func (s *security) ControlPlaneNamespace() string {
 	return s.controlPlaneNamespace
 }
 
-// WatchTrustAnchors watches for changes to the trust domains and returns the
-// PEM encoded trust domain roots.
-// Returns when the given context is canceled.
-func (s *security) WatchTrustAnchors(ctx context.Context, trustAnchors chan<- []byte) {
-	sub := make(chan struct{})
-	s.source.lock.Lock()
-	s.source.trustAnchorSubscribers = append(s.source.trustAnchorSubscribers, sub)
-	s.source.lock.Unlock()
-
-	for {
-		select {
-		case <-ctx.Done():
-			return
-		case <-sub:
-			caBundle, err := s.CurrentTrustAnchors()
-			if err != nil {
-				log.Errorf("failed to marshal trust anchors: %s", err)
-				continue
-			}
-
-			select {
-			case trustAnchors <- caBundle:
-			case <-ctx.Done():
-			}
-		}
-	}
-}
-
 // TLSServerConfigNoClientAuth returns a TLS server config which instruments
 // using the current signed server certificate. Authorizes client certificate
 // chains against the trust anchors.
 func (s *security) TLSServerConfigNoClientAuth() *tls.Config {
-	return tlsconfig.TLSServerConfig(s.source)
+	return tlsconfig.TLSServerConfig(s.spiffe.SVIDSource())
 }
 
 // NetListenerID returns a mTLS net listener which instruments using the
@@ -362,7 +342,7 @@ func (s *security) NetListenerID(lis net.Listener, id spiffeid.ID) net.Listener 
 		return lis
 	}
 	return tls.NewListener(lis,
-		tlsconfig.MTLSServerConfig(s.source, s.source, tlsconfig.AuthorizeID(id)),
+		tlsconfig.MTLSServerConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id)),
 	)
 }
 
@@ -375,8 +355,13 @@ func (s *security) NetDialerID(ctx context.Context, spiffeID spiffeid.ID, timeou
 	}
 	return (&tls.Dialer{
 		NetDialer: (&net.Dialer{Timeout: timeout, Cancel: ctx.Done()}),
-		Config:    tlsconfig.MTLSClientConfig(s.source, s.source, tlsconfig.AuthorizeID(spiffeID)),
+		Config:    tlsconfig.MTLSClientConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(spiffeID)),
 	}).Dial
+}
+
+// MTLSEnabled returns true if mTLS is enabled.
+func (s *security) MTLSEnabled() bool {
+	return s.mtls
 }
 
 // CurrentNamespace returns the namespace of this workload.
@@ -388,6 +373,21 @@ func CurrentNamespace() string {
 	return namespace
 }
 
+// CurrentNamespaceOrError returns the namespace of this workload. If current
+// Namespace is not found, error.
+func CurrentNamespaceOrError() (string, error) {
+	namespace, ok := os.LookupEnv("NAMESPACE")
+	if !ok {
+		return "", errors.New("'NAMESPACE' environment variable not set")
+	}
+
+	if len(namespace) == 0 {
+		return "", errors.New("'NAMESPACE' environment variable is empty")
+	}
+
+	return namespace, nil
+}
+
 // SentryID returns the SPIFFE ID of the sentry server.
 func SentryID(sentryTrustDomain spiffeid.TrustDomain, sentryNamespace string) (spiffeid.ID, error) {
 	sentryID, err := spiffeid.FromSegments(sentryTrustDomain, "ns", sentryNamespace, "dapr-sentry")
@@ -396,4 +396,12 @@ func SentryID(sentryTrustDomain spiffeid.TrustDomain, sentryNamespace string) (s
 	}
 
 	return sentryID, nil
+}
+
+func (s *security) WithSVIDContext(ctx context.Context) context.Context {
+	if s.spiffe == nil {
+		return ctx
+	}
+
+	return spiffecontext.With(ctx, s.spiffe)
 }

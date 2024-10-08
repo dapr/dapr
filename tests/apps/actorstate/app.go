@@ -71,7 +71,7 @@ func indexHandler(w http.ResponseWriter, r *http.Request) {
 
 func actorStateHandlerGRPC(w http.ResponseWriter, r *http.Request) {
 	daprAddress := fmt.Sprintf("localhost:%d", daprGRPCPort)
-	conn, err := grpc.DialContext(r.Context(), daprAddress, grpc.WithTransportCredentials(insecure.NewCredentials()))
+	conn, err := grpc.DialContext(r.Context(), daprAddress, grpc.WithTransportCredentials(insecure.NewCredentials())) //nolint:staticcheck
 	if err != nil {
 		log.Printf("gRPC dapr connection failed %s", err.Error())
 		w.WriteHeader(http.StatusInternalServerError)
@@ -176,6 +176,11 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 }
 
+func healthzHandler(w http.ResponseWriter, r *http.Request) {
+	w.WriteHeader(http.StatusOK)
+	w.Write([]byte(""))
+}
+
 func configHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing dapr request for %s", r.URL.RequestURI())
 
@@ -184,13 +189,11 @@ func configHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(struct {
 		Entities                []string `json:"entities,omitempty"`
 		ActorIdleTimeout        string   `json:"actorIdleTimeout,omitempty"`
-		ActorScanInterval       string   `json:"actorScanInterval,omitempty"`
 		DrainOngoingCallTimeout string   `json:"drainOngoingCallTimeout,omitempty"`
 		DrainRebalancedActors   bool     `json:"drainRebalancedActors,omitempty"`
 	}{
 		Entities:                []string{"httpMyActorType", "grpcMyActorType"},
 		ActorIdleTimeout:        "30s",
-		ActorScanInterval:       "10s",
 		DrainOngoingCallTimeout: "20s",
 		DrainRebalancedActors:   true,
 	})
@@ -227,6 +230,7 @@ func appRouter() http.Handler {
 
 	router.HandleFunc("/", indexHandler).Methods("GET")
 	router.HandleFunc("/dapr/config", configHandler).Methods("GET")
+	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
 	router.HandleFunc("/test/initactor/{actorType}/{id}", initActor).Methods("GET")
 	router.HandleFunc("/test/actor_state_http/{actorType}/{id}/{key}", actorStateHandlerHTTP).Methods("GET", "DELETE")
 	router.HandleFunc("/test/actor_state_http/{actorType}/{id}", actorStateHandlerHTTP).Methods("PUT", "POST", "PATCH")

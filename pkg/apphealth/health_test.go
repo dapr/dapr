@@ -51,7 +51,7 @@ func TestAppHealth_setResult(t *testing.T) {
 
 	simulateFailures := func(n int32) {
 		statusChange <- 255 // Fill the channel
-		for i := int32(0); i < n; i++ {
+		for i := range n {
 			if i == threshold-1 {
 				<-statusChange // Allow the channel to be written into
 			}
@@ -89,10 +89,10 @@ func TestAppHealth_setResult(t *testing.T) {
 	// Multiple invocations in parallel
 	// Only one failure should be sent
 	wg := sync.WaitGroup{}
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		wg.Add(1)
 		go func() {
-			for i := int32(0); i < (threshold + 5); i++ {
+			for range threshold + 5 {
 				h.setResult(context.Background(), false)
 			}
 			wg.Done()
@@ -113,7 +113,7 @@ func TestAppHealth_setResult(t *testing.T) {
 	// Test overflows
 	h.failureCount.Store(int32(math.MaxInt32 - 2))
 	statusChange <- 255 // Fill the channel again
-	for i := int32(0); i < 5; i++ {
+	for range 5 {
 		h.setResult(context.Background(), false)
 	}
 	assert.Empty(t, unexpectedStatusChanges.Load())
@@ -158,7 +158,7 @@ func TestAppHealth_ratelimitReports(t *testing.T) {
 	totalPassed := atomic.Int64{}
 	start := clock.Now()
 	wg.Add(3)
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		go func() {
 			totalPassed.Add(firehose(start, 3*time.Millisecond))
 			wg.Done()
@@ -218,7 +218,7 @@ func Test_StartProbes(t *testing.T) {
 		done := make(chan struct{})
 		go func() {
 			defer close(done)
-			require.Error(t, h.StartProbes(ctx))
+			assert.Error(t, h.StartProbes(ctx))
 		}()
 
 		select {

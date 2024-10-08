@@ -4,12 +4,15 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"strconv"
 	"time"
 
 	ocprom "contrib.go.opencensus.io/exporter/prometheus"
 	prom "github.com/prometheus/client_golang/prometheus"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/kit/logger"
 )
 
@@ -21,87 +24,65 @@ const (
 
 // Exporter is the interface for metrics exporters.
 type Exporter interface {
-	// Run initializes metrics exporter
-	Run(context.Context) error
-	// Options returns Exporter options
-	Options() *Options
-}
-
-// NewExporter creates new MetricsExporter instance.
-func NewExporter(logger logger.Logger, namespace string) Exporter {
-	return NewExporterWithOptions(logger, namespace, DefaultMetricOptions())
-}
-
-// NewExporterWithOptions creates new MetricsExporter instance with options.
-func NewExporterWithOptions(logger logger.Logger, namespace string, options *Options) Exporter {
-	// TODO: support multiple exporters
-	return &promMetricsExporter{
-		exporter: &exporter{
-			namespace: namespace,
-			options:   options,
-			logger:    logger,
-		},
-	}
+	// Start initializes metrics exporter
+	Start(context.Context) error
 }
 
 // exporter is the base struct.
 type exporter struct {
-	namespace string
-	options   *Options
-	logger    logger.Logger
+	namespace     string
+	enabled       bool
+	port          string
+	listenAddress string
+	logger        logger.Logger
+	htarget       healthz.Target
 }
 
-// Options returns current metric exporter options.
-func (m *exporter) Options() *Options {
-	return m.options
+// New creates new metrics Exporter instance with given options.
+func New(opts Options) Exporter {
+	// TODO: support multiple exporters
+	return &exporter{
+		htarget:       opts.Healthz.AddTarget(),
+		namespace:     opts.Namespace,
+		logger:        opts.Log,
+		enabled:       opts.Enabled,
+		port:          opts.Port,
+		listenAddress: opts.ListenAddress,
+	}
 }
 
-// promMetricsExporter is prometheus metric exporter.
-type promMetricsExporter struct {
-	*exporter
-	ocExporter *ocprom.Exporter
-	server     *http.Server
-}
-
-// Run initializes and runs the opencensus exporter.
-func (m *promMetricsExporter) Run(ctx context.Context) error {
-	if !m.exporter.Options().MetricsEnabled {
+// Start initializes and runs the opencensus exporter.
+func (e *exporter) Start(ctx context.Context) error {
+	if !e.enabled {
+		e.htarget.Ready()
 		// Block until context is cancelled.
 		<-ctx.Done()
 		return nil
 	}
 
-	var err error
-	if m.ocExporter, err = ocprom.NewExporter(ocprom.Options{
-		Namespace: m.namespace,
+	port, err := strconv.Atoi(e.port)
+	if err != nil {
+		return fmt.Errorf("failed to parse metrics port: %w", err)
+	}
+
+	ocExporter, err := ocprom.NewExporter(ocprom.Options{
+		Namespace: e.namespace,
 		Registry:  prom.DefaultRegisterer.(*prom.Registry),
-	}); err != nil {
+	})
+	if err != nil {
 		return fmt.Errorf("failed to create Prometheus exporter: %w", err)
 	}
 
-	// start metrics server
-	return m.startMetricServer(ctx)
-}
-
-// startMetricServer starts metrics server.
-func (m *promMetricsExporter) startMetricServer(ctx context.Context) error {
-	if !m.exporter.Options().MetricsEnabled {
-		// skip if metrics is not enabled
-		return nil
+	addr := fmt.Sprintf("%s:%d", e.listenAddress, port)
+	ln, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("failed to listen on %s: %w", addr, err)
 	}
-
-	addr := fmt.Sprintf(":%d", m.options.MetricsPort())
-
-	if m.ocExporter == nil {
-		return errors.New("exporter was not initialized")
-	}
-
-	m.exporter.logger.Infof("metrics server started on %s%s", addr, defaultMetricsPath)
+	e.logger.Infof("metrics server started on %s%s", addr, defaultMetricsPath)
 	mux := http.NewServeMux()
-	mux.Handle(defaultMetricsPath, m.ocExporter)
+	mux.Handle(defaultMetricsPath, ocExporter)
 
-	m.server = &http.Server{
-		Addr:        addr,
+	server := &http.Server{
 		Handler:     mux,
 		ReadTimeout: time.Second * 10,
 	}
@@ -109,16 +90,22 @@ func (m *promMetricsExporter) startMetricServer(ctx context.Context) error {
 	errCh := make(chan error)
 
 	go func() {
-		if err := m.server.ListenAndServe(); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			errCh <- fmt.Errorf("failed to run metrics server: %v", err)
+		if serr := server.Serve(ln); serr != nil && !errors.Is(serr, http.ErrServerClosed) {
+			errCh <- fmt.Errorf("failed to run metrics server: %v", serr)
 			return
 		}
 		errCh <- nil
 	}()
 
-	<-ctx.Done()
+	e.htarget.Ready()
+
+	select {
+	case <-ctx.Done():
+	case err = <-errCh:
+		close(errCh)
+	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
 	defer cancel()
-	return errors.Join(m.server.Shutdown(ctx), <-errCh)
+	return errors.Join(server.Shutdown(ctx), err, <-errCh)
 }

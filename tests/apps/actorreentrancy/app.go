@@ -20,6 +20,8 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
+	"strconv"
 	"sync"
 
 	"github.com/gorilla/mux"
@@ -29,17 +31,28 @@ import (
 )
 
 const (
-	appPort                 = 22222
-	daprV1URL               = "http://localhost:3500/v1.0"
-	actorMethodURLFormat    = daprV1URL + "/actors/%s/%s/method/%s"
+	actorMethodURLFormat    = "http://localhost:%d/v1.0/actors/%s/%s/method/%s"
 	defaultActorType        = "reentrantActor"
 	actorIdleTimeout        = "1h"
-	actorScanInterval       = "30s"
 	drainOngoingCallTimeout = "30s"
 	drainRebalancedActors   = true
-	reentrantMethod         = "reentrantMethod"
-	standardMethod          = "standardMethod"
 )
+
+var (
+	appPort      = 22222
+	daprHTTPPort = 3500
+)
+
+func init() {
+	p := os.Getenv("DAPR_HTTP_PORT")
+	if p != "" && p != "0" {
+		daprHTTPPort, _ = strconv.Atoi(p)
+	}
+	p = os.Getenv("PORT")
+	if p != "" && p != "0" {
+		appPort, _ = strconv.Atoi(p)
+	}
+}
 
 // represents a response for the APIs in this app.
 type actorLogEntry struct {
@@ -48,10 +61,13 @@ type actorLogEntry struct {
 	ActorID   string `json:"actorId,omitempty"`
 }
 
+func (e actorLogEntry) String() string {
+	return fmt.Sprintf("action='%s' actorType='%s' actorID='%s'", e.Action, e.ActorType, e.ActorID)
+}
+
 type daprConfig struct {
 	Entities                []string                `json:"entities,omitempty"`
 	ActorIdleTimeout        string                  `json:"actorIdleTimeout,omitempty"`
-	ActorScanInterval       string                  `json:"actorScanInterval,omitempty"`
 	DrainOngoingCallTimeout string                  `json:"drainOngoingCallTimeout,omitempty"`
 	DrainRebalancedActors   bool                    `json:"drainRebalancedActors,omitempty"`
 	Reentrancy              config.ReentrancyConfig `json:"reentrancy,omitempty"`
@@ -79,7 +95,6 @@ var (
 var daprConfigResponse = daprConfig{
 	Entities:                []string{defaultActorType},
 	ActorIdleTimeout:        actorIdleTimeout,
-	ActorScanInterval:       actorScanInterval,
 	DrainOngoingCallTimeout: drainOngoingCallTimeout,
 	DrainRebalancedActors:   drainRebalancedActors,
 	Reentrancy:              config.ReentrancyConfig{Enabled: false},
@@ -98,7 +113,8 @@ func resetLogs() {
 	actorLogsMutex.Lock()
 	defer actorLogsMutex.Unlock()
 
-	actorLogs = []actorLogEntry{}
+	log.Print("Reset actorLogs")
+	actorLogs = actorLogs[:0]
 }
 
 func appendLog(actorType string, actorID string, action string) {
@@ -110,11 +126,8 @@ func appendLog(actorType string, actorID string, action string) {
 
 	actorLogsMutex.Lock()
 	defer actorLogsMutex.Unlock()
+	log.Printf("Append to actorLogs: %s", logEntry)
 	actorLogs = append(actorLogs, logEntry)
-}
-
-func getLogs() []actorLogEntry {
-	return actorLogs
 }
 
 // indexHandler is the handler for root path.
@@ -130,9 +143,14 @@ func logsHandler(w http.ResponseWriter, r *http.Request) {
 		resetLogs()
 	}
 
+	actorLogsMutex.Lock()
+	entries, _ := json.Marshal(actorLogs)
+	actorLogsMutex.Unlock()
+
+	log.Printf("Sending actorLogs: %s", string(entries))
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusOK)
-	json.NewEncoder(w).Encode(getLogs())
+	w.Write(entries)
 }
 
 func configHandler(w http.ResponseWriter, r *http.Request) {
@@ -168,7 +186,7 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	nextCall, nextBody := advanceCallStackForNextRequest(reentrantReq)
-	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf(actorMethodURLFormat, nextCall.ActorType, nextCall.ActorID, nextCall.Method), bytes.NewReader(nextBody))
+	req, _ := http.NewRequest(http.MethodPut, fmt.Sprintf(actorMethodURLFormat, daprHTTPPort, nextCall.ActorType, nextCall.ActorID, nextCall.Method), bytes.NewReader(nextBody))
 
 	res, err := httpClient.Do(req)
 	if err != nil {
@@ -190,13 +208,15 @@ func actorTestCallHandler(w http.ResponseWriter, r *http.Request) {
 }
 
 func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
-	log.Print("Handling actor method call.")
 	method := mux.Vars(r)["method"]
+	log.Printf("Handling actor method call %s", method)
 
 	switch method {
-	case reentrantMethod:
+	case "helloMethod":
+		// No-op
+	case "reentrantMethod":
 		reentrantCallHandler(w, r)
-	case standardMethod:
+	case "standardMethod":
 		fallthrough
 	default:
 		standardHandler(w, r)
@@ -205,7 +225,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 
 func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Handling reentrant call")
-	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Enter %s", mux.Vars(r)["method"]))
+	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], "Enter "+mux.Vars(r)["method"])
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 
@@ -226,7 +246,7 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 
 	log.Printf("Next call: %s on %s.%s", nextCall.Method, nextCall.ActorType, nextCall.ActorID)
 
-	url := fmt.Sprintf(actorMethodURLFormat, nextCall.ActorType, nextCall.ActorID, nextCall.Method)
+	url := fmt.Sprintf(actorMethodURLFormat, daprHTTPPort, nextCall.ActorType, nextCall.ActorID, nextCall.Method)
 	req, _ := http.NewRequest(http.MethodPut, url, bytes.NewReader(nextBody))
 
 	reentrancyID := r.Header.Get("Dapr-Reentrancy-Id")
@@ -234,28 +254,28 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := httpClient.Do(req)
 
-	log.Printf("Call status: %d\n", resp.StatusCode)
+	log.Printf("Call status: %d", resp.StatusCode)
 	if err != nil || resp.StatusCode == http.StatusInternalServerError {
 		w.WriteHeader(http.StatusInternalServerError)
-		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Error %s", mux.Vars(r)["method"]))
+		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], "Error "+mux.Vars(r)["method"])
 	} else {
-		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Exit %s", mux.Vars(r)["method"]))
+		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], "Exit "+mux.Vars(r)["method"])
 	}
 	defer resp.Body.Close()
 }
 
 func standardHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Handling standard call")
-	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Enter %s", mux.Vars(r)["method"]))
-	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Exit %s", mux.Vars(r)["method"]))
+	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], "Enter "+mux.Vars(r)["method"])
+	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], "Exit "+mux.Vars(r)["method"])
 }
 
 func advanceCallStackForNextRequest(req reentrantRequest) (actorCall, []byte) {
 	nextCall := req.Calls[0]
-	log.Printf("Current call: %v\n", nextCall)
+	log.Printf("Current call: %v", nextCall)
 	nextReq := req
 	nextReq.Calls = nextReq.Calls[1:]
-	log.Printf("Next req: %v\n", nextReq)
+	log.Printf("Next req: %v", nextReq)
 	nextBody, _ := json.Marshal(nextReq)
 	return nextCall, nextBody
 }

@@ -1,0 +1,18 @@
+syntax = "proto3";
+
+package dapr.io.testproto;
+
+option go_package = ".";
+
+message PingRequest {
+  string value = 1;
+}
+
+message PingResponse {
+  string Value = 1;
+  int32 counter = 2;
+}
+
+service TestService {
+  rpc Ping(PingRequest) returns (PingResponse) {}
+}

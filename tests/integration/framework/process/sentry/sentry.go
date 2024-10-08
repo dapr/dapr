@@ -15,6 +15,9 @@ package sentry
 
 import (
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"fmt"
 	"net/http"
 	"os"
@@ -33,82 +36,121 @@ import (
 
 	"github.com/dapr/dapr/pkg/sentry/server/ca"
 	"github.com/dapr/dapr/tests/integration/framework/binary"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
-	"github.com/dapr/dapr/tests/integration/framework/util"
+	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
 type Sentry struct {
-	exec     process.Interface
-	freeport *util.FreePort
+	exec  process.Interface
+	ports *ports.Ports
 
-	bundle      ca.Bundle
+	bundle      *ca.Bundle
 	port        int
 	healthzPort int
 	metricsPort int
+	trustDomain *string
+	namespace   string
 }
 
 func New(t *testing.T, fopts ...Option) *Sentry {
 	t.Helper()
 
-	bundle, err := ca.GenerateBundle("integration.test.dapr.io", time.Second*5)
-	require.NoError(t, err)
-
-	fp := util.ReservePorts(t, 3)
+	fp := ports.Reserve(t, 3)
 	opts := options{
-		bundle:      bundle,
-		port:        fp.Port(t, 0),
-		healthzPort: fp.Port(t, 1),
-		metricsPort: fp.Port(t, 2),
+		port:        fp.Port(t),
+		healthzPort: fp.Port(t),
+		metricsPort: fp.Port(t),
+		writeBundle: true,
+		writeConfig: true,
 	}
 
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
 
-	configPath := filepath.Join(t.TempDir(), "sentry-config.yaml")
-	require.NoError(t, os.WriteFile(configPath, []byte(opts.configuration), 0o600))
-
-	tmpDir := t.TempDir()
-	caPath := filepath.Join(tmpDir, "ca.crt")
-	issuerKeyPath := filepath.Join(tmpDir, "issuer.key")
-	issuerCertPath := filepath.Join(tmpDir, "issuer.crt")
-
-	for _, pair := range []struct {
-		path string
-		data []byte
-	}{
-		{caPath, opts.bundle.TrustAnchors},
-		{issuerKeyPath, opts.bundle.IssKeyPEM},
-		{issuerCertPath, opts.bundle.IssChainPEM},
-	} {
-		require.NoError(t, os.WriteFile(pair.path, pair.data, 0o600))
+	// Only generate a bundle if one was not provided.
+	if opts.bundle == nil {
+		td := spiffeid.RequireTrustDomainFromString("default").String()
+		if opts.trustDomain != nil {
+			td = *opts.trustDomain
+		}
+		pk, err := ecdsa.GenerateKey(elliptic.P256(), rand.Reader)
+		require.NoError(t, err)
+		bundle, err := ca.GenerateBundle(pk, td, time.Second*5, nil)
+		require.NoError(t, err)
+		opts.bundle = &bundle
 	}
 
 	args := []string{
-		"-log-level=" + "debug",
+		"-log-level=" + "info",
 		"-port=" + strconv.Itoa(opts.port),
-		"-config=" + configPath,
 		"-issuer-ca-filename=ca.crt",
 		"-issuer-certificate-filename=issuer.crt",
 		"-issuer-key-filename=issuer.key",
 		"-metrics-port=" + strconv.Itoa(opts.metricsPort),
+		"-metrics-listen-address=127.0.0.1",
 		"-healthz-port=" + strconv.Itoa(opts.healthzPort),
-		"-issuer-credentials=" + tmpDir,
+		"-healthz-listen-address=127.0.0.1",
+		"-listen-address=127.0.0.1",
+	}
+
+	if opts.writeBundle {
+		tmpDir := t.TempDir()
+		caPath := filepath.Join(tmpDir, "ca.crt")
+		issuerKeyPath := filepath.Join(tmpDir, "issuer.key")
+		issuerCertPath := filepath.Join(tmpDir, "issuer.crt")
+
+		for _, pair := range []struct {
+			path string
+			data []byte
+		}{
+			{caPath, opts.bundle.TrustAnchors},
+			{issuerKeyPath, opts.bundle.IssKeyPEM},
+			{issuerCertPath, opts.bundle.IssChainPEM},
+		} {
+			require.NoError(t, os.WriteFile(pair.path, pair.data, 0o600))
+		}
+		args = append(args, "-issuer-credentials="+tmpDir)
+	} else {
+		args = append(args, "-issuer-credentials="+t.TempDir())
+	}
+
+	if opts.kubeconfig != nil {
+		args = append(args, "-kubeconfig="+*opts.kubeconfig)
+	}
+
+	if opts.trustDomain != nil {
+		args = append(args, "-trust-domain="+*opts.trustDomain)
+	}
+
+	if opts.writeConfig {
+		configPath := filepath.Join(t.TempDir(), "sentry-config.yaml")
+		require.NoError(t, os.WriteFile(configPath, []byte(opts.configuration), 0o600))
+		args = append(args, "-config="+configPath)
+	}
+
+	ns := "default"
+	if opts.namespace != nil {
+		opts.execOpts = append(opts.execOpts, exec.WithEnvVars(t, "NAMESPACE", *opts.namespace))
+		ns = *opts.namespace
 	}
 
 	return &Sentry{
 		exec:        exec.New(t, binary.EnvValue("sentry"), args, opts.execOpts...),
-		freeport:    fp,
+		ports:       fp,
 		bundle:      opts.bundle,
 		port:        opts.port,
 		metricsPort: opts.metricsPort,
 		healthzPort: opts.healthzPort,
+		trustDomain: opts.trustDomain,
+		namespace:   ns,
 	}
 }
 
 func (s *Sentry) Run(t *testing.T, ctx context.Context) {
-	s.freeport.Free(t)
+	s.ports.Free(t)
 	s.exec.Run(t, ctx)
 }
 
@@ -117,27 +159,36 @@ func (s *Sentry) Cleanup(t *testing.T) {
 }
 
 func (s *Sentry) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := util.HTTPClient(t)
-	assert.Eventually(t, func() bool {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", s.healthzPort), nil)
-		if err != nil {
-			return false
-		}
+	client := client.HTTP(t)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", s.healthzPort), nil)
+	require.NoError(t, err)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.Do(req)
-		if err != nil {
-			return false
+		if assert.NoError(c, err) {
+			defer resp.Body.Close()
+			assert.Equal(c, http.StatusOK, resp.StatusCode)
 		}
-		defer resp.Body.Close()
-		return http.StatusOK == resp.StatusCode
-	}, time.Second*5, 100*time.Millisecond)
+	}, time.Second*20, 10*time.Millisecond)
+}
+
+func (s *Sentry) TrustAnchorsFile(t *testing.T) string {
+	t.Helper()
+	taf := filepath.Join(t.TempDir(), "ca.pem")
+	require.NoError(t, os.WriteFile(taf, s.CABundle().TrustAnchors, 0o600))
+	return taf
 }
 
 func (s *Sentry) CABundle() ca.Bundle {
-	return s.bundle
+	return *s.bundle
 }
 
 func (s *Sentry) Port() int {
 	return s.port
+}
+
+func (s *Sentry) Address() string {
+	return "localhost:" + strconv.Itoa(s.Port())
 }
 
 func (s *Sentry) MetricsPort() int {
@@ -148,31 +199,42 @@ func (s *Sentry) HealthzPort() int {
 	return s.healthzPort
 }
 
-// ConnectGrpc returns a connection to the Sentry gRPC server, validating TLS certificates.
-func (s *Sentry) ConnectGrpc(parentCtx context.Context) (*grpc.ClientConn, error) {
+func (s *Sentry) Namespace() string {
+	return s.namespace
+}
+
+func (s *Sentry) TrustDomain(t *testing.T) string {
+	if s.trustDomain == nil {
+		return "localhost"
+	}
+	return *s.trustDomain
+}
+
+// DialGRPC dials the sentry using the given context and returns a grpc client
+// connection.
+func (s *Sentry) DialGRPC(t *testing.T, ctx context.Context, sentryID string) *grpc.ClientConn {
 	bundle := s.CABundle()
-	sentrySPIFFEID, err := spiffeid.FromString("spiffe://localhost/ns/default/dapr-sentry")
-	if err != nil {
-		return nil, fmt.Errorf("failed to create Sentry SPIFFE ID: %w", err)
-	}
+	sentrySPIFFEID, err := spiffeid.FromString(sentryID)
+	require.NoError(t, err)
+
 	x509bundle, err := x509bundle.Parse(sentrySPIFFEID.TrustDomain(), bundle.TrustAnchors)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create x509 bundle: %w", err)
-	}
+	require.NoError(t, err)
 	transportCredentials := grpccredentials.TLSClientCredentials(x509bundle, tlsconfig.AuthorizeID(sentrySPIFFEID))
 
-	ctx, cancel := context.WithTimeout(parentCtx, 8*time.Second)
+	ctx, cancel := context.WithTimeout(ctx, time.Second*5)
 	defer cancel()
+	//nolint:staticcheck
 	conn, err := grpc.DialContext(
 		ctx,
 		fmt.Sprintf("127.0.0.1:%d", s.Port()),
 		grpc.WithTransportCredentials(transportCredentials),
-		grpc.WithReturnConnectionError(),
-		grpc.WithBlock(),
+		grpc.WithReturnConnectionError(), //nolint:staticcheck
+		grpc.WithBlock(),                 //nolint:staticcheck
 	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to establish gRPC connection: %w", err)
-	}
+	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, conn.Close())
+	})
 
-	return conn, nil
+	return conn
 }

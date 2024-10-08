@@ -17,59 +17,12 @@ import (
 	"fmt"
 	"io/fs"
 	"os"
-	"path/filepath"
 	"strings"
-
-	"golang.org/x/exp/slices"
-	"k8s.io/client-go/kubernetes"
-	"k8s.io/client-go/rest"
-	"k8s.io/client-go/tools/clientcmd"
 )
 
 const (
 	DotDelimiter = "."
 )
-
-var (
-	clientSet     *kubernetes.Clientset
-	kubeConfig    *rest.Config
-	KubeConfigVar = "KUBE_CONFIG"
-)
-
-func initKubeConfig() {
-	kubeConfig = GetConfig()
-	clientset, err := kubernetes.NewForConfig(kubeConfig)
-	if err != nil {
-		panic(err)
-	}
-
-	clientSet = clientset
-}
-
-// GetConfig gets a kubernetes rest config.
-func GetConfig() *rest.Config {
-	if kubeConfig != nil {
-		return kubeConfig
-	}
-	conf, err := rest.InClusterConfig()
-	if err != nil {
-		conf, err = clientcmd.BuildConfigFromFlags("", os.Getenv(KubeConfigVar))
-		if err != nil {
-			panic(err)
-		}
-	}
-
-	return conf
-}
-
-// GetKubeClient gets a kubernetes client.
-func GetKubeClient() *kubernetes.Clientset {
-	if clientSet == nil {
-		initKubeConfig()
-	}
-
-	return clientSet
-}
 
 // Contains reports whether v is present in s.
 // Similar to https://pkg.go.dev/golang.org/x/exp/slices#Contains.
@@ -111,26 +64,6 @@ func GetEnvOrElse(name, orElse string) string {
 	return orElse
 }
 
-// IsTruthy returns true if a string is a truthy value.
-// Truthy values are "y", "yes", "true", "t", "on", "1" (case-insensitive); everything else is false.
-func IsTruthy(val string) bool {
-	switch strings.ToLower(strings.TrimSpace(val)) {
-	case "y", "yes", "true", "t", "on", "1":
-		return true
-	default:
-		return false
-	}
-}
-
-// IsYaml checks whether the file is yaml or not.
-func IsYaml(fileName string) bool {
-	extension := strings.ToLower(filepath.Ext(fileName))
-	if extension == ".yaml" || extension == ".yml" {
-		return true
-	}
-	return false
-}
-
 // GetIntValOrDefault returns an int value if greater than 0 OR default value.
 func GetIntValOrDefault(val int, defaultValue int) int {
 	if val > 0 {
@@ -169,13 +102,15 @@ func PopulateMetadataForBulkPublishEntry(reqMeta, entryMeta map[string]string) m
 
 // Filter returns a new slice containing all items in the given slice that satisfy the given test.
 func Filter[T any](items []T, test func(item T) bool) []T {
-	filteredItems := make([]T, 0, len(items))
-	for _, value := range items {
-		if test(value) {
-			filteredItems = append(filteredItems, value)
+	filteredItems := make([]T, len(items))
+	n := 0
+	for i := range items {
+		if test(items[i]) {
+			filteredItems[n] = items[i]
+			n++
 		}
 	}
-	return slices.Clip(filteredItems)
+	return filteredItems[:n]
 }
 
 // MapToSlice is the inversion of SliceToMap. Order is not guaranteed as map retrieval order is not.
@@ -210,4 +145,12 @@ func GetNamespaceOrDefault(defaultNamespace string) string {
 		namespace = defaultNamespace
 	}
 	return namespace
+}
+
+func ParseServiceAddr(val string) []string {
+	p := strings.Split(val, ",")
+	for i, v := range p {
+		p[i] = strings.TrimSpace(v)
+	}
+	return p
 }

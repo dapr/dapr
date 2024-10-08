@@ -36,9 +36,10 @@ import (
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/parallel"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -127,11 +128,8 @@ func (f *fuzzpubsub) Setup(t *testing.T) []framework.Option {
 		takenNames[*s] = true
 	})
 	psRouteFz := fuzz.New().Funcs(func(s *string, c fuzz.Continue) {
-		for *s == "" || *s == "/" || takenNames[*s] || strings.HasPrefix(*s, "//") ||
-			strings.HasPrefix(*s, ".") || strings.Contains(*s, "?") ||
-			strings.Contains(*s, "#") || strings.Contains(*s, "%") ||
-			strings.Contains(*s, " ") || strings.Contains(*s, "\t") ||
-			strings.Contains(*s, "\n") || strings.Contains(*s, "\r") {
+		for *s == "" || *s == "/" || takenNames[*s] || strings.HasSuffix(*s, "/") ||
+			strings.ContainsAny(*s, ".:=?#*% \t{}\n\r") {
 			*s = "/" + c.RandString()
 		}
 		takenNames[*s] = true
@@ -141,14 +139,14 @@ func (f *fuzzpubsub) Setup(t *testing.T) []framework.Option {
 	f.respChan = make(map[string]chan []byte)
 
 	files := make([]string, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		psNameFz.Fuzz(&f.pubSubs[i].Name)
 
 		topicsB, err := rand.Int(rand.Reader, big.NewInt(30))
 		require.NoError(t, err)
 		topics := int(topicsB.Int64() + 1)
 		f.pubSubs[i].Topics = make([]testTopic, topics)
-		for j := 0; j < topics; j++ {
+		for j := range topics {
 			psTopicFz.Fuzz(&f.pubSubs[i].Topics[j].Name)
 			psRouteFz.Fuzz(&f.pubSubs[i].Topics[j].Route)
 			f.respChan[f.pubSubs[i].Topics[j].Route] = make(chan []byte, 0)
@@ -223,20 +221,18 @@ spec:
 func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 	f.daprd.WaitUntilRunning(t, ctx)
 
-	httpClient := util.HTTPClient(t)
+	t.Skip("TODO: @joshvanl skipping until pubsub publish is made stable")
 
+	pt := parallel.New(t)
 	for i := range f.pubSubs {
 		pubsubName := f.pubSubs[i].Name
 		for j := range f.pubSubs[i].Topics {
 			topicName := f.pubSubs[i].Topics[j].Name
 			route := f.pubSubs[i].Topics[j].Route
 			payload := f.pubSubs[i].Topics[j].payload
-			t.Run(pubsubName+"/"+topicName+route, func(t *testing.T) {
-				t.Skip("TODO: @joshvanl skipping until pubsub publish is made stable")
-
-				t.Parallel()
-
-				reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
+			pt.Add(func(col *assert.CollectT) {
+				reqURL := fmt.Sprintf("http://127.0.0.1:%d/v1.0/publish/%s/%s",
+					f.daprd.HTTPPort(), url.QueryEscape(pubsubName), url.QueryEscape(topicName))
 				// TODO: @joshvanl: under heavy load, messages seem to get lost here
 				// with no response from Dapr. Until this is fixed, we use to smaller
 				// timeout, and retry on context deadline exceeded.
@@ -245,27 +241,27 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 					t.Cleanup(cancel)
 
 					b, err := json.Marshal(payload)
-					require.NoError(t, err)
+					require.NoError(col, err)
 
 					req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, bytes.NewReader(b))
-					require.NoError(t, err)
+					require.NoError(col, err)
 					req.Header.Set("Content-Type", "application/json")
-					resp, err := httpClient.Do(req)
+					resp, err := client.HTTP(t).Do(req)
 					if errors.Is(err, context.DeadlineExceeded) {
 						// Only retry if we haven't exceeded the test timeout.
 						d, ok := ctx.Deadline()
-						require.True(t, ok)
-						require.True(t, time.Now().After(d))
+						require.True(col, ok)
+						require.True(col, time.Now().After(d))
 						continue
 					}
-					require.NoError(t, err)
+					require.NoError(col, err)
 
-					assert.Equal(t, http.StatusNoContent, resp.StatusCode, reqURL)
+					assert.Equal(col, http.StatusNoContent, resp.StatusCode, reqURL)
 					var respBody []byte
 					respBody, err = io.ReadAll(resp.Body)
-					require.NoError(t, err)
-					require.NoError(t, resp.Body.Close())
-					assert.Empty(t, string(respBody))
+					require.NoError(col, err)
+					require.NoError(col, resp.Body.Close())
+					assert.Empty(col, string(respBody))
 					break
 				}
 
@@ -274,16 +270,16 @@ func (f *fuzzpubsub) Run(t *testing.T, ctx context.Context) {
 					var data []byte
 					if f.withRaw {
 						var message pubSubMessage
-						require.NoError(t, json.Unmarshal(body, &message))
+						require.NoError(col, json.Unmarshal(body, &message))
 						var err error
 						data, err = base64.StdEncoding.DecodeString(message.DataBase64)
-						require.NoError(t, err)
+						require.NoError(col, err)
 					} else {
 						data = body
 					}
 					var messageData pubSubMessageData
-					require.NoError(t, json.Unmarshal(data, &messageData), string(data))
-					assert.Equal(t, payload, messageData.Data)
+					require.NoError(col, json.Unmarshal(data, &messageData), string(data))
+					assert.Equal(col, payload, messageData.Data)
 				case <-ctx.Done():
 					t.Fatal("timed out waiting for message")
 				}

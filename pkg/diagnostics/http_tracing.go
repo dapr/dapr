@@ -22,9 +22,11 @@ import (
 	otelcodes "go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 
+	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/config"
+	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/utils/responsewriter"
+	"github.com/dapr/dapr/pkg/responsewriter"
 )
 
 // We have leveraged the code from opencensus-go plugin to adhere the w3c trace context.
@@ -60,7 +62,7 @@ func HTTPTraceMiddleware(next http.Handler, appID string, spec config.TracingSpe
 				AddAttributesToSpan(span, spanAttr)
 
 				// Correct the span name based on API.
-				if sname, ok := spanAttr[daprAPISpanNameInternal]; ok {
+				if sname, ok := spanAttr[diagConsts.DaprAPISpanNameInternal]; ok {
 					span.SetName(sname)
 				}
 			}
@@ -105,8 +107,10 @@ func startTracingClientSpanFromHTTPRequest(r *http.Request, spanName string, spe
 	sc := SpanContextFromRequest(r)
 	ctx := trace.ContextWithRemoteSpanContext(r.Context(), sc)
 	kindOption := trace.WithSpanKind(trace.SpanKindClient)
+	//nolint:spancheck
 	_, span := tracer.Start(ctx, spanName, kindOption)
 	diagUtils.AddSpanToRequest(r, span)
+	//nolint:spancheck
 	return span
 }
 
@@ -114,7 +118,9 @@ func StartProducerSpanChildFromParent(ctx *fasthttp.RequestCtx, parentSpan trace
 	path := string(ctx.Request.URI().Path())
 	netCtx := trace.ContextWithRemoteSpanContext(ctx, parentSpan.SpanContext())
 	kindOption := trace.WithSpanKind(trace.SpanKindProducer)
+	//nolint:spancheck
 	_, span := tracer.Start(netCtx, path, kindOption)
+	//nolint:spancheck
 	return span
 }
 
@@ -182,104 +188,32 @@ func tracestateToHeader(sc trace.SpanContext, setHeader func(string, string)) {
 	}
 }
 
-func getAPIComponent(apiPath string) (string, string) {
-	// Dapr API reference : https://docs.dapr.io/reference/api/
-	// example : apiPath /v1.0/state/statestore
-	if apiPath == "" {
-		return "", ""
-	}
-
-	// Split up to 4 delimiters in '/v1.0/state/statestore/key' to get component api type and value
-	tokens := strings.SplitN(apiPath, "/", 4)
-	if len(tokens) < 3 {
-		return "", ""
-	}
-
-	// return 'state', 'statestore' from the parsed tokens in apiComponent type
-	return tokens[1], tokens[2]
-}
-
 func spanAttributesMapFromHTTPContext(rw responsewriter.ResponseWriter, r *http.Request) map[string]string {
-	// Span Attribute reference https://github.com/open-telemetry/opentelemetry-specification/tree/master/specification/trace/semantic_conventions
-	path := r.URL.Path
-	method := r.Method
-	statusCode := rw.Status()
+	// Init with a worst-case initial capacity of 7, which is the maximum number of unique keys we expect to add.
+	// This is just a "hint" to the compiler so when the map is allocated, it has an initial capacity for 7 elements.
+	// It's a (minor) perf improvement that allows us to avoid re-allocations which are wasteful on the allocator and GC both.
+	m := make(map[string]string, 11)
 
-	m := map[string]string{}
-	_, componentType := getAPIComponent(path)
-
-	var dbType string
-	switch componentType {
-	case "state":
-		dbType = stateBuildingBlockType
-		m[dbNameSpanAttributeKey] = rw.UserValueString("storeName")
-
-	case "secrets":
-		dbType = secretBuildingBlockType
-		m[dbNameSpanAttributeKey] = rw.UserValueString("secretStoreName")
-
-	case "bindings":
-		dbType = bindingBuildingBlockType
-		m[dbNameSpanAttributeKey] = rw.UserValueString("name")
-
-	case "invoke":
-		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
-		targetID := rw.UserValueString("id")
-		m[netPeerNameSpanAttributeKey] = targetID
-		m[daprAPISpanNameInternal] = "CallLocal/" + targetID + "/" + rw.UserValueString("method")
-
-	case "publish":
-		m[messagingSystemSpanAttributeKey] = pubsubBuildingBlockType
-		m[messagingDestinationSpanAttributeKey] = rw.UserValueString("topic")
-		m[messagingDestinationKindSpanAttributeKey] = messagingDestinationTopicKind
-
-	case "actors":
-		dbType = populateActorParams(rw, r, m)
-	}
-
-	// Populate the rest of database attributes.
-	if _, ok := m[dbNameSpanAttributeKey]; ok {
-		m[dbSystemSpanAttributeKey] = dbType
-		m[dbStatementSpanAttributeKey] = method + " " + path
-		m[dbConnectionStringSpanAttributeKey] = dbType
+	// Check if the context contains an AppendSpanAttributes method
+	endpointData, _ := r.Context().Value(endpoints.EndpointCtxKey{}).(*endpoints.EndpointCtxData)
+	if endpointData != nil && endpointData.Group != nil && endpointData.Group.AppendSpanAttributes != nil {
+		endpointData.Group.AppendSpanAttributes(r, m)
 	}
 
 	// Populate dapr original api attributes.
-	m[daprAPIProtocolSpanAttributeKey] = daprAPIHTTPSpanAttrValue
-	m[daprAPISpanAttributeKey] = method + " " + path
-	m[daprAPIStatusCodeSpanAttributeKey] = strconv.Itoa(statusCode)
+	m[diagConsts.DaprAPIProtocolSpanAttributeKey] = diagConsts.DaprAPIHTTPSpanAttrValue
+	m[diagConsts.DaprAPISpanAttributeKey] = r.Method + " " + r.URL.Path
+	m[diagConsts.DaprAPIStatusCodeSpanAttributeKey] = strconv.Itoa(rw.Status())
+
+	// OTel convention attributes
+	m[diagConsts.OtelSpanConvHTTPRequestMethodAttributeKey] = r.Method
+	m[diagConsts.OtelSpanConvURLFullAttributeKey] = r.RequestURI
+	addressAndPort := strings.Split(r.RemoteAddr, ":")
+	m[diagConsts.OtelSpanConvServerAddressAttributeKey] = addressAndPort[0]
+	if len(addressAndPort) > 1 {
+		// This should always be true for Dapr, adding this "if" just to be safe.
+		m[diagConsts.OtelSpanConvServerPortAttributeKey] = addressAndPort[1]
+	}
 
 	return m
-}
-
-func populateActorParams(rw responsewriter.ResponseWriter, r *http.Request, m map[string]string) string {
-	actorType := rw.UserValueString("actorType")
-	actorID := rw.UserValueString("actorId")
-	if actorType == "" || actorID == "" {
-		return ""
-	}
-
-	path := r.URL.Path
-	// Split up to 7 delimiters in '/v1.0/actors/{actorType}/{actorId}/method/{method}'
-	// to get component api type and value
-	tokens := strings.SplitN(path, "/", 7)
-	if len(tokens) < 7 {
-		return ""
-	}
-
-	m[daprAPIActorTypeID] = actorType + "." + actorID
-
-	dbType := ""
-	switch tokens[5] {
-	case "method":
-		m[gRPCServiceSpanAttributeKey] = daprGRPCServiceInvocationService
-		m[netPeerNameSpanAttributeKey] = m[daprAPIActorTypeID]
-		m[daprAPISpanNameInternal] = "CallActor/" + actorType + "/" + rw.UserValueString("method")
-
-	case "state":
-		dbType = stateBuildingBlockType
-		m[dbNameSpanAttributeKey] = "actor"
-	}
-
-	return dbType
 }

@@ -2,7 +2,7 @@ package diagnostics_test
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 	"time"
 
@@ -185,14 +185,14 @@ func TestResiliencyCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(test.appID, "fakeRuntimeNamespace", nil))
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(test.appID))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			if test.wantErr {
 				require.Error(t, err)
 			}
 			require.NoError(t, err)
-			require.Equal(t, test.wantNumberOfRows, len(rows))
+			require.Len(t, rows, test.wantNumberOfRows)
 			for _, wantTag := range test.wantTags {
 				diag.RequireTagExist(t, rows, wantTag)
 			}
@@ -211,7 +211,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			name: "EndpointPolicyCloseState",
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				for i := 0; i < 2; i++ {
+				for range 2 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
@@ -226,11 +226,11 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			name: "EndpointPolicyOpenState",
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				for i := 0; i < 3; i++ {
+				for range 3 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
-						return nil, fmt.Errorf("fake error")
+						return nil, errors.New("fake error")
 					})
 				}
 			},
@@ -244,11 +244,11 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			name: "EndpointPolicyHalfOpenState",
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				for i := 0; i < 3; i++ {
+				for range 3 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
-						return nil, fmt.Errorf("fake error")
+						return nil, errors.New("fake error")
 					})
 				}
 				// let the circuit breaker to go to half open state (5x cb timeout)
@@ -256,7 +256,7 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 				policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
-					return nil, fmt.Errorf("fake error")
+					return nil, errors.New("fake error")
 				})
 			},
 			wantNumberOfRows: 5,
@@ -271,11 +271,11 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil))
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyCountViewName)
 			require.NoError(t, err)
-			require.Equal(t, test.wantNumberOfRows, len(rows))
+			require.Len(t, rows, test.wantNumberOfRows)
 
 			wantedTags := []tag.Tag{
 				diag.NewTag("app_id", testAppID),
@@ -314,7 +314,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 			name: "EndpointPolicyNoActivations",
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				for i := 0; i < 2; i++ {
+				for range 2 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
@@ -331,7 +331,7 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 				policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
-					return nil, fmt.Errorf("fake error")
+					return nil, errors.New("fake error")
 				})
 			},
 			wantNumberOfRows: 1,
@@ -349,10 +349,10 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
 				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
-				for i := 0; i < 2; i++ {
+				for range 2 {
 					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
-						return nil, fmt.Errorf("fake error")
+						return nil, errors.New("fake error")
 					})
 				}
 			},
@@ -375,11 +375,11 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 				policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
 					time.Sleep(500 * time.Millisecond)
-					return nil, fmt.Errorf("fake error")
+					return nil, errors.New("fake error")
 				})
 				policyRunner = resiliency.NewRunner[any](context.Background(), policyDef)
 				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
-					return nil, fmt.Errorf("fake error")
+					return nil, errors.New("fake error")
 				})
 			},
 			wantNumberOfRows: 3,
@@ -399,15 +399,15 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 			name: "EndpointPolicyOpenAndCloseState",
 			unitFn: func() {
 				r := createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStateStore")
-				for i := 0; i < 2; i++ {
+				for range 2 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
-						return nil, fmt.Errorf("fake error")
+						return nil, errors.New("fake error")
 					})
 				}
 				// let the circuit breaker to go to half open state (5x cb timeout) and then return success to close it
-				time.Sleep(500 * time.Millisecond)
+				time.Sleep(1000 * time.Millisecond)
 				policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 				policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 				_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
@@ -415,11 +415,11 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 				})
 
 				// now open the circuit breaker again
-				for i := 0; i < 2; i++ {
+				for range 2 {
 					policyDef := r.EndpointPolicy("fakeApp", "fakeEndpoint")
 					policyRunner := resiliency.NewRunner[any](context.Background(), policyDef)
 					_, _ = policyRunner(func(ctx context.Context) (interface{}, error) {
-						return nil, fmt.Errorf("fake error")
+						return nil, errors.New("fake error")
 					})
 				}
 			},
@@ -439,11 +439,11 @@ func TestResiliencyActivationsCountMonitoring(t *testing.T) {
 	for _, test := range tests {
 		t.Run(test.name, func(t *testing.T) {
 			cleanupRegisteredViews()
-			require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil))
+			require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
 			test.unitFn()
 			rows, err := view.RetrieveData(resiliencyActivationViewName)
 			require.NoError(t, err)
-			require.Equal(t, test.wantNumberOfRows, len(rows))
+			require.Len(t, rows, test.wantNumberOfRows)
 			if test.wantNumberOfRows == 0 {
 				return
 			}
@@ -496,13 +496,13 @@ func createDefaultTestResiliency(resiliencyName string, resiliencyNamespace stri
 func TestResiliencyLoadedMonitoring(t *testing.T) {
 	t.Run(resiliencyLoadedViewName, func(t *testing.T) {
 		cleanupRegisteredViews()
-		require.NoError(t, diag.InitMetrics(testAppID, "fakeRuntimeNamespace", nil))
+		require.NoError(t, diag.DefaultResiliencyMonitoring.Init(testAppID))
 		_ = createTestResiliency(testResiliencyName, testResiliencyNamespace, "fakeStoreName")
 
 		rows, err := view.RetrieveData(resiliencyLoadedViewName)
 
 		require.NoError(t, err)
-		require.Equal(t, 1, len(rows))
+		require.Len(t, rows, 1)
 
 		diag.RequireTagExist(t, rows, diag.NewTag("app_id", testAppID))
 		diag.RequireTagExist(t, rows, diag.NewTag("name", testResiliencyName))

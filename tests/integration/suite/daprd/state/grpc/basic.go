@@ -15,7 +15,6 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -38,15 +37,7 @@ type basic struct {
 }
 
 func (b *basic) Setup(t *testing.T) []framework.Option {
-	b.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-`))
+	b.daprd = procdaprd.New(t, procdaprd.WithInMemoryActorStateStore("mystore"))
 
 	return []framework.Option{
 		framework.WithProcesses(b.daprd),
@@ -55,8 +46,8 @@ spec:
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.daprd.WaitUntilRunning(t, ctx)
-
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", b.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	//nolint:staticcheck
+	conn, err := grpc.DialContext(ctx, b.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	client := rtv1.NewDaprClient(conn)
@@ -68,10 +59,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			{StoreName: "mystore", States: []*commonv1.StateItem{{}}},
 			{StoreName: "mystore", States: []*commonv1.StateItem{{Value: []byte("value1")}}},
 		} {
-			t.Run(fmt.Sprintf("%+v", req), func(t *testing.T) {
-				_, err = client.SaveState(ctx, req)
-				require.Error(t, err)
-			})
+			_, err = client.SaveState(ctx, req)
+			require.Error(t, err)
 		}
 	})
 
@@ -89,10 +78,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				{Key: "key2", Value: []byte("value2")},
 			}},
 		} {
-			t.Run(fmt.Sprintf("%v", req), func(t *testing.T) {
-				_, err = client.SaveState(ctx, req)
-				require.NoError(t, err)
-			})
+			_, err = client.SaveState(ctx, req)
+			require.NoError(t, err)
 		}
 	})
 }

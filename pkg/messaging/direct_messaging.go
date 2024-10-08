@@ -43,38 +43,45 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ttlcache"
 )
 
 var log = logger.NewLogger("dapr.runtime.direct_messaging")
 
-const streamingUnsupportedErr = "streaming-based service invocation is enabled, but target app %s is running a version of Dapr that does not support it"
+const streamingUnsupportedErr = "target app '%s' is running a version of Dapr that does not support streaming-based service invocation"
+
+// Maximum TTL in seconds for the nameresolution cache
+const resolverCacheTTL = 20
 
 // messageClientConnection is the function type to connect to the other
 // applications to send the message using service invocation.
 type messageClientConnection func(ctx context.Context, address string, id string, namespace string, customOpts ...grpc.DialOption) (*grpc.ClientConn, func(destroy bool), error)
 
 type directMessaging struct {
-	channels                     *channels.Channels
-	resourceHTTPEndpointChannels map[string]channel.HTTPEndpointAppChannel
-	connectionCreatorFn          messageClientConnection
-	appID                        string
-	mode                         modes.DaprMode
-	grpcPort                     int
-	namespace                    string
-	resolver                     nr.Resolver
-	hostAddress                  string
-	hostName                     string
-	maxRequestBodySizeMB         int
-	proxy                        Proxy
-	readBufferSize               int
-	resiliency                   resiliency.Provider
-	compStore                    *compstore.ComponentStore
+	channels            *channels.Channels
+	connectionCreatorFn messageClientConnection
+	appID               string
+	mode                modes.DaprMode
+	grpcPort            int
+	namespace           string
+	resolver            nr.Resolver
+	resolverMulti       nr.ResolverMulti
+	hostAddress         string
+	hostName            string
+	maxRequestBodySize  int
+	proxy               Proxy
+	readBufferSize      int
+	resiliency          resiliency.Provider
+	compStore           *compstore.ComponentStore
+	resolverCache       *ttlcache.Cache[nr.AddressList]
+	closed              atomic.Bool
 }
 
 type remoteApp struct {
 	id        string
 	namespace string
 	address   string
+	cacheKey  string
 }
 
 // NewDirectMessaging contains the options for NewDirectMessaging.
@@ -87,6 +94,7 @@ type NewDirectMessagingOpts struct {
 	Channels           *channels.Channels
 	ClientConnFn       messageClientConnection
 	Resolver           nr.Resolver
+	MultiResolver      nr.ResolverMulti
 	MaxRequestBodySize int
 	Proxy              Proxy
 	ReadBufferSize     int
@@ -99,21 +107,28 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 	hName, _ := os.Hostname()
 
 	dm := &directMessaging{
-		appID:                        opts.AppID,
-		namespace:                    opts.Namespace,
-		grpcPort:                     opts.Port,
-		mode:                         opts.Mode,
-		channels:                     opts.Channels,
-		connectionCreatorFn:          opts.ClientConnFn,
-		resolver:                     opts.Resolver,
-		maxRequestBodySizeMB:         opts.MaxRequestBodySize,
-		proxy:                        opts.Proxy,
-		readBufferSize:               opts.ReadBufferSize,
-		resiliency:                   opts.Resiliency,
-		hostAddress:                  hAddr,
-		hostName:                     hName,
-		compStore:                    opts.CompStore,
-		resourceHTTPEndpointChannels: map[string]channel.HTTPEndpointAppChannel{},
+		appID:               opts.AppID,
+		namespace:           opts.Namespace,
+		grpcPort:            opts.Port,
+		mode:                opts.Mode,
+		channels:            opts.Channels,
+		connectionCreatorFn: opts.ClientConnFn,
+		resolver:            opts.Resolver,
+		maxRequestBodySize:  opts.MaxRequestBodySize,
+		proxy:               opts.Proxy,
+		readBufferSize:      opts.ReadBufferSize,
+		resiliency:          opts.Resiliency,
+		hostAddress:         hAddr,
+		hostName:            hName,
+		compStore:           opts.CompStore,
+	}
+
+	// Set resolverMulti if the resolver implements the ResolverMulti interface
+	dm.resolverMulti, _ = opts.Resolver.(nr.ResolverMulti)
+	if dm.resolverMulti != nil {
+		dm.resolverCache = ttlcache.NewCache[nr.AddressList](ttlcache.CacheOptions{
+			MaxTTL: resolverCacheTTL,
+		})
 	}
 
 	if dm.proxy != nil {
@@ -122,6 +137,17 @@ func NewDirectMessaging(opts NewDirectMessagingOpts) invokev1.DirectMessaging {
 	}
 
 	return dm
+}
+
+func (d *directMessaging) Close() error {
+	if !d.closed.CompareAndSwap(false, true) {
+		return nil
+	}
+
+	if d.resolverCache != nil {
+		d.resolverCache.Stop()
+	}
+	return nil
 }
 
 // Invoke takes a message requests and invokes an app, either local or remote.
@@ -196,9 +222,8 @@ func (d *directMessaging) invokeWithRetry(
 				Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
 			},
 		)
-		attempts := atomic.Int32{}
 		return policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
-			attempt := attempts.Add(1)
+			attempt := resiliency.GetAttempt(ctx)
 			rResp, teardown, rErr := fn(ctx, app.id, app.namespace, app.address, req)
 			if rErr == nil {
 				teardown(false)
@@ -208,9 +233,14 @@ func (d *directMessaging) invokeWithRetry(
 			code := status.Code(rErr)
 			if code == codes.Unavailable || code == codes.Unauthenticated {
 				// Destroy the connection and force a re-connection on the next attempt
+				// We also remove the resolved name from the cache
 				teardown(true)
+				if app.cacheKey != "" && d.resolverCache != nil {
+					d.resolverCache.Delete(app.cacheKey)
+				}
 				return rResp, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", app.id, attempt-1, rErr)
 			}
+
 			teardown(false)
 			return rResp, backoff.Permanent(rErr)
 		})
@@ -247,12 +277,12 @@ func (d *directMessaging) invokeHTTPEndpoint(ctx context.Context, appID, appName
 
 	// Set up timers
 	start := time.Now()
-	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID)
 	imr, err := d.invokeRemoteUnaryForHTTPEndpoint(ctx, req, appID)
 
 	// Diagnostics
 	if imr != nil {
-		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
+		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, imr.Status().GetCode(), start)
 	}
 
 	return imr, nopTeardown, err
@@ -276,20 +306,20 @@ func (d *directMessaging) invokeRemote(ctx context.Context, appID, appNamespace,
 	clientV1 := internalv1pb.NewServiceInvocationClient(conn)
 
 	opts := []grpc.CallOption{
-		grpc.MaxCallRecvMsgSize(d.maxRequestBodySizeMB << 20),
-		grpc.MaxCallSendMsgSize(d.maxRequestBodySizeMB << 20),
+		grpc.MaxCallRecvMsgSize(d.maxRequestBodySize),
+		grpc.MaxCallSendMsgSize(d.maxRequestBodySize),
 	}
 
 	// Set up timers
 	start := time.Now()
-	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID, req.Message().Method)
+	diag.DefaultMonitoring.ServiceInvocationRequestSent(appID)
 
 	// Do invoke
 	imr, err := d.invokeRemoteStream(ctx, clientV1, req, appID, opts)
 
 	// Diagnostics
 	if imr != nil {
-		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, req.Message().Method, imr.Status().Code, start)
+		diag.DefaultMonitoring.ServiceInvocationResponseReceived(appID, imr.Status().GetCode(), start)
 	}
 
 	return imr, teardown, err
@@ -336,6 +366,21 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 	}()
 	r := req.RawData()
 	reqProto := req.Proto()
+
+	// If there's a message in the proto, we remove it from the message we send to avoid sending it twice
+	// However we need to keep a reference to those bytes, and if needed add them back, to retry the request with resiliency
+	// We re-add it when the method ends to ensure we can perform retries
+	messageData := reqProto.GetMessage().GetData()
+	messageDataValue := messageData.GetValue()
+	if len(messageDataValue) > 0 {
+		messageData.Value = nil
+		defer func() {
+			if messageDataValue != nil {
+				messageData.Value = messageDataValue
+			}
+		}()
+	}
+
 	proto := &internalv1pb.InternalInvokeRequestStream{}
 	var (
 		n    int
@@ -375,7 +420,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		}
 
 		// Send the chunk if there's anything to send
-		if proto.Request != nil || proto.Payload != nil {
+		if proto.GetRequest() != nil || proto.GetPayload() != nil {
 			err = stream.SendMsg(proto)
 			if errors.Is(err, io.EOF) {
 				// If SendMsg returns an io.EOF error, it usually means that there's a transport-level error
@@ -406,8 +451,13 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		// - If the request is replayable, we will re-submit it as unary. This will have a small performance impact due to the additional round-trip, but it will still work (and the warning will remind users to upgrade)
 		// - If the request is not replayable, the data stream has already been consumed at this point so nothing else we can do - just show an error and tell users to upgrade the target app… (or disable streaming for now)
 		// At this point it seems that this is the best we can do, since we cannot detect Unimplemented status codes earlier (unless we send a "ping", which would add latency).
-		// See: // See: https://github.com/grpc/grpc-go/issues/5910
+		// See: https://github.com/grpc/grpc-go/issues/5910
 		if status.Code(err) == codes.Unimplemented {
+			// If we took out the data from the message, re-add it, so we can attempt to perform an unary invocation
+			if messageDataValue != nil {
+				messageData.Value = messageDataValue
+				messageDataValue = nil
+			}
 			if req.CanReplay() {
 				log.Warnf("App %s does not support streaming-based service invocation (most likely because it's using an older version of Dapr); falling back to unary calls", appID)
 				return d.invokeRemoteUnary(ctx, clientV1, req, opts)
@@ -418,18 +468,19 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 		}
 		return nil, err
 	}
-	if chunk.Response == nil || chunk.Response.Status == nil {
+	if chunk.GetResponse().GetStatus() == nil {
 		return nil, errors.New("response does not contain the required fields in the leading chunk")
 	}
 	pr, pw := io.Pipe()
-	res, err := invokev1.InternalInvokeResponse(chunk.Response)
+	res, err := invokev1.InternalInvokeResponse(chunk.GetResponse())
 	if err != nil {
 		return nil, err
 	}
-	res.WithRawData(pr)
-	if chunk.Response.Message != nil {
-		res.WithContentType(chunk.Response.Message.ContentType)
+	if chunk.GetResponse().GetMessage() != nil {
+		res.WithContentType(chunk.GetResponse().GetMessage().GetContentType())
+		res.WithDataTypeURL(chunk.GetResponse().GetMessage().GetData().GetTypeUrl()) // Could be empty
 	}
+	res.WithRawData(pr)
 
 	// Read the response into the stream in the background
 	go func() {
@@ -440,11 +491,6 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 			readErr   error
 		)
 		for {
-			if ctx.Err() != nil {
-				pw.CloseWithError(ctx.Err())
-				return
-			}
-
 			// Get the payload from the chunk that was previously read
 			payload = chunk.GetPayload()
 			if payload != nil {
@@ -472,7 +518,7 @@ func (d *directMessaging) invokeRemoteStream(ctx context.Context, clientV1 inter
 				return
 			}
 
-			if chunk.Response != nil && (chunk.Response.Status != nil || chunk.Response.Headers != nil || chunk.Response.Message != nil) {
+			if chunk.GetResponse().GetStatus() != nil || chunk.GetResponse().GetHeaders() != nil || chunk.GetResponse().GetMessage() != nil {
 				pw.CloseWithError(errors.New("response metadata found in non-leading chunk"))
 				return
 			}
@@ -510,7 +556,7 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 				Values: []string{value},
 			}
 		} else {
-			metadata[header].Values = append(metadata[header].Values, value)
+			metadata[header].Values = append(metadata[header].GetValues(), value)
 		}
 	}
 
@@ -532,52 +578,84 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 	addOrCreate(fasthttp.HeaderForwarded, forwardedHeaderValue)
 }
 
-func (d *directMessaging) getRemoteApp(appID string) (remoteApp, error) {
-	id, namespace, err := d.requestAppIDAndNamespace(appID)
+func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) {
+	res.id, res.namespace, err = d.requestAppIDAndNamespace(appID)
 	if err != nil {
-		return remoteApp{}, err
+		return res, err
 	}
 
 	if d.resolver == nil {
-		return remoteApp{}, errors.New("name resolver not initialized")
+		return res, errors.New("name resolver not initialized")
 	}
 
-	var address string
 	// Note: check for case where URL is overwritten for external service invocation,
 	// or if current app id is associated with an http endpoint CRD.
 	// This will also forgo service discovery.
-	if strings.HasPrefix(id, "http://") || strings.HasPrefix(id, "https://") {
-		address = id
-	} else if d.isHTTPEndpoint(id) {
-		address = d.checkHTTPEndpoints(id)
-	} else {
-		request := nr.ResolveRequest{ID: id, Namespace: namespace, Port: d.grpcPort}
-		address, err = d.resolver.ResolveID(request)
-		if err != nil {
-			return remoteApp{}, err
+	switch {
+	case strings.HasPrefix(res.id, "http://") || strings.HasPrefix(res.id, "https://"):
+		res.address = res.id
+	case d.isHTTPEndpoint(res.id):
+		res.address = d.checkHTTPEndpoints(res.id)
+	default:
+		request := nr.ResolveRequest{
+			ID:        res.id,
+			Namespace: res.namespace,
+			Port:      d.grpcPort,
+		}
+
+		// If the component implements ResolverMulti, we can use caching
+		if d.resolverMulti != nil {
+			var addresses nr.AddressList
+			if d.resolverCache != nil {
+				// Check if the value is in the cache
+				res.cacheKey = request.CacheKey()
+				addresses, _ = d.resolverCache.Get(res.cacheKey)
+				if len(addresses) > 0 {
+					// Pick a random one
+					res.address = addresses.Pick()
+				}
+			}
+
+			// If there was nothing in the cache (including the case of the cache disabled)
+			if res.address == "" {
+				// Resolve
+				addresses, err = d.resolverMulti.ResolveIDMulti(context.TODO(), request)
+				if err != nil {
+					return res, err
+				}
+				res.address = addresses.Pick()
+
+				if len(addresses) > 0 && res.cacheKey != "" {
+					// Store the result in cache
+					// Note that we may have a race condition here if another goroutine was resolving the same address
+					// This is acceptable, as the waste caused by an extra DNS resolution is very small
+					d.resolverCache.Set(res.cacheKey, addresses, resolverCacheTTL)
+				}
+			}
+		} else {
+			res.address, err = d.resolver.ResolveID(context.TODO(), request)
+			if err != nil {
+				return res, err
+			}
 		}
 	}
 
-	return remoteApp{
-		namespace: namespace,
-		id:        id,
-		address:   address,
-	}, nil
+	return res, nil
 }
 
 // ReadChunk reads a chunk of data from a StreamPayload object.
 // The returned value "seq" indicates the sequence number
 func ReadChunk(payload *commonv1pb.StreamPayload, out io.Writer) (seq uint64, err error) {
-	if len(payload.Data) > 0 {
+	if len(payload.GetData()) > 0 {
 		var n int
-		n, err = out.Write(payload.Data)
+		n, err = out.Write(payload.GetData())
 		if err != nil {
 			return 0, err
 		}
-		if n != len(payload.Data) {
-			return 0, fmt.Errorf("wrote %d out of %d bytes", n, len(payload.Data))
+		if n != len(payload.GetData()) {
+			return 0, fmt.Errorf("wrote %d out of %d bytes", n, len(payload.GetData()))
 		}
 	}
 
-	return payload.Seq, nil
+	return payload.GetSeq(), nil
 }

@@ -14,6 +14,7 @@ limitations under the License.
 package patcher
 
 import (
+	"encoding/json"
 	"strings"
 	"testing"
 
@@ -26,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestParseEnvString(t *testing.T) {
@@ -82,12 +84,11 @@ func TestParseEnvString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			c := NewSidecarConfig(&corev1.Pod{})
 			c.Env = tc.envStr
 			envKeys, envVars := c.getEnv()
-			assert.Equal(t, tc.expLen, len(envVars))
+			assert.Len(t, envVars, tc.expLen)
 			assert.Equal(t, tc.expKeys, envKeys)
 			assert.Equal(t, tc.expEnv, envVars)
 		})
@@ -328,8 +329,6 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Identity = "pod_identity"
 		c.ControlPlaneNamespace = "my-namespace"
 		c.ControlPlaneTrustDomain = "test.example.com"
-		c.CertChain = "my-cert-chain"
-		c.CertKey = "my-cert-key"
 
 		c.SetFromPodAnnotations()
 
@@ -360,25 +359,8 @@ func TestGetSidecarContainer(t *testing.T) {
 		}
 
 		// Command should be empty, image's entrypoint to be used.
-		assert.Equal(t, 0, len(container.Command))
-		// NAMESPACE
-		assert.Equal(t, "dapr-system", container.Env[0].Value)
-		// POD_NAME
-		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
-		// DAPR_CONTROLPLANE_NAMESPACE
-		assert.Equal(t, "my-namespace", container.Env[3].Value)
-		// DAPR_CONTROLPLANE_TRUST_DOMAIN
-		assert.Equal(t, "test.example.com", container.Env[4].Value)
-		// DAPR_CERT_CHAIN
-		assert.Equal(t, "my-cert-chain", container.Env[5].Value)
-		// DAPR_CERT_KEY
-		assert.Equal(t, "my-cert-key", container.Env[6].Value)
-		// SENTRY_LOCAL_IDENTITY
-		assert.Equal(t, "pod_identity", container.Env[7].Value)
-		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[8].ValueFrom.SecretKeyRef.Name)
-		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[9].ValueFrom.SecretKeyRef.Name)
+		assert.Empty(t, container.Command)
+		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -410,8 +392,7 @@ func TestGetSidecarContainer(t *testing.T) {
 		c.Identity = "pod_identity"
 		c.ControlPlaneNamespace = "my-namespace"
 		c.ControlPlaneTrustDomain = "test.example.com"
-		c.CertChain = "my-cert-chain"
-		c.CertKey = "my-cert-key"
+		c.EnableK8sDownwardAPIs = true
 
 		c.SetFromPodAnnotations()
 
@@ -450,25 +431,8 @@ func TestGetSidecarContainer(t *testing.T) {
 		}
 
 		// Command should be empty, image's entrypoint to be used.
-		assert.Equal(t, 0, len(container.Command))
-		// NAMESPACE
-		assert.Equal(t, "dapr-system", container.Env[0].Value)
-		// POD_NAME
-		assert.Equal(t, "metadata.name", container.Env[1].ValueFrom.FieldRef.FieldPath)
-		// DAPR_CONTROLPLANE_NAMESPACE
-		assert.Equal(t, "my-namespace", container.Env[3].Value)
-		// DAPR_CONTROLPLANE_TRUST_DOMAIN
-		assert.Equal(t, "test.example.com", container.Env[4].Value)
-		// DAPR_CERT_CHAIN
-		assert.Equal(t, "my-cert-chain", container.Env[5].Value)
-		// DAPR_CERT_KEY
-		assert.Equal(t, "my-cert-key", container.Env[6].Value)
-		// SENTRY_LOCAL_IDENTITY
-		assert.Equal(t, "pod_identity", container.Env[7].Value)
-		// DAPR_API_TOKEN
-		assert.Equal(t, "secret", container.Env[8].ValueFrom.SecretKeyRef.Name)
-		// DAPR_APP_TOKEN
-		assert.Equal(t, "appsecret", container.Env[9].ValueFrom.SecretKeyRef.Name)
+		assert.Empty(t, container.Command)
+		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_HOST_IP","valueFrom":{"fieldRef":{"fieldPath":"status.podIP"}}},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
 		// default image
 		assert.Equal(t, "daprio/dapr", container.Image)
 		assert.EqualValues(t, expectedArgs, container.Args)
@@ -576,6 +540,27 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 	}))
 
+	t.Run("block shutdown duration", testSuiteGenerator([]testCase{
+		{
+			name:        "default to empty",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--dapr-block-shutdown-duration")
+			},
+		},
+		{
+			name: "add a block shutdown duration",
+			annotations: map[string]string{
+				"dapr.io/block-shutdown-duration": "3s",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--dapr-block-shutdown-duration 3s")
+			},
+		},
+	}))
+
 	t.Run("sidecar image", testSuiteGenerator([]testCase{
 		{
 			name:        "no annotation",
@@ -606,7 +591,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			name:        "default does not use UDS",
 			annotations: map[string]string{},
 			assertFn: func(t *testing.T, container *corev1.Container) {
-				assert.Equal(t, 0, len(container.VolumeMounts))
+				assert.Empty(t, container.VolumeMounts)
 			},
 		},
 		{
@@ -832,11 +817,11 @@ func TestGetSidecarContainer(t *testing.T) {
 
 			t.Run(tc.name, func(t *testing.T) {
 				if tc.explicitCommandSpecified {
-					assert.True(t, len(container.Command) > 0, "Must contain a command")
-					assert.True(t, len(container.Args) > 0, "Must contain arguments")
+					assert.NotEmpty(t, container.Command, "Must contain a command")
+					assert.NotEmpty(t, container.Args, "Must contain arguments")
 				} else {
-					assert.Len(t, container.Command, 0, "Must not contain a command")
-					assert.True(t, len(container.Args) > 0, "Must contain arguments")
+					assert.Empty(t, container.Command, "Must not contain a command")
+					assert.NotEmpty(t, container.Args, "Must contain arguments")
 				}
 			})
 		}
@@ -863,6 +848,58 @@ func TestGetSidecarContainer(t *testing.T) {
 				assert.NotNil(t, container.SecurityContext.Capabilities, "SecurityContext.Capabilities should not be nil")
 				assert.Equal(t, corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}, *container.SecurityContext.Capabilities, "SecurityContext.Capabilities should drop all capabilities")
 				assert.Nil(t, container.SecurityContext.SeccompProfile)
+			},
+		},
+		{
+			name: "set run as non root explicitly true",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsNonRoot = true
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
+				assert.Equal(t, ptr.Of(true), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be true")
+			},
+		},
+		{
+			name: "set run as non root explicitly false",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsNonRoot = false
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
+				assert.Equal(t, ptr.Of(false), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be false")
+			},
+		},
+		{
+			name: "set run as user 1000",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsUser = ptr.Of(int64(1000))
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should not be nil")
+				assert.Equal(t, ptr.Of(int64(1000)), container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be 1000")
+			},
+		},
+		{
+			name: "do not set run as user leave it as default",
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be nil")
+			},
+		},
+		{
+			name: "set run as group 3000",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsGroup = ptr.Of(int64(3000))
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should not be nil")
+				assert.Equal(t, ptr.Of(int64(3000)), container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be 3000")
+			},
+		},
+		{
+			name: "do not set run as group leave it as default",
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be nil")
 			},
 		},
 	}))
@@ -1013,6 +1050,27 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 	}))
 
+	t.Run("max-body-size", testSuiteGenerator([]testCase{
+		{
+			name:        "not present by default",
+			annotations: map[string]string{},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.NotContains(t, args, "--max-body-size")
+			},
+		},
+		{
+			name: "set value",
+			annotations: map[string]string{
+				annotations.KeyMaxBodySize: "1Mi",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				args := strings.Join(container.Args, " ")
+				assert.Contains(t, args, "--max-body-size 1Mi")
+			},
+		},
+	}))
+
 	t.Run("set resources", testCaseFn(testCase{
 		annotations: map[string]string{
 			annotations.KeyCPURequest:  "100",
@@ -1122,4 +1180,12 @@ func TestGetSidecarContainer(t *testing.T) {
 			},
 		},
 	}))
+}
+
+func assertEqualJSON(t *testing.T, val any, expect string) {
+	t.Helper()
+
+	actual, err := json.Marshal(val)
+	require.NoError(t, err)
+	assert.Equal(t, expect, string(actual))
 }

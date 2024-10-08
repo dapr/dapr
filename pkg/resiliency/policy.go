@@ -42,6 +42,8 @@ type doneCh[T any] struct {
 	err error
 }
 
+type attemptsCtxKey struct{}
+
 // PolicyDefinition contains a definition for a policy, used to create a Runner.
 type PolicyDefinition struct {
 	log                       logger.Logger
@@ -117,16 +119,21 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				ctx, cancel := context.WithTimeout(ctx, def.t)
 				defer cancel()
 
-				done := make(chan doneCh[T])
-				timedOut := atomic.Bool{}
+				done := make(chan doneCh[T], 1)
 				go func() {
 					rRes, rErr := operCopy(ctx)
-					if !timedOut.Load() {
-						done <- doneCh[T]{rRes, rErr}
-					} else if opts.Disposer != nil && !isZero(rRes) {
+
+					// If the channel is full, it means we had a timeout
+					select {
+					case done <- doneCh[T]{rRes, rErr}:
+						// No timeout, all good
+					default:
+						// The operation has timed out
 						// Invoke the disposer if we have a non-zero return value
 						// Note that in case of timeouts we do not invoke the accumulator
-						opts.Disposer(rRes)
+						if opts.Disposer != nil && !isZero(rRes) {
+							opts.Disposer(rRes)
+						}
 					}
 				}()
 
@@ -134,7 +141,21 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				case v := <-done:
 					return v.res, v.err
 				case <-ctx.Done():
-					timedOut.Store(true)
+					// Because done has a capacity of 1, adding a message on the channel signals that there was a timeout
+					// However, the response may have arrived in the meanwhile, so we need to also check if something was added
+					select {
+					case done <- doneCh[T]{}:
+						// All good, nothing to do here
+					default:
+						// The response arrived at the same time as the context deadline, and the channel has a message
+						v := <-done
+
+						// Invoke the disposer if the return value is non-zero
+						// Note that in case of timeouts we do not invoke the accumulator
+						if opts.Disposer != nil && !isZero(v.res) {
+							opts.Disposer(v.res)
+						}
+					}
 					if def.addTimeoutActivatedMetric != nil && timeoutMetricsActivated.CompareAndSwap(false, true) {
 						def.addTimeoutActivatedMetric()
 					}
@@ -186,9 +207,12 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 
 		// Use retry/back off
 		b := def.r.NewBackOffWithContext(ctx)
+		attempts := atomic.Int32{}
 		return retry.NotifyRecoverWithData(
 			func() (T, error) {
-				rRes, rErr := operation(ctx)
+				attempt := attempts.Add(1)
+				opCtx := context.WithValue(ctx, attemptsCtxKey{}, attempt)
+				rRes, rErr := operation(opCtx)
 				// In case of an error, if we have a disposer we invoke it with the return value, then reset the return value
 				if rErr != nil && opts.Disposer != nil && !isZero(rRes) {
 					opts.Disposer(rRes)
@@ -201,11 +225,11 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 				if def.addRetryActivatedMetric != nil {
 					def.addRetryActivatedMetric()
 				}
-				def.log.Infof("Error processing operation %s. Retrying in %v…", def.name, d)
+				def.log.Warnf("Error processing operation %s. Retrying in %v…", def.name, d)
 				def.log.Debugf("Error for operation %s was: %v", def.name, opErr)
 			},
 			func() {
-				def.log.Infof("Recovered processing operation %s.", def.name)
+				def.log.Infof("Recovered processing operation %s after %d attempts", def.name, attempts.Load())
 			},
 		)
 	}
@@ -214,6 +238,18 @@ func NewRunnerWithOptions[T any](ctx context.Context, def *PolicyDefinition, opt
 // DisposerCloser is a Disposer function for RunnerOpts that invokes Close() on the object.
 func DisposerCloser[T io.Closer](obj T) {
 	_ = obj.Close()
+}
+
+// GetAttempt returns the attempt number from a context
+// Attempts are numbered from 1 onwards.
+// If the context doesn't have an attempt number, returns 0
+func GetAttempt(ctx context.Context) int32 {
+	v := ctx.Value(attemptsCtxKey{})
+	attempt, ok := v.(int32)
+	if !ok {
+		return 0
+	}
+	return attempt
 }
 
 func isZero(val any) bool {

@@ -64,11 +64,9 @@ rules:
     resources: ["configmaps"]
     verbs: ["get", "update", "watch", "list"]
     resourceNames: ["dapr-trust-bundle"]
-{{- if eq .Values.global.rbac.namespaced true }}
   - apiGroups: ["dapr.io"]
     resources: ["configurations"]
-    verbs: ["list"]
-{{- end }}
+    verbs: ["list", "get", "watch"]
 ---
 kind: RoleBinding
 apiVersion: rbac.authorization.k8s.io/v1

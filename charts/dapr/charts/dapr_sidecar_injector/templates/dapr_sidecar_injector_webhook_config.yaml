@@ -28,4 +28,10 @@ webhooks:
   failurePolicy: {{ .Values.webhookFailurePolicy}}
   sideEffects: None
   admissionReviewVersions: ["v1", "v1beta1"]
+  {{- if .Values.namespaceSelector }}
+  namespaceSelector: {{- .Values.namespaceSelector | toYaml | nindent 4 }}
+  {{- end }}
+  {{- if .Values.objectSelector }}
+  objectSelector: {{- .Values.objectSelector | toYaml | nindent 4 }}
+  {{- end }}
 {{- end }}

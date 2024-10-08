@@ -14,10 +14,13 @@ limitations under the License.
 package pubsub
 
 import (
+	"errors"
 	"fmt"
 
 	"github.com/dapr/dapr/pkg/messages"
 )
+
+var ErrMessageDropped = errors.New("pubsub message dropped") // TODO: remove this and use apierrors.PubSubMsgDropped
 
 // pubsub.NotFoundError is returned by the runtime when the pubsub does not exist.
 type NotFoundError struct {

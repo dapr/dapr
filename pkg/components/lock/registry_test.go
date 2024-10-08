@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/kit/logger"
@@ -42,5 +42,5 @@ func TestAliasing(t *testing.T) {
 		return nil
 	}, "", alias)
 	_, err := r.Create("lock."+alias, "", "")
-	assert.Nil(t, err)
+	require.NoError(t, err)
 }

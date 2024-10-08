@@ -77,7 +77,7 @@ func (_m *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string
 	if err != nil {
 		return &invokev1.InvokeMethodResponse{}, err
 	}
-	err = _m.Failure.PerformFailure(string(r.Message.Data.Value))
+	err = _m.Failure.PerformFailure(string(r.GetMessage().GetData().GetValue()))
 	if err != nil {
 		return &invokev1.InvokeMethodResponse{}, err
 	}
@@ -85,9 +85,20 @@ func (_m *FailingDirectMessaging) Invoke(ctx context.Context, targetAppID string
 	if statusCode == 0 {
 		statusCode = http.StatusOK
 	}
+	// Setting up the headers passed in request
+	md := r.GetMetadata()
+	headers := make(map[string][]string)
+	for k, v := range md {
+		headers[k] = v.GetValues()
+	}
+	contentType := r.GetMessage().GetContentType()
+	// TODO: fix type
+	//nolint:gosec
 	resp := invokev1.
 		NewInvokeMethodResponse(int32(statusCode), http.StatusText(statusCode), nil).
-		WithRawDataBytes(r.Message.Data.Value)
+		WithRawDataBytes(r.GetMessage().GetData().GetValue()).
+		WithHTTPHeaders(headers).
+		WithContentType(contentType)
 	return resp, nil
 }
 

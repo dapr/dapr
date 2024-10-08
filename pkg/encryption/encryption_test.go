@@ -25,6 +25,7 @@ import (
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
@@ -101,7 +102,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 		}})
 
 		keys, err := ComponentEncryptionKey(component, secretStore)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.Equal(t, primaryKey, keys.Primary.Key)
 		assert.Equal(t, secondaryKey, keys.Secondary.Key)
 	})
@@ -132,7 +133,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 		keys, err := ComponentEncryptionKey(component, nil)
 		assert.Empty(t, keys.Primary.Key)
 		assert.Empty(t, keys.Secondary.Key)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("no error when component doesn't have encryption keys", func(t *testing.T) {
@@ -150,7 +151,7 @@ func TestComponentEncryptionKey(t *testing.T) {
 		}
 
 		_, err := ComponentEncryptionKey(component, nil)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -165,7 +166,7 @@ func TestTryGetEncryptionKeyFromMetadataItem(t *testing.T) {
 		}})
 
 		_, err := tryGetEncryptionKeyFromMetadataItem("", commonapi.NameValuePair{}, secretStore)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }
 
@@ -176,7 +177,7 @@ func TestCreateCipher(t *testing.T) {
 		}, AESGCMAlgorithm)
 
 		assert.Nil(t, cipherObj)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("valid 256-bit key", func(t *testing.T) {
@@ -190,7 +191,7 @@ func TestCreateCipher(t *testing.T) {
 		}, AESGCMAlgorithm)
 
 		assert.NotNil(t, cipherObj)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("valid 192-bit key", func(t *testing.T) {
@@ -204,7 +205,7 @@ func TestCreateCipher(t *testing.T) {
 		}, AESGCMAlgorithm)
 
 		assert.NotNil(t, cipherObj)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("valid 128-bit key", func(t *testing.T) {
@@ -218,7 +219,7 @@ func TestCreateCipher(t *testing.T) {
 		}, AESGCMAlgorithm)
 
 		assert.NotNil(t, cipherObj)
-		assert.NoError(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("invalid key size", func(t *testing.T) {
@@ -232,7 +233,7 @@ func TestCreateCipher(t *testing.T) {
 		}, AESGCMAlgorithm)
 
 		assert.Nil(t, cipherObj)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 
 	t.Run("invalid algorithm", func(t *testing.T) {
@@ -246,6 +247,6 @@ func TestCreateCipher(t *testing.T) {
 		}, "3DES")
 
 		assert.Nil(t, cipherObj)
-		assert.Error(t, err)
+		require.Error(t, err)
 	})
 }

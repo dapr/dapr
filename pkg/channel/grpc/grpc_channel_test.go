@@ -30,13 +30,13 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
+	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	channelt "github.com/dapr/dapr/pkg/channel/testing"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/grpc/metadata"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
-	"github.com/dapr/dapr/utils/streams"
+	daprt "github.com/dapr/dapr/pkg/testing"
 )
 
 // TODO: Add APIVersion testing
@@ -75,9 +75,9 @@ func TestMain(m *testing.M) {
 
 func createConnection(t *testing.T) *grpc.ClientConn {
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
-	conn, err := grpc.DialContext(ctx, "localhost:9998",
+	conn, err := grpc.DialContext(ctx, "localhost:9998", //nolint:staticcheck
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(),
+		grpc.WithBlock(), //nolint:staticcheck
 	)
 	cancel()
 	require.NoError(t, err, "failed to connect to gRPC server")
@@ -93,11 +93,11 @@ func TestInvokeMethod(t *testing.T) {
 	conn := createConnection(t)
 	defer closeConnection(t, conn)
 	c := Channel{
-		baseAddress:          "localhost:9998",
-		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		conn:                 conn,
-		appMetadataToken:     "token1",
-		maxRequestBodySizeMB: 4,
+		baseAddress:        "localhost:9998",
+		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
+		conn:               conn,
+		appMetadataToken:   "token1",
+		maxRequestBodySize: 4 << 20,
 	}
 	ctx := context.Background()
 
@@ -106,7 +106,7 @@ func TestInvokeMethod(t *testing.T) {
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2")
 		defer req.Close()
 		response, err := c.InvokeMethod(ctx, req, "")
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		defer response.Close()
 
 		assert.Equal(t, "application/json", response.ContentType())
@@ -124,12 +124,12 @@ func TestInvokeMethod(t *testing.T) {
 	t.Run("request body stream errors", func(t *testing.T) {
 		req := invokev1.NewInvokeMethodRequest("method").
 			WithHTTPExtension(http.MethodPost, "param1=val1&param2=val2").
-			WithRawData(&streams.ErrorReader{})
+			WithRawData(&daprt.ErrorReader{})
 		defer req.Close()
 
 		response, err := c.InvokeMethod(ctx, req, "")
 		require.Error(t, err)
-		assert.ErrorIs(t, err, io.ErrClosedPipe)
+		require.ErrorIs(t, err, io.ErrClosedPipe)
 		if response != nil {
 			defer response.Close()
 		}
@@ -139,11 +139,11 @@ func TestInvokeMethod(t *testing.T) {
 func TestHealthProbe(t *testing.T) {
 	conn := createConnection(t)
 	c := Channel{
-		baseAddress:          "localhost:9998",
-		appCallbackClient:    runtimev1pb.NewAppCallbackClient(conn),
-		conn:                 conn,
-		appMetadataToken:     "token1",
-		maxRequestBodySizeMB: 4,
+		baseAddress:        "localhost:9998",
+		appCallbackClient:  runtimev1pb.NewAppCallbackClient(conn),
+		conn:               conn,
+		appMetadataToken:   "token1",
+		maxRequestBodySize: 4 << 20,
 	}
 	ctx := context.Background()
 
@@ -154,19 +154,19 @@ func TestHealthProbe(t *testing.T) {
 
 	// OK response
 	success, err = c.HealthProbe(ctx)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.True(t, success)
 
 	// Non-2xx status code
 	mockServer.Error = errors.New("test failure")
 	success, err = c.HealthProbe(ctx)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.False(t, success)
 
 	// Closed connection
 	closeConnection(t, conn)
 	success, err = c.HealthProbe(ctx)
-	assert.Error(t, err)
+	require.Error(t, err)
 	assert.False(t, success)
 }
 

@@ -166,7 +166,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		assert.Empty(t, ps.Features())
 		ps.features = []pubsub.Feature{pubsub.FeatureMessageTTL}
 		assert.NotEmpty(t, ps.Features())
-		assert.Equal(t, ps.Features()[0], pubsub.FeatureMessageTTL)
+		assert.Equal(t, pubsub.FeatureMessageTTL, ps.Features()[0])
 	})
 
 	t.Run("publish should call publish grpc method", func(t *testing.T) {
@@ -174,7 +174,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 
 		svc := &server{
 			onPublishCalled: func(req *proto.PublishRequest) {
-				assert.Equal(t, req.Topic, fakeTopic)
+				assert.Equal(t, fakeTopic, req.GetTopic())
 			},
 		}
 		ps, cleanup, err := getPubSub(svc)
@@ -194,7 +194,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 
 		svc := &server{
 			onPublishCalled: func(req *proto.PublishRequest) {
-				assert.Equal(t, req.Topic, fakeTopic)
+				assert.Equal(t, fakeTopic, req.GetTopic())
 			},
 			publishErr: errors.New("fake-publish-err"),
 		}
@@ -206,7 +206,7 @@ func TestPubSubPluggableCalls(t *testing.T) {
 			Topic: fakeTopic,
 		})
 
-		assert.NotNil(t, err)
+		require.Error(t, err)
 		assert.Equal(t, int64(1), svc.publishCalled.Load())
 	})
 
@@ -246,12 +246,12 @@ func TestPubSubPluggableCalls(t *testing.T) {
 		svc := &server{
 			pullChan: messageChan,
 			onAckReceived: func(ma *proto.PullMessagesRequest) {
-				if ma.Topic != nil {
+				if ma.GetTopic() != nil {
 					topicSent.Done()
 				} else {
 					messagesAcked.Done()
 				}
-				if ma.AckError != nil {
+				if ma.GetAckError() != nil {
 					totalAckErrors.Add(1)
 				}
 			},

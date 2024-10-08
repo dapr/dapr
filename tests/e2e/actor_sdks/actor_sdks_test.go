@@ -189,8 +189,8 @@ func TestActorInvocationCrossSDKs(t *testing.T) {
 		healthCheckApp(t, externalURL, numHealthChecks)
 	}
 
-	t.Log("Sleeping for 10 seconds ...")
-	time.Sleep(10 * time.Second)
+	t.Log("Sleeping for 15 seconds ...")
+	time.Sleep(15 * time.Second)
 
 	for _, appSpec := range apps {
 		app := appSpec.AppName

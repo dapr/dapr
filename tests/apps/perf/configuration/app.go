@@ -307,7 +307,7 @@ func subscribeGRPC(keys []string) (string, error) {
 	}
 	res, err := client.Recv()
 	if errors.Is(err, io.EOF) {
-		return "", fmt.Errorf("error subscribe: stream closed before receiving ID")
+		return "", errors.New("error subscribe: stream closed before receiving ID")
 	}
 	if err != nil {
 		return "", fmt.Errorf("error subscribe: %w", err)
@@ -416,7 +416,7 @@ func unsubscribeGRPC(subscriptionID string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("error unsubscribing config updates: %w", err)
 	}
-	if !resp.Ok {
+	if !resp.GetOk() {
 		return "", fmt.Errorf("error unsubscribing config updates: %s", resp.GetMessage())
 	}
 	return resp.GetMessage(), nil

@@ -7,6 +7,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
+
+	"github.com/dapr/dapr/pkg/config"
 )
 
 const (
@@ -15,16 +17,32 @@ const (
 
 func componentsMetrics() *componentMetrics {
 	c := newComponentMetrics()
-	c.Init("test", "default")
+	_ = c.Init("test", "default", config.LoadDefaultConfiguration().GetMetricsSpec().GetLatencyDistribution(log))
 
 	return c
 }
 
 func TestPubSub(t *testing.T) {
+	t.Run("record drop by app or sidecar", func(t *testing.T) {
+		c := componentsMetrics()
+
+		c.PubsubIngressEvent(context.Background(), componentName, "drop", "success", "A", 1)
+		c.PubsubIngressEvent(context.Background(), componentName, "drop", "drop", "A", 1)
+
+		viewData, _ := view.RetrieveData("component/pubsub_ingress/count")
+		v := view.Find("component/pubsub_ingress/count")
+
+		allTagsPresent(t, v, viewData[0].Tags)
+
+		assert.Len(t, viewData, 2)
+		assert.Equal(t, int64(1), viewData[0].Data.(*view.CountData).Value)
+		assert.Equal(t, int64(1), viewData[1].Data.(*view.CountData).Value)
+	})
+
 	t.Run("record ingress count", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.PubsubIngressEvent(context.Background(), componentName, "retry", "A", 0)
+		c.PubsubIngressEvent(context.Background(), componentName, "retry", "retry", "A", 0)
 
 		viewData, _ := view.RetrieveData("component/pubsub_ingress/count")
 		v := view.Find("component/pubsub_ingress/count")
@@ -35,14 +53,14 @@ func TestPubSub(t *testing.T) {
 	t.Run("record ingress latency", func(t *testing.T) {
 		c := componentsMetrics()
 
-		c.PubsubIngressEvent(context.Background(), componentName, "retry", "A", 1)
+		c.PubsubIngressEvent(context.Background(), componentName, "retry", "", "A", 1)
 
 		viewData, _ := view.RetrieveData("component/pubsub_ingress/latencies")
 		v := view.Find("component/pubsub_ingress/latencies")
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
 	})
 
 	t.Run("record egress latency", func(t *testing.T) {
@@ -55,7 +73,7 @@ func TestPubSub(t *testing.T) {
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
 	})
 }
 
@@ -81,7 +99,7 @@ func TestBindings(t *testing.T) {
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
 	})
 
 	t.Run("record output binding count", func(t *testing.T) {
@@ -105,7 +123,7 @@ func TestBindings(t *testing.T) {
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
 	})
 }
 
@@ -130,7 +148,7 @@ func TestState(t *testing.T) {
 		v := view.Find("component/state/latencies")
 
 		allTagsPresent(t, v, viewData[0].Tags)
-		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
 	})
 }
 
@@ -156,7 +174,7 @@ func TestConfiguration(t *testing.T) {
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
 	})
 }
 
@@ -182,15 +200,15 @@ func TestSecrets(t *testing.T) {
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
-		assert.Equal(t, float64(1), viewData[0].Data.(*view.DistributionData).Min)
+		assert.InEpsilon(t, 1, viewData[0].Data.(*view.DistributionData).Min, 0)
 	})
 }
 
 func TestComponentMetricsInit(t *testing.T) {
 	c := componentsMetrics()
 	assert.True(t, c.enabled)
-	assert.Equal(t, c.appID, "test")
-	assert.Equal(t, c.namespace, "default")
+	assert.Equal(t, "test", c.appID)
+	assert.Equal(t, "default", c.namespace)
 }
 
 func TestElapsedSince(t *testing.T) {
@@ -198,5 +216,5 @@ func TestElapsedSince(t *testing.T) {
 	time.Sleep(time.Second)
 
 	elapsed := ElapsedSince(start)
-	assert.True(t, elapsed >= 1000)
+	assert.GreaterOrEqual(t, elapsed, float64(1000))
 }

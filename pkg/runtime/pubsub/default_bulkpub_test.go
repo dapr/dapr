@@ -16,11 +16,11 @@ package pubsub
 import (
 	"context"
 	"errors"
-	"fmt"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -76,7 +76,7 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 	}
 
 	for _, tc := range tcs {
-		t.Run(fmt.Sprintf(tc.name), func(t *testing.T) {
+		t.Run(tc.name, func(t *testing.T) {
 			// Create publish requests for each message in the bulk request.
 			var pubReqs []*contribPubsub.PublishRequest
 			for _, entry := range req.Entries {
@@ -101,11 +101,11 @@ func TestBulkPublish_DefaultBulkPublisher(t *testing.T) {
 
 			// Check if the bulk publish method returns an error.
 			if tc.nErrors > 0 {
-				assert.Error(t, err)
+				require.Error(t, err)
 				// Response should contain an entry for each message in the bulk request.
-				assert.Equal(t, tc.nErrors, len(res.FailedEntries))
+				assert.Len(t, res.FailedEntries, tc.nErrors)
 			} else {
-				assert.NoError(t, err)
+				require.NoError(t, err)
 				assert.Empty(t, res.FailedEntries)
 			}
 

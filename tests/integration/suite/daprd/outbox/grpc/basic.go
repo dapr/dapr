@@ -15,8 +15,8 @@ package grpc
 
 import (
 	"context"
-	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,7 +28,8 @@ import (
 	"github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -37,23 +38,25 @@ func init() {
 }
 
 type basic struct {
-	daprd *procdaprd.Daprd
-	lock  sync.Mutex
-	msg   []byte
+	eventCalled atomic.Int32
+	daprd       *daprd.Daprd
+	lock        sync.Mutex
+	msg         []byte
 }
 
 func (o *basic) Setup(t *testing.T) []framework.Option {
 	onTopicEvent := func(ctx context.Context, in *runtimev1pb.TopicEventRequest) (*runtimev1pb.TopicEventResponse, error) {
 		o.lock.Lock()
 		defer o.lock.Unlock()
-		o.msg = in.Data
+		o.eventCalled.Add(1)
+		o.msg = in.GetData()
 		return &runtimev1pb.TopicEventResponse{
 			Status: runtimev1pb.TopicEventResponse_SUCCESS,
 		}, nil
 	}
 
-	srv1 := newGRPCServer(t, onTopicEvent)
-	o.daprd = procdaprd.New(t, procdaprd.WithAppID("outboxtest"), procdaprd.WithAppPort(srv1.Port()), procdaprd.WithAppProtocol("grpc"), procdaprd.WithResourceFiles(`
+	srv1 := app.New(t, app.WithOnTopicEventFn(onTopicEvent))
+	o.daprd = daprd.New(t, daprd.WithAppID("outboxtest"), daprd.WithAppPort(srv1.Port(t)), daprd.WithAppProtocol("grpc"), daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -98,7 +101,7 @@ scopes:
 func (o *basic) Run(t *testing.T, ctx context.Context) {
 	o.daprd.WaitUntilRunning(t, ctx)
 
-	conn, err := grpc.DialContext(ctx, fmt.Sprintf("localhost:%d", o.daprd.GRPCPort()), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())
+	conn, err := grpc.DialContext(ctx, o.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock()) //nolint:staticcheck
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -120,5 +123,7 @@ func (o *basic) Run(t *testing.T, ctx context.Context) {
 		o.lock.Lock()
 		defer o.lock.Unlock()
 		return string(o.msg) == "2"
-	}, time.Second*5, time.Millisecond*100, "failed to receive message in time")
+	}, time.Second*5, time.Millisecond*10, "failed to receive message in time")
+
+	assert.Equal(t, int32(1), o.eventCalled.Load())
 }

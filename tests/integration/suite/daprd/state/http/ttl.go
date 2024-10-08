@@ -26,8 +26,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/util"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -40,15 +40,7 @@ type ttl struct {
 }
 
 func (l *ttl) Setup(t *testing.T) []framework.Option {
-	l.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(`
-apiVersion: dapr.io/v1alpha1
-kind: Component
-metadata:
-  name: mystore
-spec:
-  type: state.in-memory
-  version: v1
-`))
+	l.daprd = procdaprd.New(t, procdaprd.WithInMemoryActorStateStore("mystore"))
 
 	return []framework.Option{
 		framework.WithProcesses(l.daprd),
@@ -60,7 +52,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 
 	postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/mystore", l.daprd.HTTPPort())
 
-	client := util.HTTPClient(t)
+	client := client.HTTP(t)
 
 	now := time.Now()
 
@@ -70,7 +62,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		resp, err := client.Do(req)
 		require.NoError(t, err)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	})
 
@@ -82,7 +74,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		body, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.NoError(t, resp.Body.Close())
+		require.NoError(t, resp.Body.Close())
 		assert.Equal(t, `"value1"`, string(body))
 
 		ttlExpireTimeStr := resp.Header.Get("metadata.ttlExpireTime")
@@ -98,8 +90,8 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			require.NoError(c, err)
 			resp, err := client.Do(req)
 			require.NoError(c, err)
-			assert.NoError(t, resp.Body.Close())
+			require.NoError(t, resp.Body.Close())
 			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
-		}, 5*time.Second, 100*time.Millisecond)
+		}, 5*time.Second, 10*time.Millisecond)
 	})
 }

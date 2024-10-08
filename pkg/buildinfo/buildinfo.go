@@ -25,6 +25,11 @@ var (
 	features              string
 )
 
+// PtrSize returns the size of the pointer type for this system
+// This will be 64 on 64-bit environments, and 32 on 32-bit ones
+// See: https://stackoverflow.com/a/25741986/192024
+const PtrSize = 32 << uintptr(^uintptr(0)>>63) //nolint:unconvert
+
 // Set by the init function
 var featuresSlice []string
 

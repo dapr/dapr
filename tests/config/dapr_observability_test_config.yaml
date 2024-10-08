@@ -17,3 +17,20 @@ spec:
   tracing:
     samplingRate: "0"
   # by default, metric.enabled is true.
+
+---
+
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: metrics-config
+spec:
+  metrics:
+    enabled: true
+    latencyDistributionBuckets:
+    - 5
+    - 50
+    - 500
+    - 5000
+    http:
+      increasedCardinality: false

@@ -82,6 +82,9 @@ func (e *Expr) Expr() string {
 }
 
 func (e *Expr) String() string {
+	if e == nil {
+		return ""
+	}
 	return e.expr
 }
 

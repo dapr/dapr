@@ -16,8 +16,11 @@ package compstore
 import (
 	"sync"
 
+	"github.com/microsoft/durabletask-go/backend"
+
 	"github.com/dapr/components-contrib/bindings"
 	"github.com/dapr/components-contrib/configuration"
+	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/components-contrib/crypto"
 	"github.com/dapr/components-contrib/lock"
 	"github.com/dapr/components-contrib/secretstores"
@@ -44,13 +47,22 @@ type ComponentStore struct {
 	inputBindingRoutes      map[string]string
 	outputBindings          map[string]bindings.OutputBinding
 	locks                   map[string]lock.Store
-	pubSubs                 map[string]PubsubItem
-	topicRoutes             map[string]TopicRoutes
+	pubSubs                 map[string]*rtpubsub.PubsubItem
 	workflowComponents      map[string]workflows.Workflow
+	workflowBackends        map[string]backend.Backend
 	cryptoProviders         map[string]crypto.SubtleCrypto
 	components              []compsv1alpha1.Component
-	subscriptions           []rtpubsub.Subscription
+	subscriptions           *subscriptions
 	httpEndpoints           []httpEndpointV1alpha1.HTTPEndpoint
+	actorStateStore         struct {
+		name  string
+		store state.Store
+	}
+
+	conversations map[string]conversation.Conversation
+
+	compPendingLock sync.Mutex
+	compPending     *compsv1alpha1.Component
 }
 
 func New() *ComponentStore {
@@ -64,9 +76,14 @@ func New() *ComponentStore {
 		inputBindingRoutes:      make(map[string]string),
 		outputBindings:          make(map[string]bindings.OutputBinding),
 		locks:                   make(map[string]lock.Store),
-		pubSubs:                 make(map[string]PubsubItem),
+		pubSubs:                 make(map[string]*rtpubsub.PubsubItem),
 		workflowComponents:      make(map[string]workflows.Workflow),
+		workflowBackends:        make(map[string]backend.Backend),
 		cryptoProviders:         make(map[string]crypto.SubtleCrypto),
-		topicRoutes:             make(map[string]TopicRoutes),
+		subscriptions: &subscriptions{
+			declaratives: make(map[string]*DeclarativeSubscription),
+			streams:      make(map[string]*DeclarativeSubscription),
+		},
+		conversations: make(map[string]conversation.Conversation),
 	}
 }

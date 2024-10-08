@@ -43,7 +43,7 @@ func TestCircuitBreaker(t *testing.T) {
 	cb.Initialize(log)
 	assert.Equal(t, breaker.StateClosed, cb.State())
 
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		cb.Execute(func() (any, error) {
 			return nil, errors.New("test")
 		})
@@ -53,7 +53,7 @@ func TestCircuitBreaker(t *testing.T) {
 		return "❌", nil
 	})
 	assert.Equal(t, breaker.StateOpen, cb.State())
-	assert.EqualError(t, err, "circuit breaker is open")
+	require.EqualError(t, err, "circuit breaker is open")
 	assert.Nil(t, res)
 
 	time.Sleep(500 * time.Millisecond)
@@ -61,6 +61,6 @@ func TestCircuitBreaker(t *testing.T) {
 	res, err = cb.Execute(func() (any, error) {
 		return 42, nil
 	})
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, 42, res)
 }
