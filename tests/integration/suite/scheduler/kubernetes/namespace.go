@@ -27,7 +27,6 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes"
-	"github.com/dapr/dapr/tests/integration/framework/process/kubernetes/store"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -41,33 +40,29 @@ func init() {
 type namespace struct {
 	sentry    *sentry.Sentry
 	scheduler *scheduler.Scheduler
-	store     *store.Store
+	kubeapi   *kubernetes.Kubernetes
 }
 
 func (n *namespace) Setup(t *testing.T) []framework.Option {
 	n.sentry = sentry.New(t)
 
-	n.store = store.New(metav1.GroupVersionKind{
-		Version: "v1",
-		Kind:    "Namespace",
-	})
-	n.store.Add(&corev1.Namespace{
-		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
-		ObjectMeta: metav1.ObjectMeta{Name: "default"},
-	})
-
-	kubeapi := kubernetes.New(t,
-		kubernetes.WithClusterNamespaceListFromStore(t, n.store),
+	n.kubeapi = kubernetes.New(t,
+		kubernetes.WithClusterNamespaceList(t, &corev1.NamespaceList{
+			Items: []corev1.Namespace{{
+				TypeMeta:   metav1.TypeMeta{Kind: "Namespace", APIVersion: "v1"},
+				ObjectMeta: metav1.ObjectMeta{Name: "default"},
+			}},
+		}),
 	)
 
 	n.scheduler = scheduler.New(t,
 		scheduler.WithSentry(n.sentry),
-		scheduler.WithKubeconfig(kubeapi.KubeconfigPath(t)),
+		scheduler.WithKubeconfig(n.kubeapi.KubeconfigPath(t)),
 		scheduler.WithMode("kubernetes"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(n.sentry, kubeapi, n.scheduler),
+		framework.WithProcesses(n.sentry, n.kubeapi, n.scheduler),
 	}
 }
 
@@ -114,7 +109,7 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, resp.Kvs, 2)
 	}, time.Second*10, 10*time.Millisecond)
 
-	n.store.Delete(&corev1.Namespace{
+	n.kubeapi.Informer().DeleteWait(t, ctx, &corev1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
 		ObjectMeta: metav1.ObjectMeta{Name: "default"},
 	})
