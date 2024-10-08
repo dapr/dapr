@@ -281,7 +281,11 @@ func (m MetricSpec) GetHTTPIncreasedCardinality(log logger.Logger) bool {
 // GetLatencyDistribution returns a *view.Aggregration to be used for latency histograms
 func (m MetricSpec) GetLatencyDistribution(log logger.Logger) *view.Aggregation {
 	defaultLatencyDistribution := []float64{1, 2, 3, 4, 5, 6, 8, 10, 13, 16, 20, 25, 30, 40, 50, 65, 80, 100, 130, 160, 200, 250, 300, 400, 500, 650, 800, 1_000, 2_000, 5_000, 10_000, 20_000, 50_000, 100_000}
-	log.Infof("metric spec: %v", m)
+	metricSpecBytes, err := json.Marshal(m)
+	if err != nil {
+		log.Errorf("Error marshalling metric spec to JSON: %s", err)
+	}
+	log.Infof("metric spec: %s", string(metricSpecBytes))
 	if m.LatencyDistributionBuckets == nil || len(*m.LatencyDistributionBuckets) == 0 {
 		// The default is defaultLatencyDistribution
 		log.Infof("Using default latency distribution buckets: %v", defaultLatencyDistribution)
