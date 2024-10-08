@@ -92,7 +92,6 @@ func WithExit1() Option {
 	return WithExecOptions(
 		exec.WithExitCode(1),
 		exec.WithRunError(func(t *testing.T, err error) {
-			//nolint:testifylint
 			assert.ErrorContains(t, err, "exit status 1")
 		}),
 	)

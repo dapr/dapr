@@ -40,7 +40,7 @@ func publishMessagesToPubsub(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	daprPubsubURL := fmt.Sprintf("http://localhost:%d/v1.0/publish/%s", daprPort, pubsubTopic)
-	for i := 0; i < numPubsubMessages; i++ {
+	for i := range numPubsubMessages {
 		m := fmt.Sprintf("message-%d", i)
 		jsonValue, err := json.Marshal(m)
 		if err != nil {
@@ -61,7 +61,7 @@ func publishMessagesToBinding(wg *sync.WaitGroup) {
 	defer wg.Done()
 
 	daprBindingURL := fmt.Sprintf("http://localhost:%d/v1.0/bindings/%s", daprPort, bindingTopic)
-	for i := 0; i < numBindingMessage; i++ {
+	for i := range numBindingMessage {
 		b := []byte(fmt.Sprintf(`{"data": {"id": "message%d"}}`, i))
 		log.Printf("Publishing to %s", daprBindingURL)
 		r, err := httpClient.Post(daprBindingURL, "application/json", bytes.NewBuffer(b))

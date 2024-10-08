@@ -216,7 +216,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	client := client.HTTP(t)
 	pt := parallel.New(t)
-	for i := 0; i < 100; i++ {
+	for range 100 {
 		pt.Add(func(t *assert.CollectT) {
 			u := uuid.New().String()
 			reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/echo", b.daprd1.HTTPPort(), b.daprd2.AppID())

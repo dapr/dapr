@@ -65,7 +65,7 @@ func (f *fuzzgrpc) Setup(t *testing.T) []framework.Option {
 	f.methods = make([]string, numTests)
 	f.bodies = make([][]byte, numTests)
 	f.queries = make([]map[string]string, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz := fuzz.New()
 		fz.NumElements(0, 100).Fuzz(&f.methods[i])
 		fz.NumElements(0, 100).Fuzz(&f.bodies[i])
@@ -82,7 +82,7 @@ func (f *fuzzgrpc) Run(t *testing.T, ctx context.Context) {
 	f.daprd2.WaitUntilRunning(t, ctx)
 
 	pt := parallel.New(t)
-	for i := 0; i < len(f.methods); i++ {
+	for i := range f.methods {
 		method := f.methods[i]
 		body := f.bodies[i]
 		query := f.queries[i]

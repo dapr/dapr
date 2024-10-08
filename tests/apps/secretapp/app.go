@@ -15,6 +15,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -128,7 +129,7 @@ func getAll(secrets []daprSecret) ([]daprSecret, int, error) {
 
 func getBulk(secrets []daprSecret) ([]daprSecret, int, error) {
 	if len(secrets) == 0 {
-		return nil, http.StatusBadRequest, fmt.Errorf("no secret store specified")
+		return nil, http.StatusBadRequest, errors.New("no secret store specified")
 	}
 	store := secrets[0].Store
 	log.Println("Processing get bulk request for secrerts.")
@@ -170,7 +171,6 @@ func getBulk(secrets []daprSecret) ([]daprSecret, int, error) {
 	}
 
 	for key, value := range resMap {
-		value := value
 		output = append(output, daprSecret{
 			Key:   key,
 			Value: &value,

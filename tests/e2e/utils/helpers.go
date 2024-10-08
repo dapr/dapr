@@ -110,7 +110,7 @@ func HealthCheckApps(urls ...string) error {
 
 	// Collect all errors
 	errs := make([]error, count)
-	for i := 0; i < count; i++ {
+	for i := range count {
 		errs[i] = <-errCh
 	}
 

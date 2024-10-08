@@ -418,7 +418,7 @@ func (s *state) writeRead(t *testing.T, ctx context.Context, client *http.Client
 	t.Helper()
 
 	postURL := fmt.Sprintf("http://localhost:%d/v1.0/state/%s", s.daprd.HTTPPort(), url.QueryEscape(compName))
-	getURL := fmt.Sprintf("%s/foo", postURL)
+	getURL := postURL + "/foo"
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL,
 		strings.NewReader(`[{"key": "foo", "value": "bar"}]`))

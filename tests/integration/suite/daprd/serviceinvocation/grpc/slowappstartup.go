@@ -113,7 +113,6 @@ func (s *slowappstartup) Run(t *testing.T, ctx context.Context) {
 		})
 		// This function must only return that the app is not in a healthy state
 		// until the app is in a healthy state.
-		//nolint:testifylint
 		if !assert.NoError(c, err) {
 			require.ErrorContains(c, err, "app is not in a healthy state")
 		}

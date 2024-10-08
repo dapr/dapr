@@ -115,7 +115,6 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		//nolint:testifylint
 		assert.NoError(c, err)
 		assert.Len(c, resp.GetSubscriptions(), 1)
 	}, time.Second*5, time.Millisecond*10)
@@ -142,7 +141,6 @@ func (u *unhealthy) Run(t *testing.T, ctx context.Context) {
 				HttpExtension: &commonv1.HTTPExtension{Verb: commonv1.HTTPExtension_GET},
 			},
 		})
-		//nolint:testifylint
 		assert.ErrorContains(c, err, "app is not in a healthy state")
 	}, time.Second*5, time.Millisecond*10)
 }

@@ -53,7 +53,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 	app := app.New(t,
 		app.WithHandlerFunc("/job/", func(w nethttp.ResponseWriter, r *nethttp.Request) {
 			body, err := io.ReadAll(r.Body)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 			h.dataCh <- body
 		}),
 	)

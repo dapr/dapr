@@ -90,7 +90,7 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 
 	errCh := make(chan error, 8)
 	go func() {
-		for i := 0; i < 4; i++ {
+		for range 4 {
 			event, serr := stream.Recv()
 			errCh <- serr
 			errCh <- stream.Send(&rtv1.SubscribeTopicEventsRequestAlpha1{
@@ -115,9 +115,9 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
-	assert.Empty(t, len(resp.GetFailedEntries()))
+	assert.Empty(t, resp.GetFailedEntries())
 
-	for i := 0; i < 8; i++ {
+	for range 8 {
 		require.NoError(t, <-errCh)
 	}
 }

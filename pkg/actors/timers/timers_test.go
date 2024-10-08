@@ -441,7 +441,7 @@ func TestTimerRepeats(t *testing.T) {
 
 				for i := 0; i < 10; i++ {
 					if test.delAfterSeconds > 0 && clock.Now().Sub(start).Seconds() >= test.delAfterSeconds {
-						require.NoError(t, testTimers.DeleteTimer(ctx, req.Key()))
+						assert.NoError(t, testTimers.DeleteTimer(ctx, req.Key()))
 					}
 
 					select {
@@ -685,7 +685,7 @@ func TestTimerCounter(t *testing.T) {
 	var wg sync.WaitGroup
 
 	now := clock.Now()
-	for i := 0; i < numberOfLongTimersToCreate; i++ {
+	for i := range numberOfLongTimersToCreate {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -699,11 +699,11 @@ func TestTimerCounter(t *testing.T) {
 				Data:      json.RawMessage(`"testTimer"`),
 			})
 			err := provider.CreateTimer(context.Background(), timer)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 		}(i)
 	}
 
-	for i := 0; i < numberOfOneTimeTimersToCreate; i++ {
+	for i := range numberOfOneTimeTimersToCreate {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -716,7 +716,7 @@ func TestTimerCounter(t *testing.T) {
 				Data:      json.RawMessage(`"testTimer"`),
 			})
 			err := provider.CreateTimer(context.Background(), timer)
-			require.NoError(t, err)
+			assert.NoError(t, err)
 		}(i)
 	}
 
@@ -746,7 +746,7 @@ func TestTimerCounter(t *testing.T) {
 		"Expected to have %d reminders executed, but got %d (note: this value may be outdated)", expectExecute, executeCount.Load(),
 	)
 
-	for i := 0; i < numberOfTimersToDelete; i++ {
+	for i := range numberOfTimersToDelete {
 		wg.Add(1)
 		go func(idx int) {
 			defer wg.Done()
@@ -756,7 +756,7 @@ func TestTimerCounter(t *testing.T) {
 				Name:      fmt.Sprintf("positiveTimer%d", idx),
 			}
 			err := provider.DeleteTimer(context.Background(), timer.Key())
-			require.NoError(t, err)
+			assert.NoError(t, err)
 		}(i)
 	}
 
@@ -808,12 +808,12 @@ func TestCreateTimerGoroutineLeak(t *testing.T) {
 	initialCount := runtime.NumGoroutine()
 
 	// Create 10 timers with unique names
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		require.NoError(t, createFn(i, false))
 	}
 
 	// Create 5 timers that override the first ones
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
 		require.NoError(t, createFn(i, false))
 	}
 
@@ -839,7 +839,7 @@ func createTimer(t *testing.T, now time.Time, req internal.CreateTimerRequest) *
 	t.Helper()
 
 	reminder, err := req.NewReminder(now)
-	require.NoError(t, err)
+	assert.NoError(t, err)
 
 	return reminder
 }

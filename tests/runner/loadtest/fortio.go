@@ -16,7 +16,6 @@ package loadtest
 import (
 	"encoding/json"
 	"errors"
-	"fmt"
 	"sync"
 
 	"github.com/dapr/dapr/tests/perf"
@@ -109,7 +108,7 @@ func (f *Fortio) Run(platform runner.PlatformInterface) error {
 		return err
 	}
 
-	daprResp, err := utils.HTTPPost(fmt.Sprintf("%s/test", f.testerAppURL), body)
+	daprResp, err := utils.HTTPPost(f.testerAppURL+"/test", body)
 	if err != nil {
 		return err
 	}

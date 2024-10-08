@@ -98,7 +98,6 @@ func (s *StateStore) Run(t *testing.T, ctx context.Context) {
 	client := compv1pb.NewStateStoreClient(conn)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		_, err = client.Ping(ctx, new(compv1pb.PingRequest))
-		//nolint:testifylint
 		assert.NoError(c, err)
 	}, 10*time.Second, 10*time.Millisecond)
 	require.NoError(t, conn.Close())

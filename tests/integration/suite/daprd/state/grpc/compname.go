@@ -64,7 +64,7 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 
 	c.storeNames = make([]string, numTests)
 	files := make([]string, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz.Fuzz(&c.storeNames[i])
 
 		files[i] = fmt.Sprintf(`
@@ -92,7 +92,6 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 
 	pt := parallel.New(t)
 	for _, storeName := range c.storeNames {
-		storeName := storeName
 		pt.Add(func(col *assert.CollectT) {
 			//nolint:staticcheck
 			conn, err := grpc.DialContext(ctx, c.daprd.GRPCAddress(), grpc.WithTransportCredentials(insecure.NewCredentials()), grpc.WithBlock())

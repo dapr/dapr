@@ -32,7 +32,6 @@ func invokeActor(t *testing.T, ctx context.Context, baseURL string, client *http
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, baseURL+"/method/foo", nil)
 		require.NoError(c, err)
 		resp, rErr := client.Do(req)
-		//nolint:testifylint
 		if assert.NoError(c, rErr) {
 			assert.NoError(c, resp.Body.Close())
 			assert.Equal(c, http.StatusOK, resp.StatusCode)

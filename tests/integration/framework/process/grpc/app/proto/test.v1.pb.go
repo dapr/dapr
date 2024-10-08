@@ -155,11 +155,13 @@ func file_test_v1_proto_rawDescGZIP() []byte {
 	return file_test_v1_proto_rawDescData
 }
 
-var file_test_v1_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
-var file_test_v1_proto_goTypes = []interface{}{
-	(*PingRequest)(nil),  // 0: dapr.io.testproto.PingRequest
-	(*PingResponse)(nil), // 1: dapr.io.testproto.PingResponse
-}
+var (
+	file_test_v1_proto_msgTypes = make([]protoimpl.MessageInfo, 2)
+	file_test_v1_proto_goTypes  = []interface{}{
+		(*PingRequest)(nil),  // 0: dapr.io.testproto.PingRequest
+		(*PingResponse)(nil), // 1: dapr.io.testproto.PingResponse
+	}
+)
 var file_test_v1_proto_depIdxs = []int32{
 	0, // 0: dapr.io.testproto.TestService.Ping:input_type -> dapr.io.testproto.PingRequest
 	1, // 1: dapr.io.testproto.TestService.Ping:output_type -> dapr.io.testproto.PingResponse

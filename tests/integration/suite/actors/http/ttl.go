@@ -109,7 +109,6 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, rErr := client.Do(req)
-		//nolint:testifylint
 		if assert.NoError(c, rErr) {
 			require.NoError(c, resp.Body.Close())
 			assert.Equal(c, http.StatusOK, resp.StatusCode)

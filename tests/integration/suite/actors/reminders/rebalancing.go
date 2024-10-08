@@ -75,7 +75,7 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 	i.place = placement.New(t)
 
 	// Init two instances of daprd, each with its own server
-	for j := 0; j < 2; j++ {
+	for j := range 2 {
 		i.handler[j] = &httpServer{
 			activeActors:       i.activeActors,
 			doubleActivationCh: i.doubleActivationCh,
@@ -99,11 +99,11 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	i.place.WaitUntilRunning(t, ctx)
 
 	// Wait for daprd to be ready
-	for j := 0; j < 2; j++ {
+	for j := range 2 {
 		i.daprd[j].WaitUntilRunning(t, ctx)
 	}
 	// Wait for actors to be ready
-	for j := 0; j < 2; j++ {
+	for j := range 2 {
 		err := i.handler[j].WaitForActorsReady(ctx)
 		require.NoErrorf(t, err, "Actor instance %d not ready", j)
 	}
@@ -116,12 +116,9 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	// Try to invoke an actor to ensure the actor subsystem is ready
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err := http.NewRequest(http.MethodPost, fmt.Sprintf("http://localhost:%d/v1.0/actors/myactortype/pinger/method/ping", i.daprd[0].HTTPPort()), nil)
-		//nolint:testifylint
 		if assert.NoError(c, err) {
 			resp, rErr := client.Do(req)
-			//nolint:testifylint
 			if assert.NoError(c, rErr) {
-				//nolint:testifylint
 				assert.NoError(c, resp.Body.Close())
 				assert.Equal(c, http.StatusOK, resp.StatusCode)
 			}
@@ -149,7 +146,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	}()
 
 	// Schedule reminders to be executed in 0s
-	for j := 0; j < iterations; j++ {
+	for j := range iterations {
 		go func(j int) {
 			rctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 			defer cancel()
@@ -187,7 +184,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	}()
 
 	// Also invoke the same actors using actor invocation
-	for j := 0; j < iterations; j++ {
+	for j := range iterations {
 		go func(j int) {
 			rctx, cancel := context.WithTimeout(ctx, 20*time.Second)
 			defer cancel()
@@ -224,7 +221,7 @@ func (i *rebalancing) Run(t *testing.T, ctx context.Context) {
 	}()
 
 	// Wait for all operations to complete
-	for j := 0; j < (iterations*2)+2; j++ {
+	for range (iterations * 2) + 2 {
 		require.NoError(t, <-errCh)
 	}
 }
@@ -367,7 +364,6 @@ func (i *rebalancing) getPlacementStream(t *testing.T, ctx context.Context) plac
 		pctx, cancel := context.WithTimeout(ctx, time.Second)
 		defer cancel()
 		err = i.reportStatusToPlacement(pctx, stream, []string{})
-		//nolint:testifylint
 		if !assert.NoError(c, err) {
 			stream.CloseSend()
 			stream = nil

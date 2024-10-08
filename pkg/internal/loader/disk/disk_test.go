@@ -94,7 +94,7 @@ name: statestore`
 			}
 			var scopeS string
 			if len(scopes) > 0 {
-				scopeS = fmt.Sprintf("\nscopes:\n- %s", strings.Join(scopes, "\n- "))
+				scopeS = "\nscopes:\n- " + strings.Join(scopes, "\n- ")
 			}
 			return fmt.Sprintf(`apiVersion: dapr.io/v1alpha1
 kind: Component

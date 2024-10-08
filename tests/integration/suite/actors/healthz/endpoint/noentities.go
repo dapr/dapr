@@ -108,7 +108,6 @@ func (n *noentities) Run(t *testing.T, ctx context.Context) {
 	} {
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			meta, err := tv.cl.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			//nolint:testifylint
 			assert.NoError(c, err)
 			assert.True(c, meta.GetActorRuntime().GetHostReady())
 			assert.Equal(c, tv.activeActors, meta.GetActorRuntime().GetActiveActors())

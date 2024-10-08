@@ -19,7 +19,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
 )
 
@@ -124,7 +123,7 @@ func TestPendingActorCalls(t *testing.T) {
 		go func() {
 			select {
 			case <-time.After(200 * time.Millisecond):
-				require.Fail(t, "channel should be closed before timeout")
+				assert.Fail(t, "channel should be closed before timeout")
 			case <-testActor.channel():
 				channelClosed.Store(true)
 				break
@@ -145,7 +144,7 @@ func TestPendingActorCalls(t *testing.T) {
 		nListeners := 10
 		releaseSignaled := make([]atomic.Bool, nListeners)
 
-		for i := 0; i < nListeners; i++ {
+		for i := range nListeners {
 			releaseCh := testActor.channel()
 			go func(listenerIndex int) {
 				select {
@@ -161,7 +160,7 @@ func TestPendingActorCalls(t *testing.T) {
 
 		assert.Eventually(t, func() bool {
 			clock.Step(100 * time.Millisecond)
-			for i := 0; i < nListeners; i++ {
+			for i := range nListeners {
 				if !releaseSignaled[i].Load() {
 					return false
 				}

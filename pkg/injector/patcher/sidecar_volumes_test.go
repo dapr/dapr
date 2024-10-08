@@ -91,7 +91,6 @@ func TestParseVolumeMountsString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			mounts := parseVolumeMountsString(tc.mountStr, tc.readOnly)
 			assert.Len(t, mounts, tc.expMountsLen)

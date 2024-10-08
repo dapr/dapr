@@ -274,6 +274,7 @@ func (k6 *K6) k8sRun(k8s *runner.KubeTestPlatform) error {
 					File: scriptName,
 				},
 			},
+			//nolint:gosec
 			Parallelism: int32(k6.parallelism),
 			Arguments:   args,
 			Starter: k6api.Pod{
@@ -556,7 +557,7 @@ func NewK6(scriptPath string, opts ...K6Opt) *K6 {
 	log.Printf("starting %s k6 test", uniqueTestID)
 
 	k6Tester := &K6{
-		name:              fmt.Sprintf("k6-test-%s", uniqueTestID),
+		name:              "k6-test-" + uniqueTestID,
 		appID:             "k6-tester",
 		script:            scriptPath,
 		parallelism:       1,

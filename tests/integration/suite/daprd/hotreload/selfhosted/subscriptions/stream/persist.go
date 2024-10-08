@@ -15,7 +15,6 @@ package stream
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -57,7 +56,7 @@ spec:
 
 	p.dir = t.TempDir()
 
-	require.NoError(t, os.WriteFile(filepath.Join(p.dir, "pubsub.yaml"), []byte(fmt.Sprintf(`
+	require.NoError(t, os.WriteFile(filepath.Join(p.dir, "pubsub.yaml"), []byte(`
 apiVersion: dapr.io/v1alpha1
 kind: Component
 metadata:
@@ -65,7 +64,7 @@ metadata:
 spec:
  type: pubsub.in-memory
  version: v1
-`)), 0o600))
+`), 0o600))
 
 	p.daprd = daprd.New(t,
 		daprd.WithAppPort(p.sub.Port(t)),

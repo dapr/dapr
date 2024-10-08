@@ -220,7 +220,7 @@ func runTraces(t *testing.T, testName string, numTraces int, samplingRate string
 	idg := defaultIDGenerator()
 	sampledCount := 0
 
-	for i := 0; i < numTraces; i++ {
+	for range numTraces {
 		ctx := context.Background()
 		if hasParentSpanContext {
 			traceID, _ := idg.NewIDs(context.Background())
@@ -387,6 +387,7 @@ func TestTraceIDAndStateFromSpan(t *testing.T) {
 		id, state := TraceIDAndStateFromSpan(span)
 		assert.NotEmpty(t, id)
 		assert.NotEmpty(t, state)
+		span.End()
 	})
 
 	t.Run("empty span, id and state are empty", func(t *testing.T) {
@@ -394,6 +395,7 @@ func TestTraceIDAndStateFromSpan(t *testing.T) {
 		id, state := TraceIDAndStateFromSpan(span)
 		assert.Empty(t, id)
 		assert.Empty(t, state)
+		span.End()
 	})
 
 	t.Run("nil span, id and state are empty", func(t *testing.T) {

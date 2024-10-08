@@ -113,23 +113,23 @@ func (f *fuzzhttp) Setup(t *testing.T) []framework.Option {
 		n := c.Rand.Intn(100) + 1
 		var sb strings.Builder
 		sb.Grow(n)
-		for i := 0; i < n; i++ {
+		for range n {
 			sb.WriteRune(headerNameChars[c.Rand.Intn(len(headerNameChars))])
 		}
 		s.name = sb.String()
 		sb.Reset()
 		sb.Grow(n)
-		for i := 0; i < n; i++ {
+		for range n {
 			sb.WriteRune(headerValueChars[c.Rand.Intn(len(headerValueChars))])
 		}
 		s.value = sb.String()
 	}
 	queryFuzz := func(m map[string]string, c fuzz.Continue) {
 		n := c.Rand.Intn(4) + 1
-		for i := 0; i < n; i++ {
+		for range n {
 			var sb strings.Builder
 			sb.Grow(n)
-			for i := 0; i < n; i++ {
+			for range n {
 				sb.WriteRune(queryChars[c.Rand.Intn(len(queryChars))])
 			}
 			m[sb.String()] = sb.String()
@@ -141,7 +141,7 @@ func (f *fuzzhttp) Setup(t *testing.T) []framework.Option {
 	f.headers = make([][]header, numTests)
 	f.queries = make([]map[string]string, numTests)
 
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz := fuzz.New()
 		fz.NumElements(0, 100).Funcs(methodFuzz).Fuzz(&f.methods[i])
 		fz.NumElements(0, 100).Fuzz(&f.bodies[i])
@@ -162,7 +162,7 @@ func (f *fuzzhttp) Run(t *testing.T, ctx context.Context) {
 
 	pt := parallel.New(t)
 
-	for i := 0; i < len(f.methods); i++ {
+	for i := range len(f.methods) {
 		method := f.methods[i]
 		body := f.bodies[i]
 		headers := f.headers[i]

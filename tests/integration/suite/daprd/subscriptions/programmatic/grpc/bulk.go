@@ -113,7 +113,7 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
-	assert.Empty(t, len(resp.GetFailedEntries()))
+	assert.Empty(t, resp.GetFailedEntries())
 	b.sub.ReceiveBulk(t, ctx)
 	b.sub.ReceiveBulk(t, ctx)
 	b.sub.ReceiveBulk(t, ctx)
@@ -131,6 +131,6 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
-	assert.Empty(t, len(resp.GetFailedEntries()))
+	assert.Empty(t, resp.GetFailedEntries())
 	b.sub.AssertBulkEventChanLen(t, 0)
 }

@@ -46,7 +46,7 @@ func TestConnectionPoolConnection(t *testing.T) {
 		cpc.MarkIdle()
 
 		// Increase time by 1s, 10 times
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			assert.False(t, cpc.Expired(maxConnIdle))
 			clockMock.Step(time.Second)
 		}
@@ -112,7 +112,8 @@ func TestConnectionPool(t *testing.T) {
 
 		// Share the connection grpcMaxConcurrentStreams times (100)
 		// Should always return the first connection
-		for i := 0; i < grpcMaxConcurrentStreams; i++ {
+		//nolint:gosec
+		for i := range grpcMaxConcurrentStreams {
 			conn = cp.Share()
 			require.Equal(t, conns[0], conn)
 			require.Equal(t, int32(i+1), cp.connections[0].referenceCount)
@@ -122,7 +123,8 @@ func TestConnectionPool(t *testing.T) {
 		require.Equal(t, int32(100), cp.connections[0].referenceCount)
 
 		// Next grpcMaxConcurrentStreams should return the second connection
-		for i := 0; i < grpcMaxConcurrentStreams; i++ {
+		//nolint:gosec
+		for i := range grpcMaxConcurrentStreams {
 			conn = cp.Share()
 			require.Equal(t, conns[1], conn)
 			require.Equal(t, int32(i+1), cp.connections[1].referenceCount)
@@ -185,12 +187,14 @@ func TestConnectionPool(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, conns[0], conn)
 			require.Equal(t, 1, n) // Should not have called createFn again
+			//nolint:gosec
 			require.Equal(t, int32(i+1), cp.connections[0].referenceCount)
 		}
 
 		// Next grpcMaxConcurrentStreams calls should return the second connection
 		// After having invoked the method one more time
-		for i := 0; i < grpcMaxConcurrentStreams; i++ {
+		//nolint:gosec
+		for i := range grpcMaxConcurrentStreams {
 			conn, err = cp.Get(createFn)
 			require.NoError(t, err)
 			require.Equal(t, conns[1], conn)
@@ -253,7 +257,7 @@ func TestConnectionPool(t *testing.T) {
 
 		return func(t *testing.T) {
 			// Start by fully using all available connections (requires grpcMaxConcurrentStreams+1 calls)
-			for i := 0; i < grpcMaxConcurrentStreams+1; i++ {
+			for i := range grpcMaxConcurrentStreams + 1 {
 				conn := cp.Share()
 				if i < grpcMaxConcurrentStreams {
 					require.Equal(t, conns[0], conn)
@@ -309,7 +313,7 @@ func TestConnectionPool(t *testing.T) {
 			require.Equal(t, int32(100), cp.connections[0].referenceCount)
 
 			// Release the first connection 100 times, to bring it to 0
-			for i := 0; i < grpcMaxConcurrentStreams; i++ {
+			for range grpcMaxConcurrentStreams {
 				cp.Release(conns[0])
 			}
 			idleStart := clock.Now()

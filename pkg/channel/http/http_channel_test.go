@@ -67,8 +67,7 @@ func (t *testHandlerHeaders) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	for k, v := range r.Header {
 		headers[k] = v[0]
 	}
-	rsp, _ := json.Marshal(headers)
-	io.WriteString(w, string(rsp))
+	json.NewEncoder(w).Encode(headers)
 }
 
 // testQueryStringHandler is used for querystring test.
@@ -131,7 +130,7 @@ func (t *testUppercaseHandler) ServeHTTP(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.WriteHeader(http.StatusOK)
-	for i := 0; i < len(b); i++ {
+	for i := range b {
 		if b[i] < 'A' || b[i] > 'Z' {
 			w.Write([]byte("false"))
 			return
@@ -542,14 +541,14 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		// act
 		var wg sync.WaitGroup
 		wg.Add(5)
-		for i := 0; i < 5; i++ {
+		for range 5 {
 			go func() {
 				req := invokev1.
 					NewInvokeMethodRequest("method").
 					WithHTTPExtension("GET", "")
 				defer req.Close()
 				resp, err := c.InvokeMethod(ctx, req, "")
-				require.NoError(t, err)
+				assert.NoError(t, err)
 				defer resp.Close()
 				wg.Done()
 			}()
@@ -578,14 +577,14 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		// act
 		var wg sync.WaitGroup
 		wg.Add(20)
-		for i := 0; i < 20; i++ {
+		for range 20 {
 			go func() {
 				req := invokev1.
 					NewInvokeMethodRequest("method").
 					WithHTTPExtension("GET", "")
 				defer req.Close()
 				resp, err := c.InvokeMethod(ctx, req, "")
-				require.NoError(t, err)
+				assert.NoError(t, err)
 				defer resp.Close()
 				wg.Done()
 			}()
@@ -613,7 +612,7 @@ func TestInvokeMethodMaxConcurrency(t *testing.T) {
 		}
 
 		// act
-		for i := 0; i < 20; i++ {
+		for i := range 20 {
 			if i == 10 {
 				c.baseAddress = server.URL
 			}

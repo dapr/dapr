@@ -329,8 +329,8 @@ func TestAPILogging(t *testing.T) {
 					assert.True(t, ok)
 					assert.Less(t, dur, 10.0)
 
-					assert.Equal(t, float64(len(body)), logData["size"])
-					assert.Equal(t, float64(http.StatusOK), logData["code"])
+					assert.InDelta(t, float64(len(body)), logData["size"], 0)
+					assert.InDelta(t, float64(http.StatusOK), logData["code"], 0)
 
 					if userAgent != "" {
 						assert.Equal(t, userAgent, logData["useragent"])

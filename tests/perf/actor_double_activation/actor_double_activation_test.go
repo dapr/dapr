@@ -34,9 +34,7 @@ const (
 	serviceApplicationName = "perf-actor-double-activation"
 )
 
-var (
-	tr *runner.TestRunner
-)
+var tr *runner.TestRunner
 
 func TestMain(m *testing.M) {
 	utils.SetupLogs("actor_double_activation")

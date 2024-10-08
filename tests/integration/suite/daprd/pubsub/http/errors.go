@@ -264,7 +264,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errMsg, exists := data["message"]
 		require.True(t, exists)
 		expectedErr := "rawPayload value must be a valid boolean: actual is 'invalidBooleanValue'"
-		require.Equal(t, fmt.Sprintf("failed deserializing metadata. Error: %s", expectedErr), errMsg)
+		require.Equal(t, "failed deserializing metadata. Error: "+expectedErr, errMsg)
 
 		// Confirm that the 'details' field exists and has one element
 		details, exists := data["details"]

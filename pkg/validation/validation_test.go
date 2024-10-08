@@ -24,7 +24,7 @@ import (
 func TestValidateKubernetesAppID(t *testing.T) {
 	t.Run("invalid length", func(t *testing.T) {
 		id := ""
-		for i := 0; i < 64; i++ {
+		for range 64 {
 			id += "a"
 		}
 		err := ValidateKubernetesAppID(id)

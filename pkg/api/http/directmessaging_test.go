@@ -1092,6 +1092,8 @@ func getFakeDirectMessageResponse() *invokev1.InvokeMethodResponse {
 }
 
 func getFakeDirectMessageResponseWithStatusCode(code int) *invokev1.InvokeMethodResponse {
+	// TODO: fix types
+	//nolint:gosec
 	return invokev1.NewInvokeMethodResponse(int32(code), http.StatusText(code), nil).
 		WithRawDataString("fakeDirectMessageResponse").
 		WithContentType("application/json")

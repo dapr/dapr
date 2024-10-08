@@ -294,7 +294,7 @@ func Test_reconcile(t *testing.T) {
 	created := make([]componentsapi.Component, caseNum)
 
 	fz := fuzz.New()
-	for i := 0; i < caseNum; i++ {
+	for i := range caseNum {
 		fz.Fuzz(&deleted[i])
 		fz.Fuzz(&updated[i])
 		fz.Fuzz(&created[i])
@@ -325,7 +325,7 @@ func Test_reconcile(t *testing.T) {
 		}()
 
 		var got []componentsapi.Component
-		for i := 0; i < caseNum; i++ {
+		for range caseNum {
 			select {
 			case e := <-eventCh:
 				got = append(got, e)
@@ -336,7 +336,7 @@ func Test_reconcile(t *testing.T) {
 		assert.ElementsMatch(t, deleted, got)
 
 		got = []componentsapi.Component{}
-		for i := 0; i < caseNum; i++ {
+		for range caseNum {
 			select {
 			case e := <-eventCh:
 				got = append(got, e)
@@ -347,7 +347,7 @@ func Test_reconcile(t *testing.T) {
 		assert.ElementsMatch(t, updated, got)
 
 		got = []componentsapi.Component{}
-		for i := 0; i < caseNum; i++ {
+		for range caseNum {
 			select {
 			case e := <-eventCh:
 				got = append(got, e)

@@ -461,7 +461,6 @@ func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {
 
 	var meta metaResponse
 	resp, err := d.httpClient.Do(req)
-	//nolint:testifylint
 	if assert.NoError(t, err) {
 		defer resp.Body.Close()
 		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))

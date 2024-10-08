@@ -123,7 +123,6 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		//nolint:testifylint
 		assert.NoError(c, err)
 		assert.Len(c, resp.GetSubscriptions(), 1)
 	}, time.Second*5, time.Millisecond*10)
@@ -184,7 +183,6 @@ func (h *healthy) Run(t *testing.T, ctx context.Context) {
 			Topic:      "topic",
 			Data:       []byte(`{"status":"completed"}`),
 		})
-		//nolint:testifylint
 		assert.Error(c, err)
 	}, time.Second*5, time.Millisecond*10)
 	_, err = client.SaveState(ctx, &rtv1.SaveStateRequest{

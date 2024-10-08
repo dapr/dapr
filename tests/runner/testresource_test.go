@@ -15,6 +15,7 @@ package runner
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -47,7 +48,7 @@ func (m *MockDisposable) Dispose(wait bool) error {
 func TestAdd(t *testing.T) {
 	resource := new(TestResources)
 
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		r := new(MockDisposable)
 		r.On("Name").Return(fmt.Sprintf("resource - %d", i))
 		resource.Add(r)
@@ -62,7 +63,7 @@ func TestSetup(t *testing.T) {
 	t.Run("active all resources", func(t *testing.T) {
 		expect := []string{}
 		resource := new(TestResources)
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			name := fmt.Sprintf("resource - %d", i)
 			r := new(MockDisposable)
 			r.On("Name").Return(name)
@@ -88,7 +89,7 @@ func TestSetup(t *testing.T) {
 	t.Run("fails to setup resources and stops the process", func(t *testing.T) {
 		expect := []string{}
 		resource := new(TestResources)
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			name := fmt.Sprintf("resource - %d", i)
 			r := new(MockDisposable)
 			r.On("Name").Return(name)
@@ -123,7 +124,7 @@ func TestTearDown(t *testing.T) {
 	t.Run("tear down successfully", func(t *testing.T) {
 		// adding 3 mock resources
 		resource := new(TestResources)
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			r := new(MockDisposable)
 			r.On("Name").Return(fmt.Sprintf("resource - %d", i))
 			r.On("Init").Return(nil)
@@ -146,12 +147,12 @@ func TestTearDown(t *testing.T) {
 	t.Run("ignore failures of disposing resources", func(t *testing.T) {
 		// adding 3 mock resources
 		resource := new(TestResources)
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			r := new(MockDisposable)
 			r.On("Name").Return(fmt.Sprintf("resource - %d", i))
 			r.On("Init").Return(nil)
 			if i == 1 {
-				r.On("Dispose").Return(fmt.Errorf("dispose error"))
+				r.On("Dispose").Return(errors.New("dispose error"))
 			} else {
 				r.On("Dispose").Return(nil)
 			}

@@ -162,12 +162,12 @@ var unitFormats = map[unit]string{
 
 // OutputK6Trend outputs the given k6trend using the given prefix.
 func (t *Table) OutputK6Trend(prefix string, unit unit, trend loadtest.K6TrendMetric) *Table {
-	t.Outputf(fmt.Sprintf("%s MAX", prefix), unitFormats[unit], trend.Values.Max)
-	t.Outputf(fmt.Sprintf("%s MIN", prefix), unitFormats[unit], trend.Values.Min)
-	t.Outputf(fmt.Sprintf("%s AVG", prefix), unitFormats[unit], trend.Values.Avg)
-	t.Outputf(fmt.Sprintf("%s MED", prefix), unitFormats[unit], trend.Values.Med)
-	t.Outputf(fmt.Sprintf("%s P90", prefix), unitFormats[unit], trend.Values.P90)
-	t.Outputf(fmt.Sprintf("%s P95", prefix), unitFormats[unit], trend.Values.P95)
+	t.Outputf(prefix+" MAX", unitFormats[unit], trend.Values.Max)
+	t.Outputf(prefix+" MIN", unitFormats[unit], trend.Values.Min)
+	t.Outputf(prefix+" AVG", unitFormats[unit], trend.Values.Avg)
+	t.Outputf(prefix+" MED", unitFormats[unit], trend.Values.Med)
+	t.Outputf(prefix+" P90", unitFormats[unit], trend.Values.P90)
+	t.Outputf(prefix+" P95", unitFormats[unit], trend.Values.P95)
 	return t
 }
 
@@ -215,6 +215,7 @@ func (t *Table) Flush() error {
 		filePrefixOutput = "./test_report"
 	}
 
+	//nolint:gosec
 	err = os.WriteFile(filePath(filePrefixOutput, t.Test), bts, os.ModePerm)
 	if err != nil {
 		log.Errorf("error when saving table %s: %v", t.Test, err)

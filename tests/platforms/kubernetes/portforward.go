@@ -1,6 +1,7 @@
 package kubernetes
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"net/http"
@@ -59,22 +60,22 @@ func NewPodPortForwarder(c *KubeClient, namespace string) *PodPortForwarder {
 // Connect establishes a new connection to a given app on the provided target ports.
 func (p *PodPortForwarder) Connect(name string, targetPorts ...int) ([]int, error) {
 	if name == "" {
-		return nil, fmt.Errorf("name must be set to establish connection")
+		return nil, errors.New("name must be set to establish connection")
 	}
 	if len(targetPorts) == 0 {
-		return nil, fmt.Errorf("cannot establish connection without target ports")
+		return nil, errors.New("cannot establish connection without target ports")
 	}
 	if p.namespace == "" {
-		return nil, fmt.Errorf("namespace must be set to establish connection")
+		return nil, errors.New("namespace must be set to establish connection")
 	}
 	if p.client == nil {
-		return nil, fmt.Errorf("client must be set to establish connection")
+		return nil, errors.New("client must be set to establish connection")
 	}
 
 	config := p.client.GetClientConfig()
 
-	var ports []int
-	for i := 0; i < len(targetPorts); i++ {
+	ports := make([]int, 0, len(targetPorts))
+	for range len(targetPorts) {
 		p, perr := freeport.GetFreePort()
 		if perr != nil {
 			return nil, perr

@@ -15,7 +15,7 @@ package metrics
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"testing"
 
 	"github.com/microsoft/durabletask-go/api"
@@ -70,7 +70,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		return "success", nil
 	})
 	r.AddActivityN("activity_failure", func(ctx task.ActivityContext) (any, error) {
-		return nil, fmt.Errorf("failure")
+		return nil, errors.New("failure")
 	})
 	r.AddOrchestratorN("workflow", func(ctx *task.OrchestrationContext) (any, error) {
 		var input string

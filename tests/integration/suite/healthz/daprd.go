@@ -63,7 +63,6 @@ func (d *daprd) Run(t *testing.T, ctx context.Context) {
 
 			assert.EventuallyWithT(t, func(c *assert.CollectT) {
 				resp, err := client.Do(req)
-				//nolint:testifylint
 				if assert.NoError(c, err) {
 					require.NoError(t, resp.Body.Close())
 					assert.Equal(c, http.StatusNoContent, resp.StatusCode)
@@ -91,7 +90,6 @@ func (d *daprd) Run(t *testing.T, ctx context.Context) {
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, reqURL, nil)
 			require.NoError(t, err)
 
-			//nolint:testifylint
 			assert.EventuallyWithT(t, func(t *assert.CollectT) {
 				resp, err := client.Do(req)
 				if assert.NoError(t, err) {

@@ -131,7 +131,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*40, time.Millisecond*10, "failed to find job's key in etcd")
 
 	// ensure data exists on ALL schedulers
-	for i := 0; i < 3; i++ {
+	for i := range n.schedulers {
 		diffScheduler := n.schedulers[i]
 
 		diffSchedulerPort := diffScheduler.EtcdClientPort()
@@ -166,7 +166,7 @@ func (n *notls) checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb
 
 func getEtcdKeys(t *testing.T, port string) []*mvccpb.KeyValue {
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints:   []string{fmt.Sprintf("127.0.0.1:%s", port)},
+		Endpoints:   []string{"127.0.0.1:" + port},
 		DialTimeout: 40 * time.Second,
 	})
 	require.NoError(t, err)

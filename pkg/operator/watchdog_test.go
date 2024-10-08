@@ -39,7 +39,7 @@ func createMockInjectorDeployment(replicas int32) *appsv1.Deployment {
 
 func createMockPods(n, daprized, injected, daprdPresent int) (pods []*corev1.Pod) {
 	pods = make([]*corev1.Pod, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		pods[i] = &corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
 				Name:        fmt.Sprintf("pod-%d", i),
@@ -277,10 +277,9 @@ func TestDaprWatchdog_Start(t *testing.T) {
 		require.NoError(t, ctlClient.Create(ctx, pod))
 	}
 
-	startDone := make(chan struct{}, 1)
+	startDone := make(chan error)
 	go func() {
-		require.NoError(t, dw.Start(ctx))
-		startDone <- struct{}{}
+		startDone <- dw.Start(ctx)
 	}()
 
 	// let it run a few cycles
@@ -288,7 +287,7 @@ func TestDaprWatchdog_Start(t *testing.T) {
 	cancel()
 	cancelled = true
 
-	<-startDone
+	require.NoError(t, <-startDone)
 
 	t.Log("daprized pods should be deleted except those running")
 	assertExpectedPodsDeleted(t, pods, ctlClient, ctx, daprized, running, injected)

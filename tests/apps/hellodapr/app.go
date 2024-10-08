@@ -71,7 +71,7 @@ func testHandler(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Trigger the test
-	res := appResponse{Message: fmt.Sprintf("%s is not supported", testCommand)}
+	res := appResponse{Message: testCommand + " is not supported"}
 	statusCode := http.StatusBadRequest
 
 	startTime := epoch()

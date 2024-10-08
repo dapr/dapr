@@ -272,7 +272,7 @@ func TestPerformBulkStoreOperation(t *testing.T) {
 
 					// On the second attempt, key3 fails with etag error
 					require.Len(t, req, 2)
-					for i := 0; i < 2; i++ {
+					for i := range 2 {
 						switch req[i].Key {
 						case "key3", "key1":
 							// All good

@@ -687,7 +687,7 @@ func concurrentPolicyExec(t *testing.T, policyDefFn func(idx int) *PolicyDefinit
 	t.Helper()
 	wg := sync.WaitGroup{}
 	wg.Add(10)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
 		go func(i int) {
 			defer wg.Done()
 			// Not defined

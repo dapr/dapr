@@ -181,7 +181,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructPubSubEndpoints(), nil)
 
 	t.Run("Publish successfully - 204 No Content", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubname/topic", apiVersionV1)
+		apiPath := apiVersionV1 + "/publish/pubsubname/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -193,7 +193,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish multi path successfully - 204 No Content", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubname/A/B/C", apiVersionV1)
+		apiPath := apiVersionV1 + "/publish/pubsubname/A/B/C"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -205,7 +205,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish unsuccessfully - 500 InternalError", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/errorpubsub/topic", apiVersionV1)
+		apiPath := apiVersionV1 + "/publish/errorpubsub/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -217,7 +217,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish without topic name - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubname", apiVersionV1)
+		apiPath := apiVersionV1 + "/publish/pubsubname"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -228,7 +228,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish without topic name ending in / - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubname/", apiVersionV1)
+		apiPath := apiVersionV1 + "/publish/pubsubname/"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -239,7 +239,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish with topic name '/' - 204", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubname/%%2F", apiVersionV1)
+		apiPath := apiVersionV1 + "/publish/pubsubname/%2F"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -250,7 +250,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish without topic or pubsub name - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish", apiVersionV1)
+		apiPath := apiVersionV1 + "/publish"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -261,7 +261,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Publish without topic or pubsub name ending in / - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/", apiVersionV1)
+		apiPath := apiVersionV1 + "/publish/"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -272,7 +272,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Pubsub not configured - 400", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/pubsubname/topic", apiVersionV1)
+		apiPath := apiVersionV1 + "/publish/pubsubname/topic"
 		testMethods := []string{"POST", "PUT"}
 		savePubSubAdapter := testAPI.pubsubAdapter
 		testAPI.pubsubAdapter = nil
@@ -288,7 +288,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Pubsub not configured - 400", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/errnotfound/topic", apiVersionV1)
+		apiPath := apiVersionV1 + "/publish/errnotfound/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -301,7 +301,7 @@ func TestPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Pubsub not configured - 403", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/errnotallowed/topic", apiVersionV1)
+		apiPath := apiVersionV1 + "/publish/errnotallowed/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -400,7 +400,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	reqBytes, _ := json.Marshal(bulkRequest)
 	resBytes := []byte{}
 	t.Run("Bulk Publish successfully - 204", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -412,7 +412,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish multi path successfully - 204", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/A/B/C", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname/A/B/C"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -424,7 +424,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish complete failure - 500 InternalError", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/errorpubsub/topic", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/errorpubsub/topic"
 		testMethods := []string{"POST", "PUT"}
 
 		errBulkRequest := []bulkPublishMessageEntry{}
@@ -473,7 +473,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish partial failure - 500 InternalError", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/errorpubsub/topic", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/errorpubsub/topic"
 		testMethods := []string{"POST", "PUT"}
 
 		errBulkRequest := []bulkPublishMessageEntry{}
@@ -521,7 +521,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish without topic name - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -553,7 +553,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			},
 		}
 		reqBytesWithoutEntryId, _ := json.Marshal(reqWithoutEntryId) //nolint:stylecheck
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -589,7 +589,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			},
 		}
 		reqBytesWithoutEntryId, _ := json.Marshal(reqWithoutEntryId) //nolint:stylecheck
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -602,7 +602,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish metadata error - 400", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic?metadata.rawPayload=100", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname/topic?metadata.rawPayload=100"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -635,7 +635,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			},
 		}
 		rBytes, _ := json.Marshal(reqInvalidCE)
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -671,7 +671,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			},
 		}
 		rBytes, _ := json.Marshal(dCTMismatch)
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -684,7 +684,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish bad request - 400", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -697,7 +697,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish without topic name ending in / - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname/"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -708,7 +708,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish with topic name '/' - 204", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/%%2F", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname/%2F"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -720,7 +720,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish without topic or pubsub name - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -731,7 +731,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish without topic or pubsub name ending in / - 404", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -742,7 +742,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk Publish Pubsub not configured - 400", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/pubsubname/topic", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/pubsubname/topic"
 		testMethods := []string{"POST", "PUT"}
 		// setup
 		savePubSubAdapter := testAPI.pubsubAdapter
@@ -758,7 +758,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk publish Pubsub not found - 400", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/errnotfound/topic", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/errnotfound/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -770,7 +770,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 	})
 
 	t.Run("Bulk publish Pubsub not allowed - 403", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/publish/bulk/errnotallowed/topic", apiVersionV1alpha1)
+		apiPath := apiVersionV1alpha1 + "/publish/bulk/errnotallowed/topic"
 		testMethods := []string{"POST", "PUT"}
 		for _, method := range testMethods {
 			// act
@@ -801,7 +801,7 @@ func TestShutdownEndpoints(t *testing.T) {
 	defer fakeServer.Shutdown()
 
 	t.Run("Shutdown successfully - 204", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/shutdown", apiVersionV1)
+		apiPath := apiVersionV1 + "/shutdown"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 204, resp.StatusCode)
 		select {
@@ -875,7 +875,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 	fakeServer.StartServer(testAPI.constructBindingsEndpoints(), nil)
 
 	t.Run("Invoke output bindings - 204 No Content empty response", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
+		apiPath := apiVersionV1 + "/bindings/testbinding"
 		req := OutputBindingRequest{
 			Data: "fake output",
 		}
@@ -891,7 +891,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke output bindings - 200 OK", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/bindings/testresponse", apiVersionV1)
+		apiPath := apiVersionV1 + "/bindings/testresponse"
 		req := OutputBindingRequest{
 			Data: "fake output",
 		}
@@ -907,7 +907,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke output bindings - 400 InternalError invalid req", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/bindings/testresponse", apiVersionV1)
+		apiPath := apiVersionV1 + "/bindings/testresponse"
 		req := `{"dat" : "invalid request"}`
 		b, _ := json.Marshal(&req)
 		testMethods := []string{"POST", "PUT"}
@@ -921,7 +921,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 	})
 
 	t.Run("Invoke output bindings - 500 InternalError", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/bindings/notfound", apiVersionV1)
+		apiPath := apiVersionV1 + "/bindings/notfound"
 		req := OutputBindingRequest{
 			Data: "fake output",
 		}
@@ -964,7 +964,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	})
 
 	t.Run("Invoke output bindings - 204 OK", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/bindings/testbinding", apiVersionV1)
+		apiPath := apiVersionV1 + "/bindings/testbinding"
 		req := OutputBindingRequest{
 			Data: "fake output",
 		}
@@ -982,7 +982,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 	})
 
 	t.Run("Invoke output bindings - 500 InternalError", func(t *testing.T) {
-		apiPath := fmt.Sprintf("%s/bindings/notfound", apiVersionV1)
+		apiPath := apiVersionV1 + "/bindings/notfound"
 		req := OutputBindingRequest{
 			Data: "fake output",
 		}
@@ -1038,7 +1038,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		for apiPath, testMethods := range apisAndMethods {
 			for _, method := range testMethods {
-				t.Run(fmt.Sprintf("%s %s", method, apiPath), func(t *testing.T) {
+				t.Run(method+" "+apiPath, func(t *testing.T) {
 					// act
 					resp := fakeServer.DoRequest(method, apiPath, fakeData, nil)
 
@@ -2259,7 +2259,7 @@ func TestConfigurationGet(t *testing.T) {
 	})
 
 	t.Run("Get All Configurations with empty key - alpha1", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0-alpha1/configuration/%s", storeName)
+		apiPath := "v1.0-alpha1/configuration/" + storeName
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with empty key should return 200")
@@ -2287,7 +2287,7 @@ func TestConfigurationGet(t *testing.T) {
 	})
 
 	t.Run("Get All Configurations with empty key", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/configuration/%s", storeName)
+		apiPath := "v1.0/configuration/" + storeName
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 200, resp.StatusCode, "Accessing configuration store with empty key should return 200")
@@ -2568,7 +2568,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		assert.NotNil(t, resp.JSONBody)
 		rspMap := resp.JSONBody.(map[string]any)
 		assert.NotNil(t, rspMap)
-		assert.Equal(t, float64(0), rspMap["status"])
+		assert.InDelta(t, float64(0), rspMap["status"], 0)
 	})
 
 	t.Run("Unlock with invalid resource id", func(t *testing.T) {
@@ -2623,7 +2623,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		assert.NotNil(t, resp.JSONBody)
 		rspMap := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap)
-		assert.Equal(t, float64(3), rspMap["status"])
+		assert.InDelta(t, float64(3), rspMap["status"], 0)
 	})
 }
 
@@ -3142,7 +3142,7 @@ func (f *fakeHTTPServer) Shutdown() {
 }
 
 func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body []byte) fakeHTTPResponse {
-	url := fmt.Sprintf("http://127.0.0.1/%s", path)
+	url := "http://127.0.0.1/" + path
 	r, _ := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("dapr-api-token", token)
@@ -3161,7 +3161,7 @@ func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body 
 }
 
 func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, params map[string]string, headers ...string) fakeHTTPResponse {
-	url := fmt.Sprintf("http://127.0.0.1/%s", path)
+	url := "http://127.0.0.1/" + path
 	if basicAuth != "" {
 		url = fmt.Sprintf("http://%s@127.0.0.1/%s", basicAuth, path)
 	}
@@ -3339,7 +3339,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update state - PUT verb supported", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{{
 			Key: "good-key",
 		}}
@@ -3352,7 +3352,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update state - No ETag", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{{
 			Key: "good-key",
 		}}
@@ -3365,7 +3365,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update state - State Error", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{{
 			Key:  "error-key",
 			ETag: ptr.Of(""),
@@ -3379,7 +3379,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update state - Matching ETag", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{{
 			Key:  "good-key",
 			ETag: &etag,
@@ -3394,7 +3394,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 	t.Run("Update state - Wrong ETag", func(t *testing.T) {
 		invalidEtag := "BAD ETAG"
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{{
 			Key:  "good-key",
 			ETag: &invalidEtag,
@@ -3407,7 +3407,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update bulk state - No ETag", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{
 			{Key: "good-key"},
 			{Key: "good-key2"},
@@ -3421,7 +3421,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update bulk state - State Error", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{
 			{Key: "good-key"},
 			{Key: "error-key"},
@@ -3435,7 +3435,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update bulk state - Matching ETag", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{
 			{Key: "good-key", ETag: &etag},
 			{Key: "good-key2", ETag: &etag},
@@ -3449,7 +3449,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("Update bulk state - One has invalid ETag", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", storeName)
+		apiPath := "v1.0/state/" + storeName
 		request := []state.SetRequest{
 			{Key: "good-key", ETag: &etag},
 			{Key: "good-key2", ETag: ptr.Of("BAD ETAG")},
@@ -3621,7 +3621,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("set state request retries with resiliency", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", "failStore")
+		apiPath := "v1.0/state/failStore"
 
 		request := []state.SetRequest{{
 			Key: "failingSetKey",
@@ -3634,7 +3634,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("set state request times out with resiliency", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", "failStore")
+		apiPath := "v1.0/state/failStore"
 
 		request := []state.SetRequest{{
 			Key: "timeoutSetKey",
@@ -3689,7 +3689,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("bulk state set recovers from single key failure with resiliency", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", "failStore")
+		apiPath := "v1.0/state/failStore"
 
 		reqs := []state.SetRequest{
 			{
@@ -3709,7 +3709,7 @@ func TestV1StateEndpoints(t *testing.T) {
 	})
 
 	t.Run("bulk state set times out with resiliency", func(t *testing.T) {
-		apiPath := fmt.Sprintf("v1.0/state/%s", "failStore")
+		apiPath := "v1.0/state/failStore"
 
 		reqs := []state.SetRequest{
 			{
@@ -4547,7 +4547,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
 
 		testTransactionalOperations := make([]stateTransactionRequestBodyOperation, 20)
-		for i := 0; i < 20; i++ {
+		for i := range 20 {
 			testTransactionalOperations[i] = stateTransactionRequestBodyOperation{
 				Operation: string(state.OperationUpsert),
 				Request: map[string]any{

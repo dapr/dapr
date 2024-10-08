@@ -323,7 +323,7 @@ func subscribeHandler(w http.ResponseWriter, r *http.Request) {
 		// This case is triggered when there is multiple redelivery of same message or a message
 		// is thre for an unknown URL path
 
-		errorMessage := fmt.Sprintf("Unexpected/Multiple redelivery of message from %s", r.URL.String())
+		errorMessage := "Unexpected/Multiple redelivery of message from " + r.URL.String()
 		log.Printf("(%s) Responding with DROP. %s", reqID, errorMessage)
 		// Return success with DROP status to drop message
 		w.WriteHeader(http.StatusOK)

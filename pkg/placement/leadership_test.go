@@ -32,7 +32,7 @@ func TestCleanupHeartBeats(t *testing.T) {
 	testServer.hasLeadership.Store(true)
 	maxClients := 3
 
-	for i := 0; i < maxClients; i++ {
+	for i := range maxClients {
 		testServer.lastHeartBeat.Store(fmt.Sprintf("ns-10.0.0.%d:1001", i), clock.Now().UnixNano())
 	}
 
@@ -64,7 +64,7 @@ func TestMonitorLeadership(t *testing.T) {
 	underlyingRaftServers := make([]*hashicorpRaft.Raft, numServers)
 
 	// Setup Raft and placement servers
-	for i := 0; i < numServers; i++ {
+	for i := range numServers {
 		raft, err := raftServers[i].Raft(ctx)
 		require.NoError(t, err)
 		leaderChannels[i] = raft.LeaderCh()
@@ -103,7 +103,7 @@ func TestMonitorLeadership(t *testing.T) {
 	}, time.Second*15, 10*time.Millisecond, "server was not properly re-elected in time")
 
 	t.Cleanup(func() {
-		for i := 0; i < numServers; i++ {
+		for i := range numServers {
 			cleanupFns[i]()
 		}
 		cancel()

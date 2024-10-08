@@ -66,7 +66,7 @@ func TestPlacementStream_RoundRobin(t *testing.T) {
 	testSrv := make([]*testServer, testServerCount)
 	cleanup := make([]func(), testServerCount)
 
-	for i := 0; i < testServerCount; i++ {
+	for i := range testServerCount {
 		address[i], testSrv[i], cleanup[i] = newTestServer()
 	}
 
@@ -549,7 +549,7 @@ func TestConcurrentUnblockPlacements(t *testing.T) {
 	testPlacement.hasPlacementTablesCh = nil
 
 	t.Run("concurrent unlock", func(t *testing.T) {
-		for i := 0; i < 10000; i++ {
+		for range 10000 {
 			testPlacement.blockPlacements()
 			wg := sync.WaitGroup{}
 			wg.Add(2)

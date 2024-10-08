@@ -187,7 +187,7 @@ func TestDoProcessComponent(t *testing.T) {
 
 		// assert
 		require.Error(t, err, "expected an error")
-		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.CreateComponentFailure, "testlock (lock.mockLock/v3)", fmt.Errorf("couldn't find lock store lock.mockLock/v3")).Error())
+		assert.Equal(t, err.Error(), rterrors.NewInit(rterrors.CreateComponentFailure, "testlock (lock.mockLock/v3)", errors.New("couldn't find lock store lock.mockLock/v3")).Error())
 	})
 
 	t.Run("test error when lock prefix strategy invalid", func(t *testing.T) {

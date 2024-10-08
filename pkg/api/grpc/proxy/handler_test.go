@@ -14,6 +14,7 @@ limitations under the License.
 // Based on https://github.com/trusch/grpc-proxy
 // Copyright Michal Witkowski. Licensed under Apache2 license: https://github.com/trusch/grpc-proxy/blob/master/LICENSE.txt
 
+//nolint:testifylint
 package proxy
 
 import (
@@ -133,7 +134,8 @@ func (s *assertingService) PingError(ctx context.Context, ping *pb.PingRequest) 
 func (s *assertingService) PingList(ping *pb.PingRequest, stream pb.TestService_PingListServer) error {
 	// Send user trailers and headers.
 	stream.SendHeader(metadata.Pairs(serverHeaderMdKey, "I like cats."))
-	for i := 0; i < countListResponses; i++ {
+	for i := range countListResponses {
+		//nolint:gosec
 		stream.Send(&pb.PingResponse{Value: ping.GetValue(), Counter: int32(i)})
 	}
 	stream.SetTrailer(metadata.Pairs(serverTrailerMdKey, "I also like dogs."))
@@ -218,7 +220,7 @@ func (s *proxyTestSuite) TestPingEmptyCarriesClientMetadata() {
 }
 
 func (s *proxyTestSuite) TestPingEmpty_StressTest() {
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		s.TestPingEmptyCarriesClientMetadata()
 	}
 }
@@ -274,7 +276,7 @@ func (s *proxyTestSuite) TestPingStream_FullDuplexWorks() {
 	stream, err := s.testClient.PingStream(ctx)
 	s.Require().NoError(err, "PingStream request should be successful")
 
-	for i := 0; i < countListResponses; i++ {
+	for i := range countListResponses {
 		if s.sendPing(stream, i) {
 			break
 		}
@@ -288,17 +290,17 @@ func (s *proxyTestSuite) TestPingStream_FullDuplexWorks() {
 }
 
 func (s *proxyTestSuite) TestPingStream_StressTest() {
-	for i := 0; i < 50; i++ {
+	for range 50 {
 		s.TestPingStream_FullDuplexWorks()
 	}
 }
 
 func (s *proxyTestSuite) TestPingStream_MultipleThreads() {
 	wg := sync.WaitGroup{}
-	for i := 0; i < 4; i++ {
+	for range 4 {
 		wg.Add(1)
 		go func() {
-			for j := 0; j < 10; j++ {
+			for range 10 {
 				s.TestPingStream_StressTest()
 			}
 			wg.Done()
@@ -508,10 +510,10 @@ func (s *proxyTestSuite) TestResiliencyUnary() {
 		numOperations := 10
 
 		wg := sync.WaitGroup{}
-		for i := 0; i < numGoroutines; i++ {
+		for i := range numGoroutines {
 			wg.Add(1)
 			go func(i int) {
-				for j := 0; j < numOperations; j++ {
+				for j := range numOperations {
 					pingMsg := fmt.Sprintf("%d:%d", i, j)
 					ctx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(diag.GRPCProxyAppIDKey, testAppID))
 					res, err := s.testClient.Ping(ctx, &pb.PingRequest{Value: pingMsg})
@@ -637,7 +639,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		require.NoError(t, err, "PingStream request should be successful")
 
 		// Send and receive 2 messages
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			innerErr := stream.Send(&pb.PingRequest{Value: strconv.Itoa(i)})
 			require.NoError(t, innerErr, "Message should be sent")
 			res, innerErr := stream.Recv()
@@ -680,7 +682,7 @@ func (s *proxyTestSuite) TestResiliencyStreaming() {
 		require.NoError(t, err, "PingStream request should be successful")
 
 		// Send and receive 2 messages
-		for i := 0; i < 2; i++ {
+		for i := range 2 {
 			innerErr := stream.Send(&pb.PingRequest{Value: strconv.Itoa(i)})
 			require.NoError(t, innerErr, "Message should be sent")
 			res, innerErr := stream.Recv()

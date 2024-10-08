@@ -26,7 +26,7 @@ var nodes = []string{"node1", "node2", "node3", "node4", "node5"}
 
 func TestReplicationFactor(t *testing.T) {
 	keys := []string{}
-	for i := 0; i < 100; i++ {
+	for i := range 100 {
 		keys = append(keys, strconv.Itoa(i))
 	}
 
@@ -98,7 +98,7 @@ func TestGetAndSetVirtualNodeCacheHashesConcurrently(t *testing.T) {
 	const goroutines = 10
 	var wg sync.WaitGroup
 
-	for i := 0; i < goroutines; i++ {
+	for range goroutines {
 		wg.Add(1)
 		go func() {
 			defer wg.Done()

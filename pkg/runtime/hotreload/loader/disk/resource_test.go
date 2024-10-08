@@ -95,7 +95,7 @@ func Test_Disk(t *testing.T) {
 	require.NoError(t, err)
 
 	var events []*loader.Event[componentsapi.Component]
-	for i := 0; i < 3; i++ {
+	for range 3 {
 		select {
 		case event := <-conn.EventCh:
 			events = append(events, event)
@@ -175,7 +175,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			select {
 			case event := <-conn.EventCh:
 				events = append(events, event)
@@ -258,7 +258,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			select {
 			case event := <-conn.EventCh:
 				events = append(events, event)
@@ -342,7 +342,7 @@ func Test_Stream(t *testing.T) {
 		require.NoError(t, err)
 
 		var events []*loader.Event[componentsapi.Component]
-		for i := 0; i < 3; i++ {
+		for range 3 {
 			select {
 			case event := <-conn.EventCh:
 				events = append(events, event)

@@ -98,7 +98,6 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 			ActorId:   "myactorid",
 			Method:    "foo",
 		})
-		//nolint:testifylint
 		assert.NoError(c, err)
 	}, time.Second*20, time.Millisecond*10, "actor not ready")
 

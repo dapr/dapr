@@ -54,21 +54,20 @@ const (
 
 	eventKey = `"event":`
 
-	data1     string = `{"orderId":"1"}`
-	data2     string = `{"orderId":"2"}`
-	data3     string = `{"orderId":"3"}`
-	data4     string = `{"orderId":"4"}`
-	data5     string = `{"orderId":"5"}`
-	data6     string = `{"orderId":"6"}`
-	data7     string = `{"orderId":"7"}`
-	data8     string = `{"orderId":"8"}`
-	data9     string = ``
-	data10    string = `{"orderId":"10"}`
-	ext1Key   string = "ext1Key"
-	ext1Value string = "ext1Value"
-	ext2Key   string = "ext2Key"
-	ext2Value string = "ext2Value"
-	//nolint:goconst
+	data1      string = `{"orderId":"1"}`
+	data2      string = `{"orderId":"2"}`
+	data3      string = `{"orderId":"3"}`
+	data4      string = `{"orderId":"4"}`
+	data5      string = `{"orderId":"5"}`
+	data6      string = `{"orderId":"6"}`
+	data7      string = `{"orderId":"7"}`
+	data8      string = `{"orderId":"8"}`
+	data9      string = ``
+	data10     string = `{"orderId":"10"}`
+	ext1Key    string = "ext1Key"
+	ext1Value  string = "ext1Value"
+	ext2Key    string = "ext2Key"
+	ext2Value  string = "ext2Value"
 	order1     string = `{"data":` + data1 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"9b6767c3-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
 	order2     string = `{"data":` + data2 + `,"datacontenttype":"application/json","` + ext2Key + `":"` + ext2Value + `","id":"993f4e4a-05e5-4772-94a4-e899b1af0131","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","traceparent":"00-1343b02c3af4f9b352d4cb83d6c8cb81-82a64f8c4433e2c4-01","tracestate":"","type":"type2"}`
 	order3     string = `{"data":` + data3 + `,"datacontenttype":"application/json","` + ext1Key + `":"` + ext1Value + `","id":"6767010u-04b5-4871-96ae-c6bde0d5e16d","pubsubname":"orderpubsub","source":"checkout","specversion":"1.0","topic":"orders","traceid":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","traceparent":"00-e61de949bb4de415a7af49fc86675648-ffb64972bb907224-01","tracestate":"","type":"type1"}`
