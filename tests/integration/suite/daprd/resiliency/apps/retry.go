@@ -19,6 +19,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	grpcapp "github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
+	testpb "github.com/dapr/dapr/tests/integration/framework/process/grpc/app/proto"
 	httpapp "github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 
@@ -46,6 +47,7 @@ type retry struct {
 	handlerFuncRoot     httpapp.Option
 	handlerFuncRetry    httpapp.Option
 	grpcOnInvokeHandler grpcapp.Option
+	grpcProxyHandler    grpcapp.Option
 }
 
 func (rt *retry) Setup(t *testing.T) []framework.Option {
@@ -139,6 +141,40 @@ spec:
 			successResponse := &commonv1.InvokeResponse{
 				Data:        data,
 				ContentType: in.GetContentType(),
+			}
+			return successResponse, nil
+		} else {
+			return nil, status.Errorf(codes.Code(respStatusCode), "error for key: %s", key)
+		}
+	})
+
+	rt.grpcProxyHandler = grpcapp.WithPingFn(func(ctx context.Context, in *testpb.PingRequest) (*testpb.PingResponse, error) {
+		data := in.GetValue()
+		var message map[string]string
+
+		err := json.Unmarshal([]byte(data), &message)
+		require.NoError(t, err)
+		if message["key"] == "" {
+			return nil, errors.New("key is empty")
+		}
+		if message["statusCode"] == "" {
+			return nil, errors.New("statusCode is empty")
+		}
+
+		key := message["key"]
+		c, _ := rt.counters.LoadOrStore(key, &atomic.Int32{})
+		counter := c.(*atomic.Int32)
+		counter.Add(1)
+
+		respStatusCode, err := strconv.Atoi(message["statusCode"])
+		if err != nil {
+			respStatusCode = 2 // Unknown
+		}
+
+		if respStatusCode == 0 {
+			successResponse := &testpb.PingResponse{
+				Value:   strconv.Itoa(respStatusCode),
+				Counter: counter.Load(),
 			}
 			return successResponse, nil
 		} else {
@@ -285,6 +321,7 @@ func (rt *retry) Run(t *testing.T, ctx context.Context) {
 			}
 			if scenario.protocol == "grpc" {
 				rt.runGrpcScenario(t, ctx, scenario)
+				rt.runGrpcProxyScenario(t, ctx, scenario)
 			}
 		})
 	}
@@ -299,7 +336,7 @@ type testScenario struct {
 }
 
 func (rt *retry) runGrpcScenario(t *testing.T, ctx context.Context, scenario testScenario) {
-	app1 := grpcapp.New(t, rt.grpcOnInvokeHandler)
+	app1 := grpcapp.New(t, rt.grpcOnInvokeHandler, rt.grpcProxyHandler)
 	app1.Run(t, ctx)
 
 	daprd1 := daprd.New(t,
@@ -346,6 +383,64 @@ func (rt *retry) runGrpcScenario(t *testing.T, ctx context.Context, scenario tes
 			Method: key,
 			Data:   &anypb.Any{Value: []byte(fmt.Sprintf(`{"key": "%s", "statusCode": "%s"}`, key, statusCodeStr))},
 		})
+
+		expectedCount := 1
+		if scenario.expectRetries {
+			// 4 = 1 try + 3 retries.
+			expectedCount = 4
+			require.Error(t, err)
+		}
+
+		assert.Equal(t, expectedCount, rt.getCount(key), "Retry count mismatch for test case '%s' with codes %s and test code %d", scenario.title, scenario.statusCodes, statusCode)
+	}
+}
+
+func (rt *retry) runGrpcProxyScenario(t *testing.T, ctx context.Context, scenario testScenario) {
+	app1 := grpcapp.New(t, rt.grpcProxyHandler)
+	app1.Run(t, ctx)
+
+	daprd1 := daprd.New(t,
+		daprd.WithAppPort(app1.Port(t)),
+		daprd.WithAppProtocol("grpc"),
+		daprd.WithResourceFiles(fmt.Sprintf(rt.grpcResiliency, scenario.statusCodes)),
+	)
+	daprd1.Run(t, ctx)
+	defer daprd1.Cleanup(t)
+
+	app2 := grpcapp.New(t, rt.grpcProxyHandler)
+	app2.Run(t, ctx)
+
+	daprd2 := daprd.New(t,
+		daprd.WithAppPort(app2.Port(t)),
+		daprd.WithAppProtocol("grpc"),
+		daprd.WithResourceFiles(fmt.Sprintf(rt.grpcResiliency, scenario.statusCodes)),
+	)
+
+	daprd2.Run(t, ctx)
+	defer daprd2.Cleanup(t)
+
+	daprd1.WaitUntilRunning(t, ctx)
+	daprd2.WaitUntilRunning(t, ctx)
+
+	for _, statusCode := range scenario.statusCodesTest {
+		rt.retries = 0
+
+		key := uuid.NewString()
+		statusCodeStr := strconv.Itoa(statusCode)
+
+		//nolint:staticcheck
+		conn, err := grpc.DialContext(ctx, daprd1.GRPCAddress(),
+			grpc.WithTransportCredentials(insecure.NewCredentials()),
+			grpc.WithBlock(),
+		)
+		require.NoError(t, err)
+		t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+		ctxWithMetadata := metadata.AppendToOutgoingContext(
+			ctx, "dapr-app-id", daprd2.AppID())
+
+		_, err = testpb.NewTestServiceClient(conn).
+			Ping(ctxWithMetadata, &testpb.PingRequest{Value: fmt.Sprintf(`{"key": "%s", "statusCode": "%s"}`, key, statusCodeStr)})
 
 		expectedCount := 1
 		if scenario.expectRetries {
