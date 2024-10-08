@@ -139,7 +139,7 @@ func (n *namespace) Run(t *testing.T, ctx context.Context) {
 		assert.Len(c, resp.Kvs, 2)
 	}, time.Second*20, 10*time.Millisecond)
 
-	n.kubeapi.Informer().Delete(t, &corev1.Namespace{
+	n.kubeapi.Informer().DeleteWait(t, ctx, &corev1.Namespace{
 		TypeMeta:   metav1.TypeMeta{APIVersion: "v1", Kind: "Namespace"},
 		ObjectMeta: metav1.ObjectMeta{Name: "default"},
 	})
