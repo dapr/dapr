@@ -59,6 +59,14 @@ spec:
         duration: 5s
         maxRetries: 3
 
+      withMatch:
+        policy: constant
+        duration: 5s
+        maxRetries: 3
+        matching:
+          httpStatusCodes: "500"
+
+
     # Circuit breakers are automatically instantiated per component, service endpoint, and application route.
     # using these settings as a template. See logic below under `buildingBlocks`.
     # Circuit breakers maintain counters that can live as long as the Dapr sidecar.
@@ -96,6 +104,12 @@ spec:
       appB:
         timeout: general
         retry: serviceRetry
+        # Circuit breakers for services are scoped per endpoint (e.g. hostname + port).
+        # When a breaker is tripped, that route is removed from load balancing for the configured `timeout` duration.
+        circuitBreaker: serviceCB
+      appC:
+        timeout: general
+        retry: withMatch
         # Circuit breakers for services are scoped per endpoint (e.g. hostname + port).
         # When a breaker is tripped, that route is removed from load balancing for the configured `timeout` duration.
         circuitBreaker: serviceCB
