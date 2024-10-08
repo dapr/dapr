@@ -22,15 +22,19 @@ import (
 var ErrMaxStackDepthExceeded = errors.New("maximum stack depth exceeded")
 
 type ActorLock struct {
-	methodLock    sync.Mutex
 	requestLock   sync.Mutex
 	activeRequest *string
 	stackDepth    atomic.Int32
 	maxStackDepth int32
+	// lockChan is used instead of a sync.Mutex to enforce FIFO ordering of method execution.
+	// We use a buffered channel to ensure that requests are processed
+	// in the order they arrive, which sync.Mutex does not guarantee.
+	lockChan chan struct{}
 }
 
 func NewActorLock(maxStackDepth int32) *ActorLock {
 	return &ActorLock{
+		lockChan:      make(chan struct{}, 1),
 		maxStackDepth: maxStackDepth,
 	}
 }
@@ -43,7 +47,7 @@ func (a *ActorLock) Lock(requestID *string) error {
 	}
 
 	if currentRequest == nil || *currentRequest != *requestID {
-		a.methodLock.Lock()
+		a.lockChan <- struct{}{}
 		a.setCurrentID(requestID)
 		a.stackDepth.Add(1)
 	} else {
@@ -57,7 +61,7 @@ func (a *ActorLock) Unlock() {
 	a.stackDepth.Add(-1)
 	if a.stackDepth.Load() == 0 {
 		a.clearCurrentID()
-		a.methodLock.Unlock()
+		<-a.lockChan
 	}
 }
 
