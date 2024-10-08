@@ -21,6 +21,7 @@ package actors
 import (
 	"context"
 	"errors"
+	"sync"
 	"time"
 
 	mock "github.com/stretchr/testify/mock"
@@ -451,4 +452,64 @@ func (f *FailingActors) GetRuntimeStatus(ctx context.Context) *runtimev1pb.Actor
 	return &runtimev1pb.ActorRuntime{
 		ActiveActors: []*runtimev1pb.ActiveActorsCount{},
 	}
+}
+
+type MockActorFIFOInvocation struct {
+	*MockActors
+	receivedCallOrderLock  sync.Mutex
+	processedCallOrderLock sync.Mutex
+	receivedCallOrder      []string
+	processedCallOrder     []string
+	actorLock              *ActorLock
+}
+
+func NewMockActorFIFOInvocation(maxStackDepth int32) *MockActorFIFOInvocation {
+	return &MockActorFIFOInvocation{
+		MockActors:         &MockActors{},
+		receivedCallOrder:  make([]string, 0),
+		processedCallOrder: make([]string, 0),
+		actorLock:          NewActorLock(maxStackDepth),
+	}
+}
+
+func (_m *MockActorFIFOInvocation) Call(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	ret := _m.Called(req)
+
+	_m.receivedCallOrderLock.Lock()
+	_m.receivedCallOrder = append(_m.receivedCallOrder, req.GetMessage().GetMethod())
+
+	// Reuse the method name as a unique requestID so we don't spend cycles on generating UIDs
+	uniqueRequestID := req.GetMessage().GetMethod()
+	err := _m.actorLock.Lock(&uniqueRequestID)
+	_m.receivedCallOrderLock.Unlock()
+
+	if err != nil {
+		return nil, err
+	}
+	defer _m.actorLock.Unlock()
+
+	_m.processedCallOrderLock.Lock()
+	_m.processedCallOrder = append(_m.processedCallOrder, req.GetMessage().GetMethod())
+	_m.processedCallOrderLock.Unlock()
+
+	// Sleep for 500ns to simulate load and force callers to wait for lock
+	time.Sleep(500 * time.Nanosecond)
+
+	var r0 *internalsv1pb.InternalInvokeResponse
+	if rf, ok := ret.Get(0).(func(*internalsv1pb.InternalInvokeRequest) *internalsv1pb.InternalInvokeResponse); ok {
+		r0 = rf(req)
+	} else {
+		if ret.Get(0) != nil {
+			r0 = ret.Get(0).(*internalsv1pb.InternalInvokeResponse)
+		}
+	}
+
+	var r1 error
+	if rf, ok := ret.Get(1).(func(*internalsv1pb.InternalInvokeRequest) error); ok {
+		r1 = rf(req)
+	} else {
+		r1 = ret.Error(1)
+	}
+
+	return r0, r1
 }
