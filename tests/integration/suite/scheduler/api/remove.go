@@ -16,7 +16,6 @@ package api
 import (
 	"context"
 	"fmt"
-	"path"
 	"strconv"
 	"testing"
 	"time"

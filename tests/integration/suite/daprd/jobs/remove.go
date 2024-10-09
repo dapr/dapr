@@ -16,7 +16,6 @@ package jobs
 import (
 	"context"
 	"fmt"
-	"path"
 	"strconv"
 	"sync/atomic"
 	"testing"
