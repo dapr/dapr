@@ -21,10 +21,14 @@ on:
         required: true 
         type: string
 
+permissions: {}
+
 jobs:
   create-release:
     name: Creates release branch and tag
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
     steps:
       - name: Check out code
         uses: actions/checkout@v4
@@ -47,6 +51,8 @@ jobs:
     name: Triggers the Dapr runtime build
     runs-on: ubuntu-latest
     needs: create-release
+    permissions:
+      actions: write
     steps:
       - name: Triggers the build
         env:
