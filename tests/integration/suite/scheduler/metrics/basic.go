@@ -16,13 +16,11 @@ package metrics
 import (
 	"context"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
@@ -84,23 +82,21 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
 
-			assert.True(t, b.etcdHasJob(t, ctx, name))
+			resp, err := client.GetJob(ctx, &schedulerv1.GetJobRequest{
+				Name: name,
+				Metadata: &schedulerv1.JobMetadata{
+					AppId:     "appid",
+					Namespace: "namespace",
+					Target: &schedulerv1.JobTargetMetadata{
+						Type: new(schedulerv1.JobTargetMetadata_Job),
+					},
+				},
+			})
+			assert.NotNil(t, resp)
+			require.NoError(t, err)
+
 			metrics := b.scheduler.Metrics(t, ctx)
 			assert.Equal(t, i, int(metrics["dapr_scheduler_jobs_created_total"]))
 		}
 	})
-}
-
-func (b *basic) etcdHasJob(t *testing.T, ctx context.Context, key string) bool {
-	t.Helper()
-
-	// Get keys with prefix
-	keys := b.scheduler.ETCDClient(t).Get(t, ctx, "", clientv3.WithPrefix())
-	for _, k := range keys {
-		if strings.HasSuffix(k, "||"+key) {
-			return true
-		}
-	}
-
-	return false
 }
