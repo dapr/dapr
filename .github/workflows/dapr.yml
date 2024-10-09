@@ -106,6 +106,26 @@ jobs:
           rm -r protoc protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
           make init-proto
           make gen-proto check-proto-diff
+
+  depcheck:
+    name: "Dependency Review"
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
+      - uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+      - name: Install govulncheck
+        run: go install golang.org/x/vuln/cmd/govulncheck@latest
+      - name: Run govulncheck
+        run: govulncheck -C '.' -format text --tags=uint,allcomponents,integration ./...
+        shell: bash
+
   unit-tests:
     name: Unit tests
     needs: lint
