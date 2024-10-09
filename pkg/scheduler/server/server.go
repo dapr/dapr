@@ -17,11 +17,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
 
-	etcdcron "github.com/diagridio/go-etcd-cron"
+	"github.com/diagridio/go-etcd-cron/api"
+	"github.com/diagridio/go-etcd-cron/cron"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
@@ -69,7 +71,7 @@ type Server struct {
 	sec            security.Handler
 	authz          *authz.Authz
 	config         *embed.Config
-	cron           etcdcron.Interface
+	cron           api.Interface
 	connectionPool *internal.Pool // Connection pool for sidecars
 
 	hzAPIServer healthz.Target
@@ -135,7 +137,11 @@ func (s *Server) runServer(ctx context.Context) error {
 
 	log.Infof("Dapr Scheduler listening on: %s:%d", s.listenAddress, s.port)
 
-	srv := grpc.NewServer(s.sec.GRPCServerOptionMTLS())
+	srv := grpc.NewServer(
+		s.sec.GRPCServerOptionMTLS(),
+		grpc.MaxSendMsgSize(math.MaxInt32),
+		grpc.MaxRecvMsgSize(math.MaxInt32),
+	)
 	schedulerv1pb.RegisterSchedulerServer(srv, s)
 
 	s.hzAPIServer.Ready()
@@ -183,14 +189,15 @@ func (s *Server) runEtcdCron(ctx context.Context) error {
 	}
 
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints: endpoints,
+		Endpoints:          endpoints,
+		MaxCallRecvMsgSize: math.MaxInt32,
 	})
 	if err != nil {
 		return err
 	}
 
 	// pass in initial cluster endpoints, but with client ports
-	s.cron, err = etcdcron.New(etcdcron.Options{
+	s.cron, err = cron.New(cron.Options{
 		Client:         client,
 		Namespace:      "dapr",
 		PartitionID:    s.replicaID,

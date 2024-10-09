@@ -84,6 +84,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 				scheduleJobFn: opts.scheduleJobFn,
 				getJobFn:      opts.getJobFn,
 				deleteJobFn:   opts.deleteJobFn,
+				listJobsFn:    opts.listJobsFn,
 				watchJobsFn:   opts.watchJobsFn,
 			}
 
