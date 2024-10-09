@@ -29,10 +29,14 @@ on:
       - release-*
       - feature/*
 
+permissions: {}
+
 jobs:
   validate-virt-mem:
     name: Standalone validations
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       GOOS: linux
       GOARCH: amd64
