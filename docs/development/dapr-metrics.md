@@ -59,7 +59,7 @@ Dapr uses prometheus process and go collectors by default.
 
 [monitoring metrics](../../pkg/scheduler/monitoring/metrics.go)
 
-* dapr_scheduler_sidecars_connected_total: The total number of dapr sidecars connected to the scheduler service.
+* dapr_scheduler_sidecars_connected: The total number of dapr sidecars connected to the scheduler service.
 * dapr_scheduler_jobs_created_total: The total number of jobs scheduled.
 * dapr_scheduler_jobs_triggered_total: The total number of successfully triggered jobs.
 * dapr_scheduler_trigger_latency: The latency of triggering jobs from the scheduler service.

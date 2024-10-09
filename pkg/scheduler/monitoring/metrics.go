@@ -84,9 +84,9 @@ func RecordJobsTriggeredCount(jobMetadata *schedulerv1pb.JobMetadata) {
 }
 
 // RecordTriggerDuration records the time it takes to send the job to dapr from the scheduler service
-func RecordTriggerDuration(ns string, appID string, start time.Time) {
+func RecordTriggerDuration(ns string, start time.Time) {
 	elapsed := time.Since(start).Milliseconds()
-	stats.RecordWithTags(context.Background(), utils.WithTags(triggerLatency.Name(), ns, appID), triggerLatency.M(float64(elapsed)))
+	stats.RecordWithTags(context.Background(), utils.WithTags(triggerLatency.Name(), ns), triggerLatency.M(float64(elapsed)))
 }
 
 // InitMetrics initialize the scheduler service metrics.
