@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
@@ -186,7 +187,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				if rErr != nil {
 					return rResp, invokeError{
 						statusCode: http.StatusInternalServerError,
-						msg:        NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error()).JSONErrorValue(),
+						msg:        NewErrorResponse(errorcodes.MalformedResponse, rErr.Error()).JSONErrorValue(),
 					}
 				}
 			} else {

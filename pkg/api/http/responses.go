@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/reflect/protoreflect"
 
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 const (
@@ -122,7 +123,7 @@ func respondWithProto(w http.ResponseWriter, m protoreflect.ProtoMessage, status
 		EmitUnpopulated: emitUnpopulated,
 	}.Marshal(m)
 	if err != nil {
-		msg := NewErrorResponse("ERR_INTERNAL", "failed to encode response as JSON: "+err.Error())
+		msg := NewErrorResponse(errorcodes.Internal, "failed to encode response as JSON: "+err.Error())
 		respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
 		log.Debug(msg)
 		return
