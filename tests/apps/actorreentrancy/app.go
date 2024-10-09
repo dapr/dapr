@@ -225,7 +225,7 @@ func actorMethodHandler(w http.ResponseWriter, r *http.Request) {
 
 func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Handling reentrant call")
-	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Enter %s", mux.Vars(r)["method"]))
+	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], "Enter "+mux.Vars(r)["method"])
 	body, err := io.ReadAll(r.Body)
 	defer r.Body.Close()
 
@@ -257,17 +257,17 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Call status: %d", resp.StatusCode)
 	if err != nil || resp.StatusCode == http.StatusInternalServerError {
 		w.WriteHeader(http.StatusInternalServerError)
-		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Error %s", mux.Vars(r)["method"]))
+		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], "Error "+mux.Vars(r)["method"])
 	} else {
-		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Exit %s", mux.Vars(r)["method"]))
+		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], "Exit "+mux.Vars(r)["method"])
 	}
 	defer resp.Body.Close()
 }
 
 func standardHandler(w http.ResponseWriter, r *http.Request) {
 	log.Print("Handling standard call")
-	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Enter %s", mux.Vars(r)["method"]))
-	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], fmt.Sprintf("Exit %s", mux.Vars(r)["method"]))
+	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], "Enter "+mux.Vars(r)["method"])
+	appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], "Exit "+mux.Vars(r)["method"])
 }
 
 func advanceCallStackForNextRequest(req reentrantRequest) (actorCall, []byte) {

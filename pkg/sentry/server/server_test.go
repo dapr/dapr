@@ -21,6 +21,7 @@ import (
 	"crypto/x509"
 	"crypto/x509/pkix"
 	"encoding/pem"
+	"errors"
 	"fmt"
 	"math/big"
 	"net"
@@ -110,7 +111,7 @@ func TestRun(t *testing.T) {
 				return spiffeid.RequireTrustDomainFromString("test"), nil
 			}),
 			ca: cafake.New().WithSignIdentity(func(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
-				return nil, fmt.Errorf("signing error")
+				return nil, errors.New("signing error")
 			}).WithTrustAnchors(func() []byte {
 				return []byte("my-trust-anchors")
 			}),
@@ -155,7 +156,7 @@ func TestRun(t *testing.T) {
 				return grpc.Creds(insecure.NewCredentials())
 			}),
 			val: validatorfake.New().WithValidateFn(func(ctx context.Context, req *sentryv1pb.SignCertificateRequest) (spiffeid.TrustDomain, error) {
-				return spiffeid.TrustDomain{}, fmt.Errorf("validation error")
+				return spiffeid.TrustDomain{}, errors.New("validation error")
 			}),
 			ca: cafake.New().WithSignIdentity(func(ctx context.Context, req *ca.SignRequest) ([]*x509.Certificate, error) {
 				return []*x509.Certificate{crtX509}, nil
@@ -290,7 +291,7 @@ func TestRun(t *testing.T) {
 
 			go func() {
 				defer close(serverClosed)
-				require.NoError(t, New(opts).Start(ctx))
+				assert.NoError(t, New(opts).Start(ctx))
 			}()
 
 			require.Eventually(t, func() bool {

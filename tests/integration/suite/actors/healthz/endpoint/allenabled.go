@@ -97,7 +97,6 @@ func (a *allenabled) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		meta, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		//nolint:testifylint
 		assert.NoError(c, err)
 		assert.True(c, meta.GetActorRuntime().GetHostReady())
 		assert.Len(c, meta.GetActorRuntime().GetActiveActors(), 1)
