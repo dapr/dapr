@@ -5,9 +5,14 @@ on:
     - cron: '0 0 1 * *' # trigger on the 1st of every month at midnight
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   mirror:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
     steps:
       - 
         name: Checkout
