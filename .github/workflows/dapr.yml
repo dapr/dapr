@@ -122,6 +122,7 @@ jobs:
         uses: golang/govulncheck-action@v1
         with:
           go-version-file: go.mod
+          go-package: './... --tags uint,allcomponents,integration'
 
   unit-tests:
     name: Unit tests
