@@ -107,33 +107,21 @@ jobs:
           make init-proto
           make gen-proto check-proto-diff
 
-  vulncheck:
-    name: govulncheck
+  depcheck:
+    name: "Dependency Review"
     runs-on: ubuntu-latest
     permissions:
       contents: read
-    strategy:
-      fail-fast: false
-      matrix:
-        target_os: ["linux"]
-        target_arch: ["amd64"]
-    env:
-      GOLANGCILINT_VER: "v1.61.0"
-      PROTOC_VERSION: "24.4"
-      GOOS: "${{ matrix.target_os }}"
-      GOARCH: "${{ matrix.target_arch }}"
-      GOPROXY: "https://proxy.golang.org"
     steps:
       - name: Check out code into the Go module directory
         uses: actions/checkout@v4
-      - name: Set up Go
-        id: setup-go
-        uses: actions/setup-go@v5
-        with:
-          go-version-file: "go.mod"
+      - name: Dependency review
+        uses: actions/dependency-review-action@v4
       - name: "Run vulncheck"
         id: govulncheck
         uses: golang/govulncheck-action@v1
+        with:
+          go-version-file: go.mod
 
   unit-tests:
     name: Unit tests
