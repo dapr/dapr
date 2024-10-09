@@ -106,6 +106,35 @@ jobs:
           rm -r protoc protoc-${{ env.PROTOC_VERSION }}-linux-x86_64.zip
           make init-proto
           make gen-proto check-proto-diff
+
+  vulncheck:
+    name: govulncheck
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    strategy:
+      fail-fast: false
+      matrix:
+        target_os: ["linux"]
+        target_arch: ["amd64"]
+    env:
+      GOLANGCILINT_VER: "v1.61.0"
+      PROTOC_VERSION: "24.4"
+      GOOS: "${{ matrix.target_os }}"
+      GOARCH: "${{ matrix.target_arch }}"
+      GOPROXY: "https://proxy.golang.org"
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+      - name: Set up Go
+        id: setup-go
+        uses: actions/setup-go@v5
+        with:
+          go-version-file: "go.mod"
+      - name: "Run vulncheck"
+        id: govulncheck
+        uses: golang/govulncheck-action@v1
+
   unit-tests:
     name: Unit tests
     needs: lint
