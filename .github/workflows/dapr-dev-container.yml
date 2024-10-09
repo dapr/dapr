@@ -19,10 +19,15 @@ on:
     # Run weekly on Tuesdays
     - cron: "22 03 * * 2"
 
+permissions: {}
+
 jobs:
   build:
     name: build dev container
     runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      packages: write
     env:
       DOCKER_REGISTRY: ${{ secrets.DOCKER_REGISTRY }}
     steps:
