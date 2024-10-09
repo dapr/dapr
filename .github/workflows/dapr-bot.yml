@@ -6,10 +6,17 @@ on:
   issues:
     types: [labeled]
 
+permissions: {}
+
 jobs:
   daprbot:
     name: bot-processor
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
+      actions: write
     steps:
       - name: Checkout code
         uses: actions/checkout@v4 # required to make the script available for next step

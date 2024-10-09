@@ -17,11 +17,17 @@ on:
   schedule:
     - cron: '*/10 * * * *'
   workflow_dispatch:
+
+permissions: {}
+
 jobs:
   automerge:
     if: github.repository_owner == 'dapr'
     name: Automerge and update PRs.
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4
@@ -35,6 +41,10 @@ jobs:
   prune_stale:
     name: Prune Stale
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
+      issues: write
     steps:
     - name: Prune Stale
       uses: actions/stale@v7.0.0

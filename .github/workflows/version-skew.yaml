@@ -27,6 +27,8 @@ defaults:
   run:
     shell: bash
 
+permissions: {}
+
 # Jobs can be triggered with the `/test-version-skew` command. You can also
 # supply a specific version to test against, overriding the current latest
 # release, e.g. `/test-version-skew 1.10.5`. This is useful for testing
@@ -46,6 +48,9 @@ jobs:
   integration-version-skew:
     name: integration-version-skew
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     strategy:
       fail-fast: false # Keep running if one leg fails.
       matrix:
@@ -213,6 +218,9 @@ jobs:
   e2e-version-skew:
     name: e2e-version-skew
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       REGISTRY_PORT: 5000
       REGISTRY_NAME: kind-registry

@@ -34,6 +34,8 @@ env:
   GOARCH: amd64
   GOPROXY: https://proxy.golang.org
 
+permissions: {}
+
 # Job(s) can be triggered with the following commands:
   # /test-sdk-all
   # /test-sdk-python
@@ -52,6 +54,9 @@ jobs:
       )
     name: "Python SDK verification tests"
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write    
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -178,6 +183,9 @@ jobs:
       )
     name: "Java SDK verification tests"
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       JDK_VER: 11
       JAVA_SPRING_BOOT_VERSION: 2.7.8
@@ -340,6 +348,9 @@ jobs:
       )
     name: "JS SDK verification tests"
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       NODE_VER: 18
     services:
@@ -481,6 +492,9 @@ jobs:
       )
     name: "Go SDK verification tests"
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'

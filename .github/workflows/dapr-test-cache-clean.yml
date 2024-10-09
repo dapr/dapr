@@ -22,6 +22,8 @@ on:
   # Manual trigger
   workflow_dispatch:
 
+permissions: {}
+
 jobs:
   cleanup:
     runs-on: ubuntu-22.04
