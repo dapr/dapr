@@ -93,7 +93,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		keys, rerr := a.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Empty(c, keys)
-	}, time.Second*10, 10*time.Millisecond) //nolint:mnd
+	}, time.Second*10, 10*time.Millisecond)
 
 	metrics := a.scheduler.Metrics(t, ctx)
 	assert.Equal(t, 0, int(metrics["dapr_scheduler_jobs_created_total"]))
@@ -114,9 +114,9 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 		keys, rerr := a.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
 		require.NoError(c, rerr)
 		assert.Len(c, keys, 1)
-	}, time.Second*10, 10*time.Millisecond) //nolint:mnd
+	}, time.Second*10, 10*time.Millisecond)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, a.triggered.Load(), int64(1))
-	}, 30*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greater or equal 1, actual value %d", a.triggered.Load()) //nolint:mnd
+	}, 30*time.Second, 10*time.Millisecond, "failed to wait for 'triggered' to be greater or equal 1, actual value %d", a.triggered.Load())
 }

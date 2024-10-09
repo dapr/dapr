@@ -200,7 +200,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				}
 			}
 			return true
-		}, 3*time.Second, 10*time.Millisecond) //nolint:mnd
+		}, 3*time.Second, 10*time.Millisecond)
 
 		// Terminate the root orchestration
 		b.terminateWorkflow(t, ctx, string(id))

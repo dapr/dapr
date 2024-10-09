@@ -95,7 +95,7 @@ func InitMetrics() error {
 		utils.NewMeasureView(sidecarsConnectedGauge, []tag.Key{}, view.LastValue()),
 		utils.NewMeasureView(jobsScheduledTotal, []tag.Key{}, view.Count()),
 		utils.NewMeasureView(jobsTriggeredTotal, []tag.Key{}, view.Count()),
-		utils.NewMeasureView(triggerLatency, []tag.Key{}, view.Distribution(0, 100, 500, 1000, 5000, 10000)), //nolint:mnd
+		utils.NewMeasureView(triggerLatency, []tag.Key{}, view.Distribution(0, 100, 500, 1000, 5000, 10000)),
 	)
 
 	return err
