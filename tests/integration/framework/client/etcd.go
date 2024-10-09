@@ -67,6 +67,9 @@ func (c *EtcdClient) ListAllKeys(ctx context.Context, prefix string) ([]string, 
 
 func (c *EtcdClient) Get(t *testing.T, ctx context.Context, prefix string, opts ...clientv3.OpOption) []string {
 	t.Helper()
+
+	opts = append([]clientv3.OpOption{clientv3.WithPrefix()}, opts...)
+
 	resp, err := c.client.Get(ctx, prefix, opts...)
 	require.NoError(t, err)
 
