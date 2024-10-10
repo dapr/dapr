@@ -88,6 +88,8 @@ require (
 	sigs.k8s.io/yaml v1.4.0
 )
 
+require github.com/microsoft/go-mssqldb v1.6.0 // indirect
+
 require (
 	cloud.google.com/go v0.113.0 // indirect
 	cloud.google.com/go/auth v0.4.1 // indirect
@@ -323,8 +325,7 @@ require (
 	github.com/matoous/go-nanoid/v2 v2.0.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect
-	github.com/microcosm-cc/bluemonday v0.0.0-00010101000000-000000000000 // indirect
-	github.com/microsoft/go-mssqldb v1.6.0 // indirect
+	github.com/microcosm-cc/bluemonday v1.0.25 // indirect
 	github.com/miekg/dns v1.1.57 // indirect
 	github.com/mitchellh/copystructure v1.2.0 // indirect
 	github.com/mitchellh/go-homedir v1.1.0 // indirect
@@ -482,7 +483,6 @@ replace (
 
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
-replace github.com/microcosm-cc/bluemonday => github.com/microcosm-cc/bluemonday v1.0.24
 
 // Needed due to a deprecated method used in functional tests
 replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
