@@ -47,7 +47,7 @@ func TestParseEnvString(t *testing.T) {
 		},
 		{
 			testName: "common valid environment string",
-			envStr:   "ENV1=value1,ENV2=value2, ENV3=value3",
+			envStr:   "ENV1=value1 , ENV2=value2 , ENV3=value3",
 			expLen:   3,
 			expKeys:  []string{"ENV1", "ENV2", "ENV3"},
 			expEnv: []corev1.EnvVar{
@@ -88,6 +88,132 @@ func TestParseEnvString(t *testing.T) {
 			c := NewSidecarConfig(&corev1.Pod{})
 			c.Env = tc.envStr
 			envKeys, envVars := c.getEnv()
+			assert.Len(t, envVars, tc.expLen)
+			assert.Equal(t, tc.expKeys, envKeys)
+			assert.Equal(t, tc.expEnv, envVars)
+		})
+	}
+}
+
+func TestParseEnvFromSecret(t *testing.T) {
+	testCases := []struct {
+		testName     string
+		envSecretStr string
+		expLen       int
+		expKeys      []string
+		expEnv       []corev1.EnvVar
+	}{
+		{
+			testName:     "empty env",
+			envSecretStr: "",
+			expLen:       0,
+			expKeys:      []string{},
+			expEnv:       []corev1.EnvVar{},
+		},
+		{
+			testName:     "single key name value secret",
+			envSecretStr: "KEY1=NAME1",
+			expLen:       1,
+			expKeys:      []string{"KEY1"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name: "KEY1",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "NAME1",
+							},
+							Key: "NAME1",
+						},
+					},
+				},
+			},
+		},
+		{
+			testName:     "multi key name secret",
+			envSecretStr: "KEY1=NAME1:SECRETKEY1",
+			expLen:       1,
+			expKeys:      []string{"KEY1"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name: "KEY1",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "NAME1",
+							},
+							Key: "SECRETKEY1",
+						},
+					},
+				},
+			},
+		},
+		{
+			testName:     "multi key name value secret",
+			envSecretStr: "KEY1=NAME1:SECRETKEY1,KEY2=NAME2:SECRETKEY2",
+			expLen:       2,
+			expKeys:      []string{"KEY1", "KEY2"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name: "KEY1",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "NAME1",
+							},
+							Key: "SECRETKEY1",
+						},
+					},
+				},
+				{
+					Name: "KEY2",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "NAME2",
+							},
+							Key: "SECRETKEY2",
+						},
+					},
+				},
+			},
+		},
+		{
+			testName:     "multi key name value secret with spaces",
+			envSecretStr: "KEY1= NAME1 : SECRETKEY1, KEY2= NAME2 : SECRETKEY2",
+			expLen:       2,
+			expKeys:      []string{"KEY1", "KEY2"},
+			expEnv: []corev1.EnvVar{
+				{
+					Name: "KEY1",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "NAME1",
+							},
+							Key: "SECRETKEY1",
+						},
+					},
+				},
+				{
+					Name: "KEY2",
+					ValueFrom: &corev1.EnvVarSource{
+						SecretKeyRef: &corev1.SecretKeySelector{
+							LocalObjectReference: corev1.LocalObjectReference{
+								Name: "NAME2",
+							},
+							Key: "SECRETKEY2",
+						},
+					},
+				},
+			},
+		},
+	}
+	for _, tc := range testCases {
+		t.Run(tc.testName, func(t *testing.T) {
+			c := NewSidecarConfig(&corev1.Pod{})
+			c.EnvFromSecret = tc.envSecretStr
+			envKeys, envVars := c.getEnvFromSecret()
 			assert.Len(t, envVars, tc.expLen)
 			assert.Equal(t, tc.expKeys, envKeys)
 			assert.Equal(t, tc.expEnv, envVars)
@@ -711,6 +837,40 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 	}))
 
+	t.Run("sidecar container should have env vars from secret injected", testCaseFn(testCase{
+		annotations: map[string]string{
+			annotations.KeyEnv:           `HELLO=world`,
+			annotations.KeyEnvFromSecret: `SECRET1=NAME1:SECRETKEY1,SECRET2=NAME2:SECRETKEY2,SECRET3=NAME3`,
+		},
+		assertFn: func(t *testing.T, container *corev1.Container) {
+			expect := map[string]string{
+				"HELLO":                      "world",
+				"SECRET1":                    "NAME1:SECRETKEY1",
+				"SECRET2":                    "NAME2:SECRETKEY2",
+				"SECRET3":                    "NAME3:NAME3",
+				securityConsts.EnvKeysEnvVar: "HELLO SECRET1 SECRET2 SECRET3",
+			}
+
+			found := map[string]string{}
+			for _, env := range container.Env {
+				switch env.Name {
+				case "HELLO", "SECRET1", "SECRET2", "SECRET3", securityConsts.EnvKeysEnvVar:
+					if env.ValueFrom != nil {
+						if env.ValueFrom.SecretKeyRef.Name != "" {
+							found[env.Name] = env.ValueFrom.SecretKeyRef.Name + ":" + env.ValueFrom.SecretKeyRef.Key
+						} else {
+							found[env.Name] = env.ValueFrom.SecretKeyRef.Key
+						}
+					} else {
+						found[env.Name] = env.Value
+					}
+				}
+			}
+
+			assert.Equal(t, expect, found)
+		},
+	}))
+
 	t.Run("sidecar container should specify commands only when ignoreEntrypointTolerations match with the pod", func(t *testing.T) {
 		testCases := []struct {
 			name                        string
@@ -955,9 +1115,24 @@ func TestGetSidecarContainer(t *testing.T) {
 	t.Run("sidecar container should have env vars injected", testCaseFn(testCase{
 		annotations: map[string]string{
 			annotations.KeyEnableProfiling: "true",
+			annotations.KeyEnvFromSecret:   "KEY1=NAME1 ,KEY2=NAME2:SECRETKEY2 ",
 		},
 		assertFn: func(t *testing.T, container *corev1.Container) {
 			assert.Contains(t, container.Args, "--enable-profiling")
+			assert.True(t, func() bool {
+				envVarsCount := 0
+				for _, env := range container.Env {
+					if env.Name == "KEY1" && env.ValueFrom.SecretKeyRef.Name == "NAME1" {
+						envVarsCount++
+					}
+					if env.Name == "KEY2" &&
+						env.ValueFrom.SecretKeyRef.Name == "NAME2" &&
+						env.ValueFrom.SecretKeyRef.Key == "SECRETKEY2" {
+						envVarsCount++
+					}
+				}
+				return envVarsCount == 2
+			}())
 		},
 	}))
 
