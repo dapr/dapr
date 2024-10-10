@@ -140,6 +140,22 @@ func TestMain(m *testing.M) {
 				"TEST_APP_ACTOR_TYPE": actorName,
 			},
 		},
+		{
+			AppName:             appName + "scheduler",
+			DaprEnabled:         true,
+			DebugLoggingEnabled: true,
+			ImageName:           "e2e-actorfeatures",
+			Config:              "featureactorreminderscheduler",
+			Replicas:            1,
+			IngressEnabled:      true,
+			DaprCPULimit:        "2.0",
+			DaprCPURequest:      "0.1",
+			AppCPULimit:         "2.0",
+			AppCPURequest:       "0.1",
+			AppEnv: map[string]string{
+				"TEST_APP_ACTOR_TYPE": actorName,
+			},
+		},
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
