@@ -26,9 +26,11 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/common/expfmt"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -46,9 +48,10 @@ import (
 )
 
 type Scheduler struct {
-	exec    process.Interface
-	ports   *ports.Ports
-	running atomic.Bool
+	exec       process.Interface
+	ports      *ports.Ports
+	running    atomic.Bool
+	httpClient *http.Client
 
 	port        int
 	healthzPort int
@@ -139,6 +142,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 			))...,
 		),
 		ports:           fp,
+		httpClient:      client.HTTP(t),
 		id:              opts.id,
 		port:            opts.port,
 		healthzPort:     opts.healthzPort,
@@ -215,6 +219,15 @@ func (s *Scheduler) DataDir() string {
 	return s.dataDir
 }
 
+func (s *Scheduler) ETCDClient(t *testing.T) *client.EtcdClient {
+	t.Helper()
+
+	return client.Etcd(t, clientv3.Config{
+		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
+		DialTimeout: 40 * time.Second,
+	})
+}
+
 func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, s.Address(), grpc.WithBlock(), grpc.WithReturnConnectionError(),
@@ -264,4 +277,61 @@ func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) 
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 	return schedulerv1pb.NewSchedulerClient(conn)
+}
+
+func (s *Scheduler) ipPort(port int) string {
+	return "127.0.0.1:" + strconv.Itoa(port)
+}
+
+func (s *Scheduler) MetricsAddress() string {
+	return s.ipPort(s.MetricsPort())
+}
+
+// Metrics returns a subset of metrics scraped from the metrics endpoint
+func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()), nil)
+	require.NoError(t, err)
+
+	resp, err := s.httpClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Extract the metrics
+	parser := expfmt.TextParser{}
+	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	metrics := make(map[string]float64)
+	for _, mf := range metricFamilies {
+		for _, m := range mf.GetMetric() {
+			metricName := mf.GetName()
+			labels := ""
+			for _, l := range m.GetLabel() {
+				labels += "|" + l.GetName() + ":" + l.GetValue()
+			}
+			if counter := m.GetCounter(); counter != nil {
+				metrics[metricName+labels] = counter.GetValue()
+				continue
+			}
+			if gauge := m.GetGauge(); gauge != nil {
+				metrics[metricName+labels] = gauge.GetValue()
+				continue
+			}
+			h := m.GetHistogram()
+			if h == nil {
+				continue
+			}
+			for _, b := range h.GetBucket() {
+				bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.FormatUint(uint64(b.GetUpperBound()), 10)
+				metrics[bucketKey] = float64(b.GetCumulativeCount())
+			}
+			metrics[metricName+"_count"+labels] = float64(h.GetSampleCount())
+			metrics[metricName+"_sum"+labels] = h.GetSampleSum()
+		}
+	}
+
+	return metrics
 }

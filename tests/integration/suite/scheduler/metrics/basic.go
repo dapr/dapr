@@ -11,12 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package api
+package metrics
 
 import (
 	"context"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -32,36 +31,34 @@ import (
 )
 
 func init() {
-	suite.Register(new(jobs))
+	suite.Register(new(basic))
 }
 
-// schedulejobs tests scheduling jobs against the scheduler.
-type jobs struct {
+type basic struct {
 	scheduler *scheduler.Scheduler
 
 	idPrefix string
 }
 
-func (j *jobs) Setup(t *testing.T) []framework.Option {
+func (b *basic) Setup(t *testing.T) []framework.Option {
 	uuid, err := uuid.NewUUID()
 	require.NoError(t, err)
-	j.idPrefix = uuid.String()
+	b.idPrefix = uuid.String()
 
-	j.scheduler = scheduler.New(t)
+	b.scheduler = scheduler.New(t)
 
 	return []framework.Option{
-		framework.WithProcesses(j.scheduler),
+		framework.WithProcesses(b.scheduler),
 	}
 }
 
-func (j *jobs) Run(t *testing.T, ctx context.Context) {
-	j.scheduler.WaitUntilRunning(t, ctx)
+func (b *basic) Run(t *testing.T, ctx context.Context) {
+	b.scheduler.WaitUntilRunning(t, ctx)
+	client := b.scheduler.Client(t, ctx)
 
-	client := j.scheduler.Client(t, ctx)
-
-	t.Run("CRUD 10 jobs", func(t *testing.T) {
+	t.Run("create 10 jobs, ensure metrics", func(t *testing.T) {
 		for i := 1; i <= 10; i++ {
-			name := j.idPrefix + "_" + strconv.Itoa(i)
+			name := b.idPrefix + "_" + strconv.Itoa(i)
 
 			req := &schedulerv1.ScheduleJobRequest{
 				Name: name,
@@ -69,7 +66,7 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 					Schedule: ptr.Of("@every 20s"),
 					Repeats:  ptr.Of(uint32(1)),
 					Data: &anypb.Any{
-						Value: []byte(j.idPrefix),
+						Value: []byte(b.idPrefix),
 					},
 					Ttl: ptr.Of("30s"),
 				},
@@ -85,8 +82,6 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
 
-			assert.True(t, j.etcdHasJob(t, ctx, name))
-
 			resp, err := client.GetJob(ctx, &schedulerv1.GetJobRequest{
 				Name: name,
 				Metadata: &schedulerv1.JobMetadata{
@@ -97,45 +92,11 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 					},
 				},
 			})
-			require.NoError(t, err)
-			assert.Equal(t, "@every 20s", resp.GetJob().GetSchedule())
-			assert.Equal(t, uint32(1), resp.GetJob().GetRepeats())
-			assert.Equal(t, "30s", resp.GetJob().GetTtl())
-			assert.Equal(t, &anypb.Any{
-				Value: []byte(j.idPrefix),
-			}, resp.GetJob().GetData())
-		}
-
-		for i := 1; i <= 10; i++ {
-			name := j.idPrefix + "_" + strconv.Itoa(i)
-
-			_, err := client.DeleteJob(ctx, &schedulerv1.DeleteJobRequest{
-				Name: name,
-				Metadata: &schedulerv1.JobMetadata{
-					AppId:     "appid",
-					Namespace: "namespace",
-					Target: &schedulerv1.JobTargetMetadata{
-						Type: new(schedulerv1.JobTargetMetadata_Job),
-					},
-				},
-			})
+			assert.NotNil(t, resp)
 			require.NoError(t, err)
 
-			assert.False(t, j.etcdHasJob(t, ctx, name))
+			metrics := b.scheduler.Metrics(t, ctx)
+			assert.Equal(t, i, int(metrics["dapr_scheduler_jobs_created_total"]))
 		}
 	})
-}
-
-func (j *jobs) etcdHasJob(t *testing.T, ctx context.Context, key string) bool {
-	t.Helper()
-
-	// Get keys with prefix
-	keys := j.scheduler.ETCDClient(t).Get(t, ctx, "")
-	for _, k := range keys {
-		if strings.HasSuffix(k, "||"+key) {
-			return true
-		}
-	}
-
-	return false
 }
