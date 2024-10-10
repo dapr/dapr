@@ -30,10 +30,6 @@ affinity:
             operator: In
             values:
             - linux
-          - key: kubernetes.io/arch
-            operator: In
-            values:
-            - amd64
 
 zookeeper:
   persistence:
@@ -47,7 +43,3 @@ zookeeper:
               operator: In
               values:
               - linux
-            - key: kubernetes.io/arch
-              operator: In
-              values:
-              - amd64
