@@ -87,7 +87,7 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 		DialTimeout: 5 * time.Second,
 	})
 
-	// Use "path" import, to have the same path separator across OS
+	// should have the same path separator across OS
 	etcdKeysPrefix := "dapr/jobs"
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

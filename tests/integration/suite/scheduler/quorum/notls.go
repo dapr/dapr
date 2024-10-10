@@ -146,7 +146,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 func (n *notls) checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
 	t.Helper()
 
-	// Use "path" import, to have the same path separator across OS
+	// should have the same path separator across OS
 	jobPrefix := "dapr/jobs/app"
 	found := false
 	for _, kv := range keys {
