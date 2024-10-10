@@ -1295,6 +1295,9 @@ message ConversationAlpha1Request {
 
   // The metadata passing to conversation components.
   map<string, string> metadata = 5;
+
+  // Scrub PII data that comes back from the LLM
+  optional bool piiScrubOutput = 6;
 }
 
 message ConversationInput {
@@ -1303,6 +1306,9 @@ message ConversationInput {
 
   // The role to set for the message
   optional string role = 2;
+
+  // Scrub PII data that goes into the LLM
+  optional bool piiScrubInput = 3;
 }
 
 // ConversationAlpha1Result is the result for one input.

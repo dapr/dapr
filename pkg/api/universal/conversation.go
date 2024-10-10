@@ -16,6 +16,7 @@ package universal
 import (
 	"context"
 
+	piiscrubber "github.com/aavaz-ai/pii-scrubber"
 	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -51,9 +52,29 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		return nil, err
 	}
 
+	scrubber, err := piiscrubber.NewDefaultScrubber()
+	if err != nil {
+		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
+		a.logger.Debug(err)
+		return &runtimev1pb.ConversationAlpha1Response{}, err
+	}
+
 	for _, i := range req.GetInputs() {
+		msg := i.GetMessage()
+
+		if i.GetPiiScrubInput() {
+			scrubbed, err := scrubber.ScrubTexts([]string{i.GetMessage()})
+			if err != nil {
+				err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+				a.logger.Debug(err)
+				return &runtimev1pb.ConversationAlpha1Response{}, err
+			}
+
+			msg = scrubbed[0]
+		}
+
 		c := conversation.ConversationInput{
-			Message: i.GetMessage(),
+			Message: msg,
 			Role:    conversation.Role(i.GetRole()),
 		}
 
@@ -75,7 +96,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 		a.logger.Debug(err)
-		return nil, err
+		return &runtimev1pb.ConversationAlpha1Response{}, err
 	}
 
 	// handle response
@@ -86,10 +107,23 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 			response.ConversationContext = &resp.ConversationContext
 		}
 
-		for i := range resp.Outputs {
+		for _, o := range resp.Outputs {
+			res := o.Result
+
+			if req.GetPiiScrubOutput() {
+				scrubbed, err := scrubber.ScrubTexts([]string{o.Result})
+				if err != nil {
+					err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
+					a.logger.Debug(err)
+					return &runtimev1pb.ConversationAlpha1Response{}, err
+				}
+
+				res = scrubbed[0]
+			}
+
 			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationAlpha1Result{
-				Result:     resp.Outputs[i].Result,
-				Parameters: resp.Outputs[i].Parameters,
+				Result:     res,
+				Parameters: o.Parameters,
 			})
 		}
 	}
