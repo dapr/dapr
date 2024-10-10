@@ -62,7 +62,7 @@ func (s *Serializer) FromRequest(ctx context.Context, req Request) (*Job, error)
 		return nil, err
 	}
 
-	name, err := buildJobName(req.GetName(), req.GetMetadata())
+	name, err := buildJobName(req)
 	if err != nil {
 		return nil, err
 	}
@@ -119,7 +119,14 @@ func (j *Job) Metadata() *anypb.Any {
 	return j.meta
 }
 
-func buildJobName(name string, meta *schedulerv1pb.JobMetadata) (string, error) {
+func buildJobName(req Request) (string, error) {
+	joinStrings := func(ss ...string) string {
+		return strings.Join(ss, "||")
+	}
+
+	name := req.GetName()
+	meta := req.GetMetadata()
+
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Actor:
 		actor := t.GetActor()

@@ -81,6 +81,8 @@ func (i *Informer) Handler(t *testing.T, wrapped http.Handler) http.HandlerFunc 
 			split = split[2:]
 		}
 		if split[0] == "namespaces" {
+			// namespace resources are special cased in the Kubernetes CRUD resource
+			// URL, so we need to handle them differently.
 			if len(split) > 1 {
 				split = split[2:]
 				gvk.Kind = split[0]

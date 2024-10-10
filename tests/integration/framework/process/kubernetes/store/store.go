@@ -50,6 +50,7 @@ func (s *Store) Delete(objs ...client.Object) {
 	defer s.lock.Unlock()
 	if s.objs == nil {
 		s.objs = make(map[string]client.Object)
+		return
 	}
 	for _, obj := range objs {
 		delete(s.objs, obj.GetNamespace()+"/"+obj.GetName())
