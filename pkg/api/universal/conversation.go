@@ -53,11 +53,8 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 
 	for _, i := range req.GetInputs() {
 		c := conversation.ConversationInput{
-			Message: i.Message,
-		}
-
-		if i.Role != nil {
-			c.Role = conversation.Role(*i.Role)
+			Message: i.GetMessage(),
+			Role:    conversation.Role(i.GetRole()),
 		}
 
 		request.Inputs = append(request.Inputs, c)
