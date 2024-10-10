@@ -219,11 +219,11 @@ jobs:
         dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
         df -h
         echo "Removing large packages"
-        sudo apt-get remove -y --ignore-missing '^dotnet-.*'
-        sudo apt-get remove -y --ignore-missing '^llvm-.*'
-        sudo apt-get remove -y --ignore-missing 'php.*'
-        sudo apt-get remove -y --ignore-missing 'temurin-*'
-        sudo apt-get remove -y --ignore-missing microsoft-edge-stable azure-cli google-chrome-stable firefox powershell mono-devel
+        sudo apt-get remove -y '^dotnet-.*'
+        sudo apt-get remove -y '^llvm-.*'
+        sudo apt-get remove -y 'php.*'
+        sudo apt-get remove -y 'temurin-*'
+        sudo apt-get remove -y microsoft-edge-stable azure-cli google-chrome-stable firefox powershell mono-devel
         sudo apt-get autoremove -y
         sudo apt-get clean
         df -h
