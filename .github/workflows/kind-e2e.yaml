@@ -27,6 +27,8 @@ defaults:
   run:
     shell: bash
 
+permissions: {}
+
 jobs:
   # This workflow runs our e2e tests in a local KinD cluster. Since it
   # does not required a paid cluster and special credentials, it does
@@ -44,6 +46,8 @@ jobs:
   e2e:
     name: e2e
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       REGISTRY_PORT: 5000
       REGISTRY_NAME: kind-registry
@@ -215,6 +219,7 @@ jobs:
         dpkg-query -Wf '${Installed-Size}\t${Package}\n' | sort -n | tail -n 100
         df -h
         echo "Removing large packages"
+        sudo apt-get update
         sudo apt-get remove -y '^dotnet-.*'
         sudo apt-get remove -y '^llvm-.*'
         sudo apt-get remove -y 'php.*'
