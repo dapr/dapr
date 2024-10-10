@@ -266,6 +266,8 @@ spec:
                         description: If true (default is false) HTTP verbs (e.g., GET, POST) are excluded from the metrics.
                         type: boolean
                     type: object
+                  recordErrorCodes:
+                    type: boolean
                   rules:
                     items:
                       description: MetricsRule defines configuration options for a
@@ -329,6 +331,8 @@ spec:
                     items:
                       type: integer
                     type: array
+                  recordErrorCodes:
+                    type: boolean
                   rules:
                     items:
                       description: MetricsRule defines configuration options for a
