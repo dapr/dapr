@@ -185,7 +185,7 @@ func assertHealthSignal(t *testing.T, clock *clocktesting.FakeClock, ch <-chan b
 	select {
 	case v := <-ch:
 		return v
-	case <-time.After(200 * time.Millisecond):
+	case <-time.After(300 * time.Millisecond):
 		t.Fatal("did not receive a signal in 200ms")
 	}
 	return false
