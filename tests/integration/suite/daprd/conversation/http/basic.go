@@ -66,7 +66,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	t.Run("good json", func(t *testing.T) {
 		body := `{"inputs":[{"message":"well hello there"}]}`
 
-		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(string(body)))
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 		require.NoError(t, err)
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
