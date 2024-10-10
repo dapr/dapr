@@ -17,6 +17,7 @@ import (
 	"context"
 
 	piiscrubber "github.com/aavaz-ai/pii-scrubber"
+
 	"github.com/dapr/components-contrib/conversation"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -63,11 +64,11 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		msg := i.GetMessage()
 
 		if i.GetPiiScrubInput() {
-			scrubbed, err := scrubber.ScrubTexts([]string{i.GetMessage()})
-			if err != nil {
-				err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-				a.logger.Debug(err)
-				return &runtimev1pb.ConversationAlpha1Response{}, err
+			scrubbed, sErr := scrubber.ScrubTexts([]string{i.GetMessage()})
+			if sErr != nil {
+				sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
+				a.logger.Debug(sErr)
+				return &runtimev1pb.ConversationAlpha1Response{}, sErr
 			}
 
 			msg = scrubbed[0]
@@ -111,11 +112,11 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 			res := o.Result
 
 			if req.GetPiiScrubOutput() {
-				scrubbed, err := scrubber.ScrubTexts([]string{o.Result})
-				if err != nil {
-					err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
-					a.logger.Debug(err)
-					return &runtimev1pb.ConversationAlpha1Response{}, err
+				scrubbed, sErr := scrubber.ScrubTexts([]string{o.Result})
+				if sErr != nil {
+					sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
+					a.logger.Debug(sErr)
+					return &runtimev1pb.ConversationAlpha1Response{}, sErr
 				}
 
 				res = scrubbed[0]
