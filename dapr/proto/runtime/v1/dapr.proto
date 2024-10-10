@@ -1288,13 +1288,21 @@ message ConversationAlpha1Request {
   optional string conversationContext = 2;
 
   // Inputs for the conversation, support multiple input in one time.
-  repeated string inputs = 3;
+  repeated ConversationInput inputs = 3;
 
   // Parameters for all custom fields.
   map<string, google.protobuf.Any> parameters = 4;
 
   // The metadata passing to conversation components.
   map<string, string> metadata = 5;
+}
+
+message ConversationInput {
+  // The message to send to the llm
+  string message = 1;
+
+  // The role to set for the message
+  optional string role = 2;
 }
 
 // ConversationAlpha1Result is the result for one input.
