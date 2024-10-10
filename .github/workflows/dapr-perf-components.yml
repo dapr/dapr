@@ -30,6 +30,9 @@ on:
   # Dispatch on external events
   repository_dispatch:
     types: [components-perf-test]
+
+permissions: {}
+
 env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
@@ -50,6 +53,9 @@ jobs:
   deploy-infrastructure:
     name: Deploy test infrastructure
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Set up for scheduled test
         if: github.event_name != 'repository_dispatch'
@@ -184,6 +190,9 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       GOOS: linux
       GOARCH: amd64
@@ -313,6 +322,9 @@ jobs:
       - build
       - deploy-infrastructure
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       GOOS: linux
       GOARCH: amd64
