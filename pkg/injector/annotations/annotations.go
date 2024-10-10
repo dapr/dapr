@@ -35,6 +35,7 @@ const (
 	KeyEnableDebug                      = "dapr.io/enable-debug"
 	KeyDebugPort                        = "dapr.io/debug-port"
 	KeyEnv                              = "dapr.io/env"
+	KeyEnvFromSecret                    = "dapr.io/env-from-secret"
 	KeyCPURequest                       = "dapr.io/sidecar-cpu-request"
 	KeyCPULimit                         = "dapr.io/sidecar-cpu-limit"
 	KeyMemoryRequest                    = "dapr.io/sidecar-memory-request"
