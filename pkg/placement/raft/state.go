@@ -14,6 +14,7 @@ limitations under the License.
 package raft
 
 import (
+	"errors"
 	"fmt"
 	"io"
 	"sync"
@@ -25,7 +26,7 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
-var ErrNamespaceNotFound = fmt.Errorf("namespace not found")
+var ErrNamespaceNotFound = errors.New("namespace not found")
 
 // DaprHostMember represents Dapr runtime actor host member which serve actor types.
 type DaprHostMember struct {
@@ -382,10 +383,10 @@ func (s *DaprHostMemberState) upsertMember(host *DaprHostMember) bool {
 
 	ns, ok := s.data.Namespace[host.Namespace]
 	if !ok {
-		s.data.Namespace[host.Namespace] = &daprNamespace{
+		ns = &daprNamespace{
 			Members: make(map[string]*DaprHostMember),
 		}
-		ns = s.data.Namespace[host.Namespace]
+		s.data.Namespace[host.Namespace] = ns
 	}
 
 	if m, ok := ns.Members[host.Name]; ok {
@@ -473,6 +474,9 @@ func (s *DaprHostMemberState) restore(r io.Reader) error {
 	defer s.lock.Unlock()
 
 	s.data = data
+	if s.data.Namespace == nil {
+		s.data.Namespace = make(map[string]*daprNamespace)
+	}
 
 	s.restoreHashingTables()
 	s.updateAPILevel()

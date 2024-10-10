@@ -20,6 +20,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/http"
 	"strconv"
 	"testing"
 	"time"
@@ -50,6 +51,7 @@ import (
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	daprerrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/api/universal"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -634,6 +636,8 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 
 	for _, tt := range httpResponseTests {
 		t.Run(fmt.Sprintf("handle http %d response code", tt.status), func(t *testing.T) {
+			// TODO: fix types
+			//nolint:gosec
 			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil).
 				WithRawDataString(tt.errHTTPMessage).
 				WithContentType("application/json")
@@ -2092,7 +2096,7 @@ func TestGetBulkState(t *testing.T) {
 				if len(tt.expectedResponse) == 0 {
 					assert.Empty(t, resp.GetItems(), "Expected response to be empty")
 				} else {
-					for i := 0; i < len(resp.GetItems()); i++ {
+					for i := range resp.GetItems() {
 						if tt.expectedResponse[i].GetError() == "" {
 							assert.Equal(t, resp.GetItems()[i].GetData(), tt.expectedResponse[i].GetData(), "Expected response Data to be same")
 							assert.Equal(t, resp.GetItems()[i].GetEtag(), tt.expectedResponse[i].GetEtag(), "Expected response Etag to be same")
@@ -2769,7 +2773,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 
 	tooManyOperations := make([]*runtimev1pb.TransactionalStateOperation, 20)
-	for i := 0; i < 20; i++ {
+	for i := range tooManyOperations {
 		tooManyOperations[i] = &runtimev1pb.TransactionalStateOperation{
 			OperationType: string(state.OperationUpsert),
 			Request: &commonv1pb.StateItem{
@@ -2910,6 +2914,14 @@ func TestStateStoreErrors(t *testing.T) {
 		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
 
 		assert.Equal(t, "rpc error: code = Internal desc = failed deleting state with key a: error", err2.Error())
+	})
+
+	t.Run("standardized error", func(t *testing.T) {
+		a := &api{}
+		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, http.StatusNotFound, "", "testReason")
+		err2 := a.stateErrorResponse(standardizedErr, messages.ErrStateSave, "a", standardizedErr.Error())
+
+		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", err2.Error())
 	})
 }
 
@@ -3846,6 +3858,10 @@ func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.Subs
 }
 
 func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
+	return nil
+}
+
+func (m *mockConfigStore) Close() error {
 	return nil
 }
 

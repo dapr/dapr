@@ -664,7 +664,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				doneCh <- errors.New("timeout waiting for externalCalledCh")
 			}
 		}()
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			require.NoError(t, <-doneCh)
 		}
 		require.GreaterOrEqual(t, time.Since(start), d)
@@ -816,7 +816,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				doneCh <- nil
 			}
 		}()
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			require.NoError(t, <-doneCh)
 		}
 		require.GreaterOrEqual(t, time.Since(start), d)
@@ -944,7 +944,7 @@ func TestSubscribeToInternalTopics(t *testing.T) {
 				doneCh <- nil
 			}
 		}()
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			require.NoError(t, <-doneCh)
 		}
 		require.GreaterOrEqual(t, time.Since(start), d)
@@ -1067,6 +1067,10 @@ func (o *outboxStateMock) BulkSet(ctx context.Context, req []state.SetRequest, o
 }
 
 func (o *outboxStateMock) BulkDelete(ctx context.Context, req []state.DeleteRequest, opts state.BulkStoreOpts) error {
+	return nil
+}
+
+func (o *outboxStateMock) Close() error {
 	return nil
 }
 

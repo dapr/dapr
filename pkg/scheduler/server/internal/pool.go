@@ -198,6 +198,7 @@ func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, error) {
 		if !ok || len(appIDConns) == 0 {
 			return nil, fmt.Errorf("no connections available for appID: %s", meta.GetAppId())
 		}
+		//nolint:gosec
 		conn := nsPool.conns[appIDConns[int(idx)%len(appIDConns)]]
 		return conn, nil
 
@@ -207,6 +208,7 @@ func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, error) {
 			return nil, fmt.Errorf("no connections available for actorType: %s", t.GetActor().GetType())
 		}
 
+		//nolint:gosec
 		conn := nsPool.conns[actorTypeConns[int(idx)%len(actorTypeConns)]]
 		return conn, nil
 
