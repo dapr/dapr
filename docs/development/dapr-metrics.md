@@ -97,8 +97,8 @@ Dapr uses prometheus process and go collectors by default.
 
 #### Resiliency
 
-* dapr_resiliency_loaded: The number of resiliency policies loaded.
-* dapr_resiliency_count: The number of times a resiliency policy has been executed.
+* dapr_resiliency_loaded_total: The number of resiliency policies loaded.
+* dapr_resiliency_count_total: The number of times a resiliency policy has been executed.
 * dapr_resiliency_activations_total: Number of times a resiliency policy has been activated in a building block after a failure or after a state change.
 
 #### Workflow metrics
@@ -140,9 +140,9 @@ We support only server side metrics.
 #### Server metrics
 > Note: Server metrics are prefixed by a forward slash character `/`
 
-* dapr_http_server_request_count: Number of HTTP requests started in server
+* dapr_http_server_request_count_total: Number of HTTP requests started in server
 * dapr_http_server_request_bytes: HTTP request body size if set as ContentLength (uncompressed) in server
-* dapr_http_server_response_count: Number of HTTP responses in server
+* dapr_http_server_response_count_total: Number of HTTP responses in server
 * dapr_http_server_response_bytes: HTTP response body size (uncompressed) in server.
 * dapr_http_server_latency: HTTP request end to end latency in server.
 
@@ -151,36 +151,36 @@ We support only server side metrics.
 * dapr_http_client_sent_bytes: Total bytes sent in request body (not including headers)
 * dapr_http_client_received_bytes: Total bytes received in response bodies (not including headers but including error responses with bodies)
 * dapr_http_client_roundtrip_latency: End-to-end latency
-* dapr_http_client_completed_count: Count of completed requests
+* dapr_http_client_completed_count_total: Count of completed requests
 
 ## Dapr Component Metrics
 
 ### Pub/Sub metrics
 
 * dapr_component_pubsub_ingress_latencies: The consuming app event processing latency
-* dapr_component_pubsub_ingress_count: The number of incoming messages arriving from the pub/sub component
-* dapr_component_pubsub_egress_count: The number of outgoing messages published to the pub/sub component
+* dapr_component_pubsub_ingress_count_total: The number of incoming messages arriving from the pub/sub component
+* dapr_component_pubsub_egress_count_total: The number of outgoing messages published to the pub/sub component
 * dapr_component_pubsub_egress_latencies: The latency of the response from the pub/sub component
 
 ### Bindings metrics
 
-* dapr_component_input_binding_count: The number of incoming events arriving from the input binding component
+* dapr_component_input_binding_count_total: The number of incoming events arriving from the input binding component
 * dapr_component_input_binding_latencies: The triggered app event processing latency
-* dapr_component_output_binding_count: The number of operations invoked on the output binding component
+* dapr_component_output_binding_count_total: The number of operations invoked on the output binding component
 * dapr_component_output_binding_latencies: The latency of the response from the output binding component
 
 ### State metrics
 
-* dapr_component_state_count: The number of operations performed on the state component
+* dapr_component_state_count_total: The number of operations performed on the state component
 * dapr_component_state_latencies: The latency of the response from the state component
 
 ### Configuration metrics
 
-* dapr_component_configuration_count: The number of operations performed on the configuration component
+* dapr_component_configuration_count_total: The number of operations performed on the configuration component
 * dapr_component_configuration_latencies: The latency of the response from the configuration component
 
 ### Secret metrics
 
-* dapr_component_secret_count: The number of operations performed on the secret component
+* dapr_component_secret_count_total: The number of operations performed on the secret component
 * dapr_component_secret_latencies: The latency of the response from the secret component
 
