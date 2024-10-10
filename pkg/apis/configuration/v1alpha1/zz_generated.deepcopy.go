@@ -501,6 +501,11 @@ func (in *MetricSpec) DeepCopyInto(out *MetricSpec) {
 		*out = new(bool)
 		**out = **in
 	}
+	if in.RecordErrorCodes != nil {
+		in, out := &in.RecordErrorCodes, &out.RecordErrorCodes
+		*out = new(bool)
+		**out = **in
+	}
 	if in.HTTP != nil {
 		in, out := &in.HTTP, &out.HTTP
 		*out = new(MetricHTTP)

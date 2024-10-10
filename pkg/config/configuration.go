@@ -254,8 +254,9 @@ func (o OtelSpec) GetIsSecure() bool {
 // MetricSpec configuration for metrics.
 type MetricSpec struct {
 	// Defaults to true
-	Enabled *bool       `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	HTTP    *MetricHTTP `json:"http,omitempty" yaml:"http,omitempty"`
+	Enabled          *bool       `json:"enabled,omitempty" yaml:"enabled,omitempty"`
+	RecordErrorCodes *bool       `json:"recordErrorCodes,omitempty"`
+	HTTP             *MetricHTTP `json:"http,omitempty" yaml:"http,omitempty"`
 	// Latency distribution buckets. If not set, the default buckets are used.
 	LatencyDistributionBuckets *[]int        `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`
 	Rules                      []MetricsRule `json:"rules,omitempty" yaml:"rules,omitempty"`
@@ -315,6 +316,15 @@ func (m MetricSpec) GetHTTPPathMatching() []string {
 		return nil
 	}
 	return m.HTTP.PathMatching
+}
+
+// GetRecordErrorCodes returns true if `recordErrorCodes` is enabled for metrics
+func (m MetricSpec) GetRecordErrorCodes() bool {
+	if m.RecordErrorCodes == nil {
+		// The default is false
+		return false
+	}
+	return *m.RecordErrorCodes
 }
 
 // MetricHTTP defines configuration for metrics for the HTTP server
