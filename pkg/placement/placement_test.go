@@ -45,11 +45,12 @@ func newTestPlacementServer(t *testing.T, raftServer *raft.Server) (string, *Ser
 	port, err := freeport.GetFreePort()
 	require.NoError(t, err)
 
-	testServer := NewPlacementService(PlacementServiceOpts{
-		RaftNode:    raftServer,
-		SecProvider: securityfake.New(),
-		Port:        port,
-		Healthz:     healthz.New(),
+	testServer := NewPlacementService(ServiceOpts{
+		RaftNode:           raftServer,
+		SecProvider:        securityfake.New(),
+		Port:               port,
+		Healthz:            healthz.New(),
+		DisseminateTimeout: 2 * time.Second,
 	})
 	clock := clocktesting.NewFakeClock(time.Now())
 	testServer.clock = clock

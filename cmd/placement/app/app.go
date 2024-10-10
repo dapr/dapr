@@ -37,11 +37,14 @@ import (
 var log = logger.NewLogger("dapr.placement")
 
 func Run() {
-	opts := options.New(os.Args[1:])
+	opts, err := options.New(os.Args[1:])
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	// Apply options to all loggers.
-	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
-		log.Fatal(err)
+	if e := logger.ApplyOptionsToLoggers(&opts.Logger); e != nil {
+		log.Fatal(e)
 	}
 
 	log.Infof("Starting Dapr Placement Service -- version %s -- commit %s", buildinfo.Version(), buildinfo.Commit())
@@ -56,9 +59,8 @@ func Run() {
 		Healthz:   healthz,
 	})
 
-	err := monitoring.InitMetrics()
-	if err != nil {
-		log.Fatal(err)
+	if e := monitoring.InitMetrics(); e != nil {
+		log.Fatal(e)
 	}
 
 	ctx := signals.Context()
@@ -95,11 +97,14 @@ func Run() {
 		log.Fatal("Failed to create raft server.")
 	}
 
-	placementOpts := placement.PlacementServiceOpts{
-		Port:        opts.PlacementPort,
-		RaftNode:    raftServer,
-		SecProvider: secProvider,
-		Healthz:     healthz,
+	placementOpts := placement.ServiceOpts{
+		Port:               opts.PlacementPort,
+		RaftNode:           raftServer,
+		SecProvider:        secProvider,
+		Healthz:            healthz,
+		KeepAliveTime:      opts.KeepAliveTime,
+		KeepAliveTimeout:   opts.KeepAliveTimeout,
+		DisseminateTimeout: opts.DisseminateTimeout,
 	}
 	if opts.MinAPILevel >= 0 && opts.MinAPILevel < math.MaxInt32 {
 		// TODO: fix types

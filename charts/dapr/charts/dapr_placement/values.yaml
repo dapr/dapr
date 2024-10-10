@@ -25,6 +25,9 @@ ha: false
 
 maxActorApiLevel: 10
 minActorApiLevel: 0
+keepAliveTime: 2s
+keepAliveTimeout: 3s
+disseminateTimeout: 2s
 
 cluster:
   forceInMemoryLog: false
