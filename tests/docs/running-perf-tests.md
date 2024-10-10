@@ -58,6 +58,11 @@ Performance tests are designed to let you evaluate the latency, resource usage a
 
 ### Deploy your dapr runtime change
 
+**Note**: If you are running MacBook with Apple Silicon M chip, you need to set `TARGET_ARCH` to `arm64` before running `make build-linux`
+```shell
+export TARGET_ARCH=arm64
+```
+
 Run the below commands to build and deploy dapr from your local disk
 
 ```bash
