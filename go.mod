@@ -6,6 +6,7 @@ toolchain go1.23.1
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
+	github.com/AdaLogics/go-fuzz-headers v0.0.0-20230811130428-ced1acdcaa24
 	github.com/PaesslerAG/jsonpath v0.1.1
 	github.com/PuerkitoBio/purell v1.2.1
 	github.com/alphadose/haxmap v1.4.0
