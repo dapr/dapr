@@ -11,11 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package jobs
+package serialize
 
-import (
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/grpc"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/http"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/kubernetes"
-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/streaming"
-)
+func PrefixesFromNamespace(namespace string) []string {
+	return []string{
+		"actorreminder||" + namespace,
+		"app||" + namespace,
+	}
+}

@@ -45,6 +45,17 @@ func (s *Store) Add(objs ...client.Object) {
 	}
 }
 
+func (s *Store) Delete(objs ...client.Object) {
+	s.lock.Lock()
+	defer s.lock.Unlock()
+	if s.objs == nil {
+		s.objs = make(map[string]client.Object)
+	}
+	for _, obj := range objs {
+		delete(s.objs, obj.GetNamespace()+"/"+obj.GetName())
+	}
+}
+
 func (s *Store) Set(objs ...client.Object) {
 	s.lock.Lock()
 	defer s.lock.Unlock()

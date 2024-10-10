@@ -13,7 +13,13 @@ limitations under the License.
 
 package placement
 
-import "github.com/dapr/dapr/tests/integration/framework/process/exec"
+import (
+	"testing"
+
+	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/kit/ptr"
+)
 
 // Option is a function that configures the process.
 type Option func(*options)
@@ -88,6 +94,14 @@ func WithEnableTLS(enable bool) Option {
 func WithSentryAddress(sentryAddress string) Option {
 	return func(o *options) {
 		o.sentryAddress = &sentryAddress
+	}
+}
+
+func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
+	return func(o *options) {
+		o.tlsEnabled = true
+		o.sentryAddress = ptr.Of(sentry.Address())
+		o.trustAnchorsFile = ptr.Of(sentry.TrustAnchorsFile(t))
 	}
 }
 

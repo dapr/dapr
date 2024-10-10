@@ -102,6 +102,7 @@ func Run() {
 				DataDir:                 opts.EtcdDataDir,
 				ReplicaCount:            opts.ReplicaCount,
 				ReplicaID:               opts.ReplicaID,
+				KubeConfig:              opts.KubeConfig,
 				EtcdID:                  opts.ID,
 				EtcdInitialPeers:        opts.EtcdInitialPeers,
 				EtcdClientPorts:         opts.EtcdClientPorts,
