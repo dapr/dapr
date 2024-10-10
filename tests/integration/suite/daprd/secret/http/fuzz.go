@@ -61,7 +61,7 @@ func (f *fuzzsecret) Setup(t *testing.T) []framework.Option {
 	f.secretStoreName = uid.String()
 
 	f.values = make(map[string]string)
-	for i := 0; i < numTests; i++ {
+	for range numTests {
 		var key, value string
 		for len(key) == 0 || takenNames[key] {
 			fuzz.New().Fuzz(&key)
@@ -116,8 +116,6 @@ func (f *fuzzsecret) Run(t *testing.T, ctx context.Context) {
 
 	pt := parallel.New(t)
 	for key, value := range f.values {
-		key := key
-		value := value
 		pt.Add(func(t *assert.CollectT) {
 			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/%s", f.daprd.HTTPPort(), url.QueryEscape(f.secretStoreName), url.QueryEscape(key))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)

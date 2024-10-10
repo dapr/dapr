@@ -84,7 +84,6 @@ func TestParseEnvString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			c := NewSidecarConfig(&corev1.Pod{})
 			c.Env = tc.envStr

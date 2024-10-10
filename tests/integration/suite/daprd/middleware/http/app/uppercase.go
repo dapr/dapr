@@ -60,7 +60,7 @@ spec:
 	handler.HandleFunc("/", func(http.ResponseWriter, *http.Request) {})
 	handler.HandleFunc("/foo", func(w http.ResponseWriter, r *http.Request) {
 		_, err := io.Copy(w, r.Body)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	})
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 
