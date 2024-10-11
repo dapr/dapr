@@ -52,7 +52,7 @@ func New(origArgs []string) *Options {
 	}
 
 	// Create a flag set
-	fs := pflag.NewFlagSet("sentry", pflag.ExitOnError)
+	fs := pflag.NewFlagSet("injector", pflag.ExitOnError)
 	fs.SortFlags = true
 
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port used for health checks")
