@@ -126,9 +126,9 @@ func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 
 		// assert cb execution,activation,and current state counts
 		mtc := d.daprdClient.Metrics(t, context.Background())
-		assert.Equal(t, float64(4), mtc["dapr_resiliency_count|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"])
-		assert.Equal(t, float64(0), mtc["dapr_resiliency_activations_total|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:open|target:app_server"])
-		assert.Equal(t, float64(1), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"])
+		assert.InDelta(t, float64(4), mtc["dapr_resiliency_count|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"], 0)
+		assert.InDelta(t, float64(0), mtc["dapr_resiliency_activations_total|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:open|target:app_server"], 0)
+		assert.InDelta(t, float64(1), mtc["dapr_resiliency_cb_state|app_id:client|flow_direction:outbound|name:myresiliency|namespace:|policy:circuitbreaker|status:closed|target:app_server"], 0)
 
 		// Verify the total number of calls made to the server
 		assert.Equal(t, int32(4), d.callCount1.Load())

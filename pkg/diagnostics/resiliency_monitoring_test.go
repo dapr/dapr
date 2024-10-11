@@ -310,9 +310,9 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 					rowsCbState, map[tag.Tag]bool{cbTag: true, diag.NewTag(diag.PolicyKey.Name(), string(diag.CircuitBreakerPolicy)): true})
 				require.True(t, found)
 				if cbTag.Value == test.wantCbStateLastValue.Value {
-					require.Equal(t, float64(1), gotValue)
+					require.InDelta(t, float64(1), gotValue, 0)
 				} else {
-					require.Equal(t, float64(0), gotValue)
+					require.InDelta(t, float64(0), gotValue, 0)
 				}
 			}
 		})
