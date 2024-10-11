@@ -20,7 +20,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
-
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -65,8 +64,24 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Message:       "well hello there, my phone number is +2222222222",
-					PiiScrubInput: &scrubInput,
+					Message:  "well hello there, my phone number is +2222222222",
+					ScrubPII: &scrubInput,
+				},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, resp.GetOutputs(), 1)
+		require.Equal(t, "well hello there, my phone number is <PHONE_NUMBER>", resp.GetOutputs()[0].GetResult())
+	})
+
+	t.Run("scrub input great phone number", func(t *testing.T) {
+		scrubInput := true
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationAlpha1Request{
+			Name: "echo",
+			Inputs: []*rtv1.ConversationInput{
+				{
+					Message:  "well hello there, my phone number is +4422222222",
+					ScrubPII: &scrubInput,
 				},
 			},
 		})
@@ -82,8 +97,8 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Message:       "well hello there, my email is test@test.com",
-					PiiScrubInput: &scrubInput,
+					Message:  "well hello there, my email is test@test.com",
+					ScrubPII: &scrubInput,
 				},
 			},
 		})
@@ -99,8 +114,8 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Message:       "well hello there from 10.8.9.1",
-					PiiScrubInput: &scrubInput,
+					Message:  "well hello there from 10.8.9.1",
+					ScrubPII: &scrubInput,
 				},
 			},
 		})
@@ -122,7 +137,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 					Message: "well hello there, my email is test@test.com",
 				},
 			},
-			PiiScrubOutput: &scrubOutput,
+			ScrubPII: &scrubOutput,
 		})
 
 		require.NoError(t, err)
@@ -138,11 +153,11 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
-					Message:       "well hello there",
-					PiiScrubInput: &scrubOutput,
+					Message:  "well hello there",
+					ScrubPII: &scrubOutput,
 				},
 			},
-			PiiScrubOutput: &scrubOutput,
+			ScrubPII: &scrubOutput,
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)

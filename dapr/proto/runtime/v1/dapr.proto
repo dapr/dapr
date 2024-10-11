@@ -1284,8 +1284,8 @@ message ConversationAlpha1Request {
   // The name of Coverstaion component
   string name = 1;
 
-  // Conversation context - the Id of an existing chat room (like in ChatGPT)
-  optional string conversationContext = 2;
+  // The ID of an existing chat (like in ChatGPT)
+  optional string contextID = 2;
 
   // Inputs for the conversation, support multiple input in one time.
   repeated ConversationInput inputs = 3;
@@ -1297,7 +1297,7 @@ message ConversationAlpha1Request {
   map<string, string> metadata = 5;
 
   // Scrub PII data that comes back from the LLM
-  optional bool piiScrubOutput = 6;
+  optional bool scrubPII = 6;
 }
 
 message ConversationInput {
@@ -1308,7 +1308,7 @@ message ConversationInput {
   optional string role = 2;
 
   // Scrub PII data that goes into the LLM
-  optional bool piiScrubInput = 3;
+  optional bool scrubPII = 3;
 }
 
 // ConversationAlpha1Result is the result for one input.
@@ -1321,8 +1321,8 @@ message ConversationAlpha1Result {
 
 // ConversationAlpha1Response is the response for Conversation.
 message ConversationAlpha1Response {
-  // Conversation context - the Id of an existing chat room (like in ChatGPT)
-  optional string conversationContext = 1;
+  // The ID of an existing chat (like in ChatGPT)
+  optional string contextID = 1;
 
   // An array of results.
   repeated ConversationAlpha1Result outputs = 2;

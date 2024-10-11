@@ -63,7 +63,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	for _, i := range req.GetInputs() {
 		msg := i.GetMessage()
 
-		if i.GetPiiScrubInput() {
+		if i.GetScrubPII() {
 			scrubbed, sErr := scrubber.ScrubTexts([]string{i.GetMessage()})
 			if sErr != nil {
 				sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
@@ -83,7 +83,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	}
 
 	request.Parameters = req.GetParameters()
-	request.ConversationContext = req.GetConversationContext()
+	request.ConversationContext = req.GetContextID()
 
 	// do call
 	policyRunner := resiliency.NewRunner[*conversation.ConversationResponse](ctx,
@@ -105,13 +105,13 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	a.logger.Debug(response)
 	if resp != nil {
 		if resp.ConversationContext != "" {
-			response.ConversationContext = &resp.ConversationContext
+			response.ContextID = &resp.ConversationContext
 		}
 
 		for _, o := range resp.Outputs {
 			res := o.Result
 
-			if req.GetPiiScrubOutput() {
+			if req.GetScrubPII() {
 				scrubbed, sErr := scrubber.ScrubTexts([]string{o.Result})
 				if sErr != nil {
 					sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())

@@ -64,7 +64,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 	httpClient := client.HTTP(t)
 
 	t.Run("scrub input phone number", func(t *testing.T) {
-		body := `{"inputs":[{"message":"well hello there, my phone number is +2222222222", "piiScrubInput": true}]}`
+		body := `{"inputs":[{"message":"well hello there, my phone number is +2222222222", "scrubPII": true}]}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 		require.NoError(t, err)
@@ -78,7 +78,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("scrub input email", func(t *testing.T) {
-		body := `{"inputs":[{"message":"well hello there, my email is test@test.com", "piiScrubInput": true}]}`
+		body := `{"inputs":[{"message":"well hello there, my email is test@test.com", "scrubPII": true}]}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 		require.NoError(t, err)
@@ -92,7 +92,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("scrub input ip address", func(t *testing.T) {
-		body := `{"inputs":[{"message":"well hello there from 10.8.9.1", "piiScrubInput": true}]}`
+		body := `{"inputs":[{"message":"well hello there from 10.8.9.1", "scrubPII": true}]}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 		require.NoError(t, err)
@@ -106,7 +106,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 	})
 
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
-		body := `{"inputs":[{"message":"well hello there from 10.8.9.1"},{"message":"well hello there, my email is test@test.com"}],"piiScrubOutput": true}`
+		body := `{"inputs":[{"message":"well hello there from 10.8.9.1"},{"message":"well hello there, my email is test@test.com"}],"scrubPII": true}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 		require.NoError(t, err)
@@ -116,11 +116,11 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.Equal(t, `{"outputs":[{"result":"well hello there from <IP>"}, {"result":"well hello there, my email is <EMAIL_ADDRESS>"}]}`, string(respBody))
+		require.Equal(t, `{"outputs":[{"result":"well hello there from <IP>"},{"result":"well hello there, my email is <EMAIL_ADDRESS>"}]}`, string(respBody))
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {
-		body := `{"inputs":[{"message":"well hello there","piiScrubInput": true}],"piiScrubOutput": true}`
+		body := `{"inputs":[{"message":"well hello there","scrubPII": true}],"scrubPII": true}`
 
 		req, err := http.NewRequestWithContext(ctx, http.MethodPost, postURL, strings.NewReader(body))
 		require.NoError(t, err)
