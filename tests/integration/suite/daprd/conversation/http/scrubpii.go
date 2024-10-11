@@ -116,7 +116,7 @@ func (s *scrubPII) Run(t *testing.T, ctx context.Context) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 		require.NoError(t, resp.Body.Close())
-		require.Equal(t, `{"outputs":[{"result":"well hello there from <IP>"},{"result":"well hello there, my email is <EMAIL_ADDRESS>"}]}`, string(respBody))
+		require.Equal(t, `{"outputs":[{"result":"well hello there from <IP>"}, {"result":"well hello there, my email is <EMAIL_ADDRESS>"}]}`, string(respBody))
 	})
 
 	t.Run("no scrubbing on good input", func(t *testing.T) {
