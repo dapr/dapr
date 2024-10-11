@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	componentspubsub "github.com/dapr/components-contrib/pubsub"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -36,8 +37,6 @@ import (
 	inmemory "github.com/dapr/dapr/tests/integration/framework/process/pubsub/in-memory"
 	"github.com/dapr/dapr/tests/integration/suite"
 	kiterrors "github.com/dapr/kit/errors"
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
-	
 )
 
 const (

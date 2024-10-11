@@ -10,8 +10,6 @@ import (
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 )
 
-var enabled bool
-
 type errorCodeMetrics struct {
 	errorCodeCount *stats.Int64Measure
 
