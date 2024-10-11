@@ -21,8 +21,8 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/components-contrib/metadata"
-	"github.com/dapr/kit/errors"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
+	"github.com/dapr/kit/errors"
 )
 
 type StateStoreError struct {
