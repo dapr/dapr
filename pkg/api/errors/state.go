@@ -50,7 +50,7 @@ func (s *StateStoreError) NotFound(appID string) error {
 			msg,
 			errorcodes.StateStoreNotFound,
 		),
-		errorcodes.NotFound,
+		errors.CodeNotFound,
 		meta,
 	)
 }
@@ -69,7 +69,7 @@ func (s *StateStoreError) NotConfigured(appID string) error {
 			msg,
 			errorcodes.StateStoreNotConfigured,
 		),
-		errorcodes.NotConfigured,
+		errors.CodeNotConfigured,
 		meta,
 	)
 }
@@ -82,7 +82,7 @@ func (s *StateStoreError) InvalidKeyName(key string, msg string) error {
 			msg,
 			errorcodes.MalformedRequest,
 		).WithFieldViolation(key, msg),
-		errorcodes.IllegalKey,
+		errors.CodeIllegalKey,
 		nil,
 	)
 }
@@ -128,7 +128,7 @@ func (s *StateStoreError) QueryUnsupported() error {
 			"state store does not support querying",
 			errorcodes.StateStoreNotSupported,
 		),
-		"QUERYING_"+errorcodes.NotSupported,
+		"QUERYING_"+errors.CodeNotSupported,
 		nil,
 	)
 }
@@ -141,7 +141,7 @@ func (s *StateStoreError) QueryFailed(detail string) error {
 			fmt.Sprintf("state store %s query failed: %s", s.name, detail),
 			errorcodes.StateQuery,
 		),
-		errorcodes.PostfixQueryFailed,
+		errors.CodePostfixQueryFailed,
 		nil,
 	)
 }
@@ -151,6 +151,6 @@ func (s *StateStoreError) build(err *errors.ErrorBuilder, errCode string, metada
 		err = err.WithResourceInfo("state", s.name, "", "")
 	}
 	return err.
-		WithErrorInfo(errorcodes.PrefixStateStore+errCode, metadata).
+		WithErrorInfo(errors.CodePrefixStateStore+errCode, metadata).
 		Build()
 }
