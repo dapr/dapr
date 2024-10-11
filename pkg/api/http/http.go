@@ -1022,7 +1022,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			data := []byte(fmt.Sprintf("%v", r.Value))
 			val, encErr := encryption.TryEncryptValue(storeName, data)
 			if encErr != nil {
-				statusCode, errMsg, resp := a.stateErrorResponse(encErr, errorcodes.SaveState)
+				statusCode, errMsg, resp := a.stateErrorResponse(encErr, errorcodes.StateSave)
 				resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
@@ -1046,7 +1046,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
-		statusCode, errMsg, resp := a.stateErrorResponse(err, errorcodes.SaveState)
+		statusCode, errMsg, resp := a.stateErrorResponse(err, errorcodes.StateSave)
 		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
@@ -1581,7 +1581,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				val, err := encryption.TryEncryptValue(storeName, data)
 				if err != nil {
 					msg := NewErrorResponse(
-						errorcodes.SaveState,
+						errorcodes.StateSave,
 						fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()))
 					fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 					log.Debug(msg)

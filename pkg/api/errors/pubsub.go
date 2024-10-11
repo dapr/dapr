@@ -115,7 +115,7 @@ func (p *PubSubMetadataError) NotFound() error {
 		http.StatusNotFound,
 		fmt.Sprintf("%s %s is not found", metadata.PubSubType, p.p.name),
 		errorcodes.PubsubNotFound,
-		errorcodes.NotFound,
+		errors.CodeNotFound,
 	)
 }
 
@@ -126,7 +126,7 @@ func (p *PubSubMetadataError) NotConfigured() error {
 		http.StatusBadRequest,
 		fmt.Sprintf("%s %s is not configured", metadata.PubSubType, p.p.name),
 		errorcodes.PubsubNotConfigured,
-		errorcodes.NotConfigured,
+		errors.CodeNotConfigured,
 	)
 }
 
@@ -228,7 +228,7 @@ func (p *PubSubMetadataError) build(grpcCode codes.Code, httpCode int, msg, tag,
 		err = err.WithResourceInfo(string(metadata.PubSubType), p.p.name, "", msg)
 	}
 	return err.WithErrorInfo(
-		errorcodes.PrefixPubSub+errCode,
+		errors.CodePrefixPubSub+errCode,
 		p.metadata,
 	).Build()
 }
@@ -240,7 +240,7 @@ func PubSubOutbox(appID string, err error) error {
 		http.StatusInternalServerError,
 		message,
 		errorcodes.PublishOutbox,
-	).WithErrorInfo(errorcodes.PrefixPubSub+"OUTBOX", map[string]string{
+	).WithErrorInfo(errors.CodePrefixPubSub+"OUTBOX", map[string]string{
 		"appID": appID, "error": err.Error(),
 	}).Build()
 }

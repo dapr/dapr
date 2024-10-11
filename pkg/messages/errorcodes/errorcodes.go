@@ -80,7 +80,7 @@ const (
 	PurgeWorkflow                   = "ERR_PURGE_WORKFLOW"
 	RaiseEventWorkflow              = "ERR_RAISE_EVENT_WORKFLOW"
 	ResumeWorkflow                  = "ERR_RESUME_WORKFLOW"
-	SaveState                       = "ERR_SAVE_STATE"
+	StateSave                       = "ERR_STATE_SAVE"
 	SecretGet                       = "ERR_SECRET_GET"
 	SecretStoreNotFound             = "ERR_SECRET_STORE_NOT_FOUND"
 	SecretStoresNotConfigured       = "ERR_SECRET_STORES_NOT_CONFIGURED"
