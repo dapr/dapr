@@ -15,14 +15,17 @@ package options
 
 import (
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
 )
 
 func TestAppFlag(t *testing.T) {
-	opts := New([]string{})
+	opts, err := New([]string{})
+	require.NoError(t, err)
 	assert.EqualValues(t, "dapr-placement-0", opts.RaftID)
 	assert.EqualValues(t, []raft.PeerInfo{{ID: "dapr-placement-0", Address: "127.0.0.1:8201"}}, opts.RaftPeers)
 	assert.True(t, opts.RaftInMemEnabled)
@@ -39,6 +42,9 @@ func TestAppFlag(t *testing.T) {
 	assert.False(t, opts.Logger.JSONFormatEnabled)
 	assert.True(t, opts.Metrics.Enabled())
 	assert.EqualValues(t, "9090", opts.Metrics.Port())
+	assert.EqualValues(t, 2*time.Second, opts.KeepAliveTime)
+	assert.EqualValues(t, 3*time.Second, opts.KeepAliveTimeout)
+	assert.EqualValues(t, 2*time.Second, opts.DisseminateTimeout)
 }
 
 func TestInitialCluster(t *testing.T) {
@@ -80,8 +86,65 @@ func TestInitialCluster(t *testing.T) {
 
 	for _, tt := range peerAddressTests {
 		t.Run(tt.name, func(t *testing.T) {
-			opts := New(tt.in)
+			opts, err := New(tt.in)
+			require.NoError(t, err)
 			assert.EqualValues(t, tt.out, opts.RaftPeers)
+		})
+	}
+}
+
+func TestOptsFromEnvVariables(t *testing.T) {
+	t.Run("metadata enabled", func(t *testing.T) {
+		t.Setenv("DAPR_PLACEMENT_METADATA_ENABLED", "true")
+
+		opts, err := New([]string{})
+		require.NoError(t, err)
+		assert.True(t, opts.MetadataEnabled)
+	})
+}
+
+func TestValidateFlags(t *testing.T) {
+	testCases := []struct {
+		name  string
+		arg   string
+		value string
+	}{
+		{
+			"keepalive-time too low",
+			"keepalive-time",
+			"0.5s",
+		},
+		{
+			"keepalive-time too high",
+			"keepalive-time",
+			"11s",
+		},
+		{
+			"keepalive-timeout too low",
+			"keepalive-timeout",
+			"0.5s",
+		},
+		{
+			"keepalive-timeout too high",
+			"keepalive-timeout",
+			"11s",
+		},
+		{
+			"disseminate-timeout too low",
+			"disseminate-timeout",
+			"0.5s",
+		},
+		{
+			"disseminate-timeout too high",
+			"disseminate-timeout",
+			"6s",
+		},
+	}
+	for _, tt := range testCases {
+		t.Run(tt.name, func(t *testing.T) {
+			_, err := New([]string{"--" + tt.arg, tt.value})
+			require.Error(t, err)
+			require.Contains(t, err.Error(), "invalid value for "+tt.arg)
 		})
 	}
 }

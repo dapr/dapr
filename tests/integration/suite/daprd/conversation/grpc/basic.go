@@ -60,8 +60,12 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("good input", func(t *testing.T) {
 		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationAlpha1Request{
-			Name:   "echo",
-			Inputs: []string{"well hello there"},
+			Name: "echo",
+			Inputs: []*rtv1.ConversationInput{
+				{
+					Message: "well hello there",
+				},
+			},
 		})
 		require.NoError(t, err)
 		require.Len(t, resp.GetOutputs(), 1)
