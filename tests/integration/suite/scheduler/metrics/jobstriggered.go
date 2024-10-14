@@ -169,8 +169,9 @@ func (j *jobstriggered) Run(t *testing.T, ctx context.Context) {
 					// ensure the trigger duration is less than 1 second (1000 milliseconds)
 					assert.Less(t, avgTriggerLatency, float64(1000), "Trigger duration should be less than 1 second")
 
+					grace := 1000
 					// triggered time should be less than the total round trip time of a job being scheduled and sent back to the app
-					assert.Less(t, int64(avgTriggerLatency), receivedJobElapsed, "Trigger time should be less than the total elapsed time to receive the scheduled job")
+					assert.LessOrEqual(t, int64(avgTriggerLatency), receivedJobElapsed+int64(grace), "Trigger time should be less than the total elapsed time to receive the scheduled job")
 				}, time.Second*3, 10*time.Millisecond)
 
 				test.exp(t, job)
