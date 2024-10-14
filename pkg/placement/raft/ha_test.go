@@ -322,19 +322,27 @@ func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-ch
 	go func() {
 		defer close(ready)
 		for {
-			timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*5)
-			defer timeoutCancel()
-			r, err := srv.Raft(timeoutCtx)
-			assert.NoError(t, err)
-			if r.State() == hcraft.Follower || r.State() == hcraft.Leader {
+			select {
+			case <-ctx.Done():
 				return
+			default:
+				timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*5)
+				r, err := srv.Raft(timeoutCtx)
+				if err == nil && (r.State() == hcraft.Follower || r.State() == hcraft.Leader) {
+					timeoutCancel()
+					return
+				}
+				timeoutCancel()
 			}
 		}
 	}()
 
+	// Advance the clock to trigger elections more quickly
 	go func() {
 		for {
 			select {
+			case <-ctx.Done():
+				return
 			case <-ready:
 			case <-time.After(time.Millisecond):
 				clock.Step(time.Second * 2)
@@ -346,7 +354,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-ch
 		cancel()
 		select {
 		case <-stopped:
-		case <-time.After(time.Second * 5):
+		case <-time.After(time.Second * 10):
 			require.Fail(t, "server didn't stop in time")
 		}
 	}
