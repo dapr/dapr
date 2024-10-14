@@ -87,8 +87,8 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 		DialTimeout: 5 * time.Second,
 	})
 
-	// Use "path/filepath" import, it is using OS specific path separator unlike "path"
-	etcdKeysPrefix := filepath.Join("dapr", "jobs")
+	// should have the same path separator across OS
+	etcdKeysPrefix := "dapr/jobs"
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
