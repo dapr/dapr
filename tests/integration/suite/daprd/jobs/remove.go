@@ -16,7 +16,6 @@ package jobs
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -87,8 +86,8 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 
 	client := r.daprd.GRPCClient(t, ctx)
 
-	// Use "path/filepath" import, it is using OS specific path separator unlike "path"
-	etcdKeysPrefix := filepath.Join("dapr", "jobs")
+	// should have the same path separator across OS
+	etcdKeysPrefix := "dapr/jobs"
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		keys, rerr := r.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)

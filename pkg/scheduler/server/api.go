@@ -185,7 +185,7 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 		// another long running go routine that accepts this job on a channel
 		log.Errorf("Error sending job to connection stream: %s", err)
 	}
-	monitoring.RecordTriggerDuration(meta.GetNamespace(), now)
+	monitoring.RecordTriggerDuration(now)
 
 	monitoring.RecordJobsTriggeredCount(&meta)
 	return true
