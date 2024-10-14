@@ -17,6 +17,7 @@ import (
 	"fmt"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/spf13/pflag"
 
@@ -36,6 +37,18 @@ const (
 	defaultPlacementPort     = 50005
 	defaultReplicationFactor = 100
 	envMetadataEnabled       = "DAPR_PLACEMENT_METADATA_ENABLED"
+
+	keepAliveTimeDefault = 2 * time.Second
+	keepAliveTimeMin     = 1 * time.Second
+	keepAliveTimeMax     = 10 * time.Second
+
+	keepAliveTimeoutDefault = 3 * time.Second
+	keepAliveTimeoutMin     = 1 * time.Second
+	keepAliveTimeoutMax     = 10 * time.Second
+
+	disseminateTimeoutDefault = 2 * time.Second
+	disseminateTimeoutMin     = 1 * time.Second
+	disseminateTimeoutMax     = 3 * time.Second
 )
 
 type Options struct {
@@ -63,12 +76,16 @@ type Options struct {
 
 	ReplicationFactor int
 
+	KeepAliveTime      time.Duration
+	KeepAliveTimeout   time.Duration
+	DisseminateTimeout time.Duration
+
 	// Log and metrics configurations
 	Logger  logger.Options
 	Metrics *metrics.FlagOptions
 }
 
-func New(origArgs []string) *Options {
+func New(origArgs []string) (*Options, error) {
 	// We are using pflag to parse the CLI flags
 	// pflag is a drop-in replacement for the standard library's "flag" package, however…
 	// There's one key difference: with the stdlib's "flag" package, there are no short-hand options so options can be defined with a single slash (such as "daprd -mode").
@@ -84,13 +101,12 @@ func New(origArgs []string) *Options {
 		}
 	}
 
-	// Default options
 	opts := Options{
 		MetadataEnabled: utils.IsTruthy(os.Getenv(envMetadataEnabled)),
 	}
 
 	// Create a flag set
-	fs := pflag.NewFlagSet("sentry", pflag.ExitOnError)
+	fs := pflag.NewFlagSet("placement", pflag.ExitOnError)
 	fs.SortFlags = true
 
 	fs.StringVar(&opts.RaftID, "id", "dapr-placement-0", "Placement server ID")
@@ -106,6 +122,9 @@ func New(origArgs []string) *Options {
 	fs.IntVar(&opts.MaxAPILevel, "max-api-level", 10, "If set to >= 0, causes the reported 'api-level' in the cluster to never exceed this value")
 	fs.IntVar(&opts.MinAPILevel, "min-api-level", 0, "Enforces a minimum 'api-level' in the cluster")
 	fs.IntVar(&opts.ReplicationFactor, "replicationFactor", defaultReplicationFactor, "sets the replication factor for actor distribution on vnodes")
+	fs.DurationVar(&opts.KeepAliveTime, "keepalive-time", keepAliveTimeDefault, "sets the interval at which the placement service sends keepalive pings to daprd \non the gRPC stream to check if the connection is still alive. \nLower values will lead to shorter actor rebalancing time in case of pod loss/restart, \nbut higher network traffic during normal operation. \nAccepts values between 1 and 10 seconds")
+	fs.DurationVar(&opts.KeepAliveTimeout, "keepalive-timeout", keepAliveTimeoutDefault, "sets the timeout period for daprd to respond to the placement service's keepalive pings \nbefore the placement service closes the connection. \nLower values will lead to shorter actor rebalancing time in case of pod loss/restart, \nbut higher network traffic during normal operation. \nAccepts values between 1 and 10 seconds")
+	fs.DurationVar(&opts.DisseminateTimeout, "disseminate-timeout", disseminateTimeoutDefault, "sets the timeout period for dissemination to be delayed after actor membership change \nso as to avoid excessive dissemination during multiple pod restarts. \nHigher values will reduce the frequency of dissemination, but delay the table dissemination. \nAccepts values between 1 and 3 seconds")
 
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	fs.StringVar(&opts.TrustAnchorsFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
@@ -121,12 +140,16 @@ func New(origArgs []string) *Options {
 	// Ignore errors; flagset is set for ExitOnError
 	_ = fs.Parse(args)
 
+	if err := opts.Validate(); err != nil {
+		return nil, err
+	}
+
 	opts.RaftPeers = parsePeersFromFlag(opts.raftPeerFlag)
 	if opts.RaftLogStorePath != "" {
 		opts.RaftInMemEnabled = false
 	}
 
-	return &opts
+	return &opts, nil
 }
 
 func parsePeersFromFlag(val []string) []raft.PeerInfo {
@@ -147,4 +170,20 @@ func parsePeersFromFlag(val []string) []raft.PeerInfo {
 	}
 
 	return peers[:i]
+}
+
+func (o *Options) Validate() error {
+	if o.KeepAliveTime < keepAliveTimeMin || o.KeepAliveTime > keepAliveTimeMax {
+		return fmt.Errorf("invalid value for keepalive-time: value should be between %s and %s, got %s", keepAliveTimeMin, keepAliveTimeMax, o.KeepAliveTime)
+	}
+
+	if o.KeepAliveTimeout < keepAliveTimeoutMin || o.KeepAliveTimeout > keepAliveTimeoutMax {
+		return fmt.Errorf("invalid value for keepalive-timeout: value should be between %s and %s, got %s", keepAliveTimeoutMin, keepAliveTimeoutMax, o.KeepAliveTimeout)
+	}
+
+	if o.DisseminateTimeout < disseminateTimeoutMin || o.DisseminateTimeout > disseminateTimeoutMax {
+		return fmt.Errorf("invalid value for disseminate-timeout: value should be between %s and %s, got %s", disseminateTimeoutMin, disseminateTimeoutMax, o.DisseminateTimeout)
+	}
+
+	return nil
 }
