@@ -19,12 +19,14 @@ import (
 	"fmt"
 	"io"
 	"sync"
+	"time"
 
 	"github.com/golang/protobuf/ptypes/wrappers"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/kit/concurrency"
@@ -140,6 +142,8 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		return errors.New("received job, but app channel not initialized")
 	}
 
+	start := time.Now()
+
 	response, err := appChannel.TriggerJob(ctx, job.GetName(), job.GetData())
 	if err != nil {
 		// TODO(Cassie): add an orphaned job go routine to retry sending job at a later time
@@ -149,6 +153,7 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 		defer response.Close()
 	}
 
+	elapsed := diag.ElapsedSince(start)
 	// TODO: standardize on the error code returned by both protocol channels,
 	// converting HTTP status codes to gRPC codes
 	statusCode := response.Status().GetCode()
@@ -157,10 +162,12 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	switch codes.Code(statusCode) {
 	case codes.OK:
 		log.Debugf("Sent job %s to app", job.GetName())
+		diag.DefaultComponentMonitoring.JobExecutedSuccess(ctx, job.GetName(), diag.JobExecutionOp, true, elapsed)
 	case codes.NotFound:
 		log.Errorf("non-retriable error returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
 	default:
 		log.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
+		diag.DefaultComponentMonitoring.JobExecutedFailure(ctx, job.GetName(), diag.JobExecutionOp, true, elapsed)
 	}
 
 	return nil
