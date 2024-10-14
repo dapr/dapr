@@ -41,6 +41,7 @@ func init() {
 }
 
 type components struct {
+	sentry    *sentry.Sentry
 	daprd     *daprd.Daprd
 	store     *store.Store
 	kubeapi   *kubernetes.Kubernetes
@@ -49,7 +50,7 @@ type components struct {
 }
 
 func (c *components) Setup(t *testing.T) []framework.Option {
-	sentry := sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
+	c.sentry = sentry.New(t, sentry.WithTrustDomain("integration.test.dapr.io"))
 
 	c.store = store.New(metav1.GroupVersionKind{
 		Group:   "dapr.io",
@@ -60,7 +61,7 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 		kubernetes.WithBaseOperatorAPI(t,
 			spiffeid.RequireTrustDomainFromString("integration.test.dapr.io"),
 			"default",
-			sentry.Port(),
+			c.sentry.Port(),
 		),
 		kubernetes.WithClusterDaprConfigurationList(t, &configapi.ConfigurationList{
 			Items: []configapi.Configuration{{
@@ -69,7 +70,7 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 				Spec: configapi.ConfigurationSpec{
 					MTLSSpec: &configapi.MTLSSpec{
 						ControlPlaneTrustDomain: "integration.test.dapr.io",
-						SentryAddress:           sentry.Address(),
+						SentryAddress:           c.sentry.Address(),
 					},
 					Features: []configapi.FeatureSpec{{
 						Name:    "HotReload",
@@ -84,7 +85,7 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 	opts := []operator.Option{
 		operator.WithNamespace("default"),
 		operator.WithKubeconfigPath(c.kubeapi.KubeconfigPath(t)),
-		operator.WithTrustAnchorsFile(sentry.TrustAnchorsFile(t)),
+		operator.WithTrustAnchorsFile(c.sentry.TrustAnchorsFile(t)),
 	}
 	c.operator1 = operator.New(t, opts...)
 	c.operator2 = operator.New(t, append(opts,
@@ -94,24 +95,25 @@ func (c *components) Setup(t *testing.T) []framework.Option {
 	c.daprd = daprd.New(t,
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("daprsystem"),
-		daprd.WithSentryAddress(sentry.Address()),
+		daprd.WithSentryAddress(c.sentry.Address()),
 		daprd.WithControlPlaneAddress(c.operator1.Address()),
 		daprd.WithDisableK8sSecretStore(true),
 		daprd.WithEnableMTLS(true),
 		daprd.WithNamespace("default"),
 		daprd.WithControlPlaneTrustDomain("integration.test.dapr.io"),
 		daprd.WithExecOptions(exec.WithEnvVars(t,
-			"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+			"DAPR_TRUST_ANCHORS", string(c.sentry.CABundle().TrustAnchors),
 		)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry, c.kubeapi, c.daprd),
+		framework.WithProcesses(c.sentry, c.kubeapi, c.daprd),
 	}
 }
 
 func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.operator1.Run(t, ctx)
+	c.sentry.WaitUntilRunning(t, ctx)
 	c.operator1.WaitUntilRunning(t, ctx)
 	c.daprd.WaitUntilRunning(t, ctx)
 
