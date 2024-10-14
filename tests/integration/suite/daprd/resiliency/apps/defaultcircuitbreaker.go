@@ -27,7 +27,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -46,21 +46,20 @@ func (d *defaultcircuitbreaker) Setup(t *testing.T) []framework.Option {
 	d.callCount1 = &atomic.Int32{}
 	d.callCount2 = &atomic.Int32{}
 
-	handler := http.NewServeMux()
-	handler.HandleFunc("/circuitbreaker_ok", func(w http.ResponseWriter, r *http.Request) {
-		d.callCount1.Add(1)
-		w.WriteHeader(http.StatusOK)
-	})
-	handler.HandleFunc("/circuitbreaker_fail", func(w http.ResponseWriter, r *http.Request) {
-		d.callCount2.Add(1)
-		if d.callCount2.Load() <= 3 {
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-		w.WriteHeader(http.StatusOK)
-	})
-
-	srv := prochttp.New(t, prochttp.WithHandler(handler))
+	app := app.New(t,
+		app.WithHandlerFunc("/circuitbreaker_ok", func(w http.ResponseWriter, r *http.Request) {
+			d.callCount1.Add(1)
+			w.WriteHeader(http.StatusOK)
+		}),
+		app.WithHandlerFunc("/circuitbreaker_fail", func(w http.ResponseWriter, r *http.Request) {
+			d.callCount2.Add(1)
+			if d.callCount2.Load() <= 3 {
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			w.WriteHeader(http.StatusOK)
+		}),
+	)
 
 	resiliency := `
 apiVersion: dapr.io/v1alpha1
@@ -82,19 +81,18 @@ spec:
 `
 
 	d.daprdClient = daprd.New(t,
-		daprd.WithAppPort(srv.Port()),
+		daprd.WithAppPort(app.Port()),
 		daprd.WithResourceFiles(resiliency),
 		daprd.WithAppID("client"),
 		daprd.WithLogLevel("debug"),
 	)
 	d.daprdServer = daprd.New(t,
-		daprd.WithAppPort(srv.Port()),
+		daprd.WithAppPort(app.Port()),
 		daprd.WithAppID("server"),
 	)
-	// log.Print(d.daprdClient.Metrics(t, context.Background()))
 
 	return []framework.Option{
-		framework.WithProcesses(srv, d.daprdClient, d.daprdServer),
+		framework.WithProcesses(app, d.daprdClient, d.daprdServer),
 	}
 }
 

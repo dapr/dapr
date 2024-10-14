@@ -283,8 +283,8 @@ func TestResiliencyCountMonitoringCBStates(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, rows, test.wantNumberOfRows)
 
-			rowsCbState, err2 := view.RetrieveData(resiliencyCBStateViewName)
-			require.NoError(t, err2)
+			rowsCbState, err := view.RetrieveData(resiliencyCBStateViewName)
+			require.NoError(t, err)
 			require.NotNil(t, rowsCbState)
 
 			wantedTags := []tag.Tag{
