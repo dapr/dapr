@@ -38,7 +38,7 @@ const (
 	appPortGRPC               = 3001
 	appNameGRPC               = "schedulerapp-grpc"
 	appName                   = "schedulerapp"
-	numHealthChecks           = 2                                      // Number of get calls before starting tests.
+	numHealthChecks           = 10                                     // Number of get calls before starting tests.
 	numIterations             = 4                                      // Number of times each test should run.
 	jobName                   = "testjob"                              // Job name.
 	scheduleJobURLFormat      = "%s/scheduleJob/" + jobName + "-%s-%s" // App Schedule Job URL.
