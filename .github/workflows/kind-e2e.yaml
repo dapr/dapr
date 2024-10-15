@@ -254,7 +254,7 @@ jobs:
           sudo apt-get remove -y firefox
         fi
         
-        if dpkg -l | grep -q 'powershell'; then
+        if dpkg -l | grep -q '^powershell'; then
           sudo apt-get remove -y powershell
         fi
     
