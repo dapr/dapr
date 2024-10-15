@@ -23,6 +23,7 @@ var (
 	namespaceKey        = tag.MustNewKey("namespace")
 	resiliencyNameKey   = tag.MustNewKey("name")
 	policyKey           = tag.MustNewKey("policy")
+	errorCodeKey        = tag.MustNewKey("errorcode")
 	componentNameKey    = tag.MustNewKey("componentName")
 	destinationAppIDKey = tag.MustNewKey("dst_app_id")
 	sourceAppIDKey      = tag.MustNewKey("src_app_id")

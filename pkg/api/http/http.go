@@ -508,6 +508,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 			status := apierrors.StateStore(storeName).InvalidKeyName(k, err.Error())
 			universalFastHTTPErrorResponder(reqCtx, status)
 			log.Debug(status)
+			diag.DefaultErrorCodeMonitoring.RecordErrorCode(errorcodes.IllegalKey)
 			return
 		}
 		r := state.GetRequest{
