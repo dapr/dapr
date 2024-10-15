@@ -311,7 +311,10 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 				return err
 			}
 
-			cloudEvent[contribPubsub.TopicField] = c.publishTopic
+			customTopic := o.cloudEventExtractorFn(cloudEvent, contribPubsub.TopicField)
+			if customTopic == "" {
+				cloudEvent[contribPubsub.TopicField] = c.publishTopic
+			}
 			cloudEvent[contribPubsub.PubsubField] = c.publishPubSub
 
 			b, err := json.Marshal(cloudEvent)
@@ -320,11 +323,11 @@ func (o *outboxImpl) SubscribeToInternalTopics(ctx context.Context, appID string
 			}
 
 			contentType := cloudEvent[contribPubsub.DataContentTypeField].(string)
-
+			topic := cloudEvent[contribPubsub.TopicField].(string)
 			err = o.publisher.Publish(ctx, &contribPubsub.PublishRequest{
 				PubsubName:  c.publishPubSub,
 				Data:        b,
-				Topic:       c.publishTopic,
+				Topic:       topic,
 				ContentType: &contentType,
 			})
 			if err != nil {
