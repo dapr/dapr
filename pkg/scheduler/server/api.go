@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal"
 )
 
@@ -62,7 +63,7 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 		log.Errorf("error scheduling job %s: %s", req.GetName(), err)
 		return nil, err
 	}
-
+	monitoring.RecordJobsScheduledCount(req.GetMetadata())
 	return &schedulerv1pb.ScheduleJobResponse{}, nil
 }
 
@@ -146,6 +147,8 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 
 	s.connectionPool.Add(req.GetInitial(), stream)
 
+	monitoring.RecordSidecarsConnectedCount(1)
+	defer monitoring.RecordSidecarsConnectedCount(-1)
 	select {
 	case <-s.closeCh:
 		return errors.New("server is closing")
@@ -172,6 +175,7 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 		return true
 	}
 
+	now := time.Now()
 	if err := s.connectionPool.Send(ctx, &internal.JobEvent{
 		Name:     req.GetName()[idx+2:],
 		Data:     req.GetPayload(),
@@ -181,7 +185,9 @@ func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 		// another long running go routine that accepts this job on a channel
 		log.Errorf("Error sending job to connection stream: %s", err)
 	}
+	monitoring.RecordTriggerDuration(now)
 
+	monitoring.RecordJobsTriggeredCount(&meta)
 	return true
 }
 

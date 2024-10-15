@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -58,6 +59,8 @@ type Daprd struct {
 	publicPort       int
 	metricsPort      int
 	profilePort      int
+
+	once sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
@@ -181,7 +184,9 @@ func (d *Daprd) Run(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) Cleanup(t *testing.T) {
-	d.exec.Cleanup(t)
+	d.once.Do(func() {
+		d.exec.Cleanup(t)
+	})
 }
 
 func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
