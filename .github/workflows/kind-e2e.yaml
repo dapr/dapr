@@ -221,7 +221,7 @@ jobs:
         echo "Removing large packages"
         sudo apt-get update
         
-        // check if pkgs exist before removing them
+        # check if pkgs exist before removing them
         if dpkg -l | grep -q '^dotnet-.*'; then
           sudo apt-get remove -y '^dotnet-.*'
         fi
