@@ -46,12 +46,13 @@ jobs:
         uses: actions/setup-python@v4
         with:
           python-version: '3.x'
-      - name: Create virtual environment
-        run: python3 -m venv venv
-      - name: Activate virtual environment and install required packages
+      - name: Upgrade pip
         run: |
-          source venv/bin/activate
-          pip install numpy scipy psutil
+          python3 -m ensurepip --upgrade
+          python3 -m pip install --upgrade pip
+      - name: Install required Python packages
+        run: |
+          python3 -m pip install numpy scipy psutil
       # This is a good example where we want to always compare against the latest stable release.
       # Pinning to a given Dapr version does not add any value in this workflow.
       - name: Install latest Dapr CLI
