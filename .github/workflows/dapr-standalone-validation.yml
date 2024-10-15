@@ -42,8 +42,16 @@ jobs:
       GOARCH: amd64
       DAPR_INSTALL_URL: https://raw.githubusercontent.com/dapr/cli/master/install/install.sh
     steps:
-      - name: Install required packages
-        run: pip3 install scipy psutil
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Create virtual environment
+        run: python3 -m venv venv
+      - name: Activate virtual environment and install required packages
+        run: |
+          source venv/bin/activate
+          pip install scipy psutil
       # This is a good example where we want to always compare against the latest stable release.
       # Pinning to a given Dapr version does not add any value in this workflow.
       - name: Install latest Dapr CLI
