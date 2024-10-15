@@ -80,7 +80,10 @@ func (s *server) SayHello(ctx context.Context, in *pb.HelloRequest) (*pb.HelloRe
 			time.Sleep(*message.Timeout)
 		} else {
 			log.Println("Forcing failure.")
-			return nil, errors.New("forced failure")
+			if message.ResponseCode == nil {
+				return nil, errors.New("forced failure")
+			}
+			return nil, grpc.Errorf(grpccodes.Code(*message.ResponseCode), "forced failure with status code %d", *message.ResponseCode)
 		}
 	}
 	return &pb.HelloReply{Message: "Hello"}, nil

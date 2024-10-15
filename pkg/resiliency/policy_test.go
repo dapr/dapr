@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 
+	resiliencyV1alpha "github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/resiliency/breaker"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
@@ -40,7 +41,7 @@ func ExampleNewRunnerWithOptions_accumulator() {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    &retry.Config{MaxRetries: 6},
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionMatch()),
 	}
 
 	// Handler function
@@ -82,7 +83,7 @@ func ExampleNewRunnerWithOptions_disposer() {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    &retry.Config{MaxRetries: 6},
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionMatch()),
 	}
 
 	// Handler function
@@ -135,13 +136,13 @@ func TestPolicy(t *testing.T) {
 	cbValue.Initialize(testLog)
 	tests := map[string]*struct {
 		t  time.Duration
-		r  *retry.Config
+		r  *Retry
 		cb *breaker.CircuitBreaker
 	}{
 		"empty": {},
 		"all": {
 			t:  10 * time.Millisecond,
-			r:  &retryValue,
+			r:  NewRetry(retryValue, NewRetryConditionMatch()),
 			cb: &cbValue,
 		},
 		"nil policy": nil,
@@ -256,9 +257,75 @@ func TestPolicyRetry(t *testing.T) {
 				log:  testLog,
 				name: "retry",
 				t:    10 * time.Millisecond,
-				r:    &retry.Config{MaxRetries: test.maxRetries},
+				r:    NewRetry(retry.Config{MaxRetries: test.maxRetries}, NewRetryConditionMatch()),
 			})
 			_, err := policy(fn)
+			if err != nil {
+				assert.NotContains(t, err.Error(), "expected attempt in context to be")
+			}
+			assert.Equal(t, test.expected, called.Load())
+		})
+	}
+}
+
+func TestPolicyRetryWithMatch(t *testing.T) {
+	tests := []struct {
+		name         string
+		maxCalls     int32
+		returnedCode int32
+		matching     *resiliencyV1alpha.RetryMatching
+		maxRetries   int64
+		expected     int32
+	}{
+		{
+			name:         "Retries succeed",
+			maxCalls:     5,
+			returnedCode: 500,
+			matching: &resiliencyV1alpha.RetryMatching{
+				HTTPStatusCodes: "500-599",
+				GRPCStatusCodes: "",
+			},
+			maxRetries: 6,
+			expected:   6,
+		},
+		{
+			name:         "Retries code not in retry list",
+			maxCalls:     5,
+			returnedCode: 500,
+			matching: &resiliencyV1alpha.RetryMatching{
+				HTTPStatusCodes: "400-499",
+				GRPCStatusCodes: "",
+			},
+			maxRetries: 6,
+			expected:   1,
+		},
+	}
+
+	for _, test := range tests {
+		t.Run(test.name, func(t *testing.T) {
+			called := atomic.Int32{}
+			maxCalls := test.maxCalls
+			fn := func(ctx context.Context) (struct{}, error) {
+				v := called.Add(1)
+				attempt := GetAttempt(ctx)
+				if attempt != v {
+					return struct{}{}, backoff.Permanent(fmt.Errorf("expected attempt in context to be %d but got %d", v, attempt))
+				}
+				if v <= maxCalls {
+					return struct{}{}, NewCodeError(test.returnedCode, fmt.Errorf("called (%d) vs Max (%d)", v-1, maxCalls))
+				}
+				return struct{}{}, nil
+			}
+
+			match, err := ParseRetryConditionMatch(test.matching)
+			require.NoError(t, err)
+			policy := NewRunner[struct{}](context.Background(), &PolicyDefinition{
+				log:  testLog,
+				name: "retry",
+				t:    10 * time.Millisecond,
+				r:    NewRetry(retry.Config{MaxRetries: test.maxRetries}, match),
+			})
+			_, err = policy(fn)
 			if err != nil {
 				assert.NotContains(t, err.Error(), "expected attempt in context to be")
 			}
@@ -293,7 +360,7 @@ func TestPolicyAccumulator(t *testing.T) {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    &retry.Config{MaxRetries: 6},
+		r:    NewRetry(retry.Config{MaxRetries: 6}, NewRetryConditionMatch()),
 	}
 	var accumulatorCalled int
 	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
@@ -337,7 +404,7 @@ func TestPolicyDisposer(t *testing.T) {
 		log:  testLog,
 		name: "retry",
 		t:    10 * time.Millisecond,
-		r:    &retry.Config{MaxRetries: 5},
+		r:    NewRetry(retry.Config{MaxRetries: 5}, NewRetryConditionMatch()),
 	}
 	policy := NewRunnerWithOptions(context.Background(), policyDef, RunnerOpts[int32]{
 		Disposer: func(i int32) {
