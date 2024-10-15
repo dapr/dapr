@@ -60,6 +60,7 @@ jobs:
         with:
           go-version-file: "go.mod"
       - name: Initialize CodeQL
+        if: github.event_name == 'pull_request'
         uses: github/codeql-action/init@v3.25.12
         with:
           languages: go
@@ -113,6 +114,7 @@ jobs:
           make init-proto
           make gen-proto check-proto-diff
       - name: Perform CodeQL Analysis
+        if: github.event_name == 'pull_request'
         uses: github/codeql-action/analyze@v3.26.12
         with:
           ram: 4096
@@ -120,6 +122,7 @@ jobs:
 
   depcheck:
     name: "Dependency Review"
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read

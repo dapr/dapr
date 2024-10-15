@@ -1298,6 +1298,9 @@ message ConversationAlpha1Request {
 
   // Scrub PII data that comes back from the LLM
   optional bool scrubPII = 6;
+
+  // Temperature for the LLM to optimize for creativity or predictability
+  optional double temperature = 7;
 }
 
 message ConversationInput {
