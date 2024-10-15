@@ -66,8 +66,6 @@ const (
 	PauseWorkflow                   = "ERR_PAUSE_WORKFLOW"
 	PermissionDenied                = "ERR_PERMISSION_DENIED"
 	PostfixQueryFailed              = "ERR_POSTFIX_QUERY_FAILED"
-	PrefixPubSub                    = "ERR_PREFIX_PUB_SUB"
-	PrefixStateStore                = "ERR_PREFIX_STATE_STORE"
 	PublishOutbox                   = "ERR_PUBLISH_OUTBOX"
 	PubsubCloudEventsSer            = "ERR_PUBSUB_CLOUD_EVENTS_SER"
 	PubsubEmpty                     = "ERR_PUBSUB_EMPTY"
