@@ -51,7 +51,7 @@ jobs:
       - name: Activate virtual environment and install required packages
         run: |
           source venv/bin/activate
-          pip install scipy psutil
+          pip install numpy scipy psutil
       # This is a good example where we want to always compare against the latest stable release.
       # Pinning to a given Dapr version does not add any value in this workflow.
       - name: Install latest Dapr CLI
