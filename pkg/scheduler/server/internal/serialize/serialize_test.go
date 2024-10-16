@@ -54,7 +54,8 @@ func Test_buildJobName(t *testing.T) {
 						Type: &schedulerv1pb.JobTargetMetadata_Job{
 							Job: new(schedulerv1pb.TargetJob),
 						},
-					}},
+					},
+				},
 			},
 			expName: "app||myns||myapp||test",
 			expErr:  false,
@@ -68,7 +69,8 @@ func Test_buildJobName(t *testing.T) {
 						Type: &schedulerv1pb.JobTargetMetadata_Job{
 							Job: nil,
 						},
-					}},
+					},
+				},
 			},
 			expName: "app||myns||myapp||test",
 			expErr:  false,
@@ -84,7 +86,8 @@ func Test_buildJobName(t *testing.T) {
 								Type: "myactortype", Id: "myactorid",
 							},
 						},
-					}},
+					},
+				},
 			},
 			expName: "actorreminder||myns||myactortype||myactorid||test",
 			expErr:  false,
@@ -95,7 +98,7 @@ func Test_buildJobName(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 			got, err := buildJobName(test.req)
-			assert.Equal(t, err != nil, test.expErr)
+			assert.Equal(t, test.expErr, err != nil)
 			assert.Equal(t, test.expName, got)
 		})
 	}

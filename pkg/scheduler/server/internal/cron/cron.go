@@ -27,6 +27,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -170,6 +171,7 @@ func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 		return true
 	}
 
+	now := time.Now()
 	if err := c.connectionPool.Send(ctx, &pool.JobEvent{
 		Name:     req.GetName()[idx+2:],
 		Data:     req.GetPayload(),
@@ -179,6 +181,10 @@ func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 		// another long running go routine that accepts this job on a channel
 		log.Errorf("Error sending job to connection stream: %s", err)
 	}
+
+	monitoring.RecordTriggerDuration(now)
+
+	monitoring.RecordJobsTriggeredCount(&meta)
 
 	return true
 }

@@ -120,10 +120,6 @@ func (j *Job) Metadata() *anypb.Any {
 }
 
 func buildJobName(req Request) (string, error) {
-	joinStrings := func(ss ...string) string {
-		return strings.Join(ss, "||")
-	}
-
 	name := req.GetName()
 	meta := req.GetMetadata()
 
