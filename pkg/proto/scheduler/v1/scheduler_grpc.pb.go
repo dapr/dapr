@@ -23,6 +23,7 @@ const (
 	Scheduler_GetJob_FullMethodName      = "/dapr.proto.scheduler.v1.Scheduler/GetJob"
 	Scheduler_DeleteJob_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
 	Scheduler_WatchJobs_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/WatchJobs"
+	Scheduler_ListJobs_FullMethodName    = "/dapr.proto.scheduler.v1.Scheduler/ListJobs"
 )
 
 // SchedulerClient is the client API for Scheduler service.
@@ -38,6 +39,8 @@ type SchedulerClient interface {
 	// WatchJobs is used by the daprd sidecar to connect to the Scheduler
 	// service to watch for jobs triggering back.
 	WatchJobs(ctx context.Context, opts ...grpc.CallOption) (Scheduler_WatchJobsClient, error)
+	// ListJobs is used by the daprd sidecar to list all jobs.
+	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
 }
 
 type schedulerClient struct {
@@ -106,6 +109,15 @@ func (x *schedulerWatchJobsClient) Recv() (*WatchJobsResponse, error) {
 	return m, nil
 }
 
+func (c *schedulerClient) ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error) {
+	out := new(ListJobsResponse)
+	err := c.cc.Invoke(ctx, Scheduler_ListJobs_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
 // SchedulerServer is the server API for Scheduler service.
 // All implementations should embed UnimplementedSchedulerServer
 // for forward compatibility
@@ -119,6 +131,8 @@ type SchedulerServer interface {
 	// WatchJobs is used by the daprd sidecar to connect to the Scheduler
 	// service to watch for jobs triggering back.
 	WatchJobs(Scheduler_WatchJobsServer) error
+	// ListJobs is used by the daprd sidecar to list all jobs.
+	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
 }
 
 // UnimplementedSchedulerServer should be embedded to have forward compatible implementations.
@@ -136,6 +150,9 @@ func (UnimplementedSchedulerServer) DeleteJob(context.Context, *DeleteJobRequest
 }
 func (UnimplementedSchedulerServer) WatchJobs(Scheduler_WatchJobsServer) error {
 	return status.Errorf(codes.Unimplemented, "method WatchJobs not implemented")
+}
+func (UnimplementedSchedulerServer) ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ListJobs not implemented")
 }
 
 // UnsafeSchedulerServer may be embedded to opt out of forward compatibility for this service.
@@ -229,6 +246,24 @@ func (x *schedulerWatchJobsServer) Recv() (*WatchJobsRequest, error) {
 	return m, nil
 }
 
+func _Scheduler_ListJobs_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ListJobsRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(SchedulerServer).ListJobs(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Scheduler_ListJobs_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(SchedulerServer).ListJobs(ctx, req.(*ListJobsRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 // Scheduler_ServiceDesc is the grpc.ServiceDesc for Scheduler service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -247,6 +282,10 @@ var Scheduler_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "DeleteJob",
 			Handler:    _Scheduler_DeleteJob_Handler,
+		},
+		{
+			MethodName: "ListJobs",
+			Handler:    _Scheduler_ListJobs_Handler,
 		},
 	},
 	Streams: []grpc.StreamDesc{

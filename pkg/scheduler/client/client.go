@@ -15,6 +15,7 @@ package client
 
 import (
 	"context"
+	"math"
 
 	grpcMiddleware "github.com/grpc-ecosystem/go-grpc-middleware"
 	grpcRetry "github.com/grpc-ecosystem/go-grpc-middleware/retry"
@@ -43,6 +44,7 @@ func New(ctx context.Context, address string, sec security.Handler) (schedulerv1
 	}
 
 	opts := []grpc.DialOption{
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
 		grpc.WithUnaryInterceptor(unaryClientInterceptor),
 		sec.GRPCDialOptionMTLS(schedulerID),
 	}

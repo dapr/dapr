@@ -89,9 +89,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	etcdKeysPrefix := "dapr/jobs"
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := a.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Empty(c, keys)
+		assert.Empty(c, a.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix))
 	}, time.Second*10, 10*time.Millisecond)
 
 	metrics := a.scheduler.Metrics(t, ctx)
@@ -112,9 +110,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*4, 10*time.Millisecond)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := a.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Len(c, keys, 1)
+		assert.Len(c, a.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix), 1)
 	}, time.Second*10, 10*time.Millisecond)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

@@ -16,6 +16,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -30,6 +31,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
@@ -219,19 +221,12 @@ func (s *Scheduler) DataDir() string {
 	return s.dataDir
 }
 
-func (s *Scheduler) ETCDClient(t *testing.T) *client.EtcdClient {
-	t.Helper()
-
-	return client.Etcd(t, clientv3.Config{
-		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
-		DialTimeout: 40 * time.Second,
-	})
-}
-
 func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
 	//nolint:staticcheck
-	conn, err := grpc.DialContext(ctx, s.Address(), grpc.WithBlock(), grpc.WithReturnConnectionError(),
+	conn, err := grpc.DialContext(ctx, s.Address(),
+		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(math.MaxInt32), grpc.MaxCallRecvMsgSize(math.MaxInt32)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(), grpc.WithReturnConnectionError(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -272,7 +267,12 @@ func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) 
 	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
 	require.NoError(t, err)
 
-	conn, err := grpc.DialContext(ctx, s.Address(), sech.GRPCDialOptionMTLS(id), grpc.WithBlock()) //nolint:staticcheck
+	//nolint:staticcheck
+	conn, err := grpc.DialContext(ctx, s.Address(),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32), grpc.MaxCallSendMsgSize(math.MaxInt32)),
+		sech.GRPCDialOptionMTLS(id),
+		grpc.WithBlock(),
+	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
@@ -334,4 +334,74 @@ func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) map[string]float6
 	}
 
 	return metrics
+}
+
+func (s *Scheduler) EtcdClient(t *testing.T) *clientv3.Client {
+	t.Helper()
+
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
+		DialTimeout: 15 * time.Second,
+	})
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		require.NoError(t, client.Close())
+	})
+
+	return client
+}
+
+func (s *Scheduler) EtcdJobs(t *testing.T, ctx context.Context) []*mvccpb.KeyValue {
+	t.Helper()
+	resp, err := s.EtcdClient(t).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	require.NoError(t, err)
+	return resp.Kvs
+}
+
+func (s *Scheduler) ListJobActors(t *testing.T, ctx context.Context, namespace, appID, actorType, actorID string) *schedulerv1pb.ListJobsResponse {
+	t.Helper()
+	resp, err := s.Client(t, ctx).ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
+		Metadata: &schedulerv1pb.JobMetadata{
+			Namespace: namespace, AppId: appID,
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{
+						Type: actorType,
+						Id:   actorID,
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	return resp
+}
+
+func (s *Scheduler) ListJobJobs(t *testing.T, ctx context.Context, namespace, appID string) *schedulerv1pb.ListJobsResponse {
+	t.Helper()
+	resp, err := s.Client(t, ctx).ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
+		Metadata: &schedulerv1pb.JobMetadata{
+			Namespace: namespace, AppId: appID,
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Job{
+					Job: new(schedulerv1pb.TargetJob),
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	return resp
+}
+
+func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string) []string {
+	t.Helper()
+
+	resp, err := client.Etcd(t, clientv3.Config{
+		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
+		DialTimeout: 40 * time.Second,
+	}).ListAllKeys(ctx, prefix)
+	require.NoError(t, err)
+
+	return resp
 }
