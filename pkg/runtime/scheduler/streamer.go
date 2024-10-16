@@ -162,12 +162,12 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	switch codes.Code(statusCode) {
 	case codes.OK:
 		log.Debugf("Sent job %s to app", job.GetName())
-		diag.DefaultComponentMonitoring.JobExecutedSuccess(ctx, job.GetName(), diag.JobExecutionOp, true, elapsed)
+		diag.DefaultComponentMonitoring.JobExecutedSuccess(ctx, diag.JobTriggerOp, true, elapsed)
 	case codes.NotFound:
 		log.Errorf("non-retriable error returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
 	default:
 		log.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
-		diag.DefaultComponentMonitoring.JobExecutedFailure(ctx, job.GetName(), diag.JobExecutionOp, true, elapsed)
+		diag.DefaultComponentMonitoring.JobExecutedFailure(ctx, diag.JobTriggerOp, false, elapsed)
 	}
 
 	return nil
