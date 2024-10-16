@@ -11,22 +11,27 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package http
+package grpc
 
 import (
 	"context"
-	"net/http"
-	"strings"
+	"errors"
+
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
@@ -41,24 +46,24 @@ type metrics struct {
 func (m *metrics) Setup(t *testing.T) []framework.Option {
 	m.scheduler = scheduler.New(t)
 
-	app := app.New(t,
-		app.WithHandlerFunc("/job/success", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusOK)
-		}),
-		app.WithHandlerFunc("/job/failure", func(w http.ResponseWriter, r *http.Request) {
-			w.WriteHeader(http.StatusInternalServerError)
+	srv := app.New(t,
+		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
+			if in.Name == "success" {
+				return new(runtimev1pb.JobEventResponse), nil
+			}
+			return nil, errors.New("job failed")
 		}),
 	)
 
 	m.daprd = daprd.New(t,
 		daprd.WithSchedulerAddresses(m.scheduler.Address()),
-		daprd.WithAppPort(app.Port()),
-		daprd.WithAppProtocol("http"),
+		daprd.WithAppPort(srv.Port(t)),
+		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppID("my_app"),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(m.scheduler, m.daprd, app),
+		framework.WithProcesses(m.scheduler, m.daprd, srv),
 	}
 }
 
@@ -66,23 +71,39 @@ func (m *metrics) Run(t *testing.T, ctx context.Context) {
 	m.scheduler.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilRunning(t, ctx)
 
+	client := m.daprd.GRPCClient(t, ctx)
+
+	data, _ := anypb.New(wrapperspb.Bytes([]byte("hello world")))
+
 	t.Run("success count", func(t *testing.T) {
-		body := strings.NewReader(`{"dueTime":"0s","data":"test"}`)
-		m.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/success", body)
+		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+			Job: &runtimev1pb.Job{
+				Name:    "success",
+				DueTime: ptr.Of("0s"),
+				Data:    data,
+			},
+		})
+		require.NoError(t, err)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := m.daprd.Metrics(t, ctx)
 			assert.Equal(t, 1, int(metrics["dapr_component_job_successCount|app_id:my_app|component:|namespace:|operation:job_trigger_op|success:true"]))
-		}, time.Second*3, time.Millisecond*10)
+		}, time.Second*10, time.Millisecond*10)
 	})
 
 	t.Run("failure count", func(t *testing.T) {
-		body := strings.NewReader(`{"dueTime":"0s","data":"test"}`)
-		m.daprd.HTTPPost2xx(t, ctx, "/v1.0-alpha1/jobs/failure", body)
+		_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+			Job: &runtimev1pb.Job{
+				Name:    "failure",
+				DueTime: ptr.Of("0s"),
+				Data:    data,
+			},
+		})
+		require.NoError(t, err)
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			metrics := m.daprd.Metrics(t, ctx)
 			assert.Equal(t, 1, int(metrics["dapr_component_job_failureCount|app_id:my_app|component:|namespace:|operation:job_trigger_op"]))
-		}, time.Second*3, time.Millisecond*10)
+		}, time.Second*10, time.Millisecond*10)
 	})
 }

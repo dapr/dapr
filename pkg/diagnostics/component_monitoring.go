@@ -29,7 +29,7 @@ const (
 	BulkGet                  = "bulk_get"
 	BulkDelete               = "bulk_delete"
 	CryptoOp                 = "crypto_op"
-	JobExecutionOp           = "job_execution_op"
+	JobTriggerOp             = "job_trigger_op"
 )
 
 // componentMetrics holds dapr runtime metrics for components.
@@ -461,26 +461,26 @@ func (c *componentMetrics) CryptoInvoked(ctx context.Context, component, operati
 }
 
 // JobExecutedSuccess records the metrics for a job execution success event.
-func (c *componentMetrics) JobExecutedSuccess(ctx context.Context, component, operation string, success bool, elapsed float64) {
-	c.jobExecuted(ctx, component, operation, success, elapsed, c.jobSuccessCount)
+func (c *componentMetrics) JobExecutedSuccess(ctx context.Context, operation string, success bool, elapsed float64) {
+	c.jobExecuted(ctx, operation, success, elapsed, c.jobSuccessCount)
 }
 
 // JobExecutedFailure records the metrics for a job execution failure event.
-func (c *componentMetrics) JobExecutedFailure(ctx context.Context, component, operation string, success bool, elapsed float64) {
-	c.jobExecuted(ctx, component, operation, success, elapsed, c.jobFailureCount)
+func (c *componentMetrics) JobExecutedFailure(ctx context.Context, operation string, success bool, elapsed float64) {
+	c.jobExecuted(ctx, operation, success, elapsed, c.jobFailureCount)
 }
 
-func (c *componentMetrics) jobExecuted(ctx context.Context, component, operation string, success bool, elapsed float64, countMeasure *stats.Int64Measure) {
+func (c *componentMetrics) jobExecuted(ctx context.Context, operation string, success bool, elapsed float64, countMeasure *stats.Int64Measure) {
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(countMeasure.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+			diagUtils.WithTags(countMeasure.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 			countMeasure.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(c.jobLatency.Name(), appIDKey, c.appID, componentKey, component, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+				diagUtils.WithTags(c.jobLatency.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
 				c.jobLatency.M(elapsed))
 		}
 	}
