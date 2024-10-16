@@ -111,9 +111,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	etcdKeysPrefix := "dapr/jobs"
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := r.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Empty(c, keys)
+		assert.Empty(c, r.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix))
 	}, time.Second*10, 10*time.Millisecond)
 
 	_, err := client.InvokeActor(ctx, &runtimev1pb.InvokeActorRequest{
@@ -133,9 +131,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := r.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Len(c, keys, 1)
+		assert.Len(c, r.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix), 1)
 	}, time.Second*10, 10*time.Millisecond)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -150,8 +146,6 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := r.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Empty(c, keys)
+		assert.Empty(c, r.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix))
 	}, time.Second*10, 10*time.Millisecond)
 }

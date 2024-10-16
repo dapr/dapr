@@ -16,6 +16,8 @@ service Scheduler {
   // WatchJobs is used by the daprd sidecar to connect to the Scheduler
   // service to watch for jobs triggering back.
   rpc WatchJobs(stream WatchJobsRequest) returns (stream WatchJobsResponse) {}
+  // ListJobs is used by the daprd sidecar to list all jobs.
+  rpc ListJobs(ListJobsRequest) returns (ListJobsResponse) {}
 }
 
 message Job {
@@ -156,4 +158,25 @@ message DeleteJobRequest {
 // DeleteJobRequest is the response message used by the daprd sidecar to delete or get a job.
 message DeleteJobResponse {
   // Empty
+}
+
+// NamedJob is a job with a name.
+message NamedJob {
+ // name is the name of the job.
+  string name = 1;
+
+  // The job scheduled.
+  Job job = 2;
+}
+
+// ListJobsRequest is the message used by the daprd sidecar to list all jobs.
+message ListJobsRequest {
+  // The metadata associated with the job.
+  JobMetadata metadata = 1;
+}
+
+// ListJobsResponse is the response message to convey the details of a job.
+message ListJobsResponse {
+  // The list of jobs.
+  repeated NamedJob jobs = 1;
 }

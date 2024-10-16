@@ -33,6 +33,7 @@ type options struct {
 	scheduleJobFn func(context.Context, *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error)
 	getJobFn      func(context.Context, *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error)
 	deleteJobFn   func(context.Context, *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error)
+	listJobsFn    func(context.Context, *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error)
 	watchJobsFn   func(schedulerv1pb.Scheduler_WatchJobsServer) error
 }
 
@@ -63,6 +64,12 @@ func WithGetJobFn(fn func(ctx context.Context, request *schedulerv1pb.GetJobRequ
 func WithDeleteJobFn(fn func(ctx context.Context, request *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error)) func(*options) {
 	return func(o *options) {
 		o.deleteJobFn = fn
+	}
+}
+
+func WithListJobsFn(fn func(ctx context.Context, request *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error)) func(*options) {
+	return func(o *options) {
+		o.listJobsFn = fn
 	}
 }
 

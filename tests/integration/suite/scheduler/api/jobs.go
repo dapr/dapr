@@ -16,7 +16,6 @@ package api
 import (
 	"context"
 	"strconv"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -85,7 +84,7 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 			_, err := client.ScheduleJob(ctx, req)
 			require.NoError(t, err)
 
-			assert.True(t, j.etcdHasJob(t, ctx, name))
+			assert.Len(t, j.scheduler.ListJobJobs(t, ctx, "namespace", "appid").GetJobs(), i)
 
 			resp, err := client.GetJob(ctx, &schedulerv1.GetJobRequest{
 				Name: name,
@@ -121,21 +120,18 @@ func (j *jobs) Run(t *testing.T, ctx context.Context) {
 			})
 			require.NoError(t, err)
 
-			assert.False(t, j.etcdHasJob(t, ctx, name))
+			resp, err := client.GetJob(ctx, &schedulerv1.GetJobRequest{
+				Name: name,
+				Metadata: &schedulerv1.JobMetadata{
+					AppId:     "appid",
+					Namespace: "namespace",
+					Target: &schedulerv1.JobTargetMetadata{
+						Type: new(schedulerv1.JobTargetMetadata_Job),
+					},
+				},
+			})
+			require.Error(t, err)
+			assert.Nil(t, resp)
 		}
 	})
-}
-
-func (j *jobs) etcdHasJob(t *testing.T, ctx context.Context, key string) bool {
-	t.Helper()
-
-	// Get keys with prefix
-	keys := j.scheduler.ETCDClient(t).Get(t, ctx, "")
-	for _, k := range keys {
-		if strings.HasSuffix(k, "||"+key) {
-			return true
-		}
-	}
-
-	return false
 }
