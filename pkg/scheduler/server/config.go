@@ -15,6 +15,7 @@ package server
 
 import (
 	"fmt"
+	"math"
 	"net"
 	"net/url"
 	"path/filepath"
@@ -46,6 +47,7 @@ func config(opts Options) (*embed.Config, error) {
 
 	config.Name = opts.EtcdID
 	config.InitialCluster = strings.Join(opts.EtcdInitialPeers, ",")
+	config.MaxRequestBytes = math.MaxInt32
 
 	etcdURL, peerPort, err := peerHostAndPort(opts.EtcdID, opts.EtcdInitialPeers)
 	if err != nil {

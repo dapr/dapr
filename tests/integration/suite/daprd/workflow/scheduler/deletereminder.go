@@ -27,11 +27,9 @@ import (
 	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	clientv3 "go.etcd.io/etcd/client/v3"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	clients "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -82,18 +80,11 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	d.place.WaitUntilRunning(t, ctx)
 	d.daprd.WaitUntilRunning(t, ctx)
 
-	etcdClient := clients.Etcd(t, clientv3.Config{
-		Endpoints:   []string{"localhost:" + d.scheduler.EtcdClientPort()},
-		DialTimeout: 5 * time.Second,
-	})
-
 	// should have the same path separator across OS
 	etcdKeysPrefix := "dapr/jobs"
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Empty(c, keys)
+		assert.Empty(c, d.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix))
 	}, time.Second*10, 10*time.Millisecond)
 
 	r := task.NewTaskRegistry()
@@ -131,9 +122,7 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Empty(c, keys)
+		assert.Empty(c, d.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix))
 	}, time.Second*60, time.Millisecond*10) // account for cleanup time in etcd
 	// explicitly not checking the job/counters records since those get garbage collected after 180s
 }
