@@ -417,7 +417,7 @@ func (s *secret) readExpectError(t *testing.T, ctx context.Context, compName, ke
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
 	require.NoError(t, err)
 	s.doReq(t, req, expCode, fmt.Sprintf(
-		`\{"errorCode":"(ERR_SECRET_STORES_NOT_CONFIGURED|ERR_SECRET_STORE_NOT_FOUND)","message":"(secret store is not configured|failed finding secret store with key %s)"\}`,
+		`\{"errorCode":"(ERR_SECRET_STORES_NOT_CONFIGURED|ERR_SECRET_STORE_NOT_FOUND)","message":"(secret store is not configured|secret store %s not found)","details":\[\{"@type":"type\.googleapis\.com/google\.rpc\.ErrorInfo","domain":"dapr\.io","metadata":null,"reason":"(DAPR_SECRET_NOT_CONFIGURED|DAPR_SECRET_NOT_FOUND)"\}\]\}`,
 		compName))
 }
 
