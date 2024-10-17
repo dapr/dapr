@@ -11,13 +11,11 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheduler
+package serialize
 
-import (
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/authz"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/helm"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/kubernetes"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/metrics"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/quorum"
-)
+func PrefixesFromNamespace(namespace string) []string {
+	return []string{
+		"actorreminder||" + namespace,
+		"app||" + namespace,
+	}
+}
