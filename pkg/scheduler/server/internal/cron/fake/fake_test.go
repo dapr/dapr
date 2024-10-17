@@ -11,30 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package binary
+package fake
 
-import "testing"
+import (
+	"testing"
 
-type buildOpts struct {
-	getRootDirFunc func(t *testing.T) string
-	buildDir       string
-	tags           []string
-}
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
+)
 
-func withRootDirFunc(f func(t *testing.T) string) func(*buildOpts) {
-	return func(o *buildOpts) {
-		o.getRootDirFunc = f
-	}
-}
-
-func withTags(tags ...string) func(*buildOpts) {
-	return func(o *buildOpts) {
-		o.tags = tags
-	}
-}
-
-func withBuildDir(dir string) func(*buildOpts) {
-	return func(o *buildOpts) {
-		o.buildDir = dir
-	}
+func Test_Fake(t *testing.T) {
+	var _ cron.Interface = new(Fake)
 }

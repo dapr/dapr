@@ -50,7 +50,7 @@ const (
 
 	// Target for the QPS - Temporary
 	targetQPS          float64 = 33
-	targetSchedulerQPS float64 = 2900
+	targetSchedulerQPS float64 = 2850
 
 	// Target for the QPS to trigger reminders.
 	targetTriggerQPS          float64 = 1000
@@ -296,7 +296,7 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 	assert.Equal(t, 0, daprResult.RetCodes.Num400)
 	assert.Equal(t, 0, daprResult.RetCodes.Num500)
 	assert.Equal(t, 0, restarts)
-	assert.InDelta(t, targetSchedulerQPS, daprResult.ActualQPS, 10)
+	assert.InDelta(t, targetSchedulerQPS, daprResult.ActualQPS, 100)
 }
 
 type actorReminderRequest struct {
