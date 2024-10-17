@@ -158,13 +158,14 @@ func TestRaftHA(t *testing.T) {
 	})
 
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
-		var oldSvr int
+		oldSvr := -1
 		for i := range 3 {
 			if raftServers[i] == nil {
 				oldSvr = i
 				break
 			}
 		}
+		require.NotEqual(t, -1, oldSvr, "no server to replace")
 
 		raftServers[oldSvr], ready[oldSvr], raftServerCancel[oldSvr] = createRaftServer(t, oldSvr, peers)
 		select {
