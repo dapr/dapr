@@ -108,13 +108,12 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		require.NoError(t, err)
+		require.NoError(c, err)
 		assert.Len(c, resp.GetRegisteredComponents(), 1)
 	}, time.Second*5, time.Millisecond*10)
 
 	called := a.healthCalled.Load()
 	require.Eventually(t, func() bool { return a.healthCalled.Load() > called }, time.Second*5, time.Millisecond*10)
-
 	assert.Eventually(t, func() bool {
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
