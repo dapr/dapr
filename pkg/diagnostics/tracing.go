@@ -178,18 +178,18 @@ func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trac
 }
 
 func TraceIDAndStateFromSpan(span trace.Span) (string, string) {
-	var corID, traceState string
+	var traceID, traceState string
 
 	if span != nil {
 		sc := span.SpanContext()
 
 		if !sc.Equal(trace.SpanContext{}) {
-			corID = SpanContextToW3CString(sc)
+			traceID = SpanContextToW3CString(sc)
 		}
 		if sc.TraceState().Len() > 0 {
 			traceState = TraceStateToW3CString(sc)
 		}
 	}
 
-	return corID, traceState
+	return traceID, traceState
 }
