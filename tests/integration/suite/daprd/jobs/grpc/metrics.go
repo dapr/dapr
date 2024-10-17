@@ -48,7 +48,7 @@ func (m *metrics) Setup(t *testing.T) []framework.Option {
 
 	srv := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
-			if in.Name == "success" {
+			if in.GetName() == "success" {
 				return new(runtimev1pb.JobEventResponse), nil
 			}
 			return nil, errors.New("job failed")
