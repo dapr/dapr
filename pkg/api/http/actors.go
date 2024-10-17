@@ -180,7 +180,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	var req actors.CreateReminderRequest
 	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
+		msg := messages.ErrMalformedRequest.RecordAndGet().RecordAndGet().WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -193,13 +193,13 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	err = a.universal.Actors().CreateReminder(ctx, &req)
 	if err != nil {
 		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-			msg := messages.ErrActorReminderOpActorNotHosted
+			msg := messages.ErrActorReminderOpActorNotHosted.RecordAndGet()
 			respondWithError(w, msg)
 			log.Debug(msg)
 			return
 		}
 
-		msg := messages.ErrActorReminderCreate.WithFormat(err)
+		msg := messages.ErrActorReminderCreate.RecordAndGet().WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -220,7 +220,7 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	var req actors.CreateTimerRequest
 	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
+		msg := messages.ErrMalformedRequest.RecordAndGet().WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -232,7 +232,7 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 
 	err = a.universal.Actors().CreateTimer(ctx, &req)
 	if err != nil {
-		msg := messages.ErrActorTimerCreate.WithFormat(err)
+		msg := messages.ErrActorTimerCreate.RecordAndGet().WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -270,7 +270,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	var ops []actors.TransactionalOperation
 	err = json.NewDecoder(r.Body).Decode(&ops)
 	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
+		msg := messages.ErrMalformedRequest.RecordAndGet().WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -282,7 +282,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if !hosted {
-		msg := messages.ErrActorInstanceMissing
+		msg := messages.ErrActorInstanceMissing.RecordAndGet()
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -296,7 +296,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 
 	err = a.universal.Actors().TransactionalStateOperation(ctx, &req)
 	if err != nil {
-		msg := messages.ErrActorStateTransactionSave.WithFormat(err)
+		msg := messages.ErrActorStateTransactionSave.RecordAndGet().WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -321,13 +321,13 @@ func (a *api) onGetActorReminder(w http.ResponseWriter, r *http.Request) {
 	})
 	if err != nil {
 		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-			msg := messages.ErrActorReminderOpActorNotHosted
+			msg := messages.ErrActorReminderOpActorNotHosted.RecordAndGet()
 			respondWithError(w, msg)
 			log.Debug(msg)
 			return
 		}
 
-		msg := messages.ErrActorReminderGet.WithFormat(err)
+		msg := messages.ErrActorReminderGet.RecordAndGet().WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -369,7 +369,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	// Actor invocation doesn't support streaming, so we need to read the entire reqBody
 	reqBody, err := io.ReadAll(r.Body)
 	if err != nil {
-		msg := messages.ErrBadRequest.WithFormat("failed to read body: " + err.Error())
+		msg := messages.ErrBadRequest.RecordAndGet().WithFormat("failed to read body: " + err.Error())
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -397,7 +397,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	if err != nil {
 		actorErr, isActorError := actorerrors.As(err)
 		if !isActorError {
-			msg := messages.ErrActorInvoke.WithFormat(err)
+			msg := messages.ErrActorInvoke.RecordAndGet().WithFormat(err)
 			respondWithError(w, msg)
 			log.Debug(msg)
 			return
@@ -414,7 +414,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if res == nil {
-		msg := messages.ErrActorInvoke.WithFormat("failed to cast response")
+		msg := messages.ErrActorInvoke.RecordAndGet().WithFormat("failed to cast response")
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -454,7 +454,7 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	})
 
 	if !hosted {
-		msg := messages.ErrActorInstanceMissing
+		msg := messages.ErrActorInstanceMissing.RecordAndGet()
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -466,7 +466,7 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 		Key:       key,
 	})
 	if err != nil {
-		msg := messages.ErrActorStateGet.WithFormat(err)
+		msg := messages.ErrActorStateGet.RecordAndGet().WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return

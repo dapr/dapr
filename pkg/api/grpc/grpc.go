@@ -267,7 +267,7 @@ var (
 // Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if a.directMessaging == nil {
-		return nil, messages.ErrDirectInvokeNotReady
+		return nil, messages.ErrDirectInvokeNotReady.RecordAndGet()
 	}
 
 	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
@@ -303,7 +303,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			}
 		}
 		if rErr != nil {
-			return rResp, messages.ErrDirectInvoke.WithFormat(in.GetId(), rErr)
+			return rResp, messages.ErrDirectInvoke.RecordAndGet().WithFormat(in.GetId(), rErr)
 		}
 
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
@@ -540,7 +540,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	}
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrInvokeOutputBinding, in.GetName(), err.Error())
+		err = status.Errorf(codes.Internal, messages.RecordAndGet(messages.ErrInvokeOutputBinding), in.GetName(), err.Error())
 		apiServerLogger.Debug(err)
 		return r, err
 	}
@@ -663,7 +663,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		if ok {
 			err = kerr.GRPCStatus().Err()
 		} else {
-			err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
+			err = status.Errorf(codes.Internal, messages.RecordAndGet(messages.ErrStateGet), in.GetKey(), in.GetStoreName(), err.Error())
 		}
 
 		a.logger.Debug(err)
@@ -676,7 +676,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	if encryption.EncryptedStateStore(in.GetStoreName()) {
 		val, err := encryption.TryDecryptValue(in.GetStoreName(), getResponse.Data)
 		if err != nil {
-			err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
+			err = status.Errorf(codes.Internal, messages.RecordAndGet(messages.ErrStateGet), in.GetKey(), in.GetStoreName(), err.Error())
 			a.logger.Debug(err)
 			return &runtimev1pb.GetStateResponse{}, err
 		}
@@ -766,7 +766,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Set, err == nil, elapsed)
 
 	if err != nil {
-		err = a.stateErrorResponse(err, messages.ErrStateSave, in.GetStoreName(), err.Error())
+		err = a.stateErrorResponse(err, messages.RecordAndGet(messages.ErrStateSave), in.GetStoreName(), err.Error())
 		a.logger.Debug(err)
 		return empty, err
 	}
@@ -832,7 +832,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Delete, err == nil, elapsed)
 
 	if err != nil {
-		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.GetKey(), err.Error())
+		err = a.stateErrorResponse(err, messages.RecordAndGet(messages.ErrStateDelete), in.GetKey(), err.Error())
 		a.logger.Debug(err)
 		return empty, err
 	}
@@ -882,7 +882,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.BulkDelete, err == nil, elapsed)
 
 	if err != nil {
-		err = a.stateErrorResponse(err, messages.ErrStateDeleteBulk, in.GetStoreName(), err.Error())
+		err = a.stateErrorResponse(err, messages.RecordAndGet(messages.ErrStateDeleteBulk), in.GetStoreName(), err.Error())
 		a.logger.Debug(err)
 		return empty, err
 	}
@@ -962,7 +962,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			operations = append(operations, delReq)
 
 		default:
-			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, inputReq.GetOperationType())
+			err := status.Errorf(codes.Unimplemented, messages.RecordAndGet(messages.ErrNotSupportedStateOperation), inputReq.GetOperationType())
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
 		}
@@ -984,7 +984,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				data := []byte(fmt.Sprintf("%v", req.Value))
 				val, err := encryption.TryEncryptValue(in.GetStoreName(), data)
 				if err != nil {
-					err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
+					err = status.Errorf(codes.Internal, messages.RecordAndGet(messages.ErrStateTransaction), err.Error())
 					apiServerLogger.Debug(err)
 					return &emptypb.Empty{}, err
 				}
@@ -1025,7 +1025,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.StateTransaction, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
+		err = status.Errorf(codes.Internal, messages.RecordAndGet(messages.ErrStateTransaction), err.Error())
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
 	}
@@ -1048,7 +1048,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	})
 
 	if !hosted {
-		err = messages.ErrActorInstanceMissing
+		err = messages.ErrActorInstanceMissing.RecordAndGet()
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1061,7 +1061,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 
 	resp, err := a.Universal.Actors().GetState(ctx, &req)
 	if err != nil {
-		err = messages.ErrActorStateGet.WithFormat(err)
+		err = messages.ErrActorStateGet.RecordAndGet().WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1111,7 +1111,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 			}
 
 		default:
-			err = status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, op.GetOperationType())
+			err = status.Errorf(codes.Unimplemented, messages.RecordAndGet(messages.ErrNotSupportedStateOperation), op.GetOperationType())
 			apiServerLogger.Debug(err)
 			return nil, err
 		}
@@ -1125,7 +1125,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 	})
 
 	if !hosted {
-		err = messages.ErrActorInstanceMissing
+		err = messages.ErrActorInstanceMissing.RecordAndGet()
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1138,7 +1138,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 	err = a.Universal.Actors().TransactionalStateOperation(ctx, &req)
 	if err != nil {
-		err = messages.ErrActorStateTransactionSave.WithFormat(err)
+		err = messages.ErrActorStateTransactionSave.RecordAndGet().WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1169,7 +1169,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return a.Universal.Actors().Call(ctx, req)
 	})
 	if err != nil && !actorerrors.Is(err) {
-		err = messages.ErrActorInvoke.WithFormat(err)
+		err = messages.ErrActorInvoke.RecordAndGet().WithFormat(err)
 		apiServerLogger.Debug(err)
 		return response, err
 	}
@@ -1190,12 +1190,12 @@ func stringValueOrEmpty(value *string) string {
 
 func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
 	if a.CompStore().ConfigurationsLen() == 0 {
-		return nil, status.Error(codes.FailedPrecondition, messages.ErrConfigurationStoresNotConfigured)
+		return nil, status.Error(codes.FailedPrecondition, messages.RecordAndGet(messages.ErrConfigurationStoresNotConfigured))
 	}
 
 	conf, ok := a.CompStore().GetConfiguration(name)
 	if !ok {
-		return nil, status.Errorf(codes.InvalidArgument, messages.ErrConfigurationStoreNotFound, name)
+		return nil, status.Errorf(codes.InvalidArgument, messages.RecordAndGet(messages.ErrConfigurationStoreNotFound), name)
 	}
 	return conf, nil
 }
@@ -1226,7 +1226,7 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(ctx, in.GetStoreName(), diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.Internal, messages.ErrConfigurationGet, req.Keys, in.GetStoreName(), err.Error())
+		err = status.Errorf(codes.Internal, messages.RecordAndGet(messages.ErrConfigurationGet), req.Keys, in.GetStoreName(), err.Error())
 		apiServerLogger.Debug(err)
 		return response, err
 	}
@@ -1379,7 +1379,7 @@ func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.S
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.GetStoreName(), diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
-		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, componentReq.Keys, request.GetStoreName(), err)
+		err = status.Errorf(codes.InvalidArgument, messages.RecordAndGet(messages.ErrConfigurationSubscribe), componentReq.Keys, request.GetStoreName(), err)
 		apiServerLogger.Debug(err)
 		return "", err
 	}
@@ -1418,7 +1418,7 @@ func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb
 	if !ok {
 		return &runtimev1pb.UnsubscribeConfigurationResponse{
 			Ok:      false,
-			Message: fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, "subscription does not exist"),
+			Message: fmt.Sprintf(messages.RecordAndGet(messages.ErrConfigurationUnsubscribe), subscribeID, "subscription does not exist"),
 		}, nil
 	}
 

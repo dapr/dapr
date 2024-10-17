@@ -49,9 +49,9 @@ func (a *Universal) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWor
 	response, err := workflowComponent.Get(ctx, &req)
 	if err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId(), err)
+			err = messages.ErrWorkflowInstanceNotFound.RecordAndGet().WithFormat(in.GetInstanceId(), err)
 		} else {
-			err = messages.ErrWorkflowGetResponse.WithFormat(in.GetInstanceId(), err)
+			err = messages.ErrWorkflowGetResponse.RecordAndGet().WithFormat(in.GetInstanceId(), err)
 		}
 		a.logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
@@ -84,7 +84,7 @@ func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.Star
 	}
 
 	if in.GetWorkflowName() == "" {
-		err := messages.ErrWorkflowNameMissing
+		err := messages.ErrWorkflowNameMissing.RecordAndGet()
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
@@ -106,7 +106,7 @@ func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.Star
 
 	resp, err := workflowComponent.Start(ctx, &req)
 	if err != nil {
-		err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(), err)
+		err := messages.ErrStartWorkflow.RecordAndGet().WithFormat(in.GetWorkflowName(), err)
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
@@ -138,9 +138,9 @@ func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.
 	}
 	if err := workflowComponent.Terminate(ctx, req); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId(), err)
+			err = messages.ErrWorkflowInstanceNotFound.RecordAndGet().WithFormat(in.GetInstanceId(), err)
 		} else {
-			err = messages.ErrTerminateWorkflow.WithFormat(in.GetInstanceId(), err)
+			err = messages.ErrTerminateWorkflow.RecordAndGet().WithFormat(in.GetInstanceId(), err)
 		}
 		a.logger.Debug(err)
 		return emptyResponse, err
@@ -157,7 +157,7 @@ func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb
 	}
 
 	if in.GetEventName() == "" {
-		err := messages.ErrMissingWorkflowEventName
+		err := messages.ErrMissingWorkflowEventName.RecordAndGet()
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -178,7 +178,7 @@ func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb
 
 	err = workflowComponent.RaiseEvent(ctx, &req)
 	if err != nil {
-		err = messages.ErrRaiseEventWorkflow.WithFormat(in.GetInstanceId(), err)
+		err = messages.ErrRaiseEventWorkflow.RecordAndGet().WithFormat(in.GetInstanceId(), err)
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -205,7 +205,7 @@ func (a *Universal) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.Paus
 		InstanceID: in.GetInstanceId(),
 	}
 	if err := workflowComponent.Pause(ctx, req); err != nil {
-		err = messages.ErrPauseWorkflow.WithFormat(in.GetInstanceId(), err)
+		err = messages.ErrPauseWorkflow.RecordAndGet().WithFormat(in.GetInstanceId(), err)
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -232,7 +232,7 @@ func (a *Universal) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Res
 		InstanceID: in.GetInstanceId(),
 	}
 	if err := workflowComponent.Resume(ctx, req); err != nil {
-		err = messages.ErrResumeWorkflow.WithFormat(in.GetInstanceId(), err)
+		err = messages.ErrResumeWorkflow.RecordAndGet().WithFormat(in.GetInstanceId(), err)
 		a.logger.Debug(err)
 		return emptyResponse, err
 	}
@@ -263,9 +263,9 @@ func (a *Universal) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Purg
 	err = workflowComponent.Purge(ctx, &req)
 	if err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
-			err = messages.ErrWorkflowInstanceNotFound.WithFormat(in.GetInstanceId(), err)
+			err = messages.ErrWorkflowInstanceNotFound.RecordAndGet().WithFormat(in.GetInstanceId(), err)
 		} else {
-			err = messages.ErrPurgeWorkflow.WithFormat(in.GetInstanceId(), err)
+			err = messages.ErrPurgeWorkflow.RecordAndGet().WithFormat(in.GetInstanceId(), err)
 		}
 		a.logger.Debug(err)
 		return emptyResponse, err
@@ -310,21 +310,21 @@ func (a *Universal) PurgeWorkflowAlpha1(ctx context.Context, in *runtimev1pb.Pur
 
 func (a *Universal) validateInstanceID(instanceID string, isCreate bool) error {
 	if instanceID == "" {
-		return messages.ErrMissingOrEmptyInstance
+		return messages.ErrMissingOrEmptyInstance.RecordAndGet()
 	}
 
 	if isCreate {
 		// Limit the length of the instance ID to avoid potential conflicts with state stores that have restrictive key limits.
 		const maxInstanceIDLength = 64
 		if len(instanceID) > maxInstanceIDLength {
-			return messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIDLength)
+			return messages.ErrInstanceIDTooLong.RecordAndGet().WithFormat(maxInstanceIDLength)
 		}
 
 		// Check to see if the instance ID contains invalid characters. Valid characters are letters, digits, dashes, and underscores.
 		// See https://github.com/dapr/dapr/issues/6156 for more context on why we check this.
 		for _, c := range instanceID {
 			if !unicode.IsLetter(c) && c != '_' && c != '-' && !unicode.IsDigit(c) {
-				return messages.ErrInvalidInstanceID.WithFormat(instanceID)
+				return messages.ErrInvalidInstanceID.RecordAndGet().WithFormat(instanceID)
 			}
 		}
 	}
@@ -333,12 +333,12 @@ func (a *Universal) validateInstanceID(instanceID string, isCreate bool) error {
 
 func (a *Universal) getWorkflowComponent(componentName string) (workflows.Workflow, error) {
 	if componentName == "" {
-		return nil, messages.ErrNoOrMissingWorkflowComponent
+		return nil, messages.ErrNoOrMissingWorkflowComponent.RecordAndGet()
 	}
 
 	workflowComponent, ok := a.compStore.GetWorkflow(componentName)
 	if !ok {
-		err := messages.ErrWorkflowComponentDoesNotExist.WithFormat(componentName)
+		err := messages.ErrWorkflowComponentDoesNotExist.RecordAndGet().WithFormat(componentName)
 		a.logger.Debug(err)
 		return nil, err
 	}

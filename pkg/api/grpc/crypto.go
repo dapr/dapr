@@ -24,6 +24,8 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/messages"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/pkg/messaging"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -47,17 +49,17 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 
 	// Validate required options
 	if reqProto.GetOptions() == nil {
-		err = messages.ErrBadRequest.WithFormat("first message does not contain the required options")
+		err = messages.ErrBadRequest.RecordAndGet().WithFormat("first message does not contain the required options")
 		a.logger.Debug(err)
 		return err
 	}
 	if reqProto.GetOptions().GetKeyName() == "" {
-		err = messages.ErrBadRequest.WithFormat("missing property 'keyName' in the options message")
+		err = messages.ErrBadRequest.RecordAndGet().WithFormat("missing property 'keyName' in the options message")
 		a.logger.Debug(err)
 		return err
 	}
 	if reqProto.GetOptions().GetKeyWrapAlgorithm() == "" {
-		err = messages.ErrBadRequest.WithFormat("missing property 'keyWrapAlgorithm' in the options message")
+		err = messages.ErrBadRequest.RecordAndGet().WithFormat("missing property 'keyWrapAlgorithm' in the options message")
 		a.logger.Debug(err)
 		return err
 	}
@@ -97,12 +99,13 @@ func (a *api) DecryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err er
 	if err != nil {
 		// This is already an APIError object.
 		a.logger.Debug(err)
+		diag.DefaultErrorCodeMonitoring.RecordErrorCode(errorcodes.BadRequest)
 		return err
 	}
 
 	// Validate required options
 	if reqProto.GetOptions() == nil {
-		err = messages.ErrBadRequest.WithFormat("first message does not contain the required options")
+		err = messages.ErrBadRequest.RecordAndGet().WithFormat("first message does not contain the required options")
 		a.logger.Debug(err)
 		return err
 	}
@@ -219,7 +222,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 		a.logger.Fatal("Invalid type for opts argument")
 	}
 	if err != nil {
-		err = messages.ErrCryptoOperation.WithFormat(err)
+		err = messages.ErrCryptoOperation.RecordAndGet().WithFormat(err)
 		a.logger.Debug(err)
 		return err
 	}
@@ -237,7 +240,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 	)
 	for {
 		if ctx.Err() != nil {
-			err = messages.ErrCryptoOperation.WithFormat(ctx.Err())
+			err = messages.ErrCryptoOperation.RecordAndGet().WithFormat(ctx.Err())
 			a.logger.Debug(err)
 			return err
 		}
@@ -247,7 +250,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 		if err == io.EOF {
 			done = true
 		} else if err != nil {
-			err = messages.ErrCryptoOperation.WithFormat(err)
+			err = messages.ErrCryptoOperation.RecordAndGet().WithFormat(err)
 			a.logger.Debug(err)
 			return err
 		}
@@ -262,7 +265,7 @@ func (a *api) cryptoProcessStream(stream grpc.ServerStream, reqProto runtimev1pb
 
 			err = stream.SendMsg(resProto)
 			if err != nil {
-				err = messages.ErrCryptoOperation.WithFormat(fmt.Errorf("error sending message: %w", err))
+				err = messages.ErrCryptoOperation.RecordAndGet().WithFormat(fmt.Errorf("error sending message: %w", err))
 				a.logger.Debug(err)
 				return err
 			}
@@ -301,10 +304,10 @@ func (a *api) cryptoGetFirstChunk(stream grpc.ServerStream, reqProto any) error 
 
 	select {
 	case <-firstChunkCtx.Done():
-		return messages.ErrBadRequest.WithFormat(fmt.Errorf("error waiting for first message: %w", firstChunkCtx.Err()))
+		return messages.ErrBadRequest.RecordAndGet().WithFormat(fmt.Errorf("error waiting for first message: %w", firstChunkCtx.Err()))
 	case err := <-firstMsgCh:
 		if err != nil {
-			return messages.ErrCryptoOperation.WithFormat(fmt.Errorf("error receiving the first message: %w", err))
+			return messages.ErrCryptoOperation.RecordAndGet().WithFormat(fmt.Errorf("error receiving the first message: %w", err))
 		}
 	}
 

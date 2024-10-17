@@ -160,7 +160,7 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 
 	// If the request is for an internal endpoint, do not allow it if the app health status is not successful
 	if h.baseAddress != "" && appID == "" && h.appHealth != nil && h.appHealth.GetStatus() != apphealth.AppStatusHealthy {
-		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
+		return nil, status.Error(codes.Internal, messages.RecordAndGet(messages.ErrAppUnhealthy))
 	}
 
 	switch req.APIVersion() {

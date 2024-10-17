@@ -77,7 +77,7 @@ func (g *Channel) GetAppConfig(_ context.Context, appID string) (*config.Applica
 // InvokeMethod invokes user code via gRPC.
 func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRequest, _ string) (*invokev1.InvokeMethodResponse, error) {
 	if g.appHealth != nil && g.appHealth.GetStatus() != apphealth.AppStatusHealthy {
-		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
+		return nil, status.Error(codes.Internal, messages.RecordAndGet(messages.ErrAppUnhealthy))
 	}
 
 	switch req.APIVersion() {
@@ -93,7 +93,7 @@ func (g *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 // TriggerJob sends the triggered job to the app via gRPC.
 func (g *Channel) TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
 	if g.appHealth != nil && g.appHealth.GetStatus() != apphealth.AppStatusHealthy {
-		return nil, status.Error(codes.Internal, messages.ErrAppUnhealthy)
+		return nil, status.Error(codes.Internal, messages.RecordAndGet(messages.ErrAppUnhealthy))
 	}
 
 	return g.sendJob(ctx, name, data)

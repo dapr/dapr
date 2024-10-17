@@ -22,6 +22,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
+	
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
@@ -143,7 +144,7 @@ func (a *api) onPutMetadata() http.HandlerFunc {
 
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
-					return nil, messages.ErrBodyRead.WithFormat(err)
+					return nil, messages.ErrBodyRead.RecordAndGet().WithFormat(err)
 				}
 				in.Value = string(body)
 

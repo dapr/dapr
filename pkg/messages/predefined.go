@@ -16,8 +16,10 @@ package messages
 import (
 	"net/http"
 
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	grpcCodes "google.golang.org/grpc/codes"
+
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 const (
@@ -134,3 +136,15 @@ var (
 	ErrConversationInvoke        = APIError{"failed conversing with component %s: %s", errorcodes.ConversationInvoke, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrConversationMissingInputs = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
 )
+
+// This will record the error as a metric and return the APIError
+func (err APIError) RecordAndGet() APIError {
+	diag.DefaultErrorCodeMonitoring.RecordErrorCode(err.tag)
+	return err
+}
+
+// This will record the error as a metric and return the APIError string
+func RecordAndGet(errorCode string) string {
+	diag.DefaultErrorCodeMonitoring.RecordErrorCode(errorCode)
+	return errorCode
+}

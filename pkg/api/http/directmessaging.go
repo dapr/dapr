@@ -101,7 +101,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 
 	targetID, invokeMethodName := findTargetIDAndMethod(reqPath, r.Header)
 	if targetID == "" {
-		respondWithError(w, messages.ErrDirectInvokeNoAppID)
+		respondWithError(w, messages.ErrDirectInvokeNoAppID.RecordAndGet())
 		return
 	}
 
@@ -116,7 +116,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 
 	verb := strings.ToUpper(r.Method)
 	if a.directMessaging == nil {
-		respondWithError(w, messages.ErrDirectInvokeNotReady)
+		respondWithError(w, messages.ErrDirectInvokeNotReady.RecordAndGet())
 		return
 	}
 
@@ -159,7 +159,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		if rErr != nil {
 			// Allowlist policies that are applied on the callee side can return a Permission Denied error.
 			// For everything else, treat it as a gRPC transport error
-			apiErr := messages.ErrDirectInvoke.WithFormat(targetID, rErr)
+			apiErr := messages.ErrDirectInvoke.RecordAndGet().WithFormat(targetID, rErr)
 			invokeErr := invokeError{
 				statusCode: apiErr.HTTPCode(),
 				msg:        apiErr.JSONErrorValue(),
@@ -289,7 +289,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		respondWithData(w, invokeErr.statusCode, invokeErr.msg)
 		return
 	default:
-		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, err))
+		respondWithError(w, messages.ErrDirectInvoke.RecordAndGet().WithFormat(targetID, err))
 		return
 	}
 }

@@ -57,7 +57,7 @@ func (a *api) constructHealthzEndpoints() []endpoints.Endpoint {
 
 func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.healthz.IsReady() {
-		msg := messages.ErrHealthNotReady
+		msg := messages.ErrHealthNotReady.RecordAndGet()
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -67,7 +67,7 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 	// This is used by some components (e.g. Consul nameresolver) to check if the app was replaced with a different one
 	qs := r.URL.Query()
 	if qs.Has("appid") && qs.Get("appid") != a.universal.AppID() {
-		msg := messages.ErrHealthAppIDNotMatch
+		msg := messages.ErrHealthAppIDNotMatch.RecordAndGet()
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return
@@ -78,7 +78,7 @@ func (a *api) onGetHealthz(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) onGetOutboundHealthz(w http.ResponseWriter, r *http.Request) {
 	if !a.outboundHealthz.IsReady() {
-		msg := messages.ErrOutboundHealthNotReady
+		msg := messages.ErrOutboundHealthNotReady.RecordAndGet()
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return

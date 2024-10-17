@@ -21,7 +21,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 // appIDKey is a tag key for App ID.
@@ -82,15 +81,10 @@ func InitMetrics(appID, namespace string, metricSpec config.MetricSpec) error {
 		return err
 	}
 
-	log.Info("jake::: my build!!!!!!!!!!!!!")
 	if metricSpec.GetRecordErrorCodes() {
 		if err := DefaultErrorCodeMonitoring.Init(appID); err != nil {
 			return err
 		}
-		log.Info("jake::: error code monitoring success")
-		DefaultErrorCodeMonitoring.RecordErrorCode(errorcodes.ActorInstanceMissing)
-		DefaultErrorCodeMonitoring.RecordErrorCode(errorcodes.ActorInstanceMissing)
-		DefaultErrorCodeMonitoring.RecordErrorCode(errorcodes.PubsubEmpty)
 	}
 
 	// Set reporting period of views

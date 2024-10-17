@@ -90,14 +90,14 @@ func (a *api) onCryptoEncrypt(w http.ResponseWriter, r *http.Request) {
 	// Get the required properties from the headers
 	keyName := r.Header.Get(cryptoHeaderKeyName)
 	if keyName == "" {
-		err = messages.ErrBadRequest.WithFormat("missing header '" + cryptoHeaderKeyName + "'")
+		err = messages.ErrBadRequest.RecordAndGet().WithFormat("missing header '" + cryptoHeaderKeyName + "'")
 		log.Debug(err)
 		respondWithError(w, err)
 		return
 	}
 	algorithm := r.Header.Get(cryptoHeaderKeyWrapAlgorithm)
 	if algorithm == "" {
-		err = messages.ErrBadRequest.WithFormat("missing header '" + cryptoHeaderKeyWrapAlgorithm + "'")
+		err = messages.ErrBadRequest.RecordAndGet().WithFormat("missing header '" + cryptoHeaderKeyWrapAlgorithm + "'")
 		log.Debug(err)
 		respondWithError(w, err)
 		return
@@ -124,7 +124,7 @@ func (a *api) onCryptoEncrypt(w http.ResponseWriter, r *http.Request) {
 	// Errors returned here, synchronously, are initialization errors, for example due to failed wrapping
 	enc, err := encv1.Encrypt(r.Body, encOpts)
 	if err != nil {
-		err = messages.ErrCryptoOperation.WithFormat(err)
+		err = messages.ErrCryptoOperation.RecordAndGet().WithFormat(err)
 		log.Debug(err)
 		respondWithError(w, err)
 		return
@@ -168,7 +168,7 @@ func (a *api) onCryptoDecrypt(w http.ResponseWriter, r *http.Request) {
 	// Errors returned here, synchronously, are initialization errors, for example due to failed unwrapping
 	dec, err := encv1.Decrypt(r.Body, decOpts)
 	if err != nil {
-		err = messages.ErrCryptoOperation.WithFormat(err)
+		err = messages.ErrCryptoOperation.RecordAndGet().WithFormat(err)
 		log.Debug(err)
 		respondWithError(w, err)
 		return
@@ -187,20 +187,20 @@ func (a *api) onCryptoDecrypt(w http.ResponseWriter, r *http.Request) {
 
 func (a *api) cryptoGetComponent(componentName string) (contribCrypto.SubtleCrypto, error) {
 	if a.universal.CompStore().CryptoProvidersLen() == 0 {
-		err := messages.ErrCryptoProvidersNotConfigured
+		err := messages.ErrCryptoProvidersNotConfigured.RecordAndGet()
 		log.Debug(err)
 		return nil, err
 	}
 
 	if componentName == "" {
-		err := messages.ErrBadRequest.WithFormat("missing component name")
+		err := messages.ErrBadRequest.RecordAndGet().WithFormat("missing component name")
 		log.Debug(err)
 		return nil, err
 	}
 
 	component, ok := a.universal.CompStore().GetCryptoProvider(componentName)
 	if !ok {
-		err := messages.ErrCryptoProviderNotFound.WithFormat(componentName)
+		err := messages.ErrCryptoProviderNotFound.RecordAndGet().WithFormat(componentName)
 		log.Debug(err)
 		return nil, err
 	}

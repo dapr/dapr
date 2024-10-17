@@ -406,7 +406,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	var req OutputBindingRequest
 	err := json.Unmarshal(body, &req)
 	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
+		msg := messages.ErrMalformedRequest.RecordAndGet().WithFormat(err)
 		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
@@ -414,7 +414,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 
 	b, err := json.Marshal(req.Data)
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.MalformedRequestData, fmt.Sprintf(messages.ErrMalformedRequestData, err))
+		msg := NewErrorResponse(errorcodes.MalformedRequestData, fmt.Sprintf(messages.RecordAndGet(messages.ErrMalformedRequestData), err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -454,7 +454,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.InvokeOutputBinding, fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err))
+		msg := NewErrorResponse(errorcodes.InvokeOutputBinding, fmt.Sprintf(messages.RecordAndGet(messages.ErrInvokeOutputBinding), name, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -477,7 +477,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 	var req BulkGetRequest
 	err = json.Unmarshal(reqCtx.PostBody(), &req)
 	if err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
+		msg := messages.ErrMalformedRequest.RecordAndGet().WithFormat(err)
 		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
@@ -508,7 +508,6 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 			status := apierrors.StateStore(storeName).InvalidKeyName(k, err.Error())
 			universalFastHTTPErrorResponder(reqCtx, status)
 			log.Debug(status)
-			diag.DefaultErrorCodeMonitoring.RecordErrorCode(errorcodes.IllegalKey)
 			return
 		}
 		r := state.GetRequest{
@@ -644,7 +643,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 			code = kerr.HTTPStatusCode()
 		}
 
-		msg := NewErrorResponse(errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
+		msg := NewErrorResponse(errorcodes.StateGet, fmt.Sprintf(messages.RecordAndGet(messages.ErrStateGet), key, storeName, err.Error()))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(code, msg))
 		log.Debug(msg)
 		return
@@ -658,7 +657,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	if encryption.EncryptedStateStore(storeName) {
 		val, err := encryption.TryDecryptValue(storeName, resp.Data)
 		if err != nil {
-			msg := NewErrorResponse(errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
+			msg := NewErrorResponse(errorcodes.StateGet, fmt.Sprintf(messages.RecordAndGet(messages.ErrStateGet), key, storeName, err.Error()))
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 			log.Debug(msg)
 			return
@@ -680,7 +679,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
 	if a.universal.CompStore().ConfigurationsLen() == 0 {
-		msg := NewErrorResponse(errorcodes.ConfigurationStoreNotConfigured, messages.ErrConfigurationStoresNotConfigured)
+		msg := NewErrorResponse(errorcodes.ConfigurationStoreNotConfigured, messages.RecordAndGet(messages.ErrConfigurationStoresNotConfigured))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
@@ -690,7 +689,7 @@ func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.Reques
 
 	conf, ok := a.universal.CompStore().GetConfiguration(storeName)
 	if !ok {
-		msg := NewErrorResponse(errorcodes.ConfigurationStoreNotFound, fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName))
+		msg := NewErrorResponse(errorcodes.ConfigurationStoreNotFound, fmt.Sprintf(messages.RecordAndGet(messages.ErrConfigurationStoreNotFound), storeName))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
@@ -808,7 +807,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.ConfigurationSubscribe, fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
+		msg := NewErrorResponse(errorcodes.ConfigurationSubscribe, fmt.Sprintf(messages.RecordAndGet(messages.ErrConfigurationSubscribe), keys, storeName, err.Error()))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -841,7 +840,7 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.ConfigurationUnsubscribe, fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, err.Error()))
+		msg := NewErrorResponse(errorcodes.ConfigurationUnsubscribe, fmt.Sprintf(messages.RecordAndGet(messages.ErrConfigurationUnsubscribe), subscribeID, err.Error()))
 		errRespBytes, _ := json.Marshal(&UnsubscribeConfigurationResponse{
 			Ok:      false,
 			Message: msg.Message,
@@ -887,7 +886,7 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.ConfigurationGet, fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()))
+		msg := NewErrorResponse(errorcodes.ConfigurationGet, fmt.Sprintf(messages.RecordAndGet(messages.ErrConfigurationGet), keys, storeName, err.Error()))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -962,7 +961,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 
 	if err != nil {
 		statusCode, errMsg, resp := a.stateErrorResponse(err, errorcodes.StateDelete)
-		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
+		resp.Message = fmt.Sprintf(messages.RecordAndGet(messages.ErrStateDelete), key, errMsg)
 
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
 		log.Debug(resp.Message)
@@ -1023,7 +1022,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			val, encErr := encryption.TryEncryptValue(storeName, data)
 			if encErr != nil {
 				statusCode, errMsg, resp := a.stateErrorResponse(encErr, errorcodes.StateSave)
-				resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
+				resp.Message = fmt.Sprintf(messages.RecordAndGet(messages.ErrStateSave), storeName, errMsg)
 
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
 				log.Debug(resp.Message)
@@ -1047,7 +1046,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 	if err != nil {
 		statusCode, errMsg, resp := a.stateErrorResponse(err, errorcodes.StateSave)
-		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
+		resp.Message = fmt.Sprintf(messages.RecordAndGet(messages.ErrStateSave), storeName, errMsg)
 
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
 		log.Debug(resp.Message)
@@ -1495,7 +1494,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	body := reqCtx.PostBody()
 	var req stateTransactionRequestBody
 	if err := json.Unmarshal(body, &req); err != nil {
-		msg := messages.ErrMalformedRequest.WithFormat(err)
+		msg := messages.ErrMalformedRequest.RecordAndGet().WithFormat(err)
 		universalFastHTTPErrorResponder(reqCtx, msg)
 		log.Debug(msg)
 		return
@@ -1522,7 +1521,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			var upsertReq state.SetRequest
 			err := mapstructure.Decode(o.Request, &upsertReq)
 			if err != nil {
-				msg := messages.ErrMalformedRequest.WithFormat(err)
+				msg := messages.ErrMalformedRequest.RecordAndGet().WithFormat(err)
 				universalFastHTTPErrorResponder(reqCtx, msg)
 				log.Debug(msg)
 				return
@@ -1539,7 +1538,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			var delReq state.DeleteRequest
 			err := mapstructure.Decode(o.Request, &delReq)
 			if err != nil {
-				msg := messages.ErrMalformedRequest.WithFormat(err)
+				msg := messages.ErrMalformedRequest.RecordAndGet().WithFormat(err)
 				universalFastHTTPErrorResponder(reqCtx, msg)
 				log.Debug(msg)
 				return
@@ -1556,7 +1555,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 		default:
 			msg := NewErrorResponse(
 				errorcodes.NotSupportedStateOperation,
-				fmt.Sprintf(messages.ErrNotSupportedStateOperation, o.Operation))
+				fmt.Sprintf(messages.RecordAndGet(messages.ErrNotSupportedStateOperation), o.Operation))
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 			log.Debug(msg)
 			return
@@ -1582,7 +1581,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				if err != nil {
 					msg := NewErrorResponse(
 						errorcodes.StateSave,
-						fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()))
+						fmt.Sprintf(messages.RecordAndGet(messages.ErrStateSave), storeName, err.Error()))
 					fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 					log.Debug(msg)
 					return
@@ -1625,7 +1624,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateTransaction, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.StateTransaction, fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
+		msg := NewErrorResponse(errorcodes.StateTransaction, fmt.Sprintf(messages.RecordAndGet(messages.ErrStateTransaction), err.Error()))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {
@@ -1645,7 +1644,7 @@ func (a *api) onQueryStateHandler() nethttp.HandlerFunc {
 
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
-					return nil, messages.ErrBodyRead.WithFormat(err)
+					return nil, messages.ErrBodyRead.RecordAndGet().WithFormat(err)
 				}
 				in.Query = string(body)
 				return in, nil

@@ -38,5 +38,5 @@ type NotAllowedError struct {
 }
 
 func (e NotAllowedError) Error() string {
-	return fmt.Sprintf(messages.ErrPubsubForbidden, e.Topic, e.ID)
+	return fmt.Sprintf(messages.RecordAndGet(messages.ErrPubsubForbidden), e.Topic, e.ID)
 }

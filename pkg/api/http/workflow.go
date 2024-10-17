@@ -206,7 +206,7 @@ func (a *api) onStartWorkflowHandler() http.HandlerFunc {
 				var err error
 				in.Input, err = io.ReadAll(r.Body)
 				if err != nil {
-					return nil, messages.ErrBodyRead.WithFormat(err)
+					return nil, messages.ErrBodyRead.RecordAndGet().WithFormat(err)
 				}
 				return in, nil
 			},
@@ -254,7 +254,7 @@ func (a *api) onRaiseEventWorkflowHandler() http.HandlerFunc {
 				var err error
 				in.EventData, err = io.ReadAll(r.Body)
 				if err != nil {
-					return nil, messages.ErrBodyRead.WithFormat(err)
+					return nil, messages.ErrBodyRead.RecordAndGet().WithFormat(err)
 				}
 				return in, nil
 			},

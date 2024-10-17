@@ -33,7 +33,7 @@ func (a *Universal) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequ
 	}
 
 	if !a.isSecretAllowed(in.GetStoreName(), in.GetKey()) {
-		err = messages.ErrSecretPermissionDenied.WithFormat(in.GetKey(), in.GetStoreName())
+		err = messages.ErrSecretPermissionDenied.RecordAndGet().WithFormat(in.GetKey(), in.GetStoreName())
 		a.logger.Debug(err)
 		return response, err
 	}
@@ -56,7 +56,7 @@ func (a *Universal) GetSecret(ctx context.Context, in *runtimev1pb.GetSecretRequ
 	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.GetStoreName(), diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		err = messages.ErrSecretGet.WithFormat(req.Name, in.GetStoreName(), err.Error())
+		err = messages.ErrSecretGet.RecordAndGet().WithFormat(req.Name, in.GetStoreName(), err.Error())
 		a.logger.Debug(err)
 		return response, err
 	}
@@ -94,7 +94,7 @@ func (a *Universal) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSe
 	diag.DefaultComponentMonitoring.SecretInvoked(ctx, in.GetStoreName(), diag.BulkGet, err == nil, elapsed)
 
 	if err != nil {
-		err = messages.ErrBulkSecretGet.WithFormat(in.GetStoreName(), err.Error())
+		err = messages.ErrBulkSecretGet.RecordAndGet().WithFormat(in.GetStoreName(), err.Error())
 		a.logger.Debug(err)
 		return response, err
 	}
@@ -107,7 +107,7 @@ func (a *Universal) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSe
 		if a.isSecretAllowed(in.GetStoreName(), key) {
 			filteredSecrets[key] = v
 		} else {
-			a.logger.Debugf(messages.ErrSecretPermissionDenied.WithFormat(key, in.GetStoreName()).String())
+			a.logger.Debugf(messages.ErrSecretPermissionDenied.RecordAndGet().WithFormat(key, in.GetStoreName()).String())
 		}
 	}
 
@@ -125,14 +125,14 @@ func (a *Universal) GetBulkSecret(ctx context.Context, in *runtimev1pb.GetBulkSe
 // Internal method that checks if the request is for a valid secret store component.
 func (a *Universal) secretsValidateRequest(componentName string) (secretstores.SecretStore, error) {
 	if a.compStore.SecretStoresLen() == 0 {
-		err := messages.ErrSecretStoreNotConfigured
+		err := messages.ErrSecretStoreNotConfigured.RecordAndGet()
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	component, ok := a.compStore.GetSecretStore(componentName)
 	if !ok {
-		err := messages.ErrSecretStoreNotFound.WithFormat(componentName)
+		err := messages.ErrSecretStoreNotFound.RecordAndGet().WithFormat(componentName)
 		a.logger.Debug(err)
 		return nil, err
 	}

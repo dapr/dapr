@@ -41,12 +41,12 @@ import (
 func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	appChannel := a.channels.AppChannel()
 	if appChannel == nil {
-		return nil, status.Error(codes.Internal, messages.ErrChannelNotFound)
+		return nil, status.Error(codes.Internal, messages.RecordAndGet(messages.ErrChannelNotFound))
 	}
 
 	req, err := invokev1.FromInternalInvokeRequest(in)
 	if err != nil {
-		return nil, status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
+		return nil, status.Errorf(codes.InvalidArgument, messages.RecordAndGet(messages.ErrInternalInvokeRequest), err.Error())
 	}
 	defer req.Close()
 
@@ -82,7 +82,7 @@ func (a *api) CallLocal(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStreamServer) error { //nolint:nosnakecase
 	appChannel := a.channels.AppChannel()
 	if appChannel == nil {
-		return status.Error(codes.Internal, messages.ErrChannelNotFound)
+		return status.Error(codes.Internal, messages.RecordAndGet(messages.ErrChannelNotFound))
 	}
 
 	// Read the first chunk of the incoming request
@@ -93,7 +93,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 		return err
 	}
 	if chunk.GetRequest().GetMetadata() == nil || chunk.GetRequest().GetMessage() == nil {
-		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, "request does not contain the required fields in the leading chunk")
+		return status.Errorf(codes.InvalidArgument, messages.RecordAndGet(messages.ErrInternalInvokeRequest), "request does not contain the required fields in the leading chunk")
 	}
 
 	// Append the invoked method to the context's metadata so we can use it for tracing
@@ -106,7 +106,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	pr, pw := io.Pipe()
 	req, err := invokev1.FromInternalInvokeRequest(chunk.GetRequest())
 	if err != nil {
-		return status.Errorf(codes.InvalidArgument, messages.ErrInternalInvokeRequest, err.Error())
+		return status.Errorf(codes.InvalidArgument, messages.RecordAndGet(messages.ErrInternalInvokeRequest), err.Error())
 	}
 	req.WithRawData(pr).
 		WithContentType(chunk.GetRequest().GetMessage().GetContentType())
@@ -201,7 +201,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 	res, err := appChannel.InvokeMethod(ctx, req, "")
 	if err != nil {
 		statusCode = int32(codes.Internal)
-		return status.Errorf(codes.Internal, messages.ErrChannelInvoke, err)
+		return status.Errorf(codes.Internal, messages.RecordAndGet(messages.ErrChannelInvoke), err)
 	}
 	defer res.Close()
 	statusCode = res.Status().GetCode()
@@ -296,7 +296,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 			return res, nil
 		}
 
-		return nil, messages.ErrActorInvoke.WithFormat(err)
+		return nil, messages.ErrActorInvoke.RecordAndGet().WithFormat(err)
 	}
 	return res, nil
 }

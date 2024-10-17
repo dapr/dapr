@@ -26,56 +26,56 @@ import (
 
 // SubtleGetKeyAlpha1 returns the public part of an asymmetric key stored in the vault.
 func (a *Universal) SubtleGetKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleGetKeyRequest) (*runtimev1pb.SubtleGetKeyResponse, error) {
-	return nil, messages.ErrAPIUnimplemented
+	return nil, messages.ErrAPIUnimplemented.RecordAndGet()
 }
 
 // SubtleEncryptAlpha1 encrypts a small message using a key stored in the vault.
 func (a *Universal) SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleEncryptRequest) (*runtimev1pb.SubtleEncryptResponse, error) {
-	return nil, messages.ErrAPIUnimplemented
+	return nil, messages.ErrAPIUnimplemented.RecordAndGet()
 }
 
 // SubtleDecryptAlpha1 decrypts a small message using a key stored in the vault.
 func (a *Universal) SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.SubtleDecryptRequest) (*runtimev1pb.SubtleDecryptResponse, error) {
-	return nil, messages.ErrAPIUnimplemented
+	return nil, messages.ErrAPIUnimplemented.RecordAndGet()
 }
 
 // SubtleWrapKeyAlpha1 wraps a key using a key stored in the vault.
 func (a *Universal) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleWrapKeyRequest) (*runtimev1pb.SubtleWrapKeyResponse, error) {
-	return nil, messages.ErrAPIUnimplemented
+	return nil, messages.ErrAPIUnimplemented.RecordAndGet()
 }
 
 // SubtleUnwrapKeyAlpha1 unwraps a key using a key stored in the vault.
 func (a *Universal) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1pb.SubtleUnwrapKeyRequest) (*runtimev1pb.SubtleUnwrapKeyResponse, error) {
-	return nil, messages.ErrAPIUnimplemented
+	return nil, messages.ErrAPIUnimplemented.RecordAndGet()
 }
 
 // SubtleSignAlpha1 signs a message using a key stored in the vault.
 func (a *Universal) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.SubtleSignRequest) (*runtimev1pb.SubtleSignResponse, error) {
-	return nil, messages.ErrAPIUnimplemented
+	return nil, messages.ErrAPIUnimplemented.RecordAndGet()
 }
 
 // SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
 func (a *Universal) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.SubtleVerifyRequest) (*runtimev1pb.SubtleVerifyResponse, error) {
-	return nil, messages.ErrAPIUnimplemented
+	return nil, messages.ErrAPIUnimplemented.RecordAndGet()
 }
 
 // CryptoValidateRequest is an internal method that checks if the request is for a valid crypto component.
 func (a *Universal) CryptoValidateRequest(componentName string) (contribCrypto.SubtleCrypto, error) {
 	if a.compStore.CryptoProvidersLen() == 0 {
-		err := messages.ErrCryptoProvidersNotConfigured
+		err := messages.ErrCryptoProvidersNotConfigured.RecordAndGet()
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	if componentName == "" {
-		err := messages.ErrBadRequest.WithFormat("missing component name")
+		err := messages.ErrBadRequest.RecordAndGet().WithFormat("missing component name")
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	component, ok := a.compStore.GetCryptoProvider(componentName)
 	if !ok {
-		err := messages.ErrCryptoProviderNotFound.WithFormat(componentName)
+		err := messages.ErrCryptoProviderNotFound.RecordAndGet().WithFormat(componentName)
 		a.logger.Debug(err)
 		return nil, err
 	}

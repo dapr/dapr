@@ -75,7 +75,7 @@ func UniversalHTTPHandler[T proto.Message, U proto.Message](
 			// Read the request body and decode it as JSON using protojson
 			body, err = io.ReadAll(r.Body)
 			if err != nil {
-				msg := messages.ErrBodyRead.WithFormat(err)
+				msg := messages.ErrBodyRead.RecordAndGet().WithFormat(err)
 				respondWithError(w, msg)
 				log.Debug(msg)
 				return
@@ -84,7 +84,7 @@ func UniversalHTTPHandler[T proto.Message, U proto.Message](
 			if len(body) > 0 {
 				err = pjsonDec.Unmarshal(body, in)
 				if err != nil {
-					msg := messages.ErrMalformedRequest.WithFormat(err)
+					msg := messages.ErrMalformedRequest.RecordAndGet().WithFormat(err)
 					respondWithError(w, msg)
 					log.Debug(msg)
 					return
