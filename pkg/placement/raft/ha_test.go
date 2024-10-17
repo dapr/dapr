@@ -103,12 +103,14 @@ func TestRaftHA(t *testing.T) {
 		follower = (oldLeader + 1) % 3
 		retrieveValidState(t, raftServers[follower], testMembers[0])
 
-		t.Run("new leader after leader fails", func(t *testing.T) {
+		t.Run("new leader is elected after leader fails", func(t *testing.T) {
+			// Stop the current leader
 			raftServerCancel[oldLeader]()
 			raftServers[oldLeader] = nil
 
 			require.Eventually(t, func() bool {
-				return oldLeader != findLeader(t, raftServers)
+				newLeader := findLeader(t, raftServers)
+				return oldLeader != newLeader && newLeader != -1
 			}, time.Second*10, time.Millisecond*100)
 		})
 	})
@@ -158,13 +160,14 @@ func TestRaftHA(t *testing.T) {
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
 		waitUntilReady()
 
-		for oldSvr := range 3 {
-			if raftServers[oldSvr] == nil {
+		var oldSvr int
+		for i := range 3 {
+			if raftServers[i] == nil {
+				oldSvr = i
 				break
 			}
 		}
 
-		oldSvr := 2
 		raftServers[oldSvr], ready[oldSvr], raftServerCancel[oldSvr] = createRaftServer(t, oldSvr, peers)
 		select {
 		case <-ready[oldSvr]:
@@ -318,7 +321,6 @@ func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-ch
 		for {
 			select {
 			case <-ctx.Done():
-				return
 			case <-ready:
 			case <-time.After(time.Millisecond):
 				clock.Step(time.Second * 2)
