@@ -135,7 +135,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
-	assert.Empty(t, len(resp.GetFailedEntries()))
+	assert.Empty(t, resp.GetFailedEntries())
 	g.sub.ReceiveBulk(t, ctx)
 	g.sub.ReceiveBulk(t, ctx)
 	g.sub.ReceiveBulk(t, ctx)
@@ -153,6 +153,6 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
-	assert.Empty(t, len(resp.GetFailedEntries()))
+	assert.Empty(t, resp.GetFailedEntries())
 	g.sub.AssertBulkEventChanLen(t, 0)
 }

@@ -65,7 +65,7 @@ func (c *componentName) Setup(t *testing.T) []framework.Option {
 	})
 
 	c.secretStoreNames = make([]string, numTests)
-	for i := 0; i < numTests; i++ {
+	for i := range numTests {
 		fz.Fuzz(&c.secretStoreNames[i])
 	}
 
@@ -106,7 +106,6 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 
 	pt := parallel.New(t)
 	for _, secretStoreName := range c.secretStoreNames {
-		secretStoreName := secretStoreName
 		pt.Add(func(t *assert.CollectT) {
 			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/key1", c.daprd.HTTPPort(), url.QueryEscape(secretStoreName))
 			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)

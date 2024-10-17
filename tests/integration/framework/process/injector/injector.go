@@ -139,7 +139,6 @@ func (i *Injector) Cleanup(t *testing.T) {
 
 func (i *Injector) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := client.HTTP(t)
-	//nolint:testifylint
 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", i.healthzPort), nil)
 		if !assert.NoError(t, err) {

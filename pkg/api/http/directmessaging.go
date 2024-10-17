@@ -173,6 +173,8 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		// Construct response if not HTTP
 		resStatus := rResp.Status()
 		if !rResp.IsHTTPResponse() {
+			// TODO: Update type to use int32
+			//nolint:gosec
 			statusCode := int32(invokev1.HTTPStatusFromCode(codes.Code(resStatus.GetCode())))
 			if statusCode != http.StatusOK {
 				// Close the response to replace the body
@@ -344,6 +346,7 @@ func pathHasPrefix(path string, prefixParts ...string) int {
 	}
 
 	var i, start, found int
+	//nolint:intrange
 	for i = 0; i < pl; i++ {
 		if path[i] != '/' {
 			if found >= ppl {

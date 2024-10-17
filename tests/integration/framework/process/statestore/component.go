@@ -16,7 +16,6 @@ package statestore
 import (
 	"context"
 	"fmt"
-	"io"
 	"testing"
 
 	"github.com/dapr/components-contrib/metadata"
@@ -241,7 +240,7 @@ func (c *component) Init(ctx context.Context, req *compv1pb.InitRequest) (*compv
 }
 
 func (c *component) Close() error {
-	return c.impl.(io.Closer).Close()
+	return c.impl.Close()
 }
 
 func (c *component) Ping(ctx context.Context, req *compv1pb.PingRequest) (*compv1pb.PingResponse, error) {
