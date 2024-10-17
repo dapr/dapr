@@ -47,7 +47,7 @@ jobs:
         target_arch: ["amd64"]
     env:
       GOLANGCILINT_VER: "v1.61.0"
-      PROTOC_VERSION: "24.4"
+      PROTOC_VERSION: "25.4"
       GOOS: "${{ matrix.target_os }}"
       GOARCH: "${{ matrix.target_arch }}"
       GOPROXY: "https://proxy.golang.org"
@@ -60,6 +60,7 @@ jobs:
         with:
           go-version-file: "go.mod"
       - name: Initialize CodeQL
+        if: github.event_name == 'pull_request'
         uses: github/codeql-action/init@v3.25.12
         with:
           languages: go
@@ -113,6 +114,7 @@ jobs:
           make init-proto
           make gen-proto check-proto-diff
       - name: Perform CodeQL Analysis
+        if: github.event_name == 'pull_request'
         uses: github/codeql-action/analyze@v3.26.12
         with:
           ram: 4096
@@ -120,6 +122,7 @@ jobs:
 
   depcheck:
     name: "Dependency Review"
+    if: github.event_name == 'pull_request'
     runs-on: ubuntu-latest
     permissions:
       contents: read

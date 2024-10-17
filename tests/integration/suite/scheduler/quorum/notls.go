@@ -17,7 +17,6 @@ import (
 	"context"
 	"fmt"
 	"math/rand"
-	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -147,13 +146,8 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 func (n *notls) checkKeysForJobName(t *testing.T, jobName string, keys []*mvccpb.KeyValue) {
 	t.Helper()
 
-	var jobPrefix string
-	if runtime.GOOS == "windows" {
-		jobPrefix = "dapr\\jobs\\app"
-	} else {
-		jobPrefix = "dapr/jobs/app"
-	}
-
+	// should have the same path separator across OS
+	jobPrefix := "dapr/jobs/app"
 	found := false
 	for _, kv := range keys {
 		if string(kv.Key) == fmt.Sprintf("%s||%s||%s||%s", jobPrefix, "ns", "appid", jobName) {
