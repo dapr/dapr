@@ -158,8 +158,6 @@ func TestRaftHA(t *testing.T) {
 	})
 
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
-		waitUntilReady()
-
 		var oldSvr int
 		for i := range 3 {
 			if raftServers[i] == nil {
@@ -224,8 +222,6 @@ func TestRaftHA(t *testing.T) {
 			}
 		}
 
-		waitUntilReady()
-
 		// Restart all nodes
 		for i := range 3 {
 			raftServers[i], ready[i], raftServerCancel[i] = createRaftServer(t, i, peers)
@@ -251,16 +247,6 @@ func TestRaftHA(t *testing.T) {
 			raftServerCancel[i]()
 		}
 	}
-}
-
-func waitUntilReady() {
-	// It is painful that we have to include a `time.Sleep` here, but due to
-	// the non-deterministic behaviour of the raft library we are using we will
-	// later fail on slower test runner machines. A clock timer wait means we
-	// have a _better_ chance of being in the right spot in the state machine
-	// and the network has died down. Ideally we should move to a different
-	// raft library that is more deterministic and reliable for our use case.
-	time.Sleep(time.Second * 4)
 }
 
 func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-chan struct{}, context.CancelFunc) {
