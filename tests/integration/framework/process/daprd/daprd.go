@@ -473,3 +473,11 @@ func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {
 
 	return meta
 }
+
+func (d *Daprd) ActorInvokeURL(actorType, actorID, method string) string {
+	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/method/%s", d.HTTPAddress(), actorType, actorID, method)
+}
+
+func (d *Daprd) ActorReminderURL(actorType, actorID, method string) string {
+	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/reminders/%s", d.HTTPAddress(), actorType, actorID, method)
+}
