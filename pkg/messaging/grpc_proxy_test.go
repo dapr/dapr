@@ -190,7 +190,7 @@ func TestIntercept(t *testing.T) {
 
 		t.Setenv(securityConsts.AppAPITokenEnvVar, "token1")
 
-		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}})
+		ctx := metadata.NewIncomingContext(context.TODO(), metadata.MD{diagnostics.GRPCProxyAppIDKey: []string{"a"}, securityConsts.APITokenHeader: []string{"oldtoken"}})
 		proxy := p.(*proxy)
 		ctx, conn, _, teardown, err := proxy.intercept(ctx, "/test")
 		defer teardown(true)
