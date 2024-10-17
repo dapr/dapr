@@ -29,6 +29,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"k8s.io/apimachinery/pkg/api/validation/path"
 
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/file"
@@ -118,7 +119,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			respBody, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
-			assert.Contains(t, string(respBody), "ERR_SECRET_GET")
+			assert.Contains(t, string(respBody), errorcodes.SecretGet)
 			assert.Contains(t, string(respBody), "secret key1 not found")
 		})
 	}

@@ -21,6 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/components-contrib/metadata"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/kit/errors"
 )
 
@@ -47,7 +48,7 @@ func (s *StateStoreError) NotFound(appID string) error {
 			codes.InvalidArgument,
 			http.StatusBadRequest,
 			msg,
-			"ERR_STATE_STORE_NOT_FOUND",
+			errorcodes.StateStoreNotFound,
 		),
 		errors.CodeNotFound,
 		meta,
@@ -66,7 +67,7 @@ func (s *StateStoreError) NotConfigured(appID string) error {
 			codes.FailedPrecondition,
 			http.StatusInternalServerError,
 			msg,
-			"ERR_STATE_STORE_NOT_CONFIGURED",
+			errorcodes.StateStoreNotConfigured,
 		),
 		errors.CodeNotConfigured,
 		meta,
@@ -79,7 +80,7 @@ func (s *StateStoreError) InvalidKeyName(key string, msg string) error {
 			codes.InvalidArgument,
 			http.StatusBadRequest,
 			msg,
-			"ERR_MALFORMED_REQUEST",
+			errorcodes.MalformedRequest,
 		).WithFieldViolation(key, msg),
 		errors.CodeIllegalKey,
 		nil,
@@ -94,7 +95,7 @@ func (s *StateStoreError) TransactionsNotSupported() error {
 			codes.Unimplemented,
 			http.StatusInternalServerError,
 			fmt.Sprintf("state store %s doesn't support transactions", s.name),
-			"ERR_STATE_STORE_NOT_SUPPORTED", // TODO: @elena-kolevska this code misleading and also used for different things ("query unsupported"); it should be removed in the next major version
+			errorcodes.StateStoreNotSupported, // TODO: @elena-kolevska this code misleading and also used for different things ("query unsupported"); it should be removed in the next major version
 		).WithHelpLink("https://docs.dapr.io/reference/components-reference/supported-state-stores/", "Check the list of state stores and the features they support"),
 		"TRANSACTIONS_NOT_SUPPORTED",
 		nil,
@@ -107,7 +108,7 @@ func (s *StateStoreError) TooManyTransactionalOps(count int, max int) error {
 			codes.InvalidArgument,
 			http.StatusBadRequest,
 			fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", count, max),
-			"ERR_STATE_STORE_TOO_MANY_TRANSACTIONS",
+			errorcodes.StateStoreTooManyTransactions,
 		),
 		"TOO_MANY_TRANSACTIONS",
 		map[string]string{
@@ -125,7 +126,7 @@ func (s *StateStoreError) QueryUnsupported() error {
 			codes.Internal,
 			http.StatusInternalServerError,
 			"state store does not support querying",
-			"ERR_STATE_STORE_NOT_SUPPORTED",
+			errorcodes.StateStoreNotSupported,
 		),
 		"QUERYING_"+errors.CodeNotSupported,
 		nil,
@@ -138,7 +139,7 @@ func (s *StateStoreError) QueryFailed(detail string) error {
 			codes.Internal,
 			http.StatusInternalServerError,
 			fmt.Sprintf("state store %s query failed: %s", s.name, detail),
-			"ERR_STATE_QUERY",
+			errorcodes.StateQuery,
 		),
 		errors.CodePostfixQueryFailed,
 		nil,
