@@ -1,9 +1,13 @@
+//go:build allcomponents
+
 /*
 Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
+
     http://www.apache.org/licenses/LICENSE-2.0
+
 Unless required by applicable law or agreed to in writing, software
 distributed under the License is distributed on an "AS IS" BASIS,
 WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
@@ -11,13 +15,13 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheduler
+package components
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/authz"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/helm"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/kubernetes"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/metrics"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/quorum"
+	"github.com/dapr/components-contrib/conversation/mistral"
+	"github.com/dapr/dapr/pkg/components/conversation"
 )
+
+func init() {
+	conversation.DefaultRegistry.RegisterComponent(mistral.NewMistral, "mistral")
+}
