@@ -22,17 +22,15 @@ import (
 	"sync"
 	"sync/atomic"
 
-	"github.com/diagridio/go-etcd-cron/api"
-	"github.com/diagridio/go-etcd-cron/cron"
-	clientv3 "go.etcd.io/etcd/client/v3"
-	"go.etcd.io/etcd/server/v3/embed"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
-	"github.com/dapr/dapr/pkg/scheduler/server/authz"
-	"github.com/dapr/dapr/pkg/scheduler/server/internal"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/controller"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
@@ -46,6 +44,7 @@ type Options struct {
 	ListenAddress           string
 	Port                    int
 	Mode                    modes.DaprMode
+	KubeConfig              *string
 	ReplicaCount            uint32
 	ReplicaID               uint32
 	DataDir                 string
@@ -65,21 +64,17 @@ type Options struct {
 type Server struct {
 	listenAddress string
 	port          int
-	replicaCount  uint32
-	replicaID     uint32
 
 	sec            security.Handler
-	authz          *authz.Authz
-	config         *embed.Config
-	cron           api.Interface
-	connectionPool *internal.Pool // Connection pool for sidecars
+	serializer     *serialize.Serializer
+	cron           cron.Interface
+	connectionPool *pool.Pool // Connection pool for sidecars
+	controller     concurrency.Runner
 
 	hzAPIServer healthz.Target
-	hzETCD      healthz.Target
 
 	wg      sync.WaitGroup
 	running atomic.Bool
-	readyCh chan struct{}
 
 	closeCh chan struct{}
 }
@@ -90,21 +85,41 @@ func New(opts Options) (*Server, error) {
 		return nil, err
 	}
 
+	connectionPool := pool.New()
+
+	cron := cron.New(cron.Options{
+		ReplicaCount:   opts.ReplicaCount,
+		ReplicaID:      opts.ReplicaID,
+		ConnectionPool: connectionPool,
+		Config:         config,
+		Healthz:        opts.Healthz,
+	})
+
+	var ctrl concurrency.Runner
+	if opts.Mode == modes.KubernetesMode {
+		var err error
+		ctrl, err = controller.New(controller.Options{
+			KubeConfig: opts.KubeConfig,
+			Cron:       cron,
+			Healthz:    opts.Healthz,
+		})
+		if err != nil {
+			return nil, err
+		}
+	}
+
 	return &Server{
-		port:          opts.Port,
-		listenAddress: opts.ListenAddress,
-		replicaCount:  opts.ReplicaCount,
-		replicaID:     opts.ReplicaID,
-		sec:           opts.Security,
-		authz: authz.New(authz.Options{
+		port:           opts.Port,
+		listenAddress:  opts.ListenAddress,
+		sec:            opts.Security,
+		connectionPool: connectionPool,
+		controller:     ctrl,
+		cron:           cron,
+		serializer: serialize.New(serialize.Options{
 			Security: opts.Security,
 		}),
-		config:         config,
-		connectionPool: internal.NewPool(),
-		readyCh:        make(chan struct{}),
-		closeCh:        make(chan struct{}),
-		hzAPIServer:    opts.Healthz.AddTarget(),
-		hzETCD:         opts.Healthz.AddTarget(),
+		closeCh:     make(chan struct{}),
+		hzAPIServer: opts.Healthz.AddTarget(),
 	}, nil
 }
 
@@ -115,17 +130,23 @@ func (s *Server) Run(ctx context.Context) error {
 
 	log.Info("Dapr Scheduler is starting...")
 
-	defer s.wg.Wait()
-	return concurrency.NewRunnerManager(
+	runners := []concurrency.Runner{
 		s.connectionPool.Run,
 		s.runServer,
-		s.runEtcdCron,
+		s.cron.Run,
 		func(ctx context.Context) error {
 			<-ctx.Done()
 			close(s.closeCh)
 			return nil
 		},
-	).Run(ctx)
+	}
+
+	if s.controller != nil {
+		runners = append(runners, s.controller)
+	}
+
+	defer s.wg.Wait()
+	return concurrency.NewRunnerManager(runners...).Run(ctx)
 }
 
 func (s *Server) runServer(ctx context.Context) error {
@@ -159,73 +180,6 @@ func (s *Server) runServer(ctx context.Context) error {
 			srv.GracefulStop()
 			log.Info("Scheduler GRPC server stopped")
 			return nil
-		},
-	).Run(ctx)
-}
-
-func (s *Server) runEtcdCron(ctx context.Context) error {
-	defer s.hzETCD.NotReady()
-
-	log.Info("Starting etcd")
-
-	etcd, err := embed.StartEtcd(s.config)
-	if err != nil {
-		return err
-	}
-	defer etcd.Close()
-
-	select {
-	case <-etcd.Server.ReadyNotify():
-		log.Info("Etcd server is ready!")
-	case <-ctx.Done():
-		return ctx.Err()
-	}
-
-	log.Info("Starting EtcdCron")
-
-	endpoints := make([]string, 0, len(etcd.Clients))
-	for _, peer := range etcd.Clients {
-		endpoints = append(endpoints, peer.Addr().String())
-	}
-
-	client, err := clientv3.New(clientv3.Config{
-		Endpoints:          endpoints,
-		MaxCallRecvMsgSize: math.MaxInt32,
-	})
-	if err != nil {
-		return err
-	}
-
-	// pass in initial cluster endpoints, but with client ports
-	s.cron, err = cron.New(cron.Options{
-		Client:         client,
-		Namespace:      "dapr",
-		PartitionID:    s.replicaID,
-		PartitionTotal: s.replicaCount,
-		TriggerFn:      s.triggerJob,
-	})
-	if err != nil {
-		return fmt.Errorf("fail to create etcd-cron: %s", err)
-	}
-	close(s.readyCh)
-
-	s.hzETCD.Ready()
-
-	return concurrency.NewRunnerManager(
-		func(ctx context.Context) error {
-			if err := s.cron.Run(ctx); !errors.Is(err, context.DeadlineExceeded) {
-				return err
-			}
-			return nil
-		},
-		func(ctx context.Context) error {
-			defer log.Info("EtcdCron shutting down")
-			select {
-			case err := <-etcd.Err():
-				return err
-			case <-ctx.Done():
-				return nil
-			}
 		},
 	).Run(ctx)
 }
