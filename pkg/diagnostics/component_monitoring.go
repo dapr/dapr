@@ -175,12 +175,12 @@ func newComponentMetrics() *componentMetrics {
 			"The latency of the response from the crypto component.",
 			stats.UnitMilliseconds),
 		jobSuccessCount: stats.Int64(
-			"component/job/successCount",
+			"component/job/success_count",
 			"The number of job triggers that returned success response.",
 			stats.UnitDimensionless,
 		),
 		jobFailureCount: stats.Int64(
-			"component/job/failureCount",
+			"component/job/failure_count",
 			"The number of job triggers that returned failure response.",
 			stats.UnitDimensionless,
 		),
