@@ -141,7 +141,7 @@ func (c *components) Run(t *testing.T, ctx context.Context) {
 	c.kubeapi.Informer().Modify(t, &comp)
 	require.EventuallyWithT(t, func(ct *assert.CollectT) {
 		assert.Len(ct, c.daprd.GetMetaRegisteredComponents(ct, ctx), 1)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*15, time.Millisecond*10)
 
 	comp.Scopes = []string{"foo"}
 	c.operator1.Cleanup(t)

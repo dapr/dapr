@@ -18,7 +18,7 @@ The Dev Container can be rebuilt with custom options. Relevant args (and their d
 * `HELM_VERSION` (default: `latest`)
 * `MINIKUBE_VERSION` (default: `latest`)
 * `DAPR_CLI_VERSION` (default: `latest`)
-* `PROTOC_VERSION` (default: `24.4`)
+* `PROTOC_VERSION` (default: `25.4`)
 * `PROTOC_GEN_GO_VERSION` (default: `1.32`)
 * `PROTOC_GEN_GO_GRPC_VERSION` (default: `1.3`)
 * `GOLANGCI_LINT_VERSION` (default: `1.45.2`)

@@ -15,6 +15,7 @@ package authz
 
 import (
 	"context"
+	"fmt"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -31,7 +32,7 @@ func Request(ctx context.Context, namespace string) (*spiffe.Parsed, error) {
 	}
 
 	if len(namespace) == 0 || id.Namespace() != namespace {
-		return nil, status.New(codes.PermissionDenied, "identity does not match requested namespace").Err()
+		return nil, status.New(codes.PermissionDenied, fmt.Sprintf("identity does not match requested namespace exp=%s got=%s", namespace, id.Namespace())).Err()
 	}
 
 	return id, nil

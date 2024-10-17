@@ -84,6 +84,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 
 	request.Parameters = req.GetParameters()
 	request.ConversationContext = req.GetContextID()
+	request.Temperature = req.GetTemperature()
 
 	// do call
 	policyRunner := resiliency.NewRunner[*conversation.ConversationResponse](ctx,

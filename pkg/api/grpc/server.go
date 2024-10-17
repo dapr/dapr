@@ -111,6 +111,32 @@ var (
 // NewAPIServer returns a new user facing gRPC API server.
 func NewAPIServer(opts Options) Server {
 	apiServerInfoLogger.SetOutputLevel(logger.LogLevel("info"))
+
+	// This is equivalent to "infinity" time (see: https://github.com/grpc/grpc-go/blob/master/internal/transport/defaults.go)
+	const infinity = time.Duration(math.MaxInt64)
+
+	serverOpts := []grpcGo.ServerOption{
+		grpcGo.KeepaliveEnforcementPolicy(grpcKeepalive.EnforcementPolicy{
+			// If a client pings more than once every 8s, terminate the connection
+			MinTime: 8 * time.Second,
+			// Allow pings even when there are no active streams
+			PermitWithoutStream: true,
+		}),
+		grpcGo.KeepaliveParams(grpcKeepalive.ServerParameters{
+			// Do not set a max age
+			MaxConnectionAge: infinity,
+			// Do not forcefully close connections if there are pending RPCs
+			MaxConnectionAgeGrace: infinity,
+			// If a client is idle for 3m, send a GOAWAY
+			// This is equivalent to the max idle time set in the client
+			MaxConnectionIdle: 3 * time.Minute,
+			// Ping the client if it is idle for 10s to ensure the connection is still active
+			Time: 10 * time.Second,
+			// Wait 5s for the ping ack before assuming the connection is dead
+			Timeout: 5 * time.Second,
+		}),
+	}
+
 	return &server{
 		api:            opts.API,
 		config:         opts.Config,
@@ -125,6 +151,7 @@ func NewAPIServer(opts Options) Server {
 		workflowEngine: opts.WorkflowEngine,
 		htarget:        opts.Healthz.AddTarget(),
 		closeCh:        make(chan struct{}),
+		grpcServerOpts: serverOpts,
 	}
 }
 

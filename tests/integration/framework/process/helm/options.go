@@ -61,7 +61,7 @@ func WithShowOnlySchedulerSTS() OptionFunc {
 func WithShowOnlyServices(t *testing.T) OptionFunc {
 	return func(o *options) {
 		require.NoError(t, filepath.Walk(
-			filepath.Join(binary.GetRootDir(t), "charts/dapr/charts"),
+			filepath.Join(binary.RootDir(t), "charts/dapr/charts"),
 			func(path string, info os.FileInfo, err error) error {
 				if err != nil {
 					return err
@@ -71,7 +71,7 @@ func WithShowOnlyServices(t *testing.T) OptionFunc {
 				}
 
 				if strings.HasSuffix(path, "service.yaml") {
-					chartPath := filepath.Join(binary.GetRootDir(t), "/charts/dapr")
+					chartPath := filepath.Join(binary.RootDir(t), "/charts/dapr")
 					relativePath, err := filepath.Rel(chartPath, path)
 					if err != nil {
 						return err
