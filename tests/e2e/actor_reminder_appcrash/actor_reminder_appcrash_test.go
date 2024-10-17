@@ -33,7 +33,7 @@ import (
 
 const (
 	appName                      = "actorreminderappcrash"              // App name in Dapr.
-	actorIDAppCrashTemplate      = "actor-reminder-appcrash-test-%d"    // Template for Actor ID
+	actorIDAppCrashTemplate      = "actor-reminder-appcrash-test-%s"    // Template for Actor ID
 	reminderName                 = "AppCrashTestReminder"               // Reminder name
 	numIterations                = 7                                    // Number of times each test should run.
 	numHealthChecks              = 60                                   // Number of get calls before starting tests.
