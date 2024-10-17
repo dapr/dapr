@@ -40,6 +40,7 @@ const (
 	defaultActorType                = "testactorfeatures"                   // Actor type must be unique per test app.
 	actorTypeEnvName                = "TEST_APP_ACTOR_TYPE"                 // To set to change actor type.
 	actorRemindersPartitionsEnvName = "TEST_APP_ACTOR_REMINDERS_PARTITIONS" // To set actor type partition count.
+	startupDelayEnvName             = "TEST_APP_START_DELAY"                // To set actor type partition count.
 	actorIdleTimeout                = "1h"
 	drainOngoingCallTimeout         = "30s"
 	drainRebalancedActors           = true
@@ -50,6 +51,7 @@ var (
 	appPort      = 3000
 	daprHTTPPort = 3500
 	httpClient   = utils.NewHTTPClient()
+	startupDelay = time.Duration(0)
 )
 
 func init() {
@@ -60,6 +62,10 @@ func init() {
 	p = os.Getenv("PORT")
 	if p != "" && p != "0" {
 		appPort, _ = strconv.Atoi(p)
+	}
+	p = os.Getenv(startupDelayEnvName)
+	if p != "" {
+		startupDelay, _ = time.ParseDuration(p)
 	}
 }
 
@@ -434,6 +440,15 @@ func shutdownHandler(w http.ResponseWriter, r *http.Request) {
 	}()
 }
 
+func shutdownAppHandler(w http.ResponseWriter, r *http.Request) {
+	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
+
+	go func() {
+		time.Sleep(1 * time.Second)
+		log.Fatal("simulating app fatal shutdown")
+	}()
+}
+
 func shutdownSidecarHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Processing %s test request for %s", r.Method, r.URL.RequestURI())
 
@@ -713,6 +728,7 @@ func appRouter() http.Handler {
 	router.HandleFunc("/test/metadata", testCallMetadataHandler).Methods("GET")
 	router.HandleFunc("/test/env/{envName}", testEnvHandler).Methods("GET", "POST")
 	router.HandleFunc("/test/shutdown", shutdownHandler).Methods("POST")
+	router.HandleFunc("/test/shutdownapp", shutdownAppHandler).Methods("POST")
 	router.HandleFunc("/test/shutdownsidecar", shutdownSidecarHandler).Methods("POST")
 	router.HandleFunc("/healthz", healthzHandler).Methods("GET")
 
@@ -720,6 +736,7 @@ func appRouter() http.Handler {
 }
 
 func main() {
+	log.Printf("Actor App - delaying startup for %v", startupDelay.String())
 	log.Printf("Actor App - listening on http://localhost:%d", appPort)
 	utils.StartServer(appPort, appRouter, true, false)
 }
