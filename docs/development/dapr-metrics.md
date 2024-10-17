@@ -208,3 +208,8 @@ We support only server side metrics.
 * dapr_component_secret_count: The number of operations performed on the secret component
 * dapr_component_secret_latencies: The latency of the response from the secret component
 
+### Job metrics
+
+* dapr_component_job_successCount: The number of job triggers that returned success response
+* dapr_component_job_failureCount: The number of job triggers that returned failure response
+* dapr_component_job_latencies: The latency of the job trigger

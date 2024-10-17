@@ -176,17 +176,17 @@ func newComponentMetrics() *componentMetrics {
 			stats.UnitMilliseconds),
 		jobSuccessCount: stats.Int64(
 			"component/job/successCount",
-			"The number of job executions that returned success response.",
+			"The number of job triggers that returned success response.",
 			stats.UnitDimensionless,
 		),
 		jobFailureCount: stats.Int64(
 			"component/job/failureCount",
-			"The number of job executions that resulted failure response.",
+			"The number of job triggers that returned failure response.",
 			stats.UnitDimensionless,
 		),
 		jobLatency: stats.Float64(
 			"component/job/latencies",
-			"The latency of the job execution.",
+			"The latency of the job trigger.",
 			stats.UnitMilliseconds,
 		),
 	}
@@ -460,17 +460,17 @@ func (c *componentMetrics) CryptoInvoked(ctx context.Context, component, operati
 	}
 }
 
-// JobExecutedSuccess records the metrics for a job execution success event.
-func (c *componentMetrics) JobExecutedSuccess(ctx context.Context, operation string, success bool, elapsed float64) {
-	c.jobExecuted(ctx, operation, success, elapsed, c.jobSuccessCount)
+// JobTriggeredSuccess records the metrics for a job execution success event.
+func (c *componentMetrics) JobTriggeredSuccess(ctx context.Context, operation string, success bool, elapsed float64) {
+	c.jobTriggered(ctx, operation, success, elapsed, c.jobSuccessCount)
 }
 
-// JobExecutedFailure records the metrics for a job execution failure event.
-func (c *componentMetrics) JobExecutedFailure(ctx context.Context, operation string, success bool, elapsed float64) {
-	c.jobExecuted(ctx, operation, success, elapsed, c.jobFailureCount)
+// JobTriggeredFailure records the metrics for a job execution failure event.
+func (c *componentMetrics) JobTriggeredFailure(ctx context.Context, operation string, success bool, elapsed float64) {
+	c.jobTriggered(ctx, operation, success, elapsed, c.jobFailureCount)
 }
 
-func (c *componentMetrics) jobExecuted(ctx context.Context, operation string, success bool, elapsed float64, countMeasure *stats.Int64Measure) {
+func (c *componentMetrics) jobTriggered(ctx context.Context, operation string, success bool, elapsed float64, countMeasure *stats.Int64Measure) {
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
