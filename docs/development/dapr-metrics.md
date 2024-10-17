@@ -110,6 +110,7 @@ Dapr uses prometheus process and go collectors by default.
 * dapr_resiliency_loaded: The number of resiliency policies loaded.
 * dapr_resiliency_count: The number of times a resiliency policy has been executed.
 * dapr_resiliency_activations_total: Number of times a resiliency policy has been activated in a building block after a failure or after a state change.
+* dapr_resiliency_cb_state: A resiliency policy's current CircuitBreakerState state. 4 series are generated, one for each possible state, with the tag "status" being [unknown, closed, half-open, open]. The current state is 1, all other states are 0.
 
 #### Workflow metrics
 
