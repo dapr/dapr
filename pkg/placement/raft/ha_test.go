@@ -79,13 +79,6 @@ func TestRaftHA(t *testing.T) {
 
 	// Run tests
 	t.Run("elects leader with 3 nodes", func(t *testing.T) {
-		// It is painful that we have to include a `time.Sleep` here, but due to
-		// the non-deterministic behaviour of the raft library we are using we will
-		// later fail on slower test runner machines. A clock timer wait means we
-		// have a _better_ chance of being in the right spot in the state machine
-		// and the network has died down. Ideally we should move to a different
-		// raft library that is more deterministic and reliable for our use case.
-		time.Sleep(time.Second * 3)
 		require.NotEqual(t, -1, findLeader(t, raftServers))
 	})
 
@@ -110,20 +103,14 @@ func TestRaftHA(t *testing.T) {
 		follower = (oldLeader + 1) % 3
 		retrieveValidState(t, raftServers[follower], testMembers[0])
 
-		t.Run("new leader after leader fails", func(t *testing.T) {
+		t.Run("new leader is elected after leader fails", func(t *testing.T) {
+			// Stop the current leader
 			raftServerCancel[oldLeader]()
 			raftServers[oldLeader] = nil
 
-			// It is painful that we have to include a `time.Sleep` here, but due to
-			// the non-deterministic behaviour of the raft library we are using we will
-			// later fail on slower test runner machines. A clock timer wait means we
-			// have a _better_ chance of being in the right spot in the state machine
-			// and the network has died down. Ideally we should move to a different
-			// raft library that is more deterministic and reliable for our use case.
-			time.Sleep(time.Second * 3)
-
 			require.Eventually(t, func() bool {
-				return oldLeader != findLeader(t, raftServers)
+				newLeader := findLeader(t, raftServers)
+				return oldLeader != newLeader && newLeader != -1
 			}, time.Second*10, time.Millisecond*100)
 		})
 	})
@@ -143,13 +130,6 @@ func TestRaftHA(t *testing.T) {
 	})
 
 	t.Run("leave only leader node running", func(t *testing.T) {
-		// It is painful that we have to include a `time.Sleep` here, but due to
-		// the non-deterministic behaviour of the raft library we are using we will
-		// fail in a few lines on slower test runner machines. A clock timer wait
-		// means we have a _better_ chance of being in the right spot in the state
-		// machine. Ideally we should move to a different raft library that is more
-		// deterministic and reliable.
-		time.Sleep(time.Second * 3)
 		leader := findLeader(t, raftServers)
 		for i := range raftServers {
 			if i != leader {
@@ -177,22 +157,16 @@ func TestRaftHA(t *testing.T) {
 		}, time.Second*5, time.Millisecond*100, "leader did not step down")
 	})
 
-	// It is painful that we have to include a `time.Sleep` here, but due to
-	// the non-deterministic behaviour of the raft library we are using we will
-	// fail in a few lines on slower test runner machines. A clock timer wait
-	// means we have a _better_ chance of being in the right spot in the state
-	// machine. Ideally we should move to a different raft library that is more
-	// deterministic and reliable.
-	time.Sleep(time.Second * 6)
-
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
-		for oldSvr := range 3 {
-			if raftServers[oldSvr] == nil {
+		oldSvr := -1
+		for i := range 3 {
+			if raftServers[i] == nil {
+				oldSvr = i
 				break
 			}
 		}
+		require.NotEqual(t, -1, oldSvr, "no server to replace")
 
-		oldSvr := 2
 		raftServers[oldSvr], ready[oldSvr], raftServerCancel[oldSvr] = createRaftServer(t, oldSvr, peers)
 		select {
 		case <-ready[oldSvr]:
@@ -248,14 +222,6 @@ func TestRaftHA(t *testing.T) {
 				raftServerCancel[i]()
 			}
 		}
-
-		// It is painful that we have to include a `time.Sleep` here, but due to
-		// the non-deterministic behaviour of the raft library we are using we will
-		// later fail on slower test runner machines. A clock timer wait means we
-		// have a _better_ chance of being in the right spot in the state machine
-		// and the network has died down. Ideally we should move to a different
-		// raft library that is more deterministic and reliable for our use case.
-		time.Sleep(time.Second * 3)
 
 		// Restart all nodes
 		for i := range 3 {
@@ -322,19 +288,26 @@ func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-ch
 	go func() {
 		defer close(ready)
 		for {
-			timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*5)
-			defer timeoutCancel()
-			r, err := srv.Raft(timeoutCtx)
-			assert.NoError(t, err)
-			if r.State() == hcraft.Follower || r.State() == hcraft.Leader {
+			select {
+			case <-ctx.Done():
 				return
+			default:
+				timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*5)
+				r, err := srv.Raft(timeoutCtx)
+				if err == nil && (r.State() == hcraft.Follower || r.State() == hcraft.Leader) {
+					timeoutCancel()
+					return
+				}
+				timeoutCancel()
 			}
 		}
 	}()
 
+	// Advance the clock to trigger elections more quickly
 	go func() {
 		for {
 			select {
+			case <-ctx.Done():
 			case <-ready:
 			case <-time.After(time.Millisecond):
 				clock.Step(time.Second * 2)
@@ -375,7 +348,7 @@ func findLeader(t *testing.T, raftServers []*Server) int {
 		}
 
 		return true
-	}, time.Second*30, time.Second, "no leader elected")
+	}, time.Second*30, 500*time.Millisecond, "no leader elected")
 	return n
 }
 
