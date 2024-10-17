@@ -184,14 +184,14 @@ func Test_Initial(t *testing.T) {
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
 			a := New(Options{fake.New().WithMTLSEnabled(true)})
-			err := a.Initial(test.ctx, test.initial)
+			err := a.WatchInitial(test.ctx, test.initial)
 			assert.Equal(t, test.expCode != nil, err != nil, "%v %v", test.expCode, err)
 			if test.expCode != nil {
 				assert.Equal(t, *test.expCode, status.Code(err))
 			}
 
 			a = New(Options{fake.New().WithMTLSEnabled(false)})
-			err = a.Initial(test.ctx, test.initial)
+			err = a.WatchInitial(test.ctx, test.initial)
 			assert.Equal(t, test.nonMTlSCode != nil, err != nil, "%v %v", test.nonMTlSCode, err)
 			if test.nonMTlSCode != nil {
 				assert.Equal(t, *test.nonMTlSCode, status.Code(err))
