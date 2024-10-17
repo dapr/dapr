@@ -170,7 +170,7 @@ func TestRaftHA(t *testing.T) {
 		select {
 		case <-ready[oldSvr]:
 			// nop
-		case <-time.After(time.Second * 10):
+		case <-time.After(time.Second * 5):
 			t.Fatalf("raft server %d did not start in time", oldSvr)
 		}
 
@@ -318,7 +318,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-ch
 		cancel()
 		select {
 		case <-stopped:
-		case <-time.After(time.Second * 10):
+		case <-time.After(time.Second * 5):
 			require.Fail(t, "server didn't stop in time")
 		}
 	}
