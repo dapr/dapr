@@ -11,13 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package scheduler
+package fake
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/authz"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/helm"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/kubernetes"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/metrics"
-	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/quorum"
+	"testing"
+
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 )
+
+func Test_Fake(t *testing.T) {
+	var _ cron.Interface = new(Fake)
+}

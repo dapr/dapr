@@ -43,7 +43,7 @@ func (a *Authz) Metadata(ctx context.Context, meta *schedulerv1pb.JobMetadata) e
 	return a.authz(ctx, meta.GetNamespace(), meta.GetAppId())
 }
 
-func (a *Authz) Initial(ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) error {
+func (a *Authz) WatchInitial(ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) error {
 	return a.authz(ctx, initial.GetNamespace(), initial.GetAppId())
 }
 
