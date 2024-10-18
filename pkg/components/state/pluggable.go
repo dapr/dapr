@@ -45,7 +45,7 @@ var (
 	ErrTransactOperationNotSupported = errors.New("transact operation not supported")
 )
 
-// errors code
+// errorcodes code
 var (
 	GRPCCodeETagMismatch          = codes.FailedPrecondition
 	GRPCCodeETagInvalid           = codes.InvalidArgument
