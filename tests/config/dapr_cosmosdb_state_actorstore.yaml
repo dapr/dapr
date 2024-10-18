@@ -43,6 +43,7 @@ scopes:
 - reentrantactor
 - actorreminder
 - actorreminderpartition
+- actorreminderappcrash
 - actorinvocationapp
 - actormetadata-a
 - actormetadata-b
