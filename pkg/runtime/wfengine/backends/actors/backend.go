@@ -136,10 +136,14 @@ func getActivityScheduler(activityWorkItemChan chan *backend.ActivityWorkItem) a
 }
 
 // InternalActors returns a map of internal actors that are used to implement workflows
-func (abe *ActorBackend) GetInternalActorsMap() map[string]actors.InternalActorFactory {
+func (abe *ActorBackend) GetInternalActorsMap(registerWorkflowBackend bool, registerActivityBackend bool) map[string]actors.InternalActorFactory {
 	internalActors := make(map[string]actors.InternalActorFactory)
-	internalActors[abe.config.workflowActorType] = NewWorkflowActor(getWorkflowScheduler(abe.orchestrationWorkItemChan), abe.config, &abe.workflowActorOpts)
-	internalActors[abe.config.activityActorType] = NewActivityActor(getActivityScheduler(abe.activityWorkItemChan), abe.config, &abe.activityActorOpts)
+	if registerWorkflowBackend {
+		internalActors[abe.config.workflowActorType] = NewWorkflowActor(getWorkflowScheduler(abe.orchestrationWorkItemChan), abe.config, &abe.workflowActorOpts)
+	}
+	if registerActivityBackend {
+		internalActors[abe.config.activityActorType] = NewActivityActor(getActivityScheduler(abe.activityWorkItemChan), abe.config, &abe.activityActorOpts)
+	}
 	return internalActors
 }
 
@@ -150,9 +154,9 @@ func (abe *ActorBackend) SetActorRuntime(ctx context.Context, actorRuntime actor
 	}
 }
 
-func (abe *ActorBackend) RegisterActor(ctx context.Context) error {
+func (abe *ActorBackend) RegisterActor(ctx context.Context, registerWorkflowBackend bool, registerActivityBackend bool) error {
 	if abe.actorRuntime != nil {
-		for actorType, actor := range abe.GetInternalActorsMap() {
+		for actorType, actor := range abe.GetInternalActorsMap(registerWorkflowBackend, registerActivityBackend) {
 			err := abe.actorRuntime.RegisterInternalActor(ctx, actorType, actor, time.Minute*1)
 			if err != nil {
 				return fmt.Errorf("failed to register workflow actor %s: %w", actorType, err)

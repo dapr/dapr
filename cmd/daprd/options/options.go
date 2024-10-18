@@ -82,6 +82,8 @@ type Options struct {
 	AppChannelAddress             string
 	Logger                        logger.Options
 	Metrics                       *metrics.FlagOptions
+	RegisterWorkflowBackend       bool
+	RegisterActivityBackend       bool
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -163,7 +165,8 @@ func New(origArgs []string) (*Options, error) {
 	fs.IntVar(&opts.AppHealthProbeTimeout, "app-health-probe-timeout", int(config.AppHealthConfigDefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
 	fs.IntVar(&opts.AppHealthThreshold, "app-health-threshold", int(config.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 	fs.StringVar(&opts.AppChannelAddress, "app-channel-address", runtime.DefaultChannelAddress, "The network address the application listens on")
-
+	fs.BoolVar(&opts.RegisterWorkflowBackend, "register-workflow-backend", true, "Enable or disables the registration of the Workflow backend")
+	fs.BoolVar(&opts.RegisterActivityBackend, "register-activity-backend", true, "Enable or disables the registration of the Workflow Activity backend")
 	// Add flags for actors, placement, and reminders
 	// --placement-host-address is a legacy (but not deprecated) flag that is translated to the actors-service flag
 	var placementServiceHostAddr string
