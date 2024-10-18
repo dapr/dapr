@@ -77,6 +77,7 @@ type SidecarConfig struct {
 	EnableDebug                         bool    `annotation:"dapr.io/enable-debug" default:"false"`
 	SidecarDebugPort                    int32   `annotation:"dapr.io/debug-port" default:"40000"`
 	Env                                 string  `annotation:"dapr.io/env"`
+	EnvFromSecret                       string  `annotation:"dapr.io/env-from-secret"`
 	SidecarCPURequest                   string  `annotation:"dapr.io/sidecar-cpu-request"`
 	SidecarCPULimit                     string  `annotation:"dapr.io/sidecar-cpu-limit"`
 	SidecarMemoryRequest                string  `annotation:"dapr.io/sidecar-memory-request"`
