@@ -8,6 +8,7 @@ import (
 	"go.opencensus.io/tag"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/resiliency/breaker"
 )
 
 var (
@@ -17,6 +18,13 @@ var (
 
 	OutboundPolicyFlowDirection PolicyFlowDirection = "outbound"
 	InboundPolicyFlowDirection  PolicyFlowDirection = "inbound"
+
+	cbStatuses = []string{
+		string(breaker.StateClosed),
+		string(breaker.StateHalfOpen),
+		string(breaker.StateOpen),
+		string(breaker.StateUnknown),
+	}
 )
 
 type PolicyType string
@@ -24,9 +32,10 @@ type PolicyType string
 type PolicyFlowDirection string
 
 type resiliencyMetrics struct {
-	policiesLoadCount *stats.Int64Measure
-	executionCount    *stats.Int64Measure
-	activationsCount  *stats.Int64Measure
+	policiesLoadCount   *stats.Int64Measure
+	executionCount      *stats.Int64Measure
+	activationsCount    *stats.Int64Measure
+	circuitbreakerState *stats.Int64Measure
 
 	appID   string
 	ctx     context.Context
@@ -47,7 +56,10 @@ func newResiliencyMetrics() *resiliencyMetrics {
 			"resiliency/activations_total",
 			"Number of times a resiliency policyKey has been activated in a building block after a failure or after a state change.",
 			stats.UnitDimensionless),
-
+		circuitbreakerState: stats.Int64(
+			"resiliency/cb_state",
+			"A resiliency policy's current CircuitBreakerState state. 0 is closed, 1 is half-open, 2 is open, and -1 is unknown.",
+			stats.UnitDimensionless),
 		// TODO: how to use correct context
 		ctx:     context.Background(),
 		enabled: false,
@@ -63,6 +75,7 @@ func (m *resiliencyMetrics) Init(id string) error {
 		diagUtils.NewMeasureView(m.policiesLoadCount, []tag.Key{appIDKey, resiliencyNameKey, namespaceKey}, view.Count()),
 		diagUtils.NewMeasureView(m.executionCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
 		diagUtils.NewMeasureView(m.activationsCount, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.Count()),
+		diagUtils.NewMeasureView(m.circuitbreakerState, []tag.Key{appIDKey, resiliencyNameKey, policyKey, namespaceKey, flowDirectionKey, targetKey, statusKey}, view.LastValue()),
 	)
 }
 
@@ -80,12 +93,42 @@ func (m *resiliencyMetrics) PolicyLoaded(resiliencyName, namespace string) {
 // PolicyWithStatusExecuted records metric when policy is executed with added status information (e.g., circuit breaker open).
 func (m *resiliencyMetrics) PolicyWithStatusExecuted(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
 	if m.enabled {
+		// Common tags for all metrics
+		commonTags := []interface{}{
+			appIDKey, m.appID,
+			resiliencyNameKey, resiliencyName,
+			policyKey, string(policy),
+			namespaceKey, namespace,
+			flowDirectionKey, string(flowDirection),
+			targetKey, target,
+			statusKey, // status appened on each recording
+		}
+
+		// Record count metric for all resiliency executions
 		_ = stats.RecordWithTags(
 			m.ctx,
-			diagUtils.WithTags(m.executionCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
-				namespaceKey, namespace, flowDirectionKey, string(flowDirection), targetKey, target, statusKey, status),
+			diagUtils.WithTags(m.executionCount.Name(), append(commonTags, status)...),
 			m.executionCount.M(1),
 		)
+
+		// Record cb gauge, 4 metrics, one for each cb state, with the active state having a value of 1, otherwise 0
+		if policy == CircuitBreakerPolicy {
+			for _, s := range cbStatuses {
+				if s == status {
+					_ = stats.RecordWithTags(
+						m.ctx,
+						diagUtils.WithTags(m.circuitbreakerState.Name(), append(commonTags, s)...),
+						m.circuitbreakerState.M(1),
+					)
+				} else {
+					_ = stats.RecordWithTags(
+						m.ctx,
+						diagUtils.WithTags(m.circuitbreakerState.Name(), append(commonTags, s)...),
+						m.circuitbreakerState.M(0),
+					)
+				}
+			}
+		}
 	}
 }
 
@@ -99,9 +142,10 @@ func (m *resiliencyMetrics) PolicyActivated(resiliencyName, namespace string, po
 	m.PolicyWithStatusActivated(resiliencyName, namespace, policy, flowDirection, target, "")
 }
 
-// PolicyWithStatusActivated records metric when policy is activated after a failure or in the case of circuit breaker after a state change. with added state/status (e.g., circuit breaker open).
+// PolicyWithStatusActivated records metrics when policy is activated after a failure or in the case of circuit breaker after a state change. with added state/status (e.g., circuit breaker open).
 func (m *resiliencyMetrics) PolicyWithStatusActivated(resiliencyName, namespace string, policy PolicyType, flowDirection PolicyFlowDirection, target string, status string) {
 	if m.enabled {
+		// Record combined activation measure
 		_ = stats.RecordWithTags(
 			m.ctx,
 			diagUtils.WithTags(m.activationsCount.Name(), appIDKey, m.appID, resiliencyNameKey, resiliencyName, policyKey, string(policy),
