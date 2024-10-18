@@ -636,6 +636,8 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 
 	for _, tt := range httpResponseTests {
 		t.Run(fmt.Sprintf("handle http %d response code", tt.status), func(t *testing.T) {
+			// TODO: fix types
+			//nolint:gosec
 			fakeResp := invokev1.NewInvokeMethodResponse(int32(tt.status), tt.statusMessage, nil).
 				WithRawDataString(tt.errHTTPMessage).
 				WithContentType("application/json")
@@ -2094,7 +2096,7 @@ func TestGetBulkState(t *testing.T) {
 				if len(tt.expectedResponse) == 0 {
 					assert.Empty(t, resp.GetItems(), "Expected response to be empty")
 				} else {
-					for i := 0; i < len(resp.GetItems()); i++ {
+					for i := range resp.GetItems() {
 						if tt.expectedResponse[i].GetError() == "" {
 							assert.Equal(t, resp.GetItems()[i].GetData(), tt.expectedResponse[i].GetData(), "Expected response Data to be same")
 							assert.Equal(t, resp.GetItems()[i].GetEtag(), tt.expectedResponse[i].GetEtag(), "Expected response Etag to be same")
@@ -2771,7 +2773,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 	client := runtimev1pb.NewDaprClient(clientConn)
 
 	tooManyOperations := make([]*runtimev1pb.TransactionalStateOperation, 20)
-	for i := 0; i < 20; i++ {
+	for i := range tooManyOperations {
 		tooManyOperations[i] = &runtimev1pb.TransactionalStateOperation{
 			OperationType: string(state.OperationUpsert),
 			Request: &commonv1pb.StateItem{
@@ -3856,6 +3858,10 @@ func (m *mockConfigStore) Subscribe(ctx context.Context, req *configuration.Subs
 }
 
 func (m *mockConfigStore) Unsubscribe(ctx context.Context, req *configuration.UnsubscribeRequest) error {
+	return nil
+}
+
+func (m *mockConfigStore) Close() error {
 	return nil
 }
 

@@ -15,7 +15,6 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -96,14 +95,12 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	client := client.HTTP(t)
 
-	daprdURL := fmt.Sprintf("http://%s/v1.0/actors/myactortype/myactorid", b.daprd.HTTPAddress())
-
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/method/foo", nil)
+	aurl := b.daprd.ActorInvokeURL("myactortype", "myactorid", "foo")
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, aurl, nil)
 	require.NoError(t, err)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, rErr := client.Do(req)
-		//nolint:testifylint
 		if assert.NoError(c, rErr) {
 			assert.NoError(c, resp.Body.Close())
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
@@ -111,7 +108,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10, "actor not ready in time")
 
 	body := `{"dueTime": "1s", "data": "reminderdata"}`
-	req, err = http.NewRequestWithContext(ctx, http.MethodPost, daprdURL+"/reminders/remindermethod", strings.NewReader(body))
+	aurl = b.daprd.ActorReminderURL("myactortype", "myactorid", "remindermethod")
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, aurl, strings.NewReader(body))
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)

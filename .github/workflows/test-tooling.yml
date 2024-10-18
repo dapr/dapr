@@ -12,6 +12,8 @@ on:
       - ".github/workflows/test-tooling.yml"
       - ".build-tools/*"
 
+permissions: {}
+
 jobs:
   lint:
     name: Test (${{ matrix.os}})
@@ -24,8 +26,10 @@ jobs:
           - "windows-latest"
           - "macos-latest"
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
     env:
-      GOLANGCILINT_VER: "v1.55.2" # Make sure to bump /.build-tools/check-lint-version/main_test.go
+      GOLANGCILINT_VER: "v1.61.0" # Make sure to bump /.build-tools/check-lint-version/main_test.go
 
     steps:
       - name: Checkout

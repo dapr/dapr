@@ -24,6 +24,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -58,6 +59,8 @@ type Daprd struct {
 	publicPort       int
 	metricsPort      int
 	profilePort      int
+
+	once sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
@@ -181,7 +184,9 @@ func (d *Daprd) Run(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) Cleanup(t *testing.T) {
-	d.exec.Cleanup(t)
+	d.once.Do(func() {
+		d.exec.Cleanup(t)
+	})
 }
 
 func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
@@ -399,9 +404,11 @@ func (d *Daprd) http2xx(t *testing.T, ctx context.Context, method, path string, 
 
 	resp, err := d.httpClient.Do(req)
 	require.NoError(t, err)
+	b, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	require.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code")
-	require.Less(t, resp.StatusCode, 300, "expected 2xx status code")
+	require.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code: "+string(b))
+	require.Less(t, resp.StatusCode, 300, "expected 2xx status code: "+string(b))
 }
 
 func (d *Daprd) GetMetaRegisteredComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {
@@ -459,11 +466,18 @@ func (d *Daprd) meta(t assert.TestingT, ctx context.Context) metaResponse {
 
 	var meta metaResponse
 	resp, err := d.httpClient.Do(req)
-	//nolint:testifylint
 	if assert.NoError(t, err) {
 		defer resp.Body.Close()
 		assert.NoError(t, json.NewDecoder(resp.Body).Decode(&meta))
 	}
 
 	return meta
+}
+
+func (d *Daprd) ActorInvokeURL(actorType, actorID, method string) string {
+	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/method/%s", d.HTTPAddress(), actorType, actorID, method)
+}
+
+func (d *Daprd) ActorReminderURL(actorType, actorID, method string) string {
+	return fmt.Sprintf("http://%s/v1.0/actors/%s/%s/reminders/%s", d.HTTPAddress(), actorType, actorID, method)
 }

@@ -108,7 +108,7 @@ func (r *TestResources) setup() error {
 	}
 
 	allErrs := make([]error, 0)
-	for i := 0; i < resourceCount; i++ {
+	for range resourceCount {
 		err := <-errs
 		if err != nil {
 			allErrs = append(allErrs, err)
@@ -139,7 +139,7 @@ func (r *TestResources) tearDown() error {
 	}
 
 	allErrs := make([]error, 0)
-	for i := 0; i < resourceCount; i++ {
+	for range resourceCount {
 		err := <-errs
 		if err != nil {
 			os.Stderr.WriteString(err.Error() + "\n")

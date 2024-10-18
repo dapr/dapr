@@ -23,11 +23,9 @@
 name: dapr-perf
 
 on:
-  # Run at minute 44 past hour 6, 14, and 22 on every day-of-week from Monday through Friday.
-  # Run at 23:44 on Sunday and Saturday.
+  # Run at 23:44 every day
   schedule:
-    - cron: "44 6,14,22 * * 1-5"
-    - cron: "44 23 * * 0,6"
+    - cron: "44 23 * * *"
   # Manual trigger
   workflow_dispatch:
     inputs:
@@ -39,11 +37,13 @@ on:
   repository_dispatch:
     types: [perf-test]
 
+permissions: {}
+
 env:
   # Configure proxy for Go modules
   GOPROXY: https://proxy.golang.org
   # Version of kubectl
-  KUBECTLVER: "v1.27.6"
+  KUBECTLVER: "v1.30.0"
   # Version of Helm
   HELMVER: "v3.10.0"
   # Kubernetes namespace to use
@@ -59,6 +59,9 @@ jobs:
   deploy-infrastructure:
     name: Deploy test infrastructure
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     steps:
       - name: Set up for manual runs
         if: github.event_name == 'workflow_dispatch'
@@ -200,6 +203,9 @@ jobs:
   build:
     name: Build
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       GOOS: linux
       GOARCH: amd64
@@ -335,6 +341,9 @@ jobs:
       - build
       - deploy-infrastructure
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      pull-requests: write
     env:
       GOOS: linux
       GOARCH: amd64

@@ -26,7 +26,7 @@ func Names(t *testing.T, num int) []string {
 	require.GreaterOrEqual(t, num, 1)
 
 	names := make([]string, num)
-	for i := 0; i < num; i++ {
+	for i := range num {
 		names[i] = name(t)
 	}
 
@@ -38,7 +38,7 @@ func Paths(t *testing.T, num int) []string {
 
 	dir := t.TempDir()
 	names := make([]string, num)
-	for i := 0; i < num; i++ {
+	for i := range num {
 		names[i] = filepath.Join(dir, name(t))
 	}
 

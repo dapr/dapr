@@ -109,7 +109,7 @@ func Test_Start(t *testing.T) {
 		providerStopped := make(chan struct{})
 		go func() {
 			defer close(providerStopped)
-			require.NoError(t, p.Run(ctx))
+			assert.NoError(t, p.Run(ctx))
 		}()
 
 		prov := p.(*provider)

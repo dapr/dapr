@@ -15,10 +15,15 @@ name: dapr-release-notes
 
 on:
   workflow_dispatch:
+
+permissions: {}
+
 jobs:
   build:
     name: Generate release notes
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     steps:
       - name: Checkout repo
         uses: actions/checkout@v4

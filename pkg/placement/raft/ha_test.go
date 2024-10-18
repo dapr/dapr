@@ -1,4 +1,4 @@
-package placement
+package raft
 
 import (
 	"context"
@@ -13,7 +13,6 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/healthz"
-	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/security/fake"
 	daprtesting "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
@@ -25,16 +24,16 @@ func init() {
 	})
 }
 
-func TestPlacementHA(t *testing.T) {
+func TestRaftHA(t *testing.T) {
 	// Get 3 ports
 	ports, err := daprtesting.GetFreePorts(3)
 	if err != nil {
-		log.Fatalf("failed to get 3 ports: %v", err)
+		logging.Fatalf("failed to get 3 ports: %v", err)
 		return
 	}
 
 	// Note that ports below are unused (i.e. no service is started on those ports), they are just used as identifiers with the IP address
-	testMembers := []*raft.DaprHostMember{
+	testMembers := []*DaprHostMember{
 		{
 			Name:      "127.0.0.1:3031",
 			Namespace: "ns1",
@@ -56,20 +55,20 @@ func TestPlacementHA(t *testing.T) {
 	}
 
 	// Create 3 raft servers
-	raftServers := make([]*raft.Server, 3)
+	raftServers := make([]*Server, 3)
 	ready := make([]<-chan struct{}, 3)
 	raftServerCancel := make([]context.CancelFunc, 3)
-	peers := make([]raft.PeerInfo, 3)
-	for i := 0; i < 3; i++ {
-		peers[i] = raft.PeerInfo{
+	peers := make([]PeerInfo, 3)
+	for i := range 3 {
+		peers[i] = PeerInfo{
 			ID:      fmt.Sprintf("mynode-%d", i),
 			Address: fmt.Sprintf("127.0.0.1:%d", ports[i]),
 		}
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		raftServers[i], ready[i], raftServerCancel[i] = createRaftServer(t, i, peers)
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		select {
 		case <-ready[i]:
 			// nop
@@ -80,20 +79,13 @@ func TestPlacementHA(t *testing.T) {
 
 	// Run tests
 	t.Run("elects leader with 3 nodes", func(t *testing.T) {
-		// It is painful that we have to include a `time.Sleep` here, but due to
-		// the non-deterministic behaviour of the raft library we are using we will
-		// later fail on slower test runner machines. A clock timer wait means we
-		// have a _better_ chance of being in the right spot in the state machine
-		// and the network has died down. Ideally we should move to a different
-		// raft library that is more deterministic and reliable for our use case.
-		time.Sleep(time.Second * 3)
 		require.NotEqual(t, -1, findLeader(t, raftServers))
 	})
 
 	t.Run("set and retrieve state in leader", func(t *testing.T) {
 		assert.Eventually(t, func() bool {
 			lead := findLeader(t, raftServers)
-			_, err := raftServers[lead].ApplyCommand(raft.MemberUpsert, *testMembers[0])
+			_, err := raftServers[lead].ApplyCommand(MemberUpsert, *testMembers[0])
 			if errors.Is(err, hcraft.ErrLeadershipLost) || errors.Is(err, hcraft.ErrNotLeader) {
 				// If leadership is lost, we should retry
 				return false
@@ -111,27 +103,21 @@ func TestPlacementHA(t *testing.T) {
 		follower = (oldLeader + 1) % 3
 		retrieveValidState(t, raftServers[follower], testMembers[0])
 
-		t.Run("new leader after leader fails", func(t *testing.T) {
+		t.Run("new leader is elected after leader fails", func(t *testing.T) {
+			// Stop the current leader
 			raftServerCancel[oldLeader]()
 			raftServers[oldLeader] = nil
 
-			// It is painful that we have to include a `time.Sleep` here, but due to
-			// the non-deterministic behaviour of the raft library we are using we will
-			// later fail on slower test runner machines. A clock timer wait means we
-			// have a _better_ chance of being in the right spot in the state machine
-			// and the network has died down. Ideally we should move to a different
-			// raft library that is more deterministic and reliable for our use case.
-			time.Sleep(time.Second * 3)
-
 			require.Eventually(t, func() bool {
-				return oldLeader != findLeader(t, raftServers)
+				newLeader := findLeader(t, raftServers)
+				return oldLeader != newLeader && newLeader != -1
 			}, time.Second*10, time.Millisecond*100)
 		})
 	})
 
 	t.Run("set and retrieve state in leader after re-election", func(t *testing.T) {
 		assert.Eventually(t, func() bool {
-			_, err := raftServers[findLeader(t, raftServers)].ApplyCommand(raft.MemberUpsert, *testMembers[1])
+			_, err := raftServers[findLeader(t, raftServers)].ApplyCommand(MemberUpsert, *testMembers[1])
 			if errors.Is(err, hcraft.ErrLeadershipLost) || errors.Is(err, hcraft.ErrNotLeader) {
 				// If leadership is lost, we should retry
 				return false
@@ -140,17 +126,10 @@ func TestPlacementHA(t *testing.T) {
 
 			retrieveValidState(t, raftServers[findLeader(t, raftServers)], testMembers[1])
 			return true
-		}, time.Second*10, time.Millisecond*300)
+		}, time.Second*20, time.Millisecond*300)
 	})
 
 	t.Run("leave only leader node running", func(t *testing.T) {
-		// It is painful that we have to include a `time.Sleep` here, but due to
-		// the non-deterministic behaviour of the raft library we are using we will
-		// fail in a few lines on slower test runner machines. A clock timer wait
-		// means we have a _better_ chance of being in the right spot in the state
-		// machine. Ideally we should move to a different raft library that is more
-		// deterministic and reliable.
-		time.Sleep(time.Second * 3)
 		leader := findLeader(t, raftServers)
 		for i := range raftServers {
 			if i != leader {
@@ -160,7 +139,7 @@ func TestPlacementHA(t *testing.T) {
 		}
 
 		var running int
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if raftServers[i] != nil {
 				running++
 			}
@@ -178,21 +157,15 @@ func TestPlacementHA(t *testing.T) {
 		}, time.Second*5, time.Millisecond*100, "leader did not step down")
 	})
 
-	// It is painful that we have to include a `time.Sleep` here, but due to
-	// the non-deterministic behaviour of the raft library we are using we will
-	// fail in a few lines on slower test runner machines. A clock timer wait
-	// means we have a _better_ chance of being in the right spot in the state
-	// machine. Ideally we should move to a different raft library that is more
-	// deterministic and reliable.
-	time.Sleep(time.Second * 3)
-
 	t.Run("leader elected when second node comes up", func(t *testing.T) {
-		var oldSvr int
-		for oldSvr = 0; oldSvr < 3; oldSvr++ {
-			if raftServers[oldSvr] == nil {
+		oldSvr := -1
+		for i := range 3 {
+			if raftServers[i] == nil {
+				oldSvr = i
 				break
 			}
 		}
+		require.NotEqual(t, -1, oldSvr, "no server to replace")
 
 		raftServers[oldSvr], ready[oldSvr], raftServerCancel[oldSvr] = createRaftServer(t, oldSvr, peers)
 		select {
@@ -203,7 +176,7 @@ func TestPlacementHA(t *testing.T) {
 		}
 
 		var running int
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			if raftServers[i] != nil {
 				running++
 			}
@@ -250,20 +223,12 @@ func TestPlacementHA(t *testing.T) {
 			}
 		}
 
-		// It is painful that we have to include a `time.Sleep` here, but due to
-		// the non-deterministic behaviour of the raft library we are using we will
-		// later fail on slower test runner machines. A clock timer wait means we
-		// have a _better_ chance of being in the right spot in the state machine
-		// and the network has died down. Ideally we should move to a different
-		// raft library that is more deterministic and reliable for our use case.
-		time.Sleep(time.Second * 3)
-
 		// Restart all nodes
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			raftServers[i], ready[i], raftServerCancel[i] = createRaftServer(t, i, peers)
 		}
 
-		for i := 0; i < 3; i++ {
+		for i := range 3 {
 			select {
 			case <-ready[i]:
 				// nop
@@ -285,10 +250,10 @@ func TestPlacementHA(t *testing.T) {
 	}
 }
 
-func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Server, <-chan struct{}, context.CancelFunc) {
+func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-chan struct{}, context.CancelFunc) {
 	clock := clocktesting.NewFakeClock(time.Now())
 
-	srv := raft.New(raft.Options{
+	srv := New(Options{
 		ID:           fmt.Sprintf("mynode-%d", nodeID),
 		InMem:        true,
 		Peers:        peers,
@@ -316,26 +281,33 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 	stopped := make(chan struct{})
 	go func() {
 		defer close(stopped)
-		require.NoError(t, srv.StartRaft(ctx))
+		assert.NoError(t, srv.StartRaft(ctx))
 	}()
 
 	ready := make(chan struct{})
 	go func() {
 		defer close(ready)
 		for {
-			timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*5)
-			defer timeoutCancel()
-			r, err := srv.Raft(timeoutCtx)
-			require.NoError(t, err)
-			if r.State() == hcraft.Follower || r.State() == hcraft.Leader {
+			select {
+			case <-ctx.Done():
 				return
+			default:
+				timeoutCtx, timeoutCancel := context.WithTimeout(ctx, time.Second*5)
+				r, err := srv.Raft(timeoutCtx)
+				if err == nil && (r.State() == hcraft.Follower || r.State() == hcraft.Leader) {
+					timeoutCancel()
+					return
+				}
+				timeoutCancel()
 			}
 		}
 	}()
 
+	// Advance the clock to trigger elections more quickly
 	go func() {
 		for {
 			select {
+			case <-ctx.Done():
 			case <-ready:
 			case <-time.After(time.Millisecond):
 				clock.Step(time.Second * 2)
@@ -353,7 +325,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []raft.PeerInfo) (*raft.Se
 	}
 }
 
-func findLeader(t *testing.T, raftServers []*raft.Server) int {
+func findLeader(t *testing.T, raftServers []*Server) int {
 	// Ensure that one node became leader
 	n := -1
 	require.Eventually(t, func() bool {
@@ -376,19 +348,22 @@ func findLeader(t *testing.T, raftServers []*raft.Server) int {
 		}
 
 		return true
-	}, time.Second*30, time.Second, "no leader elected")
+	}, time.Second*30, 500*time.Millisecond, "no leader elected")
 	return n
 }
 
-func retrieveValidState(t *testing.T, srv *raft.Server, expect *raft.DaprHostMember) {
+func retrieveValidState(t *testing.T, srv *Server, expect *DaprHostMember) {
 	t.Helper()
 
-	var actual *raft.DaprHostMember
+	var actual *DaprHostMember
 	assert.Eventuallyf(t, func() bool {
 		state := srv.FSM().State()
-		assert.NotNil(t, state)
+		if state == nil {
+			return false
+		}
+
 		var ok bool
-		state.ForEachHostInNamespace(expect.Namespace, func(member *raft.DaprHostMember) bool {
+		state.ForEachHostInNamespace(expect.Namespace, func(member *DaprHostMember) bool {
 			if member.Name == expect.Name {
 				actual = member
 				ok = true

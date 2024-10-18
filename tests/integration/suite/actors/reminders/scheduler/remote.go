@@ -77,7 +77,7 @@ spec:
 	r.actorIDsNum = 500
 	r.methodcalled.Store(make([]string, 0, r.actorIDsNum))
 	r.actorIDs = make([]string, r.actorIDsNum)
-	for i := 0; i < r.actorIDsNum; i++ {
+	for i := range r.actorIDsNum {
 		uid, err := uuid.NewUUID()
 		require.NoError(t, err)
 		r.actorIDs[i] = uid.String()
@@ -93,7 +93,6 @@ spec:
 		})
 
 		for _, id := range r.actorIDs {
-			id := id
 			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/remind/remindermethod", id), func(http.ResponseWriter, *http.Request) {
 				r.lock.Lock()
 				defer r.lock.Unlock()
@@ -156,7 +155,7 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*5, time.Millisecond*10)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(t, r.actorIDs, r.methodcalled.Load().([]string))
+		assert.ElementsMatch(c, r.actorIDs, r.methodcalled.Load().([]string))
 	}, time.Second*10, time.Millisecond*10)
 
 	assert.GreaterOrEqual(t, r.daprd1called.Load(), uint64(0))
