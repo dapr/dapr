@@ -40,11 +40,13 @@ type WorkflowEngine struct {
 	worker               backend.TaskHubWorker
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 
-	startMutex      sync.Mutex
-	disconnectChan  chan any
-	spec            config.WorkflowSpec
-	wfEngineReady   atomic.Bool
-	wfEngineReadyCh chan struct{}
+	startMutex              sync.Mutex
+	disconnectChan          chan any
+	spec                    config.WorkflowSpec
+	wfEngineReady           atomic.Bool
+	wfEngineReadyCh         chan struct{}
+	registerWorkflowBackend bool
+	registerActivityBackend bool
 }
 
 var (
@@ -56,10 +58,12 @@ func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)
 }
 
-func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager processor.WorkflowBackendManager) *WorkflowEngine {
+func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager processor.WorkflowBackendManager, registerWorkflowBackend bool, registerActivityBackend bool) *WorkflowEngine {
 	engine := &WorkflowEngine{
-		spec:            spec,
-		wfEngineReadyCh: make(chan struct{}),
+		spec:                    spec,
+		wfEngineReadyCh:         make(chan struct{}),
+		registerWorkflowBackend: registerWorkflowBackend,
+		registerActivityBackend: registerActivityBackend,
 	}
 
 	var ok bool
@@ -135,20 +139,33 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	abe, ok := wfe.Backend.(*actorsbe.ActorBackend)
 	if ok {
 		abe.WaitForActorsReady(ctx)
-		abe.RegisterActor(ctx)
+		abe.RegisterActor(ctx, wfe.registerWorkflowBackend, wfe.registerActivityBackend)
 	}
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
-	orchestrationWorker := backend.NewOrchestrationWorker(
-		wfe.Backend,
-		wfe.executor,
-		wfBackendLogger,
-		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentWorkflowInvocations()))
-	activityWorker := backend.NewActivityTaskWorker(
-		wfe.Backend,
-		wfe.executor,
-		wfBackendLogger,
-		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentActivityInvocations()))
+	var orchestrationWorker backend.TaskWorker
+	var activityWorker backend.TaskWorker
+
+	if wfe.registerWorkflowBackend {
+		orchestrationWorker = backend.NewOrchestrationWorker(
+			wfe.Backend,
+			wfe.executor,
+			wfBackendLogger,
+			backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentWorkflowInvocations()))
+	} else {
+		orchestrationWorker = NewNoOpTaskWorker(wfBackendLogger)
+	}
+
+	if wfe.registerActivityBackend {
+		activityWorker = backend.NewActivityTaskWorker(
+			wfe.Backend,
+			wfe.executor,
+			wfBackendLogger,
+			backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentActivityInvocations()))
+	} else {
+		activityWorker = NewNoOpTaskWorker(wfBackendLogger)
+	}
+
 	wfe.worker = backend.NewTaskHubWorker(wfe.Backend, orchestrationWorker, activityWorker, wfBackendLogger)
 
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.

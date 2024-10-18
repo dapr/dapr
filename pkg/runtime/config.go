@@ -114,6 +114,8 @@ type Config struct {
 	Registry                      *registry.Options
 	Security                      security.Handler
 	Healthz                       healthz.Healthz
+	RegisterWorkflowBackend       bool
+	RegisterActivityBackend       bool
 }
 
 type internalConfig struct {
@@ -149,6 +151,8 @@ type internalConfig struct {
 	metricsExporter              metrics.Exporter
 	healthz                      healthz.Healthz
 	outboundHealthz              healthz.Healthz
+	registerWorkflowBackend      bool
+	registerActivityBackend      bool
 }
 
 func (i internalConfig) ActorsEnabled() bool {
@@ -314,6 +318,8 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
 		healthz:                   c.Healthz,
 		outboundHealthz:           healthz.New(),
+		registerWorkflowBackend:   c.RegisterWorkflowBackend,
+		registerActivityBackend:   c.RegisterActivityBackend,
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
