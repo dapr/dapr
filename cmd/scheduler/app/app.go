@@ -23,7 +23,7 @@ import (
 	healthzserver "github.com/dapr/dapr/pkg/healthz/server"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
-	"github.com/dapr/dapr/pkg/placement/monitoring"
+	"github.com/dapr/dapr/pkg/scheduler/monitoring"
 	"github.com/dapr/dapr/pkg/scheduler/server"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
@@ -102,6 +102,7 @@ func Run() {
 				DataDir:                 opts.EtcdDataDir,
 				ReplicaCount:            opts.ReplicaCount,
 				ReplicaID:               opts.ReplicaID,
+				KubeConfig:              opts.KubeConfig,
 				EtcdID:                  opts.ID,
 				EtcdInitialPeers:        opts.EtcdInitialPeers,
 				EtcdClientPorts:         opts.EtcdClientPorts,

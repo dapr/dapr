@@ -16,5 +16,6 @@ package jobs
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/grpc"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/http"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/kubernetes"
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/jobs/streaming"
 )

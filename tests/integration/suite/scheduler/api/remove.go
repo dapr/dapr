@@ -16,18 +16,15 @@ package api
 import (
 	"context"
 	"fmt"
-	"path/filepath"
 	"strconv"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	clientv3 "go.etcd.io/etcd/client/v3"
 
 	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -70,11 +67,6 @@ func (r *remove) Setup(t *testing.T) []framework.Option {
 func (r *remove) Run(t *testing.T, ctx context.Context) {
 	r.scheduler.WaitUntilRunning(t, ctx)
 
-	etcdClient := client.Etcd(t, clientv3.Config{
-		Endpoints:   []string{fmt.Sprintf("localhost:%d", r.etcdPort)},
-		DialTimeout: 5 * time.Second,
-	})
-
 	client := r.scheduler.Client(t, ctx)
 
 	watch, err := client.WatchJobs(ctx)
@@ -104,13 +96,11 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	// Use "path/filepath" import, it is using OS specific path separator unlike "path"
-	etcdKeysPrefix := filepath.Join("dapr", "jobs")
+	// should have the same path separator across OS
+	etcdKeysPrefix := "dapr/jobs"
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Len(c, keys, 1)
+		assert.Len(c, r.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix), 1)
 	}, time.Second*10, 10*time.Millisecond)
 
 	job, err := watch.Recv()
@@ -124,9 +114,7 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	}))
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Len(c, keys, 1)
+		assert.Len(c, r.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix), 1)
 	}, time.Second*10, 10*time.Millisecond)
 
 	_, err = client.DeleteJob(ctx, &schedulerv1.DeleteJobRequest{
@@ -142,8 +130,6 @@ func (r *remove) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := etcdClient.ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Empty(c, keys)
+		assert.Empty(c, r.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix))
 	}, time.Second*10, 10*time.Millisecond)
 }
