@@ -461,26 +461,26 @@ func (c *componentMetrics) CryptoInvoked(ctx context.Context, component, operati
 }
 
 // JobTriggeredSuccess records the metrics for a job execution success event.
-func (c *componentMetrics) JobTriggeredSuccess(ctx context.Context, operation string, success bool, elapsed float64) {
-	c.jobTriggered(ctx, operation, success, elapsed, c.jobSuccessCount)
+func (c *componentMetrics) JobTriggeredSuccess(ctx context.Context, operation string, elapsed float64) {
+	c.jobTriggered(ctx, operation, elapsed, c.jobSuccessCount)
 }
 
 // JobTriggeredFailure records the metrics for a job execution failure event.
-func (c *componentMetrics) JobTriggeredFailure(ctx context.Context, operation string, success bool, elapsed float64) {
-	c.jobTriggered(ctx, operation, success, elapsed, c.jobFailureCount)
+func (c *componentMetrics) JobTriggeredFailure(ctx context.Context, operation string, elapsed float64) {
+	c.jobTriggered(ctx, operation, elapsed, c.jobFailureCount)
 }
 
-func (c *componentMetrics) jobTriggered(ctx context.Context, operation string, success bool, elapsed float64, countMeasure *stats.Int64Measure) {
+func (c *componentMetrics) jobTriggered(ctx context.Context, operation string, elapsed float64, countMeasure *stats.Int64Measure) {
 	if c.enabled {
 		stats.RecordWithTags(
 			ctx,
-			diagUtils.WithTags(countMeasure.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+			diagUtils.WithTags(countMeasure.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation),
 			countMeasure.M(1))
 
 		if elapsed > 0 {
 			stats.RecordWithTags(
 				ctx,
-				diagUtils.WithTags(c.jobLatency.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation, successKey, strconv.FormatBool(success)),
+				diagUtils.WithTags(c.jobLatency.Name(), appIDKey, c.appID, namespaceKey, c.namespace, operationKey, operation),
 				c.jobLatency.M(elapsed))
 		}
 	}
