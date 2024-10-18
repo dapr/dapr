@@ -5,7 +5,7 @@ This folder is intended for `placement` service APIs that the `daprd` sidecars u
 ## Proto client generation
 
 Pre-requisites:
-1. Install protoc version: [v4.24.4](https://github.com/protocolbuffers/protobuf/releases/tag/v4.24.4)
+1. Install protoc version: [v4.25.4](https://github.com/protocolbuffers/protobuf/releases/tag/v4.25.4)
 
 2. Install protoc-gen-go and protoc-gen-go-grpc
 
