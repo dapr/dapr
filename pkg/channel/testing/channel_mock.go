@@ -18,6 +18,7 @@ import (
 type MockAppChannel struct {
 	mock.Mock
 	requestsReceived map[string][]byte
+	requestsMetadata map[string]map[string]string
 	mutex            sync.Mutex
 }
 
@@ -73,6 +74,7 @@ func (_m *MockAppChannel) HealthProbe(ctx context.Context) (bool, error) {
 func (_m *MockAppChannel) Init() {
 	_m.mutex.Lock()
 	_m.requestsReceived = make(map[string][]byte)
+	_m.requestsMetadata = make(map[string]map[string]string)
 	_m.mutex.Unlock()
 }
 
@@ -86,10 +88,20 @@ func (_m *MockAppChannel) InvokeMethod(ctx context.Context, req *invokev1.Invoke
 			return nil, err
 		}
 		var data []byte
-		if pd != nil && pd.Message != nil && pd.Message.Data != nil {
-			data = pd.Message.Data.Value
+		metadata := make(map[string]string, 1)
+		if pd != nil && pd.Message != nil {
+			if pd.Message.Data != nil {
+				data = pd.Message.Data.Value
+			}
+			for k, v := range pd.Metadata {
+				if len(v.Values) > 0 {
+					metadata[k] = v.Values[0]
+				}
+			}
 		}
+
 		_m.requestsReceived[req.Message().Method] = data
+		_m.requestsMetadata[req.Message().Method] = metadata
 	}
 	_m.mutex.Unlock()
 	ret := _m.Called(ctx, req)
@@ -117,6 +129,12 @@ func (_m *MockAppChannel) GetInvokedRequest() map[string][]byte {
 	_m.mutex.Lock()
 	defer _m.mutex.Unlock()
 	return _m.requestsReceived
+}
+
+func (_m *MockAppChannel) GetInvokedRequestMetadata() map[string]map[string]string {
+	_m.mutex.Lock()
+	defer _m.mutex.Unlock()
+	return _m.requestsMetadata
 }
 
 // SetAppHealth provides a mock function with given fields: ah
