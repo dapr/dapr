@@ -24,6 +24,7 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
+	"github.com/dapr/dapr/pkg/actors/reminders/migration"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
@@ -32,23 +33,30 @@ import (
 )
 
 type SchedulerOptions struct {
-	Namespace string
-	AppID     string
-	Clients   *clients.Clients
+	Namespace        string
+	AppID            string
+	Clients          *clients.Clients
+	ProviderOpts     internal.ActorsProviderOptions
+	ListActorTypesFn func() []string
 }
 
 // Implements a reminders provider that does nothing when using Scheduler Service.
 type scheduler struct {
-	namespace string
-	appID     string
-	clients   *clients.Clients
+	namespace        string
+	appID            string
+	clients          *clients.Clients
+	lookUpActorFn    internal.LookupActorFn
+	stateReminder    internal.RemindersProvider
+	listActorTypesFn func() []string
 }
 
 func NewScheduler(opts SchedulerOptions) internal.RemindersProvider {
 	return &scheduler{
-		clients:   opts.Clients,
-		namespace: opts.Namespace,
-		appID:     opts.AppID,
+		clients:          opts.Clients,
+		namespace:        opts.Namespace,
+		appID:            opts.AppID,
+		stateReminder:    NewStateStore(opts.ProviderOpts),
+		listActorTypesFn: opts.ListActorTypesFn,
 	}
 }
 
@@ -56,9 +64,12 @@ func (s *scheduler) SetExecuteReminderFn(fn internal.ExecuteReminderFn) {
 }
 
 func (s *scheduler) SetStateStoreProviderFn(fn internal.StateStoreProviderFn) {
+	s.stateReminder.SetStateStoreProviderFn(fn)
 }
 
 func (s *scheduler) SetLookupActorFn(fn internal.LookupActorFn) {
+	s.lookUpActorFn = fn
+	s.stateReminder.SetLookupActorFn(fn)
 }
 
 func (s *scheduler) SetMetricsCollectorFn(fn remindersMetricsCollectorFn) {
@@ -66,6 +77,15 @@ func (s *scheduler) SetMetricsCollectorFn(fn remindersMetricsCollectorFn) {
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
 func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context) {
+	err := migration.ToScheduler(ctx, migration.ToSchedulerOptions{
+		ActorTypes:         s.listActorTypesFn(),
+		LookUpActorFn:      s.lookUpActorFn,
+		StateReminders:     s.stateReminder,
+		SchedulerReminders: s,
+	})
+	if err != nil {
+		log.Errorf("Error attempting to migrate reminders to scheduler: %s", err)
+	}
 }
 
 func (s *scheduler) DrainRebalancedReminders(actorType string, actorID string) {
@@ -204,15 +224,10 @@ func (s *scheduler) GetReminder(ctx context.Context, req *internal.GetReminderRe
 		return nil, err
 	}
 
-	var data json.RawMessage
-	if err := json.Unmarshal(jsonBytes, &data); err != nil {
-		return nil, err
-	}
-
 	reminder := &internal.Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
-		Data:      data,
+		Data:      jsonBytes,
 		Period:    internal.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
 		DueTime:   job.GetJob().GetDueTime(),
 	}
@@ -247,4 +262,51 @@ func (s *scheduler) DeleteReminder(ctx context.Context, req internal.DeleteRemin
 		log.Errorf("Error deleting reminder job %s due to: %s", req.Name, err)
 	}
 	return err
+}
+
+func (s *scheduler) ListReminders(ctx context.Context, req internal.ListRemindersRequest) ([]*internal.Reminder, error) {
+	client, err := s.clients.Next(ctx)
+	if err != nil {
+		return nil, err
+	}
+	resp, err := client.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
+		Metadata: &schedulerv1pb.JobMetadata{
+			AppId:     s.appID,
+			Namespace: s.namespace,
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{
+						Type: req.ActorType,
+					},
+				},
+			},
+		},
+	})
+	if err != nil {
+		return nil, err
+	}
+	reminders := make([]*internal.Reminder, len(resp.GetJobs()))
+	for i, named := range resp.GetJobs() {
+		actor := named.GetMetadata().GetTarget().GetActor()
+		if actor == nil {
+			log.Warnf("Skipping reminder job %s with unsupported target type %s", named.GetName(), named.GetMetadata().GetTarget().String())
+			continue
+		}
+
+		job := named.GetJob()
+		jsonBytes, err := protojson.Marshal(job.GetData())
+		if err != nil {
+			return nil, err
+		}
+
+		reminders[i] = &internal.Reminder{
+			Name:      named.GetName(),
+			ActorID:   actor.GetId(),
+			ActorType: actor.GetType(),
+			Data:      jsonBytes,
+			Period:    internal.NewSchedulerReminderPeriod(job.GetSchedule(), job.GetRepeats()),
+			DueTime:   job.GetDueTime(),
+		}
+	}
+	return reminders, nil
 }
