@@ -114,8 +114,8 @@ type Config struct {
 	Registry                      *registry.Options
 	Security                      security.Handler
 	Healthz                       healthz.Healthz
-	RegisterWorkflowBackend       bool
-	RegisterActivityBackend       bool
+	RegisterWorkflowBackend       string
+	RegisterActivityBackend       string
 }
 
 type internalConfig struct {
@@ -318,8 +318,18 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		internalGRPCListenAddress: c.DaprInternalGRPCListenAddress,
 		healthz:                   c.Healthz,
 		outboundHealthz:           healthz.New(),
-		registerWorkflowBackend:   c.RegisterWorkflowBackend,
-		registerActivityBackend:   c.RegisterActivityBackend,
+	}
+
+	if c.RegisterWorkflowBackend == "true" {
+		intc.registerWorkflowBackend = true
+	} else {
+		intc.registerWorkflowBackend = false
+	}
+
+	if c.RegisterActivityBackend == "true" {
+		intc.registerActivityBackend = true
+	} else {
+		intc.registerActivityBackend = false
 	}
 
 	if len(intc.standalone.ResourcesPath) == 0 && c.ComponentsPath != "" {
