@@ -38,6 +38,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
@@ -155,12 +156,27 @@ func (p *Placement) Port() int {
 	return p.port
 }
 
+func (p *Placement) ipPort(port int) string {
+	return "127.0.0.1:" + strconv.Itoa(port)
+}
+
 func (p *Placement) Address() string {
-	return "127.0.0.1:" + strconv.Itoa(p.port)
+	return p.ipPort(p.port)
 }
 
 func (p *Placement) HealthzPort() int {
 	return p.healthzPort
+}
+
+// Metrics returns a subset of metrics scraped from the metrics endpoint
+func (p *Placement) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
+	t.Helper()
+
+	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", p.MetricsAddress())).GetMetrics()
+}
+
+func (p *Placement) MetricsAddress() string {
+	return p.ipPort(p.MetricsPort())
 }
 
 func (p *Placement) MetricsPort() int {

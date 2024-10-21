@@ -206,7 +206,6 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 
 	nTargetConns := p.raftNode.FSM().State().MemberCountInNamespace(ns)
 
-	monitoring.RecordRuntimesCount(nStreamConnPool, ns)
 	monitoring.RecordActorRuntimesCount(nTargetConns, ns)
 
 	// Ignore dissemination if there is no member update
