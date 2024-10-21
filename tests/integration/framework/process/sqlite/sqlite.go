@@ -18,6 +18,7 @@ import (
 	"database/sql"
 	"encoding/json"
 	"path/filepath"
+	"runtime"
 	"strconv"
 	"sync"
 	"testing"
@@ -55,6 +56,10 @@ type SQLite struct {
 
 func New(t *testing.T, fopts ...Option) *SQLite {
 	t.Helper()
+
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows due to SQLite limitations")
+	}
 
 	opts := options{
 		name:      "mystore",
