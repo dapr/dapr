@@ -323,7 +323,6 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 	a.placement.SetOnTableUpdateFn(func() {
 		a.drainRebalancedActors()
 		a.actorsReminders.OnPlacementTablesUpdated(ctx)
-		a.htarget.Ready()
 	})
 
 	a.checker, err = a.getAppHealthChecker()
@@ -360,6 +359,7 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 	}()
 
 	log.Infof("Actor runtime started. Idle timeout: %v", a.actorsConfig.Config.ActorIdleTimeout)
+	a.htarget.Ready()
 
 	return nil
 }
