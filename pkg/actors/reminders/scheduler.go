@@ -26,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/actors/reminders/migration"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
+	"github.com/dapr/dapr/pkg/healthz"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
 	"github.com/dapr/kit/ptr"
@@ -38,6 +39,7 @@ type SchedulerOptions struct {
 	Clients          *clients.Clients
 	ProviderOpts     internal.ActorsProviderOptions
 	ListActorTypesFn func() []string
+	Healthz          healthz.Healthz
 }
 
 // Implements a reminders provider that does nothing when using Scheduler Service.
@@ -48,6 +50,7 @@ type scheduler struct {
 	lookUpActorFn    internal.LookupActorFn
 	stateReminder    internal.RemindersProvider
 	listActorTypesFn func() []string
+	htarget          healthz.Target
 }
 
 func NewScheduler(opts SchedulerOptions) internal.RemindersProvider {
@@ -57,6 +60,7 @@ func NewScheduler(opts SchedulerOptions) internal.RemindersProvider {
 		appID:            opts.AppID,
 		stateReminder:    NewStateStore(opts.ProviderOpts),
 		listActorTypesFn: opts.ListActorTypesFn,
+		htarget:          opts.Healthz.AddTarget(),
 	}
 }
 
@@ -86,6 +90,7 @@ func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context) {
 	if err != nil {
 		log.Errorf("Error attempting to migrate reminders to scheduler: %s", err)
 	}
+	s.htarget.Ready()
 }
 
 func (s *scheduler) DrainRebalancedReminders(actorType string, actorID string) {

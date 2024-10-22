@@ -24,7 +24,6 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
-	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -33,31 +32,24 @@ func init() {
 }
 
 type rebalance struct {
-	db *sqlite.SQLite
-
 	actor1 *actors.Actors
 	actor2 *actors.Actors
 }
 
 func (r *rebalance) Setup(t *testing.T) []framework.Option {
-	r.db = sqlite.New(t,
-		sqlite.WithActorStateStore(true),
-		sqlite.WithCreateStateTables(),
-	)
 	r.actor1 = actors.New(t,
-		actors.WithDB(r.db),
 		actors.WithActorTypes("myactortype"),
 	)
 	r.actor2 = actors.New(t,
+		actors.WithDB(r.actor1.DB()),
 		actors.WithScheduler(r.actor1.Scheduler()),
-		actors.WithDB(r.db),
 		actors.WithActorTypes("myactortype"),
 		actors.WithPlacement(r.actor1.Placement()),
 		actors.WithFeatureSchedulerReminders(true),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(r.db, r.actor1, r.actor2),
+		framework.WithProcesses(r.actor1, r.actor2),
 	}
 }
 
@@ -82,24 +74,26 @@ func (r *rebalance) Run(t *testing.T, ctx context.Context) {
 
 	assert.Len(t, r.actor1.DB().ActorReminders(t, ctx, "myactortype").Reminders, 200)
 	assert.Len(t, r.actor2.DB().ActorReminders(t, ctx, "myactortype").Reminders, 200)
+
 	assert.Empty(t, r.actor1.Scheduler().EtcdJobs(t, ctx))
-	assert.Empty(t, r.actor2.Scheduler().EtcdJobs(t, ctx))
 
 	t.Run("new daprd", func(t *testing.T) {
 		daprd := actors.New(t,
-			actors.WithDB(r.db),
+			actors.WithDB(r.actor1.DB()),
 			actors.WithActorTypes("myactortype"),
-			actors.WithFeatureSchedulerReminders(false),
+			actors.WithFeatureSchedulerReminders(true),
 			actors.WithPlacement(r.actor1.Placement()),
 			actors.WithScheduler(r.actor1.Scheduler()),
 		)
+		t.Cleanup(func() { daprd.Cleanup(t) })
 		daprd.Run(t, ctx)
 		daprd.WaitUntilRunning(t, ctx)
 
 		assert.Len(t, r.actor1.DB().ActorReminders(t, ctx, "myactortype").Reminders, 200)
 		assert.Len(t, r.actor2.DB().ActorReminders(t, ctx, "myactortype").Reminders, 200)
+		assert.Len(t, daprd.DB().ActorReminders(t, ctx, "myactortype").Reminders, 200)
 		assert.NotEmpty(t, r.actor1.Scheduler().EtcdJobs(t, ctx))
-		assert.NotEmpty(t, r.actor2.Scheduler().EtcdJobs(t, ctx))
+		assert.NotEmpty(t, daprd.Scheduler().EtcdJobs(t, ctx))
 		daprd.Cleanup(t)
 	})
 }

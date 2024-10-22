@@ -251,6 +251,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 			AppID:            opts.Config.AppID,
 			ProviderOpts:     providerOpts,
 			ListActorTypesFn: a.Entities,
+			Healthz:          opts.Healthz,
 		})
 	} else {
 		factory, err := opts.Config.GetRemindersProvider(a.placement)
