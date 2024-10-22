@@ -301,6 +301,8 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 		return errors.New("actors runtime has already been closed")
 	}
 
+	defer a.htarget.Ready()
+
 	if len(a.actorsConfig.ActorsService) == 0 {
 		return errors.New("actors: couldn't connect to actors service: address is empty")
 	}
@@ -360,7 +362,6 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 	}()
 
 	log.Infof("Actor runtime started. Idle timeout: %v", a.actorsConfig.Config.ActorIdleTimeout)
-	a.htarget.Ready()
 
 	return nil
 }
