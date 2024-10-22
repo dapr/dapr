@@ -29,9 +29,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
-	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
@@ -100,7 +100,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 
 	targetID, invokeMethodName := findTargetIDAndMethod(reqPath, r.Header)
 	if targetID == "" {
-		respondWithError(w, messages.ErrDirectInvokeNoAppID)
+		respondWithError(w, apierrors.Invoke("service_invocation").WithAppError("", nil).NoAppID())
 		return
 	}
 
@@ -115,7 +115,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 
 	verb := strings.ToUpper(r.Method)
 	if a.directMessaging == nil {
-		respondWithError(w, messages.ErrDirectInvokeNotReady)
+		respondWithError(w, apierrors.Invoke("service_invocation").WithAppError(targetID, nil).NotReady())
 		return
 	}
 
@@ -158,16 +158,12 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		if rErr != nil {
 			// Allowlist policies that are applied on the callee side can return a Permission Denied error.
 			// For everything else, treat it as a gRPC transport error
-			apiErr := messages.ErrDirectInvoke.WithFormat(targetID, rErr)
-			invokeErr := invokeError{
-				statusCode: apiErr.HTTPCode(),
-				msg:        apiErr.JSONErrorValue(),
-			}
 
+			apiErr := apierrors.Invoke("service_invocation").WithAppError(targetID, rErr).DirectInvoke()
 			if status.Code(rErr) == codes.PermissionDenied {
-				invokeErr.statusCode = invokev1.HTTPStatusFromCode(codes.PermissionDenied)
+				return rResp, apierrors.Invoke("service_invocation").WithAppError(targetID, rErr).NoPermission()
 			}
-			return rResp, invokeErr
+			return rResp, apiErr
 		}
 
 		// Construct response if not HTTP
@@ -184,10 +180,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				rResp.WithRawDataBytes(body)
 				resStatus.Code = statusCode
 				if rErr != nil {
-					return rResp, invokeError{
-						statusCode: http.StatusInternalServerError,
-						msg:        NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error()).JSONErrorValue(),
-					}
+					return rResp, apierrors.Invoke("service_invocation").WithAppError(targetID, rErr).MalformedResponse()
 				}
 			} else {
 				resStatus.Code = statusCode
@@ -269,10 +262,10 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		}
 	}
 
-	var (
-		codeErr   codeError
-		invokeErr invokeError
-	)
+	var codeErr codeError
+	nopermitKitErr := apierrors.ErrorToKitError(apierrors.Invoke("service_invocation").WithAppError(targetID, err).NoPermission())
+	malformedResponseKitErr := apierrors.ErrorToKitError(apierrors.Invoke("service_invocation").WithAppError(targetID, err).MalformedResponse())
+
 	switch {
 	case errors.As(err, &codeErr):
 		if len(codeErr.headers) > 0 && !headersSet {
@@ -284,11 +277,13 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 			StatusCode:  codeErr.statusCode,
 		}, codeErr.statusCode)
 		return
-	case errors.As(err, &invokeErr):
-		respondWithData(w, invokeErr.statusCode, invokeErr.msg)
+	case errors.As(err, malformedResponseKitErr):
+		respondWithData(w, malformedResponseKitErr.HTTPStatusCode(), malformedResponseKitErr.JSONErrorValue())
+	case errors.As(err, nopermitKitErr):
+		respondWithData(w, nopermitKitErr.HTTPStatusCode(), nopermitKitErr.JSONErrorValue())
 		return
 	default:
-		respondWithError(w, messages.ErrDirectInvoke.WithFormat(targetID, err))
+		respondWithError(w, apierrors.Invoke("service_invocation").WithAppError(targetID, err).DirectInvoke())
 		return
 	}
 }
@@ -383,15 +378,6 @@ func (a *api) getBaseURL(targetAppID string) string {
 		return endpoint.Spec.BaseURL
 	}
 	return ""
-}
-
-type invokeError struct {
-	statusCode int
-	msg        []byte
-}
-
-func (ie invokeError) Error() string {
-	return fmt.Sprintf("invokeError (statusCode='%d') msg='%v'", ie.statusCode, string(ie.msg))
 }
 
 type codeError struct {
