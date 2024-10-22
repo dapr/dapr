@@ -4,10 +4,11 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/dapr/dapr/pkg/api/grpc/metadata"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"google.golang.org/grpc"
 	grpc_metadata "google.golang.org/grpc/metadata"
+
+	"github.com/dapr/dapr/pkg/api/grpc/metadata"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 )
 
 type wrappedStream struct {
