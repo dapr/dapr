@@ -145,8 +145,8 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	// There are separate "workers" for executing orchestrations (workflows) and activities
 	var orchestrationWorker backend.TaskWorker
 	var activityWorker backend.TaskWorker
-
 	if wfe.registerWorkflowBackend {
+		wfLogger.Info("Registering workflow worker")
 		orchestrationWorker = backend.NewOrchestrationWorker(
 			wfe.Backend,
 			wfe.executor,
@@ -154,15 +154,18 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 			backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentWorkflowInvocations()))
 	} else {
 		orchestrationWorker = NewNoOpTaskWorker(wfBackendLogger)
+		wfLogger.Info("Registering no-op workflow worker")
 	}
 
 	if wfe.registerActivityBackend {
+		wfLogger.Info("Registering workflow activity worker")
 		activityWorker = backend.NewActivityTaskWorker(
 			wfe.Backend,
 			wfe.executor,
 			wfBackendLogger,
 			backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentActivityInvocations()))
 	} else {
+		wfLogger.Info("Registering no-op workflow activity worker")
 		activityWorker = NewNoOpTaskWorker(wfBackendLogger)
 	}
 

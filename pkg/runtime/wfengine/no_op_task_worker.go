@@ -19,20 +19,20 @@ type worker struct {
 }
 
 func (w *worker) Start(ctx context.Context) {
-	w.logger.Infof("No-Op Task Worker: Start...")
+	w.logger.Debugf("No-op task worker - started")
 	ctx, cancel := context.WithCancel(ctx)
 	w.cancel = cancel
 }
 
 func (w *worker) ProcessNext(ctx context.Context) (bool, error) {
-	w.logger.Infof("No-Op Task Worker: Process Next...")
+	w.logger.Debugf("No-op task worker - process next")
 	return false, nil
 }
 
 func (w *worker) StopAndDrain() {
-	w.logger.Infof("No-Op Task Worker: Stopping...")
+	w.logger.Debugf("No-op task worker - stopping")
 	if w.cancel != nil {
 		w.cancel()
 	}
-	w.logger.Infof("No-Op Task Worker: Stopped")
+	w.logger.Debugf("No-op task worker - stopped")
 }
