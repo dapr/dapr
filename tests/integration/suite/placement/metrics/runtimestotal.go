@@ -15,8 +15,6 @@ package metrics
 
 import (
 	"context"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -57,9 +55,10 @@ func (m *runtimestotal) Setup(t *testing.T) []framework.Option {
 			w.Write([]byte(`OK`))
 		}),
 	)
+
 	srvNS2 := prochttp.New(t,
 		prochttp.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
-			w.Write([]byte(`{"entities": ["myactortype3", "myactortype4", "myactortype5"]}`))
+			w.Write([]byte(`{"entities": ["myactortype6"]}`))
 		}),
 		prochttp.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`OK`))
@@ -75,7 +74,6 @@ func (m *runtimestotal) Setup(t *testing.T) []framework.Option {
 	m.daprdB = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore1"),
 		daprd.WithPlacementAddresses(m.place.Address()),
-		daprd.WithAppPort(srvNS1.Port()),
 		daprd.WithNamespace("ns1"))
 	m.daprdC = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore2"),
@@ -95,6 +93,8 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 	metrics := m.place.Metrics(t, ctx)
 	require.Equal(t, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
 	require.Equal(t, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
+	require.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
+	require.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
 
 	// Start first sidecar
 	m.daprdA.Run(t, ctx)
@@ -103,20 +103,10 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := m.place.Metrics(t, ctx)
 
-		fmt.Println("---------------------------")
-		fmt.Println(metrics["dapr_placement_runtimes_total|host_namespace:ns1"])
-		fmt.Println("---------------------------")
-
-		for k, v := range metrics {
-			fmt.Println(k, v)
-		}
-
-		vd, _ := json.MarshalIndent(metrics, "", "  ")
-		fmt.Println(string(vd))
-		fmt.Println(metrics)
-
 		assert.Equal(c, 1, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
 		assert.Equal(c, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
+		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
+		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
 	}, 5*time.Second, 10*time.Millisecond, "daprdA sidecar didn't report dapr_placement_runtimes_total to Placement in time")
 
 	// Start second sidecar
@@ -128,6 +118,8 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 		metrics := m.place.Metrics(t, ctx)
 		assert.Equal(c, 2, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
 		assert.Equal(c, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
+		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
+		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
 	}, 5*time.Second, 10*time.Millisecond, "daprdB sidecar didn't report dapr_placement_runtimes_total to Placement in time")
 
 	// Start third sidecar
@@ -139,6 +131,8 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 		metrics := m.place.Metrics(t, ctx)
 		assert.Equal(c, 2, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
 		assert.Equal(c, 1, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
+		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
+		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
 	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
 
 	// Stop one sidecar
@@ -148,6 +142,8 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 		metrics := m.place.Metrics(t, ctx)
 		assert.Equal(c, 1, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
 		assert.Equal(c, 1, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
+		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
+		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
 	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
 
 	// Stop another sidecar
@@ -157,6 +153,8 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 		metrics := m.place.Metrics(t, ctx)
 		assert.Equal(c, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
 		assert.Equal(c, 1, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
+		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
+		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
 	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
 
 	// Stop the last sidecar
@@ -166,6 +164,8 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 		metrics := m.place.Metrics(t, ctx)
 		assert.Equal(c, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
 		assert.Equal(c, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
+		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
+		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
 	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
 
 }
