@@ -35,10 +35,8 @@ func init() {
 
 // actorheartbeat tests placement reports API level with no maximum API level.
 type actorheartbeat struct {
-	place  *placement.Placement
-	daprd  *daprd.Daprd
-	daprdB *daprd.Daprd
-	daprdC *daprd.Daprd
+	place *placement.Placement
+	daprd *daprd.Daprd
 }
 
 func (m *actorheartbeat) Setup(t *testing.T) []framework.Option {

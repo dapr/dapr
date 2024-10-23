@@ -167,5 +167,4 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
 		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
 	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
-
 }
