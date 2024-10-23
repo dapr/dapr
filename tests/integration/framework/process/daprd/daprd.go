@@ -330,10 +330,10 @@ func (d *Daprd) ProfilePort() int {
 }
 
 // Metrics Returns a subset of metrics scraped from the metrics endpoint
-func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
+func (d *Daprd) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
 	t.Helper()
 
-	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", d.MetricsAddress())).GetMetrics()
+	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()))
 }
 
 func (d *Daprd) HTTPGet2xx(t *testing.T, ctx context.Context, path string) {

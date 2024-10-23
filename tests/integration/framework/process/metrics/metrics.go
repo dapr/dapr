@@ -2,8 +2,10 @@ package metrics
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"strconv"
+	"strings"
 	"testing"
 
 	"github.com/prometheus/common/expfmt"
@@ -11,6 +13,11 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework/client"
 )
+
+type Metric struct {
+	Value float64
+	Name  string
+}
 
 type Metrics struct {
 	metrics map[string]float64
@@ -27,6 +34,7 @@ func New(t *testing.T, ctx context.Context, url string) *Metrics {
 
 	// Extract the metrics
 	parser := expfmt.TextParser{}
+
 	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
@@ -36,9 +44,12 @@ func New(t *testing.T, ctx context.Context, url string) *Metrics {
 		for _, m := range mf.GetMetric() {
 			metricName := mf.GetName()
 			labels := ""
+			labelMap := make(map[string]string)
 			for _, l := range m.GetLabel() {
 				labels += "|" + l.GetName() + ":" + l.GetValue()
+				labelMap[l.GetName()] = l.GetValue()
 			}
+			fmt.Println("====m:", m.GetCounter())
 			if counter := m.GetCounter(); counter != nil {
 				metrics[metricName+labels] = counter.GetValue()
 				continue
@@ -65,6 +76,35 @@ func New(t *testing.T, ctx context.Context, url string) *Metrics {
 	}
 }
 
-func (m *Metrics) GetMetrics() map[string]float64 {
+func (m *Metrics) All() map[string]float64 {
 	return m.metrics
+}
+
+// MatchMetric returns all metrics that contain all the substrings in the key
+// This is useful because of the way we serialize labels in the metrics name
+func (m *Metrics) MatchMetric(args ...string) []Metric {
+	result := make([]Metric, 0)
+
+	// Iterate over all key-value pairs in the map
+	for key, value := range m.metrics {
+		matchesAll := true
+
+		// Check if all args are present in the key
+		for _, arg := range args {
+			if !strings.Contains(key, arg) {
+				matchesAll = false
+				break
+			}
+		}
+
+		// If all substrings match, add it to the result
+		if matchesAll {
+			result = append(result, Metric{
+				Value: value,
+				Name:  key,
+			})
+		}
+	}
+
+	return result
 }

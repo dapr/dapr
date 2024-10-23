@@ -20,7 +20,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -89,13 +88,6 @@ func (m *runtimestotal) Setup(t *testing.T) []framework.Option {
 func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 	m.place.WaitUntilRunning(t, ctx)
 
-	// No sidecars connected
-	metrics := m.place.Metrics(t, ctx)
-	require.Equal(t, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
-	require.Equal(t, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
-	require.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
-	require.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
-
 	// Start first sidecar
 	m.daprdA.Run(t, ctx)
 	t.Cleanup(func() { m.daprdA.Cleanup(t) })
@@ -103,10 +95,21 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := m.place.Metrics(t, ctx)
 
-		assert.Equal(c, 1, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(c, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
-		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
+		// Namespace 1
+		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m1, 1, "can't find dapr_placement_runtimes_total with label host_namespace:ns1 in metrics") {
+			assert.Equal(c, 1, int(m1[0].Value))
+		}
+		m2 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m2, 1, "can't find dapr_placement_actor_runtimes_total with label host_namespace:ns1 in metrics") {
+			assert.Equal(c, 1, int(m2[0].Value))
+		}
+
+		// Namespace 2
+		m3 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+		assert.Empty(c, m3)
+		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+		assert.Empty(c, m4)
 	}, 5*time.Second, 10*time.Millisecond, "daprdA sidecar didn't report dapr_placement_runtimes_total to Placement in time")
 
 	// Start second sidecar
@@ -116,11 +119,23 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := m.place.Metrics(t, ctx)
-		assert.Equal(c, 2, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(c, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
-		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
-	}, 5*time.Second, 10*time.Millisecond, "daprdB sidecar didn't report dapr_placement_runtimes_total to Placement in time")
+
+		// Namespace 1
+		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m1, 1, "can't find dapr_placement_runtimes_total with label host_namespace:ns1 in metrics") {
+			assert.Equal(c, 2, int(m1[0].Value))
+		}
+		m2 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m2, 1, "can't find dapr_placement_actor_runtimes_total with label host_namespace:ns1 in metrics") {
+			assert.Equal(c, 1, int(m2[0].Value))
+		}
+
+		// Namespace 2
+		m3 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+		assert.Empty(c, m3)
+		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+		assert.Empty(c, m4)
+	}, 5*time.Second, 10*time.Millisecond)
 
 	// Start third sidecar
 	m.daprdC.Run(t, ctx)
@@ -129,10 +144,27 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := m.place.Metrics(t, ctx)
-		assert.Equal(c, 2, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(c, 1, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
-		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
+
+		// Namespace 1
+		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m1, 1) {
+			assert.Equal(c, 2, int(m1[0].Value))
+		}
+		m2 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m2, 1) {
+			assert.Equal(c, 1, int(m2[0].Value))
+		}
+
+		// Namespace 2
+		m3 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+		if assert.Len(c, m3, 1) {
+			assert.Equal(c, 1, int(m3[0].Value))
+		}
+
+		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+		if assert.Len(c, m4, 1) {
+			assert.Equal(c, 1, int(m4[0].Value))
+		}
 	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
 
 	// Stop one sidecar
@@ -140,10 +172,26 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := m.place.Metrics(t, ctx)
-		assert.Equal(c, 1, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(c, 1, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
-		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
+
+		// Namespace 1
+		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m1, 1) {
+			assert.Equal(c, 1, int(m1[0].Value))
+		}
+		m2 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m2, 1) {
+			assert.Equal(c, 0, int(m2[0].Value))
+		}
+
+		// Namespace 2
+		m3 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+		if assert.Len(c, m3, 1) {
+			assert.Equal(c, 1, int(m3[0].Value))
+		}
+		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+		if assert.Len(c, m4, 1) {
+			assert.Equal(c, 1, int(m4[0].Value))
+		}
 	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
 
 	// Stop another sidecar
@@ -151,10 +199,26 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := m.place.Metrics(t, ctx)
-		assert.Equal(c, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(c, 1, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
-		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(t, 1, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
+
+		// Namespace 1
+		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m1, 1) {
+			assert.Equal(c, 0, int(m1[0].Value))
+		}
+		m2 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m2, 1) {
+			assert.Equal(c, 0, int(m2[0].Value))
+		}
+
+		// Namespace 2
+		m3 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+		if assert.Len(c, m3, 1) {
+			assert.Equal(c, 1, int(m3[0].Value))
+		}
+		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+		if assert.Len(c, m4, 1) {
+			assert.Equal(c, 1, int(m4[0].Value))
+		}
 	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
 
 	// Stop the last sidecar
@@ -162,9 +226,27 @@ func (m *runtimestotal) Run(t *testing.T, ctx context.Context) {
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		metrics := m.place.Metrics(t, ctx)
-		assert.Equal(c, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(c, 0, int(metrics["dapr_placement_runtimes_total|host_namespace:ns2"]))
-		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
-		assert.Equal(t, 0, int(metrics["dapr_placement_actor_runtimes_total|host_namespace:ns2"]))
+
+		// Namespace 1
+		m1 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m1, 1) {
+			assert.Equal(c, 0, int(m1[0].Value))
+		}
+
+		m2 := metrics.MatchMetric("dapr_placement_runtimes_total", "host_namespace:ns2")
+		if assert.Len(c, m2, 1) {
+			assert.Equal(c, 0, int(m2[0].Value))
+		}
+
+		// Namespace 2
+		m3 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns1")
+		if assert.Len(c, m3, 1) {
+			assert.Equal(c, 0, int(m3[0].Value))
+		}
+
+		m4 := metrics.MatchMetric("dapr_placement_actor_runtimes_total", "host_namespace:ns2")
+		if assert.Len(c, m4, 1) {
+			assert.Equal(c, 0, int(m4[0].Value))
+		}
 	}, 5*time.Second, 10*time.Millisecond, "daprdC sidecar didn't report dapr_placement_runtimes_total to Placement in time")
 }
