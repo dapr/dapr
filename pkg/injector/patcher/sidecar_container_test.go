@@ -367,6 +367,69 @@ func TestGetSidecarContainer(t *testing.T) {
 		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
 	})
 
+	t.Run("get sidecar container with custom grpc ports", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					annotations.KeyAppID:            "app_id",
+					annotations.KeyConfig:           "config",
+					annotations.KeyAppPort:          "5000",
+					annotations.KeyLogAsJSON:        "true",
+					annotations.KeyAPITokenSecret:   "secret",
+					annotations.KeyAppTokenSecret:   "appsecret",
+					annotations.KeyAPIGRPCPort:      "12345",
+					annotations.KeyInternalGRPCPort: "12346",
+				},
+			},
+		})
+		c.SidecarImage = "daprio/dapr"
+		c.ImagePullPolicy = "Always"
+		c.Namespace = "dapr-system"
+		c.OperatorAddress = "controlplane:9000"
+		c.PlacementAddress = "placement:50000"
+		c.SentryAddress = "sentry:50000"
+		c.MTLSEnabled = true
+		c.Identity = "pod_identity"
+		c.ControlPlaneNamespace = "my-namespace"
+		c.ControlPlaneTrustDomain = "test.example.com"
+
+		c.SetFromPodAnnotations()
+
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
+		require.NoError(t, err)
+
+		expectedArgs := []string{
+			"/daprd",
+			"--dapr-http-port", "3500",
+			"--dapr-grpc-port", "12345",
+			"--dapr-internal-grpc-port", "12346",
+			"--dapr-listen-addresses", "[::1],127.0.0.1",
+			"--dapr-public-port", "3501",
+			"--app-id", "app_id",
+			"--app-protocol", "http",
+			"--log-level", "info",
+			"--dapr-graceful-shutdown-seconds", "-1",
+			"--mode", "kubernetes",
+			"--control-plane-address", "controlplane:9000",
+			"--sentry-address", "sentry:50000",
+			"--app-port", "5000",
+			"--enable-metrics",
+			"--metrics-port", "9090",
+			"--config", "config",
+			"--placement-host-address", "placement:50000",
+			"--log-as-json",
+			"--enable-mtls",
+		}
+
+		// Command should be empty, image's entrypoint to be used.
+		assert.Empty(t, container.Command)
+		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
+		// default image
+		assert.Equal(t, "daprio/dapr", container.Image)
+		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
+	})
+
 	t.Run("get sidecar container with debugging", func(t *testing.T) {
 		c := NewSidecarConfig(&corev1.Pod{
 			ObjectMeta: metav1.ObjectMeta{
