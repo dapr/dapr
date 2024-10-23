@@ -58,6 +58,12 @@ func WithShowOnlySchedulerSTS() OptionFunc {
 	}
 }
 
+func WithShowOnlyPlacementSTS() OptionFunc {
+	return func(o *options) {
+		o.showOnly = append(o.showOnly, "charts/dapr_placement/templates/dapr_placement_statefulset.yaml")
+	}
+}
+
 func WithShowOnlyServices(t *testing.T) OptionFunc {
 	return func(o *options) {
 		require.NoError(t, filepath.Walk(
@@ -90,7 +96,7 @@ func WithShowOnly(chart, tplYamlFileName string) OptionFunc {
 		if !strings.HasSuffix(tplYamlFileName, ".yaml") {
 			tplYamlFileName += ".yaml"
 		}
-		o.showOnly = append(o.showOnly, fmt.Sprintf("%s/templates/%s", chart, tplYamlFileName))
+		o.showOnly = append(o.showOnly, fmt.Sprintf("charts/%s/templates/%s", chart, tplYamlFileName))
 	}
 }
 

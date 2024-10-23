@@ -22,6 +22,7 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"sigs.k8s.io/yaml"
 
 	"github.com/dapr/dapr/tests/integration/framework/binary"
@@ -128,4 +129,31 @@ func UnmarshalStdout[K any](t *testing.T, h *Helm) []K {
 	}
 
 	return ks
+}
+
+// UnmarshalStdoutFunc unmarshals the stdout of the helm command into resources separated by "---" and calls the provided
+// function with the metadata and data of each resource so it can be unmarshaled into the appropriate type by the caller.
+func UnmarshalStdoutFunc(t *testing.T, h *Helm, f func(objMetaFound metav1.PartialObjectMetadata, data []byte)) {
+	t.Helper()
+
+	s := bufio.NewScanner(h.Stdout(t))
+	s.Split(func(data []byte, atEOF bool) (int, []byte, error) {
+		if atEOF && len(data) == 0 {
+			return 0, nil, nil
+		}
+		if i := bytes.Index(data, []byte("\n---")); i >= 0 {
+			return i + 1, data[0:i], nil
+		}
+		if atEOF {
+			return len(data), data, nil
+		}
+		return 0, nil, nil
+	})
+
+	for s.Scan() {
+		data := s.Bytes()
+		var meta metav1.PartialObjectMetadata
+		require.NoError(t, yaml.Unmarshal(s.Bytes(), &meta))
+		f(meta, data)
+	}
 }
