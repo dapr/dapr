@@ -42,6 +42,7 @@ type SidecarConfig struct {
 	ImagePullPolicy             corev1.PullPolicy
 	OperatorAddress             string
 	SentryAddress               string
+	SchedulerEnabled            bool
 	RunAsNonRoot                bool
 	RunAsUser                   *int64
 	RunAsGroup                  *int64

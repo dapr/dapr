@@ -36,6 +36,7 @@ type Config struct {
 	AllowedServiceAccountsPrefixNames string `envconfig:"ALLOWED_SERVICE_ACCOUNTS_PREFIX_NAMES"`
 	IgnoreEntrypointTolerations       string `envconfig:"IGNORE_ENTRYPOINT_TOLERATIONS"`
 	ActorsEnabled                     string `envconfig:"ACTORS_ENABLED"`
+	SchedulerEnabled                  string `envconfig:"SCHEDULER_ENABLED"`
 	ActorsServiceName                 string `envconfig:"ACTORS_SERVICE_NAME"`
 	ActorsServiceAddress              string `envconfig:"ACTORS_SERVICE_ADDRESS"`
 	RemindersServiceName              string `envconfig:"REMINDERS_SERVICE_NAME"`
@@ -51,6 +52,7 @@ type Config struct {
 	ControlPlaneTrustDomain string `envconfig:"DAPR_CONTROL_PLANE_TRUST_DOMAIN"`
 	SentryAddress           string `envconfig:"DAPR_SENTRY_ADDRESS"`
 
+	parsedSchedulerEnabled           bool
 	parsedActorsEnabled              bool
 	parsedActorsService              patcher.Service
 	parsedRemindersService           patcher.Service
@@ -148,6 +150,10 @@ func (c Config) GetActorsEnabled() bool {
 	return c.parsedActorsEnabled
 }
 
+func (c Config) GetSchedulerEnabled() bool {
+	return c.parsedSchedulerEnabled
+}
+
 func (c Config) GetActorsService() (string, patcher.Service) {
 	return c.ActorsServiceName, c.parsedActorsService
 }
@@ -185,6 +191,7 @@ func (c *Config) parse() (err error) {
 	c.parseTolerationsJSON()
 
 	// Set some booleans
+	c.parsedSchedulerEnabled = isTruthyDefaultTrue(c.SchedulerEnabled)
 	c.parsedActorsEnabled = isTruthyDefaultTrue(c.ActorsEnabled)
 	c.parsedRunAsNonRoot = isTruthyDefaultTrue(c.RunAsNonRoot)
 	c.parsedReadOnlyRootFilesystem = isTruthyDefaultTrue(c.ReadOnlyRootFilesystem)

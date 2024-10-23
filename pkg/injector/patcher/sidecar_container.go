@@ -270,7 +270,7 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	}
 
 	// Scheduler address could be empty if scheduler service is disabled
-	if c.SchedulerAddress != "" {
+	if c.SchedulerEnabled && c.SchedulerAddress != "" {
 		env = append(env,
 			corev1.EnvVar{
 				Name:  injectorConsts.SchedulerHostAddressEnvVar,
