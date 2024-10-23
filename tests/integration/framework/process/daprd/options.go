@@ -304,6 +304,12 @@ func WithAppAPIToken(t *testing.T, token string) Option {
 	))
 }
 
+func WithDaprAPIToken(t *testing.T, token string) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"DAPR_API_TOKEN", token,
+	))
+}
+
 func WithSentry(t *testing.T, sentry *sentry.Sentry) Option {
 	return func(o *options) {
 		WithExecOptions(exec.WithEnvVars(t, "DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors)))(o)

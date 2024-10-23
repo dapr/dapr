@@ -15,4 +15,5 @@ package grpc
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc/appapitoken"
+	_ "github.com/dapr/dapr/tests/integration/suite/daprd/serviceinvocation/grpc/daprapitoken"
 )
