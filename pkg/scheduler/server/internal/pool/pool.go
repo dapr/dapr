@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package internal
+package pool
 
 import (
 	"context"
@@ -52,7 +52,7 @@ type JobEvent struct {
 	Metadata *schedulerv1pb.JobMetadata
 }
 
-func NewPool() *Pool {
+func New() *Pool {
 	return &Pool{
 		nsPool:  make(map[string]*namespacedPool),
 		closeCh: make(chan struct{}),
