@@ -622,6 +622,7 @@ func (a *actorsRuntime) getOrCreateActor(act *internalv1pb.Actor) *actor {
 
 func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	act := a.getOrCreateActor(req.GetActor())
+	
 	// Create the InvokeMethodRequest
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
 	if err != nil {
