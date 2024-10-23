@@ -678,7 +678,7 @@ func (c Configuration) GetLoggingSpec() LoggingSpec {
 	return *c.Spec.LoggingSpec
 }
 
-// GetLoggingSpec returns the Logging.APILogging spec.
+// GetAPILoggingSpec returns the Logging.APILogging spec.
 // It's a short-hand that includes nil-checks for safety.
 func (c Configuration) GetAPILoggingSpec() APILoggingSpec {
 	if c.Spec.LoggingSpec == nil || c.Spec.LoggingSpec.APILogging == nil {
