@@ -88,7 +88,7 @@ func (h *highCardinality) Run(t *testing.T, ctx context.Context) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/orders/1234")
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/orders")
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/basket")
-		metrics := h.daprd.Metrics(t, ctx)
+		metrics := h.daprd.Metrics(t, ctx).All()
 		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/orders/{orderID}|status:200"]))
 		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/orders/1234|status:200"]))
 		assert.Equal(t, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/orders|status:200"]))
@@ -100,7 +100,7 @@ func (h *highCardinality) Run(t *testing.T, ctx context.Context) {
 	t.Run("service invocation - no match", func(t *testing.T) {
 		h.daprd.HTTPGet2xx(t, ctx, "/v1.0/invoke/myapp/method/items/123")
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			metrics := h.daprd.Metrics(t, ctx)
+			metrics := h.daprd.Metrics(t, ctx).All()
 			assert.Equal(c, 1, int(metrics["dapr_http_server_request_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/items/123|status:200"]))
 			assert.Equal(c, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/healthz|status:204"]))
 			assert.Equal(c, 1, int(metrics["dapr_http_server_response_count|app_id:myapp|method:GET|path:/v1.0/invoke/myapp/method/items/123|status:200"]))

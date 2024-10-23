@@ -295,10 +295,10 @@ func (s *Scheduler) MetricsAddress() string {
 }
 
 // Metrics returns a subset of metrics scraped from the metrics endpoint
-func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
+func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
 	t.Helper()
 
-	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress())).GetMetrics()
+	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
 
 func (s *Scheduler) ETCDClient(t *testing.T) *clientv3.Client {

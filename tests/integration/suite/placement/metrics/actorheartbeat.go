@@ -15,7 +15,6 @@ package metrics
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -68,9 +67,6 @@ func (m *actorheartbeat) Run(t *testing.T, ctx context.Context) {
 	m.place.WaitUntilRunning(t, ctx)
 	m.daprd.WaitUntilRunning(t, ctx)
 
-	label1 := fmt.Sprintf("dapr_placement_actor_heartbeat_timestamp|actor_type:%s|app_id:%s|host_name:%s|host_namespace:ns1|pod_name:", "myactortype1", m.daprd.AppID(), m.daprd.InternalGRPCAddress())
-	label2 := fmt.Sprintf("dapr_placement_actor_heartbeat_timestamp|actor_type:%s|app_id:%s|host_name:%s|host_namespace:ns1|pod_name:", "myactortype2", m.daprd.AppID(), m.daprd.InternalGRPCAddress())
-
 	var m1, m2, i int
 	// Repeat the cycle 3 times to check if the actor heartbeat is increasing
 	// We're using `require` because the condition should be true every time
@@ -79,10 +75,14 @@ func (m *actorheartbeat) Run(t *testing.T, ctx context.Context) {
 		i++
 		metrics := m.place.Metrics(t, ctx)
 
-		require.Greater(t, int(metrics[label1]), m1)
-		require.Greater(t, int(metrics[label2]), m2)
-		m1 = int(metrics[label1])
-		m2 = int(metrics[label2])
+		metricActor1 := metrics.MatchMetric("dapr_placement_actor_heartbeat_timestamp", "actor_type:myactortype1", "app_id:"+m.daprd.AppID(), "host_name:"+m.daprd.InternalGRPCAddress(), "host_namespace:ns1")
+		require.Len(t, metricActor1, 1)
+		require.Greater(t, int(metricActor1[0].Value), m1)
+
+		metricActor2 := metrics.MatchMetric("dapr_placement_actor_heartbeat_timestamp", "actor_type:myactortype2", "app_id:"+m.daprd.AppID(), "host_name:"+m.daprd.InternalGRPCAddress(), "host_namespace:ns1")
+		require.Len(t, metricActor2, 1)
+		require.Greater(t, int(metricActor2[0].Value), m2)
+
 		return i >= 2
 	}, 10*time.Second, 1100*time.Millisecond)
 }
