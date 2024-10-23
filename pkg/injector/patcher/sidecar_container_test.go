@@ -30,6 +30,8 @@ import (
 	"github.com/dapr/kit/ptr"
 )
 
+const daprImage = "daprio/dapr"
+
 func TestParseEnvString(t *testing.T) {
 	testCases := []struct {
 		testName string
@@ -319,7 +321,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				},
 			},
 		})
-		c.SidecarImage = "daprio/dapr"
+		c.SidecarImage = daprImage
 		c.ImagePullPolicy = "Always"
 		c.Namespace = "dapr-system"
 		c.OperatorAddress = "controlplane:9000"
@@ -382,7 +384,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				},
 			},
 		})
-		c.SidecarImage = "daprio/dapr"
+		c.SidecarImage = daprImage
 		c.ImagePullPolicy = "Always"
 		c.Namespace = "dapr-system"
 		c.OperatorAddress = "controlplane:9000"
@@ -445,7 +447,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				},
 			},
 		})
-		c.SidecarImage = "daprio/dapr"
+		c.SidecarImage = daprImage
 		c.ImagePullPolicy = "Always"
 		c.Namespace = "dapr-system"
 		c.OperatorAddress = "controlplane:9000"
@@ -629,7 +631,7 @@ func TestGetSidecarContainer(t *testing.T) {
 			name:        "no annotation",
 			annotations: map[string]string{},
 			sidecarConfigModifierFn: func(c *SidecarConfig) {
-				c.SidecarImage = "daprio/dapr"
+				c.SidecarImage = daprImage
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.Equal(t, "daprio/dapr", container.Image)
@@ -641,7 +643,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				annotations.KeySidecarImage: "override",
 			},
 			sidecarConfigModifierFn: func(c *SidecarConfig) {
-				c.SidecarImage = "daprio/dapr"
+				c.SidecarImage = daprImage
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
 				assert.Equal(t, "override", container.Image)
