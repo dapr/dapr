@@ -8,6 +8,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -24,7 +25,7 @@ func TestNew(t *testing.T) {
 	// Create a mock HTTP server that serves example metrics data
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, err := io.Copy(w, strings.NewReader(exampleMetrics))
-		require.NoError(t, err)
+		assert.NoError(t, err)
 	}))
 	defer ts.Close()
 
@@ -32,14 +33,14 @@ func TestNew(t *testing.T) {
 	metricsMap := metrics.All()
 
 	require.NotNil(t, metricsMap)
-	require.Equal(t, 3, len(metricsMap))
+	require.Len(t, metricsMap, 3)
 
 	require.Contains(t, metricsMap, `dapr_placement_actor_heartbeat_timestamp|actor_type:a1|app_id:actors1|host_name:hst1|host_namespace:ns1|pod_name:`)
 	require.Contains(t, metricsMap, `dapr_placement_actor_runtimes_total|host_namespace:ns1`)
 	require.Contains(t, metricsMap, `dapr_placement_runtimes_total|host_namespace:ns1`)
 	require.Equal(t, 1729720899, int(metricsMap["dapr_placement_actor_heartbeat_timestamp|actor_type:a1|app_id:actors1|host_name:hst1|host_namespace:ns1|pod_name:"]))
-	require.Equal(t, float64(2), metricsMap["dapr_placement_actor_runtimes_total|host_namespace:ns1"])
-	require.Equal(t, float64(3), metricsMap["dapr_placement_runtimes_total|host_namespace:ns1"])
+	require.Equal(t, 2, int(metricsMap["dapr_placement_actor_runtimes_total|host_namespace:ns1"]))
+	require.Equal(t, 3, int(metricsMap["dapr_placement_runtimes_total|host_namespace:ns1"]))
 }
 
 func TestMatchMetric(t *testing.T) {
@@ -52,16 +53,16 @@ func TestMatchMetric(t *testing.T) {
 	}
 
 	results := metrics.MatchMetric("dapr_placement_actor_runtimes_total")
-	require.Equal(t, 1, len(results))
-	require.Equal(t, float64(3), results[0].Value)
+	require.Len(t, results, 1)
+	require.Equal(t, 3, int(results[0].Value))
 
 	results = metrics.MatchMetric("actor_type:a1", "app_id:actors1")
-	require.Equal(t, 1, len(results))
-	require.Equal(t, float64(123456789), results[0].Value)
+	require.Len(t, results, 1)
+	require.Equal(t, 123456789, int(results[0].Value))
 
 	results = metrics.MatchMetric("dapr_placement_actor_runtimes_total:host_namespace:ns2")
-	require.Equal(t, 0, len(results))
+	require.Empty(t, results)
 
 	results = metrics.MatchMetric("actor_type:non-existent")
-	require.Equal(t, 0, len(results))
+	require.Empty(t, results)
 }
