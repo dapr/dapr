@@ -46,7 +46,7 @@ func (NoOp) ComponentOutboundPolicy(name string, componentName ComponentType) *P
 	return nil
 }
 
-// BuildInPolicy returns a NoOp policy definition for a built-in policy.
+// BuiltInPolicy returns a NoOp policy definition for a built-in policy.
 func (NoOp) BuiltInPolicy(name BuiltInPolicyName) *PolicyDefinition {
 	return nil
 }
