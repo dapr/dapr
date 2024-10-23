@@ -37,6 +37,8 @@ type options struct {
 	listenAddress string
 	sentry        *sentry.Sentry
 	dataDir       *string
+	kubeconfig    *string
+	mode          *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -121,5 +123,17 @@ func WithNamespace(namespace string) Option {
 func WithDataDir(dataDir string) Option {
 	return func(o *options) {
 		o.dataDir = &dataDir
+	}
+}
+
+func WithKubeconfig(kubeconfig string) Option {
+	return func(o *options) {
+		o.kubeconfig = &kubeconfig
+	}
+}
+
+func WithMode(mode string) Option {
+	return func(o *options) {
+		o.mode = &mode
 	}
 }

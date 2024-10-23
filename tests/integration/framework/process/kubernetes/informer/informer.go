@@ -14,11 +14,15 @@ limitations under the License.
 package informer
 
 import (
+	"bytes"
+	"context"
 	"encoding/json"
+	"math/rand/v2"
 	"net/http"
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -41,11 +45,14 @@ import (
 type Informer struct {
 	lock   sync.Mutex
 	active map[string][][]byte
+
+	informed map[uint64]chan *metav1.WatchEvent
 }
 
 func New() *Informer {
 	return &Informer{
-		active: make(map[string][][]byte),
+		active:   make(map[string][][]byte),
+		informed: make(map[uint64]chan *metav1.WatchEvent),
 	}
 }
 
@@ -74,17 +81,35 @@ func (i *Informer) Handler(t *testing.T, wrapped http.Handler) http.HandlerFunc 
 			split = split[2:]
 		}
 		if split[0] == "namespaces" {
-			split = split[2:]
+			// namespace resources are special cased in the Kubernetes CRUD resource
+			// URL, so we need to handle them differently.
+			if len(split) > 1 {
+				split = split[2:]
+				gvk.Kind = split[0]
+			} else {
+				gvk.Kind = "namespaces"
+			}
+		} else {
+			gvk.Kind = split[0]
 		}
-		gvk.Kind = split[0]
 
 		w.Header().Add("Transfer-Encoding", "chunked")
 		w.Header().Add("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
 
 		if len(i.active[gvk.String()]) > 0 {
+			var event metav1.WatchEvent
+			assert.NoError(t, json.Unmarshal(i.active[gvk.String()][0], &event))
 			w.Write(i.active[gvk.String()][0])
 			i.active[gvk.String()] = i.active[gvk.String()][1:]
+
+			for _, ch := range i.informed {
+				select {
+				case ch <- &event:
+				case <-time.After(3 * time.Second):
+					t.Errorf("failed to send informed event to subscriber")
+				}
+			}
 		}
 		w.(http.Flusher).Flush()
 	}
@@ -103,6 +128,47 @@ func (i *Informer) Modify(t *testing.T, obj runtime.Object) {
 func (i *Informer) Delete(t *testing.T, obj runtime.Object) {
 	t.Helper()
 	i.inform(t, obj, string(watch.Deleted))
+}
+
+func (i *Informer) DeleteWait(t *testing.T, ctx context.Context, obj runtime.Object) {
+	t.Helper()
+
+	i.lock.Lock()
+	//nolint:gosec
+	ui := rand.Uint64()
+	ch := make(chan *metav1.WatchEvent)
+	i.informed[ui] = ch
+	i.lock.Unlock()
+
+	defer func() {
+		i.lock.Lock()
+		close(ch)
+		delete(i.informed, ui)
+		i.lock.Unlock()
+	}()
+
+	i.Delete(t, obj)
+
+	exp, err := json.Marshal(obj)
+	require.NoError(t, err)
+
+	for {
+		select {
+		case <-ctx.Done():
+			assert.Fail(t, "failed to wait for delete event to occur")
+			return
+		case e := <-ch:
+			if e.Type != string(watch.Deleted) {
+				continue
+			}
+
+			if !bytes.Equal(exp, e.Object.Raw) {
+				continue
+			}
+
+			return
+		}
+	}
 }
 
 func (i *Informer) inform(t *testing.T, obj runtime.Object, event string) {
@@ -147,6 +213,8 @@ func (i *Informer) objToGVK(t *testing.T, obj runtime.Object) schema.GroupVersio
 		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "secrets"}
 	case *corev1.ConfigMap:
 		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "configmaps"}
+	case *corev1.Namespace:
+		return schema.GroupVersionKind{Group: "", Version: "v1", Kind: "namespaces"}
 	default:
 		require.Fail(t, "unknown type: %T", obj)
 		return schema.GroupVersionKind{}

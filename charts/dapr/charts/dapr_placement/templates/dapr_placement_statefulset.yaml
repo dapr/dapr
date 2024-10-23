@@ -145,14 +145,14 @@ spec:
 {{- if eq .Values.metadataEnabled true }}
         - "--metadata-enabled"
 {{- end }}
+        - "--replicationFactor={{ .Values.replicationFactor }}"
+        - "--max-api-level={{ .Values.maxActorApiLevel }}"
+        - "--min-api-level={{ .Values.minActorApiLevel }}"
+        - "--keepalive-time={{ .Values.keepAliveTime }}"
+        - "--keepalive-timeout={{ .Values.keepAliveTimeout }}"
+        - "--disseminate-timeout={{ .Values.disseminateTimeout }}"
 {{- if eq .Values.global.prometheus.enabled true }}
         - "--enable-metrics"
-        - "--replicationFactor"
-        - "{{ .Values.replicationFactor }}"
-        - "--max-api-level"
-        - "{{ .Values.maxActorApiLevel }}"
-        - "--min-api-level"
-        - "{{ .Values.minActorApiLevel }}"
         - "--metrics-port"
         - "{{ .Values.global.prometheus.port }}"
 {{- else }}
@@ -253,6 +253,10 @@ spec:
       tolerations:
 {{ toYaml .Values.global.tolerations | indent 8 }}
 {{- end }}
+{{- if .Values.global.priorityClassName }}
+      priorityClassName:
+{{ toYaml .Values.global.priorityClassName | indent 8 }}
+{{- end }}
 {{- if or (eq .Values.global.ha.enabled true) (eq .Values.ha true) }}
   {{- if eq .Values.cluster.forceInMemoryLog false }}
   volumeClaimTemplates:
@@ -270,9 +274,5 @@ spec:
       storageClassName: {{ .Values.volumeclaims.storageClassName }}
     {{- end }}
   {{- end }}
-{{- end }}
-{{- if .Values.global.priorityClassName }}
-      priorityClassName:
-{{ toYaml .Values.global.priorityClassName | indent 8 }}
 {{- end }}
 {{- end }}

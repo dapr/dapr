@@ -51,13 +51,6 @@ const (
 
 	// disseminateTimerInterval is the interval to disseminate the latest consistent hashing table.
 	disseminateTimerInterval = 500 * time.Millisecond
-	// disseminateTimeout is the timeout to disseminate hashing tables after the membership change.
-	// When the multiple actor service pods are deployed first, a few pods are deployed in the beginning
-	// and the rest of pods will be deployed gradually. disseminateNextTime is maintained to decide when
-	// the hashing table is disseminated. disseminateNextTime is updated whenever membership change
-	// is applied to raft state or each pod is deployed. If we increase disseminateTimeout, it will
-	// reduce the frequency of dissemination, but it will delay the table dissemination.
-	disseminateTimeout = 2 * time.Second
 
 	// faultyHostDetectDuration is the maximum duration after which a host is considered faulty.
 	// Dapr runtime sends a heartbeat (stored in lastHeartBeat) every second.
@@ -128,6 +121,25 @@ type Service struct {
 	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
 	disseminateNextTime haxmap.Map[string, *atomic.Int64]
 
+	// keepaliveTime sets the interval at which the placement service sends keepalive pings to daprd
+	// on the gRPC stream to check if the connection is still alive. Default is 2 seconds.
+	// https://grpc.io/docs/guides/keepalive/
+	keepAliveTime time.Duration
+
+	// keepaliveTimeout sets the timeout period for daprd to respond to the placement service's
+	// keepalive pings before the placement service closes the connection. Default is 3 seconds.
+	// https://grpc.io/docs/guides/keepalive/
+	keepAliveTimeout time.Duration
+
+	// disseminateTimeout is the timeout to disseminate hashing tables after the membership change.
+	// When the multiple actor service pods are deployed first, a few pods are deployed in the beginning
+	// and the rest of pods will be deployed gradually. disseminateNextTime is maintained to decide when
+	// the hashing table is disseminated. disseminateNextTime is updated whenever membership change
+	// is applied to raft state or each pod is deployed. If we increase disseminateTimeout, it will
+	// reduce the frequency of dissemination, but it will delay the table dissemination.
+	// Default is 2 seconds
+	disseminateTimeout time.Duration
+
 	// memberUpdateCount represents how many dapr runtimes needs to change in a namespace.
 	// Only actor runtime's heartbeat can increase this.
 	memberUpdateCount haxmap.Map[string, *atomic.Uint32]
@@ -159,19 +171,22 @@ type Service struct {
 	wg       sync.WaitGroup
 }
 
-// PlacementServiceOpts contains options for the NewPlacementService method.
-type PlacementServiceOpts struct {
-	RaftNode      *raft.Server
-	MaxAPILevel   *uint32
-	MinAPILevel   uint32
-	SecProvider   security.Provider
-	Port          int
-	ListenAddress string
-	Healthz       healthz.Healthz
+// ServiceOpts contains options for the NewPlacementService method.
+type ServiceOpts struct {
+	RaftNode           *raft.Server
+	MaxAPILevel        *uint32
+	MinAPILevel        uint32
+	SecProvider        security.Provider
+	Port               int
+	ListenAddress      string
+	Healthz            healthz.Healthz
+	KeepAliveTime      time.Duration
+	KeepAliveTimeout   time.Duration
+	DisseminateTimeout time.Duration
 }
 
 // NewPlacementService returns a new placement service.
-func NewPlacementService(opts PlacementServiceOpts) *Service {
+func NewPlacementService(opts ServiceOpts) *Service {
 	return &Service{
 		streamConnPool:      newStreamConnPool(),
 		membershipCh:        make(chan hostMemberChange, membershipChangeChSize),
@@ -184,6 +199,9 @@ func NewPlacementService(opts PlacementServiceOpts) *Service {
 		disseminateLocks:    concurrency.NewMutexMap[string](),
 		memberUpdateCount:   *haxmap.New[string, *atomic.Uint32](),
 		disseminateNextTime: *haxmap.New[string, *atomic.Int64](),
+		keepAliveTime:       opts.KeepAliveTime,
+		keepAliveTimeout:    opts.KeepAliveTimeout,
+		disseminateTimeout:  opts.DisseminateTimeout,
 		port:                opts.Port,
 		listenAddress:       opts.ListenAddress,
 		htarget:             opts.Healthz.AddTarget(),
@@ -214,9 +232,10 @@ func (p *Service) Start(ctx context.Context) error {
 	}
 
 	keepaliveParams := keepalive.ServerParameters{
-		Time:    2 * time.Second,
-		Timeout: 3 * time.Second,
+		Time:    p.keepAliveTime,
+		Timeout: p.keepAliveTimeout,
 	}
+
 	grpcServer := grpc.NewServer(sec.GRPCServerOptionMTLS(), grpc.KeepaliveParams(keepaliveParams))
 
 	placementv1pb.RegisterPlacementServer(grpcServer, p)
