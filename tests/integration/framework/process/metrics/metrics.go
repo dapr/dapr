@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -49,7 +48,6 @@ func New(t *testing.T, ctx context.Context, url string) *Metrics {
 				labels += "|" + l.GetName() + ":" + l.GetValue()
 				labelMap[l.GetName()] = l.GetValue()
 			}
-			fmt.Println("====m:", m.GetCounter())
 			if counter := m.GetCounter(); counter != nil {
 				metrics[metricName+labels] = counter.GetValue()
 				continue
