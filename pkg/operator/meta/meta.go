@@ -15,10 +15,8 @@ func IsAnnotatedForDapr(a map[string]string) bool {
 
 func GetAnnotationValueOrDefault(a map[string]string, annotationKey string, defaultValue int) int {
 	// return value of annotation if exists, otherwise return default value
-	if value, ok := a[annotationKey]; ok {
-		val, err := strconv.Atoi(value)
-
-		if err == nil {
+	if value := a[annotationKey]; value != "" {
+		if val, err := strconv.Atoi(value); err == nil {
 			return val
 		}
 	}

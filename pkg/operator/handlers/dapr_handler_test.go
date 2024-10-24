@@ -13,6 +13,7 @@ import (
 	metaV1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/apimachinery/pkg/types"
+	"k8s.io/apimachinery/pkg/util/intstr"
 	"k8s.io/client-go/kubernetes/scheme"
 	"sigs.k8s.io/controller-runtime/pkg/client/fake"
 
@@ -133,6 +134,26 @@ func TestCreateDaprServiceAppIDAndMetricsSettings(t *testing.T) {
 	assert.Equal(t, "", service.ObjectMeta.Annotations["prometheus.io/path"])
 }
 
+func TestCreateDaprServiceAppIDAndPortsOverride(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
+	ctx := context.Background()
+	myDaprService := types.NamespacedName{
+		Namespace: "test",
+		Name:      "test",
+	}
+	deployment := getDeployment("test", "true")
+	deployment.GetTemplateAnnotations()[annotations.KeyAPIGRPCPort] = "12345"
+	deployment.GetTemplateAnnotations()[annotations.KeyInternalGRPCPort] = "12346"
+
+	service := testDaprHandler.createDaprServiceValues(ctx, myDaprService, deployment, "test")
+	require.NotNil(t, service)
+	assert.Equal(t, "test", service.ObjectMeta.Annotations[annotations.KeyAppID])
+	assert.Equal(t, int32(12345), service.Spec.Ports[1].Port)
+	assert.Equal(t, intstr.FromInt(12345), service.Spec.Ports[1].TargetPort)
+	assert.Equal(t, int32(12346), service.Spec.Ports[2].Port)
+	assert.Equal(t, intstr.FromInt(12346), service.Spec.Ports[2].TargetPort)
+
+}
 func TestPatchDaprService(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 
