@@ -22,7 +22,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
@@ -52,7 +52,6 @@ import (
 type Scheduler struct {
 	exec       process.Interface
 	ports      *ports.Ports
-	running    atomic.Bool
 	httpClient *http.Client
 
 	port        int
@@ -65,6 +64,9 @@ type Scheduler struct {
 	initialCluster  string
 	etcdClientPorts map[string]string
 	sentry          *sentry.Sentry
+
+	runOnce     sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
@@ -165,20 +167,16 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 }
 
 func (s *Scheduler) Run(t *testing.T, ctx context.Context) {
-	if !s.running.CompareAndSwap(false, true) {
-		t.Fatal("Process is already running")
-	}
-
-	s.ports.Free(t)
-	s.exec.Run(t, ctx)
+	s.runOnce.Do(func() {
+		s.ports.Free(t)
+		s.exec.Run(t, ctx)
+	})
 }
 
 func (s *Scheduler) Cleanup(t *testing.T) {
-	if !s.running.CompareAndSwap(true, false) {
-		return
-	}
-
-	s.exec.Cleanup(t)
+	s.cleanupOnce.Do(func() {
+		s.exec.Cleanup(t)
+	})
 }
 
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
