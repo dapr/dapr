@@ -23,6 +23,7 @@ import (
 	apiv1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
+	"k8s.io/client-go/tools/clientcmd/api"
 	"k8s.io/client-go/util/homedir"
 	metrics "k8s.io/metrics/pkg/client/clientset/versioned"
 
@@ -37,11 +38,12 @@ type KubeClient struct {
 	MetricsClient metrics.Interface
 	DaprClientSet daprclient.Interface
 	clientConfig  *rest.Config
+	RawConfig     *api.Config
 }
 
 // NewKubeClient creates KubeClient instance.
 func NewKubeClient(configPath string, clusterName string) (*KubeClient, error) {
-	config, err := clientConfig(configPath, clusterName)
+	config, rawConfig, err := clientConfig(configPath, clusterName)
 	if err != nil {
 		return nil, err
 	}
@@ -61,10 +63,10 @@ func NewKubeClient(configPath string, clusterName string) (*KubeClient, error) {
 		return nil, err
 	}
 
-	return &KubeClient{ClientSet: kubecs, DaprClientSet: daprcs, clientConfig: config, MetricsClient: metricscs}, nil
+	return &KubeClient{ClientSet: kubecs, DaprClientSet: daprcs, clientConfig: config, MetricsClient: metricscs, RawConfig: rawConfig}, nil
 }
 
-func clientConfig(kubeConfigPath string, clusterName string) (*rest.Config, error) {
+func clientConfig(kubeConfigPath string, clusterName string) (*rest.Config, *api.Config, error) {
 	if kubeConfigPath == "" {
 		kubeConfigPath = os.Getenv("KUBECONFIG")
 		if home := homedir.HomeDir(); home != "" && kubeConfigPath == "" {
@@ -78,17 +80,23 @@ func clientConfig(kubeConfigPath string, clusterName string) (*rest.Config, erro
 		overrides.Context.Cluster = clusterName
 	}
 
-	config, err := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
+	mainConfig := clientcmd.NewNonInteractiveDeferredLoadingClientConfig(
 		&clientcmd.ClientConfigLoadingRules{ExplicitPath: kubeConfigPath},
-		&overrides).ClientConfig()
+		&overrides)
+
+	clConfig, err := mainConfig.ClientConfig()
 	if err != nil {
-		return nil, err
+		return nil, nil, err
+	}
+	rawConfig, err := mainConfig.RawConfig()
+	if err != nil {
+		return nil, nil, err
 	}
 
 	// Reduce the QPS to avoid rate-limiting
-	config.QPS = 3
-	config.Burst = 5
-	return config, nil
+	clConfig.QPS = 3
+	clConfig.Burst = 5
+	return clConfig, &rawConfig, nil
 }
 
 // GetClientConfig returns client configuration.
