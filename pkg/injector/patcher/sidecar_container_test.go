@@ -642,7 +642,6 @@ func TestGetSidecarContainer(t *testing.T) {
 				annotations.KeySidecarImage: "override",
 			},
 			sidecarConfigModifierFn: func(c *SidecarConfig) {
-				//nolint:goconst
 				c.SidecarImage = "daprio/dapr"
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
