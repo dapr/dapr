@@ -26,21 +26,21 @@ import (
 )
 
 const (
-	daprSidecarHTTPPortName         = "dapr-http"
-	daprSidecarAPIGRPCPortName      = "dapr-grpc"
-	daprSidecarInternalGRPCPortName = "dapr-internal"
-	daprSidecarMetricsPortName      = "dapr-metrics"
-	daprSidecarHTTPPort             = 3500
-	daprSidecarAPIGRPCPort          = 50001
-	daprSidecarInternalGRPCPort     = 50002
-	defaultMetricsEnabled           = true
-	defaultMetricsPort              = 9090
-	clusterIPNone                   = "None"
-	daprServiceOwnerField           = ".metadata.controller"
-	annotationPrometheusProbe       = "prometheus.io/probe"
-	annotationPrometheusScrape      = "prometheus.io/scrape"
-	annotationPrometheusPort        = "prometheus.io/port"
-	annotationPrometheusPath        = "prometheus.io/path"
+	daprSidecarHTTPPortName            = "dapr-http"
+	daprSidecarAPIGRPCPortName         = "dapr-grpc"
+	daprSidecarInternalGRPCPortName    = "dapr-internal"
+	daprSidecarMetricsPortName         = "dapr-metrics"
+	daprSidecarHTTPPort                = 3500
+	daprSidecarDefaultAPIGRPCPort      = 50001
+	daprSidecarDefaultInternalGRPCPort = 50002
+	defaultMetricsEnabled              = true
+	defaultMetricsPort                 = 9090
+	clusterIPNone                      = "None"
+	daprServiceOwnerField              = ".metadata.controller"
+	annotationPrometheusProbe          = "prometheus.io/probe"
+	annotationPrometheusScrape         = "prometheus.io/scrape"
+	annotationPrometheusPort           = "prometheus.io/port"
+	annotationPrometheusPath           = "prometheus.io/path"
 )
 
 var log = logger.NewLogger("dapr.operator.handlers")
@@ -278,6 +278,8 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 		annotationsMap[annotationPrometheusPath] = "/"
 	}
 
+	grpcPort := h.getGRPCPort(wrapper)
+	internalGRPCPort := h.getInternalGRPCPort(wrapper)
 	return &corev1.Service{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name:        expectedService.Name,
@@ -297,14 +299,14 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 				},
 				{
 					Protocol:   corev1.ProtocolTCP,
-					Port:       int32(daprSidecarAPIGRPCPort),
-					TargetPort: intstr.FromInt(daprSidecarAPIGRPCPort),
+					Port:       int32(grpcPort),
+					TargetPort: intstr.FromInt(grpcPort),
 					Name:       daprSidecarAPIGRPCPortName,
 				},
 				{
 					Protocol:   corev1.ProtocolTCP,
-					Port:       int32(daprSidecarInternalGRPCPort),
-					TargetPort: intstr.FromInt(daprSidecarInternalGRPCPort),
+					Port:       int32(internalGRPCPort),
+					TargetPort: intstr.FromInt(internalGRPCPort),
 					Name:       daprSidecarInternalGRPCPortName,
 				},
 				{
@@ -347,6 +349,14 @@ func (h *DaprHandler) getMetricsPort(wrapper ObjectWrapper) int {
 		}
 	}
 	return metricsPort
+}
+
+func (h *DaprHandler) getGRPCPort(wrapper ObjectWrapper) int {
+	return meta.GetAnnotationValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyAPIGRPCPort, daprSidecarDefaultAPIGRPCPort)
+}
+
+func (h *DaprHandler) getInternalGRPCPort(wrapper ObjectWrapper) int {
+	return meta.GetAnnotationValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyInternalGRPCPort, daprSidecarDefaultInternalGRPCPort)
 }
 
 func (h *DaprHandler) isReconciled(owner *metaV1.OwnerReference) bool {

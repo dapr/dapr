@@ -175,6 +175,78 @@ func TestPatchDaprService(t *testing.T) {
 	assert.Equal(t, "app", actualService.OwnerReferences[0].Name)
 }
 
+func TestGetGRPCPort(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
+	t.Run("GRPC port override", func(t *testing.T) {
+		// Arrange
+		grpcPort := "12345"
+		deployment := getDeploymentWithGRPCPortAnnotation("test_id", "true", &grpcPort, nil)
+
+		// Act
+		p := testDaprHandler.getGRPCPort(deployment)
+
+		// Assert
+		assert.Equal(t, 12345, p)
+	})
+	t.Run("invalid GRPC port override", func(t *testing.T) {
+		// Arrange
+		grpcPort := "XXXX"
+		deployment := getDeploymentWithGRPCPortAnnotation("test_id", "true", &grpcPort, nil)
+
+		// Act
+		p := testDaprHandler.getGRPCPort(deployment)
+
+		// Assert
+		assert.Equal(t, daprSidecarDefaultAPIGRPCPort, p)
+	})
+	t.Run("no GRPC port override", func(t *testing.T) {
+		// Arrange
+		deployment := getDeployment("test_id", "true")
+
+		// Act
+		p := testDaprHandler.getGRPCPort(deployment)
+
+		// Assert
+		assert.Equal(t, daprSidecarDefaultAPIGRPCPort, p)
+	})
+}
+
+func TestGetInternalGRPCPort(t *testing.T) {
+	testDaprHandler := getTestDaprHandler()
+	t.Run("Internal GRPC port override", func(t *testing.T) {
+		// Arrange
+		grpcPort := "12345"
+		deployment := getDeploymentWithGRPCPortAnnotation("test_id", "true", nil, &grpcPort)
+
+		// Act
+		p := testDaprHandler.getInternalGRPCPort(deployment)
+
+		// Assert
+		assert.Equal(t, 12345, p)
+	})
+	t.Run("invalid Internal GRPC port override", func(t *testing.T) {
+		// Arrange
+		grpcPort := "XXXX"
+		deployment := getDeploymentWithGRPCPortAnnotation("test_id", "true", nil, &grpcPort)
+
+		// Act
+		p := testDaprHandler.getInternalGRPCPort(deployment)
+
+		// Assert
+		assert.Equal(t, daprSidecarDefaultInternalGRPCPort, p)
+	})
+	t.Run("no Internal GRPC port override", func(t *testing.T) {
+		// Arrange
+		deployment := getDeployment("test_id", "true")
+
+		// Act
+		p := testDaprHandler.getInternalGRPCPort(deployment)
+
+		// Assert
+		assert.Equal(t, daprSidecarDefaultInternalGRPCPort, p)
+	})
+}
+
 func TestGetMetricsPort(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 	t.Run("metrics port override", func(t *testing.T) {
@@ -312,6 +384,19 @@ func TestInit(t *testing.T) {
 func getDeploymentWithMetricsPortAnnotation(daprID string, daprEnabled string, metricsPort string) ObjectWrapper {
 	d := getDeployment(daprID, daprEnabled)
 	d.GetTemplateAnnotations()[annotations.KeyMetricsPort] = metricsPort
+	return d
+}
+
+func getDeploymentWithGRPCPortAnnotation(daprID string, daprEnabled string, grpcPort *string, internalGRPCPort *string) ObjectWrapper {
+	d := getDeployment(daprID, daprEnabled)
+
+	if grpcPort != nil {
+		d.GetTemplateAnnotations()[annotations.KeyAPIGRPCPort] = *grpcPort
+	}
+
+	if internalGRPCPort != nil {
+		d.GetTemplateAnnotations()[annotations.KeyInternalGRPCPort] = *internalGRPCPort
+	}
 	return d
 }
 
