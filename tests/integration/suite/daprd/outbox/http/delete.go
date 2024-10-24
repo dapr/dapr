@@ -52,7 +52,7 @@ func (o *delete) Setup(t *testing.T) []framework.Option {
 		app.WithHandlerFunc("/test", func(w http.ResponseWriter, r *http.Request) {
 			defer o.appTestCalled.Add(1)
 			var ce map[string]string
-			require.NoError(t, json.NewDecoder(r.Body).Decode(&ce))
+			assert.NoError(t, json.NewDecoder(r.Body).Decode(&ce))
 			o.msg.Store(ce)
 		}),
 	)

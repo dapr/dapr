@@ -56,12 +56,12 @@ func (g *getbulk) Run(t *testing.T, ctx context.Context) {
 	baseMemory := g.daprd.MetricResidentMemoryMi(t, ctx)
 
 	keys := make([]string, 10000)
-	for i := 0; i < 10000; i++ {
+	for i := range 10000 {
 		keys[i] = fmt.Sprintf(`"key%d"`, i)
 	}
 	input := fmt.Sprintf(`{"keys": [%s]}`, strings.Join(keys, `, `))
 
-	for i := 0; i < 400; i++ {
+	for range 400 {
 		g.daprd.HTTPPost2xx(t, ctx, "/v1.0/state/mystore/bulk", strings.NewReader(input))
 	}
 
