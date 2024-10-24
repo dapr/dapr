@@ -23,6 +23,7 @@ import (
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 )
 
 func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
@@ -127,8 +128,14 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 
 	jobs := make([]*schedulerv1pb.NamedJob, 0, len(list.GetJobs()))
 	for _, job := range list.GetJobs() {
+		meta, err := serialize.MetadataFromKey(job.GetName())
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse job metadata: %w", err)
+		}
+
 		jobs = append(jobs, &schedulerv1pb.NamedJob{
-			Name: job.GetName()[strings.LastIndex(job.GetName(), "||")+2:],
+			Name:     job.GetName()[strings.LastIndex(job.GetName(), "||")+2:],
+			Metadata: meta,
 			//nolint:protogetter
 			Job: &schedulerv1pb.Job{
 				Schedule: job.GetJob().Schedule,
