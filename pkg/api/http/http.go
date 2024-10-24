@@ -47,6 +47,7 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/outbox"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -413,7 +414,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 
 	b, err := json.Marshal(req.Data)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST_DATA", fmt.Sprintf(messages.ErrMalformedRequestData, err))
+		msg := NewErrorResponse(errorcodes.MalformedRequestData, fmt.Sprintf(messages.ErrMalformedRequestData, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -453,7 +454,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	if err != nil {
-		msg := NewErrorResponse("ERR_INVOKE_OUTPUT_BINDING", fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err))
+		msg := NewErrorResponse(errorcodes.InvokeOutputBinding, fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -536,7 +537,7 @@ func (a *api) onBulkGetState(reqCtx *fasthttp.RequestCtx) {
 			code = kerr.HTTPStatusCode()
 		}
 
-		msg := NewErrorResponse("ERR_STATE_BULK_GET", err.Error())
+		msg := NewErrorResponse(errorcodes.StateBulkGet, err.Error())
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(code, msg))
 		log.Debug(msg)
 		return
@@ -642,7 +643,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 			code = kerr.HTTPStatusCode()
 		}
 
-		msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
+		msg := NewErrorResponse(errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(code, msg))
 		log.Debug(msg)
 		return
@@ -656,7 +657,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 	if encryption.EncryptedStateStore(storeName) {
 		val, err := encryption.TryDecryptValue(storeName, resp.Data)
 		if err != nil {
-			msg := NewErrorResponse("ERR_STATE_GET", fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
+			msg := NewErrorResponse(errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 			log.Debug(msg)
 			return
@@ -678,7 +679,7 @@ func (a *api) onGetState(reqCtx *fasthttp.RequestCtx) {
 
 func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.RequestCtx) (configuration.Store, string, error) {
 	if a.universal.CompStore().ConfigurationsLen() == 0 {
-		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_CONFIGURED", messages.ErrConfigurationStoresNotConfigured)
+		msg := NewErrorResponse(errorcodes.ConfigurationStoreNotConfigured, messages.ErrConfigurationStoresNotConfigured)
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
@@ -688,7 +689,7 @@ func (a *api) getConfigurationStoreWithRequestValidation(reqCtx *fasthttp.Reques
 
 	conf, ok := a.universal.CompStore().GetConfiguration(storeName)
 	if !ok {
-		msg := NewErrorResponse("ERR_CONFIGURATION_STORE_NOT_FOUND", fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName))
+		msg := NewErrorResponse(errorcodes.ConfigurationStoreNotFound, fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return nil, "", errors.New(msg.Message)
@@ -763,7 +764,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 	if a.channels.AppChannel() == nil {
-		msg := NewErrorResponse("ERR_APP_CHANNEL_NIL", "app channel is not initialized. cannot subscribe to configuration updates")
+		msg := NewErrorResponse(errorcodes.AppChannelNil, "app channel is not initialized. cannot subscribe to configuration updates")
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -806,7 +807,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse("ERR_CONFIGURATION_SUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
+		msg := NewErrorResponse(errorcodes.ConfigurationSubscribe, fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -839,7 +840,7 @@ func (a *api) onUnsubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationUnsubscribe, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse("ERR_CONFIGURATION_UNSUBSCRIBE", fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, err.Error()))
+		msg := NewErrorResponse(errorcodes.ConfigurationUnsubscribe, fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, err.Error()))
 		errRespBytes, _ := json.Marshal(&UnsubscribeConfigurationResponse{
 			Ok:      false,
 			Message: msg.Message,
@@ -885,7 +886,7 @@ func (a *api) onGetConfiguration(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse("ERR_CONFIGURATION_GET", fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()))
+		msg := NewErrorResponse(errorcodes.ConfigurationGet, fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -959,7 +960,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Delete, err == nil, elapsed)
 
 	if err != nil {
-		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_DELETE")
+		statusCode, errMsg, resp := a.stateErrorResponse(err, errorcodes.StateDelete)
 		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
 
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
@@ -979,7 +980,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	reqs := []state.SetRequest{}
 	err = json.Unmarshal(reqCtx.PostBody(), &reqs)
 	if err != nil {
-		msg := NewErrorResponse("ERR_MALFORMED_REQUEST", err.Error())
+		msg := NewErrorResponse(errorcodes.MalformedRequest, err.Error())
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
@@ -993,7 +994,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 	for i, r := range reqs {
 		if len(reqs[i].Key) == 0 {
-			msg := NewErrorResponse("ERR_MALFORMED_REQUEST", `"key" is a required field`)
+			msg := NewErrorResponse(errorcodes.MalformedRequest, `"key" is a required field`)
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 			log.Debug(msg)
 			return
@@ -1020,7 +1021,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			data := []byte(fmt.Sprintf("%v", r.Value))
 			val, encErr := encryption.TryEncryptValue(storeName, data)
 			if encErr != nil {
-				statusCode, errMsg, resp := a.stateErrorResponse(encErr, "ERR_STATE_SAVE")
+				statusCode, errMsg, resp := a.stateErrorResponse(encErr, errorcodes.StateSave)
 				resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
@@ -1044,7 +1045,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
-		statusCode, errMsg, resp := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		statusCode, errMsg, resp := a.stateErrorResponse(err, errorcodes.StateSave)
 		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
@@ -1346,7 +1347,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			}
 			bulkRes.FailedEntries = append(bulkRes.FailedEntries, resEntry)
 		}
-		bulkRes.ErrorCode = "ERR_PUBSUB_PUBLISH_MESSAGE"
+		bulkRes.ErrorCode = errorcodes.PubsubPublishMessage
 
 		switch {
 		case errors.As(err, &runtimePubsub.NotAllowedError{}):
@@ -1553,7 +1554,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			operations = append(operations, delReq)
 		default:
 			msg := NewErrorResponse(
-				"ERR_NOT_SUPPORTED_STATE_OPERATION",
+				errorcodes.NotSupportedStateOperation,
 				fmt.Sprintf(messages.ErrNotSupportedStateOperation, o.Operation))
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 			log.Debug(msg)
@@ -1579,7 +1580,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 				val, err := encryption.TryEncryptValue(storeName, data)
 				if err != nil {
 					msg := NewErrorResponse(
-						"ERR_SAVE_STATE",
+						errorcodes.StateSave,
 						fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()))
 					fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 					log.Debug(msg)
@@ -1623,7 +1624,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateTransaction, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse("ERR_STATE_TRANSACTION", fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
+		msg := NewErrorResponse(errorcodes.StateTransaction, fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 	} else {
