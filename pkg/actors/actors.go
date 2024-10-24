@@ -1217,7 +1217,7 @@ func (a *actorsRuntime) ExecuteLocalOrRemoteActorReminder(ctx context.Context, r
 		}
 		a.lock.Unlock()
 		go func() {
-			log.Errorf("Deleting reminder which was cancelled: %s", reminder.Key())
+			log.Debugf("Deleting reminder which was cancelled: %s", reminder.Key())
 			reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 			defer cancel()
 			if derr := a.DeleteReminder(reqCtx, &DeleteReminderRequest{
