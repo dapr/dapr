@@ -11,10 +11,14 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package fake
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/migration"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/scheduler"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/serialization"
+	"testing"
+
+	"github.com/dapr/dapr/pkg/actors/internal"
 )
+
+func Test_FakeRemindersProvider(t *testing.T) {
+	var _ internal.RemindersProvider = NewRemindersProvider()
+}
