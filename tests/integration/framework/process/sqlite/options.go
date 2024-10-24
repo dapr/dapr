@@ -17,6 +17,7 @@ package sqlite
 type options struct {
 	name              string
 	isActorStateStore bool
+	tableName         *string
 	metadata          map[string]string
 	migrations        []string
 	execs             []string
@@ -72,5 +73,11 @@ CREATE TABLE state (
 func WithExecs(execs ...string) Option {
 	return func(o *options) {
 		o.execs = execs
+	}
+}
+
+func WithTableName(name string) Option {
+	return func(o *options) {
+		o.tableName = &name
 	}
 }
