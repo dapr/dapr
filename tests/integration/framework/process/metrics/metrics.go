@@ -80,16 +80,16 @@ func (m *Metrics) All() map[string]float64 {
 
 // MatchMetric returns all metrics that contain all the substrings in the key
 // This is useful because of the way we serialize labels in the metrics name
-func (m *Metrics) MatchMetric(args ...string) []Metric {
+func (m *Metrics) MatchMetric(substrings ...string) []Metric {
 	result := make([]Metric, 0)
 
 	// Iterate over all key-value pairs in the map
 	for key, value := range m.metrics {
 		matchesAll := true
 
-		// Check if all args are present in the key
-		for _, arg := range args {
-			if !strings.Contains(key, arg) {
+		// Check if all substrings are present in the key
+		for _, substring := range substrings {
+			if !strings.Contains(key, substring) {
 				matchesAll = false
 				break
 			}
