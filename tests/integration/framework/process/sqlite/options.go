@@ -13,14 +13,17 @@ limitations under the License.
 
 package sqlite
 
+import "fmt"
+
 // options contains the options for using a SQLite database in integration tests.
 type options struct {
 	name              string
 	isActorStateStore bool
-	tableName         *string
 	metadata          map[string]string
-	migrations        []string
+	migrations        []func(tableName string) string
 	execs             []string
+	dbPath            string
+	tableName         string
 }
 
 // WithName sets the name for the state store.
@@ -52,20 +55,22 @@ func WithMetadata(key, value string) Option {
 // WithCreateStateTables configures whether the state store should create the state tables.
 func WithCreateStateTables() Option {
 	return func(o *options) {
-		o.migrations = append(o.migrations, `
+		o.migrations = append(o.migrations, func(tableName string) string {
+			return fmt.Sprintf(`
 CREATE TABLE metadata (
   key text NOT NULL PRIMARY KEY,
   value text NOT NULL
 );
 INSERT INTO metadata VALUES('migrations','1');
-CREATE TABLE state (
+CREATE TABLE %s (
   key TEXT NOT NULL PRIMARY KEY,
   value TEXT NOT NULL,
   is_binary BOOLEAN NOT NULL,
   etag TEXT NOT NULL,
   expiration_time TIMESTAMP DEFAULT NULL,
   update_time TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
-);`)
+);`, tableName)
+		})
 	}
 }
 
@@ -76,8 +81,14 @@ func WithExecs(execs ...string) Option {
 	}
 }
 
-func WithTableName(name string) Option {
+func WithDBPath(dbPath string) Option {
 	return func(o *options) {
-		o.tableName = &name
+		o.dbPath = dbPath
+	}
+}
+
+func WithTableName(tableName string) Option {
+	return func(o *options) {
+		o.tableName = tableName
 	}
 }
