@@ -63,6 +63,7 @@ func (p *protobufFormat) Setup(t *testing.T) []framework.Option {
 	p.db = sqlite.New(t,
 		sqlite.WithActorStateStore(true),
 		sqlite.WithCreateStateTables(),
+		sqlite.WithTableName("state"),
 		sqlite.WithExecs(fmt.Sprintf(`
 INSERT INTO state VALUES
   ('actors||myactortype','[{"registeredTime":"%[1]s","period":"2m","actorID":"myactorid","actorType":"myactortype","name":"oldreminder","dueTime":"0"}]',0,'e467f810-4e93-45ed-85d9-e68d9fc7af4a',NULL,'%[1]s'),
@@ -107,7 +108,7 @@ func (p *protobufFormat) Run(t *testing.T, ctx context.Context) {
 
 	// Check the data in the SQLite database
 	// The value must be base64-encoded, and after being decoded it should begin with `\0pb`, which indicates it was serialized as protobuf
-	storedVal := loadRemindersFromDB(t, ctx, p.db.GetConnection(t))
+	storedVal := loadRemindersFromDB(t, ctx, p.db)
 	storedValBytes, err := base64.StdEncoding.DecodeString(storedVal)
 	require.NoErrorf(t, err, "Failed to decode value from base64: '%v'", storedVal)
 	assert.Truef(t, bytes.HasPrefix(storedValBytes, []byte{0, 'p', 'b'}), "Prefix not found in value: '%v'", storedVal)
