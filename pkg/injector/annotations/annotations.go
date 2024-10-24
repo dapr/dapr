@@ -32,6 +32,8 @@ const (
 	KeyAppMaxConcurrency                = "dapr.io/app-max-concurrency"
 	KeyEnableMetrics                    = "dapr.io/enable-metrics"
 	KeyMetricsPort                      = "dapr.io/metrics-port"
+	KeyMetricsPushEnable                = "dapr.io/metrics-push-enable"
+	KeyMetricsPushEndpoint              = "dapr.io/metrics-push-endpoint"
 	KeyEnableDebug                      = "dapr.io/enable-debug"
 	KeyDebugPort                        = "dapr.io/debug-port"
 	KeyEnv                              = "dapr.io/env"

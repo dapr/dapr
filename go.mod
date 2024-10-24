@@ -97,6 +97,7 @@ require (
 	cloud.google.com/go/pubsub v1.43.0 // indirect
 	cloud.google.com/go/secretmanager v1.14.1 // indirect
 	cloud.google.com/go/storage v1.43.0 // indirect
+	contrib.go.opencensus.io/exporter/ocagent v0.7.0
 	dubbo.apache.org/dubbo-go/v3 v3.0.3-0.20230118042253-4f159a2b38f3 // indirect
 	github.com/99designs/go-keychain v0.0.0-20191008050251-8e49817e8af4 // indirect
 	github.com/99designs/keyring v1.2.1 // indirect
@@ -184,6 +185,7 @@ require (
 	github.com/bytedance/gopkg v0.0.0-20240711085056-a03554c296f8 // indirect
 	github.com/camunda/zeebe/clients/go/v8 v8.2.12 // indirect
 	github.com/cenkalti/backoff v2.2.1+incompatible // indirect
+	github.com/census-instrumentation/opencensus-proto v0.4.1 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/chebyrash/promise v0.0.0-20230709133807-42ec49ba1459 // indirect
 	github.com/choleraehyq/pid v0.0.19 // indirect

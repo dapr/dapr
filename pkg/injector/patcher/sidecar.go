@@ -72,6 +72,8 @@ type SidecarConfig struct {
 	AppMaxConcurrency                   *int    `annotation:"dapr.io/app-max-concurrency"`
 	EnableMetrics                       bool    `annotation:"dapr.io/enable-metrics" default:"true"`
 	SidecarMetricsPort                  int32   `annotation:"dapr.io/metrics-port" default:"9090"`
+	SidecarMetricsPushEnable            bool    `annotation:"dapr.io/metrics-push-enable"`
+	SidecarMetricsPushEndpoint          string  `annotation:"dapr.io/metrics-push-endpoint"`
 	EnableDebug                         bool    `annotation:"dapr.io/enable-debug" default:"false"`
 	SidecarDebugPort                    int32   `annotation:"dapr.io/debug-port" default:"40000"`
 	Env                                 string  `annotation:"dapr.io/env"`

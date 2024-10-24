@@ -178,6 +178,7 @@ func New(origArgs []string) (*Options, error) {
 
 	opts.Metrics = metrics.DefaultFlagOptions()
 	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
+	opts.Metrics.AttachPusherCmdFlags(fs.StringVar, fs.BoolVar, fs.StringToStringVar)
 
 	// Ignore errors; flagset is set for ExitOnError
 	_ = fs.Parse(args)
