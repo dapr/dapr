@@ -238,6 +238,30 @@ func (r *statestore) GetReminder(ctx context.Context, req *internal.GetReminderR
 	return nil, nil
 }
 
+func (r *statestore) ListReminders(ctx context.Context, req internal.ListRemindersRequest) ([]*internal.Reminder, error) {
+	list, _, err := r.getRemindersForActorType(ctx, req.ActorType, false)
+	if err != nil {
+		return nil, err
+	}
+
+	reminders := make([]*internal.Reminder, len(list))
+	for i, r := range list {
+		reminders[i] = &internal.Reminder{
+			Name:           r.Reminder.Name,
+			ActorID:        r.Reminder.ActorID,
+			ActorType:      r.Reminder.ActorType,
+			Data:           r.Reminder.Data,
+			DueTime:        r.Reminder.DueTime,
+			Period:         r.Reminder.Period,
+			RegisteredTime: r.Reminder.RegisteredTime,
+			ExpirationTime: r.Reminder.ExpirationTime,
+			Callback:       r.Reminder.Callback,
+		}
+	}
+
+	return reminders, nil
+}
+
 func (r *statestore) DeleteReminder(ctx context.Context, req internal.DeleteReminderRequest) error {
 	if !r.waitForEvaluationChan() {
 		return errors.New("error deleting reminder: timed out after 30s")
