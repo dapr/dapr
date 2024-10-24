@@ -15,7 +15,7 @@ package serialization
 
 import (
 	"context"
-	"database/sql"
+	"fmt"
 	"net/http"
 	"strings"
 	"sync/atomic"
@@ -25,6 +25,8 @@ import (
 	chi "github.com/go-chi/chi/v5"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 )
 
 func invokeActor(t *testing.T, ctx context.Context, baseURL string, client *http.Client) {
@@ -51,10 +53,10 @@ func storeReminder(t *testing.T, ctx context.Context, baseURL string, client *ht
 	require.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
-func loadRemindersFromDB(t *testing.T, ctx context.Context, db *sql.DB) (storedVal string) {
+func loadRemindersFromDB(t *testing.T, ctx context.Context, db *sqlite.SQLite) (storedVal string) {
 	queryCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
-	err := db.QueryRowContext(queryCtx, "SELECT value FROM state WHERE key = 'actors||myactortype'").Scan(&storedVal)
+	err := db.GetConnection(t).QueryRowContext(queryCtx, fmt.Sprintf("SELECT value FROM %s WHERE key = 'actors||myactortype'", db.TableName())).Scan(&storedVal)
 	require.NoError(t, err)
 	return storedVal
 }
