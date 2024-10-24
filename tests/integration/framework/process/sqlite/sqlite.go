@@ -119,6 +119,12 @@ func (s *SQLite) GetConnection(t *testing.T) *sql.DB {
 	return conn
 }
 
+// GetTableName returns the connection to the SQLite database.
+func (s *SQLite) GetTableName(t *testing.T) string {
+	require.NotNil(t, s.tableName)
+	return s.tableName
+}
+
 // GetComponent returns the Component resource.
 func (s *SQLite) GetComponent(t *testing.T) string {
 	c := componentsv1alpha1.Component{

@@ -100,6 +100,10 @@ func NewActivityActor(scheduler activityScheduler, backendConfig actorsBackendCo
 func (a *activityActor) InvokeMethod(ctx context.Context, methodName string, data []byte, metadata map[string][]string) ([]byte, error) {
 	wfLogger.Debugf("Activity actor '%s': invoking method '%s'", a.actorID, methodName)
 
+	if methodName == "PurgeWorkflowState" {
+		return nil, a.purgeActivityState(ctx)
+	}
+
 	var ar ActivityRequest
 	if err := actors.DecodeInternalActorData(bytes.NewReader(data), &ar); err != nil {
 		return nil, fmt.Errorf("failed to decode activity request: %w", err)
@@ -108,10 +112,6 @@ func (a *activityActor) InvokeMethod(ctx context.Context, methodName string, dat
 	// Try to load activity state. If we find any, that means the activity invocation is a duplicate.
 	if _, err := a.loadActivityState(ctx); err != nil {
 		return nil, err
-	}
-
-	if methodName == "PurgeWorkflowState" {
-		return nil, a.purgeActivityState(ctx)
 	}
 
 	// Save the request details to the state store in case we need it after recovering from a failure.
@@ -133,9 +133,6 @@ func (a *activityActor) InvokeReminder(ctx context.Context, reminder actors.Inte
 
 	state, _ := a.loadActivityState(ctx)
 	// TODO: On error, reply with a failure - this requires support from durabletask-go to produce TaskFailure results
-	if state == nil {
-		return errors.New("no activity state found")
-	}
 
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
 	defer cancelTimeout()
@@ -312,18 +309,18 @@ func (a *activityActor) loadActivityState(ctx context.Context) (*activityState, 
 	}
 	res, err := a.actorRuntime.GetState(ctx, &req)
 	if err != nil {
-		return nil, fmt.Errorf("failed to load activity state: %w", err)
+		return &activityState{}, fmt.Errorf("failed to load activity state: %w", err)
 	}
 
 	if len(res.Data) == 0 {
 		// no data was found - this is expected on the initial invocation of the activity actor.
-		return nil, nil
+		return &activityState{}, nil
 	}
 
 	state := &activityState{}
 	err = json.Unmarshal(res.Data, state)
 	if err != nil {
-		return nil, fmt.Errorf("failed to unmarshal activity state: %w", err)
+		return &activityState{}, fmt.Errorf("failed to unmarshal activity state: %w", err)
 	}
 	return state, nil
 }

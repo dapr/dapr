@@ -27,6 +27,11 @@ go test -v -race -tags integration ./tests/integration -focus sentry
 go test -v -race -tags integration ./tests/integration -test.skip Test_Integration/sentry/validator/jwks -focus sentry
 ```
 
+To run integration tests several times for debugging purposes use this configuration and change the focus and count as needed:
+```bash
+go test -v -race -tags integration ./tests/integration -focus scheduler/authz --count=100 -failfast
+```
+
 Rather than building from source, you can also set a custom daprd, sentry, or placement binary path with the environment variables:
 - `DAPR_INTEGRATION_DAPRD_PATH`
 - `DAPR_INTEGRATION_PLACEMENT_PATH`

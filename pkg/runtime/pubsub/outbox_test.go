@@ -442,6 +442,148 @@ func TestPublishInternal(t *testing.T) {
 		require.NoError(t, err)
 	})
 
+	t.Run("valid operation, application/json contenttype metadata", func(t *testing.T) {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			var cloudEvent map[string]interface{}
+			err := json.Unmarshal(pr.Data, &cloudEvent)
+			require.NoError(t, err)
+
+			data := cloudEvent["data"]
+			j := customData{}
+
+			err = json.Unmarshal([]byte(data.(string)), &j)
+			require.NoError(t, err)
+
+			assert.Equal(t, "test", j.Name)
+			assert.Equal(t, "a", pr.PubsubName)
+			assert.Equal(t, "testapp1outbox", pr.Topic)
+			assert.Equal(t, "testapp", cloudEvent["source"])
+			assert.Equal(t, "application/json", cloudEvent["datacontenttype"])
+			assert.Equal(t, "a", cloudEvent["pubsubname"])
+
+			return nil
+		}).(*outboxImpl)
+
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		j := customData{
+			Name: "test",
+		}
+		b, err := json.Marshal(&j)
+		require.NoError(t, err)
+
+		_, err = o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{
+				Key:      "key",
+				Value:    string(b),
+				Metadata: map[string]string{"contentType": "application/json"},
+			},
+		}, "testapp", "", "")
+
+		require.NoError(t, err)
+	})
+
+	t.Run("valid operation, application/json contenttype metadata outbox projection", func(t *testing.T) {
+		o := newTestOutbox(func(ctx context.Context, pr *contribPubsub.PublishRequest) error {
+			var cloudEvent map[string]interface{}
+			err := json.Unmarshal(pr.Data, &cloudEvent)
+			require.NoError(t, err)
+
+			data := cloudEvent["data"]
+			j := customData{}
+
+			err = json.Unmarshal([]byte(data.(string)), &j)
+			require.NoError(t, err)
+
+			assert.Equal(t, "projection", j.Name)
+			assert.Equal(t, "a", pr.PubsubName)
+			assert.Equal(t, "testapp1outbox", pr.Topic)
+			assert.Equal(t, "testapp", cloudEvent["source"])
+			assert.Equal(t, "application/json", cloudEvent["datacontenttype"])
+			assert.Equal(t, "a", cloudEvent["pubsubname"])
+
+			return nil
+		}).(*outboxImpl)
+
+		o.AddOrUpdateOutbox(v1alpha1.Component{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: "test",
+			},
+			Spec: v1alpha1.ComponentSpec{
+				Metadata: []common.NameValuePair{
+					{
+						Name: outboxPublishPubsubKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("a"),
+							},
+						},
+					},
+					{
+						Name: outboxPublishTopicKey,
+						Value: common.DynamicValue{
+							JSON: v1.JSON{
+								Raw: []byte("1"),
+							},
+						},
+					},
+				},
+			},
+		})
+
+		j := customData{
+			Name: "test",
+		}
+
+		projection := customData{
+			Name: "projection",
+		}
+
+		b, err := json.Marshal(&j)
+		require.NoError(t, err)
+
+		jp, err := json.Marshal(&projection)
+		require.NoError(t, err)
+
+		_, err = o.PublishInternal(context.TODO(), "test", []state.TransactionalStateOperation{
+			state.SetRequest{
+				Key:   "key",
+				Value: string(b),
+			},
+			state.SetRequest{
+				Key:      "key",
+				Value:    string(jp),
+				Metadata: map[string]string{"contentType": "application/json", "outbox.projection": "true"},
+			},
+		}, "testapp", "", "")
+
+		require.NoError(t, err)
+	})
+
 	t.Run("missing state store", func(t *testing.T) {
 		o := newTestOutbox(nil).(*outboxImpl)
 

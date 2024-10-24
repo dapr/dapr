@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -562,20 +561,20 @@ func (d *directMessaging) addForwardedHeadersToMetadata(req *invokev1.InvokeMeth
 
 	if d.hostAddress != "" {
 		// Add X-Forwarded-For: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-For
-		addOrCreate(fasthttp.HeaderXForwardedFor, d.hostAddress)
+		addOrCreate("X-Forwarded-For", d.hostAddress)
 
 		forwardedHeaderValue += "for=" + d.hostAddress + ";by=" + d.hostAddress + ";"
 	}
 
 	if d.hostName != "" {
 		// Add X-Forwarded-Host: https://developer.mozilla.org/en-US/docs/Web/HTTP/Headers/X-Forwarded-Host
-		addOrCreate(fasthttp.HeaderXForwardedHost, d.hostName)
+		addOrCreate("X-Forwarded-Host", d.hostName)
 
 		forwardedHeaderValue += "host=" + d.hostName
 	}
 
 	// Add Forwarded header: https://tools.ietf.org/html/rfc7239
-	addOrCreate(fasthttp.HeaderForwarded, forwardedHeaderValue)
+	addOrCreate("Forwarded", forwardedHeaderValue)
 }
 
 func (d *directMessaging) getRemoteApp(appID string) (res remoteApp, err error) {
