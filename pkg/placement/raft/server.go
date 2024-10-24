@@ -187,6 +187,8 @@ func (s *Server) StartRaft(ctx context.Context) error {
 		return fmt.Errorf("failed to create raft listener: %w", err)
 	}
 
+	s.htarget.Ready()
+
 	placeID, err := spiffeid.FromSegments(sec.ControlPlaneTrustDomain(), "ns", sec.ControlPlaneNamespace(), "dapr-placement")
 	if err != nil {
 		return err
@@ -288,7 +290,6 @@ func (s *Server) StartRaft(ctx context.Context) error {
 		return err
 	}
 	close(s.raftReady)
-	s.htarget.Ready()
 
 	logging.Infof("Raft server is starting on %s...", s.raftBind)
 	<-ctx.Done()
