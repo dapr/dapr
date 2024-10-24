@@ -99,7 +99,7 @@ func (j *jsonFormat) Run(t *testing.T, ctx context.Context) {
 
 	// Check the data in the SQLite database
 	// The value must begin with `[{`, which indicates it was serialized as JSON
-	storedVal := loadRemindersFromDB(t, ctx, j.db.GetConnection(t))
+	storedVal := loadRemindersFromDB(t, ctx, j.db)
 	assert.Truef(t, strings.HasPrefix(storedVal, "[{"), "Prefix not found in value: '%v'", storedVal)
 
 	// Ensure the reminder was invoked at least once

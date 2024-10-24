@@ -182,6 +182,10 @@ func (req DeleteReminderRequest) Key() string {
 	return req.ActorType + daprSeparator + req.ActorID + daprSeparator + req.Name
 }
 
+type ListRemindersRequest struct {
+	ActorType string
+}
+
 // DeleteTimerRequest is a request object for deleting a timer.
 type DeleteTimerRequest struct {
 	Name      string

@@ -165,8 +165,11 @@ message NamedJob {
  // name is the name of the job.
   string name = 1;
 
+  // The metadata associated with the job.
+  JobMetadata metadata = 2;
+
   // The job scheduled.
-  Job job = 2;
+  Job job = 3;
 }
 
 // ListJobsRequest is the message used by the daprd sidecar to list all jobs.

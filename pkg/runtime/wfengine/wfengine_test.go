@@ -40,6 +40,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/processor"
@@ -944,6 +945,7 @@ func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
+		Healthz:        healthz.New(),
 	})
 	require.NoError(t, err)
 
@@ -979,6 +981,7 @@ func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.Workfl
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
+		Healthz:        healthz.New(),
 	})
 	require.NoError(t, err)
 

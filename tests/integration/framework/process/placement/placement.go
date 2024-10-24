@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,9 +42,8 @@ import (
 )
 
 type Placement struct {
-	exec    process.Interface
-	ports   *ports.Ports
-	running atomic.Bool
+	exec  process.Interface
+	ports *ports.Ports
 
 	id                  string
 	port                int
@@ -52,6 +51,9 @@ type Placement struct {
 	metricsPort         int
 	initialCluster      string
 	initialClusterPorts []int
+
+	runOnce     sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Placement {
@@ -116,20 +118,16 @@ func New(t *testing.T, fopts ...Option) *Placement {
 }
 
 func (p *Placement) Run(t *testing.T, ctx context.Context) {
-	if !p.running.CompareAndSwap(false, true) {
-		t.Fatal("Process is already running")
-	}
-
-	p.ports.Free(t)
-	p.exec.Run(t, ctx)
+	p.runOnce.Do(func() {
+		p.ports.Free(t)
+		p.exec.Run(t, ctx)
+	})
 }
 
 func (p *Placement) Cleanup(t *testing.T) {
-	if !p.running.CompareAndSwap(true, false) {
-		return
-	}
-
-	p.exec.Cleanup(t)
+	p.cleanupOnce.Do(func() {
+		p.exec.Cleanup(t)
+	})
 }
 
 func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {

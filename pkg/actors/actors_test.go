@@ -41,6 +41,7 @@ import (
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -207,6 +208,7 @@ func (b *runtimeBuilder) buildActorRuntime(t *testing.T) *actorsRuntime {
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.FromConfigurations(log, testResiliency),
 		StateStoreName: storeName,
+		Healthz:        healthz.New(),
 	}, clock)
 	require.NoError(t, err)
 
@@ -235,6 +237,7 @@ func newTestActorsRuntimeWithMock(t *testing.T, appChannel channel.AppChannel) *
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
+		Healthz:        healthz.New(),
 		MockPlacement:  NewMockPlacement(TestAppID),
 	}, clock)
 	require.NoError(t, err)
@@ -258,6 +261,7 @@ func newTestActorsRuntimeWithMockWithoutPlacement(t *testing.T, appChannel chann
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
+		Healthz:        healthz.New(),
 	}, clock)
 	require.NoError(t, err)
 
@@ -280,6 +284,7 @@ func newTestActorsRuntimeWithMockAndNoStore(t *testing.T, appChannel channel.App
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
+		Healthz:        healthz.New(),
 	}, clock)
 	require.NoError(t, err)
 

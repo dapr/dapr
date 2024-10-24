@@ -83,7 +83,7 @@ func (d *defaultS) Run(t *testing.T, ctx context.Context) {
 
 	// Check the data in the SQLite database
 	// The value must begin with `[{`, which indicates it was serialized as JSON
-	storedVal := loadRemindersFromDB(t, ctx, d.db.GetConnection(t))
+	storedVal := loadRemindersFromDB(t, ctx, d.db)
 	assert.Truef(t, strings.HasPrefix(storedVal, "[{"), "Prefix not found in value: '%v'", storedVal)
 
 	assert.Eventually(t, func() bool {
