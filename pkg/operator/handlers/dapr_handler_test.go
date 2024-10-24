@@ -152,8 +152,8 @@ func TestCreateDaprServiceAppIDAndPortsOverride(t *testing.T) {
 	assert.Equal(t, intstr.FromInt(12345), service.Spec.Ports[1].TargetPort)
 	assert.Equal(t, int32(12346), service.Spec.Ports[2].Port)
 	assert.Equal(t, intstr.FromInt(12346), service.Spec.Ports[2].TargetPort)
-
 }
+
 func TestPatchDaprService(t *testing.T) {
 	testDaprHandler := getTestDaprHandler()
 
