@@ -274,7 +274,7 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 	if enableMetrics {
 		annotationsMap[annotationPrometheusProbe] = "true"
 		annotationsMap[annotationPrometheusScrape] = "true" // WARN: deprecated as of v1.7 please use prometheus.io/probe instead.
-		annotationsMap[annotationPrometheusPort] = strconv.Itoa(metricsPort)
+		annotationsMap[annotationPrometheusPort] = strconv.FormatInt(int64(metricsPort), 10)
 		annotationsMap[annotationPrometheusPath] = "/"
 	}
 
@@ -298,25 +298,21 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 					Name:       daprSidecarHTTPPortName,
 				},
 				{
-					Protocol: corev1.ProtocolTCP,
-					//nolint:gosec
-					Port:       int32(grpcPort),
-					TargetPort: intstr.FromInt(grpcPort),
+					Protocol:   corev1.ProtocolTCP,
+					Port:       grpcPort,
+					TargetPort: intstr.FromInt32(grpcPort),
 					Name:       daprSidecarAPIGRPCPortName,
 				},
 				{
-					Protocol: corev1.ProtocolTCP,
-					//nolint:gosec
-					Port:       int32(internalGRPCPort),
-					TargetPort: intstr.FromInt(internalGRPCPort),
+					Protocol:   corev1.ProtocolTCP,
+					Port:       internalGRPCPort,
+					TargetPort: intstr.FromInt32(internalGRPCPort),
 					Name:       daprSidecarInternalGRPCPortName,
 				},
 				{
-					Protocol: corev1.ProtocolTCP,
-					// TODO: update types
-					//nolint:gosec
-					Port:       int32(metricsPort),
-					TargetPort: intstr.FromInt(metricsPort),
+					Protocol:   corev1.ProtocolTCP,
+					Port:       metricsPort,
+					TargetPort: intstr.FromInt32(metricsPort),
 					Name:       daprSidecarMetricsPortName,
 				},
 			},
@@ -342,22 +338,15 @@ func (h *DaprHandler) getEnableMetrics(wrapper ObjectWrapper) bool {
 	return enableMetrics
 }
 
-func (h *DaprHandler) getMetricsPort(wrapper ObjectWrapper) int {
-	annotationsMap := wrapper.GetTemplateAnnotations()
-	metricsPort := defaultMetricsPort
-	if val := annotationsMap[annotations.KeyMetricsPort]; val != "" {
-		if v, err := strconv.Atoi(val); err == nil {
-			metricsPort = v
-		}
-	}
-	return metricsPort
+func (h *DaprHandler) getMetricsPort(wrapper ObjectWrapper) int32 {
+	return meta.GetAnnotationIntValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyMetricsPort, defaultMetricsPort)
 }
 
-func (h *DaprHandler) getGRPCPort(wrapper ObjectWrapper) int {
+func (h *DaprHandler) getGRPCPort(wrapper ObjectWrapper) int32 {
 	return meta.GetAnnotationIntValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyAPIGRPCPort, daprSidecarDefaultAPIGRPCPort)
 }
 
-func (h *DaprHandler) getInternalGRPCPort(wrapper ObjectWrapper) int {
+func (h *DaprHandler) getInternalGRPCPort(wrapper ObjectWrapper) int32 {
 	return meta.GetAnnotationIntValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyInternalGRPCPort, daprSidecarDefaultInternalGRPCPort)
 }
 

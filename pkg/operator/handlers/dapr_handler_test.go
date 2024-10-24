@@ -207,7 +207,7 @@ func TestGetGRPCPort(t *testing.T) {
 		p := testDaprHandler.getGRPCPort(deployment)
 
 		// Assert
-		assert.Equal(t, 12345, p)
+		assert.Equal(t, int32(12345), p)
 	})
 	t.Run("invalid GRPC port override", func(t *testing.T) {
 		// Arrange
@@ -218,7 +218,7 @@ func TestGetGRPCPort(t *testing.T) {
 		p := testDaprHandler.getGRPCPort(deployment)
 
 		// Assert
-		assert.Equal(t, daprSidecarDefaultAPIGRPCPort, p)
+		assert.Equal(t, int32(daprSidecarDefaultAPIGRPCPort), p)
 	})
 	t.Run("no GRPC port override", func(t *testing.T) {
 		// Arrange
@@ -228,7 +228,7 @@ func TestGetGRPCPort(t *testing.T) {
 		p := testDaprHandler.getGRPCPort(deployment)
 
 		// Assert
-		assert.Equal(t, daprSidecarDefaultAPIGRPCPort, p)
+		assert.Equal(t, int32(daprSidecarDefaultAPIGRPCPort), p)
 	})
 }
 
@@ -243,7 +243,7 @@ func TestGetInternalGRPCPort(t *testing.T) {
 		p := testDaprHandler.getInternalGRPCPort(deployment)
 
 		// Assert
-		assert.Equal(t, 12345, p)
+		assert.Equal(t, int32(12345), p)
 	})
 	t.Run("invalid Internal GRPC port override", func(t *testing.T) {
 		// Arrange
@@ -254,7 +254,7 @@ func TestGetInternalGRPCPort(t *testing.T) {
 		p := testDaprHandler.getInternalGRPCPort(deployment)
 
 		// Assert
-		assert.Equal(t, daprSidecarDefaultInternalGRPCPort, p)
+		assert.Equal(t, int32(daprSidecarDefaultInternalGRPCPort), p)
 	})
 	t.Run("no Internal GRPC port override", func(t *testing.T) {
 		// Arrange
@@ -264,7 +264,7 @@ func TestGetInternalGRPCPort(t *testing.T) {
 		p := testDaprHandler.getInternalGRPCPort(deployment)
 
 		// Assert
-		assert.Equal(t, daprSidecarDefaultInternalGRPCPort, p)
+		assert.Equal(t, int32(daprSidecarDefaultInternalGRPCPort), p)
 	})
 }
 
@@ -278,7 +278,7 @@ func TestGetMetricsPort(t *testing.T) {
 		p := testDaprHandler.getMetricsPort(deployment)
 
 		// Assert
-		assert.Equal(t, 5050, p)
+		assert.Equal(t, int32(5050), p)
 	})
 	t.Run("invalid metrics port override", func(t *testing.T) {
 		// Arrange
@@ -288,7 +288,7 @@ func TestGetMetricsPort(t *testing.T) {
 		p := testDaprHandler.getMetricsPort(deployment)
 
 		// Assert
-		assert.Equal(t, defaultMetricsPort, p)
+		assert.Equal(t, int32(defaultMetricsPort), p)
 	})
 	t.Run("no metrics port override", func(t *testing.T) {
 		// Arrange
@@ -298,7 +298,7 @@ func TestGetMetricsPort(t *testing.T) {
 		p := testDaprHandler.getMetricsPort(deployment)
 
 		// Assert
-		assert.Equal(t, defaultMetricsPort, p)
+		assert.Equal(t, int32(defaultMetricsPort), p)
 	})
 }
 
