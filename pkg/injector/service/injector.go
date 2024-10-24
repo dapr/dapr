@@ -51,11 +51,13 @@ var log = logger.NewLogger("dapr.injector.service")
 
 var AllowedServiceAccountInfos = []string{
 	"kube-system:replicaset-controller",
+	"kube-system:replication-controller",
 	"kube-system:deployment-controller",
 	"kube-system:cronjob-controller",
 	"kube-system:job-controller",
 	"kube-system:statefulset-controller",
 	"kube-system:daemon-set-controller",
+	"openshift-operator-lifecycle-manager:olm-operator-serviceaccount",
 	"tekton-pipelines:tekton-pipelines-controller",
 }
 
