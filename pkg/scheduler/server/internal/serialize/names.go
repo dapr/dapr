@@ -13,9 +13,52 @@ limitations under the License.
 
 package serialize
 
+import (
+	"fmt"
+	"path"
+	"strings"
+
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
+)
+
+// PrefixesFromNamespace returns key prefixes for all jobs types for a given
+// namespace.
 func PrefixesFromNamespace(namespace string) []string {
 	return []string{
 		"actorreminder||" + namespace,
 		"app||" + namespace,
 	}
+}
+
+// MetadataFromKey returns the JobMetadata based on a raw job key.
+func MetadataFromKey(key string) (*schedulerv1pb.JobMetadata, error) {
+	seg := strings.Split(key, "||")
+
+	if len(seg) >= 5 && path.Base(seg[len(seg)-5]) == "actorreminder" {
+		seg = seg[len(seg)-4:]
+		return &schedulerv1pb.JobMetadata{
+			Namespace: seg[0],
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{
+						Type: seg[1],
+						Id:   seg[2],
+					},
+				},
+			},
+		}, nil
+	}
+
+	if len(seg) >= 4 && path.Base(seg[len(seg)-4]) == "app" {
+		seg = seg[len(seg)-3:]
+		return &schedulerv1pb.JobMetadata{
+			Namespace: seg[0],
+			AppId:     seg[1],
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: new(schedulerv1pb.JobTargetMetadata_Job),
+			},
+		}, nil
+	}
+
+	return nil, fmt.Errorf("invalid key: %s", key)
 }
