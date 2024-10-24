@@ -38,18 +38,43 @@ type Options struct {
 	ListenAddress string
 	// Healthz is used to signal the health of the metrics server.
 	Healthz healthz.Healthz
+	// PushToCollector options for optional push of metrics to external OpenTelemetry collector.
+	PushToCollector PushToCollectorOptions
+}
+type PushToCollectorOptions struct {
+	// Enabled indicates whether a metrics should be pushed to otel collector.
+	Enabled bool
+	// Endpoint hostname and port of the otel collector receiver, example: otelcol:55678
+	Endpoint string
+	// Headers represents custom http headers that should be passed.
+	Headers map[string]string
+	// Tls configuration
+	TLS TLSOptions
+}
+
+type TLSOptions struct {
+	// CaFile path to a file with CA cert
+	CaFile string
+	// CertFile path to a file with public part of the key pair
+	CertFile string
+	// KeyFile path to a file with private part of the key pair
+	KeyFile string
 }
 
 type FlagOptions struct {
 	enabled       bool
 	port          string
 	listenAddress string
+	PushToCollectorOptions
 }
 
 func DefaultFlagOptions() *FlagOptions {
 	return &FlagOptions{
 		port:    defaultMetricsPort,
 		enabled: defaultMetricsEnabled,
+		PushToCollectorOptions: PushToCollectorOptions{
+			Enabled: false,
+		},
 	}
 }
 
@@ -80,11 +105,49 @@ func (f *FlagOptions) AttachCmdFlags(
 		"Enable prometheus metric")
 }
 
+func (f *FlagOptions) AttachPusherCmdFlags(
+	stringVar func(p *string, name string, value string, usage string),
+	boolVar func(p *bool, name string, value bool, usage string),
+	stringToStringVar func(p *map[string]string, name string, value map[string]string, usage string),
+) {
+	boolVar(
+		&f.PushToCollectorOptions.Enabled,
+		"metrics-push-enable",
+		false,
+		"Enable periodic push of metrics to OTEL collector")
+	stringVar(
+		&f.PushToCollectorOptions.Endpoint,
+		"metrics-push-endpoint",
+		"",
+		"Hostname and port of the OTEL collector receiver, example: otelcol:55678")
+	stringToStringVar(&f.PushToCollectorOptions.Headers,
+		"metrics-push-headers",
+		map[string]string{},
+		"Custom http headers that should be passed when pushing metrics to OTEL collector.",
+	)
+	stringVar(
+		&f.PushToCollectorOptions.TLS.CaFile,
+		"metrics-push-tls-ca",
+		"",
+		"Path to a file with CA cert")
+	stringVar(
+		&f.PushToCollectorOptions.TLS.CertFile,
+		"metrics-push-tls-cert",
+		"",
+		"Path to a file with public part of the key pair")
+	stringVar(
+		&f.PushToCollectorOptions.TLS.KeyFile,
+		"metrics-push-tls-key",
+		"",
+		"Path to a file with private part of the key pair")
+}
+
 func (f *FlagOptions) ToOptions(healthz healthz.Healthz) Options {
 	return Options{
-		Enabled: f.enabled,
-		Port:    f.port,
-		Healthz: healthz,
+		Enabled:         f.enabled,
+		Port:            f.port,
+		Healthz:         healthz,
+		PushToCollector: f.PushToCollectorOptions,
 	}
 }
 

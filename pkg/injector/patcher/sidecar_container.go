@@ -97,6 +97,12 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 			"--enable-metrics",
 			"--metrics-port", strconv.FormatInt(int64(c.SidecarMetricsPort), 10),
 		)
+		if c.SidecarMetricsPushEnable {
+			args = append(args,
+				"--metrics-push-enable",
+				"--metrics-push-endpoint", c.SidecarMetricsPushEndpoint,
+			)
+		}
 	}
 
 	if c.Config != "" {
