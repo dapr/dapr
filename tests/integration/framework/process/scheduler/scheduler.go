@@ -16,19 +16,23 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"math"
 	"net/http"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/prometheus/common/expfmt"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.etcd.io/etcd/api/v3/mvccpb"
+	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -46,9 +50,9 @@ import (
 )
 
 type Scheduler struct {
-	exec    process.Interface
-	ports   *ports.Ports
-	running atomic.Bool
+	exec       process.Interface
+	ports      *ports.Ports
+	httpClient *http.Client
 
 	port        int
 	healthzPort int
@@ -60,6 +64,9 @@ type Scheduler struct {
 	initialCluster  string
 	etcdClientPorts map[string]string
 	sentry          *sentry.Sentry
+
+	runOnce     sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Scheduler {
@@ -122,6 +129,13 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		)
 	}
 
+	if opts.kubeconfig != nil {
+		args = append(args, "--kubeconfig="+*opts.kubeconfig)
+	}
+	if opts.mode != nil {
+		args = append(args, "--mode="+*opts.mode)
+	}
+
 	clientPorts := make(map[string]string)
 	for _, input := range opts.etcdClientPorts {
 		idAndPort := strings.Split(input, "=")
@@ -139,6 +153,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 			))...,
 		),
 		ports:           fp,
+		httpClient:      client.HTTP(t),
 		id:              opts.id,
 		port:            opts.port,
 		healthzPort:     opts.healthzPort,
@@ -152,20 +167,16 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 }
 
 func (s *Scheduler) Run(t *testing.T, ctx context.Context) {
-	if !s.running.CompareAndSwap(false, true) {
-		t.Fatal("Process is already running")
-	}
-
-	s.ports.Free(t)
-	s.exec.Run(t, ctx)
+	s.runOnce.Do(func() {
+		s.ports.Free(t)
+		s.exec.Run(t, ctx)
+	})
 }
 
 func (s *Scheduler) Cleanup(t *testing.T) {
-	if !s.running.CompareAndSwap(true, false) {
-		return
-	}
-
-	s.exec.Cleanup(t)
+	s.cleanupOnce.Do(func() {
+		s.exec.Cleanup(t)
+	})
 }
 
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -217,8 +228,10 @@ func (s *Scheduler) DataDir() string {
 
 func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
 	//nolint:staticcheck
-	conn, err := grpc.DialContext(ctx, s.Address(), grpc.WithBlock(), grpc.WithReturnConnectionError(),
+	conn, err := grpc.DialContext(ctx, s.Address(),
+		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(math.MaxInt32), grpc.MaxCallRecvMsgSize(math.MaxInt32)),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithBlock(), grpc.WithReturnConnectionError(),
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
@@ -259,9 +272,141 @@ func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) 
 	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
 	require.NoError(t, err)
 
-	conn, err := grpc.DialContext(ctx, s.Address(), sech.GRPCDialOptionMTLS(id), grpc.WithBlock()) //nolint:staticcheck
+	//nolint:staticcheck
+	conn, err := grpc.DialContext(ctx, s.Address(),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32), grpc.MaxCallSendMsgSize(math.MaxInt32)),
+		sech.GRPCDialOptionMTLS(id),
+		grpc.WithBlock(),
+	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 
 	return schedulerv1pb.NewSchedulerClient(conn)
+}
+
+func (s *Scheduler) ipPort(port int) string {
+	return "127.0.0.1:" + strconv.Itoa(port)
+}
+
+func (s *Scheduler) MetricsAddress() string {
+	return s.ipPort(s.MetricsPort())
+}
+
+// Metrics returns a subset of metrics scraped from the metrics endpoint
+func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()), nil)
+	require.NoError(t, err)
+
+	resp, err := s.httpClient.Do(req)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	// Extract the metrics
+	parser := expfmt.TextParser{}
+	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
+	metrics := make(map[string]float64)
+	for _, mf := range metricFamilies {
+		for _, m := range mf.GetMetric() {
+			metricName := mf.GetName()
+			labels := ""
+			for _, l := range m.GetLabel() {
+				labels += "|" + l.GetName() + ":" + l.GetValue()
+			}
+			if counter := m.GetCounter(); counter != nil {
+				metrics[metricName+labels] = counter.GetValue()
+				continue
+			}
+			if gauge := m.GetGauge(); gauge != nil {
+				metrics[metricName+labels] = gauge.GetValue()
+				continue
+			}
+			h := m.GetHistogram()
+			if h == nil {
+				continue
+			}
+			for _, b := range h.GetBucket() {
+				bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.FormatUint(uint64(b.GetUpperBound()), 10)
+				metrics[bucketKey] = float64(b.GetCumulativeCount())
+			}
+			metrics[metricName+"_count"+labels] = float64(h.GetSampleCount())
+			metrics[metricName+"_sum"+labels] = h.GetSampleSum()
+		}
+	}
+
+	return metrics
+}
+
+func (s *Scheduler) ETCDClient(t *testing.T) *clientv3.Client {
+	t.Helper()
+
+	client, err := clientv3.New(clientv3.Config{
+		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
+		DialTimeout: 40 * time.Second,
+	})
+	require.NoError(t, err)
+
+	t.Cleanup(func() {
+		require.NoError(t, client.Close())
+	})
+
+	return client
+}
+
+func (s *Scheduler) EtcdJobs(t *testing.T, ctx context.Context) []*mvccpb.KeyValue {
+	t.Helper()
+	resp, err := s.ETCDClient(t).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	require.NoError(t, err)
+	return resp.Kvs
+}
+
+func (s *Scheduler) ListJobActors(t *testing.T, ctx context.Context, namespace, appID, actorType, actorID string) *schedulerv1pb.ListJobsResponse {
+	t.Helper()
+	resp, err := s.Client(t, ctx).ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
+		Metadata: &schedulerv1pb.JobMetadata{
+			Namespace: namespace, AppId: appID,
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{
+						Type: actorType,
+						Id:   actorID,
+					},
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	return resp
+}
+
+func (s *Scheduler) ListJobJobs(t *testing.T, ctx context.Context, namespace, appID string) *schedulerv1pb.ListJobsResponse {
+	t.Helper()
+	resp, err := s.Client(t, ctx).ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
+		Metadata: &schedulerv1pb.JobMetadata{
+			Namespace: namespace, AppId: appID,
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Job{
+					Job: new(schedulerv1pb.TargetJob),
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	return resp
+}
+
+func (s *Scheduler) ListAllKeys(t *testing.T, ctx context.Context, prefix string) []string {
+	t.Helper()
+
+	resp, err := client.Etcd(t, clientv3.Config{
+		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
+		DialTimeout: 40 * time.Second,
+	}).ListAllKeys(ctx, prefix)
+	require.NoError(t, err)
+
+	return resp
 }
