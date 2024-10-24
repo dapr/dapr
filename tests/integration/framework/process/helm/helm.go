@@ -104,22 +104,12 @@ func (h *Helm) Stderr(t *testing.T) io.Reader {
 	return h.stderr.Add(t)
 }
 
+// UnmarshalStdout unmarshals the stdout of the helm command into resources separated by "---" and returns them as a slice
+// of the provided type.
 func UnmarshalStdout[K any](t *testing.T, h *Helm) []K {
 	t.Helper()
 
-	s := bufio.NewScanner(h.Stdout(t))
-	s.Split(func(data []byte, atEOF bool) (int, []byte, error) {
-		if atEOF && len(data) == 0 {
-			return 0, nil, nil
-		}
-		if i := bytes.Index(data, []byte("\n---")); i >= 0 {
-			return i + 1, data[0:i], nil
-		}
-		if atEOF {
-			return len(data), data, nil
-		}
-		return 0, nil, nil
-	})
+	s := getResourcesScanner(h.Stdout(t))
 
 	var ks []K
 	for s.Scan() {
@@ -133,10 +123,22 @@ func UnmarshalStdout[K any](t *testing.T, h *Helm) []K {
 
 // UnmarshalStdoutFunc unmarshals the stdout of the helm command into resources separated by "---" and calls the provided
 // function with the metadata and data of each resource so it can be unmarshaled into the appropriate type by the caller.
-func UnmarshalStdoutFunc(t *testing.T, h *Helm, f func(objMetaFound metav1.PartialObjectMetadata, data []byte)) {
+func (h *Helm) UnmarshalStdoutFunc(t *testing.T, f func(objMetaFound metav1.PartialObjectMetadata, data []byte)) {
 	t.Helper()
 
-	s := bufio.NewScanner(h.Stdout(t))
+	s := getResourcesScanner(h.Stdout(t))
+
+	for s.Scan() {
+		data := s.Bytes()
+		var meta metav1.PartialObjectMetadata
+		require.NoError(t, yaml.Unmarshal(s.Bytes(), &meta))
+		f(meta, data)
+	}
+}
+
+// getResourcesScanner returns a scanner that splits the input into resources separated by the "---" token.
+func getResourcesScanner(r io.Reader) *bufio.Scanner {
+	s := bufio.NewScanner(r)
 	s.Split(func(data []byte, atEOF bool) (int, []byte, error) {
 		if atEOF && len(data) == 0 {
 			return 0, nil, nil
@@ -149,11 +151,5 @@ func UnmarshalStdoutFunc(t *testing.T, h *Helm, f func(objMetaFound metav1.Parti
 		}
 		return 0, nil, nil
 	})
-
-	for s.Scan() {
-		data := s.Bytes()
-		var meta metav1.PartialObjectMetadata
-		require.NoError(t, yaml.Unmarshal(s.Bytes(), &meta))
-		f(meta, data)
-	}
+	return s
 }

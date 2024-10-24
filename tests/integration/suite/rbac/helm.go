@@ -46,9 +46,7 @@ func (a *rbac) Setup(t *testing.T) []framework.Option {
 	a.withPriorityClass = helm.New(t,
 		helm.WithShowOnlyPlacementSTS(),
 		helm.WithShowOnly("dapr_rbac", "priorityclassresourcequota.yaml"),
-		helm.WithValues(
-			"global.priorityClassName=system-cluster-critical",
-		),
+		helm.WithGlobalValues("priorityClassName=system-cluster-critical"),
 	)
 
 	return []framework.Option{
@@ -65,11 +63,11 @@ func (a *rbac) Run(t *testing.T, ctx context.Context) {
 	t.Run("with priority class", func(t *testing.T) {
 		var sts appsv1.StatefulSet
 		var quotas []v1.ResourceQuota
-		helm.UnmarshalStdoutFunc(t, a.withPriorityClass, func(o metav1.PartialObjectMetadata, data []byte) {
+		a.withPriorityClass.UnmarshalStdoutFunc(t, func(o metav1.PartialObjectMetadata, data []byte) {
 			switch o.GetObjectKind().GroupVersionKind().String() {
-			case "apps/v1, Kind=StatefulSet":
+			case helm.GVKStatefulSet:
 				require.NoError(t, yaml.Unmarshal(data, &sts))
-			case "/v1, Kind=ResourceQuota":
+			case helm.GVKResourceQuota:
 				var q v1.ResourceQuota
 				require.NoError(t, yaml.Unmarshal(data, &q))
 				quotas = append(quotas, q)
@@ -80,7 +78,7 @@ func (a *rbac) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "system-cluster-critical", sts.Spec.Template.Spec.PriorityClassName)
 
 		// we expect 2 quotas, as one is new and the other is the deprecated one
-		// TODO: remove deprecated quota in the next version
+		// TODO: remove deprecated quota ("system-critical-quota") in 1.16 version
 		require.Len(t, quotas, 2)
 		names := []string{"system-critical-quota", "dapr-system-critical-quota"}
 		for _, q := range quotas {

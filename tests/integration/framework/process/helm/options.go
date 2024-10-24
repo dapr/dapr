@@ -44,6 +44,7 @@ func WithValues(values ...string) OptionFunc {
 	}
 }
 
+// WithGlobalValues adds a "global." prefix to the value(s) provided to use the global values in the helm chart.
 func WithGlobalValues(values ...string) OptionFunc {
 	return func(o *options) {
 		for _, v := range values {

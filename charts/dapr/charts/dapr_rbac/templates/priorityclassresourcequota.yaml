@@ -2,7 +2,7 @@
      this is required in some cases to ensure that the priority class is allowed in the namespace
      https://kubernetes.io/docs/concepts/policy/resource-quotas/#limit-priority-class-consumption-by-default */}}
 {{ if or (eq .Values.global.priorityClassName "system-node-critical") (eq .Values.global.priorityClassName "system-cluster-critical") }}
-{{- /* Deprecated. Please remove on 1.16 */}}
+{{- /* Deprecated. Will be remove on 1.16 */}}
 apiVersion: v1
 kind: ResourceQuota
 metadata:
