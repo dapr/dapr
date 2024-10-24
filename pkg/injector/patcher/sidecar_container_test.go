@@ -383,7 +383,6 @@ func TestGetSidecarContainer(t *testing.T) {
 				},
 			},
 		})
-		//nolint:goconst
 		c.SidecarImage = "daprio/dapr"
 		c.ImagePullPolicy = "Always"
 		c.Namespace = "dapr-system"
@@ -447,7 +446,6 @@ func TestGetSidecarContainer(t *testing.T) {
 				},
 			},
 		})
-		//nolint:goconst
 		c.SidecarImage = "daprio/dapr"
 		c.ImagePullPolicy = "Always"
 		c.Namespace = "dapr-system"
@@ -632,7 +630,6 @@ func TestGetSidecarContainer(t *testing.T) {
 			name:        "no annotation",
 			annotations: map[string]string{},
 			sidecarConfigModifierFn: func(c *SidecarConfig) {
-				//nolint:goconst
 				c.SidecarImage = "daprio/dapr"
 			},
 			assertFn: func(t *testing.T, container *corev1.Container) {
