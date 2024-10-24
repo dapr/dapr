@@ -352,11 +352,11 @@ func (h *DaprHandler) getMetricsPort(wrapper ObjectWrapper) int {
 }
 
 func (h *DaprHandler) getGRPCPort(wrapper ObjectWrapper) int {
-	return meta.GetAnnotationValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyAPIGRPCPort, daprSidecarDefaultAPIGRPCPort)
+	return meta.GetAnnotationIntValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyAPIGRPCPort, daprSidecarDefaultAPIGRPCPort)
 }
 
 func (h *DaprHandler) getInternalGRPCPort(wrapper ObjectWrapper) int {
-	return meta.GetAnnotationValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyInternalGRPCPort, daprSidecarDefaultInternalGRPCPort)
+	return meta.GetAnnotationIntValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyInternalGRPCPort, daprSidecarDefaultInternalGRPCPort)
 }
 
 func (h *DaprHandler) isReconciled(owner *metaV1.OwnerReference) bool {

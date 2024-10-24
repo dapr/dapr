@@ -13,7 +13,7 @@ func IsAnnotatedForDapr(a map[string]string) bool {
 	return utils.IsTruthy(a[annotations.KeyEnabled])
 }
 
-func GetAnnotationValueOrDefault(a map[string]string, annotationKey string, defaultValue int) int {
+func GetAnnotationIntValueOrDefault(a map[string]string, annotationKey string, defaultValue int) int {
 	// return value of annotation if exists, otherwise return default value
 	if value := a[annotationKey]; value != "" {
 		if val, err := strconv.Atoi(value); err == nil {
