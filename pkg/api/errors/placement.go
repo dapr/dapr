@@ -107,3 +107,23 @@ func PlacementServiceFailedTableUpdate(msg string) error {
 	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
 		Build()
 }
+
+func PlacementServiceMalFormedSpiffeId(msg string) error {
+	return kiterrors.NewBuilder(
+		codes.InvalidArgument,
+		http.StatusExpectationFailed,
+		msg,
+		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
+	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
+		Build()
+}
+
+func PlacementServiceFailedToReceiveMessage(msg string) error {
+	return kiterrors.NewBuilder(
+		codes.DataLoss,
+		http.StatusExpectationFailed,
+		msg,
+		CodePrefixPlacement+kiterrors.CodePostfixQueryFailed,
+	).WithErrorInfo(CodePrefixPlacement+kiterrors.CodePostfixQueryFailed, nil).
+		Build()
+}
