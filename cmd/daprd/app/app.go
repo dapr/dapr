@@ -186,11 +186,13 @@ func Run() {
 					Namespace: metrics.DefaultMetricNamespace,
 					Healthz:   healthz,
 				},
-				AppSSL:         opts.AppSSL,
-				ComponentsPath: opts.ComponentsPath,
-				Registry:       reg,
-				Security:       sec,
-				Healthz:        healthz,
+				AppSSL:                  opts.AppSSL,
+				ComponentsPath:          opts.ComponentsPath,
+				Registry:                reg,
+				Security:                sec,
+				Healthz:                 healthz,
+				RegisterWorkflowBackend: opts.RegisterWorkflowBackend,
+				RegisterActivityBackend: opts.RegisterActivityBackend,
 			})
 			if rerr != nil {
 				return rerr
