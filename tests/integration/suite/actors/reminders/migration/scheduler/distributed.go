@@ -102,6 +102,7 @@ spec:
 	daprd6 := daprd.New(t, optsApp1WithScheduler...)
 
 	daprd1.Run(t, ctx)
+	t.Cleanup(func() { daprd1.Cleanup(t) })
 	daprd1.WaitUntilRunning(t, ctx)
 	client := daprd1.GRPCClient(t, ctx)
 
@@ -136,10 +137,16 @@ spec:
 	assert.Empty(t, d.scheduler.EtcdJobs(t, ctx))
 
 	daprd1.Cleanup(t)
+
 	daprd2.Run(t, ctx)
+	t.Cleanup(func() { daprd2.Cleanup(t) })
 	daprd3.Run(t, ctx)
+	t.Cleanup(func() { daprd3.Cleanup(t) })
 	daprd4.Run(t, ctx)
+	t.Cleanup(func() { daprd4.Cleanup(t) })
 	daprd5.Run(t, ctx)
+	t.Cleanup(func() { daprd5.Cleanup(t) })
+
 	daprd2.WaitUntilRunning(t, ctx)
 	daprd3.WaitUntilRunning(t, ctx)
 	daprd4.WaitUntilRunning(t, ctx)
@@ -150,6 +157,7 @@ spec:
 	assert.Len(t, d.scheduler.EtcdJobs(t, ctx), 100)
 
 	daprd6.Run(t, ctx)
+	t.Cleanup(func() { daprd6.Cleanup(t) })
 	daprd6.WaitUntilRunning(t, ctx)
 
 	assert.Len(t, d.db.ActorReminders(t, ctx, "myactortype").Reminders, 100)
