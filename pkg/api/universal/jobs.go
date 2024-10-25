@@ -82,12 +82,13 @@ func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*run
 				},
 			},
 		},
+		//nolint:protogetter
 		Job: &schedulerv1pb.Job{
-			Schedule: job.Schedule, //nolint:protogetter
+			Schedule: job.Schedule,
 			Data:     job.GetData(),
-			Repeats:  job.Repeats, //nolint:protogetter
-			DueTime:  job.DueTime, //nolint:protogetter
-			Ttl:      job.Ttl,     //nolint:protogetter
+			Repeats:  job.Repeats,
+			DueTime:  job.DueTime,
+			Ttl:      job.Ttl,
 		},
 	}
 

@@ -11,11 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package streaming
+package jobs
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,78 +27,70 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/ptr"
 )
 
 func init() {
-	suite.Register(new(reconnect))
+	suite.Register(new(repeats))
 }
 
-type reconnect struct {
-	daprd      *daprd.Daprd
-	scheduler1 *scheduler.Scheduler
-	scheduler2 *scheduler.Scheduler
-
-	jobCalled atomic.Uint64
+type repeats struct {
+	daprd     *daprd.Daprd
+	scheduler *scheduler.Scheduler
+	triggered slice.Slice[string]
 }
 
-func (r *reconnect) Setup(t *testing.T) []framework.Option {
-	srv := app.New(t,
+func (r *repeats) Setup(t *testing.T) []framework.Option {
+	r.triggered = slice.String()
+	r.scheduler = scheduler.New(t)
+
+	app := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
-			r.jobCalled.Add(1)
+			r.triggered.Append(in.GetName())
 			return new(runtimev1pb.JobEventResponse), nil
 		}),
 	)
 
-	r.scheduler1 = scheduler.New(t)
-	r.scheduler2 = scheduler.New(t,
-		scheduler.WithID(r.scheduler1.ID()),
-		scheduler.WithEtcdClientPorts([]string{r.scheduler1.ID() + "=" + r.scheduler1.EtcdClientPort()}),
-		scheduler.WithInitialCluster(r.scheduler1.InitialCluster()),
-		scheduler.WithDataDir(r.scheduler1.DataDir()),
-		scheduler.WithPort(r.scheduler1.Port()),
-	)
-
 	r.daprd = daprd.New(t,
-		daprd.WithSchedulerAddresses(r.scheduler1.Address()),
+		daprd.WithSchedulerAddresses(r.scheduler.Address()),
+		daprd.WithAppPort(app.Port(t)),
 		daprd.WithAppProtocol("grpc"),
-		daprd.WithAppPort(srv.Port(t)),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(srv, r.daprd),
+		framework.WithProcesses(r.scheduler, app, r.daprd),
 	}
 }
 
-func (r *reconnect) Run(t *testing.T, ctx context.Context) {
-	r.scheduler1.Run(t, ctx)
-	t.Cleanup(func() { r.scheduler1.Cleanup(t) })
-	r.scheduler1.WaitUntilRunning(t, ctx)
+func (r *repeats) Run(t *testing.T, ctx context.Context) {
+	r.scheduler.WaitUntilRunning(t, ctx)
 	r.daprd.WaitUntilRunning(t, ctx)
 
-	_, err := r.daprd.GRPCClient(t, ctx).ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+	client := r.daprd.GRPCClient(t, ctx)
+
+	_, err := client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
 		Job: &runtimev1pb.Job{
-			Name:     "test",
+			Name:     "test1",
 			Schedule: ptr.Of("@every 1s"),
+			Ttl:      ptr.Of("3s"),
 		},
 	})
 	require.NoError(t, err)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Positive(c, r.jobCalled.Load())
-	}, time.Second*5, time.Millisecond*10)
+	_, err = client.ScheduleJobAlpha1(ctx, &runtimev1pb.ScheduleJobRequest{
+		Job: &runtimev1pb.Job{
+			Name:     "test2",
+			Schedule: ptr.Of("@every 1s"),
+			Repeats:  ptr.Of(uint32(2)),
+		},
+	})
+	require.NoError(t, err)
 
-	r.scheduler1.Cleanup(t)
-
-	called := r.jobCalled.Load()
-	time.Sleep(time.Second * 2)
-	assert.Equal(t, called, r.jobCalled.Load())
-
-	r.scheduler2.Run(t, ctx)
-	r.scheduler2.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() { r.scheduler2.Cleanup(t) })
-
+	exp := []string{"test1", "test1", "test1", "test2", "test2"}
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Greater(c, r.jobCalled.Load(), called)
+		assert.ElementsMatch(c, exp, r.triggered.Slice())
 	}, time.Second*10, time.Millisecond*10)
+	time.Sleep(time.Second * 2)
+	assert.ElementsMatch(t, exp, r.triggered.Slice())
 }

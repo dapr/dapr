@@ -159,7 +159,9 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 		return err
 	}
 
-	s.connectionPool.Add(initial, stream)
+	if err := s.cron.AddWatch(initial, stream); err != nil {
+		return err
+	}
 
 	monitoring.RecordSidecarsConnectedCount(1)
 	defer monitoring.RecordSidecarsConnectedCount(-1)

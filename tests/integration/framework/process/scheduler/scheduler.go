@@ -16,6 +16,7 @@ package scheduler
 import (
 	"context"
 	"fmt"
+	"io"
 	"math"
 	"net/http"
 	"os"
@@ -23,6 +24,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -34,7 +36,9 @@ import (
 	"go.etcd.io/etcd/api/v3/mvccpb"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
@@ -46,6 +50,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -78,7 +83,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	uids := uid.String() + "-0"
 
 	fp := ports.Reserve(t, 5)
-	port1 := fp.Port(t)
 
 	opts := options{
 		logLevel:        "info",
@@ -88,7 +92,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		port:            fp.Port(t),
 		healthzPort:     fp.Port(t),
 		metricsPort:     fp.Port(t),
-		initialCluster:  uids + "=http://127.0.0.1:" + strconv.Itoa(port1),
+		initialCluster:  uids + "=http://127.0.0.1:" + strconv.Itoa(fp.Port(t)),
 		etcdClientPorts: []string{uids + "=" + strconv.Itoa(fp.Port(t))},
 		namespace:       "default",
 	}
@@ -182,16 +186,18 @@ func (s *Scheduler) Cleanup(t *testing.T) {
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	client := client.HTTP(t)
 
-	assert.Eventually(t, func() bool {
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", s.healthzPort), nil)
 		require.NoError(t, err)
 		resp, err := client.Do(req)
-		if err != nil {
-			return false
+		if !assert.NoError(c, err) {
+			return
 		}
-		defer resp.Body.Close()
-		return http.StatusOK == resp.StatusCode
-	}, time.Second*15, 10*time.Millisecond)
+		body, err := io.ReadAll(resp.Body)
+		assert.NoError(t, err)
+		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
+		assert.NoError(t, resp.Body.Close())
+	}, time.Second*10, 10*time.Millisecond)
 }
 
 func (s *Scheduler) ID() string {
@@ -364,23 +370,102 @@ func (s *Scheduler) EtcdJobs(t *testing.T, ctx context.Context) []*mvccpb.KeyVal
 	return resp.Kvs
 }
 
-func (s *Scheduler) ListJobActors(t *testing.T, ctx context.Context, namespace, appID, actorType, actorID string) *schedulerv1pb.ListJobsResponse {
+func (s *Scheduler) WatchJobs(t *testing.T, ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial, respStatus *atomic.Value) slice.Slice[string] {
 	t.Helper()
-	resp, err := s.Client(t, ctx).ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
+
+	watchErr := make(chan error)
+	t.Cleanup(func() {
+		select {
+		case err := <-watchErr:
+			require.NoError(t, err)
+		case <-time.After(time.Second * 5):
+			assert.Fail(t, "failed to close watcher")
+		}
+	})
+
+	ctx, cancel := context.WithCancel(ctx)
+	t.Cleanup(cancel)
+
+	watch, err := s.Client(t, ctx).WatchJobs(ctx)
+	require.NoError(t, err)
+
+	require.NoError(t, watch.Send(&schedulerv1pb.WatchJobsRequest{
+		WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Initial{Initial: initial},
+	}))
+
+	triggered := slice.String()
+
+	go func() {
+		defer func() {
+			watchErr <- watch.CloseSend()
+		}()
+		for {
+			resp, err := watch.Recv()
+			if cerr := status.Code(err); cerr == codes.Canceled || cerr == codes.DeadlineExceeded {
+				return
+			}
+			if !assert.NoError(t, err) {
+				return
+			}
+			assert.NoError(t, watch.Send(&schedulerv1pb.WatchJobsRequest{
+				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
+					Result: &schedulerv1pb.WatchJobsRequestResult{
+						Id:     resp.GetId(),
+						Status: respStatus.Load().(schedulerv1pb.WatchJobsRequestResultStatus),
+					},
+				},
+			}))
+			triggered.Append(resp.GetName())
+		}
+	}()
+
+	return triggered
+}
+
+func (s *Scheduler) WatchJobsSuccess(t *testing.T, ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) slice.Slice[string] {
+	t.Helper()
+
+	var status atomic.Value
+	status.Store(schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS)
+	return s.WatchJobs(t, ctx, initial, &status)
+}
+
+func (s *Scheduler) WatchJobsFailed(t *testing.T, ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) slice.Slice[string] {
+	t.Helper()
+
+	var status atomic.Value
+	status.Store(schedulerv1pb.WatchJobsRequestResultStatus_FAILED)
+	return s.WatchJobs(t, ctx, initial, &status)
+}
+
+func (s *Scheduler) JobNowJob(name, namespace, appID string) *schedulerv1pb.ScheduleJobRequest {
+	return &schedulerv1pb.ScheduleJobRequest{
+		Name: name,
+		Job:  &schedulerv1pb.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
+		Metadata: &schedulerv1pb.JobMetadata{
+			Namespace: namespace, AppId: appID,
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: new(schedulerv1pb.JobTargetMetadata_Job),
+			},
+		},
+	}
+}
+
+func (s *Scheduler) JobNowActor(name, namespace, appID, actorType, actorID string) *schedulerv1pb.ScheduleJobRequest {
+	return &schedulerv1pb.ScheduleJobRequest{
+		Name: name,
+		Job:  &schedulerv1pb.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
 		Metadata: &schedulerv1pb.JobMetadata{
 			Namespace: namespace, AppId: appID,
 			Target: &schedulerv1pb.JobTargetMetadata{
 				Type: &schedulerv1pb.JobTargetMetadata_Actor{
 					Actor: &schedulerv1pb.TargetActorReminder{
-						Type: actorType,
-						Id:   actorID,
+						Type: actorType, Id: actorID,
 					},
 				},
 			},
 		},
-	})
-	require.NoError(t, err)
-	return resp
+	}
 }
 
 func (s *Scheduler) ListJobJobs(t *testing.T, ctx context.Context, namespace, appID string) *schedulerv1pb.ListJobsResponse {
@@ -391,6 +476,24 @@ func (s *Scheduler) ListJobJobs(t *testing.T, ctx context.Context, namespace, ap
 			Target: &schedulerv1pb.JobTargetMetadata{
 				Type: &schedulerv1pb.JobTargetMetadata_Job{
 					Job: new(schedulerv1pb.TargetJob),
+				},
+			},
+		},
+	})
+	require.NoError(t, err)
+	return resp
+}
+
+func (s *Scheduler) ListJobActors(t *testing.T, ctx context.Context, namespace, appID, actorType, actorID string) *schedulerv1pb.ListJobsResponse {
+	t.Helper()
+	resp, err := s.Client(t, ctx).ListJobs(ctx, &schedulerv1pb.ListJobsRequest{
+		Metadata: &schedulerv1pb.JobMetadata{
+			Namespace: namespace, AppId: appID,
+			Target: &schedulerv1pb.JobTargetMetadata{
+				Type: &schedulerv1pb.JobTargetMetadata_Actor{
+					Actor: &schedulerv1pb.TargetActorReminder{
+						Type: actorType, Id: actorID,
+					},
 				},
 			},
 		},
