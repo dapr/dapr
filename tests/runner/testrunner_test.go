@@ -36,6 +36,11 @@ type MockPlatform struct {
 	mock.Mock
 }
 
+func (m *MockPlatform) WaitForAppReadiness(name string) error {
+	//TODO implement me
+	panic("implement me")
+}
+
 func (m *MockPlatform) Setup() error {
 	args := m.Called()
 	return args.Error(0)
