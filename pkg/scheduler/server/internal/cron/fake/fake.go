@@ -17,11 +17,14 @@ import (
 	"context"
 
 	"github.com/diagridio/go-etcd-cron/api"
+
+	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
 type Fake struct {
-	runFn    func(context.Context) error
-	clientFn func(context.Context) (api.Interface, error)
+	runFn      func(context.Context) error
+	clientFn   func(context.Context) (api.Interface, error)
+	addWatchFn func(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error
 }
 
 func New() *Fake {
@@ -32,6 +35,9 @@ func New() *Fake {
 		},
 		clientFn: func(context.Context) (api.Interface, error) {
 			return nil, nil
+		},
+		addWatchFn: func(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error {
+			return nil
 		},
 	}
 }
@@ -46,10 +52,19 @@ func (f *Fake) WithClient(fn func(context.Context) (api.Interface, error)) *Fake
 	return f
 }
 
+func (f *Fake) WithAddWatch(fn func(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error) *Fake {
+	f.addWatchFn = fn
+	return f
+}
+
 func (f *Fake) Run(ctx context.Context) error {
 	return f.runFn(ctx)
 }
 
 func (f *Fake) Client(ctx context.Context) (api.Interface, error) {
 	return f.clientFn(ctx)
+}
+
+func (f *Fake) AddWatch(req *schedulerv1pb.WatchJobsRequestInitial, srv schedulerv1pb.Scheduler_WatchJobsServer) error {
+	return f.addWatchFn(req, srv)
 }

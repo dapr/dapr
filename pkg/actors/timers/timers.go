@@ -65,7 +65,8 @@ func (t *timers) Init(ctx context.Context) error {
 func (t *timers) Close() error {
 	// Close the runningCh and stop the processor
 	close(t.runningCh)
-	return t.processor.Close()
+	t.processor.Close()
+	return nil
 }
 
 func (t *timers) SetExecuteTimerFn(fn internal.ExecuteTimerFn) {
@@ -145,11 +146,7 @@ func (t *timers) CreateTimer(ctx context.Context, reminder *internal.Reminder) e
 		return nil
 	}
 
-	err := t.processor.Enqueue(reminder)
-	if err != nil {
-		t.removeTimerMatching(reminder)
-		return fmt.Errorf("failed to enqueue timer: %w", err)
-	}
+	t.processor.Enqueue(reminder)
 
 	t.updateActiveTimersCount(reminder.ActorType, 1)
 
@@ -173,10 +170,7 @@ func (t *timers) DeleteTimer(_ context.Context, timerKey string) error {
 	if exists {
 		reminder := reminderAny.(*internal.Reminder)
 		t.updateActiveTimersCount(reminder.ActorType, -1)
-		err := t.processor.Dequeue(reminder.Key())
-		if err != nil {
-			return err
-		}
+		t.processor.Dequeue(reminder.Key())
 	}
 	return nil
 }

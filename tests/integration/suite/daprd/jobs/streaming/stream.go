@@ -15,8 +15,6 @@ package streaming
 
 import (
 	"context"
-	"fmt"
-	"strconv"
 	"testing"
 	"time"
 
@@ -28,8 +26,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/app"
-	"github.com/dapr/dapr/tests/integration/framework/process/ports"
-	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler/cluster"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
 )
@@ -41,7 +38,7 @@ func init() {
 type streaming struct {
 	daprdA     *daprd.Daprd
 	daprdB     *daprd.Daprd
-	schedulers []*scheduler.Scheduler
+	schedulers *cluster.Cluster
 
 	jobChan chan *runtimev1pb.JobEventRequest
 }
@@ -55,32 +52,13 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 		}),
 	)
 
-	fp := ports.Reserve(t, 6)
-	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
-
-	opts := []scheduler.Option{
-		// TODO(Cassie): clean up having to do the string templating here. mv it to the test framework.
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://localhost:%d,scheduler-1=http://localhost:%d,scheduler-2=http://localhost:%d", port1, port2, port3)),
-		scheduler.WithInitialClusterPorts(port1, port2, port3),
-		scheduler.WithReplicaCount(3),
-	}
-
-	clientPorts := []string{
-		"scheduler-0=" + strconv.Itoa(fp.Port(t)),
-		"scheduler-1=" + strconv.Itoa(fp.Port(t)),
-		"scheduler-2=" + strconv.Itoa(fp.Port(t)),
-	}
-	s.schedulers = []*scheduler.Scheduler{
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...),
-		scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...),
-	}
+	s.schedulers = cluster.New(t, cluster.WithCount(3))
 
 	s.daprdA = daprd.New(t,
 		// TODO(Cassie): rm appID + ns here and log line once streaming to the proper app is tested
 		daprd.WithAppID("A"),
 		daprd.WithNamespace("A"),
-		daprd.WithSchedulerAddresses(s.schedulers[0].Address(), s.schedulers[1].Address(), s.schedulers[2].Address()),
+		daprd.WithSchedulerAddresses(s.schedulers.Addresses()...),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srv.Port(t)),
 	)
@@ -89,21 +67,18 @@ func (s *streaming) Setup(t *testing.T) []framework.Option {
 		// TODO(Cassie): rm appID + ns here and log line once streaming to the proper app is tested
 		daprd.WithAppID("B"),
 		daprd.WithNamespace("B"),
-		daprd.WithSchedulerAddresses(s.schedulers[0].Address(), s.schedulers[1].Address(), s.schedulers[2].Address()),
+		daprd.WithSchedulerAddresses(s.schedulers.Addresses()...),
 		daprd.WithAppProtocol("grpc"),
 		daprd.WithAppPort(srv.Port(t)),
 	)
 
-	fp.Free(t)
 	return []framework.Option{
-		framework.WithProcesses(srv, s.schedulers[0], s.schedulers[1], s.schedulers[2], s.daprdA, s.daprdB),
+		framework.WithProcesses(srv, s.schedulers, s.daprdA, s.daprdB),
 	}
 }
 
 func (s *streaming) Run(t *testing.T, ctx context.Context) {
-	s.schedulers[0].WaitUntilRunning(t, ctx)
-	s.schedulers[1].WaitUntilRunning(t, ctx)
-	s.schedulers[2].WaitUntilRunning(t, ctx)
+	s.schedulers.WaitUntilRunning(t, ctx)
 
 	s.daprdA.WaitUntilRunning(t, ctx)
 	s.daprdB.WaitUntilRunning(t, ctx)

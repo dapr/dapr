@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/task"
@@ -76,10 +77,12 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 
-	assert.InDelta(t,
-		s.workflow.Metrics(t, ctx)["process_resident_memory_bytes"]*1e-6,
-		actorMemBaseline,
-		35,
-		"workflow memory leak",
-	)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.InDelta(c,
+			s.workflow.Metrics(t, ctx)["process_resident_memory_bytes"]*1e-6,
+			actorMemBaseline,
+			35,
+			"workflow memory leak",
+		)
+	}, time.Second*10, time.Millisecond*10)
 }

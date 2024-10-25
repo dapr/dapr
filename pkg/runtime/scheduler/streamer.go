@@ -63,13 +63,16 @@ func (s *streamer) receive(ctx context.Context) error {
 		s.wg.Add(1)
 		go func() {
 			defer s.wg.Done()
-			s.handleJob(ctx, resp)
+			result := s.handleJob(ctx, resp)
 			select {
 			case <-ctx.Done():
 			case <-s.stream.Context().Done():
 			case s.resultCh <- &schedulerv1pb.WatchJobsRequest{
 				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
-					Result: &schedulerv1pb.WatchJobsRequestResult{Id: resp.GetId()},
+					Result: &schedulerv1pb.WatchJobsRequestResult{
+						Id:     resp.GetId(),
+						Status: result,
+					},
 				},
 			}:
 			}
@@ -97,14 +100,16 @@ func (s *streamer) outgoing(ctx context.Context) error {
 }
 
 // handleJob invokes the appropriate app or actor reminder based on the job metadata.
-func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) {
+func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsResponse) schedulerv1pb.WatchJobsRequestResultStatus {
 	meta := job.GetMetadata()
 
 	switch t := meta.GetTarget(); t.GetType().(type) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		if err := s.invokeApp(ctx, job); err != nil {
 			log.Errorf("failed to invoke schedule app job: %s", err)
+			return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 		}
+		return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 
 	case *schedulerv1pb.JobTargetMetadata_Actor:
 		if err := s.invokeActorReminder(ctx, job); err != nil {
@@ -114,22 +119,26 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 			// issues. This will be updated in the future releases, but for now we will see this err. To not
 			// spam users only log if the error is not reminder canceled because this is expected for now.
 			if errors.Is(err, actors.ErrReminderCanceled) {
-				return
+				return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 			}
 
 			// If the actor was hosted on another instance, the error will be a gRPC status error,
 			// so we need to unwrap it and match on the error message
 			if st, ok := status.FromError(err); ok {
 				if st.Message() == actors.ErrReminderCanceled.Error() {
-					return
+					return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 				}
 			}
 
 			log.Errorf("failed to invoke scheduled actor reminder named: %s due to: %s", job.GetName(), err)
+			return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 		}
+
+		return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 
 	default:
 		log.Errorf("Unknown job metadata type: %+v", t)
+		return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 	}
 }
 
@@ -157,13 +166,16 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 	switch codes.Code(statusCode) {
 	case codes.OK:
 		log.Debugf("Sent job %s to app", job.GetName())
+		return nil
 	case codes.NotFound:
 		log.Errorf("non-retriable error returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
+		// return nil to signal SUCCESS
+		return nil
 	default:
-		log.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
+		err := fmt.Errorf("unexpected status code returned from app while processing triggered job %s. status code returned: %v", job.GetName(), statusCode)
+		log.Error(err.Error())
+		return err
 	}
-
-	return nil
 }
 
 // invokeActorReminder calls the actor ID with the given reminder data.

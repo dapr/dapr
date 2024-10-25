@@ -24,6 +24,8 @@ import (
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
+	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/dapr/kit/ptr"
@@ -35,18 +37,27 @@ func init() {
 
 type crud struct {
 	scheduler *scheduler.Scheduler
+	actors    *actors.Actors
 }
 
 func (c *crud) Setup(t *testing.T) []framework.Option {
 	c.scheduler = scheduler.New(t)
+	place := placement.New(t)
+
+	c.actors = actors.New(t,
+		actors.WithActorTypes("myactortype"),
+		actors.WithFeatureSchedulerReminders(true),
+		actors.WithScheduler(c.scheduler),
+		actors.WithPlacement(place),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(c.scheduler),
+		framework.WithProcesses(c.actors),
 	}
 }
 
 func (c *crud) Run(t *testing.T, ctx context.Context) {
-	c.scheduler.WaitUntilRunning(t, ctx)
+	c.actors.WaitUntilRunning(t, ctx)
 
 	// TODO: @joshvanl: error codes on List API.
 
@@ -235,11 +246,12 @@ func (c *crud) Run(t *testing.T, ctx context.Context) {
 	_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
 		Name:     "test123",
 		Job:      &schedulerv1pb.Job{DueTime: ptr.Of(time.Now().Add(time.Second * 2).Format(time.RFC3339))},
-		Metadata: jobMetadata("default", "test"),
+		Metadata: jobMetadata("default", c.actors.AppID()),
 	})
 	require.NoError(t, err)
-	assert.Len(t, c.scheduler.ListJobJobs(t, ctx, "default", "test").GetJobs(), 5)
+	assert.Len(t, c.scheduler.ListJobJobs(t, ctx, "default", "test").GetJobs(), 4)
+	assert.Len(t, c.scheduler.ListJobJobs(t, ctx, "default", c.actors.AppID()).GetJobs(), 1)
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		assert.Len(col, c.scheduler.ListJobJobs(t, ctx, "default", "test").GetJobs(), 4)
+		assert.Empty(col, c.scheduler.ListJobJobs(t, ctx, "default", c.actors.AppID()).GetJobs())
 	}, time.Second*10, time.Millisecond*10)
 }

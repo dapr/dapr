@@ -36,7 +36,7 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
-	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/concurrency/cmap"
 	"github.com/dapr/kit/logger"
 )
 
@@ -114,7 +114,7 @@ type Service struct {
 	membershipCh chan hostMemberChange
 
 	// disseminateLocks is a map of lock per namespace for disseminating the hashing tables
-	disseminateLocks concurrency.MutexMap[string]
+	disseminateLocks cmap.Mutex[string]
 
 	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
 	disseminateNextTime haxmap.Map[string, *atomic.Int64]
@@ -194,7 +194,7 @@ func NewPlacementService(opts ServiceOpts) *Service {
 		clock:               &clock.RealClock{},
 		closedCh:            make(chan struct{}),
 		sec:                 opts.SecProvider,
-		disseminateLocks:    concurrency.NewMutexMap[string](),
+		disseminateLocks:    cmap.NewMutex[string](),
 		memberUpdateCount:   *haxmap.New[string, *atomic.Uint32](),
 		disseminateNextTime: *haxmap.New[string, *atomic.Int64](),
 		keepAliveTime:       opts.KeepAliveTime,

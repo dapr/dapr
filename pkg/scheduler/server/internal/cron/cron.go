@@ -15,7 +15,6 @@ package cron
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -36,11 +35,10 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server.cron")
 
 type Options struct {
-	ReplicaCount   uint32
-	ReplicaID      uint32
-	Config         *embed.Config
-	ConnectionPool *pool.Pool
-	Healthz        healthz.Healthz
+	ReplicaCount uint32
+	ReplicaID    uint32
+	Config       *embed.Config
+	Healthz      healthz.Healthz
 }
 
 // Interface manages the cron framework, exposing a client to schedule jobs.
@@ -51,6 +49,9 @@ type Interface interface {
 	// Client returns a client to schedule jobs with the underlying cron
 	// framework and database. Blocks until Etcd and the Cron library are ready.
 	Client(ctx context.Context) (api.Interface, error)
+
+	// AddWatch adds a watch for jobs to the connection pool.
+	AddWatch(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error
 }
 
 type cron struct {
@@ -67,12 +68,11 @@ type cron struct {
 
 func New(opts Options) Interface {
 	return &cron{
-		replicaCount:   opts.ReplicaCount,
-		replicaID:      opts.ReplicaID,
-		config:         opts.Config,
-		connectionPool: opts.ConnectionPool,
-		readyCh:        make(chan struct{}),
-		hzETCD:         opts.Healthz.AddTarget(),
+		replicaCount: opts.ReplicaCount,
+		replicaID:    opts.ReplicaID,
+		config:       opts.Config,
+		readyCh:      make(chan struct{}),
+		hzETCD:       opts.Healthz.AddTarget(),
 	}
 }
 
@@ -119,17 +119,15 @@ func (c *cron) Run(ctx context.Context) error {
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
 	}
+
+	c.connectionPool = pool.New(c.etcdcron)
 	close(c.readyCh)
 
 	c.hzETCD.Ready()
 
 	return concurrency.NewRunnerManager(
-		func(ctx context.Context) error {
-			if err := c.etcdcron.Run(ctx); !errors.Is(err, context.DeadlineExceeded) {
-				return err
-			}
-			return nil
-		},
+		c.connectionPool.Run,
+		c.etcdcron.Run,
 		func(ctx context.Context) error {
 			defer log.Info("EtcdCron shutting down")
 			select {
@@ -153,7 +151,17 @@ func (c *cron) Client(ctx context.Context) (api.Interface, error) {
 	}
 }
 
-func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
+// AddWatch adds a watch for jobs to the connection pool.
+func (c *cron) AddWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
+	select {
+	case <-c.readyCh:
+		return c.connectionPool.Add(req, stream)
+	case <-stream.Context().Done():
+		return stream.Context().Err()
+	}
+}
+
+func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) *api.TriggerResponse {
 	log.Debugf("Triggering job: %s", req.GetName())
 
 	ctx, cancel := context.WithTimeout(ctx, time.Second*45)
@@ -162,29 +170,26 @@ func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
 	var meta schedulerv1pb.JobMetadata
 	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
 		log.Errorf("Error unmarshalling metadata: %s", err)
-		return true
+		return &api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE}
 	}
 
 	idx := strings.LastIndex(req.GetName(), "||")
 	if idx == -1 || len(req.GetName()) <= idx+2 {
 		log.Errorf("Job name is malformed: %s", req.GetName())
-		return true
+		return &api.TriggerResponse{Result: api.TriggerResponseResult_UNDELIVERABLE}
 	}
 
 	now := time.Now()
-	if err := c.connectionPool.Send(ctx, &pool.JobEvent{
-		Name:     req.GetName()[idx+2:],
-		Data:     req.GetPayload(),
-		Metadata: &meta,
-	}); err != nil {
-		// TODO: add job to a queue or something to try later this should be
-		// another long running go routine that accepts this job on a channel
-		log.Errorf("Error sending job to connection stream: %s", err)
+	defer func() {
+		monitoring.RecordTriggerDuration(now)
+		monitoring.RecordJobsTriggeredCount(&meta)
+	}()
+
+	return &api.TriggerResponse{
+		Result: c.connectionPool.Send(ctx, &pool.JobEvent{
+			Name:     req.GetName()[idx+2:],
+			Data:     req.GetPayload(),
+			Metadata: &meta,
+		}),
 	}
-
-	monitoring.RecordTriggerDuration(now)
-
-	monitoring.RecordJobsTriggeredCount(&meta)
-
-	return true
 }
