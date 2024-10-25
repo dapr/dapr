@@ -58,7 +58,7 @@ func (j *jobstriggered) Setup(t *testing.T) []framework.Option {
 		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
 			j.jobstriggeredCount.Add(1)
 			j.jobChan <- in
-			return new(runtimev1pb.JobEventResponse), nil
+			return &runtimev1pb.JobEventResponse{}, nil
 		}),
 	)
 

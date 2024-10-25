@@ -19,7 +19,6 @@ import (
 	"fmt"
 	"math"
 	"net"
-	"sync"
 	"sync/atomic"
 
 	"google.golang.org/grpc"
@@ -29,7 +28,6 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/controller"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/pool"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
@@ -65,15 +63,13 @@ type Server struct {
 	listenAddress string
 	port          int
 
-	sec            security.Handler
-	serializer     *serialize.Serializer
-	cron           cron.Interface
-	connectionPool *pool.Pool // Connection pool for sidecars
-	controller     concurrency.Runner
+	sec        security.Handler
+	serializer *serialize.Serializer
+	cron       cron.Interface
+	controller concurrency.Runner
 
 	hzAPIServer healthz.Target
 
-	wg      sync.WaitGroup
 	running atomic.Bool
 
 	closeCh chan struct{}
@@ -85,14 +81,11 @@ func New(opts Options) (*Server, error) {
 		return nil, err
 	}
 
-	connectionPool := pool.New()
-
 	cron := cron.New(cron.Options{
-		ReplicaCount:   opts.ReplicaCount,
-		ReplicaID:      opts.ReplicaID,
-		ConnectionPool: connectionPool,
-		Config:         config,
-		Healthz:        opts.Healthz,
+		ReplicaCount: opts.ReplicaCount,
+		ReplicaID:    opts.ReplicaID,
+		Config:       config,
+		Healthz:      opts.Healthz,
 	})
 
 	var ctrl concurrency.Runner
@@ -109,12 +102,11 @@ func New(opts Options) (*Server, error) {
 	}
 
 	return &Server{
-		port:           opts.Port,
-		listenAddress:  opts.ListenAddress,
-		sec:            opts.Security,
-		connectionPool: connectionPool,
-		controller:     ctrl,
-		cron:           cron,
+		port:          opts.Port,
+		listenAddress: opts.ListenAddress,
+		sec:           opts.Security,
+		controller:    ctrl,
+		cron:          cron,
 		serializer: serialize.New(serialize.Options{
 			Security: opts.Security,
 		}),
@@ -131,7 +123,6 @@ func (s *Server) Run(ctx context.Context) error {
 	log.Info("Dapr Scheduler is starting...")
 
 	runners := []concurrency.Runner{
-		s.connectionPool.Run,
 		s.runServer,
 		s.cron.Run,
 		func(ctx context.Context) error {
@@ -145,7 +136,6 @@ func (s *Server) Run(ctx context.Context) error {
 		runners = append(runners, s.controller)
 	}
 
-	defer s.wg.Wait()
 	return concurrency.NewRunnerManager(runners...).Run(ctx)
 }
 

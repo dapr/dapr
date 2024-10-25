@@ -69,7 +69,10 @@ func (s *streamer) receive(ctx context.Context) error {
 			case <-s.stream.Context().Done():
 			case s.resultCh <- &schedulerv1pb.WatchJobsRequest{
 				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
-					Result: &schedulerv1pb.WatchJobsRequestResult{Id: resp.GetId()},
+					Result: &schedulerv1pb.WatchJobsRequestResult{
+						Id:     resp.GetId(),
+						Status: schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS,
+					},
 				},
 			}:
 			}

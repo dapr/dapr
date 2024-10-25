@@ -18,7 +18,6 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -33,6 +32,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/concurrency/slice"
 )
 
 func init() {
@@ -42,11 +42,8 @@ func init() {
 type repeats struct {
 	place     *placement.Placement
 	scheduler *scheduler.Scheduler
-
-	daprd           *daprd.Daprd
-	methodcalledPT  atomic.Uint32
-	methodcalledRPT atomic.Uint32
-	methodcalledDur atomic.Uint32
+	daprd     *daprd.Daprd
+	called    slice.Slice[string]
 }
 
 func (r *repeats) Setup(t *testing.T) []framework.Option {
@@ -61,6 +58,8 @@ spec:
   - name: SchedulerReminders
     enabled: true`), 0o600))
 
+	r.called = slice.String()
+
 	handler := http.NewServeMux()
 	handler.HandleFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(`{"entities": ["myactortype"]}`))
@@ -69,13 +68,13 @@ spec:
 		w.WriteHeader(http.StatusOK)
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/remind/pt", func(http.ResponseWriter, *http.Request) {
-		r.methodcalledPT.Add(1)
+		r.called.Append("pt")
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/remind/rpt", func(http.ResponseWriter, *http.Request) {
-		r.methodcalledRPT.Add(1)
+		r.called.Append("rpt")
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/remind/dur", func(http.ResponseWriter, *http.Request) {
-		r.methodcalledDur.Add(1)
+		r.called.Append("dur")
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/foo", func(http.ResponseWriter, *http.Request) {})
 
@@ -144,14 +143,11 @@ func (r *repeats) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	assert.Eventually(t, func() bool {
-		return r.methodcalledPT.Load() == 3 &&
-			r.methodcalledDur.Load() == 3 &&
-			r.methodcalledRPT.Load() == 2
-	}, time.Second*5, time.Millisecond*10)
+	exp := []string{"pt", "pt", "pt", "rpt", "rpt", "dur", "dur", "dur"}
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.ElementsMatch(c, exp, r.called.Slice())
+	}, time.Second*10, time.Millisecond*10)
 
 	time.Sleep(time.Second * 2)
-	assert.Equal(t, uint32(3), r.methodcalledPT.Load())
-	assert.Equal(t, uint32(2), r.methodcalledRPT.Load())
-	assert.Equal(t, uint32(3), r.methodcalledDur.Load())
+	assert.ElementsMatch(t, exp, r.called.Slice())
 }

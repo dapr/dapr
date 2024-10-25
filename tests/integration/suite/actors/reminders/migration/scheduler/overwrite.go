@@ -24,6 +24,7 @@ import (
 	"github.com/stretchr/testify/require"
 	clientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -133,6 +134,14 @@ spec:
 		Ttl:      ptr.Of("10000s"),
 		Data:     expAny,
 		Repeats:  ptr.Of(uint32(100)),
+		FailurePolicy: &schedulerv1.FailurePolicy{
+			Policy: &schedulerv1.FailurePolicy_Constant{
+				Constant: &schedulerv1.FailurePolicyConstant{
+					Interval:   durationpb.New(time.Second * 1),
+					MaxRetries: ptr.Of(uint32(3)),
+				},
+			},
+		},
 	}, njob.GetJob())
 	daprd1.Cleanup(t)
 
@@ -179,6 +188,14 @@ spec:
 		Ttl:      ptr.Of("10000s"),
 		Data:     expAny,
 		Repeats:  ptr.Of(uint32(100)),
+		FailurePolicy: &schedulerv1.FailurePolicy{
+			Policy: &schedulerv1.FailurePolicy_Constant{
+				Constant: &schedulerv1.FailurePolicyConstant{
+					Interval:   durationpb.New(time.Second * 1),
+					MaxRetries: ptr.Of(uint32(3)),
+				},
+			},
+		},
 	}, njob.GetJob())
 	daprd2.Cleanup(t)
 

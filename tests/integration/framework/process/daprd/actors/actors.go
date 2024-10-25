@@ -130,6 +130,10 @@ func (a *Actors) Scheduler() *scheduler.Scheduler {
 	return a.sched
 }
 
+func (a *Actors) AppID() string {
+	return a.daprd.AppID()
+}
+
 func (a *Actors) DB() *sqlite.SQLite {
 	return a.db
 }

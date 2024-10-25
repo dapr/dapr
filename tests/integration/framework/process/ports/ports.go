@@ -54,10 +54,10 @@ func Reserve(t *testing.T, count int) *Ports {
 	defer lock.Unlock()
 
 	require.GreaterOrEqual(t, count, 1)
-	require.LessOrEqual(t, count, 10)
+	require.LessOrEqual(t, count, 20)
 
 	resvPLen -= count
-	if count > resvPLen || resvPLen < 10 {
+	if count > resvPLen || resvPLen < 20 {
 		t.Logf("reserving 300 more ports")
 		for i := 0; i < 300; i++ {
 			last++
