@@ -55,7 +55,7 @@ func StreamContainerLogsToDisk(ctx context.Context, appName string, podClient v1
 			go func(pod, container string) {
 			loop:
 				for {
-					filename := filepath.Join(logPrefix, fmt.Sprintf("%s.%s.log", pod, container))
+					filename := filepath.Join(logPrefix, appName, fmt.Sprintf("%s.%s.log", pod, container))
 					log.Printf("Streaming Kubernetes logs to %s", filename)
 					req := podClient.GetLogs(pod, &apiv1.PodLogOptions{
 						Container: container,

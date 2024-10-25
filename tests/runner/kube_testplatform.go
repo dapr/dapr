@@ -24,7 +24,6 @@ import (
 
 	configurationv1alpha1 "github.com/dapr/dapr/pkg/apis/configuration/v1alpha1"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
-
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -437,4 +436,15 @@ func (c *KubeTestPlatform) GetService(name string) (*corev1.Service, error) {
 
 func (c *KubeTestPlatform) LoadTest(loadtester LoadTester) error {
 	return loadtester.Run(c)
+}
+
+func (c *KubeTestPlatform) WaitForAppReadiness(name string) error {
+	app := c.AppResources.FindActiveResource(name)
+	appManager := app.(*kube.AppManager)
+
+	_, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDone)
+	if err != nil {
+		return fmt.Errorf("app %q did not reach the desired state: %w", name, err)
+	}
+	return nil
 }

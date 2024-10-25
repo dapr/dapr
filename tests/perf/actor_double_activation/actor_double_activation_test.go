@@ -81,6 +81,8 @@ func TestActorDoubleActivation(t *testing.T) {
 	)
 	defer k6Test.Dispose()
 
+	require.NoError(t, tr.Platform.WaitForAppReadiness(serviceApplicationName))
+
 	t.Log("Running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
 	sm, err := loadtest.K6ResultDefault(k6Test)
@@ -107,6 +109,10 @@ func TestActorDoubleActivation(t *testing.T) {
 		Restarts(restarts).
 		OutputK6(sm.RunnersResults).
 		Flush()
+
+	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
+	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+	t.Logf("target dapr app or sidecar restarted %v times", restarts)
 
 	require.Truef(t, sm.Pass, "test has not passed, results: %s", string(bts))
 	t.Logf("Test summary `%s`", string(bts))
