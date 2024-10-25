@@ -86,6 +86,10 @@ func WithClusterDaprSubscriptionV2ListFromStore(t *testing.T, store *store.Store
 	return handleClusterListResourceFromStore(t, "/apis/dapr.io/v2alpha1/subscriptions", store)
 }
 
+func WithClusterNamespaceListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/api/v1/namespaces", store)
+}
+
 func WithClusterDaprHTTPEndpointList(t *testing.T, endpoints *httpendapi.HTTPEndpointList) Option {
 	return handleClusterListResource(t, "/apis/dapr.io/v1alpha1/httpendpoints", endpoints)
 }
@@ -108,6 +112,10 @@ func WithClusterStatefulSetList(t *testing.T, ss *appsv1.StatefulSetList) Option
 
 func WithClusterServiceAccountList(t *testing.T, services *corev1.ServiceAccountList) Option {
 	return handleClusterListResource(t, "/api/v1/serviceaccounts", services)
+}
+
+func WithClusterNamespaceList(t *testing.T, namespaces *corev1.NamespaceList) Option {
+	return handleClusterListResource(t, "/api/v1/namespaces", namespaces)
 }
 
 func WithDaprConfigurationGet(t *testing.T, config *configapi.Configuration) Option {
@@ -155,6 +163,7 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 			WithClusterDaprSubscriptionListV2(t, &subv2api.SubscriptionList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v2alpha1", Kind: "SubscriptionList"}}),
 			WithClusterDaprHTTPEndpointList(t, &httpendapi.HTTPEndpointList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "HTTPEndpointList"}}),
 			WithClusterDaprResiliencyList(t, &resapi.ResiliencyList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ResiliencyList"}}),
+			WithClusterNamespaceList(t, &corev1.NamespaceList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "NamespaceList"}}),
 		} {
 			op(o)
 		}

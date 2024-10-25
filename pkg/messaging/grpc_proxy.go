@@ -103,7 +103,6 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 		return ctx, nil, nil, nopTeardown, fmt.Errorf("failed to proxy request: required metadata %s not found", diagnostics.GRPCProxyAppIDKey)
 	}
 
-	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 	appID := v[0]
 
 	if p.remoteAppFn == nil {
@@ -132,11 +131,15 @@ func (p *proxy) intercept(ctx context.Context, fullName string) (context.Context
 
 		appMetadataToken := security.GetAppToken()
 		if appMetadataToken != "" {
-			outCtx = metadata.AppendToOutgoingContext(outCtx, securityConsts.APITokenHeader, appMetadataToken)
+			md.Set(securityConsts.APITokenHeader, appMetadataToken)
 		}
+
+		outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 
 		return outCtx, appClient.(*grpc.ClientConn), nil, nopTeardown, nil
 	}
+
+	outCtx := metadata.NewOutgoingContext(ctx, md.Copy())
 
 	// proxy to a remote daprd
 	conn, teardown, cErr := p.connectionFactory(outCtx, target.address, target.id, target.namespace,
