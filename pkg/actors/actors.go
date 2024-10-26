@@ -77,7 +77,7 @@ var (
 	log = logger.NewLogger("dapr.runtime.actor")
 
 	ErrIncompatibleStateStore        = errors.New("actor state store does not exist, or does not support transactions which are required to save state - please see https://docs.dapr.io/operations/components/setup-state-store/supported-state-stores/")
-	ErrReminderOpActorNotHosted      = errors.New("operations on actor reminders are only possible on hosted actor types. Check that the actor id/type is correct and hosted by the expected instance")
+	ErrReminderOpActorNotHosted      = errors.New("operations on actor reminders are only possible on hosted actor types. Check that the actor type is correct and hosted by the expected instance")
 	ErrTransactionsTooManyOperations = errors.New("the transaction contains more operations than supported by the state store")
 	ErrReminderCanceled              = internal.ErrReminderCanceled
 )
