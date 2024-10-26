@@ -366,7 +366,7 @@ $(foreach ITEM,$(PERF_TESTS),$(eval $(call genPerfTestRun,$(ITEM))))
 TEST_PERF_TARGETS:=$(foreach ITEM,$(PERF_TESTS),test-perf-$(ITEM))
 
 # start all perf tests
-test-perf-all: check-e2e-env test-deps clean-kube-cache
+test-perf-all: check-e2e-env test-deps
 	# Note: use env variable DAPR_PERF_TEST to pick one e2e test to run.
 ifeq ($(DAPR_PERF_TEST),)
 	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) \
