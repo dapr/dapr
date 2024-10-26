@@ -71,7 +71,7 @@ func TestActorDoubleActivation(t *testing.T) {
 
 	// Check if test app endpoint is available
 	t.Logf("Test app url: %s", testServiceAppURL)
-	err := utils.HealthCheckApps(testServiceAppURL + "/health")
+	_, err := utils.HTTPGetNTimes(testServiceAppURL+"/health", numHealthChecks)
 	require.NoError(t, err, "Health checks failed")
 
 	k6Test := loadtest.NewK6(
