@@ -617,6 +617,9 @@ setup-test-components: setup-app-configurations
 	# Show the installed configurations
 	$(KUBECTL) get configurations --namespace $(DAPR_TEST_NAMESPACE)
 
+	# clean cache
+	rm -rf ~/.kube/cache
+
 setup-components-perf-test:
 	$(KUBECTL) apply -f ./tests/config/pubsub_perf_components.yaml --namespace $(DAPR_TEST_NAMESPACE)
 
