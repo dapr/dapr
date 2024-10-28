@@ -20,6 +20,7 @@ import (
 
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/metric"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -43,14 +44,23 @@ var (
 )
 
 // InitMetrics initializes the placement service metrics.
-func InitMetrics() error {
-	// Create a new Prometheus exporter
+func InitMetrics(ctx context.Context) error {
+	// Set up the Prometheus exporter (for the /metrics endpoint)
 	promExporter, err := prometheus.New(prometheus.WithNamespace("dapr"))
 	if err != nil {
 		return fmt.Errorf("failed to create Prometheus exporter: %w", err)
 	}
 
-	// Create a new MeterProvider
+	// Set up the OTLP exporter (for pushing to an OTLP receiver)
+	otlpExporter, err := otlpmetricgrpc.New(ctx,
+		otlpmetricgrpc.WithInsecure(),
+		otlpmetricgrpc.WithEndpoint("localhost:4317"), // TODO: hardcoding it temporarily
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create OTLP exporter: %w", err)
+	}
+
+	// Create a new resource to associate metadata with metrics
 	res, err := resource.New(context.Background(),
 		resource.WithAttributes(semconv.ServiceNameKey.String("dapr-placement")),
 	)
@@ -60,7 +70,8 @@ func InitMetrics() error {
 
 	mp := sdkmetric.NewMeterProvider(
 		sdkmetric.WithResource(res),
-		sdkmetric.WithReader(promExporter),
+		sdkmetric.WithReader(promExporter),                              // Add Prometheus exporter as a reader
+		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(otlpExporter)), // Add OTLP exporter with periodic reading. Interval and timeout are provided through ENV variables
 	)
 
 	// Set the global MeterProvider
