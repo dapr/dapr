@@ -49,14 +49,14 @@ func TestMain(m *testing.M) {
 			IngressEnabled:    true,
 			MetricsEnabled:    true,
 			AppPort:           3000,
-			DaprCPULimit:      "8.0",
-			DaprCPURequest:    "0.2",
-			DaprMemoryLimit:   "1Gi",
-			DaprMemoryRequest: "512Mi",
-			AppCPULimit:       "8.0",
-			AppCPURequest:     "0.2",
-			AppMemoryLimit:    "1Gi",
-			AppMemoryRequest:  "512Mi",
+			DaprCPULimit:      "4.0",
+			DaprCPURequest:    "0.1",
+			DaprMemoryLimit:   "512Mi",
+			DaprMemoryRequest: "250Mi",
+			AppCPULimit:       "4.0",
+			AppCPURequest:     "0.1",
+			AppMemoryLimit:    "512Mi",
+			AppMemoryRequest:  "256Mi",
 		},
 	}
 
@@ -76,8 +76,7 @@ func TestActorDoubleActivation(t *testing.T) {
 
 	k6Test := loadtest.NewK6(
 		"./test.js",
-		loadtest.WithParallelism(3),
-		loadtest.WithMemoryLimits("512Mi", "1Gi", "512Mi", "1Gi"),
+		loadtest.WithParallelism(2),
 		loadtest.WithRunnerEnvVar("TEST_APP_NAME", serviceApplicationName),
 	)
 	defer k6Test.Dispose()
