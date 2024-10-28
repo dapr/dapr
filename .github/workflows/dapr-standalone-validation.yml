@@ -29,17 +29,30 @@ on:
       - release-*
       - feature/*
 
+permissions: {}
+
 jobs:
   validate-virt-mem:
     name: Standalone validations
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     env:
       GOOS: linux
       GOARCH: amd64
       DAPR_INSTALL_URL: https://raw.githubusercontent.com/dapr/cli/master/install/install.sh
     steps:
-      - name: Install required packages
-        run: pip3 install scipy psutil
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.x'
+      - name: Upgrade pip
+        run: |
+          python3 -m ensurepip --upgrade
+          python3 -m pip install --upgrade pip
+      - name: Install required Python packages
+        run: |
+          python3 -m pip install numpy scipy psutil requests
       # This is a good example where we want to always compare against the latest stable release.
       # Pinning to a given Dapr version does not add any value in this workflow.
       - name: Install latest Dapr CLI

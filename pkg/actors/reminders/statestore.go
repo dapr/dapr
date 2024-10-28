@@ -238,6 +238,30 @@ func (r *statestore) GetReminder(ctx context.Context, req *internal.GetReminderR
 	return nil, nil
 }
 
+func (r *statestore) ListReminders(ctx context.Context, req internal.ListRemindersRequest) ([]*internal.Reminder, error) {
+	list, _, err := r.getRemindersForActorType(ctx, req.ActorType, false)
+	if err != nil {
+		return nil, err
+	}
+
+	reminders := make([]*internal.Reminder, len(list))
+	for i, r := range list {
+		reminders[i] = &internal.Reminder{
+			Name:           r.Reminder.Name,
+			ActorID:        r.Reminder.ActorID,
+			ActorType:      r.Reminder.ActorType,
+			Data:           r.Reminder.Data,
+			DueTime:        r.Reminder.DueTime,
+			Period:         r.Reminder.Period,
+			RegisteredTime: r.Reminder.RegisteredTime,
+			ExpirationTime: r.Reminder.ExpirationTime,
+			Callback:       r.Reminder.Callback,
+		}
+	}
+
+	return reminders, nil
+}
+
 func (r *statestore) DeleteReminder(ctx context.Context, req internal.DeleteReminderRequest) error {
 	if !r.waitForEvaluationChan() {
 		return errors.New("error deleting reminder: timed out after 30s")
@@ -761,6 +785,8 @@ func (r *statestore) getRemindersForActorType(ctx context.Context, actorType str
 
 		keyPartitionMap := make(map[string]uint32, actorMetadata.RemindersMetadata.PartitionCount)
 		getRequests := make([]state.GetRequest, actorMetadata.RemindersMetadata.PartitionCount)
+		// TODO: fix types
+		//nolint:gosec
 		for i := uint32(1); i <= uint32(actorMetadata.RemindersMetadata.PartitionCount); i++ {
 			key := actorMetadata.calculateRemindersStateKey(actorType, i)
 			keyPartitionMap[key] = i
@@ -951,7 +977,7 @@ func (r *statestore) migrateRemindersForActorType(ctx context.Context, storeName
 	actorMetadata.ID = idObj.String()
 	actorMetadata.RemindersMetadata.PartitionCount = reminderPartitionCount
 	actorRemindersPartitions := make([][]internal.Reminder, actorMetadata.RemindersMetadata.PartitionCount)
-	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
+	for i := range actorMetadata.RemindersMetadata.PartitionCount {
 		actorRemindersPartitions[i] = make([]internal.Reminder, 0)
 	}
 
@@ -966,7 +992,9 @@ func (r *statestore) migrateRemindersForActorType(ctx context.Context, storeName
 	stateMetadata := map[string]string{
 		metadataPartitionKey: actorMetadata.ID,
 	}
-	for i := 0; i < actorMetadata.RemindersMetadata.PartitionCount; i++ {
+	//TODO: fix types
+	//nolint:gosec
+	for i := range actorMetadata.RemindersMetadata.PartitionCount {
 		stateKey := actorMetadata.calculateRemindersStateKey(actorType, uint32(i+1))
 		stateOperations[i], err = r.saveRemindersInPartitionRequest(stateKey, actorRemindersPartitions[i], nil, stateMetadata)
 		if err != nil {

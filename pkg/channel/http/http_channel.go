@@ -26,6 +26,8 @@ import (
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/structpb"
 
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
 	"github.com/dapr/dapr/pkg/apphealth"
@@ -171,49 +173,37 @@ func (h *Channel) InvokeMethod(ctx context.Context, req *invokev1.InvokeMethodRe
 }
 
 // TriggerJob sends the triggered job back to the app via HTTP.
-func (h *Channel) TriggerJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	// NOTE: Using invokeMethodReq for future extensibility on httpExt types based on (future) metadata
+func (h *Channel) TriggerJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
 	// passed in from the app
-	return h.sendJob(ctx, req)
+	return h.sendJob(ctx, name, data)
 }
 
-func (h *Channel) constructJobRequest(ctx context.Context, req *invokev1.InvokeMethodRequest) (*http.Request, error) {
-	msg := req.Message()
-	verb := msg.GetHttpExtension().GetVerb().String()
-	method := msg.GetMethod()
-
-	// Construct the URL using the base address from the channel
-	uri := strings.Builder{}
-	uri.WriteString(h.baseAddress)
-
-	if len(method) > 0 && method[0] != '/' {
-		uri.WriteRune('/')
+func (h *Channel) constructJobRequest(ctx context.Context, name string, data *anypb.Any) (*http.Request, error) {
+	var value []byte
+	switch data.GetTypeUrl() {
+	case "type.googleapis.com/google.protobuf.Value":
+		var v structpb.Value
+		err := data.UnmarshalTo(&v)
+		if err != nil {
+			return nil, err
+		}
+		value, err = v.MarshalJSON()
+		if err != nil {
+			return nil, err
+		}
+	default:
+		value = bytes.TrimSpace(data.GetValue())
 	}
-	uri.WriteString(method)
 
-	// Create the HTTP request with the constructed URL and request data
-	channelReq, err := http.NewRequestWithContext(ctx, verb, uri.String(), req.RawData())
+	uri := h.baseAddress + "/job/" + strings.TrimPrefix(name, "/")
+	channelReq, err := http.NewRequestWithContext(ctx, http.MethodPost, uri, bytes.NewReader(value))
 	if err != nil {
 		return nil, err
 	}
 
-	// Recover headers from the request metadata
-	invokev1.InternalMetadataToHTTPHeader(ctx, req.Metadata(), channelReq.Header.Add)
+	channelReq.Header.Set("content-type", "application/json")
 
-	if ct := req.ContentType(); ct != "" {
-		channelReq.Header.Set("content-type", ct)
-	} else {
-		channelReq.Header.Del("content-type")
-	}
-
-	if cl := channelReq.Header.Get(invokev1.ContentLengthHeader); cl != "" {
-		v, err := strconv.ParseInt(cl, 10, 64)
-		if err != nil {
-			return nil, err
-		}
-
-		channelReq.ContentLength = v
-	}
+	channelReq.ContentLength = int64(len(value))
 
 	// HTTP client needs to inject trace parent header for proper tracing stack.
 	span := diagUtils.SpanFromContext(ctx)
@@ -234,8 +224,8 @@ func (h *Channel) constructJobRequest(ctx context.Context, req *invokev1.InvokeM
 	return channelReq, nil
 }
 
-func (h *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest) (*invokev1.InvokeMethodResponse, error) {
-	channelReq, err := h.constructJobRequest(ctx, req)
+func (h *Channel) sendJob(ctx context.Context, name string, data *anypb.Any) (*invokev1.InvokeMethodResponse, error) {
+	channelReq, err := h.constructJobRequest(ctx, name, data)
 	if err != nil {
 		return nil, err
 	}
@@ -250,7 +240,7 @@ func (h *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest
 	}()
 
 	// Emit metric when request is sent
-	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, req.Message().GetMethod(), int64(len(req.Message().GetData().GetValue())))
+	diag.DefaultHTTPMonitoring.ClientRequestStarted(ctx, channelReq.Method, channelReq.URL.Path, channelReq.ContentLength)
 	startRequest := time.Now()
 
 	rw := &RWRecorder{
@@ -284,18 +274,20 @@ func (h *Channel) sendJob(ctx context.Context, req *invokev1.InvokeMethodRequest
 	}
 
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, channelReq.URL.Path, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
-	rsp, err := h.parseChannelResponse(req, resp)
+	rsp, err := h.parseChannelResponse(resp)
 	if err != nil {
-		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
+		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, channelReq.URL.Path, strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
 	}
 
-	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
+	diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, channelReq.URL.Path, strconv.Itoa(int(rsp.Status().GetCode())), contentLength, elapsedMs)
 
+	// TODO: fix type
+	//nolint:gosec
 	rsp.Status().Code = int32(invokev1.CodeFromHTTPStatus(resp.StatusCode))
 
 	return rsp, nil
@@ -396,7 +388,7 @@ func (h *Channel) invokeMethodV1(ctx context.Context, req *invokev1.InvokeMethod
 		return nil, err
 	}
 
-	rsp, err := h.parseChannelResponse(req, resp)
+	rsp, err := h.parseChannelResponse(resp)
 	if err != nil {
 		diag.DefaultHTTPMonitoring.ClientRequestCompleted(ctx, channelReq.Method, req.Message().GetMethod(), strconv.Itoa(http.StatusInternalServerError), contentLength, elapsedMs)
 		return nil, err
@@ -488,7 +480,7 @@ func (h *Channel) constructRequest(ctx context.Context, req *invokev1.InvokeMeth
 	return channelReq, nil
 }
 
-func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channelResp *http.Response) (*invokev1.InvokeMethodResponse, error) {
+func (h *Channel) parseChannelResponse(channelResp *http.Response) (*invokev1.InvokeMethodResponse, error) {
 	contentType := channelResp.Header.Get("content-type")
 
 	// Limit response body if needed
@@ -500,6 +492,8 @@ func (h *Channel) parseChannelResponse(req *invokev1.InvokeMethodRequest, channe
 	}
 
 	// Convert status code
+	// TODO: fix type
+	//nolint:gosec
 	rsp := invokev1.
 		NewInvokeMethodResponse(int32(channelResp.StatusCode), "", nil).
 		WithHTTPHeaders(channelResp.Header).

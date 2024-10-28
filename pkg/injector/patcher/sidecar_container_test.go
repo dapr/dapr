@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/injector/annotations"
 	injectorConsts "github.com/dapr/dapr/pkg/injector/consts"
 	securityConsts "github.com/dapr/dapr/pkg/security/consts"
+	"github.com/dapr/kit/ptr"
 )
 
 func TestParseEnvString(t *testing.T) {
@@ -83,7 +84,6 @@ func TestParseEnvString(t *testing.T) {
 	}
 
 	for _, tc := range testCases {
-		tc := tc
 		t.Run(tc.testName, func(t *testing.T) {
 			c := NewSidecarConfig(&corev1.Pod{})
 			c.Env = tc.envStr
@@ -319,6 +319,7 @@ func TestGetSidecarContainer(t *testing.T) {
 				},
 			},
 		})
+		//nolint:goconst
 		c.SidecarImage = "daprio/dapr"
 		c.ImagePullPolicy = "Always"
 		c.Namespace = "dapr-system"
@@ -340,6 +341,69 @@ func TestGetSidecarContainer(t *testing.T) {
 			"--dapr-http-port", "3500",
 			"--dapr-grpc-port", "50001",
 			"--dapr-internal-grpc-port", "50002",
+			"--dapr-listen-addresses", "[::1],127.0.0.1",
+			"--dapr-public-port", "3501",
+			"--app-id", "app_id",
+			"--app-protocol", "http",
+			"--log-level", "info",
+			"--dapr-graceful-shutdown-seconds", "-1",
+			"--mode", "kubernetes",
+			"--control-plane-address", "controlplane:9000",
+			"--sentry-address", "sentry:50000",
+			"--app-port", "5000",
+			"--enable-metrics",
+			"--metrics-port", "9090",
+			"--config", "config",
+			"--placement-host-address", "placement:50000",
+			"--log-as-json",
+			"--enable-mtls",
+		}
+
+		// Command should be empty, image's entrypoint to be used.
+		assert.Empty(t, container.Command)
+		assertEqualJSON(t, container.Env, `[{"name":"NAMESPACE","value":"dapr-system"},{"name":"DAPR_TRUST_ANCHORS"},{"name":"POD_NAME","valueFrom":{"fieldRef":{"fieldPath":"metadata.name"}}},{"name":"DAPR_CONTROLPLANE_NAMESPACE","value":"my-namespace"},{"name":"DAPR_CONTROLPLANE_TRUST_DOMAIN","value":"test.example.com"},{"name":"DAPR_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"secret","key":"token"}}},{"name":"APP_API_TOKEN","valueFrom":{"secretKeyRef":{"name":"appsecret","key":"token"}}}]`)
+		// default image
+		assert.Equal(t, "daprio/dapr", container.Image)
+		assert.EqualValues(t, expectedArgs, container.Args)
+		assert.Equal(t, corev1.PullAlways, container.ImagePullPolicy)
+	})
+
+	t.Run("get sidecar container with custom grpc ports", func(t *testing.T) {
+		c := NewSidecarConfig(&corev1.Pod{
+			ObjectMeta: metav1.ObjectMeta{
+				Annotations: map[string]string{
+					annotations.KeyAppID:            "app_id",
+					annotations.KeyConfig:           "config",
+					annotations.KeyAppPort:          "5000",
+					annotations.KeyLogAsJSON:        "true",
+					annotations.KeyAPITokenSecret:   "secret",
+					annotations.KeyAppTokenSecret:   "appsecret",
+					annotations.KeyAPIGRPCPort:      "12345",
+					annotations.KeyInternalGRPCPort: "12346",
+				},
+			},
+		})
+		c.SidecarImage = "daprio/dapr"
+		c.ImagePullPolicy = "Always"
+		c.Namespace = "dapr-system"
+		c.OperatorAddress = "controlplane:9000"
+		c.PlacementAddress = "placement:50000"
+		c.SentryAddress = "sentry:50000"
+		c.MTLSEnabled = true
+		c.Identity = "pod_identity"
+		c.ControlPlaneNamespace = "my-namespace"
+		c.ControlPlaneTrustDomain = "test.example.com"
+
+		c.SetFromPodAnnotations()
+
+		container, err := c.getSidecarContainer(getSidecarContainerOpts{})
+		require.NoError(t, err)
+
+		expectedArgs := []string{
+			"/daprd",
+			"--dapr-http-port", "3500",
+			"--dapr-grpc-port", "12345",
+			"--dapr-internal-grpc-port", "12346",
 			"--dapr-listen-addresses", "[::1],127.0.0.1",
 			"--dapr-public-port", "3501",
 			"--app-id", "app_id",
@@ -848,6 +912,58 @@ func TestGetSidecarContainer(t *testing.T) {
 				assert.NotNil(t, container.SecurityContext.Capabilities, "SecurityContext.Capabilities should not be nil")
 				assert.Equal(t, corev1.Capabilities{Drop: []corev1.Capability{"ALL"}}, *container.SecurityContext.Capabilities, "SecurityContext.Capabilities should drop all capabilities")
 				assert.Nil(t, container.SecurityContext.SeccompProfile)
+			},
+		},
+		{
+			name: "set run as non root explicitly true",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsNonRoot = true
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
+				assert.Equal(t, ptr.Of(true), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be true")
+			},
+		},
+		{
+			name: "set run as non root explicitly false",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsNonRoot = false
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should not be nil")
+				assert.Equal(t, ptr.Of(false), container.SecurityContext.RunAsNonRoot, "SecurityContext.RunAsNonRoot should be false")
+			},
+		},
+		{
+			name: "set run as user 1000",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsUser = ptr.Of(int64(1000))
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should not be nil")
+				assert.Equal(t, ptr.Of(int64(1000)), container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be 1000")
+			},
+		},
+		{
+			name: "do not set run as user leave it as default",
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.SecurityContext.RunAsUser, "SecurityContext.RunAsUser should be nil")
+			},
+		},
+		{
+			name: "set run as group 3000",
+			sidecarConfigModifierFn: func(c *SidecarConfig) {
+				c.RunAsGroup = ptr.Of(int64(3000))
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.NotNil(t, container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should not be nil")
+				assert.Equal(t, ptr.Of(int64(3000)), container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be 3000")
+			},
+		},
+		{
+			name: "do not set run as group leave it as default",
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Nil(t, container.SecurityContext.RunAsGroup, "SecurityContext.RunAsGroup should be nil")
 			},
 		},
 	}))

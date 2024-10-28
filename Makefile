@@ -46,8 +46,8 @@ PROTOC ?=protoc
 
 # Version of "protoc" to use
 # We must also specify a protobuf "suite" version from https://github.com/protocolbuffers/protobuf/releases
-PROTOC_VERSION = 24.4
-PROTOBUF_SUITE_VERSION = 24.4
+PROTOC_VERSION = 25.4
+PROTOBUF_SUITE_VERSION = 25.4
 
 # name of protoc-gen-go when protoc-gen-go --version is run.
 PROTOC_GEN_GO_NAME = "protoc-gen-go"
@@ -390,8 +390,8 @@ test-integration-parallel: test-deps
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.55.2 , otherwise you might encounter errors.
-# You can download version v1.55.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.55.2
+# Please use golangci-lint version v1.61.0 , otherwise you might encounter errors.
+# You can download version v1.61.0 at https://github.com/golangci/golangci-lint/releases/tag/v1.61.0
 .PHONY: lint
 lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m
@@ -413,7 +413,7 @@ MODFILES := $(shell find . -name go.mod)
 define modtidy-target
 .PHONY: modtidy-$(1)
 modtidy-$(1):
-	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.22.6; cd -
+	cd $(shell dirname $(1)); CGO_ENABLED=$(CGO) go mod tidy -compat=1.23.1; cd -
 endef
 
 # Generate modtidy target action for each go.mod file

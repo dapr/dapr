@@ -92,7 +92,6 @@ func WithExit1() Option {
 	return WithExecOptions(
 		exec.WithExitCode(1),
 		exec.WithRunError(func(t *testing.T, err error) {
-			//nolint:testifylint
 			assert.ErrorContains(t, err, "exit status 1")
 		}),
 	)
@@ -302,6 +301,12 @@ func WithSocket(t *testing.T, socket *socket.Socket) Option {
 func WithAppAPIToken(t *testing.T, token string) Option {
 	return WithExecOptions(exec.WithEnvVars(t,
 		"APP_API_TOKEN", token,
+	))
+}
+
+func WithDaprAPIToken(t *testing.T, token string) Option {
+	return WithExecOptions(exec.WithEnvVars(t,
+		"DAPR_API_TOKEN", token,
 	))
 }
 

@@ -21,6 +21,7 @@ import (
 	"testing"
 
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
@@ -85,6 +86,10 @@ func WithClusterDaprSubscriptionV2ListFromStore(t *testing.T, store *store.Store
 	return handleClusterListResourceFromStore(t, "/apis/dapr.io/v2alpha1/subscriptions", store)
 }
 
+func WithClusterNamespaceListFromStore(t *testing.T, store *store.Store) Option {
+	return handleClusterListResourceFromStore(t, "/api/v1/namespaces", store)
+}
+
 func WithClusterDaprHTTPEndpointList(t *testing.T, endpoints *httpendapi.HTTPEndpointList) Option {
 	return handleClusterListResource(t, "/apis/dapr.io/v1alpha1/httpendpoints", endpoints)
 }
@@ -107,6 +112,10 @@ func WithClusterStatefulSetList(t *testing.T, ss *appsv1.StatefulSetList) Option
 
 func WithClusterServiceAccountList(t *testing.T, services *corev1.ServiceAccountList) Option {
 	return handleClusterListResource(t, "/api/v1/serviceaccounts", services)
+}
+
+func WithClusterNamespaceList(t *testing.T, namespaces *corev1.NamespaceList) Option {
+	return handleClusterListResource(t, "/api/v1/namespaces", namespaces)
 }
 
 func WithDaprConfigurationGet(t *testing.T, config *configapi.Configuration) Option {
@@ -154,6 +163,7 @@ func WithBaseOperatorAPI(t *testing.T, td spiffeid.TrustDomain, ns string, sentr
 			WithClusterDaprSubscriptionListV2(t, &subv2api.SubscriptionList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v2alpha1", Kind: "SubscriptionList"}}),
 			WithClusterDaprHTTPEndpointList(t, &httpendapi.HTTPEndpointList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "HTTPEndpointList"}}),
 			WithClusterDaprResiliencyList(t, &resapi.ResiliencyList{TypeMeta: metav1.TypeMeta{APIVersion: "dapr.io/v1alpha1", Kind: "ResiliencyList"}}),
+			WithClusterNamespaceList(t, &corev1.NamespaceList{TypeMeta: metav1.TypeMeta{APIVersion: "v1", Kind: "NamespaceList"}}),
 		} {
 			op(o)
 		}
@@ -182,7 +192,7 @@ func handleGetResource(t *testing.T, apigv, resource, ns, name string, obj runti
 func handleObj(t *testing.T, obj runtime.Object) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		objB, err := json.Marshal(obj)
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		w.Header().Add("Content-Length", strconv.Itoa(len(objB)))
 		w.Header().Add("Content-Type", "application/json")
 		w.Write(objB)
@@ -192,7 +202,7 @@ func handleObj(t *testing.T, obj runtime.Object) http.HandlerFunc {
 func handleObjFromStore(t *testing.T, store *store.Store) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		objB, err := json.Marshal(store.Objects())
-		require.NoError(t, err)
+		assert.NoError(t, err)
 		w.Header().Add("Content-Length", strconv.Itoa(len(objB)))
 		w.Header().Add("Content-Type", "application/json")
 		w.Write(objB)

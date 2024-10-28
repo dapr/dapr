@@ -27,6 +27,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/exp/slices"
 	"google.golang.org/grpc/codes"
@@ -40,8 +41,10 @@ import (
 	"github.com/dapr/dapr/pkg/apis/resiliency/v1alpha1"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
+	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -138,7 +141,7 @@ func (r *reentrantAppChannel) InvokeMethod(ctx context.Context, req *invokev1.In
 		r.nextCall = r.nextCall[1:]
 
 		if val := req.Metadata()["Dapr-Reentrancy-Id"]; val != nil {
-			if nextReq.Metadata == nil { //nolint:protogetter
+			if nextReq.Metadata == nil {
 				nextReq.Metadata = make(map[string]*internalsv1pb.ListStringValue)
 			}
 			nextReq.Metadata["Dapr-Reentrancy-Id"] = &internalsv1pb.ListStringValue{
@@ -205,6 +208,7 @@ func (b *runtimeBuilder) buildActorRuntime(t *testing.T) *actorsRuntime {
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.FromConfigurations(log, testResiliency),
 		StateStoreName: storeName,
+		Healthz:        healthz.New(),
 	}, clock)
 	require.NoError(t, err)
 
@@ -233,6 +237,7 @@ func newTestActorsRuntimeWithMock(t *testing.T, appChannel channel.AppChannel) *
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
+		Healthz:        healthz.New(),
 		MockPlacement:  NewMockPlacement(TestAppID),
 	}, clock)
 	require.NoError(t, err)
@@ -256,6 +261,7 @@ func newTestActorsRuntimeWithMockWithoutPlacement(t *testing.T, appChannel chann
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
+		Healthz:        healthz.New(),
 	}, clock)
 	require.NoError(t, err)
 
@@ -278,6 +284,7 @@ func newTestActorsRuntimeWithMockAndNoStore(t *testing.T, appChannel channel.App
 		TracingSpec:    config.TracingSpec{SamplingRate: "1"},
 		Resiliency:     resiliency.New(log),
 		StateStoreName: "actorStore",
+		Healthz:        healthz.New(),
 	}, clock)
 	require.NoError(t, err)
 
@@ -986,7 +993,7 @@ func TestTransactionalState(t *testing.T) {
 		fakeCallAndActivateActor(testActorsRuntime, actorType, actorID, testActorsRuntime.clock)
 
 		ops := make([]TransactionalOperation, 20)
-		for i := 0; i < 20; i++ {
+		for i := range ops {
 			ops[i] = TransactionalOperation{
 				Operation: Upsert,
 				Request: TransactionalUpsert{
@@ -1645,4 +1652,56 @@ func TestIsActorLocal(t *testing.T) {
 			}
 		})
 	}
+}
+
+func TestFIFOActorInvocation(t *testing.T) {
+	// Initialize the mock actors with a reasonable max stack depth
+	mockActors := NewMockActorFIFOInvocation(5)
+	numCalls := 10000
+
+	// Expected order of method IDs
+	expectedOrder := make([]string, 0, numCalls)
+	for i := range numCalls {
+		expectedOrder = append(expectedOrder, fmt.Sprintf("TestFIFO%d", i))
+	}
+
+	var wg sync.WaitGroup
+
+	mockActors.On("Call", mock.Anything, mock.Anything).Return(nil, nil).Times(numCalls)
+
+	// Simulate invoking methods concurrently
+	for _, methodName := range expectedOrder {
+		wg.Add(1)
+		go func(methodName string) {
+			defer wg.Done()
+
+			// Create a mock InternalInvokeRequest
+			req := &internalsv1pb.InternalInvokeRequest{
+				Message: &commonv1pb.InvokeRequest{
+					Method: methodName,
+				},
+			}
+
+			// Call the mock actor
+			_, err := mockActors.Call(context.Background(), req)
+			assert.NoError(t, err, "Call should not return an error")
+		}(methodName)
+	}
+
+	// Wait for all goroutines to finish
+	wg.Wait()
+
+	// Verify the call order
+	mockActors.receivedCallOrderLock.Lock()
+	receivedCallOrder := make([]string, len(mockActors.receivedCallOrder))
+	copy(receivedCallOrder, mockActors.receivedCallOrder)
+	mockActors.receivedCallOrderLock.Unlock()
+
+	mockActors.processedCallOrderLock.Lock()
+	processedCallOrder := make([]string, len(mockActors.processedCallOrder))
+	copy(processedCallOrder, mockActors.processedCallOrder)
+	mockActors.processedCallOrderLock.Unlock()
+
+	require.Equal(t, len(expectedOrder), len(receivedCallOrder), "Number of received and processed calls should match")
+	require.Equal(t, processedCallOrder, receivedCallOrder, "Actor methods were not called in FIFO order")
 }

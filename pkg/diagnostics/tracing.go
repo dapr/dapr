@@ -170,8 +170,10 @@ func StartInternalCallbackSpan(ctx context.Context, spanName string, parent trac
 	}
 
 	ctx = trace.ContextWithRemoteSpanContext(ctx, parent)
+	//nolint:spancheck
 	ctx, span := tracer.Start(ctx, spanName, trace.WithSpanKind(trace.SpanKindClient))
 
+	//nolint:spancheck
 	return ctx, span
 }
 

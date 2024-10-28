@@ -26,7 +26,6 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 // Option is a function that configures the process.
@@ -98,7 +97,7 @@ func (l *LogLine) FoundAll() bool {
 
 func (l *LogLine) Cleanup(t *testing.T) {
 	close(l.closeCh)
-	for i := 0; i < 2; i++ {
+	for range 2 {
 		for expLine := range <-l.outCheck {
 			assert.Fail(t, "expected to log line: "+expLine, l.got.String())
 		}
@@ -134,7 +133,8 @@ func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[strin
 		if errors.Is(err, io.EOF) || errors.Is(err, io.ErrClosedPipe) {
 			break
 		}
-		require.NoError(t, err)
+		//nolint:testifylint
+		assert.NoError(t, err)
 
 		l.got.Write(append(line, '\n'))
 
@@ -157,5 +157,5 @@ func (l *LogLine) Stderr() io.WriteCloser {
 }
 
 func (l *LogLine) EventuallyFoundAll(t *testing.T) {
-	assert.Eventually(t, l.FoundAll, time.Second*7, time.Millisecond*10)
+	assert.Eventually(t, l.FoundAll, time.Second*15, time.Millisecond*10)
 }

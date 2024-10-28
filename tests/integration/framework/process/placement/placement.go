@@ -19,7 +19,7 @@ import (
 	"fmt"
 	"net/http"
 	"strconv"
-	"sync/atomic"
+	"sync"
 	"testing"
 	"time"
 
@@ -42,9 +42,8 @@ import (
 )
 
 type Placement struct {
-	exec    process.Interface
-	ports   *ports.Ports
-	running atomic.Bool
+	exec  process.Interface
+	ports *ports.Ports
 
 	id                  string
 	port                int
@@ -52,6 +51,9 @@ type Placement struct {
 	metricsPort         int
 	initialCluster      string
 	initialClusterPorts []int
+
+	runOnce     sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Placement {
@@ -116,20 +118,16 @@ func New(t *testing.T, fopts ...Option) *Placement {
 }
 
 func (p *Placement) Run(t *testing.T, ctx context.Context) {
-	if !p.running.CompareAndSwap(false, true) {
-		t.Fatal("Process is already running")
-	}
-
-	p.ports.Free(t)
-	p.exec.Run(t, ctx)
+	p.runOnce.Do(func() {
+		p.ports.Free(t)
+		p.exec.Run(t, ctx)
+	})
 }
 
 func (p *Placement) Cleanup(t *testing.T) {
-	if !p.running.CompareAndSwap(true, false) {
-		return
-	}
-
-	p.exec.Cleanup(t)
+	p.cleanupOnce.Do(func() {
+		p.exec.Cleanup(t)
+	})
 }
 
 func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
@@ -140,12 +138,11 @@ func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.Do(req)
-		//nolint:testifylint
 		if assert.NoError(c, err) {
 			defer resp.Body.Close()
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
 		}
-	}, time.Second*10, 10*time.Millisecond)
+	}, time.Second*25, 10*time.Millisecond)
 }
 
 func (p *Placement) ID() string {
@@ -196,19 +193,16 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 	var stream placementv1pb.Placement_ReportDaprStatusClient
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		stream, err = client.ReportDaprStatus(parentCtx)
-		//nolint:testifylint
 		if !assert.NoError(c, err) {
 			return
 		}
 
-		//nolint:testifylint
 		if !assert.NoError(c, stream.Send(msg)) {
 			_ = stream.CloseSend()
 			return
 		}
 
 		_, err = stream.Recv()
-		//nolint:testifylint
 		if !assert.NoError(c, err) {
 			_ = stream.CloseSend()
 			return
@@ -256,7 +250,7 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 
 			if in.GetOperation() == "update" {
 				tables := in.GetTables()
-				require.NotEmptyf(t, tables, "Placement table is empty")
+				assert.NotEmptyf(t, tables, "Placement table is empty")
 
 				select {
 				case placementUpdateCh <- tables:
@@ -276,13 +270,13 @@ func (p *Placement) RegisterHost(t *testing.T, ctx context.Context, msg *placeme
 }
 
 // AssertRegisterHostFails Expect the registration to fail with FailedPrecondition.
-func (p *Placement) AssertRegisterHostFails(t *testing.T, ctx context.Context, apiLevel int) {
+func (p *Placement) AssertRegisterHostFails(t *testing.T, ctx context.Context, apiLevel uint32) {
 	msg := &placementv1pb.Host{
 		Name:     "myapp-fail",
 		Port:     1234,
 		Entities: []string{"someactor"},
 		Id:       "myapp",
-		ApiLevel: uint32(apiLevel),
+		ApiLevel: apiLevel,
 	}
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, p.Address(),

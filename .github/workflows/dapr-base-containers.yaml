@@ -19,6 +19,9 @@ on:
   # Dispatch on external events
   repository_dispatch:
     types: [windows-base]
+
+permissions: {}
+
 jobs:
   build:
     strategy:
@@ -30,6 +33,9 @@ jobs:
             windows-version: "ltsc2022"
     name: Build base Windows images
     runs-on: ${{ matrix.os }}
+    permissions:
+      contents: read
+      packages: write
     env:
       WINDOWS_VERSION: ${{ matrix.windows-version }}
       TARGET_OS: windows

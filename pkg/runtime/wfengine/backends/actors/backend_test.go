@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -57,7 +58,7 @@ func TestDefaultWorkflowState(t *testing.T) {
 
 func TestAddingToInbox(t *testing.T) {
 	state := NewWorkflowState(NewActorsBackendConfig(testAppID))
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		state.AddToInbox(&backend.HistoryEvent{})
 	}
 
@@ -74,7 +75,7 @@ func TestAddingToInbox(t *testing.T) {
 
 func TestClearingInbox(t *testing.T) {
 	state := NewWorkflowState(NewActorsBackendConfig(testAppID))
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		// Simulate the loadng of inbox events from storage
 		state.Inbox = append(state.Inbox, &backend.HistoryEvent{})
 	}
@@ -94,7 +95,7 @@ func TestClearingInbox(t *testing.T) {
 func TestAddingToHistory(t *testing.T) {
 	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		err := runtimeState.AddEvent(&backend.HistoryEvent{})
 		require.NoError(t, err)
 	}
@@ -115,14 +116,16 @@ func TestLoadSavedState(t *testing.T) {
 	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
-	for i := 0; i < 10; i++ {
+	for i := range 10 {
+		//nolint:gosec
 		err := runtimeState.AddEvent(&backend.HistoryEvent{EventId: int32(i)})
 		require.NoError(t, err)
 	}
 	wfstate.ApplyRuntimeStateChanges(runtimeState)
 	wfstate.CustomStatus = "my custom status"
 
-	for i := 0; i < 5; i++ {
+	for i := range 5 {
+		//nolint:gosec
 		wfstate.AddToInbox(&backend.HistoryEvent{EventId: int32(i)})
 	}
 
@@ -146,10 +149,12 @@ func TestLoadSavedState(t *testing.T) {
 	assert.Equal(t, uint64(1), wfstate.Generation)
 	require.Len(t, wfstate.History, 10)
 	for i, e := range wfstate.History {
+		//nolint:gosec
 		assert.Equal(t, int32(i), e.GetEventId())
 	}
 	require.Len(t, wfstate.Inbox, 5)
 	for i, e := range wfstate.Inbox {
+		//nolint:gosec
 		assert.Equal(t, int32(i), e.GetEventId())
 	}
 }
@@ -176,12 +181,12 @@ func TestResetLoadedState(t *testing.T) {
 	wfstate := NewWorkflowState(NewActorsBackendConfig(testAppID))
 
 	runtimeState := backend.NewOrchestrationRuntimeState(api.InstanceID("wf1"), nil)
-	for i := 0; i < 10; i++ {
+	for range 10 {
 		require.NoError(t, runtimeState.AddEvent(&backend.HistoryEvent{}))
 	}
 	wfstate.ApplyRuntimeStateChanges(runtimeState)
 
-	for i := 0; i < 5; i++ {
+	for range 5 {
 		wfstate.AddToInbox(&backend.HistoryEvent{})
 	}
 
@@ -236,6 +241,7 @@ func getActorRuntime(t *testing.T) actors.Actors {
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
+		Healthz:        healthz.New(),
 	})
 	require.NoError(t, err)
 	return act

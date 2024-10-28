@@ -66,7 +66,7 @@ func (s *opentelemetryTracerProviderStore) RegisterSampler(sampler sdktrace.Samp
 	s.sampler = sampler
 }
 
-// RegisterTraceProvider registers a trace provider as per the tracer options in the store
+// RegisterTracerProvider registers a trace provider as per the tracer options in the store
 func (s *opentelemetryTracerProviderStore) RegisterTracerProvider() *sdktrace.TracerProvider {
 	if len(s.exporters) != 0 {
 		tracerOptions := []sdktrace.TracerProviderOption{}

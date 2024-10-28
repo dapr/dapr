@@ -166,7 +166,7 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 							// it will keep moving the time to disseminate the table, which will
 							// reduce the unnecessary table dissemination.
 							val, _ := p.disseminateNextTime.GetOrSet(op.host.Namespace, &atomic.Int64{})
-							val.Store(p.clock.Now().Add(disseminateTimeout).UnixNano())
+							val.Store(p.clock.Now().Add(p.disseminateTimeout).UnixNano())
 						}
 					}
 					<-logApplyConcurrency
@@ -300,7 +300,7 @@ func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequ
 func (p *Service) disseminateOperationOnHosts(ctx context.Context, req *tablesUpdateRequest, operation string) error {
 	errCh := make(chan error)
 
-	for i := 0; i < len(req.hosts); i++ {
+	for i := range req.hosts {
 		go func(i int) {
 			var tableToSend *v1pb.PlacementTables
 			if req.hosts[i].needsVNodes && req.tablesWithVNodes != nil {
@@ -314,7 +314,7 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, req *tablesUp
 	}
 
 	var errs []error
-	for i := 0; i < len(req.hosts); i++ {
+	for range req.hosts {
 		err := <-errCh
 		if err != nil {
 			errs = append(errs, err)

@@ -14,6 +14,7 @@ limitations under the License.
 package options
 
 import (
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -28,6 +29,8 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
+var log = logger.NewLogger("dapr.scheduler")
+
 type Options struct {
 	Port                 int
 	HealthzPort          int
@@ -40,6 +43,7 @@ type Options struct {
 	SentryAddress    string
 	PlacementAddress string
 	Mode             string
+	KubeConfig       *string
 
 	ID                      string
 	ReplicaID               uint32
@@ -59,11 +63,14 @@ type Options struct {
 	Metrics *metrics.FlagOptions
 
 	taFile         string
+	kubeconfig     string
 	etcdSpaceQuota string
 }
 
 func New(origArgs []string) (*Options, error) {
 	var opts Options
+
+	defaultEtcdStorageQuota := int64(16 * 1024 * 1024 * 1024)
 
 	// Create a flag set
 	fs := pflag.NewFlagSet("scheduler", pflag.ExitOnError)
@@ -79,6 +86,10 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.taFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
 	fs.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
+	fs.StringVar(&opts.kubeconfig, "kubeconfig", "", "Kubernetes mode only. Absolute path to the kubeconfig file.")
+	if err := fs.MarkHidden("kubeconfig"); err != nil {
+		panic(err)
+	}
 
 	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
 	fs.Uint32Var(&opts.ReplicaCount, "replica-count", 1, "The total number of scheduler replicas in the cluster")
@@ -86,7 +97,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
 	fs.StringSliceVar(&opts.EtcdClientHTTPPorts, "etcd-client-http-ports", nil, "Ports for etcd client http communication")
-	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", resource.NewQuantity(16*1024*1024*1024, resource.BinarySI).String(), "Space quota for etcd")
+	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", resource.NewQuantity(defaultEtcdStorageQuota, resource.BinarySI).String(), "Space quota for etcd")
 	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
 	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "10m", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")
 	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 10000, "Number of committed transactions to trigger a snapshot to disk.")
@@ -125,6 +136,17 @@ func New(origArgs []string) (*Options, error) {
 		return nil, fmt.Errorf("failed to parse etcd space quota: %s", err)
 	}
 	opts.EtcdSpaceQuota, _ = etcdSpaceQuota.AsInt64()
+
+	if etcdSpaceQuota.Value() < defaultEtcdStorageQuota {
+		log.Warnf("--etcd-space-quota of %s may be too low for production use. Consider increasing the value to 16Gi or larger.", etcdSpaceQuota.String())
+	}
+
+	if fs.Changed("kubeconfig") {
+		if opts.Mode != string(modes.KubernetesMode) {
+			return nil, errors.New("kubeconfig flag is only valid in --mode=kubernetes")
+		}
+		opts.KubeConfig = &opts.kubeconfig
+	}
 
 	return &opts, nil
 }

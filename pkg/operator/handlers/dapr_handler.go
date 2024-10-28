@@ -26,21 +26,21 @@ import (
 )
 
 const (
-	daprSidecarHTTPPortName         = "dapr-http"
-	daprSidecarAPIGRPCPortName      = "dapr-grpc"
-	daprSidecarInternalGRPCPortName = "dapr-internal"
-	daprSidecarMetricsPortName      = "dapr-metrics"
-	daprSidecarHTTPPort             = 3500
-	daprSidecarAPIGRPCPort          = 50001
-	daprSidecarInternalGRPCPort     = 50002
-	defaultMetricsEnabled           = true
-	defaultMetricsPort              = 9090
-	clusterIPNone                   = "None"
-	daprServiceOwnerField           = ".metadata.controller"
-	annotationPrometheusProbe       = "prometheus.io/probe"
-	annotationPrometheusScrape      = "prometheus.io/scrape"
-	annotationPrometheusPort        = "prometheus.io/port"
-	annotationPrometheusPath        = "prometheus.io/path"
+	daprSidecarHTTPPortName            = "dapr-http"
+	daprSidecarAPIGRPCPortName         = "dapr-grpc"
+	daprSidecarInternalGRPCPortName    = "dapr-internal"
+	daprSidecarMetricsPortName         = "dapr-metrics"
+	daprSidecarHTTPPort                = 3500
+	daprSidecarDefaultAPIGRPCPort      = 50001
+	daprSidecarDefaultInternalGRPCPort = 50002
+	defaultMetricsEnabled              = true
+	defaultMetricsPort                 = 9090
+	clusterIPNone                      = "None"
+	daprServiceOwnerField              = ".metadata.controller"
+	annotationPrometheusProbe          = "prometheus.io/probe"
+	annotationPrometheusScrape         = "prometheus.io/scrape"
+	annotationPrometheusPort           = "prometheus.io/port"
+	annotationPrometheusPath           = "prometheus.io/path"
 )
 
 var log = logger.NewLogger("dapr.operator.handlers")
@@ -274,10 +274,12 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 	if enableMetrics {
 		annotationsMap[annotationPrometheusProbe] = "true"
 		annotationsMap[annotationPrometheusScrape] = "true" // WARN: deprecated as of v1.7 please use prometheus.io/probe instead.
-		annotationsMap[annotationPrometheusPort] = strconv.Itoa(metricsPort)
+		annotationsMap[annotationPrometheusPort] = strconv.FormatInt(int64(metricsPort), 10)
 		annotationsMap[annotationPrometheusPath] = "/"
 	}
 
+	grpcPort := h.getGRPCPort(wrapper)
+	internalGRPCPort := h.getInternalGRPCPort(wrapper)
 	return &corev1.Service{
 		ObjectMeta: metaV1.ObjectMeta{
 			Name:        expectedService.Name,
@@ -297,20 +299,20 @@ func (h *DaprHandler) createDaprServiceValues(ctx context.Context, expectedServi
 				},
 				{
 					Protocol:   corev1.ProtocolTCP,
-					Port:       int32(daprSidecarAPIGRPCPort),
-					TargetPort: intstr.FromInt(daprSidecarAPIGRPCPort),
+					Port:       grpcPort,
+					TargetPort: intstr.FromInt32(grpcPort),
 					Name:       daprSidecarAPIGRPCPortName,
 				},
 				{
 					Protocol:   corev1.ProtocolTCP,
-					Port:       int32(daprSidecarInternalGRPCPort),
-					TargetPort: intstr.FromInt(daprSidecarInternalGRPCPort),
+					Port:       internalGRPCPort,
+					TargetPort: intstr.FromInt32(internalGRPCPort),
 					Name:       daprSidecarInternalGRPCPortName,
 				},
 				{
 					Protocol:   corev1.ProtocolTCP,
-					Port:       int32(metricsPort),
-					TargetPort: intstr.FromInt(metricsPort),
+					Port:       metricsPort,
+					TargetPort: intstr.FromInt32(metricsPort),
 					Name:       daprSidecarMetricsPortName,
 				},
 			},
@@ -336,15 +338,16 @@ func (h *DaprHandler) getEnableMetrics(wrapper ObjectWrapper) bool {
 	return enableMetrics
 }
 
-func (h *DaprHandler) getMetricsPort(wrapper ObjectWrapper) int {
-	annotationsMap := wrapper.GetTemplateAnnotations()
-	metricsPort := defaultMetricsPort
-	if val := annotationsMap[annotations.KeyMetricsPort]; val != "" {
-		if v, err := strconv.Atoi(val); err == nil {
-			metricsPort = v
-		}
-	}
-	return metricsPort
+func (h *DaprHandler) getMetricsPort(wrapper ObjectWrapper) int32 {
+	return meta.GetAnnotationIntValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyMetricsPort, defaultMetricsPort)
+}
+
+func (h *DaprHandler) getGRPCPort(wrapper ObjectWrapper) int32 {
+	return meta.GetAnnotationIntValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyAPIGRPCPort, daprSidecarDefaultAPIGRPCPort)
+}
+
+func (h *DaprHandler) getInternalGRPCPort(wrapper ObjectWrapper) int32 {
+	return meta.GetAnnotationIntValueOrDefault(wrapper.GetTemplateAnnotations(), annotations.KeyInternalGRPCPort, daprSidecarDefaultInternalGRPCPort)
 }
 
 func (h *DaprHandler) isReconciled(owner *metaV1.OwnerReference) bool {

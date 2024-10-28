@@ -43,6 +43,8 @@ type SidecarConfig struct {
 	OperatorAddress             string
 	SentryAddress               string
 	RunAsNonRoot                bool
+	RunAsUser                   *int64
+	RunAsGroup                  *int64
 	EnableK8sDownwardAPIs       bool
 	ReadOnlyRootFilesystem      bool
 	SidecarDropALLCapabilities  bool
@@ -54,8 +56,6 @@ type SidecarConfig struct {
 	RemindersService            string
 	SentrySPIFFEID              string
 	SidecarHTTPPort             int32 `default:"3500"`
-	SidecarAPIGRPCPort          int32 `default:"50001"`
-	SidecarInternalGRPCPort     int32 `default:"50002"`
 	SidecarPublicPort           int32 `default:"3501"`
 
 	Enabled                             bool    `annotation:"dapr.io/enabled"`
@@ -75,6 +75,8 @@ type SidecarConfig struct {
 	EnableDebug                         bool    `annotation:"dapr.io/enable-debug" default:"false"`
 	SidecarDebugPort                    int32   `annotation:"dapr.io/debug-port" default:"40000"`
 	Env                                 string  `annotation:"dapr.io/env"`
+	SidecarAPIGRPCPort                  int32   `annotation:"dapr.io/grpc-port" default:"50001"`
+	SidecarInternalGRPCPort             int32   `annotation:"dapr.io/internal-grpc-port" default:"50002"`
 	SidecarCPURequest                   string  `annotation:"dapr.io/sidecar-cpu-request"`
 	SidecarCPULimit                     string  `annotation:"dapr.io/sidecar-cpu-limit"`
 	SidecarMemoryRequest                string  `annotation:"dapr.io/sidecar-memory-request"`
@@ -133,7 +135,7 @@ func (c *SidecarConfig) SetFromPodAnnotations() {
 func (c *SidecarConfig) setDefaultValues() {
 	// Iterate through the fields using reflection
 	val := reflect.ValueOf(c).Elem()
-	for i := 0; i < val.NumField(); i++ {
+	for i := range val.NumField() {
 		fieldT := val.Type().Field(i)
 		fieldV := val.Field(i)
 		def := fieldT.Tag.Get("default")
@@ -150,7 +152,7 @@ func (c *SidecarConfig) setDefaultValues() {
 func (c *SidecarConfig) setFromAnnotations(an map[string]string) {
 	// Iterate through the fields using reflection
 	val := reflect.ValueOf(c).Elem()
-	for i := 0; i < val.NumField(); i++ {
+	for i := range val.NumField() {
 		fieldV := val.Field(i)
 		fieldT := val.Type().Field(i)
 		key := fieldT.Tag.Get("annotation")
@@ -216,7 +218,7 @@ func (c *SidecarConfig) toString(includeAll bool) string {
 
 	// Iterate through the fields using reflection
 	val := reflect.ValueOf(c).Elem()
-	for i := 0; i < val.NumField(); i++ {
+	for i := range val.NumField() {
 		fieldT := val.Type().Field(i)
 		fieldV := val.Field(i)
 		key := fieldT.Tag.Get("annotation")

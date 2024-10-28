@@ -40,6 +40,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	"github.com/dapr/dapr/pkg/runtime/processor"
@@ -310,7 +311,7 @@ func TestActivityChainingWorkflow(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("ActivityChain", func(ctx *task.OrchestrationContext) (any, error) {
 		val := 0
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			if err := ctx.CallActivity("PlusOne", task.WithActivityInput(val)).Await(&val); err != nil {
 				return nil, err
 			}
@@ -347,7 +348,7 @@ func TestConcurrentActivityExecution(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("ActivityFanOut", func(ctx *task.OrchestrationContext) (any, error) {
 		tasks := []task.Task{}
-		for i := 0; i < 10; i++ {
+		for i := range 10 {
 			tasks = append(tasks, ctx.CallActivity("ToString", task.WithActivityInput(i)))
 		}
 		results := []string{}
@@ -650,7 +651,7 @@ func TestConcurrentTimerExecution(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("TimerFanOut", func(ctx *task.OrchestrationContext) (any, error) {
 		tasks := []task.Task{}
-		for i := 0; i < 2; i++ {
+		for range 2 {
 			tasks = append(tasks, ctx.CreateTimer(1*time.Second))
 		}
 		for _, t := range tasks {
@@ -739,7 +740,7 @@ func TestContinueAsNew_WithEvents(t *testing.T) {
 			// Run the orchestration
 			id, err := client.ScheduleNewOrchestration(ctx, "ContinueAsNewTest", api.WithInput(0))
 			require.NoError(t, err)
-			for i := 0; i < 10; i++ {
+			for range 10 {
 				require.NoError(t, client.RaiseEvent(ctx, id, "MyEvent", api.WithEventPayload(false)))
 			}
 			require.NoError(t, client.RaiseEvent(ctx, id, "MyEvent", api.WithEventPayload(true)))
@@ -757,7 +758,7 @@ func TestPurge(t *testing.T) {
 	r := task.NewTaskRegistry()
 	r.AddOrchestratorN("ActivityChainToPurge", func(ctx *task.OrchestrationContext) (any, error) {
 		val := 0
-		for i := 0; i < 10; i++ {
+		for range 10 {
 			if err := ctx.CallActivity("PlusOne", task.WithActivityInput(val)).Await(&val); err != nil {
 				return nil, err
 			}
@@ -944,6 +945,7 @@ func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
+		Healthz:        healthz.New(),
 	})
 	require.NoError(t, err)
 
@@ -979,6 +981,7 @@ func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.Workfl
 		StateStoreName: "workflowStore",
 		MockPlacement:  actors.NewMockPlacement(testAppID),
 		Resiliency:     resiliency.New(logger.NewLogger("test")),
+		Healthz:        healthz.New(),
 	})
 	require.NoError(t, err)
 
