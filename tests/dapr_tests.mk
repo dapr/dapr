@@ -269,7 +269,7 @@ setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-p
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
-perf-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components clean-kube-cache build-perf-app-all push-perf-app-all test-perf-all
+perf-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-perf-app-all push-perf-app-all test-perf-all
 
 # Generate perf app image push targets
 $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImagePush,$(ITEM))))
@@ -366,7 +366,7 @@ $(foreach ITEM,$(PERF_TESTS),$(eval $(call genPerfTestRun,$(ITEM))))
 TEST_PERF_TARGETS:=$(foreach ITEM,$(PERF_TESTS),test-perf-$(ITEM))
 
 # start all perf tests
-test-perf-all: check-e2e-env test-deps clean-kube-cache
+test-perf-all: check-e2e-env test-deps
 	# Note: use env variable DAPR_PERF_TEST to pick one e2e test to run.
 ifeq ($(DAPR_PERF_TEST),)
 	DAPR_CONTAINER_LOG_PATH=$(DAPR_CONTAINER_LOG_PATH) \
@@ -617,7 +617,6 @@ setup-test-components: setup-app-configurations
 	# Show the installed configurations
 	$(KUBECTL) get configurations --namespace $(DAPR_TEST_NAMESPACE)
 
-clean-kube-cache:
 	# clean cache
 	rm -rf ~/.kube/cache
 
