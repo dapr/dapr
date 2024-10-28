@@ -458,13 +458,7 @@ func (k6 *K6) Dispose() error {
 	if err := k6.k6Client.Delete(k6.ctx, k6.name, v1.DeleteOptions{}); err != nil && !apierrors.IsNotFound(err) {
 		return err
 	}
-	if err := k6.waitForDeletion(); err != nil {
-		return err
-	}
-	if k6.cancel != nil {
-		k6.cancel()
-	}
-	return nil
+	return k6.waitForDeletion()
 }
 
 type K6Opt = func(*K6)
