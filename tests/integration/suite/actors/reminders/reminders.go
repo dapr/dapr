@@ -14,6 +14,7 @@ limitations under the License.
 package reminders
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/migration"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/scheduler"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/serialization"
 )
