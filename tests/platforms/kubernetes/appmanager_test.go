@@ -186,7 +186,7 @@ func TestWaitUntilDeploymentState(t *testing.T) {
 		d, err := appManager.WaitUntilDeploymentState(appManager.IsDeploymentDeleted)
 
 		require.NoError(t, err)
-		assert.Nil(t, d)
+		assert.Equal(t, new(appsv1.Deployment), d)
 		assert.Equal(t, expectedGetVerbCalled, getVerbCalled)
 	})
 }
@@ -506,7 +506,7 @@ func TestWaitUntilServiceStateDeleted(t *testing.T) {
 	appManager := NewAppManager(client, testNamespace, testApp)
 	svcObj, err := appManager.WaitUntilServiceState(appManager.app.AppName, appManager.IsServiceDeleted)
 	require.NoError(t, err)
-	assert.Nil(t, svcObj)
+	assert.Equal(t, new(apiv1.Service), svcObj)
 }
 
 func TestDeleteDeployment(t *testing.T) {
