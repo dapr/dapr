@@ -25,6 +25,7 @@ import (
 	appsv1 "k8s.io/api/apps/v1"
 	batchv1 "k8s.io/api/batch/v1"
 	apiv1 "k8s.io/api/core/v1"
+	networkv1 "k8s.io/api/networking/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/resource"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -580,14 +581,51 @@ func (m *AppManager) SetAppEnv(key, value string) error {
 func (m *AppManager) CreateIngressService() (*apiv1.Service, error) {
 	serviceClient := m.client.Services(m.namespace)
 	obj := buildServiceObject(m.namespace, m.app)
-	ctx, cancel := context.WithTimeout(m.ctx, 30*time.Second)
+	ctx, cancel := context.WithTimeout(m.ctx, 60*time.Second)
 	result, err := serviceClient.Create(ctx, obj, metav1.CreateOptions{})
 	cancel()
 	if err != nil {
 		return nil, err
 	}
 
+	if err := m.WaitForIngressReady(result.Name); err != nil {
+		return nil, err
+	}
+
 	return result, nil
+}
+
+// isIngressReady checks if the Ingress is ready.
+func isIngressReady(ingress *networkv1.Ingress, err error) bool {
+	if err != nil {
+		log.Printf("Error getting ingress: %s", err)
+		return false
+	}
+
+	// Check if ingress is ready, meaning LB has an IP
+	if len(ingress.Status.LoadBalancer.Ingress) > 0 {
+		for _, ingressStatus := range ingress.Status.LoadBalancer.Ingress {
+			if ingressStatus.IP != "" {
+				return true
+			}
+		}
+	}
+
+	log.Printf("Ingress %q is not ready: no external IP assigned", ingress.Name)
+	return false
+}
+
+// WaitForIngressReady waits for the Ingress to be ready.
+func (m *AppManager) WaitForIngressReady(ingressName string) error {
+	_, err := m.WaitUntilIngressState(ingressName, func(ingress *networkv1.Ingress, err error) bool {
+		return isIngressReady(ingress, err)
+	})
+
+	if err != nil {
+		return fmt.Errorf("ingress %q is not in desired state: %w", ingressName, err)
+	}
+
+	return nil
 }
 
 // AcquireExternalURL gets external ingress endpoint from service when it is ready.
@@ -629,6 +667,33 @@ func (m *AppManager) WaitUntilServiceState(svcName string, isState func(*apiv1.S
 	}
 
 	return lastService, nil
+}
+
+// WaitUntilIngressState waits until isIngressState returns true.
+func (m *AppManager) WaitUntilIngressState(ingressName string, isIngressState func(*networkv1.Ingress, error) bool) (*networkv1.Ingress, error) {
+	ingressClient := m.client.Ingresses(m.namespace)
+	var lastIngress *networkv1.Ingress
+
+	ctx, cancel := context.WithTimeout(m.ctx, PollTimeout)
+	defer cancel()
+
+	waitErr := wait.PollUntilContextCancel(ctx, PollInterval, true, func(ctx context.Context) (bool, error) {
+		var err error
+		lastIngress, err = ingressClient.Get(ctx, ingressName, metav1.GetOptions{})
+		done := isIngressState(lastIngress, err)
+		if !done && err != nil {
+			log.Printf("wait for ingress %s: %s", ingressName, err)
+			return true, err
+		}
+
+		return done, nil
+	})
+
+	if waitErr != nil {
+		return lastIngress, fmt.Errorf("ingress %q is not in desired state, received: %#v: %s", ingressName, lastIngress, waitErr)
+	}
+
+	return lastIngress, nil
 }
 
 // AcquireExternalURLFromService gets external url from Service Object.
