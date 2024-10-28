@@ -21,6 +21,7 @@ import (
 	appv1 "k8s.io/client-go/kubernetes/typed/apps/v1"
 	batchv1 "k8s.io/client-go/kubernetes/typed/batch/v1"
 	apiv1 "k8s.io/client-go/kubernetes/typed/core/v1"
+	networkv1 "k8s.io/client-go/kubernetes/typed/networking/v1"
 	"k8s.io/client-go/rest"
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/util/homedir"
@@ -124,4 +125,8 @@ func (c *KubeClient) Namespaces() apiv1.NamespaceInterface {
 // DaprComponents gets Dapr component client for namespace.
 func (c *KubeClient) DaprComponents(namespace string) componentsv1alpha1.ComponentInterface {
 	return c.DaprClientSet.ComponentsV1alpha1().Components(namespace)
+}
+
+func (c *KubeClient) Ingresses(namespace string) networkv1.IngressInterface {
+	return c.ClientSet.NetworkingV1().Ingresses(namespace)
 }
