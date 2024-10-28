@@ -269,7 +269,7 @@ setup-pubsub-subs-perf-test-components: setup-test-env-rabbitmq setup-test-env-p
 
 e2e-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-e2e-app-all push-e2e-app-all test-e2e-all
 
-perf-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components build-perf-app-all push-perf-app-all test-perf-all
+perf-build-deploy-run: create-test-namespace setup-3rd-party build docker-push docker-deploy-k8s setup-test-components clean-kube-cache build-perf-app-all push-perf-app-all test-perf-all
 
 # Generate perf app image push targets
 $(foreach ITEM,$(PERF_TEST_APPS),$(eval $(call genPerfAppImagePush,$(ITEM))))
@@ -617,6 +617,7 @@ setup-test-components: setup-app-configurations
 	# Show the installed configurations
 	$(KUBECTL) get configurations --namespace $(DAPR_TEST_NAMESPACE)
 
+clean-kube-cache:
 	# clean cache
 	rm -rf ~/.kube/cache
 
