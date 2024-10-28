@@ -16,6 +16,7 @@ package monitoring
 import (
 	"context"
 	"fmt"
+	"os"
 	"time"
 
 	"go.opentelemetry.io/otel"
@@ -26,6 +27,8 @@ import (
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
+
+	env "github.com/dapr/dapr/pkg/config/env"
 )
 
 var (
@@ -45,19 +48,12 @@ var (
 
 // InitMetrics initializes the placement service metrics.
 func InitMetrics(ctx context.Context) error {
+	collectorEndpoint := os.Getenv(env.OtlpExporterEndpoint) // TODO: Update this to match dapr
+
 	// Set up the Prometheus exporter (for the /metrics endpoint)
 	promExporter, err := prometheus.New(prometheus.WithNamespace("dapr"))
 	if err != nil {
 		return fmt.Errorf("failed to create Prometheus exporter: %w", err)
-	}
-
-	// Set up the OTLP exporter (for pushing to an OTLP receiver)
-	otlpExporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithInsecure(),
-		otlpmetricgrpc.WithEndpoint("localhost:4317"), // TODO: hardcoding it temporarily
-	)
-	if err != nil {
-		return fmt.Errorf("failed to create OTLP exporter: %w", err)
 	}
 
 	// Create a new resource to associate metadata with metrics
@@ -68,11 +64,30 @@ func InitMetrics(ctx context.Context) error {
 		return fmt.Errorf("failed to create resource: %w", err)
 	}
 
-	mp := sdkmetric.NewMeterProvider(
-		sdkmetric.WithResource(res),
-		sdkmetric.WithReader(promExporter),                              // Add Prometheus exporter as a reader
-		sdkmetric.WithReader(sdkmetric.NewPeriodicReader(otlpExporter)), // Add OTLP exporter with periodic reading. Interval and timeout are provided through ENV variables
-	)
+	// Set up the OTLP exporter (for pushing to an OTLP receiver)
+	var mp *sdkmetric.MeterProvider
+	if collectorEndpoint != "" {
+		otlpExporter, err := otlpmetricgrpc.New(ctx,
+			otlpmetricgrpc.WithInsecure(),
+			otlpmetricgrpc.WithEndpoint("localhost:4317"), // TODO: hardcoding it temporarily
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create OTLP exporter: %w", err)
+		}
+		// TODO: Support for TLS
+
+		mp = sdkmetric.NewMeterProvider(
+			sdkmetric.WithResource(res),
+			sdkmetric.WithReader(promExporter),                              // Add Prometheus exporter as a reader
+			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(otlpExporter)), // Add OTLP exporter with periodic reading. Interval and timeout are provided through ENV variables
+		)
+
+	} else {
+		mp = sdkmetric.NewMeterProvider(
+			sdkmetric.WithResource(res),
+			sdkmetric.WithReader(promExporter), // Add Prometheus exporter as a reader
+		)
+	}
 
 	// Set the global MeterProvider
 	otel.SetMeterProvider(mp)
