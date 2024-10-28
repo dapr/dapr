@@ -79,6 +79,7 @@ func TestActorDoubleActivation(t *testing.T) {
 		"./test.js",
 		loadtest.WithParallelism(2),
 		loadtest.WithRunnerEnvVar("TEST_APP_NAME", serviceApplicationName),
+		loadtest.EnableLog(),
 	)
 	defer k6Test.Dispose()
 
