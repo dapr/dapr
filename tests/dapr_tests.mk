@@ -629,7 +629,7 @@ setup-kind:
 	# Connect the registry to the KinD network.
 	docker network connect "kind" kind-registry
 	# Setup metrics-server
-	helm install ms stable/metrics-server -n kube-system --set=args={--kubelet-insecure-tls}
+	helm upgrade --install metrics-server metrics-server/metrics-server --namespace kube-system --set=args={--kubelet-insecure-tls}
 
 describe-kind-env:
 	@echo "\
