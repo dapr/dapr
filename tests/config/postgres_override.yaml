@@ -18,10 +18,6 @@ primary:
                 operator: In
                 values:
                   - linux
-              - key: kubernetes.io/arch
-                operator: In
-                values:
-                  - amd64
   persistence:
     enabled: false
 tls:
