@@ -94,11 +94,25 @@ message WatchJobsRequestInitial {
   repeated string actor_types = 3;
 }
 
+// WatchJobsRequestResultStatus is sent by clients to signal where the job
+// triggering was sucessful or failed, in which case should be handled by the
+// failure policy of the job.
+enum WatchJobsRequestResultStatus {
+  // The job was processed successfully.
+  SUCCESS = 0;
+
+  // The job was processed with an error.
+  FAILED = 1;
+}
+
 // WatchJobsRequestResult is the result of a job execution to allow the job to
 // be marked as processed.
 message WatchJobsRequestResult {
   // id is the id of the job that has finished processing, used as an incremental counter.
   uint64 id = 1;
+
+  // status is the status of the job processing.
+  WatchJobsRequestResultStatus status = 2;
 }
 
 // WatchJobsResponse is the response message to convey the details of a job.
