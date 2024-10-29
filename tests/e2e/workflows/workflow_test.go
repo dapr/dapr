@@ -39,6 +39,8 @@ var (
 	appNamePrefix = "workflowsapp"
 )
 
+const numHealthChecks = 60 // Number of get calls before starting tests.
+
 func TestMain(m *testing.M) {
 	utils.SetupLogs("workflowtestdapr")
 	utils.InitHTTPClient(true)
@@ -376,11 +378,13 @@ func TestWorkflow(t *testing.T) {
 			require.NotEmpty(t, externalURL, "external URL must not be empty")
 
 			// Check if test app endpoint is available
-			require.NoError(t, utils.HealthCheckApps(externalURL))
+			t.Logf("Checking if app is healthy ...")
+			_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+			require.NoError(t, err)
 
 			// Generate a unique test suffix for this test
 			suffixBytes := make([]byte, 7)
-			_, err := io.ReadFull(rand.Reader, suffixBytes)
+			_, err = io.ReadFull(rand.Reader, suffixBytes)
 			require.NoError(t, err)
 			suffix := hex.EncodeToString(suffixBytes)
 
