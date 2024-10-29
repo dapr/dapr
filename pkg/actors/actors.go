@@ -662,10 +662,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 	if err != nil {
 		return nil, status.Error(codes.ResourceExhausted, err.Error())
 	}
-	err = a.idleActorProcessor.Enqueue(act)
-	if err != nil {
-		return nil, fmt.Errorf("failed to enqueue actor in idle processor: %w", err)
-	}
+	a.idleActorProcessor.Enqueue(act)
 	defer act.unlock()
 
 	// Replace method to actors method.
@@ -1438,10 +1435,7 @@ func (a *actorsRuntime) Close() error {
 			}
 		}
 		if a.idleActorProcessor != nil {
-			err := a.idleActorProcessor.Close()
-			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to close actor idle processor: %w", err))
-			}
+			a.idleActorProcessor.Close()
 		}
 	}
 
