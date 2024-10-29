@@ -300,7 +300,9 @@ spec:
 	})
 }
 
-func (u *uppercase) doReq(t require.TestingT, ctx context.Context, client *nethttp.Client, source, target *daprd.Daprd, expectUpper bool) {
+func (u *uppercase) doReq(t *testing.T, ctx context.Context, client *nethttp.Client, source, target *daprd.Daprd, expectUpper bool) {
+	t.Helper()
+
 	url := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/foo", source.HTTPPort(), target.AppID())
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader("hello"))
 	require.NoError(t, err)
