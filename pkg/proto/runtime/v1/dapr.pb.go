@@ -6841,8 +6841,8 @@ func (*DeleteJobResponse) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{99}
 }
 
-// ConversationAlpha1Request is the request object for Conversation.
-type ConversationAlpha1Request struct {
+// ConversationRequest is the request object for Conversation.
+type ConversationRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -6863,8 +6863,8 @@ type ConversationAlpha1Request struct {
 	Temperature *float64 `protobuf:"fixed64,7,opt,name=temperature,proto3,oneof" json:"temperature,omitempty"`
 }
 
-func (x *ConversationAlpha1Request) Reset() {
-	*x = ConversationAlpha1Request{}
+func (x *ConversationRequest) Reset() {
+	*x = ConversationRequest{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[100]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -6872,13 +6872,13 @@ func (x *ConversationAlpha1Request) Reset() {
 	}
 }
 
-func (x *ConversationAlpha1Request) String() string {
+func (x *ConversationRequest) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ConversationAlpha1Request) ProtoMessage() {}
+func (*ConversationRequest) ProtoMessage() {}
 
-func (x *ConversationAlpha1Request) ProtoReflect() protoreflect.Message {
+func (x *ConversationRequest) ProtoReflect() protoreflect.Message {
 	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[100]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -6890,54 +6890,54 @@ func (x *ConversationAlpha1Request) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ConversationAlpha1Request.ProtoReflect.Descriptor instead.
-func (*ConversationAlpha1Request) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConversationRequest.ProtoReflect.Descriptor instead.
+func (*ConversationRequest) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{100}
 }
 
-func (x *ConversationAlpha1Request) GetName() string {
+func (x *ConversationRequest) GetName() string {
 	if x != nil {
 		return x.Name
 	}
 	return ""
 }
 
-func (x *ConversationAlpha1Request) GetContextID() string {
+func (x *ConversationRequest) GetContextID() string {
 	if x != nil && x.ContextID != nil {
 		return *x.ContextID
 	}
 	return ""
 }
 
-func (x *ConversationAlpha1Request) GetInputs() []*ConversationInput {
+func (x *ConversationRequest) GetInputs() []*ConversationInput {
 	if x != nil {
 		return x.Inputs
 	}
 	return nil
 }
 
-func (x *ConversationAlpha1Request) GetParameters() map[string]*anypb.Any {
+func (x *ConversationRequest) GetParameters() map[string]*anypb.Any {
 	if x != nil {
 		return x.Parameters
 	}
 	return nil
 }
 
-func (x *ConversationAlpha1Request) GetMetadata() map[string]string {
+func (x *ConversationRequest) GetMetadata() map[string]string {
 	if x != nil {
 		return x.Metadata
 	}
 	return nil
 }
 
-func (x *ConversationAlpha1Request) GetScrubPII() bool {
+func (x *ConversationRequest) GetScrubPII() bool {
 	if x != nil && x.ScrubPII != nil {
 		return *x.ScrubPII
 	}
 	return false
 }
 
-func (x *ConversationAlpha1Request) GetTemperature() float64 {
+func (x *ConversationRequest) GetTemperature() float64 {
 	if x != nil && x.Temperature != nil {
 		return *x.Temperature
 	}
@@ -7010,8 +7010,8 @@ func (x *ConversationInput) GetScrubPII() bool {
 	return false
 }
 
-// ConversationAlpha1Result is the result for one input.
-type ConversationAlpha1Result struct {
+// ConversationResult is the result for one input.
+type ConversationResult struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -7022,8 +7022,8 @@ type ConversationAlpha1Result struct {
 	Parameters map[string]*anypb.Any `protobuf:"bytes,2,rep,name=parameters,proto3" json:"parameters,omitempty" protobuf_key:"bytes,1,opt,name=key,proto3" protobuf_val:"bytes,2,opt,name=value,proto3"`
 }
 
-func (x *ConversationAlpha1Result) Reset() {
-	*x = ConversationAlpha1Result{}
+func (x *ConversationResult) Reset() {
+	*x = ConversationResult{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[102]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -7031,13 +7031,13 @@ func (x *ConversationAlpha1Result) Reset() {
 	}
 }
 
-func (x *ConversationAlpha1Result) String() string {
+func (x *ConversationResult) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ConversationAlpha1Result) ProtoMessage() {}
+func (*ConversationResult) ProtoMessage() {}
 
-func (x *ConversationAlpha1Result) ProtoReflect() protoreflect.Message {
+func (x *ConversationResult) ProtoReflect() protoreflect.Message {
 	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[102]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -7049,27 +7049,27 @@ func (x *ConversationAlpha1Result) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ConversationAlpha1Result.ProtoReflect.Descriptor instead.
-func (*ConversationAlpha1Result) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConversationResult.ProtoReflect.Descriptor instead.
+func (*ConversationResult) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{102}
 }
 
-func (x *ConversationAlpha1Result) GetResult() string {
+func (x *ConversationResult) GetResult() string {
 	if x != nil {
 		return x.Result
 	}
 	return ""
 }
 
-func (x *ConversationAlpha1Result) GetParameters() map[string]*anypb.Any {
+func (x *ConversationResult) GetParameters() map[string]*anypb.Any {
 	if x != nil {
 		return x.Parameters
 	}
 	return nil
 }
 
-// ConversationAlpha1Response is the response for Conversation.
-type ConversationAlpha1Response struct {
+// ConversationResponse is the response for Conversation.
+type ConversationResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
 	unknownFields protoimpl.UnknownFields
@@ -7077,11 +7077,11 @@ type ConversationAlpha1Response struct {
 	// The ID of an existing chat (like in ChatGPT)
 	ContextID *string `protobuf:"bytes,1,opt,name=contextID,proto3,oneof" json:"contextID,omitempty"`
 	// An array of results.
-	Outputs []*ConversationAlpha1Result `protobuf:"bytes,2,rep,name=outputs,proto3" json:"outputs,omitempty"`
+	Outputs []*ConversationResult `protobuf:"bytes,2,rep,name=outputs,proto3" json:"outputs,omitempty"`
 }
 
-func (x *ConversationAlpha1Response) Reset() {
-	*x = ConversationAlpha1Response{}
+func (x *ConversationResponse) Reset() {
+	*x = ConversationResponse{}
 	if protoimpl.UnsafeEnabled {
 		mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[103]
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -7089,13 +7089,13 @@ func (x *ConversationAlpha1Response) Reset() {
 	}
 }
 
-func (x *ConversationAlpha1Response) String() string {
+func (x *ConversationResponse) String() string {
 	return protoimpl.X.MessageStringOf(x)
 }
 
-func (*ConversationAlpha1Response) ProtoMessage() {}
+func (*ConversationResponse) ProtoMessage() {}
 
-func (x *ConversationAlpha1Response) ProtoReflect() protoreflect.Message {
+func (x *ConversationResponse) ProtoReflect() protoreflect.Message {
 	mi := &file_dapr_proto_runtime_v1_dapr_proto_msgTypes[103]
 	if protoimpl.UnsafeEnabled && x != nil {
 		ms := protoimpl.X.MessageStateOf(protoimpl.Pointer(x))
@@ -7107,19 +7107,19 @@ func (x *ConversationAlpha1Response) ProtoReflect() protoreflect.Message {
 	return mi.MessageOf(x)
 }
 
-// Deprecated: Use ConversationAlpha1Response.ProtoReflect.Descriptor instead.
-func (*ConversationAlpha1Response) Descriptor() ([]byte, []int) {
+// Deprecated: Use ConversationResponse.ProtoReflect.Descriptor instead.
+func (*ConversationResponse) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_runtime_v1_dapr_proto_rawDescGZIP(), []int{103}
 }
 
-func (x *ConversationAlpha1Response) GetContextID() string {
+func (x *ConversationResponse) GetContextID() string {
 	if x != nil && x.ContextID != nil {
 		return *x.ContextID
 	}
 	return ""
 }
 
-func (x *ConversationAlpha1Response) GetOutputs() []*ConversationAlpha1Result {
+func (x *ConversationResponse) GetOutputs() []*ConversationResult {
 	if x != nil {
 		return x.Outputs
 	}
@@ -8788,10 +8788,10 @@ var file_dapr_proto_runtime_v1_dapr_proto_goTypes = []interface{}{
 	(*GetJobResponse)(nil),                             // 101: dapr.proto.runtime.v1.GetJobResponse
 	(*DeleteJobRequest)(nil),                           // 102: dapr.proto.runtime.v1.DeleteJobRequest
 	(*DeleteJobResponse)(nil),                          // 103: dapr.proto.runtime.v1.DeleteJobResponse
-	(*ConversationAlpha1Request)(nil),                  // 104: dapr.proto.runtime.v1.ConversationAlpha1Request
+	(*ConversationRequest)(nil),                        // 104: dapr.proto.runtime.v1.ConversationRequest
 	(*ConversationInput)(nil),                          // 105: dapr.proto.runtime.v1.ConversationInput
-	(*ConversationAlpha1Result)(nil),                   // 106: dapr.proto.runtime.v1.ConversationAlpha1Result
-	(*ConversationAlpha1Response)(nil),                 // 107: dapr.proto.runtime.v1.ConversationAlpha1Response
+	(*ConversationResult)(nil),                         // 106: dapr.proto.runtime.v1.ConversationResult
+	(*ConversationResponse)(nil),                       // 107: dapr.proto.runtime.v1.ConversationResponse
 	nil,                                                // 108: dapr.proto.runtime.v1.GetStateRequest.MetadataEntry
 	nil,                                                // 109: dapr.proto.runtime.v1.GetBulkStateRequest.MetadataEntry
 	nil,                                                // 110: dapr.proto.runtime.v1.BulkStateItem.MetadataEntry
@@ -8822,9 +8822,9 @@ var file_dapr_proto_runtime_v1_dapr_proto_goTypes = []interface{}{
 	nil,                                                // 135: dapr.proto.runtime.v1.SubscribeConfigurationResponse.ItemsEntry
 	nil,                                                // 136: dapr.proto.runtime.v1.GetWorkflowResponse.PropertiesEntry
 	nil,                                                // 137: dapr.proto.runtime.v1.StartWorkflowRequest.OptionsEntry
-	nil,                                                // 138: dapr.proto.runtime.v1.ConversationAlpha1Request.ParametersEntry
-	nil,                                                // 139: dapr.proto.runtime.v1.ConversationAlpha1Request.MetadataEntry
-	nil,                                                // 140: dapr.proto.runtime.v1.ConversationAlpha1Result.ParametersEntry
+	nil,                                                // 138: dapr.proto.runtime.v1.ConversationRequest.ParametersEntry
+	nil,                                                // 139: dapr.proto.runtime.v1.ConversationRequest.MetadataEntry
+	nil,                                                // 140: dapr.proto.runtime.v1.ConversationResult.ParametersEntry
 	(*v1.InvokeRequest)(nil),                           // 141: dapr.proto.common.v1.InvokeRequest
 	(v1.StateOptions_StateConsistency)(0),              // 142: dapr.proto.common.v1.StateOptions.StateConsistency
 	(*v1.Etag)(nil),                                    // 143: dapr.proto.common.v1.Etag
@@ -8914,16 +8914,16 @@ var file_dapr_proto_runtime_v1_dapr_proto_depIdxs = []int32{
 	148, // 71: dapr.proto.runtime.v1.Job.data:type_name -> google.protobuf.Any
 	97,  // 72: dapr.proto.runtime.v1.ScheduleJobRequest.job:type_name -> dapr.proto.runtime.v1.Job
 	97,  // 73: dapr.proto.runtime.v1.GetJobResponse.job:type_name -> dapr.proto.runtime.v1.Job
-	105, // 74: dapr.proto.runtime.v1.ConversationAlpha1Request.inputs:type_name -> dapr.proto.runtime.v1.ConversationInput
-	138, // 75: dapr.proto.runtime.v1.ConversationAlpha1Request.parameters:type_name -> dapr.proto.runtime.v1.ConversationAlpha1Request.ParametersEntry
-	139, // 76: dapr.proto.runtime.v1.ConversationAlpha1Request.metadata:type_name -> dapr.proto.runtime.v1.ConversationAlpha1Request.MetadataEntry
-	140, // 77: dapr.proto.runtime.v1.ConversationAlpha1Result.parameters:type_name -> dapr.proto.runtime.v1.ConversationAlpha1Result.ParametersEntry
-	106, // 78: dapr.proto.runtime.v1.ConversationAlpha1Response.outputs:type_name -> dapr.proto.runtime.v1.ConversationAlpha1Result
+	105, // 74: dapr.proto.runtime.v1.ConversationRequest.inputs:type_name -> dapr.proto.runtime.v1.ConversationInput
+	138, // 75: dapr.proto.runtime.v1.ConversationRequest.parameters:type_name -> dapr.proto.runtime.v1.ConversationRequest.ParametersEntry
+	139, // 76: dapr.proto.runtime.v1.ConversationRequest.metadata:type_name -> dapr.proto.runtime.v1.ConversationRequest.MetadataEntry
+	140, // 77: dapr.proto.runtime.v1.ConversationResult.parameters:type_name -> dapr.proto.runtime.v1.ConversationResult.ParametersEntry
+	106, // 78: dapr.proto.runtime.v1.ConversationResponse.outputs:type_name -> dapr.proto.runtime.v1.ConversationResult
 	31,  // 79: dapr.proto.runtime.v1.GetBulkSecretResponse.DataEntry.value:type_name -> dapr.proto.runtime.v1.SecretResponse
 	151, // 80: dapr.proto.runtime.v1.GetConfigurationResponse.ItemsEntry.value:type_name -> dapr.proto.common.v1.ConfigurationItem
 	151, // 81: dapr.proto.runtime.v1.SubscribeConfigurationResponse.ItemsEntry.value:type_name -> dapr.proto.common.v1.ConfigurationItem
-	148, // 82: dapr.proto.runtime.v1.ConversationAlpha1Request.ParametersEntry.value:type_name -> google.protobuf.Any
-	148, // 83: dapr.proto.runtime.v1.ConversationAlpha1Result.ParametersEntry.value:type_name -> google.protobuf.Any
+	148, // 82: dapr.proto.runtime.v1.ConversationRequest.ParametersEntry.value:type_name -> google.protobuf.Any
+	148, // 83: dapr.proto.runtime.v1.ConversationResult.ParametersEntry.value:type_name -> google.protobuf.Any
 	4,   // 84: dapr.proto.runtime.v1.Dapr.InvokeService:input_type -> dapr.proto.runtime.v1.InvokeServiceRequest
 	5,   // 85: dapr.proto.runtime.v1.Dapr.GetState:input_type -> dapr.proto.runtime.v1.GetStateRequest
 	6,   // 86: dapr.proto.runtime.v1.Dapr.GetBulkState:input_type -> dapr.proto.runtime.v1.GetBulkStateRequest
@@ -8982,7 +8982,7 @@ var file_dapr_proto_runtime_v1_dapr_proto_depIdxs = []int32{
 	98,  // 139: dapr.proto.runtime.v1.Dapr.ScheduleJobAlpha1:input_type -> dapr.proto.runtime.v1.ScheduleJobRequest
 	100, // 140: dapr.proto.runtime.v1.Dapr.GetJobAlpha1:input_type -> dapr.proto.runtime.v1.GetJobRequest
 	102, // 141: dapr.proto.runtime.v1.Dapr.DeleteJobAlpha1:input_type -> dapr.proto.runtime.v1.DeleteJobRequest
-	104, // 142: dapr.proto.runtime.v1.Dapr.ConverseAlpha1:input_type -> dapr.proto.runtime.v1.ConversationAlpha1Request
+	104, // 142: dapr.proto.runtime.v1.Dapr.ConverseAlpha1:input_type -> dapr.proto.runtime.v1.ConversationRequest
 	152, // 143: dapr.proto.runtime.v1.Dapr.InvokeService:output_type -> dapr.proto.common.v1.InvokeResponse
 	9,   // 144: dapr.proto.runtime.v1.Dapr.GetState:output_type -> dapr.proto.runtime.v1.GetStateResponse
 	7,   // 145: dapr.proto.runtime.v1.Dapr.GetBulkState:output_type -> dapr.proto.runtime.v1.GetBulkStateResponse
@@ -9041,7 +9041,7 @@ var file_dapr_proto_runtime_v1_dapr_proto_depIdxs = []int32{
 	99,  // 198: dapr.proto.runtime.v1.Dapr.ScheduleJobAlpha1:output_type -> dapr.proto.runtime.v1.ScheduleJobResponse
 	101, // 199: dapr.proto.runtime.v1.Dapr.GetJobAlpha1:output_type -> dapr.proto.runtime.v1.GetJobResponse
 	103, // 200: dapr.proto.runtime.v1.Dapr.DeleteJobAlpha1:output_type -> dapr.proto.runtime.v1.DeleteJobResponse
-	107, // 201: dapr.proto.runtime.v1.Dapr.ConverseAlpha1:output_type -> dapr.proto.runtime.v1.ConversationAlpha1Response
+	107, // 201: dapr.proto.runtime.v1.Dapr.ConverseAlpha1:output_type -> dapr.proto.runtime.v1.ConversationResponse
 	143, // [143:202] is the sub-list for method output_type
 	84,  // [84:143] is the sub-list for method input_type
 	84,  // [84:84] is the sub-list for extension type_name
@@ -10257,7 +10257,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[100].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ConversationAlpha1Request); i {
+			switch v := v.(*ConversationRequest); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -10281,7 +10281,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[102].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ConversationAlpha1Result); i {
+			switch v := v.(*ConversationResult); i {
 			case 0:
 				return &v.state
 			case 1:
@@ -10293,7 +10293,7 @@ func file_dapr_proto_runtime_v1_dapr_proto_init() {
 			}
 		}
 		file_dapr_proto_runtime_v1_dapr_proto_msgTypes[103].Exporter = func(v interface{}, i int) interface{} {
-			switch v := v.(*ConversationAlpha1Response); i {
+			switch v := v.(*ConversationResponse); i {
 			case 0:
 				return &v.state
 			case 1:
