@@ -362,21 +362,31 @@ func K6Result[T any](k6 *K6) (*K6TestSummary[T], error) {
 	pods, podErr := k6.kubeClient.CoreV1().Pods(k6.namespace).List(k6.ctx, v1.ListOptions{
 		LabelSelector: k6.selector(),
 	})
-	if podErr != nil {
-		return nil, podErr
-	}
 	runnersResults := make([]*T, 0)
+
+	if podErr != nil {
+		return &K6TestSummary[T]{
+			Pass:           false,
+			RunnersResults: runnersResults,
+		}, podErr
+	}
 	for _, pod := range pods.Items {
 		runnerResult, err := collectResult[T](k6, pod.Name)
 		if err != nil {
-			return nil, err
+			return &K6TestSummary[T]{
+				Pass:           false,
+				RunnersResults: runnersResults,
+			}, err
 		}
 		runnersResults = append(runnersResults, runnerResult)
 	}
 
 	pass, err := k6.hasPassed()
 	if err != nil {
-		return nil, err
+		return &K6TestSummary[T]{
+			Pass:           false,
+			RunnersResults: runnersResults,
+		}, err
 	}
 
 	return &K6TestSummary[T]{
