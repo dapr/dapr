@@ -19,6 +19,8 @@ import (
 	"io"
 	"sync"
 
+	"github.com/diagridio/go-etcd-cron/api"
+
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
 
@@ -39,7 +41,7 @@ type conn struct {
 
 	// inflight tracks the jobs that have been sent to the client but have not
 	// been acked yet.
-	inflight map[uint64]chan struct{}
+	inflight map[uint64]chan schedulerv1pb.WatchJobsRequestResultStatus
 
 	lock    sync.RWMutex
 	closeCh chan struct{}
@@ -47,20 +49,22 @@ type conn struct {
 
 // newConn creates a new connection and starts the goroutines to handle sending
 // jobs to the client and receiving job process results from the client.
-func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer, id uint64) *conn {
+func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer, id uint64, cancel context.CancelFunc) *conn {
 	conn := &conn{
 		pool:     p,
 		closeCh:  make(chan struct{}),
-		inflight: make(map[uint64]chan struct{}),
+		inflight: make(map[uint64]chan schedulerv1pb.WatchJobsRequestResultStatus),
 		jobCh:    make(chan *schedulerv1pb.WatchJobsResponse, 10),
 	}
 
 	p.wg.Add(2)
 
 	go func() {
-		defer p.wg.Done()
-		defer p.remove(req, id)
-		defer close(conn.closeCh)
+		defer func() {
+			close(conn.closeCh)
+			p.remove(req, id, cancel)
+			p.wg.Done()
+		}()
 		for {
 			select {
 			case job := <-conn.jobCh:
@@ -88,7 +92,7 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 				return
 			}
 
-			conn.handleJobProcessed(resp.GetResult().GetId())
+			conn.handleJobProcessed(resp.GetResult())
 		}
 	}()
 
@@ -98,10 +102,10 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 // sendWaitForResponse sends a job to the client and waits for the client to
 // send back the result. The job is acked when the client sends back the result
 // with a UUID corresponding to the job.
-func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) {
+func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) api.TriggerResponseResult {
 	c.lock.Lock()
 	c.idx++
-	ackCh := make(chan struct{}, 1)
+	ackCh := make(chan schedulerv1pb.WatchJobsRequestResultStatus, 1)
 	c.inflight[c.idx] = ackCh
 	job := &schedulerv1pb.WatchJobsResponse{
 		Name:     jobEvt.Name,
@@ -120,31 +124,39 @@ func (c *conn) sendWaitForResponse(ctx context.Context, jobEvt *JobEvent) {
 	select {
 	case c.jobCh <- job:
 	case <-c.pool.closeCh:
+		return api.TriggerResponseResult_FAILED
 	case <-c.closeCh:
+		return api.TriggerResponseResult_FAILED
 	case <-ctx.Done():
+		return api.TriggerResponseResult_FAILED
 	}
 
 	select {
-	case <-ackCh:
+	case result := <-ackCh:
+		if result == schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS {
+			return api.TriggerResponseResult_SUCCESS
+		}
+		return api.TriggerResponseResult_FAILED
 	case <-c.pool.closeCh:
 	case <-c.closeCh:
 	case <-ctx.Done():
 	}
+	return api.TriggerResponseResult_FAILED
 }
 
 // handleJobProcessed acks the job with the given UUID. This is called when the
 // client sends back the result of the job to be acked.
-func (c *conn) handleJobProcessed(id uint64) {
+func (c *conn) handleJobProcessed(result *schedulerv1pb.WatchJobsRequestResult) {
 	c.lock.Lock()
 	defer c.lock.Unlock()
 
-	if ch, ok := c.inflight[id]; ok {
+	if ch, ok := c.inflight[result.GetId()]; ok {
 		select {
-		case ch <- struct{}{}:
+		case ch <- result.GetStatus():
 		case <-c.closeCh:
 		case <-c.pool.closeCh:
 		}
 	}
 
-	delete(c.inflight, id)
+	delete(c.inflight, result.GetId())
 }
