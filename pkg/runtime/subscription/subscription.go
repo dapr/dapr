@@ -174,7 +174,6 @@ func New(opts Options) (*Subscription, error) {
 		} else {
 			// all messages consumed with "rawPayload=false" are deserialized as a CloudEvent, even when the payload is not a CloudEvent
 			err = json.Unmarshal(msg.Data, &cloudEvent)
-
 			if err != nil {
 				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
 				if route.DeadLetterTopic != "" {
