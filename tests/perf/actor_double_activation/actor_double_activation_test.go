@@ -17,6 +17,7 @@ limitations under the License.
 package actor_double_activation
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"testing"
@@ -45,7 +46,7 @@ func TestMain(m *testing.M) {
 			DaprEnabled:         true,
 			ImageName:           "perf-actor-activation-locker",
 			Config:              "redishostconfig",
-			Replicas:            2,
+			Replicas:            3,
 			IngressEnabled:      true,
 			MetricsEnabled:      true,
 			AppPort:             3000,
@@ -77,8 +78,9 @@ func TestActorDoubleActivation(t *testing.T) {
 
 	k6Test := loadtest.NewK6(
 		"./test.js",
-		loadtest.WithParallelism(2),
+		loadtest.WithParallelism(3),
 		loadtest.WithRunnerEnvVar("TEST_APP_NAME", serviceApplicationName),
+		loadtest.WithCtx(context.Background()),
 		loadtest.EnableLog(),
 	)
 	defer k6Test.Dispose()
