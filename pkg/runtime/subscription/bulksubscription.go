@@ -593,6 +593,8 @@ func (s *Subscription) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDa
 
 		// return error status code for resiliency to decide on retry
 		if hasErrStatus {
+			// TODO: Update types to uint32
+			//nolint:gosec
 			return resiliency.NewCodeError(int32(errStatus.Code()), err)
 		}
 

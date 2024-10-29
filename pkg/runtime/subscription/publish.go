@@ -128,6 +128,8 @@ func (s *Subscription) publishMessageHTTP(ctx context.Context, msg *rtpubsub.Sub
 	log.Warnf(errMsg)
 	diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 	// return error status code for resiliency to decide on retry
+	// TODO: Update types to uint32
+	//nolint:gosec
 	return resiliency.NewCodeError(int32(statusCode), rterrors.NewRetriable(errors.New(errMsg)))
 }
 
@@ -173,6 +175,8 @@ func (s *Subscription) publishMessageGRPC(ctx context.Context, msg *rtpubsub.Sub
 		diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, msg.PubSub, strings.ToLower(string(contribpubsub.Retry)), "", msg.Topic, elapsed)
 
 		// return error status code for resiliency to decide on retry
+		// TODO: Update types to uint32
+		//nolint:gosec
 		if hasErrStatus {
 			return resiliency.NewCodeError(int32(errStatus.Code()), err)
 		}

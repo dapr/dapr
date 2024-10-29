@@ -65,6 +65,8 @@ func (d *retrymatchinggrpc) Setup(t *testing.T) []framework.Option {
 		counter := c.(*atomic.Int32)
 		counter.Add(1)
 
+		// TODO: Update types to uint32
+		//nolint:gosec
 		return nil, status.Error(codes.Code(responseStatusCode), "error for key: "+key)
 	}
 
@@ -180,6 +182,8 @@ func (d *retrymatchinggrpc) Run(t *testing.T, ctx context.Context) {
 			}
 
 			if e, ok := status.FromError(err); ok {
+				// TODO: Update types to uint32
+				//nolint:gosec
 				require.Equal(t, codes.Code(scenario.expectedStatusCode), e.Code())
 			} else {
 				t.Fail()
