@@ -25,6 +25,7 @@ spec:
         allowedClockSkew: 1h
     metric:
         enabled: true
+        recorderrorcodes: null
     accessControl:
         defaultAction: allow
         trustDomain: public

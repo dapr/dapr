@@ -187,7 +187,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				if rErr != nil {
 					return rResp, invokeError{
 						statusCode: http.StatusInternalServerError,
-						msg:        NewErrorResponse(errorcodes.CommonMalformedResponse, rErr.Error()).JSONErrorValue(),
+						msg:        NewErrorResponse(messages.RecordAndGet(errorcodes.CommonMalformedResponse), rErr.Error()).JSONErrorValue(),
 					}
 				}
 			} else {

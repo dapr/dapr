@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/components-contrib/metadata"
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/kit/errors"
 )
@@ -80,7 +81,7 @@ func (p PubSubError) PublishMessage(topic string, err error) error {
 		codes.Internal,
 		http.StatusInternalServerError,
 		fmt.Sprintf("error when publishing to topic %s in pubsub %s: %s", topic, p.name, err),
-		errorcodes.PubsubPublishMessage,
+		messages.RecordAndGet(errorcodes.PubsubPublishMessage),
 		"PUBLISH_MESSAGE",
 	)
 }
@@ -90,7 +91,7 @@ func (p *PubSubError) PublishForbidden(topic, appID string, err error) error {
 		codes.PermissionDenied,
 		http.StatusForbidden,
 		fmt.Sprintf("topic %s is not allowed for app id %s", topic, appID),
-		errorcodes.PubsubForbidden,
+		messages.RecordAndGet(errorcodes.PubsubForbidden),
 		"FORBIDDEN",
 	)
 }
@@ -103,7 +104,7 @@ func (p PubSubError) TestNotFound(topic string, err error) error {
 		codes.NotFound,
 		http.StatusBadRequest,
 		fmt.Sprintf("pubsub '%s' not found", p.name),
-		errorcodes.PubsubNotFound,
+		messages.RecordAndGet(errorcodes.PubsubNotFound),
 		"TEST_NOT_FOUND",
 	)
 }
@@ -114,7 +115,7 @@ func (p *PubSubMetadataError) NotFound() error {
 		codes.InvalidArgument,
 		http.StatusNotFound,
 		fmt.Sprintf("%s %s is not found", metadata.PubSubType, p.p.name),
-		errorcodes.PubsubNotFound,
+		messages.RecordAndGet(errorcodes.PubsubNotFound),
 		errors.CodeNotFound,
 	)
 }
@@ -125,7 +126,7 @@ func (p *PubSubMetadataError) NotConfigured() error {
 		codes.FailedPrecondition,
 		http.StatusBadRequest,
 		fmt.Sprintf("%s %s is not configured", metadata.PubSubType, p.p.name),
-		errorcodes.PubsubNotConfigured,
+		messages.RecordAndGet(errorcodes.PubsubNotConfigured),
 		errors.CodeNotConfigured,
 	)
 }
@@ -142,7 +143,7 @@ func (p *PubSubMetadataError) NameEmpty() error {
 		codes.InvalidArgument,
 		http.StatusNotFound,
 		"pubsub name is empty",
-		errorcodes.PubsubEmpty,
+		messages.RecordAndGet(errorcodes.PubsubEmpty),
 		"NAME_EMPTY",
 	)
 }
@@ -152,7 +153,7 @@ func (p *PubSubMetadataError) TopicEmpty() error {
 		codes.InvalidArgument,
 		http.StatusNotFound,
 		"topic is empty in pubsub "+p.p.name,
-		errorcodes.PubsubTopicNameEmpty,
+		messages.RecordAndGet(errorcodes.PubsubTopicNameEmpty),
 		"TOPIC_NAME_EMPTY",
 	)
 }
@@ -162,7 +163,7 @@ func (p *PubSubMetadataError) DeserializeError(err error) error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		fmt.Sprintf("failed deserializing metadata. Error: %s", err),
-		errorcodes.PubsubRequestMetadata,
+		messages.RecordAndGet(errorcodes.PubsubRequestMetadata),
 		"METADATA_DESERIALIZATION",
 	)
 }
@@ -172,7 +173,7 @@ func (p *PubSubMetadataError) CloudEventCreation() error {
 		codes.InvalidArgument,
 		http.StatusInternalServerError,
 		"cannot create cloudevent",
-		errorcodes.PubsubCloudEventsSer,
+		messages.RecordAndGet(errorcodes.PubsubCloudEventsSer),
 		"CLOUD_EVENT_CREATION",
 	)
 }
@@ -186,7 +187,7 @@ func (p *PubSubTopicError) MarshalEnvelope() error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		msg,
-		errorcodes.PubsubEventsSer,
+		messages.RecordAndGet(errorcodes.PubsubEventsSer),
 		"MARSHAL_ENVELOPE",
 	)
 }
@@ -201,7 +202,7 @@ func (p *PubSubTopicError) MarshalEvents() error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
-		errorcodes.PubsubEventsSer,
+		messages.RecordAndGet(errorcodes.PubsubEventsSer),
 		"MARSHAL_EVENTS",
 	)
 }
@@ -217,7 +218,7 @@ func (p *PubSubTopicError) UnmarshalEvents(err error) error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
-		errorcodes.PubsubEventsSer,
+		messages.RecordAndGet(errorcodes.PubsubEventsSer),
 		"UNMARSHAL_EVENTS",
 	)
 }
@@ -239,7 +240,7 @@ func PubSubOutbox(appID string, err error) error {
 		codes.Internal,
 		http.StatusInternalServerError,
 		message,
-		errorcodes.PubsubPublishOutbox,
+		messages.RecordAndGet(errorcodes.PubsubPublishOutbox),
 	).WithErrorInfo(errors.CodePrefixPubSub+"OUTBOX", map[string]string{
 		"appID": appID, "error": err.Error(),
 	}).Build()

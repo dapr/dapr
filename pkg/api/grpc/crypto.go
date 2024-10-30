@@ -23,7 +23,6 @@ import (
 
 	"google.golang.org/grpc"
 
-	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/pkg/messaging"
@@ -99,7 +98,7 @@ func (a *api) DecryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err er
 	if err != nil {
 		// This is already an APIError object.
 		a.logger.Debug(err)
-		diag.DefaultErrorCodeMonitoring.RecordErrorCode(errorcodes.CommonBadRequest)
+		messages.RecordAndGet(errorcodes.CommonBadRequest)
 		return err
 	}
 

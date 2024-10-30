@@ -916,7 +916,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
-			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "ERR_COMMON_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -938,7 +938,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
-			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "ERR_CONVERSATION_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -1000,7 +1000,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
-			assert.Equal(t, "ERR_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
+			assert.Equal(t, "ERR_CONVERSATION_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -1068,7 +1068,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 				// assert
 				assert.Equal(t, 400, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
+				assert.Equal(t, "ERR_COMMON_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
 			}
 		}
 	})
@@ -2585,7 +2585,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		assert.Equal(t, 400, resp.StatusCode)
 
 		// assert
-		assert.Contains(t, string(resp.RawBody), "ERR_MALFORMED_REQUEST")
+		assert.Contains(t, string(resp.RawBody), "ERR_COMMON_MALFORMED_REQUEST")
 		assert.Contains(t, string(resp.RawBody), "ResourceId is empty in lock store store1")
 	})
 
@@ -2700,7 +2700,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_INSTANCE_ID_INVALID", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_WORKFLOW_INSTANCE_ID_INVALID", resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrInvalidInstanceID.WithFormat("invalid$ID").Message(), resp.ErrorBody["message"])
 	})
 
@@ -2712,7 +2712,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_INSTANCE_ID_TOO_LONG", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_WORKFLOW_INSTANCE_ID_TOO_LONG", resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIDLength).Message(), resp.ErrorBody["message"])
 	})
 
@@ -3306,7 +3306,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 				// assert
 				assert.Equal(t, 400, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"], apiPath)
+				assert.Equal(t, "ERR_COMMON_MALFORMED_REQUEST", resp.ErrorBody["errorCode"], apiPath)
 			}
 		}
 	})
@@ -4145,7 +4145,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "reading from not-configured secret store should fail with 500")
-		assert.Equal(t, "ERR_SECRET_STORES_NOT_CONFIGURED", resp.ErrorBody["errorCode"], apiPath)
+		assert.Equal(t, "ERR_SECRET_STORE_NOT_CONFIGURED", resp.ErrorBody["errorCode"], apiPath)
 	})
 
 	t.Run("Get Bulk secret - Good Key default allow", func(t *testing.T) {
@@ -4490,7 +4490,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		assert.Equal(t, 400, resp.StatusCode, "Accessing non-existent state store should return 400")
 	})
 
-	t.Run("Invalid opperation - 400 ERR_NOT_SUPPORTED_STATE_OPERATION", func(t *testing.T) {
+	t.Run("Invalid opperation - 400 ERR_STATE_NOT_SUPPORTED_OPERATION", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
 		testTransactionalOperations := []stateTransactionRequestBodyOperation{
 			{
@@ -4512,10 +4512,10 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 400, resp.StatusCode, "Dapr should return 400")
-		assert.Equal(t, "ERR_NOT_SUPPORTED_STATE_OPERATION", resp.ErrorBody["errorCode"], apiPath)
+		assert.Equal(t, "ERR_STATE_NOT_SUPPORTED_OPERATION", resp.ErrorBody["errorCode"], apiPath)
 	})
 
-	t.Run("Invalid request obj - 400 ERR_MALFORMED_REQUEST", func(t *testing.T) {
+	t.Run("Invalid request obj - 400 ERR_COMMON_MALFORMED_REQUEST", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
 		for _, operation := range []state.OperationType{state.OperationUpsert, state.OperationDelete} {
 			testTransactionalOperations := []stateTransactionRequestBodyOperation{
@@ -4539,11 +4539,11 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "Dapr should return 400")
-			assert.Equal(t, "ERR_MALFORMED_REQUEST", resp.ErrorBody["errorCode"], apiPath)
+			assert.Equal(t, "ERR_COMMON_MALFORMED_REQUEST", resp.ErrorBody["errorCode"], apiPath)
 		}
 	})
 
-	t.Run("Too many transactions for state store - 400 ERR_MALFORMED_REQUEST", func(t *testing.T) {
+	t.Run("Too many transactions for state store - 400 ERR_COMMON_MALFORMED_REQUEST", func(t *testing.T) {
 		apiPath := fmt.Sprintf("v1.0/state/%s/transaction", storeName)
 
 		testTransactionalOperations := make([]stateTransactionRequestBodyOperation, 20)

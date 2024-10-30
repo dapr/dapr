@@ -266,7 +266,7 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 			// Service invocation should fail
 			go func() {
 				res, status := invokeFoo(t)
-				require.Contains(t, string(res), "ERR_DIRECT_INVOKE")
+				require.Contains(t, string(res), "ERR_CONVERSATION_DIRECT_INVOKE")
 				require.Greater(t, status, 299)
 				wg.Done()
 			}()
@@ -302,7 +302,7 @@ func testAppHealthCheckProtocol(t *testing.T, protocol string) {
 			go func() {
 				res, status := invokeFoo(t)
 				require.Greater(t, status, 299)
-				require.Contains(t, string(res), "ERR_DIRECT_INVOKE")
+				require.Contains(t, string(res), "ERR_CONVERSATION_DIRECT_INVOKE")
 				wg.Done()
 			}()
 			wg.Wait()
