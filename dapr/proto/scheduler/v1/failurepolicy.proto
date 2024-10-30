@@ -1,0 +1,33 @@
+syntax = "proto3";
+
+package dapr.proto.scheduler.v1;
+
+import "google/protobuf/duration.proto";
+
+option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
+
+// FailurePolicy defines the policy to apply when a job fails to trigger.
+message FailurePolicy {
+  // policy is the policy to apply when a job fails to trigger.
+  oneof policy {
+    FailurePolicyDrop drop = 1;
+    FailurePolicyConstant constant = 2;
+  }
+}
+
+// FailurePolicyDrop is a policy which drops the job tick when the job fails to
+// trigger.
+message FailurePolicyDrop {}
+
+// FailurePolicyConstant is a policy which retries the job at a consistent
+// interval when the job fails to trigger.
+message FailurePolicyConstant {
+  // interval is the constant delay to wait before retrying the job.
+  google.protobuf.Duration interval = 1;
+
+  // max_retries is the optional maximum number of retries to attempt before
+  // giving up.
+  // If unset, the Job will be retried indefinitely.
+  optional uint32 max_retries = 2;
+}
+

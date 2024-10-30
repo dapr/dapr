@@ -14,5 +14,7 @@ limitations under the License.
 package failurepolicy
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/failurepolicy/constant"
+	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/failurepolicy/drop"
 	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/failurepolicy/noset"
 )
