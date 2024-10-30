@@ -150,10 +150,11 @@ func New(opts Options) (*Subscription, error) {
 			cloudEvent = contribpubsub.FromRawPayload(msg.Data, msgTopic, name)
 			if traceid, ok := msg.Metadata[contribpubsub.TraceIDField]; ok {
 				cloudEvent[contribpubsub.TraceIDField] = traceid
-				cloudEvent[contribpubsub.TraceParentField] = traceid
 			}
 			if traceparent, ok := msg.Metadata[contribpubsub.TraceParentField]; ok {
 				cloudEvent[contribpubsub.TraceParentField] = traceparent
+				// traceparent supersedes traceid
+				cloudEvent[contribpubsub.TraceIDField] = traceparent
 			}
 			if tracestate, ok := msg.Metadata[contribpubsub.TraceStateField]; ok {
 				cloudEvent[contribpubsub.TraceStateField] = tracestate
@@ -195,8 +196,10 @@ func New(opts Options) (*Subscription, error) {
 			}
 			if _, ok := cloudEvent[contribpubsub.TraceParentField]; !ok {
 				if traceparent, ok := msg.Metadata[contribpubsub.TraceParentField]; ok {
-					cloudEvent[contribpubsub.TraceIDField] = traceparent
 					cloudEvent[contribpubsub.TraceParentField] = traceparent
+					// traceparent supersedes traceid
+					cloudEvent[contribpubsub.TraceIDField] = traceparent
+					cloudEvent[contribpubsub.TraceIDField] = traceparent
 				}
 			}
 			if _, ok := cloudEvent[contribpubsub.TraceStateField]; !ok {

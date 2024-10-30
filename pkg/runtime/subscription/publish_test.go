@@ -845,12 +845,13 @@ func TestTracingOnNewPublishedMessage(t *testing.T) {
 			t.Cleanup(ps.Stop)
 
 			traceparent := "00-0af7651916cd43dd8448eb211c80319c-b9c7c989f97918e1-01"
+			traceid := "00-80e1afed08e019fc1110464cfa66635c-7a085853722dc6d2-01"
 			tracestate := "abc=xyz"
 			err = comp.Publish(context.TODO(), &contribpubsub.PublishRequest{
 				PubsubName: "testpubsub",
 				Topic:      "topic0",
 				Data:       []byte(`{"orderId":"1"}`),
-				Metadata:   map[string]string{contribpubsub.TraceParentField: traceparent, contribpubsub.TraceStateField: tracestate},
+				Metadata:   map[string]string{contribpubsub.TraceParentField: traceparent, contribpubsub.TraceIDField: traceid, contribpubsub.TraceStateField: tracestate},
 			})
 			require.NoError(t, err)
 			reqs := mockAppChannel.GetInvokedRequest()
@@ -863,6 +864,8 @@ func TestTracingOnNewPublishedMessage(t *testing.T) {
 				// traceparent also included as part of a CloudEvent
 				assert.Contains(t, string(reqs["orders"]), traceparent)
 				assert.Contains(t, string(reqs["orders"]), tracestate)
+				// traceid is superseded by traceparent
+				assert.NotContains(t, string(reqs["orders"]), traceid)
 			} else {
 				assert.Contains(t, string(reqs["orders"]), `{"orderId":"1"}`)
 			}
