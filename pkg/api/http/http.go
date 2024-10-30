@@ -414,7 +414,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 
 	b, err := json.Marshal(req.Data)
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.MalformedRequestData, fmt.Sprintf(messages.ErrMalformedRequestData, err))
+		msg := NewErrorResponse(errorcodes.CommonMalformedRequestData, fmt.Sprintf(messages.ErrMalformedRequestData, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -454,7 +454,7 @@ func (a *api) onOutputBindingMessage(reqCtx *fasthttp.RequestCtx) {
 	}
 
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.InvokeOutputBinding, fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err))
+		msg := NewErrorResponse(errorcodes.ConversationInvokeOutputBinding, fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err))
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -764,7 +764,7 @@ func (a *api) onSubscribeConfiguration(reqCtx *fasthttp.RequestCtx) {
 		return
 	}
 	if a.channels.AppChannel() == nil {
-		msg := NewErrorResponse(errorcodes.AppChannelNil, "app channel is not initialized. cannot subscribe to configuration updates")
+		msg := NewErrorResponse(errorcodes.CommonAppChannelNil, "app channel is not initialized. cannot subscribe to configuration updates")
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusInternalServerError, msg))
 		log.Debug(msg)
 		return
@@ -980,7 +980,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	reqs := []state.SetRequest{}
 	err = json.Unmarshal(reqCtx.PostBody(), &reqs)
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.MalformedRequest, err.Error())
+		msg := NewErrorResponse(errorcodes.CommonMalformedRequest, err.Error())
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 		log.Debug(msg)
 		return
@@ -994,7 +994,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 	for i, r := range reqs {
 		if len(reqs[i].Key) == 0 {
-			msg := NewErrorResponse(errorcodes.MalformedRequest, `"key" is a required field`)
+			msg := NewErrorResponse(errorcodes.CommonMalformedRequest, `"key" is a required field`)
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 			log.Debug(msg)
 			return
@@ -1554,7 +1554,7 @@ func (a *api) onPostStateTransaction(reqCtx *fasthttp.RequestCtx) {
 			operations = append(operations, delReq)
 		default:
 			msg := NewErrorResponse(
-				errorcodes.NotSupportedStateOperation,
+				errorcodes.StateNotSupportedOperation,
 				fmt.Sprintf(messages.ErrNotSupportedStateOperation, o.Operation))
 			fasthttpRespond(reqCtx, fasthttpResponseWithError(nethttp.StatusBadRequest, msg))
 			log.Debug(msg)

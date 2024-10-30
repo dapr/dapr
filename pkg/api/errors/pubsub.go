@@ -152,7 +152,7 @@ func (p *PubSubMetadataError) TopicEmpty() error {
 		codes.InvalidArgument,
 		http.StatusNotFound,
 		"topic is empty in pubsub "+p.p.name,
-		errorcodes.TopicNameEmpty,
+		errorcodes.PubsubTopicNameEmpty,
 		"TOPIC_NAME_EMPTY",
 	)
 }
@@ -239,7 +239,7 @@ func PubSubOutbox(appID string, err error) error {
 		codes.Internal,
 		http.StatusInternalServerError,
 		message,
-		errorcodes.PublishOutbox,
+		errorcodes.PubsubPublishOutbox,
 	).WithErrorInfo(errors.CodePrefixPubSub+"OUTBOX", map[string]string{
 		"appID": appID, "error": err.Error(),
 	}).Build()

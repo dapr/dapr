@@ -80,7 +80,7 @@ func (s *StateStoreError) InvalidKeyName(key string, msg string) error {
 			codes.InvalidArgument,
 			http.StatusBadRequest,
 			msg,
-			errorcodes.MalformedRequest,
+			errorcodes.CommonMalformedRequest,
 		).WithFieldViolation(key, msg),
 		errors.CodeIllegalKey,
 		nil,

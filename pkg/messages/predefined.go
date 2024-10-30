@@ -61,27 +61,27 @@ const (
 
 var (
 	// Generic.
-	ErrBadRequest       = APIError{"invalid request: %v", errorcodes.BadRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrAPIUnimplemented = APIError{"this API is currently not implemented", errorcodes.ApiUnimplemented, http.StatusNotImplemented, grpcCodes.Unimplemented}
+	ErrBadRequest       = APIError{"invalid request: %v", errorcodes.CommonBadRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrAPIUnimplemented = APIError{"this API is currently not implemented", errorcodes.CommonApiUnimplemented, http.StatusNotImplemented, grpcCodes.Unimplemented}
 
 	// HTTP.
-	ErrBodyRead         = APIError{"failed to read request body: %v", errorcodes.BodyRead, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrMalformedRequest = APIError{"failed deserializing HTTP body: %v", errorcodes.MalformedRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrBodyRead         = APIError{"failed to read request body: %v", errorcodes.CommonBodyRead, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrMalformedRequest = APIError{"failed deserializing HTTP body: %v", errorcodes.CommonMalformedRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
 
 	// DirectMessaging.
-	ErrDirectInvoke         = APIError{"failed to invoke, id: %s, err: %v", errorcodes.DirectInvoke, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrDirectInvokeNoAppID  = APIError{"failed getting app id either from the URL path or the header dapr-app-id", errorcodes.DirectInvoke, http.StatusNotFound, grpcCodes.NotFound}
-	ErrDirectInvokeNotReady = APIError{"invoke API is not ready", errorcodes.DirectInvoke, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrDirectInvoke         = APIError{"failed to invoke, id: %s, err: %v", errorcodes.ConversationDirectInvoke, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrDirectInvokeNoAppID  = APIError{"failed getting app id either from the URL path or the header dapr-app-id", errorcodes.ConversationDirectInvoke, http.StatusNotFound, grpcCodes.NotFound}
+	ErrDirectInvokeNotReady = APIError{"invoke API is not ready", errorcodes.ConversationDirectInvoke, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Healthz.
 	ErrHealthNotReady         = APIError{"dapr is not ready", errorcodes.HealthNotReady, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrOutboundHealthNotReady = APIError{"dapr outbound is not ready", errorcodes.OutboundHealthNotReady, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrOutboundHealthNotReady = APIError{"dapr outbound is not ready", errorcodes.HealthOutboundNotReady, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrHealthAppIDNotMatch    = APIError{"dapr app-id does not match", errorcodes.HealthAppidNotMatch, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Secrets.
-	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", errorcodes.SecretStoresNotConfigured, http.StatusInternalServerError, grpcCodes.FailedPrecondition}
+	ErrSecretStoreNotConfigured = APIError{"secret store is not configured", errorcodes.SecretStoreNotConfigured, http.StatusInternalServerError, grpcCodes.FailedPrecondition}
 	ErrSecretStoreNotFound      = APIError{"failed finding secret store with key %s", errorcodes.SecretStoreNotFound, http.StatusUnauthorized, grpcCodes.InvalidArgument}
-	ErrSecretPermissionDenied   = APIError{"access denied by policy to get %q from %q", errorcodes.PermissionDenied, http.StatusForbidden, grpcCodes.PermissionDenied}
+	ErrSecretPermissionDenied   = APIError{"access denied by policy to get %q from %q", errorcodes.SecretPermissionDenied, http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrSecretGet                = APIError{"failed getting secret with key %s from secret store %s: %s", errorcodes.SecretGet, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrBulkSecretGet            = APIError{"failed getting secrets from secret store %s: %v", errorcodes.SecretGet, http.StatusInternalServerError, grpcCodes.Internal}
 
@@ -106,29 +106,29 @@ var (
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", errorcodes.LockStoreNotConfigured, http.StatusInternalServerError, grpcCodes.FailedPrecondition}
-	ErrResourceIDEmpty            = APIError{"ResourceId is empty in lock store %s", errorcodes.MalformedRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrLockOwnerEmpty             = APIError{"LockOwner is empty in lock store %s", errorcodes.MalformedRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrExpiryInSecondsNotPositive = APIError{"ExpiryInSeconds is not positive in lock store %s", errorcodes.MalformedRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrResourceIDEmpty            = APIError{"ResourceId is empty in lock store %s", errorcodes.CommonMalformedRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrLockOwnerEmpty             = APIError{"LockOwner is empty in lock store %s", errorcodes.CommonMalformedRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrExpiryInSecondsNotPositive = APIError{"ExpiryInSeconds is not positive in lock store %s", errorcodes.CommonMalformedRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrLockStoreNotFound          = APIError{"lock store %s not found", errorcodes.LockStoreNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrTryLockFailed              = APIError{"failed to try acquiring lock: %s", errorcodes.TryLock, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrUnlockFailed               = APIError{"failed to release lock: %s", errorcodes.Unlock, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrTryLockFailed              = APIError{"failed to try acquiring lock: %s", errorcodes.LockTry, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrUnlockFailed               = APIError{"failed to release lock: %s", errorcodes.LockUnlock, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Workflow.
-	ErrStartWorkflow                 = APIError{"error starting workflow '%s': %s", errorcodes.StartWorkflow, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrWorkflowGetResponse           = APIError{"error while getting workflow info on instance '%s': %s", errorcodes.GetWorkflow, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrStartWorkflow                 = APIError{"error starting workflow '%s': %s", errorcodes.WorkflowStart, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrWorkflowGetResponse           = APIError{"error while getting workflow info on instance '%s': %s", errorcodes.WorkflowGet, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrWorkflowNameMissing           = APIError{"workflow name is not configured", errorcodes.WorkflowNameMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrInstanceIDTooLong             = APIError{"workflow instance ID exceeds the max length of %d characters", errorcodes.InstanceIdTooLong, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrInvalidInstanceID             = APIError{"workflow instance ID '%s' is invalid: only alphanumeric and underscore characters are allowed", errorcodes.InstanceIdInvalid, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrInstanceIDTooLong             = APIError{"workflow instance ID exceeds the max length of %d characters", errorcodes.WorkflowInstanceIdTooLong, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrInvalidInstanceID             = APIError{"workflow instance ID '%s' is invalid: only alphanumeric and underscore characters are allowed", errorcodes.WorkflowInstanceIdInvalid, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrWorkflowComponentDoesNotExist = APIError{"workflow component '%s' does not exist", errorcodes.WorkflowComponentNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrMissingOrEmptyInstance        = APIError{"no instance ID was provided", errorcodes.InstanceIdProvidedMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrWorkflowInstanceNotFound      = APIError{"unable to find workflow with the provided instance ID: %s", errorcodes.InstanceIdNotFound, http.StatusNotFound, grpcCodes.NotFound}
+	ErrMissingOrEmptyInstance        = APIError{"no instance ID was provided", errorcodes.WorkflowInstanceIdProvidedMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrWorkflowInstanceNotFound      = APIError{"unable to find workflow with the provided instance ID: %s", errorcodes.WorkflowInstanceIdNotFound, http.StatusNotFound, grpcCodes.NotFound}
 	ErrNoOrMissingWorkflowComponent  = APIError{"no workflow component was provided", errorcodes.WorkflowComponentMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrTerminateWorkflow             = APIError{"error terminating workflow '%s': %s", errorcodes.TerminateWorkflow, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrTerminateWorkflow             = APIError{"error terminating workflow '%s': %s", errorcodes.WorkflowTerminate, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", errorcodes.WorkflowEventNameMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrRaiseEventWorkflow            = APIError{"error raising event on workflow '%s': %s", errorcodes.RaiseEventWorkflow, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrPauseWorkflow                 = APIError{"error pausing workflow %s: %s", errorcodes.PauseWorkflow, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrResumeWorkflow                = APIError{"error resuming workflow %s: %s", errorcodes.ResumeWorkflow, http.StatusInternalServerError, grpcCodes.Internal}
-	ErrPurgeWorkflow                 = APIError{"error purging workflow %s: %s", errorcodes.PurgeWorkflow, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrRaiseEventWorkflow            = APIError{"error raising event on workflow '%s': %s", errorcodes.WorkflowRaiseEvent, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrPauseWorkflow                 = APIError{"error pausing workflow %s: %s", errorcodes.WorkflowPause, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrResumeWorkflow                = APIError{"error resuming workflow %s: %s", errorcodes.WorkflowResume, http.StatusInternalServerError, grpcCodes.Internal}
+	ErrPurgeWorkflow                 = APIError{"error purging workflow %s: %s", errorcodes.WorkflowPurge, http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Conversation
 	ErrConversationNotFound      = APIError{"failed finding conversation component %s", errorcodes.ConversationNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
