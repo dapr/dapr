@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package dapr.proto.scheduler.v1;
 
+import "dapr/proto/scheduler/v1/failurepolicy.proto";
 import "google/protobuf/any.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
@@ -35,6 +36,13 @@ message Job {
 
   // Job data.
   google.protobuf.Any data = 5;
+
+
+  // failure_policy is the optional policy to apply when a job fails to
+  // trigger.
+  // By default, the failure policy is FailurePolicyConstant with a 1s interval
+  // and 3 maximum retries.
+  optional FailurePolicy failure_policy = 6;
 }
 
 // TargetJob is the message used by the daprd sidecar to schedule a job
