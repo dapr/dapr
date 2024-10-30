@@ -60,7 +60,7 @@ type Daprd struct {
 	metricsPort      int
 	profilePort      int
 
-	once sync.Once
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *Daprd {
@@ -185,9 +185,7 @@ func (d *Daprd) Run(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) Cleanup(t *testing.T) {
-	d.once.Do(func() {
-		d.exec.Cleanup(t)
-	})
+	d.cleanupOnce.Do(func() { d.exec.Cleanup(t) })
 }
 
 func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
