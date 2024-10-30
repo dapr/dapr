@@ -105,7 +105,7 @@ func (p *parallel) Run(t *testing.T, ctx context.Context) {
 
 		backendClient := client.NewTaskHubGrpcClient(daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 		require.NoError(t, backendClient.StartWorkItemListener(ctx, r))
-		resp, err := daprd.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+		resp, err := daprd.GRPCClient(t, ctx).StartWorkflow(ctx, &rtv1.StartWorkflowRequest{
 			WorkflowComponent: "dapr",
 			WorkflowName:      "foo",
 		})

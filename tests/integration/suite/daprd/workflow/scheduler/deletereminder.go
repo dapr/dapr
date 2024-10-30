@@ -109,7 +109,7 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	backendClient := client.NewTaskHubGrpcClient(d.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, backendClient.StartWorkItemListener(ctx, r))
 
-	resp, err := d.daprd.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+	resp, err := d.daprd.GRPCClient(t, ctx).StartWorkflow(ctx, &rtv1.StartWorkflowRequest{
 		WorkflowComponent: "dapr",
 		WorkflowName:      "SingleActivity",
 		Input:             []byte(`"Dapr"`),

@@ -5813,7 +5813,7 @@ func (x *DecryptResponse) GetPayload() *v1.StreamPayload {
 	return nil
 }
 
-// GetWorkflowRequest is the request for GetWorkflowBeta1.
+// GetWorkflowRequest is the request for GetWorkflow.
 type GetWorkflowRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -5871,7 +5871,7 @@ func (x *GetWorkflowRequest) GetWorkflowComponent() string {
 	return ""
 }
 
-// GetWorkflowResponse is the response for GetWorkflowBeta1.
+// GetWorkflowResponse is the response for GetWorkflow.
 type GetWorkflowResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -5965,7 +5965,7 @@ func (x *GetWorkflowResponse) GetProperties() map[string]string {
 	return nil
 }
 
-// StartWorkflowRequest is the request for StartWorkflowBeta1.
+// StartWorkflowRequest is the request for StartWorkflow.
 type StartWorkflowRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -6050,7 +6050,7 @@ func (x *StartWorkflowRequest) GetInput() []byte {
 	return nil
 }
 
-// StartWorkflowResponse is the response for StartWorkflowBeta1.
+// StartWorkflowResponse is the response for StartWorkflow.
 type StartWorkflowResponse struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -6099,7 +6099,7 @@ func (x *StartWorkflowResponse) GetInstanceId() string {
 	return ""
 }
 
-// TerminateWorkflowRequest is the request for TerminateWorkflowBeta1.
+// TerminateWorkflowRequest is the request for TerminateWorkflow.
 type TerminateWorkflowRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -6157,7 +6157,7 @@ func (x *TerminateWorkflowRequest) GetWorkflowComponent() string {
 	return ""
 }
 
-// PauseWorkflowRequest is the request for PauseWorkflowBeta1.
+// PauseWorkflowRequest is the request for PauseWorkflow.
 type PauseWorkflowRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -6215,7 +6215,7 @@ func (x *PauseWorkflowRequest) GetWorkflowComponent() string {
 	return ""
 }
 
-// ResumeWorkflowRequest is the request for ResumeWorkflowBeta1.
+// ResumeWorkflowRequest is the request for ResumeWorkflow.
 type ResumeWorkflowRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -6273,7 +6273,7 @@ func (x *ResumeWorkflowRequest) GetWorkflowComponent() string {
 	return ""
 }
 
-// RaiseEventWorkflowRequest is the request for RaiseEventWorkflowBeta1.
+// RaiseEventWorkflowRequest is the request for RaiseEventWorkflow.
 type RaiseEventWorkflowRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache
@@ -6349,7 +6349,7 @@ func (x *RaiseEventWorkflowRequest) GetEventData() []byte {
 	return nil
 }
 
-// PurgeWorkflowRequest is the request for PurgeWorkflowBeta1.
+// PurgeWorkflowRequest is the request for PurgeWorkflow.
 type PurgeWorkflowRequest struct {
 	state         protoimpl.MessageState
 	sizeCache     protoimpl.SizeCache

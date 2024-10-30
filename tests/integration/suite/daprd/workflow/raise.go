@@ -85,7 +85,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	backendClient := client.NewTaskHubGrpcClient(r.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, backendClient.StartWorkItemListener(ctx, reg))
 
-	resp, err := gclient.StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+	resp, err := gclient.StartWorkflow(ctx, &rtv1.StartWorkflowRequest{
 		WorkflowComponent: "dapr",
 		WorkflowName:      "foo",
 		InstanceId:        "my-custom-instance-id",
@@ -97,34 +97,34 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, int64(1), stage.Load())
 	}, time.Second*3, time.Millisecond*10)
 
-	get, err := gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
+	get, err := gclient.GetWorkflow(ctx, &rtv1.GetWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
 		WorkflowComponent: "dapr",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "RUNNING", get.GetRuntimeStatus())
 
-	_, err = gclient.PauseWorkflowBeta1(ctx, &rtv1.PauseWorkflowRequest{
+	_, err = gclient.PauseWorkflow(ctx, &rtv1.PauseWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
 		WorkflowComponent: "dapr",
 	})
 	require.NoError(t, err)
 
-	get, err = gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
+	get, err = gclient.GetWorkflow(ctx, &rtv1.GetWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
 		WorkflowComponent: "dapr",
 	})
 	require.NoError(t, err)
 	assert.Equal(t, "SUSPENDED", get.GetRuntimeStatus())
 
-	_, err = gclient.ResumeWorkflowAlpha1(ctx, &rtv1.ResumeWorkflowRequest{
+	_, err = gclient.ResumeWorkflow(ctx, &rtv1.ResumeWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
 		WorkflowComponent: "dapr",
 	})
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		get, err = gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
+		get, err = gclient.GetWorkflow(ctx, &rtv1.GetWorkflowRequest{
 			InstanceId:        "my-custom-instance-id",
 			WorkflowComponent: "dapr",
 		})
@@ -132,7 +132,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, "RUNNING", get.GetRuntimeStatus())
 	}, time.Second*5, time.Millisecond*10)
 
-	_, err = gclient.RaiseEventWorkflowBeta1(ctx, &rtv1.RaiseEventWorkflowRequest{
+	_, err = gclient.RaiseEventWorkflow(ctx, &rtv1.RaiseEventWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
 		WorkflowComponent: "dapr",
 		EventName:         "testEvent",
@@ -147,7 +147,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.True(t, metadata.IsComplete())
 
-	_, err = gclient.PurgeWorkflowBeta1(ctx, &rtv1.PurgeWorkflowRequest{
+	_, err = gclient.PurgeWorkflow(ctx, &rtv1.PurgeWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
 		WorkflowComponent: "dapr",
 	})

@@ -1140,7 +1140,7 @@ message DecryptResponse {
   common.v1.StreamPayload payload = 1;
 }
 
-// GetWorkflowRequest is the request for GetWorkflowBeta1.
+// GetWorkflowRequest is the request for GetWorkflow.
 message GetWorkflowRequest {
   // ID of the workflow instance to query.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1148,7 +1148,7 @@ message GetWorkflowRequest {
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
-// GetWorkflowResponse is the response for GetWorkflowBeta1.
+// GetWorkflowResponse is the response for GetWorkflow.
 message GetWorkflowResponse {
   // ID of the workflow instance.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1164,7 +1164,7 @@ message GetWorkflowResponse {
   map<string, string> properties = 6;
 }
 
-// StartWorkflowRequest is the request for StartWorkflowBeta1.
+// StartWorkflowRequest is the request for StartWorkflow.
 message StartWorkflowRequest {
   // The ID to assign to the started workflow instance. If empty, a random ID is generated.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1178,13 +1178,13 @@ message StartWorkflowRequest {
   bytes input = 5;
 }
 
-// StartWorkflowResponse is the response for StartWorkflowBeta1.
+// StartWorkflowResponse is the response for StartWorkflow.
 message StartWorkflowResponse {
   // ID of the started workflow instance.
   string instance_id = 1 [json_name = "instanceID"];
 }
 
-// TerminateWorkflowRequest is the request for TerminateWorkflowBeta1.
+// TerminateWorkflowRequest is the request for TerminateWorkflow.
 message TerminateWorkflowRequest {
   // ID of the workflow instance to terminate.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1192,7 +1192,7 @@ message TerminateWorkflowRequest {
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
-// PauseWorkflowRequest is the request for PauseWorkflowBeta1.
+// PauseWorkflowRequest is the request for PauseWorkflow.
 message PauseWorkflowRequest {
   // ID of the workflow instance to pause.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1200,7 +1200,7 @@ message PauseWorkflowRequest {
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
-// ResumeWorkflowRequest is the request for ResumeWorkflowBeta1.
+// ResumeWorkflowRequest is the request for ResumeWorkflow.
 message ResumeWorkflowRequest {
   // ID of the workflow instance to resume.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1208,7 +1208,7 @@ message ResumeWorkflowRequest {
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
 
-// RaiseEventWorkflowRequest is the request for RaiseEventWorkflowBeta1.
+// RaiseEventWorkflowRequest is the request for RaiseEventWorkflow.
 message RaiseEventWorkflowRequest {
   // ID of the workflow instance to raise an event for.
   string instance_id = 1 [json_name = "instanceID"];
@@ -1220,7 +1220,7 @@ message RaiseEventWorkflowRequest {
   bytes event_data = 4;
 }
 
-// PurgeWorkflowRequest is the request for PurgeWorkflowBeta1.
+// PurgeWorkflowRequest is the request for PurgeWorkflow.
 message PurgeWorkflowRequest {
   // ID of the workflow instance to purge.
   string instance_id = 1 [json_name = "instanceID"];

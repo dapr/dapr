@@ -94,7 +94,7 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	backendClient := client.NewTaskHubGrpcClient(a.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
 	require.NoError(t, backendClient.StartWorkItemListener(ctx, r))
 
-	resp, err := a.daprd.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+	resp, err := a.daprd.GRPCClient(t, ctx).StartWorkflow(ctx, &rtv1.StartWorkflowRequest{
 		WorkflowComponent: "dapr",
 		WorkflowName:      "SingleActivity",
 		Input:             []byte(`"Dapr"`),

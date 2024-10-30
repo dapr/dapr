@@ -92,7 +92,7 @@ func (s *sqlite) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, backendClient.StartWorkItemListener(ctx, r))
 
 	resp, err := s.daprd.GRPCClient(t, ctx).
-		StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+		StartWorkflow(ctx, &rtv1.StartWorkflowRequest{
 			WorkflowComponent: "dapr",
 			WorkflowName:      "SingleActivity",
 			Input:             []byte(`"Dapr"`),
