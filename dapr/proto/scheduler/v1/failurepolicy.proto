@@ -19,7 +19,7 @@ message FailurePolicy {
 // trigger.
 message FailurePolicyDrop {}
 
-// FailurePolicyRetry is a policy which retries the job at a consistent
+// FailurePolicyConstant is a policy which retries the job at a consistent
 // interval when the job fails to trigger.
 message FailurePolicyConstant {
   // interval is the constant delay to wait before retrying the job.

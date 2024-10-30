@@ -69,7 +69,7 @@ func (i *interval) Run(t *testing.T, ctx context.Context) {
 		assert.ElementsMatch(c, []string{"test"}, triggered.Slice())
 	}, time.Second*10, time.Millisecond*10)
 
-	time.Sleep(time.Second * 2)
+	time.Sleep(time.Second * 1)
 	assert.ElementsMatch(t, []string{"test"}, triggered.Slice())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

@@ -145,7 +145,7 @@ func (*FailurePolicyDrop) Descriptor() ([]byte, []int) {
 	return file_dapr_proto_scheduler_v1_failurepolicy_proto_rawDescGZIP(), []int{1}
 }
 
-// FailurePolicyRetry is a policy which retries the job at a consistent
+// FailurePolicyConstant is a policy which retries the job at a consistent
 // interval when the job fails to trigger.
 type FailurePolicyConstant struct {
 	state         protoimpl.MessageState
