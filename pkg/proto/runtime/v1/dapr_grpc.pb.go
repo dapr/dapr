@@ -87,6 +87,13 @@ const (
 	Dapr_PauseWorkflowBeta1_FullMethodName             = "/dapr.proto.runtime.v1.Dapr/PauseWorkflowBeta1"
 	Dapr_ResumeWorkflowBeta1_FullMethodName            = "/dapr.proto.runtime.v1.Dapr/ResumeWorkflowBeta1"
 	Dapr_RaiseEventWorkflowBeta1_FullMethodName        = "/dapr.proto.runtime.v1.Dapr/RaiseEventWorkflowBeta1"
+	Dapr_StartWorkflow_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/StartWorkflow"
+	Dapr_GetWorkflow_FullMethodName                    = "/dapr.proto.runtime.v1.Dapr/GetWorkflow"
+	Dapr_PurgeWorkflow_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/PurgeWorkflow"
+	Dapr_TerminateWorkflow_FullMethodName              = "/dapr.proto.runtime.v1.Dapr/TerminateWorkflow"
+	Dapr_PauseWorkflow_FullMethodName                  = "/dapr.proto.runtime.v1.Dapr/PauseWorkflow"
+	Dapr_ResumeWorkflow_FullMethodName                 = "/dapr.proto.runtime.v1.Dapr/ResumeWorkflow"
+	Dapr_RaiseEventWorkflow_FullMethodName             = "/dapr.proto.runtime.v1.Dapr/RaiseEventWorkflow"
 	Dapr_Shutdown_FullMethodName                       = "/dapr.proto.runtime.v1.Dapr/Shutdown"
 	Dapr_ScheduleJobAlpha1_FullMethodName              = "/dapr.proto.runtime.v1.Dapr/ScheduleJobAlpha1"
 	Dapr_GetJobAlpha1_FullMethodName                   = "/dapr.proto.runtime.v1.Dapr/GetJobAlpha1"
@@ -180,18 +187,25 @@ type DaprClient interface {
 	SubtleSignAlpha1(ctx context.Context, in *SubtleSignRequest, opts ...grpc.CallOption) (*SubtleSignResponse, error)
 	// SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
 	SubtleVerifyAlpha1(ctx context.Context, in *SubtleVerifyRequest, opts ...grpc.CallOption) (*SubtleVerifyResponse, error)
+	// Deprecated: Do not use.
 	// Starts a new instance of a workflow
 	StartWorkflowAlpha1(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error)
+	// Deprecated: Do not use.
 	// Gets details about a started workflow instance
 	GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error)
+	// Deprecated: Do not use.
 	// Purge Workflow
 	PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Terminates a running workflow instance
 	TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Pauses a running workflow instance
 	PauseWorkflowAlpha1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Resumes a paused workflow instance
 	ResumeWorkflowAlpha1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Starts a new instance of a workflow
@@ -208,6 +222,20 @@ type DaprClient interface {
 	ResumeWorkflowBeta1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Starts a new instance of a workflow
+	StartWorkflow(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error)
+	// Gets details about a started workflow instance
+	GetWorkflow(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error)
+	// Purge Workflow
+	PurgeWorkflow(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Terminates a running workflow instance
+	TerminateWorkflow(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Pauses a running workflow instance
+	PauseWorkflow(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Resumes a paused workflow instance
+	ResumeWorkflow(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Raise an event to a running workflow instance
+	RaiseEventWorkflow(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Shutdown the sidecar
 	Shutdown(ctx context.Context, in *ShutdownRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Create and schedule a job
@@ -700,6 +728,7 @@ func (c *daprClient) SubtleVerifyAlpha1(ctx context.Context, in *SubtleVerifyReq
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) StartWorkflowAlpha1(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error) {
 	out := new(StartWorkflowResponse)
 	err := c.cc.Invoke(ctx, Dapr_StartWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -709,6 +738,7 @@ func (c *daprClient) StartWorkflowAlpha1(ctx context.Context, in *StartWorkflowR
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error) {
 	out := new(GetWorkflowResponse)
 	err := c.cc.Invoke(ctx, Dapr_GetWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -718,6 +748,7 @@ func (c *daprClient) GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowReque
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_PurgeWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -727,6 +758,7 @@ func (c *daprClient) PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowR
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_TerminateWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -736,6 +768,7 @@ func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, in *TerminateW
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) PauseWorkflowAlpha1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_PauseWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -745,6 +778,7 @@ func (c *daprClient) PauseWorkflowAlpha1(ctx context.Context, in *PauseWorkflowR
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) ResumeWorkflowAlpha1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_ResumeWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -754,6 +788,7 @@ func (c *daprClient) ResumeWorkflowAlpha1(ctx context.Context, in *ResumeWorkflo
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_RaiseEventWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -820,6 +855,69 @@ func (c *daprClient) ResumeWorkflowBeta1(ctx context.Context, in *ResumeWorkflow
 func (c *daprClient) RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_RaiseEventWorkflowBeta1_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) StartWorkflow(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error) {
+	out := new(StartWorkflowResponse)
+	err := c.cc.Invoke(ctx, Dapr_StartWorkflow_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) GetWorkflow(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error) {
+	out := new(GetWorkflowResponse)
+	err := c.cc.Invoke(ctx, Dapr_GetWorkflow_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) PurgeWorkflow(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Dapr_PurgeWorkflow_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) TerminateWorkflow(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Dapr_TerminateWorkflow_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) PauseWorkflow(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Dapr_PauseWorkflow_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) ResumeWorkflow(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Dapr_ResumeWorkflow_FullMethodName, in, out, opts...)
+	if err != nil {
+		return nil, err
+	}
+	return out, nil
+}
+
+func (c *daprClient) RaiseEventWorkflow(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
+	out := new(emptypb.Empty)
+	err := c.cc.Invoke(ctx, Dapr_RaiseEventWorkflow_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
 	}
@@ -957,18 +1055,25 @@ type DaprServer interface {
 	SubtleSignAlpha1(context.Context, *SubtleSignRequest) (*SubtleSignResponse, error)
 	// SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
 	SubtleVerifyAlpha1(context.Context, *SubtleVerifyRequest) (*SubtleVerifyResponse, error)
+	// Deprecated: Do not use.
 	// Starts a new instance of a workflow
 	StartWorkflowAlpha1(context.Context, *StartWorkflowRequest) (*StartWorkflowResponse, error)
+	// Deprecated: Do not use.
 	// Gets details about a started workflow instance
 	GetWorkflowAlpha1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error)
+	// Deprecated: Do not use.
 	// Purge Workflow
 	PurgeWorkflowAlpha1(context.Context, *PurgeWorkflowRequest) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Terminates a running workflow instance
 	TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Pauses a running workflow instance
 	PauseWorkflowAlpha1(context.Context, *PauseWorkflowRequest) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Resumes a paused workflow instance
 	ResumeWorkflowAlpha1(context.Context, *ResumeWorkflowRequest) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowAlpha1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error)
 	// Starts a new instance of a workflow
@@ -985,6 +1090,20 @@ type DaprServer interface {
 	ResumeWorkflowBeta1(context.Context, *ResumeWorkflowRequest) (*emptypb.Empty, error)
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowBeta1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error)
+	// Starts a new instance of a workflow
+	StartWorkflow(context.Context, *StartWorkflowRequest) (*StartWorkflowResponse, error)
+	// Gets details about a started workflow instance
+	GetWorkflow(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error)
+	// Purge Workflow
+	PurgeWorkflow(context.Context, *PurgeWorkflowRequest) (*emptypb.Empty, error)
+	// Terminates a running workflow instance
+	TerminateWorkflow(context.Context, *TerminateWorkflowRequest) (*emptypb.Empty, error)
+	// Pauses a running workflow instance
+	PauseWorkflow(context.Context, *PauseWorkflowRequest) (*emptypb.Empty, error)
+	// Resumes a paused workflow instance
+	ResumeWorkflow(context.Context, *ResumeWorkflowRequest) (*emptypb.Empty, error)
+	// Raise an event to a running workflow instance
+	RaiseEventWorkflow(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error)
 	// Shutdown the sidecar
 	Shutdown(context.Context, *ShutdownRequest) (*emptypb.Empty, error)
 	// Create and schedule a job
@@ -1162,6 +1281,27 @@ func (UnimplementedDaprServer) ResumeWorkflowBeta1(context.Context, *ResumeWorkf
 }
 func (UnimplementedDaprServer) RaiseEventWorkflowBeta1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method RaiseEventWorkflowBeta1 not implemented")
+}
+func (UnimplementedDaprServer) StartWorkflow(context.Context, *StartWorkflowRequest) (*StartWorkflowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method StartWorkflow not implemented")
+}
+func (UnimplementedDaprServer) GetWorkflow(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method GetWorkflow not implemented")
+}
+func (UnimplementedDaprServer) PurgeWorkflow(context.Context, *PurgeWorkflowRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PurgeWorkflow not implemented")
+}
+func (UnimplementedDaprServer) TerminateWorkflow(context.Context, *TerminateWorkflowRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method TerminateWorkflow not implemented")
+}
+func (UnimplementedDaprServer) PauseWorkflow(context.Context, *PauseWorkflowRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method PauseWorkflow not implemented")
+}
+func (UnimplementedDaprServer) ResumeWorkflow(context.Context, *ResumeWorkflowRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method ResumeWorkflow not implemented")
+}
+func (UnimplementedDaprServer) RaiseEventWorkflow(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error) {
+	return nil, status.Errorf(codes.Unimplemented, "method RaiseEventWorkflow not implemented")
 }
 func (UnimplementedDaprServer) Shutdown(context.Context, *ShutdownRequest) (*emptypb.Empty, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method Shutdown not implemented")
@@ -2192,6 +2332,132 @@ func _Dapr_RaiseEventWorkflowBeta1_Handler(srv interface{}, ctx context.Context,
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Dapr_StartWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(StartWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).StartWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_StartWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).StartWorkflow(ctx, req.(*StartWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_GetWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(GetWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).GetWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_GetWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).GetWorkflow(ctx, req.(*GetWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_PurgeWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PurgeWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).PurgeWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_PurgeWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).PurgeWorkflow(ctx, req.(*PurgeWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_TerminateWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(TerminateWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).TerminateWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_TerminateWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).TerminateWorkflow(ctx, req.(*TerminateWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_PauseWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(PauseWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).PauseWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_PauseWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).PauseWorkflow(ctx, req.(*PauseWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_ResumeWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(ResumeWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).ResumeWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_ResumeWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).ResumeWorkflow(ctx, req.(*ResumeWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
+func _Dapr_RaiseEventWorkflow_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
+	in := new(RaiseEventWorkflowRequest)
+	if err := dec(in); err != nil {
+		return nil, err
+	}
+	if interceptor == nil {
+		return srv.(DaprServer).RaiseEventWorkflow(ctx, in)
+	}
+	info := &grpc.UnaryServerInfo{
+		Server:     srv,
+		FullMethod: Dapr_RaiseEventWorkflow_FullMethodName,
+	}
+	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
+		return srv.(DaprServer).RaiseEventWorkflow(ctx, req.(*RaiseEventWorkflowRequest))
+	}
+	return interceptor(ctx, in, info, handler)
+}
+
 func _Dapr_Shutdown_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
 	in := new(ShutdownRequest)
 	if err := dec(in); err != nil {
@@ -2484,6 +2750,34 @@ var Dapr_ServiceDesc = grpc.ServiceDesc{
 		{
 			MethodName: "RaiseEventWorkflowBeta1",
 			Handler:    _Dapr_RaiseEventWorkflowBeta1_Handler,
+		},
+		{
+			MethodName: "StartWorkflow",
+			Handler:    _Dapr_StartWorkflow_Handler,
+		},
+		{
+			MethodName: "GetWorkflow",
+			Handler:    _Dapr_GetWorkflow_Handler,
+		},
+		{
+			MethodName: "PurgeWorkflow",
+			Handler:    _Dapr_PurgeWorkflow_Handler,
+		},
+		{
+			MethodName: "TerminateWorkflow",
+			Handler:    _Dapr_TerminateWorkflow_Handler,
+		},
+		{
+			MethodName: "PauseWorkflow",
+			Handler:    _Dapr_PauseWorkflow_Handler,
+		},
+		{
+			MethodName: "ResumeWorkflow",
+			Handler:    _Dapr_ResumeWorkflow_Handler,
+		},
+		{
+			MethodName: "RaiseEventWorkflow",
+			Handler:    _Dapr_RaiseEventWorkflow_Handler,
 		},
 		{
 			MethodName: "Shutdown",

@@ -151,25 +151,39 @@ service Dapr {
   rpc SubtleVerifyAlpha1(SubtleVerifyRequest) returns (SubtleVerifyResponse);
 
   // Starts a new instance of a workflow
-  rpc StartWorkflowAlpha1 (StartWorkflowRequest) returns (StartWorkflowResponse) {}
+  rpc StartWorkflowAlpha1 (StartWorkflowRequest) returns (StartWorkflowResponse) {
+    option deprecated = true;
+  }
 
   // Gets details about a started workflow instance
-  rpc GetWorkflowAlpha1 (GetWorkflowRequest) returns (GetWorkflowResponse) {}
+  rpc GetWorkflowAlpha1 (GetWorkflowRequest) returns (GetWorkflowResponse) {
+    option deprecated = true;
+  }
 
   // Purge Workflow
-  rpc PurgeWorkflowAlpha1 (PurgeWorkflowRequest) returns (google.protobuf.Empty) {}
+  rpc PurgeWorkflowAlpha1 (PurgeWorkflowRequest) returns (google.protobuf.Empty) {
+    option deprecated = true;
+  }
 
   // Terminates a running workflow instance
-  rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (google.protobuf.Empty) {}
+  rpc TerminateWorkflowAlpha1 (TerminateWorkflowRequest) returns (google.protobuf.Empty) {
+    option deprecated = true;
+  }
 
   // Pauses a running workflow instance
-  rpc PauseWorkflowAlpha1 (PauseWorkflowRequest) returns (google.protobuf.Empty) {}
+  rpc PauseWorkflowAlpha1 (PauseWorkflowRequest) returns (google.protobuf.Empty) {
+    option deprecated = true;
+  }
 
   // Resumes a paused workflow instance
-  rpc ResumeWorkflowAlpha1 (ResumeWorkflowRequest) returns (google.protobuf.Empty) {}
+  rpc ResumeWorkflowAlpha1 (ResumeWorkflowRequest) returns (google.protobuf.Empty) {
+    option deprecated = true;
+  }
 
   // Raise an event to a running workflow instance
-  rpc RaiseEventWorkflowAlpha1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
+  rpc RaiseEventWorkflowAlpha1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {
+    option deprecated = true;
+  }
 
   // Starts a new instance of a workflow
   rpc StartWorkflowBeta1 (StartWorkflowRequest) returns (StartWorkflowResponse) {}
@@ -191,6 +205,28 @@ service Dapr {
 
   // Raise an event to a running workflow instance
   rpc RaiseEventWorkflowBeta1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
+
+  // Starts a new instance of a workflow
+  rpc StartWorkflow (StartWorkflowRequest) returns (StartWorkflowResponse) {}
+
+  // Gets details about a started workflow instance
+  rpc GetWorkflow (GetWorkflowRequest) returns (GetWorkflowResponse) {}
+
+  // Purge Workflow
+  rpc PurgeWorkflow (PurgeWorkflowRequest) returns (google.protobuf.Empty) {}
+
+  // Terminates a running workflow instance
+  rpc TerminateWorkflow (TerminateWorkflowRequest) returns (google.protobuf.Empty) {}
+
+  // Pauses a running workflow instance
+  rpc PauseWorkflow (PauseWorkflowRequest) returns (google.protobuf.Empty) {}
+
+  // Resumes a paused workflow instance
+  rpc ResumeWorkflow (ResumeWorkflowRequest) returns (google.protobuf.Empty) {}
+
+  // Raise an event to a running workflow instance
+  rpc RaiseEventWorkflow (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
+
   // Shutdown the sidecar
   rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
 
@@ -737,7 +773,7 @@ message AppConnectionHealthProperties {
 message PubsubSubscription {
   string pubsub_name = 1 [json_name = "pubsubname"];
   string topic = 2 [json_name = "topic"];
-  map<string,string> metadata = 3 [json_name = "metadata"];
+  map<string, string> metadata = 3 [json_name = "metadata"];
   PubsubSubscriptionRules rules = 4 [json_name = "rules"];
   string dead_letter_topic = 5 [json_name = "deadLetterTopic"];
   PubsubSubscriptionType type = 6 [json_name = "type"];
@@ -886,7 +922,7 @@ message SubtleGetKeyRequest {
   }
 
   // Name of the component
-  string component_name = 1 [json_name="componentName"];
+  string component_name = 1 [json_name = "componentName"];
   // Name (or name/version) of the key to use in the key vault
   string name = 2;
   // Response format
@@ -899,24 +935,24 @@ message SubtleGetKeyResponse {
   // This is returned as response too in case there is a version.
   string name = 1;
   // Public key, encoded in the requested format
-  string public_key = 2 [json_name="publicKey"];
+  string public_key = 2 [json_name = "publicKey"];
 }
 
 // SubtleEncryptRequest is the request for SubtleEncryptAlpha1.
 message SubtleEncryptRequest {
   // Name of the component
-  string component_name = 1 [json_name="componentName"];
+  string component_name = 1 [json_name = "componentName"];
   // Message to encrypt.
   bytes plaintext = 2;
   // Algorithm to use, as in the JWA standard.
   string algorithm = 3;
   // Name (or name/version) of the key.
-  string key_name = 4 [json_name="keyName"];
+  string key_name = 4 [json_name = "keyName"];
   // Nonce / initialization vector.
   // Ignored with asymmetric ciphers.
   bytes nonce = 5;
   // Associated Data when using AEAD ciphers (optional).
-  bytes associated_data = 6 [json_name="associatedData"];
+  bytes associated_data = 6 [json_name = "associatedData"];
 }
 
 // SubtleEncryptResponse is the response for SubtleEncryptAlpha1.
@@ -931,13 +967,13 @@ message SubtleEncryptResponse {
 // SubtleDecryptRequest is the request for SubtleDecryptAlpha1.
 message SubtleDecryptRequest {
   // Name of the component
-  string component_name = 1 [json_name="componentName"];
+  string component_name = 1 [json_name = "componentName"];
   // Message to decrypt.
   bytes ciphertext = 2;
   // Algorithm to use, as in the JWA standard.
   string algorithm = 3;
   // Name (or name/version) of the key.
-  string key_name = 4 [json_name="keyName"];
+  string key_name = 4 [json_name = "keyName"];
   // Nonce / initialization vector.
   // Ignored with asymmetric ciphers.
   bytes nonce = 5;
@@ -945,7 +981,7 @@ message SubtleDecryptRequest {
   // This is nil when not using an authenticated cipher.
   bytes tag = 6;
   // Associated Data when using AEAD ciphers (optional).
-  bytes associated_data = 7 [json_name="associatedData"];
+  bytes associated_data = 7 [json_name = "associatedData"];
 }
 
 // SubtleDecryptResponse is the response for SubtleDecryptAlpha1.
@@ -957,24 +993,24 @@ message SubtleDecryptResponse {
 // SubtleWrapKeyRequest is the request for SubtleWrapKeyAlpha1.
 message SubtleWrapKeyRequest {
   // Name of the component
-  string component_name = 1 [json_name="componentName"];
+  string component_name = 1 [json_name = "componentName"];
   // Key to wrap
-  bytes plaintext_key = 2 [json_name="plaintextKey"];
+  bytes plaintext_key = 2 [json_name = "plaintextKey"];
   // Algorithm to use, as in the JWA standard.
   string algorithm = 3;
   // Name (or name/version) of the key.
-  string key_name = 4 [json_name="keyName"];
+  string key_name = 4 [json_name = "keyName"];
   // Nonce / initialization vector.
   // Ignored with asymmetric ciphers.
   bytes nonce = 5;
   // Associated Data when using AEAD ciphers (optional).
-  bytes associated_data = 6 [json_name="associatedData"];
+  bytes associated_data = 6 [json_name = "associatedData"];
 }
 
 // SubtleWrapKeyResponse is the response for SubtleWrapKeyAlpha1.
 message SubtleWrapKeyResponse {
   // Wrapped key.
-  bytes wrapped_key = 1 [json_name="wrappedKey"];
+  bytes wrapped_key = 1 [json_name = "wrappedKey"];
   // Authentication tag.
   // This is nil when not using an authenticated cipher.
   bytes tag = 2;
@@ -983,13 +1019,13 @@ message SubtleWrapKeyResponse {
 // SubtleUnwrapKeyRequest is the request for SubtleUnwrapKeyAlpha1.
 message SubtleUnwrapKeyRequest {
   // Name of the component
-  string component_name = 1 [json_name="componentName"];
+  string component_name = 1 [json_name = "componentName"];
   // Wrapped key.
-  bytes wrapped_key = 2 [json_name="wrappedKey"];
+  bytes wrapped_key = 2 [json_name = "wrappedKey"];
   // Algorithm to use, as in the JWA standard.
   string algorithm = 3;
   // Name (or name/version) of the key.
-  string key_name = 4 [json_name="keyName"];
+  string key_name = 4 [json_name = "keyName"];
   // Nonce / initialization vector.
   // Ignored with asymmetric ciphers.
   bytes nonce = 5;
@@ -997,25 +1033,25 @@ message SubtleUnwrapKeyRequest {
   // This is nil when not using an authenticated cipher.
   bytes tag = 6;
   // Associated Data when using AEAD ciphers (optional).
-  bytes associated_data = 7 [json_name="associatedData"];
+  bytes associated_data = 7 [json_name = "associatedData"];
 }
 
 // SubtleUnwrapKeyResponse is the response for SubtleUnwrapKeyAlpha1.
 message SubtleUnwrapKeyResponse {
   // Key in plaintext
-  bytes plaintext_key = 1 [json_name="plaintextKey"];
+  bytes plaintext_key = 1 [json_name = "plaintextKey"];
 }
 
 // SubtleSignRequest is the request for SubtleSignAlpha1.
 message SubtleSignRequest {
   // Name of the component
-  string component_name = 1 [json_name="componentName"];
+  string component_name = 1 [json_name = "componentName"];
   // Digest to sign.
   bytes digest = 2;
   // Algorithm to use, as in the JWA standard.
   string algorithm = 3;
   // Name (or name/version) of the key.
-  string key_name = 4 [json_name="keyName"];
+  string key_name = 4 [json_name = "keyName"];
 }
 
 // SubtleSignResponse is the response for SubtleSignAlpha1.
@@ -1027,13 +1063,13 @@ message SubtleSignResponse {
 // SubtleVerifyRequest is the request for SubtleVerifyAlpha1.
 message SubtleVerifyRequest {
   // Name of the component
-  string component_name = 1 [json_name="componentName"];
+  string component_name = 1 [json_name = "componentName"];
   // Digest of the message.
   bytes digest = 2;
   // Algorithm to use, as in the JWA standard.
   string algorithm = 3;
   // Name (or name/version) of the key.
-  string key_name = 4 [json_name="keyName"];
+  string key_name = 4 [json_name = "keyName"];
   // Signature to verify.
   bytes signature = 5;
 }
@@ -1055,9 +1091,9 @@ message EncryptRequest {
 // EncryptRequestOptions contains options for the first message in the EncryptAlpha1 request.
 message EncryptRequestOptions {
   // Name of the component. Required.
-  string component_name = 1 [json_name="componentName"];
+  string component_name = 1 [json_name = "componentName"];
   // Name (or name/version) of the key. Required.
-  string key_name = 2 [json_name="keyName"];
+  string key_name = 2 [json_name = "keyName"];
   // Key wrapping algorithm to use. Required.
   // Supported options include: A256KW (alias: AES), A128CBC, A192CBC, A256CBC, RSA-OAEP-256 (alias: RSA).
   string key_wrap_algorithm = 3;
@@ -1066,12 +1102,12 @@ message EncryptRequestOptions {
   // If true, the encrypted document does not contain a key reference.
   // In that case, calls to the Decrypt method must provide a key reference (name or name/version).
   // Defaults to false.
-  bool omit_decryption_key_name = 11 [json_name="omitDecryptionKeyName"];
+  bool omit_decryption_key_name = 11 [json_name = "omitDecryptionKeyName"];
   // Key reference to embed in the encrypted document (name or name/version).
   // This is helpful if the reference of the key used to decrypt the document is different from the one used to encrypt it.
   // If unset, uses the reference of the key used to encrypt the document (this is the default behavior).
   // This option is ignored if omit_decryption_key_name is true.
-  string decryption_key_name = 12 [json_name="decryptionKeyName"];
+  string decryption_key_name = 12 [json_name = "decryptionKeyName"];
 }
 
 // EncryptResponse is the response for EncryptAlpha1.
@@ -1091,11 +1127,11 @@ message DecryptRequest {
 // DecryptRequestOptions contains options for the first message in the DecryptAlpha1 request.
 message DecryptRequestOptions {
   // Name of the component
-  string component_name = 1 [json_name="componentName"];
+  string component_name = 1 [json_name = "componentName"];
   // Name (or name/version) of the key to decrypt the message.
   // Overrides any key reference included in the message if present.
   // This is required if the message doesn't include a key reference (i.e. was created with omit_decryption_key_name set to true).
-  string key_name = 12 [json_name="keyName"];
+  string key_name = 12 [json_name = "keyName"];
 }
 
 // DecryptResponse is the response for DecryptAlpha1.
@@ -1107,7 +1143,7 @@ message DecryptResponse {
 // GetWorkflowRequest is the request for GetWorkflowBeta1.
 message GetWorkflowRequest {
   // ID of the workflow instance to query.
-  string instance_id  = 1 [json_name = "instanceID"];
+  string instance_id = 1 [json_name = "instanceID"];
   // Name of the workflow component.
   string workflow_component = 2 [json_name = "workflowComponent"];
 }
@@ -1215,14 +1251,14 @@ message Job {
   // "0 15 3 * * *" - every day at 03:15
   //
   // Period string expressions:
-	// Entry                  | Description                                  | Equivalent To
-	// -----                  | -----------                                  | -------------
+  // Entry                  | Description                                  | Equivalent To
+  // -----                  | -----------                                  | -------------
   // @every `<duration>`    | Run every `<duration>` (e.g. '@every 1h30m') | N/A
-	// @yearly (or @annually) | Run once a year, midnight, Jan. 1st          | 0 0 0 1 1 *
-	// @monthly               | Run once a month, midnight, first of month   | 0 0 0 1 * *
-	// @weekly                | Run once a week, midnight on Sunday          | 0 0 0 * * 0
-	// @daily (or @midnight)  | Run once a day, midnight                     | 0 0 0 * * *
-	// @hourly                | Run once an hour, beginning of hour          | 0 0 * * * *
+  // @yearly (or @annually) | Run once a year, midnight, Jan. 1st          | 0 0 0 1 1 *
+  // @monthly               | Run once a month, midnight, first of month   | 0 0 0 1 * *
+  // @weekly                | Run once a week, midnight on Sunday          | 0 0 0 * * 0
+  // @daily (or @midnight)  | Run once a day, midnight                     | 0 0 0 * * *
+  // @hourly                | Run once an hour, beginning of hour          | 0 0 * * * *
   optional string schedule = 2 [json_name = "schedule"];
 
   // repeats is the optional number of times in which the job should be
