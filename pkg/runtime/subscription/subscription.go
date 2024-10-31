@@ -199,7 +199,6 @@ func New(opts Options) (*Subscription, error) {
 					cloudEvent[contribpubsub.TraceParentField] = traceparent
 					// traceparent supersedes traceid
 					cloudEvent[contribpubsub.TraceIDField] = traceparent
-					cloudEvent[contribpubsub.TraceIDField] = traceparent
 				}
 			}
 			if _, ok := cloudEvent[contribpubsub.TraceStateField]; !ok {
