@@ -13,6 +13,10 @@ limitations under the License.
 
 package errorcodes
 
+import (
+	"strings"
+)
+
 const (
 	// Actors (Building block)
 	ActorInstanceMissing      = "ERR_ACTOR_INSTANCE_MISSING"
@@ -117,3 +121,33 @@ const (
 	CommonMalformedRequestData = "ERR_COMMON_MALFORMED_REQUEST_DATA"
 	CommonMalformedResponse    = "ERR_COMMON_MALFORMED_RESPONSE"
 )
+
+// GetErrorType determines the type of an error code based on its prefix, used only when recording metric for improved filtering
+func GetErrorType(errCode string) string {
+    switch {
+    case strings.HasPrefix(errCode, "ERR_ACTOR_"):
+        return "actor"
+    case strings.HasPrefix(errCode, "ERR_WORKFLOW_"):
+        return "workflow"
+    case strings.HasPrefix(errCode, "ERR_STATE_"):
+        return "state"
+    case strings.HasPrefix(errCode, "ERR_CONFIGURATION_"):
+        return "configuration"
+    case strings.HasPrefix(errCode, "ERR_CRYPTO_"):
+        return "crypto"
+    case strings.HasPrefix(errCode, "ERR_SECRET_"):
+        return "secret"
+    case strings.HasPrefix(errCode, "ERR_PUBSUB_"):
+        return "pubsub"
+    case strings.HasPrefix(errCode, "ERR_CONVERSATION_"):
+        return "conversation"
+    case strings.HasPrefix(errCode, "ERR_LOCK_"):
+        return "lock"
+    case strings.HasPrefix(errCode, "ERR_HEALTH_"):
+        return "health"
+    case strings.HasPrefix(errCode, "ERR_COMMON_"):
+        return "common"
+    default:
+        return ""
+    }
+}

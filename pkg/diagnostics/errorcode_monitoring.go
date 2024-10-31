@@ -8,6 +8,7 @@ import (
 	"go.opencensus.io/tag"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 type errorCodeMetrics struct {
@@ -42,9 +43,13 @@ func (m *errorCodeMetrics) Init(id string) error {
 
 func (m *errorCodeMetrics) RecordErrorCode(code string) {
 	if m.enabled {
+		errorCodeType := errorcodes.GetErrorType(code)
+		if errorCodeType == "" {
+			return
+		}
 		_ = stats.RecordWithTags(
 			m.ctx,
-			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, code),
+			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, code, typeKey, errorCodeType),
 			m.errorCodeCount.M(1),
 		)
 	}
