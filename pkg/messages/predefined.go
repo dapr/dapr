@@ -62,7 +62,7 @@ const (
 var (
 	// Generic.
 	ErrBadRequest       = APIError{"invalid request: %v", errorcodes.CommonBadRequest, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrAPIUnimplemented = APIError{"this API is currently not implemented", errorcodes.CommonApiUnimplemented, http.StatusNotImplemented, grpcCodes.Unimplemented}
+	ErrAPIUnimplemented = APIError{"this API is currently not implemented", errorcodes.CommonAPIUnimplemented, http.StatusNotImplemented, grpcCodes.Unimplemented}
 
 	// HTTP.
 	ErrBodyRead         = APIError{"failed to read request body: %v", errorcodes.CommonBodyRead, http.StatusBadRequest, grpcCodes.InvalidArgument}
@@ -117,11 +117,11 @@ var (
 	ErrStartWorkflow                 = APIError{"error starting workflow '%s': %s", errorcodes.WorkflowStart, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrWorkflowGetResponse           = APIError{"error while getting workflow info on instance '%s': %s", errorcodes.WorkflowGet, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrWorkflowNameMissing           = APIError{"workflow name is not configured", errorcodes.WorkflowNameMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrInstanceIDTooLong             = APIError{"workflow instance ID exceeds the max length of %d characters", errorcodes.WorkflowInstanceIdTooLong, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrInvalidInstanceID             = APIError{"workflow instance ID '%s' is invalid: only alphanumeric and underscore characters are allowed", errorcodes.WorkflowInstanceIdInvalid, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrInstanceIDTooLong             = APIError{"workflow instance ID exceeds the max length of %d characters", errorcodes.WorkflowInstanceIDTooLong, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrInvalidInstanceID             = APIError{"workflow instance ID '%s' is invalid: only alphanumeric and underscore characters are allowed", errorcodes.WorkflowInstanceIDInvalid, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrWorkflowComponentDoesNotExist = APIError{"workflow component '%s' does not exist", errorcodes.WorkflowComponentNotFound, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrMissingOrEmptyInstance        = APIError{"no instance ID was provided", errorcodes.WorkflowInstanceIdProvidedMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
-	ErrWorkflowInstanceNotFound      = APIError{"unable to find workflow with the provided instance ID: %s", errorcodes.WorkflowInstanceIdNotFound, http.StatusNotFound, grpcCodes.NotFound}
+	ErrMissingOrEmptyInstance        = APIError{"no instance ID was provided", errorcodes.WorkflowInstanceIDProvidedMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
+	ErrWorkflowInstanceNotFound      = APIError{"unable to find workflow with the provided instance ID: %s", errorcodes.WorkflowInstanceIDNotFound, http.StatusNotFound, grpcCodes.NotFound}
 	ErrNoOrMissingWorkflowComponent  = APIError{"no workflow component was provided", errorcodes.WorkflowComponentMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
 	ErrTerminateWorkflow             = APIError{"error terminating workflow '%s': %s", errorcodes.WorkflowTerminate, http.StatusInternalServerError, grpcCodes.Internal}
 	ErrMissingWorkflowEventName      = APIError{"missing workflow event name", errorcodes.WorkflowEventNameMissing, http.StatusBadRequest, grpcCodes.InvalidArgument}
@@ -138,9 +138,9 @@ var (
 )
 
 // This will record the error as a metric and return the APIError
-func (err APIError) RecordAndGet() APIError {
-	diag.DefaultErrorCodeMonitoring.RecordErrorCode(err.tag)
-	return err
+func (e APIError) RecordAndGet() APIError {
+	diag.DefaultErrorCodeMonitoring.RecordErrorCode(e.tag)
+	return e
 }
 
 // This will record the error as a metric and return the APIError string

@@ -43,10 +43,10 @@ const (
 	WorkflowComponentNotFound         = "ERR_WORKFLOW_COMPONENT_NOT_FOUND"
 	WorkflowEventNameMissing          = "ERR_WORKFLOW_EVENT_NAME_MISSING"
 	WorkflowNameMissing               = "ERR_WORKFLOW_NAME_MISSING"
-	WorkflowInstanceIdInvalid         = "ERR_WORKFLOW_INSTANCE_ID_INVALID"
-	WorkflowInstanceIdNotFound        = "ERR_WORKFLOW_INSTANCE_ID_NOT_FOUND"
-	WorkflowInstanceIdProvidedMissing = "ERR_WORKFLOW_INSTANCE_ID_PROVIDED_MISSING"
-	WorkflowInstanceIdTooLong         = "ERR_WORKFLOW_INSTANCE_ID_TOO_LONG"
+	WorkflowInstanceIDInvalid         = "ERR_WORKFLOW_INSTANCE_ID_INVALID"
+	WorkflowInstanceIDNotFound        = "ERR_WORKFLOW_INSTANCE_ID_NOT_FOUND"
+	WorkflowInstanceIDProvidedMissing = "ERR_WORKFLOW_INSTANCE_ID_PROVIDED_MISSING"
+	WorkflowInstanceIDTooLong         = "ERR_WORKFLOW_INSTANCE_ID_TOO_LONG"
 
 	// State management (Building block)
 	StateTransaction              = "ERR_STATE_TRANSACTION"
@@ -112,7 +112,7 @@ const (
 	HealthOutboundNotReady = "ERR_HEALTH_OUTBOUND_NOT_READY"
 
 	// Common
-	CommonApiUnimplemented     = "ERR_COMMON_API_UNIMPLEMENTED"
+	CommonAPIUnimplemented     = "ERR_COMMON_API_UNIMPLEMENTED"
 	CommonAppChannelNil        = "ERR_COMMON_APP_CHANNEL_NIL"
 	CommonBadRequest           = "ERR_COMMON_BAD_REQUEST"
 	CommonBodyRead             = "ERR_COMMON_BODY_READ"
@@ -124,30 +124,30 @@ const (
 
 // GetErrorType determines the type of an error code based on its prefix, used only when recording metric for improved filtering
 func GetErrorType(errCode string) string {
-    switch {
-    case strings.HasPrefix(errCode, "ERR_ACTOR_"):
-        return "actor"
-    case strings.HasPrefix(errCode, "ERR_WORKFLOW_"):
-        return "workflow"
-    case strings.HasPrefix(errCode, "ERR_STATE_"):
-        return "state"
-    case strings.HasPrefix(errCode, "ERR_CONFIGURATION_"):
-        return "configuration"
-    case strings.HasPrefix(errCode, "ERR_CRYPTO_"):
-        return "crypto"
-    case strings.HasPrefix(errCode, "ERR_SECRET_"):
-        return "secret"
-    case strings.HasPrefix(errCode, "ERR_PUBSUB_"):
-        return "pubsub"
-    case strings.HasPrefix(errCode, "ERR_CONVERSATION_"):
-        return "conversation"
-    case strings.HasPrefix(errCode, "ERR_LOCK_"):
-        return "lock"
-    case strings.HasPrefix(errCode, "ERR_HEALTH_"):
-        return "health"
-    case strings.HasPrefix(errCode, "ERR_COMMON_"):
-        return "common"
-    default:
-        return ""
-    }
+	switch {
+	case strings.HasPrefix(errCode, "ERR_ACTOR_"):
+		return "actor"
+	case strings.HasPrefix(errCode, "ERR_WORKFLOW_"):
+		return "workflow"
+	case strings.HasPrefix(errCode, "ERR_STATE_"):
+		return "state"
+	case strings.HasPrefix(errCode, "ERR_CONFIGURATION_"):
+		return "configuration"
+	case strings.HasPrefix(errCode, "ERR_CRYPTO_"):
+		return "crypto"
+	case strings.HasPrefix(errCode, "ERR_SECRET_"):
+		return "secret"
+	case strings.HasPrefix(errCode, "ERR_PUBSUB_"):
+		return "pubsub"
+	case strings.HasPrefix(errCode, "ERR_CONVERSATION_"):
+		return "conversation"
+	case strings.HasPrefix(errCode, "ERR_LOCK_"):
+		return "lock"
+	case strings.HasPrefix(errCode, "ERR_HEALTH_"):
+		return "health"
+	case strings.HasPrefix(errCode, "ERR_COMMON_"):
+		return "common"
+	default:
+		return ""
+	}
 }
