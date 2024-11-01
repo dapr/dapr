@@ -37,7 +37,7 @@ func (m *errorCodeMetrics) Init(id string) error {
 	m.appID = id
 
 	return view.Register(
-		diagUtils.NewMeasureView(m.errorCodeCount, []tag.Key{appIDKey, errorCodeKey}, view.Count()),
+		diagUtils.NewMeasureView(m.errorCodeCount, []tag.Key{appIDKey, errorCodeKey, typeKey}, view.Count()),
 	)
 }
 
@@ -47,6 +47,7 @@ func (m *errorCodeMetrics) RecordErrorCode(code string) {
 		if errorCodeType == "" {
 			return
 		}
+
 		_ = stats.RecordWithTags(
 			m.ctx,
 			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, code, typeKey, errorCodeType),
