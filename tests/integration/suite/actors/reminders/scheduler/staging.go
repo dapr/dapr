@@ -42,14 +42,12 @@ type staging struct {
 
 func (s *staging) Setup(t *testing.T) []framework.Option {
 	s.actors1 = actors.New(t,
-		actors.WithFeatureSchedulerReminders(true),
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(_ http.ResponseWriter, req *http.Request) {
 			assert.Fail(t, "unexpected foo call")
 		}),
 	)
 	s.actors2 = actors.New(t,
-		actors.WithFeatureSchedulerReminders(true),
 		actors.WithDB(s.actors1.DB()),
 		actors.WithPlacement(s.actors1.Placement()),
 		actors.WithScheduler(s.actors1.Scheduler()),

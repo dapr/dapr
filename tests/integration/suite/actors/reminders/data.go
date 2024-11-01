@@ -47,6 +47,7 @@ func (d *data) Setup(t *testing.T) []framework.Option {
 			assert.NoError(t, err)
 			d.got <- string(got)
 		}),
+		actors.WithFeatureSchedulerReminders(false),
 	)
 
 	return []framework.Option{
