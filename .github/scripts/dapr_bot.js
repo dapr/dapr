@@ -82,9 +82,9 @@ async function handleIssueCommentCreate({ github, context }) {
     const isFromPulls = !!payload.issue.pull_request
     const commentBody = ((payload.comment.body || '') + '').trim()
     console.log(`    Issue(owner/repo/number): ${issue.owner}/${issue.repo}/${issue.number} 
-    Actor(current username / id): ${username} / ${payload.comment.user.id}
-    CommentID: ${payload.comment.id}
-    CreatedAt: ${payload.comment.created_at}`
+        Actor(current username / id): ${username} / ${payload.comment.user.id}
+        CommentID: ${payload.comment.id}
+        CreatedAt: ${payload.comment.created_at}`
     )
 
     if (!commentBody || !commentBody.startsWith('/')) {
