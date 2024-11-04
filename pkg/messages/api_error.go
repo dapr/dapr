@@ -19,9 +19,10 @@ import (
 	"fmt"
 	"net/http"
 
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
+
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 const (

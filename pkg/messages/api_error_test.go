@@ -19,15 +19,16 @@ import (
 	"reflect"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
+
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 func TestAPIError_WithFormat(t *testing.T) {
 	type fields struct {
 		message  string
-		tag     errorcodes.ErrorCode
+		tag      errorcodes.ErrorCode
 		httpCode int
 		grpcCode grpcCodes.Code
 	}
