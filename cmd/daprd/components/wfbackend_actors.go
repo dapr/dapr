@@ -23,5 +23,5 @@ import (
 func init() {
 	// Note that the actors backend is always enabled, even if this file is deleted
 	// This component is still registered here to allow users to explicitly instantiate the actors backend
-	wfbeLoader.DefaultRegistry.RegisterComponent(actors.NewActorBackend, "actor", "actors")
+	wfbeLoader.DefaultRegistry.RegisterComponent(actors.New, "actor", "actors")
 }

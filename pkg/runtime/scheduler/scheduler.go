@@ -22,6 +22,8 @@ import (
 	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors/table"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
@@ -40,11 +42,12 @@ type Options struct {
 
 // Manager manages connections to multiple schedulers.
 type Manager struct {
-	clients   *clients.Clients
-	actors    actors.ActorRuntime
-	namespace string
-	appID     string
-	channels  *channels.Channels
+	clients      *clients.Clients
+	actorsTable  table.Interface
+	actorsEngine engine.Interface
+	namespace    string
+	appID        string
+	channels     *channels.Channels
 
 	stopStartCh chan struct{}
 	lock        sync.Mutex
@@ -99,8 +102,9 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 	}
 
 	var entities []string
-	if m.actors != nil {
-		entities = m.actors.Entities()
+	if m.actorsTable != nil {
+		// TODO: @joshvanl: this is dynamic.
+		entities = m.actorsTable.Types()
 	}
 
 	req := &schedulerv1pb.WatchJobsRequest{
@@ -128,7 +132,6 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 			req:      req,
 			client:   clients[i],
 			channels: m.channels,
-			actors:   m.actors,
 		}).run
 	}
 
@@ -146,16 +149,31 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 
 // Start starts the scheduler manager with the given actors runtime, if it is
 // enabled, to begin receiving job triggers.
-func (m *Manager) Start(actors actors.ActorRuntime) {
+func (m *Manager) Start(ctx context.Context, actors actors.Interface) error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+
+	engine, err := actors.Engine(ctx)
+	if err != nil {
+		return err
+	}
+
+	table, err := actors.Table(ctx)
+	if err != nil {
+		return err
+	}
+
+	m.actorsEngine = engine
+	m.actorsTable = table
+
 	if !m.started {
 		m.started = true
 		m.stopped = false
-		m.actors = actors
 		close(m.stopStartCh)
 		m.stopStartCh = make(chan struct{}, 1)
 	}
+
+	return nil
 }
 
 // Stop stops the scheduler manager, which stops watching for job triggers.

@@ -61,6 +61,9 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	for atype, handler := range opts.actorTypeHandlers {
 		handlers = append(handlers, app.WithHandlerFunc("/actors/"+atype+"/", handler))
 	}
+	for pattern, handler := range opts.handlers {
+		handlers = append(handlers, app.WithHandlerFunc(pattern, handler))
+	}
 
 	app := app.New(t,
 		append(handlers,
@@ -128,6 +131,10 @@ func (a *Actors) Placement() *placement.Placement {
 
 func (a *Actors) Scheduler() *scheduler.Scheduler {
 	return a.sched
+}
+
+func (a *Actors) Daprd() *daprd.Daprd {
+	return a.daprd
 }
 
 func (a *Actors) AppID() string {

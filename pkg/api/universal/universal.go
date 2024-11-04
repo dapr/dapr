@@ -17,7 +17,6 @@ package universal
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/config"
@@ -33,14 +32,12 @@ type Options struct {
 	Namespace                   string
 	Logger                      logger.Logger
 	Resiliency                  resiliency.Provider
-	Actors                      actors.ActorRuntime
 	CompStore                   *compstore.ComponentStore
 	ShutdownFn                  func()
 	GetComponentsCapabilitiesFn func() map[string][]string
 	ExtendedMetadata            map[string]string
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
-	WorkflowEngine              *wfengine.WorkflowEngine
 	SchedulerClients            *clients.Clients
 }
 
@@ -50,7 +47,6 @@ type Universal struct {
 	namespace                   string
 	logger                      logger.Logger
 	resiliency                  resiliency.Provider
-	actors                      actors.ActorRuntime
 	compStore                   *compstore.ComponentStore
 	shutdownFn                  func()
 	getComponentsCapabilitiesFn func() map[string][]string
@@ -61,9 +57,8 @@ type Universal struct {
 	schedulerClients            *clients.Clients
 
 	extendedMetadataLock sync.RWMutex
+	actors               actors.Interface
 	actorsLock           sync.RWMutex
-	actorsReady          atomic.Bool
-	actorsReadyCh        chan struct{}
 }
 
 func New(opts Options) *Universal {
@@ -72,15 +67,12 @@ func New(opts Options) *Universal {
 		namespace:                   opts.Namespace,
 		logger:                      opts.Logger,
 		resiliency:                  opts.Resiliency,
-		actors:                      opts.Actors,
 		compStore:                   opts.CompStore,
 		shutdownFn:                  opts.ShutdownFn,
 		getComponentsCapabilitiesFn: opts.GetComponentsCapabilitiesFn,
 		extendedMetadata:            opts.ExtendedMetadata,
 		appConnectionConfig:         opts.AppConnectionConfig,
 		globalConfig:                opts.GlobalConfig,
-		workflowEngine:              opts.WorkflowEngine,
-		actorsReadyCh:               make(chan struct{}),
 		schedulerClients:            opts.SchedulerClients,
 	}
 }
@@ -97,22 +89,23 @@ func (a *Universal) Resiliency() resiliency.Provider {
 	return a.resiliency
 }
 
-func (a *Universal) Actors() actors.ActorRuntime {
-	a.actorsLock.RLock()
-	defer a.actorsLock.RUnlock()
-	return a.actors
-}
-
-func (a *Universal) SetActorRuntime(actor actors.ActorRuntime) {
-	a.actorsLock.Lock()
-	defer a.actorsLock.Unlock()
-	a.actors = actor
-}
-
 func (a *Universal) CompStore() *compstore.ComponentStore {
 	return a.compStore
 }
 
 func (a *Universal) AppConnectionConfig() config.AppConnectionConfig {
 	return a.appConnectionConfig
+}
+
+func (a *Universal) Actors() actors.Interface {
+	a.actorsLock.RLock()
+	defer a.actorsLock.RUnlock()
+	return a.actors
+}
+
+func (a *Universal) SetActorRuntime(actors actors.Interface, wfEngine *wfengine.WorkflowEngine) {
+	a.actorsLock.Lock()
+	defer a.actorsLock.Unlock()
+	a.actors = actors
+	a.workflowEngine = wfEngine
 }

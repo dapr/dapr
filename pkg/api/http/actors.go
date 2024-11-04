@@ -14,7 +14,6 @@ limitations under the License.
 package http
 
 import (
-	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -25,15 +24,15 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
-	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 var endpointGroupActorV1State = &endpoints.EndpointGroup{
@@ -171,14 +170,8 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	err := a.universal.ActorReadinessCheck(ctx)
-	if err != nil {
-		respondWithError(w, err)
-		return
-	}
-
-	var req actors.CreateReminderRequest
-	err = json.NewDecoder(r.Body).Decode(&req)
+	var req requestresponse.CreateReminderRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
 		respondWithError(w, msg)
@@ -190,9 +183,15 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
-	err = a.universal.Actors().CreateReminder(ctx, &req)
+	rem, err := a.universal.Actors().Reminders(ctx)
 	if err != nil {
-		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		respondWithError(w, err)
+		return
+	}
+
+	err = rem.Create(ctx, &req)
+	if err != nil {
+		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
 			msg := messages.ErrActorReminderOpActorNotHosted
 			respondWithError(w, msg)
 			log.Debug(msg)
@@ -211,14 +210,8 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	err := a.universal.ActorReadinessCheck(ctx)
-	if err != nil {
-		respondWithError(w, err)
-		return
-	}
-
-	var req actors.CreateTimerRequest
-	err = json.NewDecoder(r.Body).Decode(&req)
+	var req requestresponse.CreateTimerRequest
+	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
 		respondWithError(w, msg)
@@ -230,7 +223,13 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
-	err = a.universal.Actors().CreateTimer(ctx, &req)
+	timers, err := a.universal.Actors().Timers(ctx)
+	if err != nil {
+		respondWithError(w, err)
+		return
+	}
+
+	err = timers.Create(ctx, &req)
 	if err != nil {
 		msg := messages.ErrActorTimerCreate.WithFormat(err)
 		respondWithError(w, msg)
@@ -258,17 +257,11 @@ func (a *api) onDeleteActorReminder() http.HandlerFunc {
 func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	err := a.universal.ActorReadinessCheck(ctx)
-	if err != nil {
-		respondWithError(w, err)
-		return
-	}
-
 	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 
-	var ops []actors.TransactionalOperation
-	err = json.NewDecoder(r.Body).Decode(&ops)
+	var ops []requestresponse.TransactionalOperation
+	err := json.NewDecoder(r.Body).Decode(&ops)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
 		respondWithError(w, msg)
@@ -276,25 +269,20 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	hosted := a.universal.Actors().IsActorHosted(ctx, &actors.ActorHostedRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-	})
-
-	if !hosted {
-		msg := messages.ErrActorInstanceMissing
-		respondWithError(w, msg)
-		log.Debug(msg)
-		return
-	}
-
-	req := actors.TransactionalRequest{
+	req := &requestresponse.TransactionalRequest{
 		ActorID:    actorID,
 		ActorType:  actorType,
 		Operations: ops,
 	}
 
-	err = a.universal.Actors().TransactionalStateOperation(ctx, &req)
+	state, err := a.universal.Actors().State(ctx)
+	if err != nil {
+		respondWithError(w, err)
+		log.Debug(err)
+		return
+	}
+
+	err = state.TransactionalStateOperation(ctx, req)
 	if err != nil {
 		msg := messages.ErrActorStateTransactionSave.WithFormat(err)
 		respondWithError(w, msg)
@@ -308,19 +296,20 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 func (a *api) onGetActorReminder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	err := a.universal.ActorReadinessCheck(ctx)
+	rem, err := a.universal.Actors().Reminders(ctx)
 	if err != nil {
 		respondWithError(w, err)
+		log.Debug(err)
 		return
 	}
 
-	resp, err := a.universal.Actors().GetReminder(ctx, &actors.GetReminderRequest{
+	resp, err := rem.Get(ctx, &requestresponse.GetReminderRequest{
 		ActorType: chi.URLParamFromCtx(ctx, actorTypeParam),
 		ActorID:   chi.URLParamFromCtx(ctx, actorIDParam),
 		Name:      chi.URLParamFromCtx(ctx, nameParam),
 	})
 	if err != nil {
-		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
 			msg := messages.ErrActorReminderOpActorNotHosted
 			respondWithError(w, msg)
 			log.Debug(msg)
@@ -353,7 +342,7 @@ func (a *api) onDeleteActorTimer() http.HandlerFunc {
 func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	err := a.universal.ActorReadinessCheck(ctx)
+	engine, err := a.universal.Actors().Engine(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -363,8 +352,6 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 	verb := strings.ToUpper(r.Method)
 	method := chi.URLParamFromCtx(ctx, methodParam)
-
-	policyDef := a.universal.Resiliency().ActorPreLockPolicy(actorType, actorID)
 
 	// Actor invocation doesn't support streaming, so we need to read the entire reqBody
 	reqBody, err := io.ReadAll(r.Body)
@@ -383,17 +370,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 		// Save headers to internal metadata
 		WithHTTPHeaders(r.Header)
 
-	// Unlike other actor calls, resiliency is handled here for invocation.
-	// This is due to actor invocation involving a lookup for the host.
-	// Having the retry here allows us to capture that and be resilient to host failure.
-	// Additionally, we don't perform timeouts at this level. This is because an actor
-	// should technically wait forever on the locking mechanism. If we timeout while
-	// waiting for the lock, we can also create a queue of calls that will try and continue
-	// after the timeout.
-	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
-	res, err := policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
-		return a.universal.Actors().Call(ctx, req)
-	})
+	res, err := engine.Call(ctx, req)
 	if err != nil {
 		actorErr, isActorError := actorerrors.As(err)
 		if !isActorError {
@@ -438,7 +415,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	err := a.universal.ActorReadinessCheck(ctx)
+	astate, err := a.universal.Actors().State(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -448,19 +425,7 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 	key := chi.URLParamFromCtx(ctx, stateKeyParam)
 
-	hosted := a.universal.Actors().IsActorHosted(ctx, &actors.ActorHostedRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-	})
-
-	if !hosted {
-		msg := messages.ErrActorInstanceMissing
-		respondWithError(w, msg)
-		log.Debug(msg)
-		return
-	}
-
-	resp, err := a.universal.Actors().GetState(ctx, &actors.GetStateRequest{
+	resp, err := astate.Get(ctx, &requestresponse.GetStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Key:       key,

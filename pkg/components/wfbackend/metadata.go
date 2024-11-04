@@ -18,6 +18,7 @@ import (
 )
 
 // Metadata represents a set of properties specific for workflow backends.
+// TOOD: @joshvanl
 type Metadata struct {
 	metadata.Base `json:",inline"`
 

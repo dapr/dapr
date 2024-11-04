@@ -22,6 +22,9 @@ import (
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
+// ErrReminderCanceled is returned when the reminder has been canceled.
+var ErrReminderCanceled = errors.New("reminder has been canceled")
+
 // ActorError is an error returned by an Actor via a header + body in the method's response.
 type ActorError struct {
 	body        []byte

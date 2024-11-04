@@ -32,6 +32,7 @@ type options struct {
 	scheduler         *scheduler.Scheduler
 	daprdConfigs      []string
 	actorTypeHandlers map[string]http.HandlerFunc
+	handlers          map[string]http.HandlerFunc
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -80,5 +81,22 @@ func WithActorTypeHandler(actorType string, handler http.HandlerFunc) Option {
 			o.actorTypeHandlers = make(map[string]http.HandlerFunc)
 		}
 		o.actorTypeHandlers[actorType] = handler
+	}
+}
+
+func WithHandler(pattern string, handler http.HandlerFunc) Option {
+	return func(o *options) {
+		if o.handlers == nil {
+			o.handlers = make(map[string]http.HandlerFunc)
+		}
+		o.handlers[pattern] = handler
+	}
+}
+
+func WithPeerActor(actor *Actors) Option {
+	return func(o *options) {
+		WithDB(actor.DB())(o)
+		WithPlacement(actor.Placement())(o)
+		WithScheduler(actor.Scheduler())(o)
 	}
 }

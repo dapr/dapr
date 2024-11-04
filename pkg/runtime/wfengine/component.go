@@ -43,7 +43,7 @@ func BuiltinWorkflowFactory(engine *WorkflowEngine) func(logger.Logger) workflow
 	return func(logger logger.Logger) workflows.Workflow {
 		return &workflowEngineComponent{
 			logger: logger,
-			client: backend.NewTaskHubClient(engine.Backend),
+			client: backend.NewTaskHubClient(engine.backend),
 		}
 	}
 }

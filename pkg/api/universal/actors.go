@@ -17,61 +17,22 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"time"
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
-// SetActorsInitDone indicates that the actors runtime has been initialized, whether actors are available or not
-func (a *Universal) SetActorsInitDone() {
-	if a.actorsReady.CompareAndSwap(false, true) {
-		close(a.actorsReadyCh)
-	}
-}
-
-// WaitForActorsReady blocks until the actor runtime is set in the object (or until the context is canceled).
-func (a *Universal) WaitForActorsReady(ctx context.Context) {
-	// Quick check to avoid allocating a timer if the actors are ready
-	if a.actorsReady.Load() {
-		return
-	}
-
-	waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer waitCancel()
-
-	// In both cases, it's a no-op as we check for the actors runtime to be ready below
-	select {
-	case <-waitCtx.Done():
-	case <-a.actorsReadyCh:
-	}
-}
-
-// ActorReadinessCheck makes sure that the actor subsystem is ready.
-func (a *Universal) ActorReadinessCheck(ctx context.Context) error {
-	a.WaitForActorsReady(ctx)
-
-	if a.Actors() == nil {
-		// Logger may be nil in some tests
-		if a.logger != nil {
-			a.logger.Debug(messages.ErrActorRuntimeNotFound)
-		}
-		return messages.ErrActorRuntimeNotFound
-	}
-
-	return nil
-}
-
 func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.RegisterActorTimerRequest) (*emptypb.Empty, error) {
-	err := a.ActorReadinessCheck(ctx)
+	timers, err := a.actors.Timers(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	req := &actors.CreateTimerRequest{
+	req := &requestresponse.CreateTimerRequest{
 		Name:      in.GetName(),
 		ActorID:   in.GetActorId(),
 		ActorType: in.GetActorType(),
@@ -79,6 +40,7 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 		Period:    in.GetPeriod(),
 		TTL:       in.GetTtl(),
 		Callback:  in.GetCallback(),
+		Data:      in.GetData(),
 	}
 
 	if in.GetData() != nil {
@@ -91,7 +53,7 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 		}
 		req.Data = j
 	}
-	err = a.Actors().CreateTimer(ctx, req)
+	err = timers.Create(ctx, req)
 	if err != nil {
 		err = messages.ErrActorTimerCreate.WithFormat(err)
 		a.logger.Debug(err)
@@ -101,33 +63,28 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 }
 
 func (a *Universal) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.UnregisterActorTimerRequest) (*emptypb.Empty, error) {
-	err := a.ActorReadinessCheck(ctx)
+	timers, err := a.actors.Timers(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	req := &actors.DeleteTimerRequest{
+	req := &requestresponse.DeleteTimerRequest{
 		Name:      in.GetName(),
 		ActorID:   in.GetActorId(),
 		ActorType: in.GetActorType(),
 	}
 
-	err = a.Actors().DeleteTimer(ctx, req)
-	if err != nil {
-		err = messages.ErrActorTimerDelete.WithFormat(err)
-		a.logger.Debug(err)
-		return nil, err
-	}
+	timers.Delete(ctx, req)
 	return nil, nil
 }
 
 func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
-	err := a.ActorReadinessCheck(ctx)
+	r, err := a.actors.Reminders(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	req := &actors.CreateReminderRequest{
+	req := &requestresponse.CreateReminderRequest{
 		Name:      in.GetName(),
 		ActorID:   in.GetActorId(),
 		ActorType: in.GetActorType(),
@@ -146,9 +103,9 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		}
 		req.Data = j
 	}
-	err = a.Actors().CreateReminder(ctx, req)
+	err = r.Create(ctx, req)
 	if err != nil {
-		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
 			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
 			return nil, messages.ErrActorReminderOpActorNotHosted
 		}
@@ -161,20 +118,20 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 }
 
 func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error) {
-	err := a.ActorReadinessCheck(ctx)
+	r, err := a.actors.Reminders(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	req := &actors.DeleteReminderRequest{
+	req := &requestresponse.DeleteReminderRequest{
 		Name:      in.GetName(),
 		ActorID:   in.GetActorId(),
 		ActorType: in.GetActorType(),
 	}
 
-	err = a.Actors().DeleteReminder(ctx, req)
+	err = r.Delete(ctx, req)
 	if err != nil {
-		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
 			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
 			return nil, messages.ErrActorReminderOpActorNotHosted
 		}

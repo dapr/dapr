@@ -99,7 +99,6 @@ var (
 	ErrActorReminderGet              = APIError{"error getting actor reminder: %s", "ERR_ACTOR_REMINDER_GET", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderDelete           = APIError{"error deleting actor reminder: %s", "ERR_ACTOR_REMINDER_DELETE", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorTimerCreate              = APIError{"error creating actor timer: %s", "ERR_ACTOR_TIMER_CREATE", http.StatusInternalServerError, grpcCodes.Internal}
-	ErrActorTimerDelete              = APIError{"error deleting actor timer: %s", "ERR_ACTOR_TIMER_DELETE", http.StatusInternalServerError, grpcCodes.Internal}
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", "ERR_LOCK_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}

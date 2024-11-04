@@ -25,17 +25,29 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 	"google.golang.org/grpc"
 
-	"github.com/dapr/dapr/pkg/components/wfbackend"
+	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/runtime/processor"
-	actorsbe "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/kit/logger"
 )
 
-type WorkflowEngine struct {
-	IsRunning bool
+var (
+	log             = logger.NewLogger("dapr.runtime.wfengine")
+	wfBackendLogger = logger.NewLogger("wfengine.durabletask.backend")
+)
 
-	Backend              backend.Backend
+type Options struct {
+	AppID          string
+	Namespace      string
+	ActorEngine    engine.Interface
+	Spec           config.WorkflowSpec
+	BackendManager processor.WorkflowBackendManager
+}
+
+type WorkflowEngine struct {
+	isRunning atomic.Bool
+
+	backend              backend.Backend
 	executor             backend.Executor
 	worker               backend.TaskHubWorker
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
@@ -47,35 +59,28 @@ type WorkflowEngine struct {
 	wfEngineReadyCh chan struct{}
 }
 
-var (
-	wfLogger        = logger.NewLogger("dapr.runtime.wfengine")
-	wfBackendLogger = logger.NewLogger("wfengine.durabletask.backend")
-)
-
 func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)
 }
 
-func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager processor.WorkflowBackendManager) *WorkflowEngine {
+func New(opts Options) *WorkflowEngine {
 	engine := &WorkflowEngine{
-		spec:            spec,
+		spec:            opts.Spec,
 		wfEngineReadyCh: make(chan struct{}),
 	}
 
 	var ok bool
-	if backendManager != nil {
-		engine.Backend, ok = backendManager.Backend()
+	if opts.BackendManager != nil {
+		engine.backend, ok = opts.BackendManager.Backend()
 	}
 	if !ok {
 		// If no backend was initialized by the manager, create a backend backed by actors
-		var err error
-		engine.Backend, err = actorsbe.NewActorBackend(wfbackend.Metadata{
-			AppID: appID,
-		}, nil)
-		if err != nil {
-			// Should never happen
-			wfLogger.Errorf("Failed to initialize actors backend for workflow: %v", err)
-		}
+		// TODO: @joshvanl
+		//engine.backend = actors.New(actors.Options{
+		//	AppID:       opts.AppID,
+		//	Namespace:   opts.Namespace,
+		//	ActorEngine: opts.ActorEngine,
+		//})
 	}
 
 	return engine
@@ -103,19 +108,7 @@ func (wfe *WorkflowEngine) ConfigureGrpcExecutor() {
 	wfe.disconnectChan = make(chan any, 1)
 	disconnectHelper := backend.WithStreamShutdownChannel(wfe.disconnectChan)
 
-	wfe.executor, wfe.registerGrpcServerFn = backend.NewGrpcExecutor(wfe.Backend, wfLogger, autoStartCallback, disconnectHelper)
-}
-
-// SetExecutor sets the executor property. This is primarily used for testing.
-func (wfe *WorkflowEngine) SetExecutor(fn func(be backend.Backend) backend.Executor) {
-	wfe.executor = fn(wfe.Backend)
-}
-
-// SetLogLevel sets the logging level for the workflow engine.
-// This function is only intended to be used for testing.
-func SetLogLevel(level logger.LogLevel) {
-	wfLogger.SetOutputLevel(level)
-	wfBackendLogger.SetOutputLevel(level)
+	wfe.executor, wfe.registerGrpcServerFn = backend.NewGrpcExecutor(wfe.backend, log, autoStartCallback, disconnectHelper)
 }
 
 func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
@@ -123,7 +116,7 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	wfe.startMutex.Lock()
 	defer wfe.startMutex.Unlock()
 
-	if wfe.IsRunning {
+	if wfe.isRunning.Load() {
 		return nil
 	}
 
@@ -132,32 +125,33 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 	}
 
 	// Register actor backend if backend is actor
-	abe, ok := wfe.Backend.(*actorsbe.ActorBackend)
-	if ok {
-		abe.WaitForActorsReady(ctx)
-		abe.RegisterActor(ctx)
-	}
+	// TODO: @joshvanl
+	//abe, ok := wfe.backend.(*actors.Actors)
+	//if ok {
+	//	abe.WaitForActorsReady(ctx)
+	//	abe.RegisterActor(ctx)
+	//}
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
 	orchestrationWorker := backend.NewOrchestrationWorker(
-		wfe.Backend,
+		wfe.backend,
 		wfe.executor,
 		wfBackendLogger,
 		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentWorkflowInvocations()))
 	activityWorker := backend.NewActivityTaskWorker(
-		wfe.Backend,
+		wfe.backend,
 		wfe.executor,
 		wfBackendLogger,
 		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentActivityInvocations()))
-	wfe.worker = backend.NewTaskHubWorker(wfe.Backend, orchestrationWorker, activityWorker, wfBackendLogger)
+	wfe.worker = backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfBackendLogger)
 
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
 	if err := wfe.worker.Start(ctx); err != nil {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
 	}
 
-	wfe.IsRunning = true
-	wfLogger.Info("Workflow engine started")
+	wfe.isRunning.Store(true)
+	log.Info("Workflow engine started")
 
 	wfe.SetWorkflowEngineReadyDone()
 
@@ -168,7 +162,7 @@ func (wfe *WorkflowEngine) Close(ctx context.Context) error {
 	wfe.startMutex.Lock()
 	defer wfe.startMutex.Unlock()
 
-	if !wfe.IsRunning {
+	if !wfe.isRunning.Load() {
 		return nil
 	}
 
@@ -181,8 +175,8 @@ func (wfe *WorkflowEngine) Close(ctx context.Context) error {
 		if err := wfe.worker.Shutdown(ctx); err != nil {
 			return fmt.Errorf("failed to shutdown the workflow worker: %w", err)
 		}
-		wfe.IsRunning = false
-		wfLogger.Info("Workflow engine stopped")
+		wfe.isRunning.Store(false)
+		log.Info("Workflow engine stopped")
 	}
 	return nil
 }

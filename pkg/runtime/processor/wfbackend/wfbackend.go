@@ -26,7 +26,6 @@ import (
 	wfbeComp "github.com/dapr/dapr/pkg/components/wfbackend"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/kit/logger"
 )
@@ -81,20 +80,18 @@ func (w *workflowBackend) Init(ctx context.Context, comp compapi.Component) erro
 	}
 
 	// Initialization
-	baseMetadata, err := w.meta.ToBaseMetadata(comp)
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-	}
+	// TODO: @joshvanl
+	//baseMetadata, err := w.meta.ToBaseMetadata(comp)
+	//if err != nil {
+	//	diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+	//	return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+	//}
 
-	be, err := beFactory(wfbeComp.Metadata{
+	be := beFactory(wfbeComp.Options{
 		AppID: w.appID,
-		Base:  baseMetadata,
+		// TODO: @joshvanl
+		//Base:  baseMetadata,
 	})
-	if err != nil {
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-	}
 
 	log.Infof("Using %s as workflow backend", comp.Spec.Type)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)

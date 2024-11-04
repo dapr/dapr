@@ -24,7 +24,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
-	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/engine"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/kit/concurrency"
@@ -34,7 +36,7 @@ type streamer struct {
 	stream   schedulerv1pb.Scheduler_WatchJobsClient
 	resultCh chan *schedulerv1pb.WatchJobsRequest
 
-	actors   actors.ActorRuntime
+	actors   engine.Interface
 	channels *channels.Channels
 
 	wg sync.WaitGroup
@@ -118,14 +120,14 @@ func (s *streamer) handleJob(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 			// more relevant for workflows which currently has a repeat set to 2 since setting it to 1 caused
 			// issues. This will be updated in the future releases, but for now we will see this err. To not
 			// spam users only log if the error is not reminder canceled because this is expected for now.
-			if errors.Is(err, actors.ErrReminderCanceled) {
+			if errors.Is(err, actorerrors.ErrReminderCanceled) {
 				return schedulerv1pb.WatchJobsRequestResultStatus_SUCCESS
 			}
 
 			// If the actor was hosted on another instance, the error will be a gRPC status error,
 			// so we need to unwrap it and match on the error message
 			if st, ok := status.FromError(err); ok {
-				if st.Message() == actors.ErrReminderCanceled.Error() {
+				if st.Message() == actorerrors.ErrReminderCanceled.Error() {
 					return schedulerv1pb.WatchJobsRequestResultStatus_FAILED
 				}
 			}
@@ -193,7 +195,7 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		}
 	}
 
-	return s.actors.ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
+	return s.actors.CallReminder(ctx, &requestresponse.Reminder{
 		Name:      job.GetName(),
 		ActorType: actor.GetType(),
 		ActorID:   actor.GetId(),
