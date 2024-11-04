@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 var tr *runner.TestRunner
