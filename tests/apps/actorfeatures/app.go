@@ -626,7 +626,7 @@ func nonHostedTestHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Error performing %s request: %v", op, err), http.StatusInternalServerError)
 			return
 		}
-		if !bytes.Contains(body, []byte(errorcodes.ActorReminderNonHosted)) {
+		if !bytes.Contains(body, []byte(errorcodes.ActorReminderNonHosted.Code)) {
 			http.Error(w, fmt.Sprintf("Response from %s doesn't contain the required error message: %s", op, string(body)), http.StatusInternalServerError)
 			return
 		}

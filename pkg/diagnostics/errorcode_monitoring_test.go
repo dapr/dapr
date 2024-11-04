@@ -24,7 +24,7 @@ func TestRecordErrorCode(t *testing.T) {
 
 		// ActorInstanceMissing
 		assert.Equal(t, int64(1), viewData[0].Data.(*view.CountData).Value)
-		assert.Equal(t, errorcodes.ActorInstanceMissing, viewData[0].Tags[1].Value)
+		assert.Equal(t, errorcodes.ActorInstanceMissing.Code, viewData[0].Tags[1].Value)
 		assert.Equal(t, "actor", viewData[0].Tags[2].Value)
 	})
 

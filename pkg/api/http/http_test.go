@@ -59,6 +59,7 @@ import (
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/middleware"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
@@ -212,7 +213,7 @@ func TestPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, []byte(`{"key": "value"}`), nil)
 			// assert
 			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
-			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubPublishMessage.Code, resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -282,7 +283,7 @@ func TestPubSubEndpoints(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubNotConfigured.Code, resp.ErrorBody["errorCode"])
 		}
 		testAPI.pubsubAdapter = savePubSubAdapter
 	})
@@ -295,7 +296,7 @@ func TestPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, []byte(`{"key": "value"}`), nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubNotFound.Code, resp.ErrorBody["errorCode"])
 			assert.Equal(t, "pubsub 'errnotfound' not found", resp.ErrorBody["message"])
 		}
 	})
@@ -308,7 +309,7 @@ func TestPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, []byte(`{"key": "value"}`), nil)
 			// assert
 			assert.Equal(t, 403, resp.StatusCode, "unexpected success publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubForbidden.Code, resp.ErrorBody["errorCode"])
 			assert.Equal(t, "topic topic is not allowed for app id fakeAPI", resp.ErrorBody["message"]) //nolint:dupword
 		}
 	})
@@ -460,7 +461,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, errReqBytes, nil)
 			// assert
 			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
-			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubPublishMessage.Code, resp.ErrorBody["errorCode"])
 
 			bulkResp := BulkPublishResponse{}
 			require.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
@@ -508,7 +509,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, errReqBytes, nil)
 			// assert
 			assert.Equal(t, 500, resp.StatusCode, "expected internal server error as response")
-			assert.Equal(t, "ERR_PUBSUB_PUBLISH_MESSAGE", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubPublishMessage.Code, resp.ErrorBody["errorCode"])
 
 			bulkResp := BulkPublishResponse{}
 			require.NoError(t, json.Unmarshal(resp.RawBody, &bulkResp))
@@ -560,7 +561,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, reqBytesWithoutEntryId, nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubEventsSer.Code, resp.ErrorBody["errorCode"])
 			assert.Contains(t, resp.ErrorBody["message"], "error: entryId is duplicated or not present for entry")
 		}
 	})
@@ -596,7 +597,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, reqBytesWithoutEntryId, nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubEventsSer.Code, resp.ErrorBody["errorCode"])
 			assert.Contains(t, resp.ErrorBody["message"], "error: entryId is duplicated or not present for entry")
 		}
 	})
@@ -609,7 +610,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "failed to publish with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_REQUEST_METADATA", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubRequestMetadata.Code, resp.ErrorBody["errorCode"])
 			assert.Contains(t, resp.ErrorBody["message"], "failed deserializing metadata")
 		}
 	})
@@ -642,7 +643,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, rBytes, nil)
 			// assert
 			assert.Equal(t, 500, resp.StatusCode, "unexpected success publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_CLOUD_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubCloudEventsSer.Code, resp.ErrorBody["errorCode"])
 			assert.Contains(t, resp.ErrorBody["message"], "cannot create cloudevent")
 		}
 	})
@@ -678,7 +679,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, rBytes, nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubEventsSer.Code, resp.ErrorBody["errorCode"])
 			assert.Contains(t, resp.ErrorBody["message"], "error: mismatch between contentType and event")
 		}
 	})
@@ -691,7 +692,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, []byte("{\"key\":\"value\"}"), nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_EVENTS_SER", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubEventsSer.Code, resp.ErrorBody["errorCode"])
 			assert.Contains(t, resp.ErrorBody["message"], "error when unmarshaling the request for topic topic") //nolint:dupword
 		}
 	})
@@ -752,7 +753,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success bulk publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubNotConfigured.Code, resp.ErrorBody["errorCode"])
 		}
 		testAPI.pubsubAdapter = savePubSubAdapter
 	})
@@ -765,7 +766,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "unexpected success bulk publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_NOT_FOUND", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubNotFound.Code, resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -777,7 +778,7 @@ func TestBulkPubSubEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, reqBytes, nil)
 			// assert
 			assert.Equal(t, 403, resp.StatusCode, "unexpected success bulk publishing with %s", method)
-			assert.Equal(t, "ERR_PUBSUB_FORBIDDEN", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.PubsubForbidden.Code, resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -916,7 +917,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 			resp := fakeServer.DoRequest(method, apiPath, b, nil)
 			// assert
 			assert.Equal(t, 400, resp.StatusCode)
-			assert.Equal(t, "ERR_COMMON_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.CommonMalformedRequest.Code, resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -938,7 +939,7 @@ func TestV1OutputBindingsEndpoints(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
-			assert.Equal(t, "ERR_CONVERSATION_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.ConversationInvokeOutputBinding.Code, resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -1000,7 +1001,7 @@ func TestV1OutputBindingsEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 500, resp.StatusCode)
-			assert.Equal(t, "ERR_CONVERSATION_INVOKE_OUTPUT_BINDING", resp.ErrorBody["errorCode"])
+			assert.Equal(t, errorcodes.ConversationInvokeOutputBinding.Code, resp.ErrorBody["errorCode"])
 		}
 	})
 
@@ -1044,7 +1045,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 					// assert
 					assert.Equal(t, 500, resp.StatusCode, apiPath)
-					assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"])
+					assert.Equal(t, errorcodes.ActorRuntimeNotFound.Code, resp.ErrorBody["errorCode"])
 				})
 			}
 		}
@@ -1068,7 +1069,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 				// assert
 				assert.Equal(t, 400, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_COMMON_MALFORMED_REQUEST", resp.ErrorBody["errorCode"])
+				assert.Equal(t, errorcodes.CommonMalformedRequest.Code, resp.ErrorBody["errorCode"])
 			}
 		}
 	})
@@ -1151,7 +1152,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_STATE_GET", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorStateGet.Code, resp.ErrorBody["errorCode"])
 		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
 		mockActors.AssertNumberOfCalls(t, "GetState", 1)
 	})
@@ -1181,7 +1182,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 400, resp.StatusCode)
 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
 		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
-		assert.Equal(t, "ERR_ACTOR_INSTANCE_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorInstanceMissing.Code, resp.ErrorBody["errorCode"])
 	})
 
 	t.Run("Transaction - 204 No Content", func(t *testing.T) {
@@ -1267,7 +1268,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		assert.Equal(t, 400, resp.StatusCode)
 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
 		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
-		assert.Equal(t, "ERR_ACTOR_INSTANCE_MISSING", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorInstanceMissing.Code, resp.ErrorBody["errorCode"])
 	})
 
 	t.Run("Transaction - 500 when transactional state operation fails", func(t *testing.T) {
@@ -1314,7 +1315,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		mockActors.AssertNumberOfCalls(t, "TransactionalStateOperation", 1)
 		mockActors.AssertNumberOfCalls(t, "IsActorHosted", 1)
 		assert.Empty(t, resp.RawHeader["Metadata.ttlexpiretime"])
-		assert.Equal(t, "ERR_ACTOR_STATE_TRANSACTION_SAVE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorStateTransactionSave.Code, resp.ErrorBody["errorCode"])
 	})
 
 	t.Run("Reminder Create - 204 No Content", func(t *testing.T) {
@@ -1372,7 +1373,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_CREATE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorReminderCreate.Code, resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
 	})
 
@@ -1391,7 +1392,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 403, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorReminderNonHosted.Code, resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "CreateReminder", 1)
 	})
 
@@ -1437,7 +1438,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_DELETE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorReminderDelete.Code, resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
 	})
 
@@ -1456,7 +1457,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 403, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorReminderNonHosted.Code, resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "DeleteReminder", 1)
 	})
 
@@ -1501,7 +1502,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_GET", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorReminderGet.Code, resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
@@ -1520,7 +1521,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 403, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_REMINDER_NON_HOSTED", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorReminderNonHosted.Code, resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "GetReminder", 1)
 	})
 
@@ -1578,7 +1579,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		require.NoError(t, err)
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_TIMER_CREATE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorTimerCreate.Code, resp.ErrorBody["errorCode"])
 
 		// assert
 		mockActors.AssertNumberOfCalls(t, "CreateTimer", 1)
@@ -1626,7 +1627,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_TIMER_DELETE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorTimerDelete.Code, resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "DeleteTimer", 1)
 	})
 
@@ -1685,7 +1686,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_ACTOR_INVOKE_METHOD", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ActorInvokeMethod.Code, resp.ErrorBody["errorCode"])
 		mockActors.AssertNumberOfCalls(t, "Call", 1)
 	})
 
@@ -1894,7 +1895,7 @@ func TestV1ActorEndpointsWithTracer(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 500, resp.StatusCode, apiPath)
-			assert.Equal(t, "ERR_ACTOR_RUNTIME_NOT_FOUND", resp.ErrorBody["errorCode"], apiPath)
+			assert.Equal(t, errorcodes.ActorRuntimeNotFound.Code, resp.ErrorBody["errorCode"], apiPath)
 		}
 	})
 
@@ -2320,7 +2321,7 @@ func TestConfigurationGet(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "Accessing configuration store with bad key should return 500")
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_CONFIGURATION_GET", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ConfigurationGet.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, "failed to get [bad-key] from Configuration store store1: get key error: bad-key", resp.ErrorBody["message"])
 	})
 
@@ -2330,7 +2331,7 @@ func TestConfigurationGet(t *testing.T) {
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "Accessing configuration store with bad key should return 500")
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_CONFIGURATION_GET", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ConfigurationGet.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, "failed to get [bad-key] from Configuration store store1: get key error: bad-key", resp.ErrorBody["message"])
 	})
 
@@ -2340,7 +2341,7 @@ func TestConfigurationGet(t *testing.T) {
 		// assert
 		assert.Equal(t, 400, resp.StatusCode, "Accessing configuration store with none exist configurations store should return 400")
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_CONFIGURATION_STORE_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ConfigurationStoreNotFound.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, "configuration store nonExistStore not found", resp.ErrorBody["message"])
 	})
 
@@ -2350,7 +2351,7 @@ func TestConfigurationGet(t *testing.T) {
 		// assert
 		assert.Equal(t, 400, resp.StatusCode, "Accessing configuration store with none exist configurations store should return 400")
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_CONFIGURATION_STORE_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ConfigurationStoreNotFound.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, "configuration store nonExistStore not found", resp.ErrorBody["message"])
 	})
 }
@@ -2585,7 +2586,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 		assert.Equal(t, 400, resp.StatusCode)
 
 		// assert
-		assert.Contains(t, string(resp.RawBody), "ERR_COMMON_MALFORMED_REQUEST")
+		assert.Contains(t, string(resp.RawBody), errorcodes.CommonMalformedRequest.Code)
 		assert.Contains(t, string(resp.RawBody), "ResourceId is empty in lock store store1")
 	})
 
@@ -2673,7 +2674,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.WorkflowComponentNotFound.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
 	})
 
@@ -2700,7 +2701,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_INSTANCE_ID_INVALID", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.WorkflowInstanceIDInvalid.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrInvalidInstanceID.WithFormat("invalid$ID").Message(), resp.ErrorBody["message"])
 	})
 
@@ -2712,7 +2713,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_INSTANCE_ID_TOO_LONG", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.WorkflowInstanceIDTooLong.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIDLength).Message(), resp.ErrorBody["message"])
 	})
 
@@ -2744,7 +2745,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.WorkflowComponentNotFound.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
 	})
 
@@ -2791,7 +2792,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.WorkflowComponentNotFound.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
 	})
 
@@ -2828,7 +2829,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.WorkflowComponentNotFound.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
 	})
 
@@ -2857,7 +2858,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.WorkflowComponentNotFound.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
 	})
 
@@ -2886,7 +2887,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 		// assert
 		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.WorkflowComponentNotFound.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
 	})
 
@@ -3275,7 +3276,7 @@ func TestV1StateEndpoints(t *testing.T) {
 				resp := fakeServer.DoRequest(method, apiPath, nil, nil)
 				// assert
 				assert.Equal(t, 500, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
+				assert.Equal(t, errorcodes.StateStoreNotConfigured.Code, resp.ErrorBody["errorCode"])
 
 				testAPI.universal.CompStore().AddStateStore("store1", fakeStore)
 				testAPI.universal.CompStore().AddStateStore("failStore", failingStore)
@@ -3284,7 +3285,7 @@ func TestV1StateEndpoints(t *testing.T) {
 				resp = fakeServer.DoRequest(method, apiPath, nil, nil)
 				// assert
 				assert.Equal(t, 400, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_STATE_STORE_NOT_FOUND", resp.ErrorBody["errorCode"], apiPath)
+				assert.Equal(t, errorcodes.StateStoreNotFound.Code, resp.ErrorBody["errorCode"], apiPath)
 			}
 		}
 	})
@@ -3306,7 +3307,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 				// assert
 				assert.Equal(t, 400, resp.StatusCode, apiPath)
-				assert.Equal(t, "ERR_COMMON_MALFORMED_REQUEST", resp.ErrorBody["errorCode"], apiPath)
+				assert.Equal(t, errorcodes.CommonMalformedRequest.Code, resp.ErrorBody["errorCode"], apiPath)
 			}
 		}
 	})
@@ -3335,7 +3336,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "reading existing key should succeed")
-		assert.Equal(t, "ERR_STATE_GET", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.StateGet.Code, resp.ErrorBody["errorCode"])
 	})
 
 	t.Run("Update state - PUT verb supported", func(t *testing.T) {
@@ -3375,7 +3376,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "state error should return 500 status")
-		assert.Equal(t, "ERR_STATE_SAVE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.StateSave.Code, resp.ErrorBody["errorCode"])
 	})
 
 	t.Run("Update state - Matching ETag", func(t *testing.T) {
@@ -3431,7 +3432,7 @@ func TestV1StateEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
 		// assert
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_STATE_SAVE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.StateSave.Code, resp.ErrorBody["errorCode"])
 	})
 
 	t.Run("Update bulk state - Matching ETag", func(t *testing.T) {
@@ -3815,7 +3816,7 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	resp := fakeServer.DoRequest("POST", "v1.0-alpha1/state/store1/query", nil, nil)
 	// assert
 	assert.Equal(t, 500, resp.StatusCode)
-	assert.Equal(t, "ERR_STATE_STORE_NOT_SUPPORTED", resp.ErrorBody["errorCode"])
+	assert.Equal(t, errorcodes.StateStoreNotSupported.Code, resp.ErrorBody["errorCode"])
 }
 
 func TestStateStoreQuerierNotEnabled(t *testing.T) {
@@ -4127,7 +4128,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "reading existing key should succeed")
-		assert.Equal(t, "ERR_SECRET_GET", resp.ErrorBody["errorCode"], apiPath)
+		assert.Equal(t, errorcodes.SecretGet.Code, resp.ErrorBody["errorCode"], apiPath)
 	})
 
 	t.Run("Get secret - 500 for secret store not congfigured", func(t *testing.T) {
@@ -4145,7 +4146,7 @@ func TestV1SecretEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "reading from not-configured secret store should fail with 500")
-		assert.Equal(t, "ERR_SECRET_STORE_NOT_CONFIGURED", resp.ErrorBody["errorCode"], apiPath)
+		assert.Equal(t, errorcodes.SecretStoreNotConfigured.Code, resp.ErrorBody["errorCode"], apiPath)
 	})
 
 	t.Run("Get Bulk secret - Good Key default allow", func(t *testing.T) {
@@ -4512,7 +4513,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 400, resp.StatusCode, "Dapr should return 400")
-		assert.Equal(t, "ERR_STATE_NOT_SUPPORTED_OPERATION", resp.ErrorBody["errorCode"], apiPath)
+		assert.Equal(t, errorcodes.StateNotSupportedOperation.Code, resp.ErrorBody["errorCode"], apiPath)
 	})
 
 	t.Run("Invalid request obj - 400 ERR_COMMON_MALFORMED_REQUEST", func(t *testing.T) {
@@ -4539,7 +4540,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 			// assert
 			assert.Equal(t, 400, resp.StatusCode, "Dapr should return 400")
-			assert.Equal(t, "ERR_COMMON_MALFORMED_REQUEST", resp.ErrorBody["errorCode"], apiPath)
+			assert.Equal(t, errorcodes.CommonMalformedRequest.Code, resp.ErrorBody["errorCode"], apiPath)
 		}
 	})
 
@@ -4566,7 +4567,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, gohttp.StatusBadRequest, resp.StatusCode, "Dapr should return 400")
-		assert.Equal(t, "ERR_STATE_STORE_TOO_MANY_TRANSACTIONS", resp.ErrorBody["errorCode"], apiPath)
+		assert.Equal(t, errorcodes.StateStoreTooManyTransactions.Code, resp.ErrorBody["errorCode"], apiPath)
 	})
 
 	t.Run("Non Transactional State Store - 500 ERR_STATE_STORE_NOT_SUPPORTED", func(t *testing.T) {
@@ -4591,7 +4592,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "Dapr should return 500")
-		assert.Equal(t, "ERR_STATE_STORE_NOT_SUPPORTED", resp.ErrorBody["errorCode"], apiPath)
+		assert.Equal(t, errorcodes.StateStoreNotSupported.Code, resp.ErrorBody["errorCode"], apiPath)
 	})
 
 	t.Run("Direct Transaction upstream failure - 500 ERR_STATE_TRANSACTION", func(t *testing.T) {
@@ -4625,7 +4626,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 
 		// assert
 		assert.Equal(t, 500, resp.StatusCode, "Dapr should return 500")
-		assert.Equal(t, "ERR_STATE_TRANSACTION", resp.ErrorBody["errorCode"], apiPath)
+		assert.Equal(t, errorcodes.StateTransaction.Code, resp.ErrorBody["errorCode"], apiPath)
 	})
 	fakeServer.Shutdown()
 }
@@ -4634,31 +4635,31 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("non etag error", func(t *testing.T) {
 		a := &api{}
 		err := errors.New("error")
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m, r := a.stateErrorResponse(err, errorcodes.StateSave.Code)
 
 		assert.Equal(t, 500, c)
 		assert.Equal(t, "error", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		assert.Equal(t, errorcodes.StateSave.Code, r.ErrorCode)
 	})
 
 	t.Run("etag mismatch error", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m, r := a.stateErrorResponse(err, errorcodes.StateSave.Code)
 
 		assert.Equal(t, 409, c)
 		assert.Equal(t, "possible etag mismatch. error from state store: error", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		assert.Equal(t, errorcodes.StateSave.Code, r.ErrorCode)
 	})
 
 	t.Run("etag invalid error", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m, r := a.stateErrorResponse(err, errorcodes.StateSave.Code)
 
 		assert.Equal(t, 400, c)
 		assert.Equal(t, "invalid etag value: error", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		assert.Equal(t, errorcodes.StateSave.Code, r.ErrorCode)
 	})
 
 	t.Run("etag error mismatch", func(t *testing.T) {
@@ -4684,10 +4685,10 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("standardized error", func(t *testing.T) {
 		a := &api{}
 		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, gohttp.StatusNotFound, "", "testReason")
-		c, m, r := a.stateErrorResponse(standardizedErr, "ERR_STATE_SAVE")
+		c, m, r := a.stateErrorResponse(standardizedErr, errorcodes.StateSave.Code)
 		assert.Equal(t, 404, c)
 		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		assert.Equal(t, errorcodes.StateSave.Code, r.ErrorCode)
 	})
 }
 

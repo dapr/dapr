@@ -30,6 +30,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/api/universal"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1 "github.com/dapr/dapr/pkg/proto/common/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -643,7 +644,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_CONVERSATION_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ConversationDirectInvoke.Code, resp.ErrorBody["errorCode"])
 	})
 
 	t.Run("Invoke returns error - 500 ERR_CONVERSATION_DIRECT_INVOKE for external invocation", func(t *testing.T) {
@@ -670,7 +671,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_CONVERSATION_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ConversationDirectInvoke.Code, resp.ErrorBody["errorCode"])
 	})
 
 	t.Run("Invoke returns error - 403 ERR_CONVERSATION_DIRECT_INVOKE", func(t *testing.T) {
@@ -697,7 +698,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 403, resp.StatusCode)
-		assert.Equal(t, "ERR_CONVERSATION_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ConversationDirectInvoke.Code, resp.ErrorBody["errorCode"])
 	})
 
 	t.Run("Invoke returns error - 403 ERR_CONVERSATION_DIRECT_INVOKE for external invocation", func(t *testing.T) {
@@ -724,7 +725,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 403, resp.StatusCode)
-		assert.Equal(t, "ERR_CONVERSATION_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.ConversationDirectInvoke.Code, resp.ErrorBody["errorCode"])
 	})
 
 	fakeServer.Shutdown()

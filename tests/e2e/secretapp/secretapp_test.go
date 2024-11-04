@@ -25,6 +25,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
@@ -174,7 +175,7 @@ func generateTestCases() []testCase {
 			newResponse("", utils.SimpleKeyValue{Key: unallowedSecret, Value: ""}),
 			true,
 			403,
-			"ERR_SECRET_PERMISSION_DENIED",
+			errorcodes.SecretPermissionDenied.Code,
 			false,
 		},
 		{
@@ -183,7 +184,7 @@ func generateTestCases() []testCase {
 			newResponse("", utils.SimpleKeyValue{Key: nonExistentSecret, Value: ""}),
 			true,
 			500,
-			"ERR_SECRET_GET",
+			errorcodes.SecretGet.Code,
 			false,
 		},
 		{
@@ -192,7 +193,7 @@ func generateTestCases() []testCase {
 			newResponse("", utils.SimpleKeyValue{Key: allowedSecret, Value: ""}),
 			true,
 			401,
-			"ERR_SECRET_STORE_NOT_FOUND",
+			errorcodes.SecretStoreNotFound.Code,
 			false,
 		},
 		{
@@ -201,7 +202,7 @@ func generateTestCases() []testCase {
 			newResponse("", utils.SimpleKeyValue{Key: allowedSecret, Value: ""}),
 			true,
 			401,
-			"ERR_SECRET_STORE_NOT_FOUND",
+			errorcodes.SecretStoreNotFound.Code,
 			false,
 		},
 		{
@@ -228,7 +229,7 @@ func generateTestCasesForDisabledSecretStore() []testCase {
 			newResponse(secretStore, utils.SimpleKeyValue{allowedSecret, testCase1Value}),
 			true,
 			500,
-			"ERR_SECRET_STORE_NOT_CONFIGURED",
+			errorcodes.SecretStoreNotConfigured.Code,
 			false,
 		},
 	}
