@@ -122,8 +122,8 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 			InstanceId:        "my-custom-instance-id",
 			WorkflowComponent: "dapr",
 		})
-		require.NoError(t, err)
-		assert.Equal(t, "SUSPENDED", get.GetRuntimeStatus())
+		assert.NoError(c, err)
+		assert.Equal(c, "SUSPENDED", get.GetRuntimeStatus())
 	}, time.Second*5, time.Millisecond*10)
 
 	_, err = gclient.ResumeWorkflowBeta1(ctx, &rtv1.ResumeWorkflowRequest{

@@ -15,6 +15,7 @@ package metadata
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -89,9 +90,10 @@ func (m *hostNoPlacement) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "RUNNING", res.ActorRuntime.RuntimeStatus)
 		assert.False(t, res.ActorRuntime.HostReady)
 		assert.Equal(t, "placement: disconnected", res.ActorRuntime.Placement)
-		if assert.Len(t, res.ActorRuntime.ActiveActors, 1) {
-			assert.Equal(t, "myactortype", res.ActorRuntime.ActiveActors[0].Type)
-			assert.Equal(t, 0, res.ActorRuntime.ActiveActors[0].Count)
-		}
+		assert.ElementsMatch(t, []metadataActiveActors{
+			{Type: "myactortype"},
+			{Type: fmt.Sprintf("dapr.internal.default.%s.activity", m.daprd.AppID())},
+			{Type: fmt.Sprintf("dapr.internal.default.%s.workflow", m.daprd.AppID())},
+		}, res.ActorRuntime.ActiveActors)
 	}, 10*time.Second, 10*time.Millisecond)
 }

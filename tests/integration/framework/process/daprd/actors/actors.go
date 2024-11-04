@@ -15,11 +15,13 @@ package actors
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"runtime"
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -61,12 +63,31 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	for atype, handler := range opts.actorTypeHandlers {
 		handlers = append(handlers, app.WithHandlerFunc("/actors/"+atype+"/", handler))
 	}
+	for pattern, handler := range opts.handlers {
+		handlers = append(handlers, app.WithHandlerFunc(pattern, handler))
+	}
 
-	app := app.New(t,
-		append(handlers,
-			app.WithConfig(fmt.Sprintf(`{"entities": [%s]}`, strings.Join(opts.types, ","))),
-		)...,
-	)
+	config := fmt.Sprintf(`{"entities": [%s]`, strings.Join(opts.types, ","))
+	if opts.reentryMaxDepth != nil {
+		require.NotNil(t, opts.reentry)
+		config += fmt.Sprintf(`,"reentrancy":{"enabled":%t,"maxStackDepth":%d}`, *opts.reentry, *opts.reentryMaxDepth)
+	} else if opts.reentry != nil {
+		config += fmt.Sprintf(`,"reentrancy":{"enabled":%t}`, *opts.reentry)
+	}
+
+	if opts.actorIdleTimeout != nil {
+		config += fmt.Sprintf(`,"actorIdleTimeout":"%s"`, *opts.actorIdleTimeout)
+	}
+
+	if len(opts.entityConfig) > 0 {
+		b, err := json.Marshal(opts.entityConfig)
+		require.NoError(t, err)
+		config += `,"entitiesConfig":` + string(b)
+	}
+
+	config += "}"
+
+	app := app.New(t, append(handlers, app.WithConfig(config))...)
 
 	dopts := []daprd.Option{
 		daprd.WithAppPort(app.Port()),
@@ -128,6 +149,10 @@ func (a *Actors) Placement() *placement.Placement {
 
 func (a *Actors) Scheduler() *scheduler.Scheduler {
 	return a.sched
+}
+
+func (a *Actors) Daprd() *daprd.Daprd {
+	return a.daprd
 }
 
 func (a *Actors) AppID() string {

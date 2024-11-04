@@ -34,6 +34,7 @@ var log = logger.NewLogger("dapr.runtime.scheduler")
 type Options struct {
 	Namespace string
 	AppID     string
+	Actors    actors.Interface
 	Channels  *channels.Channels
 	Clients   *clients.Clients
 }
@@ -41,7 +42,7 @@ type Options struct {
 // Manager manages connections to multiple schedulers.
 type Manager struct {
 	clients   *clients.Clients
-	actors    actors.ActorRuntime
+	actors    actors.Interface
 	namespace string
 	appID     string
 	channels  *channels.Channels
@@ -58,6 +59,7 @@ func New(opts Options) *Manager {
 	return &Manager{
 		namespace:   opts.Namespace,
 		appID:       opts.AppID,
+		actors:      opts.Actors,
 		channels:    opts.Channels,
 		clients:     opts.Clients,
 		stopStartCh: make(chan struct{}, 1),
@@ -76,10 +78,16 @@ func (m *Manager) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return nil //nolint:nilerr
 			}
+
 			if err == io.EOF {
 				log.Warnf("Received EOF, re-establishing connection: %v", err)
 				continue
 			}
+
+			if errors.Is(err, context.Canceled) {
+				continue
+			}
+
 			return fmt.Errorf("error watching scheduler jobs: %w", err)
 		}
 
@@ -98,23 +106,24 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 	case <-m.stopStartCh:
 	}
 
-	var entities []string
-	if m.actors != nil {
-		entities = m.actors.Entities()
-	}
-
 	req := &schedulerv1pb.WatchJobsRequest{
 		WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Initial{
 			Initial: &schedulerv1pb.WatchJobsRequestInitial{
 				AppId:     m.appID,
 				Namespace: m.namespace,
-				ActorTypes: append(entities,
-					fmt.Sprintf("dapr.internal.%s.%s.workflow", m.namespace, m.appID),
-					fmt.Sprintf("dapr.internal.%s.%s.activity", m.namespace, m.appID),
-				),
 			},
 		},
 	}
+
+	if table, err := m.actors.Table(ctx); err == nil {
+		// TODO: @joshvanl: make actor types dynamic.
+		req.GetInitial().ActorTypes = append(table.Types(),
+			fmt.Sprintf("dapr.internal.%s.%s.workflow", m.namespace, m.appID),
+			fmt.Sprintf("dapr.internal.%s.%s.activity", m.namespace, m.appID),
+		)
+	}
+
+	engine, _ := m.actors.Engine(ctx)
 
 	clients, err := m.clients.All(ctx)
 	if err != nil {
@@ -128,7 +137,7 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 			req:      req,
 			client:   clients[i],
 			channels: m.channels,
-			actors:   m.actors,
+			actors:   engine,
 		}).run
 	}
 
@@ -146,16 +155,18 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 
 // Start starts the scheduler manager with the given actors runtime, if it is
 // enabled, to begin receiving job triggers.
-func (m *Manager) Start(actors actors.ActorRuntime) {
+func (m *Manager) Start() error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
+
 	if !m.started {
 		m.started = true
 		m.stopped = false
-		m.actors = actors
 		close(m.stopStartCh)
 		m.stopStartCh = make(chan struct{}, 1)
 	}
+
+	return nil
 }
 
 // Stop stops the scheduler manager, which stops watching for job triggers.

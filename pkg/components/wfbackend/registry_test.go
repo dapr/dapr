@@ -43,40 +43,40 @@ func TestRegistry(t *testing.T) {
 		// Initiate mock object
 		wbeMock := &mockWorkflowBackend{}
 		wbeMockV2 := &mockWorkflowBackend{}
-		md := wbe.Metadata{}
+		opts := wbe.Options{}
 
 		// act
-		testRegistry.RegisterComponent(func(_ wbe.Metadata, _ logger.Logger) (backend.Backend, error) {
+		testRegistry.RegisterComponent(func(wbe.Options) (backend.Backend, error) {
 			return wbeMock, nil
 		}, backendName)
-		testRegistry.RegisterComponent(func(_ wbe.Metadata, _ logger.Logger) (backend.Backend, error) {
+		testRegistry.RegisterComponent(func(wbe.Options) (backend.Backend, error) {
 			return wbeMockV2, nil
 		}, backendNameV2)
 
 		// assert v0 and v1
 		wbeFn, err := testRegistry.Create(componentType, "v0", "")
 		require.NoError(t, err)
-		wbe, err := wbeFn(md)
+		wbe, err := wbeFn(opts)
 		require.NoError(t, err)
 		assert.Same(t, wbeMock, wbe)
 
 		wbeFn, err = testRegistry.Create(componentType, "v1", "")
 		require.NoError(t, err)
-		wbe, err = wbeFn(md)
+		wbe, err = wbeFn(opts)
 		require.NoError(t, err)
 		assert.Same(t, wbeMock, wbe)
 
 		// assert v2
 		wbeFn, err = testRegistry.Create(componentType, "v2", "")
 		require.NoError(t, err)
-		wbe, err = wbeFn(md)
+		wbe, err = wbeFn(opts)
 		require.NoError(t, err)
 		assert.Same(t, wbeMockV2, wbe)
 
 		// check case-insensitivity
 		wbeFn, err = testRegistry.Create(strings.ToUpper(componentType), "V2", "")
 		require.NoError(t, err)
-		wbe, err = wbeFn(md)
+		wbe, err = wbeFn(opts)
 		require.NoError(t, err)
 		assert.Same(t, wbeMockV2, wbe)
 
@@ -84,7 +84,7 @@ func TestRegistry(t *testing.T) {
 		testRegistry.Logger = logger.NewLogger("wfengine.backend")
 		wbeFn, err = testRegistry.Create(strings.ToUpper(componentType), "V2", "workflowbackendlog")
 		require.NoError(t, err)
-		wbe, err = wbeFn(md)
+		wbe, err = wbeFn(opts)
 		require.NoError(t, err)
 		assert.Same(t, wbeMockV2, wbe)
 	})
