@@ -15,6 +15,7 @@ package operator
 
 import (
 	"context"
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -30,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -118,7 +120,13 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 		Spec:       compapi.ComponentSpec{Type: "workflowbackend.actors", Version: "v1"},
 	})
 
+	// TODO: @joshvanl: REMOVE!!- workflows should not require an app.
+	app := app.New(t,
+		app.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {}),
+	)
+
 	w.daprdCreate = daprd.New(t,
+		daprd.WithAppPort(app.Port()),
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
@@ -132,6 +140,7 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 		daprd.WithDisableK8sSecretStore(true),
 	)
 	w.daprdUpdate = daprd.New(t,
+		daprd.WithAppPort(app.Port()),
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
@@ -145,6 +154,7 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 		daprd.WithDisableK8sSecretStore(true),
 	)
 	w.daprdDelete = daprd.New(t,
+		daprd.WithAppPort(app.Port()),
 		daprd.WithMode("kubernetes"),
 		daprd.WithConfigs("hotreloading"),
 		daprd.WithExecOptions(
@@ -159,7 +169,7 @@ func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sentry,
+		framework.WithProcesses(sentry, app,
 			w.operatorCreate, w.operatorUpdate, w.operatorDelete,
 			w.loglineCreate, w.loglineUpdate, w.loglineDelete,
 			w.daprdCreate, w.daprdUpdate, w.daprdDelete,

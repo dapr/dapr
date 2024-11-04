@@ -68,6 +68,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppProtocol("http"),
 		daprd.WithPlacementAddresses(b.place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithLogLevel("debug"),
 	)
 
 	return []framework.Option{

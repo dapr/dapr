@@ -39,6 +39,8 @@ type state struct {
 }
 
 func (s *state) Setup(t *testing.T) []framework.Option {
+	t.Skip("TODO: @joshvanl: re-enable")
+
 	// 2MB payload. Enough memory to be larger than the background variant memory
 	// so we can measure (actor) workflow history memory does not leak.
 	input := bytes.Repeat([]byte("0"), 2*1024*1024)

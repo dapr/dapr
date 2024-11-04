@@ -53,6 +53,9 @@ func (s *staging) Setup(t *testing.T) []framework.Option {
 		actors.WithScheduler(s.actors1.Scheduler()),
 		actors.WithActorTypes("bar"),
 		actors.WithActorTypeHandler("bar", func(_ http.ResponseWriter, req *http.Request) {
+			if req.Method == http.MethodDelete {
+				return
+			}
 			s.got.Add(1)
 		}),
 	)

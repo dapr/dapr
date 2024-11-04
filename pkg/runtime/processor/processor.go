@@ -20,6 +20,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors"
 	grpcmanager "github.com/dapr/dapr/pkg/api/grpc/manager"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	httpendpointsapi "github.com/dapr/dapr/pkg/apis/httpEndpoint/v1alpha1"
@@ -72,6 +73,7 @@ type Options struct {
 
 	// ActorsEnabled indicates whether placement service is enabled in this Dapr cluster.
 	ActorsEnabled bool
+	Actors        actors.Interface
 
 	// IsHTTP indicates whether the connection to the application is using the
 	// HTTP protocol.
@@ -181,6 +183,9 @@ func New(opts Options) *Processor {
 		Registry:       opts.Registry.WorkflowBackends(),
 		ComponentStore: opts.ComponentStore,
 		Meta:           opts.Meta,
+		Namespace:      opts.Namespace,
+		Resiliency:     opts.Resiliency,
+		Actors:         opts.Actors,
 	})
 
 	// ensure a default no-op reporter

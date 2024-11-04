@@ -151,10 +151,6 @@ type internalConfig struct {
 	outboundHealthz              healthz.Healthz
 }
 
-func (i internalConfig) ActorsEnabled() bool {
-	return i.actorsService != ""
-}
-
 func (i internalConfig) SchedulerEnabled() bool {
 	return len(i.schedulerAddress) > 0
 }

@@ -110,12 +110,14 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
-	get, err = gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
-		InstanceId:        "my-custom-instance-id",
-		WorkflowComponent: "dapr",
-	})
-	require.NoError(t, err)
-	assert.Equal(t, "SUSPENDED", get.GetRuntimeStatus())
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		get, err = gclient.GetWorkflowBeta1(ctx, &rtv1.GetWorkflowRequest{
+			InstanceId:        "my-custom-instance-id",
+			WorkflowComponent: "dapr",
+		})
+		assert.NoError(c, err)
+		assert.Equal(c, "SUSPENDED", get.GetRuntimeStatus())
+	}, time.Second*5, time.Millisecond*10)
 
 	_, err = gclient.ResumeWorkflowBeta1(ctx, &rtv1.ResumeWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",

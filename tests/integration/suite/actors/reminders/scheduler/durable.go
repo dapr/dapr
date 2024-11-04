@@ -51,6 +51,8 @@ func (d *durable) Setup(t *testing.T) []framework.Option {
 	d.triggered = slice.String()
 
 	app := app.New(t,
+		app.WithHandlerFunc("/actors/myactortype/myactorid", func(_ http.ResponseWriter, r *http.Request) {
+		}),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/", func(_ http.ResponseWriter, r *http.Request) {
 			d.triggered.Append(path.Base(r.URL.Path))
 		}),

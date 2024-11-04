@@ -44,6 +44,7 @@ func (e *ErrorCode) Error() string {
 var (
 	// Actors (Building block)
 	ActorInstanceMissing      = ErrorCode{"ERR_ACTOR_INSTANCE_MISSING", CategoryActor}
+	ErrActorNoAppChannel      = ErrorCode{"ERR_ACTOR_NO_APP_CHANNEL", CategoryActor}
 	ActorInvokeMethod         = ErrorCode{"ERR_ACTOR_INVOKE_METHOD", CategoryActor}
 	ActorRuntimeNotFound      = ErrorCode{"ERR_ACTOR_RUNTIME_NOT_FOUND", CategoryActor}
 	ActorStateGet             = ErrorCode{"ERR_ACTOR_STATE_GET", CategoryActor}
