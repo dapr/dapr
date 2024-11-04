@@ -21,11 +21,12 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
+
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 
 	"github.com/dapr/dapr/pkg/messages"
 )
