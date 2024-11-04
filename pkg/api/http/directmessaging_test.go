@@ -412,7 +412,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Truef(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_COMMON_MALFORMED_RESPONSE\",\"message\":\""), "code not found in response: %v", string(resp.RawBody))
+		assert.Truef(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\""+errorcodes.CommonMalformedResponse.Code+"\",\"message\":\""), "code not found in response: %v", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging with malformed status response for external invocation", func(t *testing.T) {
@@ -440,7 +440,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.True(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_COMMON_MALFORMED_RESPONSE\",\"message\":\""))
+		assert.True(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\""+errorcodes.CommonMalformedResponse.Code+"\",\"message\":\""))
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {

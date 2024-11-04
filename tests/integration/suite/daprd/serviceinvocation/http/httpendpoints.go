@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -232,7 +233,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("bad PKI", func(t *testing.T) {
 		invokeTests(t, http.StatusInternalServerError, func(c *assert.CollectT, body string) {
-			assert.Contains(c, body, `"errorCode":errorcodes.DirectInvoke`)
+			assert.Contains(c, body, `"errorCode":`+errorcodes.ConversationDirectInvoke.Code)
 			assert.Contains(c, body, "tls: unknown certificate authority")
 		}, h.daprd2)
 	})

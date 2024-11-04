@@ -74,7 +74,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			body, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
-			assert.Contains(t, string(body), errorcodes.CommonMalformedRequest)
+			assert.Contains(t, string(body), errorcodes.CommonMalformedRequest.Code)
 		}
 	})
 

@@ -28,6 +28,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/dapr/pkg/components/pluggable"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -126,7 +127,7 @@ func (c *customerrors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, 506, resp.StatusCode)
-	assert.Equal(t, `{"errorCode":"ERR_STATE_GET","message":"fail to get key1 from state store mystore: api error: code = DataLoss desc = get-error"}`, string(b))
+	assert.Equal(t, `{"errorCode":`+errorcodes.StateGet.Code+`,"message":"fail to get key1 from state store mystore: api error: code = DataLoss desc = get-error"}`, string(b))
 
 	queryURL := fmt.Sprintf("http://%s/v1.0-alpha1/state/mystore/query", c.daprd.HTTPAddress())
 	query := strings.NewReader(`{"filter":{"EQ":{"state":"CA"}},"sort":[{"key":"person.id","order":"DESC"}]}`)
@@ -149,7 +150,7 @@ func (c *customerrors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, 510, resp.StatusCode)
-	assert.Equal(t, `{"errorCode":"ERR_STATE_SAVE","message":"failed saving state in state store mystore: api error: code = Canceled desc = bulkset-error"}`, string(b))
+	assert.Equal(t, `{"errorCode":`+errorcodes.StateSave.Code+`,"message":"failed saving state in state store mystore: api error: code = Canceled desc = bulkset-error"}`, string(b))
 
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodDelete, stateURL+"/key1", body)
 	require.NoError(t, err)
@@ -159,7 +160,7 @@ func (c *customerrors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, 511, resp.StatusCode)
-	assert.Equal(t, `{"errorCode":"ERR_STATE_DELETE","message":"failed deleting state with key key1: api error: code = OutOfRange desc = delete-error"}`, string(b))
+	assert.Equal(t, `{"errorCode":`+errorcodes.StateDelete.Code+`,"message":"failed deleting state with key key1: api error: code = OutOfRange desc = delete-error"}`, string(b))
 
 	body = strings.NewReader(`[{"key":"key1","value":"value1"}]`)
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, stateURL, body)
@@ -170,5 +171,5 @@ func (c *customerrors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, 512, resp.StatusCode)
-	assert.Equal(t, `{"errorCode":"ERR_STATE_SAVE","message":"failed saving state in state store mystore: api error: code = ResourceExhausted desc = set-error"}`, string(b))
+	assert.Equal(t, `{"errorCode":`+errorcodes.StateSave.Code+`,"message":"failed saving state in state store mystore: api error: code = ResourceExhausted desc = set-error"}`, string(b))
 }

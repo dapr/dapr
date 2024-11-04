@@ -155,7 +155,7 @@ func TestCryptoEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_CRYPTO", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.Crypto.Code, resp.ErrorBody["errorCode"])
 		assert.Equal(t, "failed to perform operation: failed to wrap the file key: simulated error", resp.ErrorBody["message"])
 	})
 
@@ -166,7 +166,7 @@ func TestCryptoEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_CRYPTO", resp.ErrorBody["errorCode"])
+		assert.Equal(t, errorcodes.Crypto.Code, resp.ErrorBody["errorCode"])
 		assert.Contains(t, resp.ErrorBody["message"], "failed to perform operation: invalid header")
 	})
 }

@@ -160,7 +160,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateStoreNotFound, errCode)
+		require.Equal(t, errorcodes.StateStoreNotFound.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -207,7 +207,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.CommonMalformedRequest, errCode)
+		require.Equal(t, errorcodes.CommonMalformedRequest.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -290,7 +290,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateStoreNotConfigured, errCode)
+		require.Equal(t, errorcodes.StateStoreNotConfigured.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -337,7 +337,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateStoreNotSupported, errCode)
+		require.Equal(t, errorcodes.StateStoreNotSupported.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -409,7 +409,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateQuery, errCode)
+		require.Equal(t, errorcodes.StateQuery.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -477,7 +477,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateStoreTooManyTransactions, errCode)
+		require.Equal(t, errorcodes.StateStoreTooManyTransactions.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -548,7 +548,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateStoreNotSupported, errCode)
+		require.Equal(t, errorcodes.StateStoreNotSupported.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]

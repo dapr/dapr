@@ -119,7 +119,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			respBody, err := io.ReadAll(resp.Body)
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
-			assert.Contains(t, string(respBody), errorcodes.SecretGet)
+			assert.Contains(t, string(respBody), errorcodes.SecretGet.Code)
 			assert.Contains(t, string(respBody), "secret key1 not found")
 		})
 	}

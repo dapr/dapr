@@ -143,7 +143,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubNotFound, errCode)
+		require.Equal(t, errorcodes.PubsubNotFound.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -190,7 +190,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubEventsSer, errCode)
+		require.Equal(t, errorcodes.PubsubEventsSer.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -259,7 +259,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubRequestMetadata, errCode)
+		require.Equal(t, errorcodes.PubsubRequestMetadata.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -330,7 +330,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubCloudEventsSer, errCode)
+		require.Equal(t, errorcodes.PubsubCloudEventsSer.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -399,7 +399,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubEventsSer, errCode)
+		require.Equal(t, errorcodes.PubsubEventsSer.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -467,7 +467,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubPublishOutbox, errCode)
+		require.Equal(t, errorcodes.PubsubPublishOutbox.Code, errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
