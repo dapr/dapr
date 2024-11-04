@@ -212,7 +212,7 @@ type ZipkinSpec struct {
 type MetricSpec struct {
 	Enabled *bool `json:"enabled"`
 	// +optional
-	RecordErrorCodes *bool `json:"recordErrorCodes,omitempty.name"`
+	RecordErrorCodes *bool `json:"recordErrorCodes,omitempty"`
 	// +optional
 	HTTP *MetricHTTP `json:"http,omitempty"`
 	// +optional

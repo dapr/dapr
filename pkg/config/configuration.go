@@ -255,7 +255,7 @@ func (o OtelSpec) GetIsSecure() bool {
 type MetricSpec struct {
 	// Defaults to true
 	Enabled          *bool       `json:"enabled,omitempty" yaml:"enabled,omitempty"`
-	RecordErrorCodes *bool       `json:"recordErrorCodes,omitempty.name"`
+	RecordErrorCodes *bool       `json:"recordErrorCodes,omitempty"`
 	HTTP             *MetricHTTP `json:"http,omitempty" yaml:"http,omitempty"`
 	// Latency distribution buckets. If not set, the default buckets are used.
 	LatencyDistributionBuckets *[]int        `json:"latencyDistributionBuckets,omitempty" yaml:"latencyDistributionBuckets,omitempty"`

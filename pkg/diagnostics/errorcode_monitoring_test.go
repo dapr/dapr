@@ -42,7 +42,7 @@ func TestRecordErrorCode(t *testing.T) {
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
-		for i := 0; i < len(viewData); i++ {
+		for i := range viewData {
 			metric1 := viewData[i]
 			switch metric1.Tags[1].Value {
 			case errorcodes.StateBulkGet.Code:
