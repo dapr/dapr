@@ -11,11 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package reminders
+package failurepolicy
 
 import (
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/failurepolicy"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/migration"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/scheduler"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/serialization"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/failurepolicy/noset"
 )

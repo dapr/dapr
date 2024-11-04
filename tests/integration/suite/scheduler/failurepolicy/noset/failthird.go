@@ -57,16 +57,27 @@ func (f *failthird) Run(t *testing.T, ctx context.Context) {
 		AppId: "appid1", Namespace: "namespace",
 	}, &respStatus)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"test", "test", "test"}, triggered.Slice())
-	}, time.Second*10, time.Millisecond*10)
+	for range 3 {
+		select {
+		case name := <-triggered:
+			assert.Equal(t, "test", name)
+		case <-time.After(time.Second * 5):
+			require.Fail(t, "timed out waiting for job")
+		}
+	}
 
 	respStatus.Store(schedulerv1.WatchJobsRequestResultStatus_SUCCESS)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"test", "test", "test", "test"}, triggered.Slice())
-	}, time.Second*10, time.Millisecond*10)
+	select {
+	case name := <-triggered:
+		assert.Equal(t, "test", name)
+	case <-time.After(time.Second * 10):
+		require.Fail(t, "timed out waiting for job")
+	}
 
-	time.Sleep(time.Second * 2)
-	assert.ElementsMatch(t, []string{"test", "test", "test", "test"}, triggered.Slice())
+	select {
+	case <-triggered:
+		assert.Fail(t, "unexpected trigger")
+	case <-time.After(time.Second * 2):
+	}
 }
