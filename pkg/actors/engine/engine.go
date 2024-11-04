@@ -217,7 +217,7 @@ func (e *engine) callRemoteActor(ctx context.Context, lar *requestresponse.Looku
 	if err != nil {
 		return nil, err
 	}
-	defer cancel(true)
+	defer cancel(false)
 
 	span := diagutils.SpanFromContext(ctx)
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
@@ -248,7 +248,7 @@ func (e *engine) callRemoteActorReminder(ctx context.Context, reminder *requestr
 	if err != nil {
 		return err
 	}
-	defer cancel(true)
+	defer cancel(false)
 
 	span := diagutils.SpanFromContext(ctx)
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
