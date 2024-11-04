@@ -56,19 +56,34 @@ func (a *actors) Run(t *testing.T, ctx context.Context) {
 	triggered := a.scheduler.WatchJobsSuccess(t, wctx, &schedulerv1pb.WatchJobsRequestInitial{
 		Namespace: "namespace", AppId: "appid", ActorTypes: []string{"actortype"},
 	})
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		if assert.ElementsMatch(c, []string{"test1"}, triggered.Slice()) {
-			cancel()
-		}
-	}, time.Second*10, time.Millisecond*10)
-	time.Sleep(time.Second * 3)
-	assert.ElementsMatch(t, []string{"test1"}, triggered.Slice())
+
+	select {
+	case name := <-triggered:
+		assert.Equal(t, "test1", name)
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "timed out waiting for job")
+	}
+	cancel()
+
+	select {
+	case <-triggered:
+		assert.Fail(t, "unexpected trigger")
+	case <-time.After(time.Second * 3):
+	}
 
 	triggered2 := a.scheduler.WatchJobsSuccess(t, ctx, &schedulerv1pb.WatchJobsRequestInitial{
 		Namespace: "namespace", AppId: "appid", ActorTypes: []string{"actortype"},
 	})
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"test1"}, triggered2.Slice())
-	}, time.Second*10, time.Millisecond*10)
-	assert.ElementsMatch(t, []string{"test1"}, triggered.Slice())
+	select {
+	case name := <-triggered2:
+		assert.Equal(t, "test1", name)
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "timed out waiting for job")
+	}
+
+	select {
+	case <-triggered:
+		assert.Fail(t, "unexpected trigger")
+	case <-time.After(time.Second * 2):
+	}
 }
