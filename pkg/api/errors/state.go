@@ -96,7 +96,7 @@ func (s *StateStoreError) TransactionsNotSupported() error {
 			codes.Unimplemented,
 			http.StatusInternalServerError,
 			fmt.Sprintf("state store %s doesn't support transactions", s.name),
-			messages.RecordAndGet(errorcodes.StateStoreNotSupported), // TODO: @elena-kolevska this code misleading and also used for different things ("query unsupported"); it should be removed in the next major version
+			messages.RecordAndGet(errorcodes.StateStoreNotSupported), // TODO: @elena-kolevska this misleading and also used for different things ("query unsupported"); it should be removed in the next major version
 		).WithHelpLink("https://docs.dapr.io/reference/components-reference/supported-state-stores/", "Check the list of state stores and the features they support"),
 		"TRANSACTIONS_NOT_SUPPORTED",
 		nil,

@@ -144,7 +144,7 @@ func (e APIError) RecordAndGet() APIError {
 }
 
 // This will record the error as a metric and return the APIError string
-func RecordAndGet(errorCode string) string {
+func RecordAndGet(errorCode errorcodes.ErrorCode) string {
 	diag.DefaultErrorCodeMonitoring.RecordErrorCode(errorCode)
-	return errorCode
+	return errorCode.Code
 }

@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"net/http"
 
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 )
@@ -34,8 +35,8 @@ const (
 type APIError struct {
 	// Message is the human-readable error message.
 	message string
-	// Tag is a string identifying the error, used with HTTP responses only.
-	tag string
+	// Tag is an ErrorCode identifying the error, used with HTTP responses only.
+	tag errorcodes.ErrorCode
 	// Status code for HTTP responses.
 	httpCode int
 	// Status code for gRPC responses.
@@ -62,10 +63,10 @@ func (e APIError) Message() string {
 
 // Tag returns the value of the tag property.
 func (e APIError) Tag() string {
-	if e.tag == "" {
+	if e.tag.Code == "" {
 		return defaultTag
 	}
-	return e.tag
+	return e.tag.Code
 }
 
 // HTTPCode returns the value of the HTTPCode property.

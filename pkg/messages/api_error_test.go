@@ -19,6 +19,7 @@ import (
 	"reflect"
 	"testing"
 
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
 )
@@ -26,7 +27,7 @@ import (
 func TestAPIError_WithFormat(t *testing.T) {
 	type fields struct {
 		message  string
-		tag      string
+		tag     errorcodes.ErrorCode
 		httpCode int
 		grpcCode grpcCodes.Code
 	}
@@ -41,21 +42,21 @@ func TestAPIError_WithFormat(t *testing.T) {
 	}{
 		{
 			name:   "no formatting",
-			fields: fields{message: "ciao", tag: "MYERR", httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
+			fields: fields{message: "ciao", tag: errorcodes.ActorInstanceMissing, httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
 			args:   args{a: []any{}},
-			want:   APIError{message: "ciao", tag: "MYERR", httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
+			want:   APIError{message: "ciao", tag: errorcodes.ActorInstanceMissing, httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
 		},
 		{
 			name:   "string parameter",
-			fields: fields{message: "ciao %s", tag: "MYERR", httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
+			fields: fields{message: "ciao %s", tag: errorcodes.ActorInstanceMissing, httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
 			args:   args{a: []any{"mondo"}},
-			want:   APIError{message: "ciao mondo", tag: "MYERR", httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
+			want:   APIError{message: "ciao mondo", tag: errorcodes.ActorInstanceMissing, httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
 		},
 		{
 			name:   "multiple params",
-			fields: fields{message: "ciao %s %d", tag: "MYERR", httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
+			fields: fields{message: "ciao %s %d", tag: errorcodes.ActorInstanceMissing, httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
 			args:   args{a: []any{"mondo", 42}},
-			want:   APIError{message: "ciao mondo 42", tag: "MYERR", httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
+			want:   APIError{message: "ciao mondo 42", tag: errorcodes.ActorInstanceMissing, httpCode: http.StatusTeapot, grpcCode: grpcCodes.ResourceExhausted},
 		},
 	}
 	for _, tt := range tests {
@@ -107,7 +108,7 @@ func TestAPIError_Message(t *testing.T) {
 
 func TestAPIError_Tag(t *testing.T) {
 	type fields struct {
-		tag string
+		tag errorcodes.ErrorCode
 	}
 	tests := []struct {
 		name   string
@@ -116,12 +117,12 @@ func TestAPIError_Tag(t *testing.T) {
 	}{
 		{
 			name:   "has tag",
-			fields: fields{tag: "SOME_ERROR"},
-			want:   "SOME_ERROR",
+			fields: fields{tag: errorcodes.ActorInstanceMissing},
+			want:   errorcodes.ActorInstanceMissing.Code,
 		},
 		{
 			name:   "no tag",
-			fields: fields{tag: ""},
+			fields: fields{tag: errorcodes.ErrorCode{}},
 			want:   defaultTag,
 		},
 	}

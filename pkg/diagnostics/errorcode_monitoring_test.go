@@ -28,14 +28,13 @@ func TestRecordErrorCode(t *testing.T) {
 		assert.Equal(t, "actor", viewData[0].Tags[2].Value)
 	})
 
-	t.Run("record two valid error codes and ignore one invalid", func(t *testing.T) {
+	t.Run("record two valid error codes", func(t *testing.T) {
 		m := newErrorCodeMetrics()
 		_ = m.Init("app-id")
 
 		m.RecordErrorCode(errorcodes.StateBulkGet)
 		m.RecordErrorCode(errorcodes.StateBulkGet)
 		m.RecordErrorCode(errorcodes.CommonAPIUnimplemented)
-		m.RecordErrorCode("invalid-error-code")
 
 		viewData, _ := view.RetrieveData("error_code/count")
 		v := view.Find("error_code/count")
@@ -45,10 +44,10 @@ func TestRecordErrorCode(t *testing.T) {
 		for i := 0; i < len(viewData); i++ {
 			metric1 := viewData[i]
 			switch metric1.Tags[1].Value {
-			case errorcodes.StateBulkGet:
+			case errorcodes.StateBulkGet.Code:
 				assert.Equal(t, int64(2), viewData[i].Data.(*view.CountData).Value)
 				assert.Equal(t, "state", viewData[i].Tags[2].Value)
-			case errorcodes.CommonAPIUnimplemented:
+			case errorcodes.CommonAPIUnimplemented.Code:
 				assert.Equal(t, int64(1), viewData[i].Data.(*view.CountData).Value)
 				assert.Equal(t, "common", viewData[i].Tags[2].Value)
 			case "invalid-error-code":

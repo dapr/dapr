@@ -41,16 +41,11 @@ func (m *errorCodeMetrics) Init(id string) error {
 	)
 }
 
-func (m *errorCodeMetrics) RecordErrorCode(code string) {
+func (m *errorCodeMetrics) RecordErrorCode(ec errorcodes.ErrorCode) {
 	if m.enabled {
-		errorCodeType := errorcodes.GetErrorType(code)
-		if errorCodeType == "" {
-			return
-		}
-
 		_ = stats.RecordWithTags(
 			m.ctx,
-			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, code, typeKey, errorCodeType),
+			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, ec.Code, typeKey, ec.Category),
 			m.errorCodeCount.M(1),
 		)
 	}
