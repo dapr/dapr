@@ -69,9 +69,23 @@ func (d *durable) Run(t *testing.T, ctx context.Context) {
 		"30", "31", "32", "33", "34", "35", "36", "37", "38", "39",
 	}
 
+	got := make([]string, 0, 40)
+	for range exp {
+		select {
+		case name := <-triggered:
+			got = append(got, name)
+		case <-time.After(time.Second * 5):
+			require.Fail(t, "timed out waiting for job")
+		}
+	}
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, exp, triggered.Slice())
+		assert.ElementsMatch(c, got, exp)
 	}, time.Second*10, time.Millisecond*10)
-	time.Sleep(time.Second * 2)
-	assert.ElementsMatch(t, exp, triggered.Slice())
+
+	select {
+	case <-triggered:
+		assert.Fail(t, "unexpected trigger")
+	case <-time.After(time.Second * 2):
+	}
 }
