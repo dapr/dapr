@@ -1480,8 +1480,9 @@ func (m *mockSubscribePubSub) Publish(ctx context.Context, req *contribpubsub.Pu
 	var err error
 	if handler, ok := m.handlers[req.Topic]; ok {
 		pubsubMsg := &contribpubsub.NewMessage{
-			Data:  req.Data,
-			Topic: req.Topic,
+			Data:     req.Data,
+			Topic:    req.Topic,
+			Metadata: req.Metadata,
 		}
 		handler(context.Background(), pubsubMsg)
 	} else if bulkHandler, ok := m.bulkHandlers[req.Topic]; ok {
