@@ -29,7 +29,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	componentspubsub "github.com/dapr/components-contrib/pubsub"
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -143,7 +142,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubNotFound.Code, errCode)
+		require.Equal(t, "ERR_PUBSUB_NOT_FOUND", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -190,7 +189,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubEventsSer.Code, errCode)
+		require.Equal(t, "ERR_PUBSUB_EVENTS_SER", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -259,7 +258,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubRequestMetadata.Code, errCode)
+		require.Equal(t, "ERR_PUBSUB_REQUEST_METADATA", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -330,7 +329,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubCloudEventsSer.Code, errCode)
+		require.Equal(t, "ERR_PUBSUB_CLOUD_EVENTS_SER", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -399,7 +398,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubEventsSer.Code, errCode)
+		require.Equal(t, "ERR_PUBSUB_EVENTS_SER", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -467,7 +466,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.PubsubPublishOutbox.Code, errCode)
+		require.Equal(t, "ERR_PUBSUB_PUBLISH_OUTBOX", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]

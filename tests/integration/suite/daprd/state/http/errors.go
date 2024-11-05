@@ -27,7 +27,6 @@ import (
 
 	"github.com/dapr/components-contrib/state"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
@@ -160,7 +159,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateStoreNotFound.Code, errCode)
+		require.Equal(t, "ERR_STATE_STORE_NOT_FOUND", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -207,7 +206,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.CommonMalformedRequest.Code, errCode)
+		require.Equal(t, "ERR_COMMON_MALFORMED_REQUEST", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -290,7 +289,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateStoreNotConfigured.Code, errCode)
+		require.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -337,7 +336,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateStoreNotSupported.Code, errCode)
+		require.Equal(t, "ERR_STATE_STORE_NOT_SUPPORTED", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -409,7 +408,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateQuery.Code, errCode)
+		require.Equal(t, "ERR_STATE_QUERY", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -477,7 +476,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateStoreTooManyTransactions.Code, errCode)
+		require.Equal(t, "ERR_STATE_STORE_TOO_MANY_TRANSACTIONS", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -548,7 +547,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, errorcodes.StateStoreNotSupported.Code, errCode)
+		require.Equal(t, "ERR_STATE_STORE_NOT_SUPPORTED", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]

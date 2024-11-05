@@ -26,7 +26,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/tests/apps/utils"
 
 	"github.com/gorilla/mux"
@@ -626,7 +625,7 @@ func nonHostedTestHandler(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, fmt.Sprintf("Error performing %s request: %v", op, err), http.StatusInternalServerError)
 			return
 		}
-		if !bytes.Contains(body, []byte(errorcodes.ActorReminderNonHosted.Code)) {
+		if !bytes.Contains(body, []byte("ERR_ACTOR_REMINDER_NON_HOSTED")) {
 			http.Error(w, fmt.Sprintf("Response from %s doesn't contain the required error message: %s", op, string(body)), http.StatusInternalServerError)
 			return
 		}

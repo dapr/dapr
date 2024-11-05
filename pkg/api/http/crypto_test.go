@@ -23,7 +23,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/dapr/pkg/api/universal"
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	daprt "github.com/dapr/dapr/pkg/testing"
@@ -92,7 +91,7 @@ func TestCryptoEndpoints(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 				require.NotEmpty(t, resp.ErrorBody)
-				assert.Equal(t, errorcodes.CryptoProvidersNotConfigured.Code, resp.ErrorBody["errorCode"])
+				assert.Equal(t, "ERR_CRYPTO_PROVIDERS_NOT_CONFIGURED", resp.ErrorBody["errorCode"])
 			})
 		}
 	})
@@ -110,7 +109,7 @@ func TestCryptoEndpoints(t *testing.T) {
 			t.Run(name, func(t *testing.T) {
 				require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 				require.NotEmpty(t, resp.ErrorBody)
-				assert.Equal(t, errorcodes.CryptoProviderNotFound.Code, resp.ErrorBody["errorCode"])
+				assert.Equal(t, "ERR_CRYPTO_PROVIDER_NOT_FOUND", resp.ErrorBody["errorCode"])
 				assert.Equal(t, "crypto provider not-found not found", resp.ErrorBody["message"])
 			})
 		}
@@ -126,7 +125,7 @@ func TestCryptoEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
-		assert.Equal(t, errorcodes.CommonBadRequest.Code, resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_COMMON_BAD_REQUEST", resp.ErrorBody["errorCode"])
 		assert.Contains(t, resp.ErrorBody["message"], "missing header 'dapr-key-name'")
 	})
 
@@ -140,7 +139,7 @@ func TestCryptoEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
-		assert.Equal(t, errorcodes.CommonBadRequest.Code, resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_COMMON_BAD_REQUEST", resp.ErrorBody["errorCode"])
 		assert.Contains(t, resp.ErrorBody["message"], "missing header 'dapr-key-wrap-algorithm'")
 	})
 
@@ -155,7 +154,7 @@ func TestCryptoEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
-		assert.Equal(t, errorcodes.Crypto.Code, resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_CRYPTO", resp.ErrorBody["errorCode"])
 		assert.Equal(t, "failed to perform operation: failed to wrap the file key: simulated error", resp.ErrorBody["message"])
 	})
 
@@ -166,7 +165,7 @@ func TestCryptoEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusInternalServerError, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
-		assert.Equal(t, errorcodes.Crypto.Code, resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_CRYPTO", resp.ErrorBody["errorCode"])
 		assert.Contains(t, resp.ErrorBody["message"], "failed to perform operation: invalid header")
 	})
 }
