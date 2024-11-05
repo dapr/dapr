@@ -22,6 +22,7 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -476,6 +477,63 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			stream2.CloseSend()
 		})
 	})
+
+	t.Run("deactivated actors are removed from the placement table if no other hosts in the namespace", func(t *testing.T) {
+		host1 := &v1pb.Host{
+			Name:      "myapp1",
+			Namespace: "ns1",
+			Port:      1231,
+			Entities:  []string{"actor1"},
+			Id:        "myapp1",
+			ApiLevel:  uint32(20),
+		}
+		stream1 := n.getStream(t, ctx)
+
+		err := stream1.Send(host1)
+		require.NoError(t, err)
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			placementTables, errR := stream1.Recv()
+			if !assert.NoError(c, errR) {
+				_ = stream1.CloseSend()
+				return
+			}
+
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
+				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1")
+			}
+		}, time.Second*15, time.Millisecond*10)
+
+		// Workflow actor has been unregistered, send an update to remove it from the placement table
+		host1 = &v1pb.Host{
+			Name:      "myapp1",
+			Namespace: "ns1",
+			Port:      1231,
+			Entities:  []string{},
+			Id:        "myapp1",
+			ApiLevel:  uint32(20),
+		}
+		err = stream1.Send(host1)
+		require.NoError(t, err)
+
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			placementTables, errR := stream1.Recv()
+			if !assert.NoError(c, errR) {
+				_ = stream1.CloseSend()
+				return
+			}
+
+			if assert.Equal(c, "update", placementTables.GetOperation()) {
+				assert.Empty(c, placementTables.GetTables().GetEntries())
+			}
+		}, time.Second*15, time.Millisecond*10)
+
+		t.Cleanup(func() {
+			stream1.CloseSend()
+		})
+	})
+
 }
 
 func (n *notls) getStream(t *testing.T, ctx context.Context) v1pb.Placement_ReportDaprStatusClient {
@@ -488,6 +546,7 @@ func (n *notls) getStream(t *testing.T, ctx context.Context) v1pb.Placement_Repo
 	)
 	require.NoError(t, err)
 	client := v1pb.NewPlacementClient(conn)
+	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-accept-vnodes", "false")
 
 	stream, err := client.ReportDaprStatus(ctx)
 	require.NoError(t, err)
