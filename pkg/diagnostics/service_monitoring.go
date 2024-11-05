@@ -31,6 +31,7 @@ var (
 	flowDirectionKey    = tag.MustNewKey("flow_direction")
 	targetKey           = tag.MustNewKey("target")
 	typeKey             = tag.MustNewKey("type")
+	categoryKey         = tag.MustNewKey("category")
 )
 
 const (
