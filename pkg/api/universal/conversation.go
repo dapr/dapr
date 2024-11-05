@@ -25,7 +25,7 @@ import (
 	kmeta "github.com/dapr/kit/metadata"
 )
 
-func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationAlpha1Request) (*runtimev1pb.ConversationAlpha1Response, error) {
+func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) {
 	// valid component
 	if a.compStore.ConversationsLen() == 0 {
 		err := messages.ErrConversationNotFound
@@ -57,7 +57,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	if err != nil {
 		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
-		return &runtimev1pb.ConversationAlpha1Response{}, err
+		return &runtimev1pb.ConversationResponse{}, err
 	}
 
 	for _, i := range req.GetInputs() {
@@ -68,7 +68,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 			if sErr != nil {
 				sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
 				a.logger.Debug(sErr)
-				return &runtimev1pb.ConversationAlpha1Response{}, sErr
+				return &runtimev1pb.ConversationResponse{}, sErr
 			}
 
 			msg = scrubbed[0]
@@ -98,11 +98,11 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	if err != nil {
 		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 		a.logger.Debug(err)
-		return &runtimev1pb.ConversationAlpha1Response{}, err
+		return &runtimev1pb.ConversationResponse{}, err
 	}
 
 	// handle response
-	response := &runtimev1pb.ConversationAlpha1Response{}
+	response := &runtimev1pb.ConversationResponse{}
 	a.logger.Debug(response)
 	if resp != nil {
 		if resp.ConversationContext != "" {
@@ -117,13 +117,13 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 				if sErr != nil {
 					sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
 					a.logger.Debug(sErr)
-					return &runtimev1pb.ConversationAlpha1Response{}, sErr
+					return &runtimev1pb.ConversationResponse{}, sErr
 				}
 
 				res = scrubbed[0]
 			}
 
-			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationAlpha1Result{
+			response.Outputs = append(response.GetOutputs(), &runtimev1pb.ConversationResult{
 				Result:     res,
 				Parameters: o.Parameters,
 			})

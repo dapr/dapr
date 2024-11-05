@@ -61,10 +61,16 @@ func (f *failed) Run(t *testing.T, ctx context.Context) {
 		AppId: "appid1", Namespace: "namespace",
 	})
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"test"}, triggered.Slice())
-	}, time.Second*10, time.Millisecond*10)
+	select {
+	case name := <-triggered:
+		assert.Equal(t, "test", name)
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "timed out waiting for job")
+	}
 
-	time.Sleep(time.Second * 2)
-	assert.ElementsMatch(t, []string{"test"}, triggered.Slice())
+	select {
+	case <-triggered:
+		assert.Fail(t, "unexpected trigger")
+	case <-time.After(time.Second * 2):
+	}
 }
