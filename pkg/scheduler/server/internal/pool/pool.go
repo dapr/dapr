@@ -11,15 +11,15 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package internal
+package pool
 
 import (
 	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
 
+	"github.com/diagridio/go-etcd-cron/api"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
@@ -30,6 +30,7 @@ var log = logger.NewLogger("dapr.runtime.scheduler")
 
 // Pool represents a connection pool for namespace/appID separation of sidecars to schedulers.
 type Pool struct {
+	cron   api.Interface
 	nsPool map[string]*namespacedPool
 
 	lock    sync.RWMutex
@@ -52,8 +53,9 @@ type JobEvent struct {
 	Metadata *schedulerv1pb.JobMetadata
 }
 
-func NewPool() *Pool {
+func New(cron api.Interface) *Pool {
 	return &Pool{
+		cron:    cron,
 		nsPool:  make(map[string]*namespacedPool),
 		closeCh: make(chan struct{}),
 	}
@@ -72,7 +74,7 @@ func (p *Pool) Run(ctx context.Context) error {
 }
 
 // Add adds a connection to the pool for a given namespace/appID.
-func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) {
+func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -94,32 +96,41 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 		_, ok = nsPool.conns[id]
 	}
 
+	prefixes := make([]string, 0, len(req.GetActorTypes())+1)
+
 	log.Debugf("Adding a Sidecar connection to Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
 	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], id)
+	prefixes = append(prefixes, "app||"+req.GetNamespace()+"||"+req.GetAppId()+"||")
 
 	for _, actorType := range req.GetActorTypes() {
 		log.Debugf("Adding a Sidecar connection to Scheduler for actor type: %s/%s.", req.GetNamespace(), actorType)
 		nsPool.actorType[actorType] = append(nsPool.actorType[actorType], id)
+		prefixes = append(prefixes, "actorreminder||"+req.GetNamespace()+"||"+actorType+"||")
 	}
 
-	nsPool.conns[id] = p.newConn(req, stream, id)
-}
-
-// Send is a blocking function that sends a job trigger to a correct job
-// recipient.
-func (p *Pool) Send(ctx context.Context, job *JobEvent) error {
-	conn, err := p.getConn(job.Metadata)
+	cancel, err := p.cron.DeliverablePrefixes(stream.Context(), prefixes...)
 	if err != nil {
 		return err
 	}
 
-	conn.sendWaitForResponse(ctx, job)
+	nsPool.conns[id] = p.newConn(req, stream, id, cancel)
 
 	return nil
 }
 
+// Send is a blocking function that sends a job trigger to a correct job
+// recipient.
+func (p *Pool) Send(ctx context.Context, job *JobEvent) api.TriggerResponseResult {
+	conn, ok := p.getConn(job.Metadata)
+	if !ok {
+		return api.TriggerResponseResult_UNDELIVERABLE
+	}
+
+	return conn.sendWaitForResponse(ctx, job)
+}
+
 // remove removes a connection from the pool with the given UUID.
-func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64) {
+func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64, cancel context.CancelFunc) {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -173,16 +184,18 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64) {
 	if len(nsPool.appID) == 0 && len(nsPool.actorType) == 0 {
 		delete(p.nsPool, req.GetNamespace())
 	}
+
+	cancel()
 }
 
 // getConn returns a connection from the pool based on the metadata.
-func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, error) {
+func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, bool) {
 	p.lock.RLock()
 	defer p.lock.RUnlock()
 
 	nsPool, ok := p.nsPool[meta.GetNamespace()]
 	if !ok {
-		return nil, fmt.Errorf("no connections available for namespace: %s", meta.GetNamespace())
+		return nil, false
 	}
 
 	idx := nsPool.idx.Add(1)
@@ -191,23 +204,23 @@ func (p *Pool) getConn(meta *schedulerv1pb.JobMetadata) (*conn, error) {
 	case *schedulerv1pb.JobTargetMetadata_Job:
 		appIDConns, ok := nsPool.appID[meta.GetAppId()]
 		if !ok || len(appIDConns) == 0 {
-			return nil, fmt.Errorf("no connections available for appID: %s", meta.GetAppId())
+			return nil, false
 		}
 		//nolint:gosec
-		conn := nsPool.conns[appIDConns[int(idx)%len(appIDConns)]]
-		return conn, nil
+		conn, ok := nsPool.conns[appIDConns[int(idx)%len(appIDConns)]]
+		return conn, ok
 
 	case *schedulerv1pb.JobTargetMetadata_Actor:
 		actorTypeConns, ok := nsPool.actorType[t.GetActor().GetType()]
 		if !ok || len(actorTypeConns) == 0 {
-			return nil, fmt.Errorf("no connections available for actorType: %s", t.GetActor().GetType())
+			return nil, false
 		}
 
 		//nolint:gosec
-		conn := nsPool.conns[actorTypeConns[int(idx)%len(actorTypeConns)]]
-		return conn, nil
+		conn, ok := nsPool.conns[actorTypeConns[int(idx)%len(actorTypeConns)]]
+		return conn, ok
 
 	default:
-		return nil, fmt.Errorf("unknown job metadata type: %v", t)
+		return nil, false
 	}
 }

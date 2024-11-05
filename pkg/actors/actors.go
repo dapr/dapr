@@ -45,6 +45,7 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/healthz"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/modes"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -144,6 +145,7 @@ type actorsRuntime struct {
 	closed             atomic.Bool
 	closeCh            chan struct{}
 	apiLevel           atomic.Uint32
+	htarget            healthz.Target
 
 	lock                            sync.Mutex
 	internalReminderInProgress      map[string]struct{}
@@ -165,6 +167,7 @@ type ActorsOpts struct {
 	Security           security.Handler
 	SchedulerClients   *clients.Clients
 	SchedulerReminders bool
+	Healthz            healthz.Healthz
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled bool
@@ -194,6 +197,7 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		internalActors:     haxmap.New[string, InternalActor](32),
 		compStore:          opts.CompStore,
 		sec:                opts.Security,
+		htarget:            opts.Healthz.AddTarget(),
 
 		internalReminderInProgress:      map[string]struct{}{},
 		schedulerReminderFeatureEnabled: opts.SchedulerReminders,
@@ -242,9 +246,12 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 		}
 		log.Debug("Using Scheduler service for reminders.")
 		a.actorsReminders = reminders.NewScheduler(reminders.SchedulerOptions{
-			Clients:   opts.Config.SchedulerClients,
-			Namespace: opts.Config.Namespace,
-			AppID:     opts.Config.AppID,
+			Clients:          opts.Config.SchedulerClients,
+			Namespace:        opts.Config.Namespace,
+			AppID:            opts.Config.AppID,
+			ProviderOpts:     providerOpts,
+			ListActorTypesFn: a.Entities,
+			Healthz:          opts.Healthz,
 		})
 	} else {
 		factory, err := opts.Config.GetRemindersProvider(a.placement)
@@ -252,11 +259,11 @@ func newActorsWithClock(opts ActorsOpts, clock clock.WithTicker) (ActorRuntime, 
 			return nil, fmt.Errorf("failed to initialize reminders provider: %w", err)
 		}
 		a.actorsReminders = factory(providerOpts)
-
-		a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
-		a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
-		a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
 	}
+
+	a.actorsReminders.SetExecuteReminderFn(a.executeReminder)
+	a.actorsReminders.SetStateStoreProviderFn(a.stateStore)
+	a.actorsReminders.SetLookupActorFn(a.isActorLocallyHosted)
 
 	a.idleActorProcessor = eventqueue.NewProcessor[string, *actor](a.idleProcessorExecuteFn).WithClock(clock)
 	return a, nil
@@ -293,6 +300,8 @@ func (a *actorsRuntime) Init(ctx context.Context) (err error) {
 	if a.closed.Load() {
 		return errors.New("actors runtime has already been closed")
 	}
+
+	defer a.htarget.Ready()
 
 	if len(a.actorsConfig.ActorsService) == 0 {
 		return errors.New("actors: couldn't connect to actors service: address is empty")
@@ -653,10 +662,7 @@ func (a *actorsRuntime) callLocalActor(ctx context.Context, req *internalv1pb.In
 	if err != nil {
 		return nil, status.Error(codes.ResourceExhausted, err.Error())
 	}
-	err = a.idleActorProcessor.Enqueue(act)
-	if err != nil {
-		return nil, fmt.Errorf("failed to enqueue actor in idle processor: %w", err)
-	}
+	a.idleActorProcessor.Enqueue(act)
 	defer act.unlock()
 
 	// Replace method to actors method.
@@ -1429,10 +1435,7 @@ func (a *actorsRuntime) Close() error {
 			}
 		}
 		if a.idleActorProcessor != nil {
-			err := a.idleActorProcessor.Close()
-			if err != nil {
-				errs = append(errs, fmt.Errorf("failed to close actor idle processor: %w", err))
-			}
+			a.idleActorProcessor.Close()
 		}
 	}
 

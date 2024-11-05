@@ -84,9 +84,7 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	etcdKeysPrefix := "dapr/jobs"
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := d.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Empty(c, keys)
+		assert.Empty(c, d.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix))
 	}, time.Second*10, 10*time.Millisecond)
 
 	r := task.NewTaskRegistry()
@@ -124,9 +122,7 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		keys, rerr := d.scheduler.ETCDClient(t).ListAllKeys(ctx, etcdKeysPrefix)
-		require.NoError(c, rerr)
-		assert.Empty(c, keys)
+		assert.Empty(c, d.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix))
 	}, time.Second*60, time.Millisecond*10) // account for cleanup time in etcd
 	// explicitly not checking the job/counters records since those get garbage collected after 180s
 }

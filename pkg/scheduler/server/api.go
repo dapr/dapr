@@ -18,47 +18,39 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"time"
 
 	"github.com/diagridio/go-etcd-cron/api"
-	"google.golang.org/protobuf/types/known/anypb"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
-	"github.com/dapr/dapr/pkg/scheduler/server/internal"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 )
 
 func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJobRequest) (*schedulerv1pb.ScheduleJobResponse, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-s.readyCh:
-	}
-
-	if err := s.authz.Metadata(ctx, req.GetMetadata()); err != nil {
-		return nil, err
-	}
-
-	jobName, err := buildJobName(req.GetName(), req.GetMetadata())
+	cron, err := s.cron.Client(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	meta, err := anypb.New(req.GetMetadata())
+	serialized, err := s.serializer.FromRequest(ctx, req)
 	if err != nil {
 		return nil, err
 	}
 
-	job := &api.Job{
-		Schedule: req.GetJob().Schedule, //nolint:protogetter
-		DueTime:  req.GetJob().DueTime,  //nolint:protogetter
-		Ttl:      req.GetJob().Ttl,      //nolint:protogetter
-		Repeats:  req.GetJob().Repeats,  //nolint:protogetter
-		Metadata: meta,
-		Payload:  req.GetJob().GetData(),
+	job := req.GetJob()
+
+	//nolint:protogetter
+	apiJob := &api.Job{
+		Schedule:      job.Schedule,
+		DueTime:       job.DueTime,
+		Ttl:           job.Ttl,
+		Repeats:       job.Repeats,
+		Metadata:      serialized.Metadata(),
+		Payload:       job.GetData(),
+		FailurePolicy: schedFPToCron(job.FailurePolicy),
 	}
 
-	err = s.cron.Add(ctx, jobName, job)
+	err = cron.Add(ctx, serialized.Name(), apiJob)
 	if err != nil {
 		log.Errorf("error scheduling job %s: %s", req.GetName(), err)
 		return nil, err
@@ -68,24 +60,19 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 }
 
 func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequest) (*schedulerv1pb.DeleteJobResponse, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-s.readyCh:
-	}
-
-	if err := s.authz.Metadata(ctx, req.GetMetadata()); err != nil {
-		return nil, err
-	}
-
-	jobName, err := buildJobName(req.GetName(), req.GetMetadata())
+	cron, err := s.cron.Client(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	err = s.cron.Delete(ctx, jobName)
+	job, err := s.serializer.FromRequest(ctx, req)
 	if err != nil {
-		log.Errorf("error deleting job %s: %s", jobName, err)
+		return nil, err
+	}
+
+	err = cron.Delete(ctx, job.Name())
+	if err != nil {
+		log.Errorf("error deleting job %s: %s", job.Name(), err)
 		return nil, err
 	}
 
@@ -93,59 +80,93 @@ func (s *Server) DeleteJob(ctx context.Context, req *schedulerv1pb.DeleteJobRequ
 }
 
 func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (*schedulerv1pb.GetJobResponse, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-s.readyCh:
-	}
-
-	if err := s.authz.Metadata(ctx, req.GetMetadata()); err != nil {
-		return nil, err
-	}
-
-	jobName, err := buildJobName(req.GetName(), req.GetMetadata())
+	cron, err := s.cron.Client(ctx)
 	if err != nil {
 		return nil, err
 	}
 
-	job, err := s.cron.Get(ctx, jobName)
+	serialized, err := s.serializer.FromRequest(ctx, req)
 	if err != nil {
-		log.Errorf("error getting job %s: %s", jobName, err)
+		return nil, err
+	}
+
+	job, err := cron.Get(ctx, serialized.Name())
+	if err != nil {
+		log.Errorf("error getting job %s: %s", serialized.Name(), err)
 		return nil, err
 	}
 
 	if job == nil {
-		return nil, fmt.Errorf("job not found: %s", jobName)
+		return nil, fmt.Errorf("job not found: %s", req.GetName())
 	}
 
 	return &schedulerv1pb.GetJobResponse{
 		//nolint:protogetter
 		Job: &schedulerv1pb.Job{
-			Schedule: job.Schedule,
-			DueTime:  job.DueTime,
-			Ttl:      job.Ttl,
-			Repeats:  job.Repeats,
-			Data:     job.GetPayload(),
+			Schedule:      job.Schedule,
+			DueTime:       job.DueTime,
+			Ttl:           job.Ttl,
+			Repeats:       job.Repeats,
+			Data:          job.GetPayload(),
+			FailurePolicy: cronFPToSched(job.FailurePolicy),
 		},
+	}, nil
+}
+
+func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsRequest) (*schedulerv1pb.ListJobsResponse, error) {
+	cron, err := s.cron.Client(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	prefix, err := s.serializer.PrefixFromList(ctx, req.GetMetadata())
+	if err != nil {
+		return nil, err
+	}
+
+	list, err := cron.List(ctx, prefix)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query job list: %w", err)
+	}
+
+	jobs := make([]*schedulerv1pb.NamedJob, 0, len(list.GetJobs()))
+	for _, job := range list.GetJobs() {
+		meta, err := serialize.MetadataFromKey(job.GetName())
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse job metadata: %w", err)
+		}
+
+		j := job.GetJob()
+		jobs = append(jobs, &schedulerv1pb.NamedJob{
+			Name:     job.GetName()[strings.LastIndex(job.GetName(), "||")+2:],
+			Metadata: meta,
+			//nolint:protogetter
+			Job: &schedulerv1pb.Job{
+				Schedule:      j.Schedule,
+				DueTime:       j.DueTime,
+				Ttl:           j.Ttl,
+				Repeats:       j.Repeats,
+				Data:          j.GetPayload(),
+				FailurePolicy: cronFPToSched(j.FailurePolicy),
+			},
+		})
+	}
+
+	return &schedulerv1pb.ListJobsResponse{
+		Jobs: jobs,
 	}, nil
 }
 
 // WatchJobs sends jobs to Dapr sidecars upon component changes.
 func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error {
-	req, err := stream.Recv()
+	initial, err := s.serializer.FromWatch(stream)
 	if err != nil {
 		return err
 	}
 
-	if req.GetInitial() == nil {
-		return errors.New("initial request is required on stream connection")
-	}
-
-	if err := s.authz.Initial(stream.Context(), req.GetInitial()); err != nil {
+	if err := s.cron.AddWatch(initial, stream); err != nil {
 		return err
 	}
-
-	s.connectionPool.Add(req.GetInitial(), stream)
 
 	monitoring.RecordSidecarsConnectedCount(1)
 	defer monitoring.RecordSidecarsConnectedCount(-1)
@@ -157,52 +178,58 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 	}
 }
 
-func (s *Server) triggerJob(ctx context.Context, req *api.TriggerRequest) bool {
-	log.Debugf("Triggering job: %s", req.GetName())
-
-	ctx, cancel := context.WithTimeout(ctx, time.Second*45)
-	defer cancel()
-
-	var meta schedulerv1pb.JobMetadata
-	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
-		log.Errorf("Error unmarshalling metadata: %s", err)
-		return true
+//nolint:protogetter
+func schedFPToCron(fp *schedulerv1pb.FailurePolicy) *api.FailurePolicy {
+	if fp == nil {
+		return nil
 	}
 
-	idx := strings.LastIndex(req.GetName(), "||")
-	if idx == -1 || len(req.GetName()) <= idx+2 {
-		log.Errorf("Job name is malformed: %s", req.GetName())
-		return true
-	}
+	switch fp.GetPolicy().(type) {
+	case *schedulerv1pb.FailurePolicy_Constant:
+		return &api.FailurePolicy{
+			Policy: &api.FailurePolicy_Constant{
+				Constant: &api.FailurePolicyConstant{
+					Interval:   fp.GetConstant().Interval,
+					MaxRetries: fp.GetConstant().MaxRetries,
+				},
+			},
+		}
+	case *schedulerv1pb.FailurePolicy_Drop:
+		return &api.FailurePolicy{
+			Policy: &api.FailurePolicy_Drop{
+				Drop: new(api.FailurePolicyDrop),
+			},
+		}
 
-	now := time.Now()
-	if err := s.connectionPool.Send(ctx, &internal.JobEvent{
-		Name:     req.GetName()[idx+2:],
-		Data:     req.GetPayload(),
-		Metadata: &meta,
-	}); err != nil {
-		// TODO: add job to a queue or something to try later this should be
-		// another long running go routine that accepts this job on a channel
-		log.Errorf("Error sending job to connection stream: %s", err)
+	default:
+		return nil
 	}
-	monitoring.RecordTriggerDuration(now)
-
-	monitoring.RecordJobsTriggeredCount(&meta)
-	return true
 }
 
-func buildJobName(name string, meta *schedulerv1pb.JobMetadata) (string, error) {
-	joinStrings := func(ss ...string) string {
-		return strings.Join(ss, "||")
+//nolint:protogetter
+func cronFPToSched(fp *api.FailurePolicy) *schedulerv1pb.FailurePolicy {
+	if fp == nil {
+		return nil
 	}
 
-	switch t := meta.GetTarget(); t.GetType().(type) {
-	case *schedulerv1pb.JobTargetMetadata_Actor:
-		actor := t.GetActor()
-		return joinStrings("actorreminder", meta.GetNamespace(), actor.GetType(), actor.GetId(), name), nil
-	case *schedulerv1pb.JobTargetMetadata_Job:
-		return joinStrings("app", meta.GetNamespace(), meta.GetAppId(), name), nil
+	switch fp.GetPolicy().(type) {
+	case *api.FailurePolicy_Constant:
+		return &schedulerv1pb.FailurePolicy{
+			Policy: &schedulerv1pb.FailurePolicy_Constant{
+				Constant: &schedulerv1pb.FailurePolicyConstant{
+					Interval:   fp.GetConstant().Interval,
+					MaxRetries: fp.GetConstant().MaxRetries,
+				},
+			},
+		}
+	case *api.FailurePolicy_Drop:
+		return &schedulerv1pb.FailurePolicy{
+			Policy: &schedulerv1pb.FailurePolicy_Drop{
+				Drop: new(schedulerv1pb.FailurePolicyDrop),
+			},
+		}
+
 	default:
-		return "", fmt.Errorf("unknown job type: %v", t)
+		return nil
 	}
 }

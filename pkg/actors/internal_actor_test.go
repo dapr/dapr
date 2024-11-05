@@ -28,6 +28,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/healthz"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -108,6 +109,7 @@ func newTestActorsRuntimeWithInternalActors(internalActors map[string]InternalAc
 		StateStoreName: "actorStore",
 		Security:       fake.New(),
 		MockPlacement:  NewMockPlacement(TestAppID),
+		Healthz:        healthz.New(),
 	})
 	if err != nil {
 		return nil, err

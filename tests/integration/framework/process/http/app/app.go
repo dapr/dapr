@@ -16,6 +16,7 @@ package app
 import (
 	"context"
 	nethttp "net/http"
+	"sync"
 	"sync/atomic"
 	"testing"
 
@@ -25,8 +26,9 @@ import (
 type Option func(*options)
 
 type App struct {
-	http    *http.HTTP
-	healthz *atomic.Bool
+	http        *http.HTTP
+	healthz     *atomic.Bool
+	cleanupOnce sync.Once
 }
 
 func New(t *testing.T, fopts ...Option) *App {
@@ -72,7 +74,9 @@ func (a *App) Run(t *testing.T, ctx context.Context) {
 }
 
 func (a *App) Cleanup(t *testing.T) {
-	a.http.Cleanup(t)
+	a.cleanupOnce.Do(func() {
+		a.http.Cleanup(t)
+	})
 }
 
 func (a *App) Port() int {
