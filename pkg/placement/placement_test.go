@@ -305,3 +305,58 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		require.NoError(t, conn.Close())
 	})
 }
+
+func TestRequiresUpdateInPlacementTables(t *testing.T) {
+	hostWithActors := &v1pb.Host{
+		Name:      "127.0.0.1:50100",
+		Namespace: "ns1",
+		Entities:  []string{"actor1", "actor2"},
+		Id:        "testAppID1",
+		Load:      1,
+	}
+
+	hostWithNoActors := &v1pb.Host{
+		Name:      "127.0.0.1:50100",
+		Namespace: "ns1",
+		Entities:  []string{},
+		Id:        "testAppID1",
+		Load:      1,
+	}
+
+	tests := []struct {
+		name        string
+		isActorHost bool
+		host        *v1pb.Host
+		expected    bool
+	}{
+		{
+			name:        "host with actors - updating actor types",
+			isActorHost: true,
+			host:        hostWithActors,
+			expected:    true,
+		},
+		{
+			name:        "host with no actors - registering new actors",
+			isActorHost: false,
+			host:        hostWithActors,
+			expected:    true,
+		},
+		{
+			name:        "host with actors - removing all actors",
+			isActorHost: true,
+			host:        hostWithNoActors,
+			expected:    true,
+		},
+		{
+			name:        "host with no actors - not registering any new actors",
+			isActorHost: false,
+			host:        hostWithNoActors,
+			expected:    false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, requiresUpdateInPlacementTables(tt.host, &tt.isActorHost))
+		})
+	}
+}

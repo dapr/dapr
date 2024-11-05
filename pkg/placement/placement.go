@@ -330,7 +330,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				}
 			}
 
-			if !p.requiresUpdateInPlacementTables(req, &isActorHost) {
+			if !requiresUpdateInPlacementTables(req, &isActorHost) {
 				continue
 			}
 
@@ -373,7 +373,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				log.Debugf("Stream connection is disconnected with the error: %v", err)
 			}
 
-			if p.requiresUpdateInPlacementTables(req, &isActorHost) {
+			if requiresUpdateInPlacementTables(req, &isActorHost) {
 				select {
 				case p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberRemove,
@@ -476,7 +476,7 @@ func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
 	return nil
 }
 
-func (p *Service) requiresUpdateInPlacementTables(req *placementv1pb.Host, isActorHost *bool) bool {
+func requiresUpdateInPlacementTables(req *placementv1pb.Host, isActorHost *bool) bool {
 	// If the member is reporting no entities it's either a
 	// - non-actor runtime or
 	// - a host that used to have actors (isActorHost=true) but has now unregistered all its actors (common for workflows actors)
