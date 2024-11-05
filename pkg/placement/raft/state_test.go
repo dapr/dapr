@@ -401,7 +401,6 @@ func TestUpdateAPILevel(t *testing.T) {
 }
 
 func TestDaprHostMemberState_UpsertRequired(t *testing.T) {
-
 	tests := []struct {
 		name             string
 		existingEntities []string
@@ -437,7 +436,8 @@ func TestDaprHostMemberState_UpsertRequired(t *testing.T) {
 			existingEntities: nil,
 			newEntities:      nil,
 			want:             false,
-		}}
+		},
+	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
 			s := &DaprHostMemberState{

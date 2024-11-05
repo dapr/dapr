@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	clocktesting "k8s.io/utils/clock/testing"
 
@@ -103,6 +104,8 @@ func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.T
 	require.NoError(t, err)
 
 	client := v1pb.NewPlacementClient(conn)
+	ctx = metadata.AppendToOutgoingContext(ctx, GRPCContextKeyAcceptVNodes, "false")
+
 	stream, err := client.ReportDaprStatus(context.Background())
 	require.NoError(t, err)
 

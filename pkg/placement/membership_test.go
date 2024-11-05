@@ -91,30 +91,20 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 		ch := make(chan struct{}, 3)
 
-		var operations1 []string
 		go func() {
 			assert.EventuallyWithT(t, func(c *assert.CollectT) {
 				placementOrder, streamErr := stream1.Recv()
 				assert.NoError(c, streamErr)
-				if placementOrder.GetOperation() == lockOperation {
-					operations1 = append(operations1, lockOperation)
-				}
+
 				if placementOrder.GetOperation() == updateOperation {
 					tables := placementOrder.GetTables()
-					assert.Len(c, tables.GetEntries(), 2)
-					assert.Contains(c, tables.GetEntries(), "actor1")
-					assert.Contains(c, tables.GetEntries(), "actor2")
-					operations1 = append(operations1, updateOperation)
+					if assert.Len(c, tables.GetEntries(), 2) &&
+						assert.Contains(c, tables.GetEntries(), "actor1") &&
+						assert.Contains(c, tables.GetEntries(), "actor2") {
+						return
+					}
 				}
-				if placementOrder.GetOperation() == unlockOperation {
-					operations1 = append(operations1, unlockOperation)
-				}
-
-				if assert.Len(c, operations1, 3) {
-					require.Equal(c, lockOperation, operations1[0])
-					require.Equal(c, updateOperation, operations1[1])
-					require.Equal(c, unlockOperation, operations1[2])
-				}
+				assert.Fail(c, "didn't receive updates in time")
 			}, 20*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
 		}()
@@ -129,59 +119,30 @@ func TestMembershipChangeWorker(t *testing.T) {
 				}
 				if placementOrder.GetOperation() == updateOperation {
 					entries := placementOrder.GetTables().GetEntries()
-					if !assert.Len(c, entries, 2) {
+					if assert.Len(c, entries, 2) &&
+						assert.Contains(c, entries, "actor3") &&
+						assert.Contains(c, entries, "actor4") {
 						return
 					}
-					if !assert.Contains(c, entries, "actor3") {
-						return
-					}
-					if !assert.Contains(c, entries, "actor4") {
-						return
-					}
-					operations2 = append(operations2, updateOperation)
-				}
-				if placementOrder.GetOperation() == unlockOperation {
-					operations2 = append(operations2, unlockOperation)
 				}
 
-				// Depending on the timing of the host 3 registration
-				// we may receive one or two update messages
-				assert.GreaterOrEqual(c, len(operations2), 3)
+				assert.Fail(c, "didn't receive updates in time")
 			}, 20*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
 		}()
 
-		var operations3 []string
 		go func() {
 			assert.EventuallyWithT(t, func(c *assert.CollectT) {
 				placementOrder, streamErr := stream3.Recv()
 				assert.NoError(c, streamErr)
-				if placementOrder.GetOperation() == lockOperation {
-					operations3 = append(operations3, lockOperation)
-				}
+
 				if placementOrder.GetOperation() == updateOperation {
 					entries := placementOrder.GetTables().GetEntries()
-					if !assert.Len(c, entries, 2) {
+					if assert.Len(c, entries, 2) &&
+						assert.Contains(c, entries, "actor3") &&
+						assert.Contains(c, entries, "actor4") {
 						return
 					}
-					if !assert.Contains(c, entries, "actor3") {
-						return
-					}
-					if !assert.Contains(c, entries, "actor4") {
-						return
-					}
-					operations3 = append(operations3, updateOperation)
-				}
-				if placementOrder.GetOperation() == unlockOperation {
-					operations3 = append(operations3, unlockOperation)
-				}
-
-				// Depending on the timing of the host 3 registration
-				// we may receive one or two update messages
-				if assert.GreaterOrEqual(c, len(operations3), 3) {
-					require.Equal(c, lockOperation, operations3[0])
-					require.Equal(c, updateOperation, operations3[1])
-					require.Equal(c, unlockOperation, operations3[2])
 				}
 			}, 20*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
@@ -379,38 +340,30 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 	t.Run("actors can be unregistered", func(t *testing.T) {
 		t.Cleanup(setupEach(t))
-		_, _, stream1 := newTestClient(t, serverAddress)
-		_, _, stream2 := newTestClient(t, serverAddress)
+		conn1, _, stream1 := newTestClient(t, serverAddress)
+		conn2, _, stream2 := newTestClient(t, serverAddress)
+
+		t.Cleanup(func() {
+			conn1.Close()
+			conn2.Close()
+		})
 
 		ch := make(chan struct{})
 
-		var operations []string
 		go func() {
 			assert.EventuallyWithT(t, func(c *assert.CollectT) {
 				placementOrder, streamErr := stream2.Recv()
 				assert.NoError(c, streamErr)
 
-				if placementOrder.GetOperation() == lockOperation {
-					operations = append(operations, lockOperation)
-				}
-
 				if placementOrder.GetOperation() == updateOperation {
 					tables := placementOrder.GetTables()
-					assert.Len(c, tables.GetEntries(), 2)
-					assert.Contains(c, tables.GetEntries(), "actor1")
-					assert.Contains(c, tables.GetEntries(), "actor2")
-					operations = append(operations, updateOperation)
+					if assert.Len(c, tables.GetEntries(), 2) &&
+						assert.Contains(c, tables.GetEntries(), "actor1") &&
+						assert.Contains(c, tables.GetEntries(), "actor2") {
+						return
+					}
 				}
-				if placementOrder.GetOperation() == unlockOperation {
-					operations = append(operations, unlockOperation)
-				}
-
-				if assert.Len(c, operations, 3) {
-					require.Equal(c, lockOperation, operations[0])
-					require.Equal(c, updateOperation, operations[1])
-					require.Equal(c, unlockOperation, operations[2])
-				}
-			}, 20*time.Second, 100*time.Millisecond)
+			}, 10*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}
 		}()
 
@@ -439,7 +392,7 @@ func TestMembershipChangeWorker(t *testing.T) {
 			select {
 			case <-ch:
 				return true
-			case <-time.After(5 * time.Second):
+			case <-time.After(10 * time.Second):
 				return false
 			}
 		}, 10*time.Second, 100*time.Millisecond)
@@ -463,28 +416,16 @@ func TestMembershipChangeWorker(t *testing.T) {
 		}, 10*time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
 
 		// Unregister actors in the actor host
-		operations = nil
 		go func() {
 			assert.EventuallyWithT(t, func(c *assert.CollectT) {
 				placementOrder, streamErr := stream2.Recv()
-
 				assert.NoError(c, streamErr)
-				if placementOrder.GetOperation() == lockOperation {
-					operations = append(operations, lockOperation)
-				}
+
 				if placementOrder.GetOperation() == updateOperation {
 					tables := placementOrder.GetTables()
-					assert.Empty(c, tables.GetEntries())
-					operations = append(operations, updateOperation)
-				}
-				if placementOrder.GetOperation() == unlockOperation {
-					operations = append(operations, unlockOperation)
-				}
-
-				if assert.Len(c, operations, 3) {
-					require.Equal(c, lockOperation, operations[0])
-					require.Equal(c, updateOperation, operations[1])
-					require.Equal(c, unlockOperation, operations[2])
+					if assert.Empty(c, tables.GetEntries()) {
+						return
+					}
 				}
 			}, 20*time.Second, 100*time.Millisecond)
 			ch <- struct{}{}

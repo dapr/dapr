@@ -533,7 +533,6 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			stream1.CloseSend()
 		})
 	})
-
 }
 
 func (n *notls) getStream(t *testing.T, ctx context.Context) v1pb.Placement_ReportDaprStatusClient {
