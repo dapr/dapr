@@ -15,6 +15,7 @@ package scheduler
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"math"
@@ -50,7 +51,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
-	"github.com/dapr/kit/concurrency/slice"
 	"github.com/dapr/kit/ptr"
 )
 
@@ -370,7 +370,7 @@ func (s *Scheduler) EtcdJobs(t *testing.T, ctx context.Context) []*mvccpb.KeyVal
 	return resp.Kvs
 }
 
-func (s *Scheduler) WatchJobs(t *testing.T, ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial, respStatus *atomic.Value) slice.Slice[string] {
+func (s *Scheduler) WatchJobs(t *testing.T, ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial, respStatus *atomic.Value) <-chan string {
 	t.Helper()
 
 	watchErr := make(chan error)
@@ -393,7 +393,7 @@ func (s *Scheduler) WatchJobs(t *testing.T, ctx context.Context, initial *schedu
 		WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Initial{Initial: initial},
 	}))
 
-	triggered := slice.String()
+	ch := make(chan string)
 
 	go func() {
 		defer func() {
@@ -407,22 +407,28 @@ func (s *Scheduler) WatchJobs(t *testing.T, ctx context.Context, initial *schedu
 			if !assert.NoError(t, err) {
 				return
 			}
-			assert.NoError(t, watch.Send(&schedulerv1pb.WatchJobsRequest{
+			err = watch.Send(&schedulerv1pb.WatchJobsRequest{
 				WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Result{
 					Result: &schedulerv1pb.WatchJobsRequestResult{
 						Id:     resp.GetId(),
 						Status: respStatus.Load().(schedulerv1pb.WatchJobsRequestResultStatus),
 					},
 				},
-			}))
-			triggered.Append(resp.GetName())
+			})
+			if !errors.Is(err, io.EOF) {
+				assert.NoError(t, err)
+			}
+			select {
+			case ch <- resp.GetName():
+			case <-ctx.Done():
+			}
 		}
 	}()
 
-	return triggered
+	return ch
 }
 
-func (s *Scheduler) WatchJobsSuccess(t *testing.T, ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) slice.Slice[string] {
+func (s *Scheduler) WatchJobsSuccess(t *testing.T, ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) <-chan string {
 	t.Helper()
 
 	var status atomic.Value
@@ -430,7 +436,7 @@ func (s *Scheduler) WatchJobsSuccess(t *testing.T, ctx context.Context, initial 
 	return s.WatchJobs(t, ctx, initial, &status)
 }
 
-func (s *Scheduler) WatchJobsFailed(t *testing.T, ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) slice.Slice[string] {
+func (s *Scheduler) WatchJobsFailed(t *testing.T, ctx context.Context, initial *schedulerv1pb.WatchJobsRequestInitial) <-chan string {
 	t.Helper()
 
 	var status atomic.Value

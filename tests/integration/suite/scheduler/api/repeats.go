@@ -81,10 +81,23 @@ func (r *repeats) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	exp := []string{"test1", "test1", "test1", "test2", "test2"}
+	got := make([]string, 0, len(exp))
+	for range exp {
+		select {
+		case name := <-triggered:
+			got = append(got, name)
+		case <-time.After(time.Second * 2):
+			require.Fail(t, "timed out waiting for job")
+		}
+	}
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, exp, triggered.Slice())
+		assert.ElementsMatch(c, got, exp)
 	}, time.Second*10, time.Millisecond*10)
 
-	time.Sleep(time.Second * 2)
-	assert.ElementsMatch(t, exp, triggered.Slice())
+	select {
+	case <-triggered:
+		assert.Fail(t, "unexpected trigger")
+	case <-time.After(time.Second * 2):
+	}
 }

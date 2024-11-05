@@ -44,8 +44,8 @@ func (a *api) constructConversationEndpoints() []endpoints.Endpoint {
 func (a *api) onConverseAlpha1() http.HandlerFunc {
 	return UniversalHTTPHandler(
 		a.universal.ConverseAlpha1,
-		UniversalHTTPHandlerOpts[*runtimev1pb.ConversationAlpha1Request, *runtimev1pb.ConversationAlpha1Response]{
-			InModifier: func(r *http.Request, in *runtimev1pb.ConversationAlpha1Request) (*runtimev1pb.ConversationAlpha1Request, error) {
+		UniversalHTTPHandlerOpts[*runtimev1pb.ConversationRequest, *runtimev1pb.ConversationResponse]{
+			InModifier: func(r *http.Request, in *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationRequest, error) {
 				in.Name = chi.URLParam(r, nameParam)
 				return in, nil
 			},
