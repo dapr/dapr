@@ -484,7 +484,7 @@ func (p *Service) requiresUpdateInPlacementTables(req *placementv1pb.Host, isAct
 	// In the latter case, we do need to update the placement tables, because we're removing a member that was previously registered
 
 	reportsActors := len(req.GetEntities()) > 0
-	existsInPlacementTables := *isActorHost // if the member has previously reported actors
+	existsInPlacementTables := *isActorHost // if the member had previously reported actors
 	*isActorHost = reportsActors
 
 	return reportsActors || existsInPlacementTables

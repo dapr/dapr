@@ -381,6 +381,11 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
+	// If the command is to upsert a member, but the member has no entities, treat it as a remove command.
+	if cmdType == MemberUpsert && len(data.Entities) == 0 {
+		cmdType = MemberRemove
+	}
+
 	cmdLog, err := makeRaftLogCommand(cmdType, data)
 	if err != nil {
 		return false, err

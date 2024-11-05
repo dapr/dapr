@@ -376,6 +376,143 @@ func TestMembershipChangeWorker(t *testing.T) {
 			testServer.streamConnPool.lock.RUnlock()
 		}, 20*time.Second, 100*time.Millisecond)
 	})
+
+	t.Run("actors can be unregistered", func(t *testing.T) {
+		t.Cleanup(setupEach(t))
+		_, _, stream1 := newTestClient(t, serverAddress)
+		_, _, stream2 := newTestClient(t, serverAddress)
+
+		ch := make(chan struct{})
+
+		var operations []string
+		go func() {
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
+				placementOrder, streamErr := stream2.Recv()
+				assert.NoError(c, streamErr)
+
+				if placementOrder.GetOperation() == lockOperation {
+					operations = append(operations, lockOperation)
+				}
+
+				if placementOrder.GetOperation() == updateOperation {
+					tables := placementOrder.GetTables()
+					assert.Len(c, tables.GetEntries(), 2)
+					assert.Contains(c, tables.GetEntries(), "actor1")
+					assert.Contains(c, tables.GetEntries(), "actor2")
+					operations = append(operations, updateOperation)
+				}
+				if placementOrder.GetOperation() == unlockOperation {
+					operations = append(operations, unlockOperation)
+				}
+
+				if assert.Len(c, operations, 3) {
+					require.Equal(c, lockOperation, operations[0])
+					require.Equal(c, updateOperation, operations[1])
+					require.Equal(c, unlockOperation, operations[2])
+				}
+			}, 20*time.Second, 100*time.Millisecond)
+			ch <- struct{}{}
+		}()
+
+		host1 := &v1pb.Host{
+			Name:      "127.0.0.1:50100",
+			Namespace: "ns1",
+			Entities:  []string{"actor1", "actor2"},
+			Id:        "testAppID1",
+			Load:      1,
+		}
+		host2 := &v1pb.Host{
+			Name:      "127.0.0.1:50101",
+			Namespace: "ns1",
+			Entities:  []string{},
+			Id:        "testAppID2",
+			Load:      1,
+		}
+		require.NoError(t, stream1.Send(host1))
+		require.NoError(t, stream2.Send(host2))
+
+		// Move the clock forward so dissemination is triggered
+		clock.Step(testServer.disseminateTimeout)
+
+		// Wait for the second host to receive the updates
+		require.Eventually(t, func() bool {
+			select {
+			case <-ch:
+				return true
+			case <-time.After(5 * time.Second):
+				return false
+			}
+		}, 10*time.Second, 100*time.Millisecond)
+
+		// Ignore the next disseminateTimeout.
+		val, _ := testServer.disseminateNextTime.GetOrSet("ns1", &atomic.Int64{})
+		val.Store(0)
+
+		// Check members have been correctly saved in the raft store
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			state := testServer.raftNode.FSM().State()
+			cnt := 0
+			state.ForEachHostInNamespace("ns1", func(host *raft.DaprHostMember) bool {
+				assert.Equal(c, "127.0.0.1:50100", host.Name)
+				assert.Equal(c, "ns1", host.Namespace)
+				assert.Contains(c, host.Entities, "actor1", "actor2")
+				cnt++
+				return true
+			})
+			assert.Equal(t, 1, cnt)
+		}, 10*time.Second, time.Millisecond, "the member hasn't been saved in the raft store")
+
+		// Unregister actors in the actor host
+		operations = nil
+		go func() {
+			assert.EventuallyWithT(t, func(c *assert.CollectT) {
+				placementOrder, streamErr := stream2.Recv()
+
+				assert.NoError(c, streamErr)
+				if placementOrder.GetOperation() == lockOperation {
+					operations = append(operations, lockOperation)
+				}
+				if placementOrder.GetOperation() == updateOperation {
+					tables := placementOrder.GetTables()
+					assert.Empty(c, tables.GetEntries())
+					operations = append(operations, updateOperation)
+				}
+				if placementOrder.GetOperation() == unlockOperation {
+					operations = append(operations, unlockOperation)
+				}
+
+				if assert.Len(c, operations, 3) {
+					require.Equal(c, lockOperation, operations[0])
+					require.Equal(c, updateOperation, operations[1])
+					require.Equal(c, unlockOperation, operations[2])
+				}
+			}, 20*time.Second, 100*time.Millisecond)
+			ch <- struct{}{}
+		}()
+
+		host1 = &v1pb.Host{
+			Name:      "127.0.0.1:50100",
+			Namespace: "ns1",
+			Entities:  []string{},
+			Id:        "testAppID1",
+			Load:      1,
+		}
+		host2 = &v1pb.Host{
+			Name:      "127.0.0.1:50101",
+			Namespace: "ns2",
+			Entities:  []string{},
+			Id:        "testAppID2",
+			Load:      1,
+		}
+		require.NoError(t, stream1.Send(host1))
+		require.NoError(t, stream2.Send(host2))
+
+		// Check member has been correctly removed from the raft store
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			state := testServer.raftNode.FSM().State()
+			assert.Equal(c, 0, state.MemberCountInNamespace("ns1"))
+		}, 10*time.Second, time.Millisecond, "the member hasn't been removed from the raft store")
+	})
 }
 
 func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
