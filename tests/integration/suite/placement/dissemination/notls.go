@@ -292,7 +292,7 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			Name:      "myapp1",
 			Namespace: "ns1",
 			Port:      1231,
-			Entities:  []string{"actor1"},
+			Entities:  []string{"actor1", "actor2"},
 			Id:        "myapp1",
 			ApiLevel:  uint32(20),
 		}
@@ -321,8 +321,8 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			}
 
 			if assert.Equal(c, "update", placementTables.GetOperation()) {
-				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1")
+				assert.Len(c, placementTables.GetTables().GetEntries(), 2)
+				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1", "actor2")
 			}
 		}, time.Second*15, time.Millisecond*10)
 
@@ -334,8 +334,8 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			}
 
 			if assert.Equal(c, "update", placementTables.GetOperation()) {
-				assert.Len(c, placementTables.GetTables().GetEntries(), 1)
-				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1")
+				assert.Len(c, placementTables.GetTables().GetEntries(), 2)
+				assert.Contains(c, placementTables.GetTables().GetEntries(), "actor1", "actor2")
 			}
 		}, time.Second*15, time.Millisecond*10)
 
@@ -375,7 +375,6 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			}
 		}, time.Second*15, time.Millisecond*10)
 
-		time.Sleep(5 * time.Second)
 		t.Cleanup(func() {
 			stream1.CloseSend()
 			stream2.CloseSend()
@@ -472,7 +471,6 @@ func (n *notls) Run(t *testing.T, ctx context.Context) {
 			}
 		}, time.Second*15, time.Millisecond*10)
 
-		time.Sleep(5 * time.Second)
 		t.Cleanup(func() {
 			stream1.CloseSend()
 			stream2.CloseSend()
