@@ -245,7 +245,7 @@ type DaprClient interface {
 	// Delete a job
 	DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
 	// Converse with a LLM service
-	ConverseAlpha1(ctx context.Context, in *ConversationAlpha1Request, opts ...grpc.CallOption) (*ConversationAlpha1Response, error)
+	ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error)
 }
 
 type daprClient struct {
@@ -960,8 +960,8 @@ func (c *daprClient) DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, 
 	return out, nil
 }
 
-func (c *daprClient) ConverseAlpha1(ctx context.Context, in *ConversationAlpha1Request, opts ...grpc.CallOption) (*ConversationAlpha1Response, error) {
-	out := new(ConversationAlpha1Response)
+func (c *daprClient) ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error) {
+	out := new(ConversationResponse)
 	err := c.cc.Invoke(ctx, Dapr_ConverseAlpha1_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -1113,7 +1113,7 @@ type DaprServer interface {
 	// Delete a job
 	DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
 	// Converse with a LLM service
-	ConverseAlpha1(context.Context, *ConversationAlpha1Request) (*ConversationAlpha1Response, error)
+	ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -1315,7 +1315,7 @@ func (UnimplementedDaprServer) GetJobAlpha1(context.Context, *GetJobRequest) (*G
 func (UnimplementedDaprServer) DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteJobAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationAlpha1Request) (*ConversationAlpha1Response, error) {
+func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConverseAlpha1 not implemented")
 }
 
@@ -2531,7 +2531,7 @@ func _Dapr_DeleteJobAlpha1_Handler(srv interface{}, ctx context.Context, dec fun
 }
 
 func _Dapr_ConverseAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConversationAlpha1Request)
+	in := new(ConversationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -2543,7 +2543,7 @@ func _Dapr_ConverseAlpha1_Handler(srv interface{}, ctx context.Context, dec func
 		FullMethod: Dapr_ConverseAlpha1_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).ConverseAlpha1(ctx, req.(*ConversationAlpha1Request))
+		return srv.(DaprServer).ConverseAlpha1(ctx, req.(*ConversationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
