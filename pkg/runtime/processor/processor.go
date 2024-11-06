@@ -83,6 +83,9 @@ type Options struct {
 	// ComponentStore is the component store.
 	ComponentStore *compstore.ComponentStore
 
+	// ComponentCb is a callback for component changes.
+	ComponentCb registry.ComponentsCallback
+
 	// Metadata is the metadata helper.
 	Meta *meta.Meta
 
@@ -111,6 +114,7 @@ type Options struct {
 type Processor struct {
 	appID           string
 	compStore       *compstore.ComponentStore
+	componentCb     registry.ComponentsCallback
 	managers        map[components.Category]manager
 	state           StateManager
 	secret          SecretManager
@@ -187,6 +191,7 @@ func New(opts Options) *Processor {
 		subErrCh:                   make(chan error),
 		closedCh:                   make(chan struct{}),
 		compStore:                  opts.ComponentStore,
+		componentCb:                opts.ComponentCb,
 		state:                      state,
 		binding:                    binding,
 		secret:                     secret,

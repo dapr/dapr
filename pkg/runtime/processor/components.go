@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
+	"github.com/dapr/dapr/pkg/runtime/registry"
 )
 
 // Init initializes a component of a category.
@@ -44,7 +45,19 @@ func (p *Processor) Init(ctx context.Context, comp componentsapi.Component) erro
 		return errors.Join(err, p.compStore.DropPendingComponent())
 	}
 
-	return p.compStore.CommitPendingComponent()
+	if err := p.compStore.CommitPendingComponent(); err != nil {
+		return fmt.Errorf("error committing component: %w", err)
+	}
+
+	if p.componentCb != nil {
+		if err := p.componentCb(registry.ComponentRegistry{
+			CompStore: p.compStore,
+		}); err != nil {
+			return fmt.Errorf("error invoking component callback: %w", err)
+		}
+	}
+
+	return nil
 }
 
 // Close closes the component.
@@ -62,6 +75,14 @@ func (p *Processor) Close(comp componentsapi.Component) error {
 	}
 
 	p.compStore.DeleteComponent(comp.Name)
+
+	if p.componentCb != nil {
+		if err := p.componentCb(registry.ComponentRegistry{
+			CompStore: p.compStore,
+		}); err != nil {
+			return fmt.Errorf("error invoking component callback: %w", err)
+		}
+	}
 
 	return nil
 }
