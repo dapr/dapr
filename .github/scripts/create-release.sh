@@ -28,7 +28,7 @@ fi
 MAJOR_MINOR_VERSION=`echo $REL_VERSION | cut -d. -f1,2`
 RELEASE_BRANCH="release-$MAJOR_MINOR_VERSION"
 RELEASE_TAG="v$REL_VERSION"
-SUFFIX=`echo $REL_VERSION | cut -d- -f2 | cut -d. -f1`
+SUFFIX=`echo $REL_VERSION | grep \- | cut -d- -f2 | cut -d. -f1`
 if [ "$SUFFIX" == "alpha" ]; then
   # Alpha releases come from the master branch as they are not complete for an RC yet.
   RELEASE_BRANCH="master"
