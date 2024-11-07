@@ -64,12 +64,12 @@ func RunIntegrationTests(t *testing.T) {
 	startTime := time.Now()
 	t.Cleanup(func() {
 		executionMessage := fmt.Sprintf("Total integration test execution time for %d test cases: %s", len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100))
-		t.Logf(strings.Repeat("-", len(executionMessage)))
+		t.Log(strings.Repeat("-", len(executionMessage)))
 		if skippedTests > 0 {
 			t.Logf("%d test cases were skipped due to focus", skippedTests)
 		}
-		t.Logf(executionMessage)
-		t.Logf(strings.Repeat("-", len(executionMessage)))
+		t.Log(executionMessage)
+		t.Log(strings.Repeat("-", len(executionMessage)))
 	})
 
 	for _, tcase := range focusedTests {
@@ -80,7 +80,7 @@ func RunIntegrationTests(t *testing.T) {
 
 			options := tcase.Setup(t)
 
-			t.Logf("setting up test case")
+			t.Log("setting up test case")
 
 			ctx, cancel := context.WithTimeout(context.Background(), 45*time.Second)
 			t.Cleanup(cancel)
