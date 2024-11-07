@@ -97,7 +97,8 @@ func (p *Processor) Close(comp componentsapi.Component) error {
 		message = ptr.Of(closeErr.Error())
 	}
 
-	if err := p.reporter(context.TODO(), comp,
+	ctx := context.WithTimeout(context.Background(), 5*time.Second)
+	if err := p.reporter(ctx, comp,
 		operatorv1.ResourceResult{
 			ResourceType:        operatorv1.ResourceType_RESOURCE_COMPONENT,
 			EventType:           operatorv1.EventType_EVENT_CLOSE,
