@@ -44,14 +44,14 @@ const (
 )
 
 func init() {
-	suite.Register(new(interrorcodes))
+	suite.Register(new(errorcodes))
 }
 
-type interrorcodes struct {
+type errorcodes struct {
 	daprd *daprd.Daprd
 }
 
-func (e *interrorcodes) Setup(t *testing.T) []framework.Option {
+func (e *errorcodes) Setup(t *testing.T) []framework.Option {
 	if runtime.GOOS == "windows" {
 		t.Skip("skipping unix socket based test on windows")
 	}
@@ -112,7 +112,7 @@ spec:
 	}
 }
 
-func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
+func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilRunning(t, ctx)
 
 	httpClient := client.HTTP(t)
@@ -466,7 +466,7 @@ func (e *interrorcodes) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, "ERR_PUBSUB_PUBLISH_OUTBOX", errCode)
+		require.Equal(t, "ERR_PUBLISH_OUTBOX", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]

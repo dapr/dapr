@@ -5,6 +5,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
+	"go.opencensus.io/tag"
 
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
@@ -20,13 +21,12 @@ func TestRecordErrorCode(t *testing.T) {
 		v := view.Find("error_code/count")
 
 		allTagsPresent(t, v, viewData[0].Tags)
-
 		assert.Len(t, viewData, 1)
 
 		// ActorInstanceMissing
 		assert.Equal(t, int64(1), viewData[0].Data.(*view.CountData).Value)
-		assert.Equal(t, errorcodes.ActorInstanceMissing.Code, viewData[0].Tags[1].Value)
-		assert.Equal(t, "actor", viewData[0].Tags[2].Value)
+		assert.True(t, TagAndValuePresent(viewData[0].Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.ActorInstanceMissing.Code}))
+		assert.True(t, TagAndValuePresent(viewData[0].Tags, tag.Tag{Key: categoryKey, Value: "actor"}))
 	})
 
 	t.Run("record two valid error codes", func(t *testing.T) {
@@ -42,17 +42,13 @@ func TestRecordErrorCode(t *testing.T) {
 
 		allTagsPresent(t, v, viewData[0].Tags)
 
-		for i := range viewData {
-			metric1 := viewData[i]
-			switch metric1.Tags[1].Value {
-			case errorcodes.StateBulkGet.Code:
-				assert.Equal(t, int64(2), viewData[i].Data.(*view.CountData).Value)
-				assert.Equal(t, "state", viewData[i].Tags[2].Value)
-			case errorcodes.CommonAPIUnimplemented.Code:
-				assert.Equal(t, int64(1), viewData[i].Data.(*view.CountData).Value)
-				assert.Equal(t, "common", viewData[i].Tags[2].Value)
-			case "invalid-error-code":
-				t.FailNow()
+		for _, metric := range viewData {
+			if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.StateBulkGet.Code}) {
+				assert.Equal(t, int64(2), metric.Data.(*view.CountData).Value)
+				assert.True(t, TagAndValuePresent(metric.Tags, tag.Tag{Key: categoryKey, Value: "state"}))
+			} else if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.CommonAPIUnimplemented.Code}) {
+				assert.Equal(t, int64(1), metric.Data.(*view.CountData).Value)
+				assert.True(t, TagAndValuePresent(metric.Tags, tag.Tag{Key: categoryKey, Value: "common"}))
 			}
 		}
 	})

@@ -180,7 +180,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	var req actors.CreateReminderRequest
 	err = json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
-		msg := messages.ErrMalformedRequest.RecordAndGet().RecordAndGet().WithFormat(err)
+		msg := messages.ErrMalformedRequest.RecordAndGet().WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
 		return

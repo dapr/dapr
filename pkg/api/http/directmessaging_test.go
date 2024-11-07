@@ -411,7 +411,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Truef(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_COMMON_MALFORMED_RESPONSE\",\"message\":\""), "code not found in response: %v", string(resp.RawBody))
+		assert.Truef(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\""), "code not found in response: %v", string(resp.RawBody))
 	})
 
 	t.Run("Invoke direct messaging with malformed status response for external invocation", func(t *testing.T) {
@@ -439,7 +439,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.True(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_COMMON_MALFORMED_RESPONSE\",\"message\":\""))
+		assert.True(t, strings.HasPrefix(string(resp.RawBody), "{\"errorCode\":\"ERR_MALFORMED_RESPONSE\",\"message\":\""))
 	})
 
 	t.Run("Invoke direct messaging with querystring - 200 OK", func(t *testing.T) {
@@ -619,7 +619,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		assert.Equal(t, "fakeDirectMessageResponse", string(resp.RawBody))
 	})
 
-	t.Run("Invoke returns error - 500 ERR_CONVERSATION_DIRECT_INVOKE", func(t *testing.T) {
+	t.Run("Invoke returns error - 500 ERR_DIRECT_INVOKE", func(t *testing.T) {
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
@@ -643,10 +643,10 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_CONVERSATION_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
 	})
 
-	t.Run("Invoke returns error - 500 ERR_CONVERSATION_DIRECT_INVOKE for external invocation", func(t *testing.T) {
+	t.Run("Invoke returns error - 500 ERR_DIRECT_INVOKE for external invocation", func(t *testing.T) {
 		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
@@ -670,10 +670,10 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 500, resp.StatusCode)
-		assert.Equal(t, "ERR_CONVERSATION_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
 	})
 
-	t.Run("Invoke returns error - 403 ERR_CONVERSATION_DIRECT_INVOKE", func(t *testing.T) {
+	t.Run("Invoke returns error - 403 ERR_DIRECT_INVOKE", func(t *testing.T) {
 		apiPath := "v1.0/invoke/fakeAppID/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
@@ -697,10 +697,10 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 403, resp.StatusCode)
-		assert.Equal(t, "ERR_CONVERSATION_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
 	})
 
-	t.Run("Invoke returns error - 403 ERR_CONVERSATION_DIRECT_INVOKE for external invocation", func(t *testing.T) {
+	t.Run("Invoke returns error - 403 ERR_DIRECT_INVOKE for external invocation", func(t *testing.T) {
 		apiPath := "v1.0/invoke/http://api.github.com/method/fakeMethod?param1=val1&param2=val2"
 		fakeData := []byte("fakeData")
 
@@ -724,7 +724,7 @@ func TestV1DirectMessagingEndpoints(t *testing.T) {
 		// assert
 		mockDirectMessaging.AssertNumberOfCalls(t, "Invoke", 1)
 		assert.Equal(t, 403, resp.StatusCode)
-		assert.Equal(t, "ERR_CONVERSATION_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_DIRECT_INVOKE", resp.ErrorBody["errorCode"])
 	})
 
 	fakeServer.Shutdown()

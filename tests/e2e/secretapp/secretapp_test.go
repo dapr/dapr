@@ -174,7 +174,7 @@ func generateTestCases() []testCase {
 			newResponse("", utils.SimpleKeyValue{Key: unallowedSecret, Value: ""}),
 			true,
 			403,
-			"ERR_SECRET_PERMISSION_DENIED",
+			"ERR_PERMISSION_DENIED",
 			false,
 		},
 		{
@@ -228,7 +228,7 @@ func generateTestCasesForDisabledSecretStore() []testCase {
 			newResponse(secretStore, utils.SimpleKeyValue{allowedSecret, testCase1Value}),
 			true,
 			500,
-			"ERR_SECRET_STORE_NOT_CONFIGURED",
+			"ERR_SECRET_STORES_NOT_CONFIGURED",
 			false,
 		},
 	}

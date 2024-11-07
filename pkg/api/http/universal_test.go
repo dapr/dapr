@@ -129,7 +129,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 
-		assert.Contains(t, string(respBody), `"ERR_COMMON_MALFORMED_REQUEST"`)
+		assert.Contains(t, string(respBody), `"ERR_MALFORMED_REQUEST"`)
 	})
 
 	t.Run("Handler returns error", func(t *testing.T) {
@@ -158,7 +158,7 @@ func TestUniversalHTTPHandler(t *testing.T) {
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
 
-		assert.Equal(t, `{"errorCode":"ERR_COMMON_BAD_REQUEST","message":"invalid request: unexpected message"}`, string(respBody))
+		assert.Equal(t, `{"errorCode":"ERR_BAD_REQUEST","message":"invalid request: unexpected message"}`, string(respBody))
 	})
 
 	t.Run("Handler returns nil", func(t *testing.T) {

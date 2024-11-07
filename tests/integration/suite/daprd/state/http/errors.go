@@ -206,7 +206,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		require.Equal(t, "ERR_COMMON_MALFORMED_REQUEST", errCode)
+		require.Equal(t, "ERR_MALFORMED_REQUEST", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]

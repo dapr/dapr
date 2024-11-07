@@ -125,7 +125,7 @@ func TestCryptoEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_COMMON_BAD_REQUEST", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_BAD_REQUEST", resp.ErrorBody["errorCode"])
 		assert.Contains(t, resp.ErrorBody["message"], "missing header 'dapr-key-name'")
 	})
 
@@ -139,7 +139,7 @@ func TestCryptoEndpoints(t *testing.T) {
 
 		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		require.NotEmpty(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_COMMON_BAD_REQUEST", resp.ErrorBody["errorCode"])
+		assert.Equal(t, "ERR_BAD_REQUEST", resp.ErrorBody["errorCode"])
 		assert.Contains(t, resp.ErrorBody["message"], "missing header 'dapr-key-wrap-algorithm'")
 	})
 
