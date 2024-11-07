@@ -20,13 +20,14 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/kit/ptr"
-	"google.golang.org/protobuf/types/known/timestamppb"
 )
 
 // Init initializes a component of a category and reports the result.
@@ -43,7 +44,7 @@ func (p *Processor) Init(ctx context.Context, comp componentsapi.Component) erro
 	}
 
 	if err := p.reporter(ctx, comp,
-		operatorv1.ResourceResult{
+		&operatorv1.ResourceResult{
 			ResourceType:        operatorv1.ResourceType_RESOURCE_COMPONENT,
 			EventType:           operatorv1.EventType_EVENT_INIT,
 			Name:                comp.GetName(),
@@ -100,7 +101,7 @@ func (p *Processor) Close(comp componentsapi.Component) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
 	defer cancel()
 	if err := p.reporter(ctx, comp,
-		operatorv1.ResourceResult{
+		&operatorv1.ResourceResult{
 			ResourceType:        operatorv1.ResourceType_RESOURCE_COMPONENT,
 			EventType:           operatorv1.EventType_EVENT_CLOSE,
 			Name:                comp.GetName(),

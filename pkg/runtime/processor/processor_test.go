@@ -15,7 +15,7 @@ package processor
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"strings"
 	"testing"
 	"time"
@@ -505,8 +505,8 @@ func TestReporter(t *testing.T) {
 		func(t *testing.T) {
 			resultChan := make(chan operatorv1.ResourceResult, 1)
 			proc, reg := newTestProc(
-				withReporter(func(_ context.Context, _ componentsapi.Component, result operatorv1.ResourceResult) error {
-					resultChan <- result
+				withReporter(func(_ context.Context, _ componentsapi.Component, result *operatorv1.ResourceResult) error {
+					resultChan <- *result
 					return nil
 				}))
 
@@ -526,10 +526,10 @@ func TestReporter(t *testing.T) {
 
 			select {
 			case result := <-resultChan:
-				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.ResourceType)
-				assert.Equal(t, operatorv1.EventType_EVENT_INIT, result.EventType)
-				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_SUCCESS, result.Condition)
-				assert.Equal(t, pubsubComponent.Name, result.Name)
+				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.GetResourceType())
+				assert.Equal(t, operatorv1.EventType_EVENT_INIT, result.GetEventType())
+				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_SUCCESS, result.GetCondition())
+				assert.Equal(t, pubsubComponent.Name, result.GetName())
 			case <-time.After(5 * time.Second):
 				t.Error("Timed out waiting for reporter result")
 			}
@@ -542,8 +542,8 @@ func TestReporter(t *testing.T) {
 		func(t *testing.T) {
 			resultChan := make(chan operatorv1.ResourceResult, 1)
 			proc, reg := newTestProc(
-				withReporter(func(_ context.Context, _ componentsapi.Component, result operatorv1.ResourceResult) error {
-					resultChan <- result
+				withReporter(func(_ context.Context, _ componentsapi.Component, result *operatorv1.ResourceResult) error {
+					resultChan <- *result
 					return nil
 				}))
 
@@ -555,17 +555,17 @@ func TestReporter(t *testing.T) {
 				"mockPubSub",
 			)
 
-			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(fmt.Errorf("error"))
+			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(errors.New("error"))
 
 			err := proc.processComponentAndDependents(context.Background(), pubsubComponent)
 			require.Error(t, err)
 
 			select {
 			case result := <-resultChan:
-				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.ResourceType)
-				assert.Equal(t, operatorv1.EventType_EVENT_INIT, result.EventType)
-				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_FAILURE, result.Condition)
-				assert.Equal(t, pubsubComponent.Name, result.Name)
+				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.GetResourceType())
+				assert.Equal(t, operatorv1.EventType_EVENT_INIT, result.GetEventType())
+				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_FAILURE, result.GetCondition())
+				assert.Equal(t, pubsubComponent.Name, result.GetName())
 			case <-time.After(5 * time.Second):
 				t.Error("Timed out waiting for reporter result")
 			}
@@ -578,8 +578,8 @@ func TestReporter(t *testing.T) {
 		func(t *testing.T) {
 			resultChan := make(chan operatorv1.ResourceResult, 1)
 			proc, reg := newTestProc(
-				withReporter(func(_ context.Context, _ componentsapi.Component, result operatorv1.ResourceResult) error {
-					resultChan <- result
+				withReporter(func(_ context.Context, _ componentsapi.Component, result *operatorv1.ResourceResult) error {
+					resultChan <- *result
 					return nil
 				}))
 
@@ -605,10 +605,10 @@ func TestReporter(t *testing.T) {
 
 			select {
 			case result := <-resultChan:
-				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.ResourceType)
-				assert.Equal(t, operatorv1.EventType_EVENT_CLOSE, result.EventType)
-				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_SUCCESS, result.Condition)
-				assert.Equal(t, pubsubComponent.Name, result.Name)
+				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.GetResourceType())
+				assert.Equal(t, operatorv1.EventType_EVENT_CLOSE, result.GetEventType())
+				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_SUCCESS, result.GetCondition())
+				assert.Equal(t, pubsubComponent.Name, result.GetName())
 			case <-time.After(5 * time.Second):
 				t.Error("Timed out waiting for reporter result")
 			}
@@ -618,8 +618,8 @@ func TestReporter(t *testing.T) {
 		func(t *testing.T) {
 			resultChan := make(chan operatorv1.ResourceResult, 1)
 			proc, reg := newTestProc(
-				withReporter(func(_ context.Context, _ componentsapi.Component, result operatorv1.ResourceResult) error {
-					resultChan <- result
+				withReporter(func(_ context.Context, _ componentsapi.Component, result *operatorv1.ResourceResult) error {
+					resultChan <- *result
 					return nil
 				}))
 
@@ -632,7 +632,7 @@ func TestReporter(t *testing.T) {
 			)
 
 			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(nil)
-			mockPubSub.On("Close").Return(fmt.Errorf("error"))
+			mockPubSub.On("Close").Return(errors.New("error"))
 
 			err := proc.processComponentAndDependents(context.Background(), pubsubComponent)
 			require.NoError(t, err)
@@ -645,10 +645,10 @@ func TestReporter(t *testing.T) {
 
 			select {
 			case result := <-resultChan:
-				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.ResourceType)
-				assert.Equal(t, operatorv1.EventType_EVENT_CLOSE, result.EventType)
-				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_FAILURE, result.Condition)
-				assert.Equal(t, pubsubComponent.Name, result.Name)
+				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.GetResourceType())
+				assert.Equal(t, operatorv1.EventType_EVENT_CLOSE, result.GetEventType())
+				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_FAILURE, result.GetCondition())
+				assert.Equal(t, pubsubComponent.Name, result.GetName())
 			case <-time.After(5 * time.Second):
 				t.Error("Timed out waiting for reporter result")
 			}

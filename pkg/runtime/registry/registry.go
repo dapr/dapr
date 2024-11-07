@@ -41,7 +41,7 @@ type ComponentRegistry struct {
 	CompStore       *compstore.ComponentStore
 }
 
-type Reporter func(context.Context, componentsapi.Component, operatorv1.ResourceResult) error
+type Reporter func(context.Context, componentsapi.Component, *operatorv1.ResourceResult) error
 
 // Registry is a collection of component registries.
 type Registry struct {

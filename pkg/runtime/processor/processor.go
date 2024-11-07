@@ -269,6 +269,6 @@ func (p *Processor) Process(ctx context.Context) error {
 }
 
 // DefaultReporter is the default resource reporter for the registry. It does nothing.
-func DefaultReporter(context.Context, componentsapi.Component, operatorv1.ResourceResult) error {
+func DefaultReporter(context.Context, componentsapi.Component, *operatorv1.ResourceResult) error {
 	return nil
 }
