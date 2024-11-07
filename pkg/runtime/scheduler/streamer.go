@@ -18,6 +18,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
+	"strings"
 	"sync"
 
 	"github.com/golang/protobuf/ptypes/wrappers"
@@ -53,10 +55,15 @@ func (s *streamer) receive(ctx context.Context) error {
 
 	for {
 		resp, err := s.stream.Recv()
-		if ctx.Err() != nil || errors.Is(err, io.EOF) {
-			return ctx.Err()
-		}
 		if err != nil {
+			if ctx.Err() != nil || errors.Is(err, io.EOF) {
+				return ctx.Err()
+			}
+			if runtime.GOOS == "windows" &&
+				strings.Contains(err.Error(), "No connection could be made because the target machine actively refused it.") {
+				return nil
+			}
+
 			return err
 		}
 
