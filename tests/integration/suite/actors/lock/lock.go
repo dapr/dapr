@@ -15,4 +15,6 @@ package lock
 
 import (
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/call"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/reminders"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock/timers"
 )

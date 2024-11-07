@@ -117,15 +117,15 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 			state:             opts.State,
 			reminders:         opts.Reminders,
 			engine:            opts.ActorEngine,
-			lock:              internal.NewLock(32),
+			lock: internal.NewLock(internal.LockOptions{
+				ActorType: opts.WorkflowActorType,
+			}),
 		}
 	}
 }
 
 // InvokeMethod implements actors.InternalActor
 func (w *workflow) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	// TODO: @joshvanl: lock actor
-
 	if req.GetMessage() == nil {
 		return nil, errors.New("message is nil in request")
 	}
@@ -137,10 +137,11 @@ func (w *workflow) InvokeMethod(ctx context.Context, req *internalv1pb.InternalI
 	}
 	defer imReq.Close()
 
-	if err := w.lock.Lock(imReq); err != nil {
+	cancel, err := w.lock.LockRequest(imReq)
+	if err != nil {
 		return nil, err
 	}
-	defer w.lock.Unlock()
+	defer cancel()
 
 	policyDef := w.resiliency.ActorPostLockPolicy(w.actorType, w.actorID)
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
@@ -197,7 +198,11 @@ func (w *workflow) executeMethod(ctx context.Context, methodName string, request
 
 // InvokeReminder implements actors.InternalActor
 func (w *workflow) InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error {
-	// TODO: @joshvanl: lock actor
+	cancel, err := w.lock.Lock()
+	if err != nil {
+		return err
+	}
+	defer cancel()
 
 	log.Debugf("Workflow actor '%s': invoking reminder '%s'", w.actorID, reminder.Name)
 
@@ -914,5 +919,11 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *workflow
 func (w *workflow) Deactivate(ctx context.Context) error {
 	log.Debugf("Workflow actor '%s': deactivating", w.actorID)
 	w.state = nil // A bit of extra caution, shouldn't be necessary
+	w.lock.Close()
 	return nil
+}
+
+// CloseUntil closes the actor but backs out sooner if the duration is reached.
+func (w *workflow) CloseUntil(d time.Duration) {
+	w.lock.CloseUntil(d)
 }

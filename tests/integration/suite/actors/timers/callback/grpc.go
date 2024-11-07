@@ -35,29 +35,24 @@ func init() {
 }
 
 type grpc struct {
-	app          *actors.Actors
-	called       atomic.Int64
-	deactivating atomic.Bool
+	app    *actors.Actors
+	called atomic.Int64
 }
 
 func (g *grpc) Setup(t *testing.T) []framework.Option {
 	g.app = actors.New(t,
 		actors.WithActorTypes("abc", "efg"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
-			if g.deactivating.Load() {
+			if r.Method == nethttp.MethodDelete {
 				assert.Equal(t, "/actors/abc/foo", r.URL.Path)
-				assert.Equal(t, nethttp.MethodDelete, r.Method)
 				return
 			}
 			assert.Equal(t, nethttp.MethodPut, r.Method)
-			if g.called.Add(1) == 1 {
-				assert.Equal(t, "/actors/abc/foo/method/foo", r.URL.Path)
-			} else {
-				assert.Equal(t, "/actors/abc/foo/method/timer/foo", r.URL.Path)
-				b, err := io.ReadAll(r.Body)
-				assert.NoError(t, err)
-				assert.Equal(t, `{"data":"aGVsbG8=","callback":"mycallback","dueTime":"0s","period":"1s"}`, string(b))
-			}
+			assert.Equal(t, "/actors/abc/foo/method/timer/foo", r.URL.Path)
+			b, err := io.ReadAll(r.Body)
+			assert.NoError(t, err)
+			assert.Equal(t, `{"data":"aGVsbG8=","callback":"mycallback","dueTime":"0s","period":"10s"}`, string(b))
+			g.called.Add(1)
 		}),
 	)
 
@@ -69,30 +64,21 @@ func (g *grpc) Setup(t *testing.T) []framework.Option {
 func (g *grpc) Run(t *testing.T, ctx context.Context) {
 	g.app.WaitUntilRunning(t, ctx)
 
-	t.Cleanup(func() { g.deactivating.Store(true) })
-
 	client := g.app.Daprd().GRPCClient(t, ctx)
 
-	_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
-		ActorType: "abc",
-		ActorId:   "foo",
-		Method:    "foo",
-	})
-	require.NoError(t, err)
-
-	_, err = client.RegisterActorTimer(ctx, &rtv1.RegisterActorTimerRequest{
+	_, err := client.RegisterActorTimer(ctx, &rtv1.RegisterActorTimerRequest{
 		ActorType: "abc",
 		ActorId:   "foo",
 		Name:      "foo",
 		DueTime:   "0s",
-		Period:    "1s",
+		Period:    "10s",
 		Data:      []byte("hello"),
 		Callback:  "mycallback",
 	})
 	require.NoError(t, err)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(t, g.called.Load(), int64(2))
+		assert.GreaterOrEqual(c, g.called.Load(), int64(1))
 	}, time.Second*10, time.Millisecond*10)
 
 	_, err = client.UnregisterActorTimer(ctx, &rtv1.UnregisterActorTimerRequest{

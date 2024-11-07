@@ -46,6 +46,7 @@ type grpc struct {
 func (g *grpc) Setup(t *testing.T) []framework.Option {
 	g.holdCall = make(chan struct{})
 	g.methodCalled = slice.String()
+	g.called.Store(0)
 
 	g.app1 = actors.New(t,
 		actors.WithActorTypes("abc"),
@@ -139,7 +140,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		_, err := client.InvokeActor(ctx, &rtv1.InvokeActorRequest{
 			ActorType: "abc",
 			ActorId:   strconv.Itoa(int(i.Load())),
-			Method:    "bar",
+			Method:    "foo",
 		})
 		errCh <- err
 	}()
@@ -157,7 +158,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, []string{
 			fmt.Sprintf("/actors/abc/%d/method/foo", i.Load()),
 			fmt.Sprintf("/actors/abc/%d/method/bar", j.Load()),
-			fmt.Sprintf("/actors/abc/%d/method/bar", i.Load()),
+			fmt.Sprintf("/actors/abc/%d/method/foo", i.Load()),
 		}, g.methodCalled.Slice())
 	}, time.Second*10, time.Millisecond*10)
 

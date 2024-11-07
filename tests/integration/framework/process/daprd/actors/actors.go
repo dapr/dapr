@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	"github.com/stretchr/testify/require"
 )
 
 type Actors struct {
@@ -65,11 +66,16 @@ func New(t *testing.T, fopts ...Option) *Actors {
 		handlers = append(handlers, app.WithHandlerFunc(pattern, handler))
 	}
 
-	app := app.New(t,
-		append(handlers,
-			app.WithConfig(fmt.Sprintf(`{"entities": [%s]}`, strings.Join(opts.types, ","))),
-		)...,
-	)
+	config := fmt.Sprintf(`{"entities": [%s]`, strings.Join(opts.types, ","))
+	if opts.reentryMaxDepth != nil {
+		require.NotNil(t, opts.reentry)
+		config += fmt.Sprintf(`,"reentrancy":{"enabled":%t,"maxStackDepth":%d}`, *opts.reentry, *opts.reentryMaxDepth)
+	} else if opts.reentry != nil {
+		config += fmt.Sprintf(`,"reentrancy":{"enabled":%t}`, *opts.reentry)
+	}
+	config += "}"
+
+	app := app.New(t, append(handlers, app.WithConfig(config))...)
 
 	dopts := []daprd.Option{
 		daprd.WithAppPort(app.Port()),

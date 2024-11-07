@@ -1,5 +1,5 @@
 /*
-Copyright 2021 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -14,141 +14,96 @@ limitations under the License.
 package internal
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
-var baseID = "test"
-
-func TestLockBaseCase(t *testing.T) {
-	for _, requestID := range []*string{&baseID, nil} {
-		lock := New(32)
-
-		assert.Nil(t, lock.activeRequest)
-		assert.Equal(t, int32(0), lock.stackDepth.Load())
-
-		err := lock.Lock(requestID)
-
-		require.NoError(t, err)
-		if requestID == nil {
-			assert.Nil(t, lock.activeRequest)
-		} else {
-			assert.Equal(t, *requestID, *lock.activeRequest)
-		}
-		assert.Equal(t, int32(1), lock.stackDepth.Load())
-
-		lock.Unlock()
-
-		assert.Nil(t, lock.activeRequest)
-		assert.Equal(t, int32(0), lock.stackDepth.Load())
-	}
-}
-
-func TestLockBypassWithMatchingID(t *testing.T) {
-	lock := New(32)
-	requestID := &baseID
-
-	for i := uint32(1); i < 5; i++ {
-		err := lock.Lock(requestID)
-
-		require.NoError(t, err)
-		assert.Equal(t, *requestID, *lock.activeRequest)
-		assert.Equal(t, int32(i), lock.stackDepth.Load())
-	}
-}
-
-func TestLockHoldsUntilStackIsZero(t *testing.T) {
-	lock := New(32)
-	requestID := &baseID
-
-	// Lock it twice.
-	lock.Lock(requestID)
-	lock.Lock(requestID)
-
-	assert.Equal(t, *requestID, *lock.activeRequest)
-	assert.Equal(t, int32(2), lock.stackDepth.Load())
-
-	// Unlock until request is nil
-	lock.Unlock()
-	assert.Equal(t, *requestID, *lock.activeRequest)
-	assert.Equal(t, int32(1), lock.stackDepth.Load())
-
-	lock.Unlock()
-	assert.Nil(t, lock.activeRequest)
-	assert.Equal(t, int32(0), lock.stackDepth.Load())
-}
-
-func TestStackDepthLimit(t *testing.T) {
-	lock := New(1)
-	requestID := &baseID
-
-	err := lock.Lock(requestID)
-
+func Test_Lock(t *testing.T) {
+	l := NewLock(LockOptions{})
+	cancel, err := l.Lock()
 	require.NoError(t, err)
-	assert.Equal(t, *requestID, *lock.activeRequest)
-	assert.Equal(t, int32(1), lock.stackDepth.Load())
+	cancel()
 
-	err = lock.Lock(requestID)
+	cancel, err = l.Lock()
+	require.NoError(t, err)
+	cancel()
 
-	require.Error(t, err)
-	assert.Equal(t, "maximum stack depth exceeded", err.Error())
+	l.Close()
+
+	l = NewLock(LockOptions{})
+	cancel1, err := l.Lock()
+	require.NoError(t, err)
+
+	errCh := make(chan error)
+	var cancel2 context.CancelFunc
+	go func() {
+		cancel2, err = l.Lock()
+		errCh <- err
+	}()
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		l.lock.Lock()
+		assert.Equal(c, 1, l.pending)
+		l.lock.Unlock()
+	}, time.Second*5, time.Millisecond*10)
+
+	time.Sleep(time.Second)
+
+	cancel1()
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		assert.Fail(t, "lock not acquired")
+	}
+	cancel2()
 }
 
-func TestLockBlocksForNonMatchingID(t *testing.T) {
-	lock := New(32)
-	firstRequestID := "first"
-	secondRequestID := "second"
+func Test_LockThree(t *testing.T) {
+	l := NewLock(LockOptions{})
+	cancel1, err := l.Lock()
+	require.NoError(t, err)
 
-	firstInChan := make(chan int)
-	firstOutChan := make(chan int)
-	secondInChan := make(chan int)
-	secondOutChan := make(chan int)
-
+	errCh := make(chan error)
+	var cancel2, cancel3 context.CancelFunc
 	go func() {
-		<-firstInChan
-		lock.Lock(&firstRequestID)
-		firstOutChan <- 1
-		<-firstInChan
-		lock.Unlock()
-		firstOutChan <- 1
+		var gerr error
+		cancel2, gerr = l.Lock()
+		errCh <- gerr
+	}()
+	go func() {
+		var gerr error
+		cancel3, gerr = l.Lock()
+		errCh <- gerr
 	}()
 
-	go func() {
-		<-secondInChan
-		lock.Lock(&secondRequestID)
-		secondOutChan <- 2
-		<-secondInChan
-		lock.Unlock()
-		secondOutChan <- 2
-	}()
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		l.lock.Lock()
+		assert.Equal(c, 2, l.pending)
+		l.lock.Unlock()
+	}, time.Second*5, time.Millisecond*10)
 
-	assert.Nil(t, lock.activeRequest)
-	assert.Equal(t, int32(0), lock.stackDepth.Load())
+	cancel1()
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		assert.Fail(t, "lock not acquired")
+	}
+	cancel2()
 
-	firstInChan <- 1
-	<-firstOutChan
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		assert.Fail(t, "lock not acquired")
+	}
 
-	assert.Equal(t, firstRequestID, *lock.activeRequest)
-	assert.Equal(t, int32(1), lock.stackDepth.Load())
+	cancel3()
 
-	secondInChan <- 2
-
-	assert.Equal(t, firstRequestID, *lock.activeRequest)
-	assert.Equal(t, int32(1), lock.stackDepth.Load())
-
-	firstInChan <- 1
-	<-firstOutChan
-	<-secondOutChan
-
-	assert.Equal(t, secondRequestID, *lock.activeRequest)
-	assert.Equal(t, int32(1), lock.stackDepth.Load())
-
-	secondInChan <- 2
-	<-secondOutChan
-
-	assert.Nil(t, lock.activeRequest)
-	assert.Nil(t, lock.activeRequest)
-	assert.Equal(t, int32(0), lock.stackDepth.Load())
+	l.Close()
 }

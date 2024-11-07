@@ -43,7 +43,6 @@ type Interface interface {
 	RegisterActorType(actorType string, factory targets.Factory)
 	UnRegisterActorType(actorType string) error
 	SubscribeToTypeUpdates(ctx context.Context) <-chan []string
-	Halt(actorType, actorID string) error
 	HaltAll() error
 	Drain(fn func(actorType, actorID string) bool)
 	Len() map[string]int
@@ -95,7 +94,7 @@ func (t *table) Close() error {
 func (t *table) Types() []string {
 	t.lock.RLock()
 	defer t.lock.RUnlock()
-	return t.table.Keys()
+	return t.factories.Keys()
 }
 
 func (t *table) Len() map[string]int {
@@ -209,17 +208,6 @@ func (t *table) UnRegisterActorType(actorType string) error {
 	return errors.Join(errs.Slice()...)
 }
 
-// Halt halts an actor, removing it from the actors table and then deactivating
-// it.
-func (t *table) Halt(actorType, actorID string) error {
-	t.lock.RLock()
-	defer t.lock.RUnlock()
-	t.actorTypesLock.Lock(actorType)
-	defer t.actorTypesLock.Unlock(actorType)
-
-	return t.haltInLock(actorType, actorID)
-}
-
 // HaltAll halts all actors currently in the table.
 func (t *table) HaltAll() error {
 	t.lock.Lock()
@@ -261,21 +249,6 @@ func (t *table) haltInLock(actorType, actorID string) error {
 		return nil
 	}
 
-	if idler, ok := target.(targets.Idlable); ok {
-		for {
-			// wait until actor is not busy, then deactivate
-			if !idler.IsBusy() {
-				break
-			}
-
-			t.clock.Sleep(time.Millisecond * 100)
-		}
-	}
-
-	return t.deactivate(target)
-}
-
-func (t *table) deactivate(target targets.Interface) error {
 	// This uses a background context as it should be unrelated from the caller's
 	// context.
 	// Once the decision to deactivate an actor has been made, we must go through
@@ -297,18 +270,8 @@ func (t *table) drain(actorType, actorID string, target targets.Interface) {
 		doDrain = v.DrainRebalancedActors
 	}
 
-	idler, ok := target.(targets.Idlable)
-	if doDrain && ok {
-		// wait until actor isn't busy or timeout hits
-		if idler.IsBusy() {
-			select {
-			case <-t.clock.After(t.drainOngoingCallTimeout):
-				break
-			case <-idler.Channel():
-				// if a call comes in from the actor for state changes, that's still allowed
-				break
-			}
-		}
+	if doDrain {
+		target.CloseUntil(t.drainOngoingCallTimeout)
 	}
 
 	diag.DefaultMonitoring.ActorRebalanced(actorType)

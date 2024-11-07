@@ -26,6 +26,8 @@ import (
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
@@ -119,7 +121,7 @@ func ActivityFactory(opts WorkflowOptions) targets.Factory {
 			state:             opts.State,
 			reminders:         opts.Reminders,
 			engine:            opts.ActorEngine,
-			lock:              internal.NewLock(32),
+			lock:              internal.NewLock(internal.LockOptions{ActorType: opts.ActivityActorType}),
 		}
 	}
 }
@@ -138,10 +140,11 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalv1pb.InternalI
 	}
 	defer imReq.Close()
 
-	if err := a.lock.Lock(imReq); err != nil {
+	cancel, err := a.lock.LockRequest(imReq)
+	if err != nil {
 		return nil, err
 	}
-	defer a.lock.Unlock()
+	defer cancel()
 
 	msg := imReq.Message()
 
@@ -173,7 +176,11 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalv1pb.InternalI
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
 // func (a *activity) InvokeReminder(ctx context.Context, reminder actors.Reminder, metadata map[string][]string) error {
 func (a *activity) InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error {
-	// TODO: @joshvanl: lock actor
+	cancel, err := a.lock.Lock()
+	if err != nil {
+		return status.Error(codes.ResourceExhausted, err.Error())
+	}
+	defer cancel()
 
 	log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
 
@@ -442,5 +449,11 @@ func (a *activity) createReliableReminder(ctx context.Context, data any) error {
 func (a *activity) Deactivate(ctx context.Context) error {
 	log.Debugf("Activity actor '%s': deactivating", a.actorID)
 	a.state = nil // A bit of extra caution, shouldn't be necessary
+	a.lock.Close()
 	return nil
+}
+
+// CloseUntil closes the actor but backs out sooner if the duration is reached.
+func (a *activity) CloseUntil(d time.Duration) {
+	a.lock.CloseUntil(d)
 }

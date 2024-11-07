@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -35,29 +36,24 @@ func init() {
 }
 
 type http struct {
-	app          *actors.Actors
-	called       atomic.Int64
-	deactivating atomic.Bool
+	app    *actors.Actors
+	called atomic.Int64
 }
 
 func (h *http) Setup(t *testing.T) []framework.Option {
 	h.app = actors.New(t,
 		actors.WithActorTypes("abc", "efg"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {
-			if h.deactivating.Load() {
+			defer h.called.Add(1)
+			if r.Method == nethttp.MethodDelete {
 				assert.Equal(t, "/actors/abc/foo", r.URL.Path)
-				assert.Equal(t, nethttp.MethodDelete, r.Method)
 				return
 			}
 			assert.Equal(t, nethttp.MethodPut, r.Method)
-			if h.called.Add(1) == 1 {
-				assert.Equal(t, "/actors/abc/foo/method/foo", r.URL.Path)
-			} else {
-				assert.Equal(t, "/actors/abc/foo/method/timer/foo", r.URL.Path)
-				b, err := io.ReadAll(r.Body)
-				assert.NoError(t, err)
-				assert.Equal(t, `{"data":"hello","callback":"","dueTime":"0s","period":"1s"}`, string(b))
-			}
+			assert.Equal(t, "/actors/abc/foo/method/timer/foo", r.URL.Path)
+			b, err := io.ReadAll(r.Body)
+			assert.NoError(t, err)
+			assert.Equal(t, `{"data":"hello","callback":"","dueTime":"0s","period":"10s"}`, string(b))
 		}),
 	)
 
@@ -69,37 +65,30 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 func (h *http) Run(t *testing.T, ctx context.Context) {
 	h.app.WaitUntilRunning(t, ctx)
 
-	t.Cleanup(func() { h.deactivating.Store(true) })
-
 	client := client.HTTP(t)
 
 	body := `{
 "dueTime": "0s",
-"period": "1s",
+"period": "10s",
 "data": "hello"
 }`
-	url := fmt.Sprintf("http://%s/v1.0/actors/abc/foo/method/foo", h.app.Daprd().HTTPAddress())
-	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
+
+	url := fmt.Sprintf("http://%s/v1.0/actors/abc/foo/timers/foo", h.app.Daprd().HTTPAddress())
+	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader(body))
 	assert.NoError(t, err)
 	resp, err := client.Do(req)
-	assert.NoError(t, err)
-
-	url = fmt.Sprintf("http://%s/v1.0/actors/abc/foo/timers/foo", h.app.Daprd().HTTPAddress())
-	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader(body))
-	assert.NoError(t, err)
-	resp, err = client.Do(req)
 	assert.NoError(t, err)
 	assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.GreaterOrEqual(t, h.called.Load(), int64(2))
+		assert.GreaterOrEqual(c, h.called.Load(), int64(1))
 	}, time.Second*10, time.Millisecond*10)
 
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/foo/timers/foo", h.app.Daprd().HTTPAddress())
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodDelete, url, nil)
 	assert.NoError(t, err)
 	resp, err = client.Do(req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
 
 	called := h.called.Load()

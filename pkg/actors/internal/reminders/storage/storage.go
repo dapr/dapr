@@ -25,7 +25,6 @@ import (
 type Interface interface {
 	io.Closer
 
-	Init(ctx context.Context) error
 	Get(ctx context.Context, req *requestresponse.GetReminderRequest) (*requestresponse.Reminder, error)
 	Create(ctx context.Context, req *requestresponse.CreateReminderRequest) error
 	Delete(ctx context.Context, req *requestresponse.DeleteReminderRequest) error

@@ -1139,10 +1139,16 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 	req := in.ToInternalInvokeRequest()
 
 	res, err := engine.Call(ctx, req)
-	if err != nil && !actorerrors.Is(err) {
-		err = messages.ErrActorInvoke.WithFormat(err)
-		apiServerLogger.Debug(err)
-		return response, err
+	if err != nil {
+		if _, ok := status.FromError(err); ok {
+			apiServerLogger.Debug(err)
+			return nil, err
+		}
+		if !actorerrors.Is(err) {
+			err = messages.ErrActorInvoke.WithFormat(err)
+			apiServerLogger.Debug(err)
+			return response, err
+		}
 	}
 
 	if res != nil {

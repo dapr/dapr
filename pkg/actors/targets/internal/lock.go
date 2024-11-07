@@ -14,181 +14,248 @@ limitations under the License.
 package internal
 
 import (
+	"context"
 	"errors"
-	"fmt"
 	"sync"
 	"sync/atomic"
+	"time"
 
 	"github.com/google/uuid"
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
+	"github.com/dapr/kit/concurrency/fifo"
+	"github.com/dapr/kit/ring"
 )
+
+const defaultMaxStackDepth = 32
 
 var (
-	log = logger.NewLogger("dapr.runtime.actors.lock")
-
-	// ErrActorDisposed is the error when runtime tries to hold the lock of the disposed actor.
-	ErrActorDisposed = errors.New("actor is already disposed")
-
 	ErrMaxStackDepthExceeded = errors.New("maximum stack depth exceeded")
+	ErrLockClosed            = errors.New("actor lock is closed")
 )
+
+type LockOptions struct {
+	ActorType  string
+	Reentrancy config.ReentrancyConfig
+}
 
 type Lock struct {
 	actorType string
 
-	requestLock sync.Mutex
-	reentrancy  config.ReentrancyConfig
+	maxStackDepth     int
+	reentrancyEnabled bool
 
-	activeRequest *string
-	stackDepth    atomic.Int32
-	maxStackDepth int32
-	// lockChan is used instead of a sync.Mutex to enforce FIFO ordering of method execution.
-	// We use a buffered channel to ensure that requests are processed
-	// in the order they arrive, which sync.Mutex does not guarantee.
-	lockChan chan struct{}
+	pending int
 
-	// disposeLock guards disposed and disposeCh.
-	disposeLock sync.RWMutex
+	lock      *fifo.Mutex
+	reqCh     chan *req
+	inflights *ring.Ring[*inflight]
 
-	// disposed is true when actor is already disposed.
-	disposed bool
-	// disposeCh is the channel to signal when all pending actor calls are completed. This channel
-	// is used when runtime drains actor.
-	disposeCh chan struct{}
-
-	// pendingActorCalls is the number of the current pending actor calls by turn-based concurrency.
-	pendingActorCalls atomic.Int32
+	closeCh chan struct{}
+	closed  atomic.Bool
+	wg      sync.WaitGroup
 }
 
-func NewLock(maxStackDepth int32) *Lock {
-	return &Lock{
-		lockChan:      make(chan struct{}, 1),
-		maxStackDepth: maxStackDepth,
+type req struct {
+	msg    *invokev1.InvokeMethodRequest
+	respCh chan *resp
+}
+
+type resp struct {
+	startCh chan struct{}
+	cancel  context.CancelFunc
+	err     error
+}
+
+type inflight struct {
+	id      string
+	depth   int
+	startCh chan struct{}
+}
+
+func NewLock(opts LockOptions) *Lock {
+	maxStackDepth := defaultMaxStackDepth
+	if opts.Reentrancy.Enabled && opts.Reentrancy.MaxStackDepth != nil {
+		maxStackDepth = *opts.Reentrancy.MaxStackDepth
 	}
-}
 
-func (l *Lock) Lock(req *invokev1.InvokeMethodRequest) error {
-	pending := l.pendingActorCalls.Add(1)
-	diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, pending)
+	l := &Lock{
+		actorType:         opts.ActorType,
+		reqCh:             make(chan *req),
+		maxStackDepth:     maxStackDepth,
+		reentrancyEnabled: opts.Reentrancy.Enabled,
+		inflights:         ring.New[*inflight](8),
+		lock:              fifo.New(),
+		closeCh:           make(chan struct{}),
+	}
 
-	// Reentrancy to determine how we lock.
-	var reentrancyID *string
-	if l.reentrancy.Enabled {
-		if md := req.Metadata()["Dapr-Reentrancy-Id"]; md != nil && len(md.GetValues()) > 0 {
-			reentrancyID = ptr.Of(md.GetValues()[0])
-		} else {
-			var uuidObj uuid.UUID
-			var err error
-			uuidObj, err = uuid.NewRandom()
-			if err != nil {
-				return fmt.Errorf("failed to generate UUID: %w", err)
+	l.wg.Add(1)
+	go func() {
+		defer l.wg.Done()
+		for {
+			select {
+			case <-l.closeCh:
+				// Ensure all pending requests are handled before closing.
+				l.LockRequest(nil)
+				return
+
+			case req := <-l.reqCh:
+				resp := l.handleLock(req)
+
+				l.wg.Add(1)
+				go func() {
+					defer l.wg.Done()
+					select {
+					case req.respCh <- resp:
+					case <-l.closeCh:
+					}
+				}()
 			}
-			uuidStr := uuidObj.String()
-			req.AddMetadata(map[string][]string{
-				"Dapr-Reentrancy-Id": {uuidStr},
-			})
-			reentrancyID = &uuidStr
+		}
+	}()
+
+	return l
+}
+
+func (l *Lock) Lock() (context.CancelFunc, error) {
+	return l.LockRequest(nil)
+}
+
+func (l *Lock) LockRequest(msg *invokev1.InvokeMethodRequest) (context.CancelFunc, error) {
+	select {
+	case <-l.closeCh:
+		return nil, ErrLockClosed
+	default:
+	}
+
+	diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, 1)
+	defer diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, -1)
+
+	req := &req{msg: msg, respCh: make(chan *resp)}
+
+	select {
+	case l.reqCh <- req:
+	case <-l.closeCh:
+		return nil, ErrLockClosed
+	}
+
+	resp := <-req.respCh
+	if resp.err != nil {
+		return nil, resp.err
+	}
+
+	select {
+	case <-resp.startCh:
+	case <-l.closeCh:
+		return nil, ErrLockClosed
+	}
+
+	return resp.cancel, nil
+}
+
+func (l *Lock) handleLock(req *req) *resp {
+	l.lock.Lock()
+	defer l.lock.Unlock()
+
+	inflight, err := l.handleInflight(req)
+	if err != nil {
+		return &resp{err: err}
+	}
+
+	cancel := func() {
+		l.lock.Lock()
+		defer l.lock.Unlock()
+
+		inflight.depth--
+		if inflight.depth == 0 {
+			l.inflights = l.inflights.Next()
+
+			if l.inflights.Value != nil {
+				l.pending--
+
+				if l.pending < l.inflights.Len()-8 {
+					l.inflights.Move(l.inflights.Len() - 8).Unlink(8)
+				}
+
+				close(l.inflights.Value.startCh)
+			}
 		}
 	}
 
-	currentRequest := l.getCurrentID()
-
-	if l.stackDepth.Load() == l.maxStackDepth {
-		return ErrMaxStackDepthExceeded
-	}
-
-	if currentRequest == nil || *currentRequest != *reentrancyID {
-		l.lockChan <- struct{}{}
-		l.setCurrentID(reentrancyID)
-		l.stackDepth.Add(1)
-	} else {
-		l.stackDepth.Add(1)
-	}
-
-	l.disposeLock.RLock()
-	disposed := l.disposed
-	l.disposeLock.RUnlock()
-	if disposed {
-		l.Unlock()
-		return ErrActorDisposed
-	}
-
-	return nil
+	return &resp{startCh: inflight.startCh, cancel: cancel}
 }
 
-func (l *Lock) Unlock() {
-	pending := l.pendingActorCalls.Add(-1)
-	if pending == 0 {
-		l.disposeLock.Lock()
-		if !l.disposed && l.disposeCh != nil {
-			l.disposed = true
-			close(l.disposeCh)
+func (l *Lock) handleInflight(req *req) (*inflight, error) {
+	id := l.idFromRequest(req.msg)
+
+	if l.inflights.Value == nil {
+		l.inflights.Value = newInflight(id)
+		close(l.inflights.Value.startCh)
+		return l.inflights.Value, nil
+	}
+
+	if l.reentrancyEnabled && l.inflights.Value.id == id {
+		l.inflights.Value.depth++
+		if l.inflights.Value.depth > l.maxStackDepth {
+			return nil, ErrMaxStackDepthExceeded
 		}
-		l.disposeLock.Unlock()
-	} else if pending < 0 {
-		log.Error("BUGBUG: tried to unlock actor before locking actor.")
-		return
+
+		return l.inflights.Value, nil
 	}
 
-	l.stackDepth.Add(-1)
-	if l.stackDepth.Load() == 0 {
-		l.clearCurrentID()
-		<-l.lockChan
+	flight := newInflight(id)
+	l.pending++
+	l.inflights.Move(l.pending).Value = flight
+	l.checkExpand()
+
+	return flight, nil
+}
+
+func newInflight(id string) *inflight {
+	return &inflight{id: id, depth: 1, startCh: make(chan struct{})}
+}
+
+func (l *Lock) checkExpand() {
+	if l.inflights.Len() == l.pending {
+		exp := ring.New[*inflight](8)
+		l.inflights.Move(l.pending).Link(exp)
+	}
+}
+
+func (l *Lock) idFromRequest(req *invokev1.InvokeMethodRequest) string {
+	id := uuid.New().String()
+	if req == nil {
+		return id
 	}
 
-	diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, pending)
-}
-
-// Channel creates or get new dispose channel. This channel is used for draining the actor.
-func (l *Lock) Channel() <-chan struct{} {
-	l.disposeLock.RLock()
-	disposeCh := l.disposeCh
-	l.disposeLock.RUnlock()
-
-	if disposeCh == nil {
-		// If disposeCh is nil, acquire a write lock and retry
-		// We need to retry after acquiring a write lock because another goroutine could race us
-		l.disposeLock.Lock()
-		disposeCh = l.disposeCh
-		if disposeCh == nil {
-			disposeCh = make(chan struct{})
-			l.disposeCh = disposeCh
-		}
-		l.disposeLock.Unlock()
+	if md := req.Metadata()["Dapr-Reentrancy-Id"]; md != nil && len(md.GetValues()) > 0 {
+		return md.GetValues()[0]
 	}
 
-	return disposeCh
+	req.AddMetadata(map[string][]string{
+		"Dapr-Reentrancy-Id": {id},
+	})
+
+	return id
 }
 
-func (l *Lock) getCurrentID() *string {
-	l.requestLock.Lock()
-	defer l.requestLock.Unlock()
-
-	return l.activeRequest
+func (l *Lock) Close() {
+	if l.closed.CompareAndSwap(false, true) {
+		close(l.closeCh)
+		l.wg.Wait()
+	}
 }
 
-func (l *Lock) setCurrentID(id *string) {
-	l.requestLock.Lock()
-	defer l.requestLock.Unlock()
-
-	l.activeRequest = id
-}
-
-func (l *Lock) clearCurrentID() {
-	l.requestLock.Lock()
-	defer l.requestLock.Unlock()
-
-	l.activeRequest = nil
-}
-
-// IsBusy returns true when pending actor calls are ongoing.
-func (l *Lock) IsBusy() bool {
-	l.disposeLock.RLock()
-	disposed := l.disposed
-	l.disposeLock.RUnlock()
-	return !disposed && l.pendingActorCalls.Load() > 0
+func (l *Lock) CloseUntil(d time.Duration) {
+	done := make(chan struct{})
+	go func() {
+		l.Close()
+		close(done)
+	}()
+	select {
+	case <-done:
+	case <-time.After(d):
+	}
 }

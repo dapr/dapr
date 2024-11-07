@@ -295,6 +295,10 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 	}
 
 	if err != nil {
+		if _, ok := status.FromError(err); ok {
+			return nil, err
+		}
+
 		actorErr, isActorErr := actorerrors.As(err)
 		if res != nil && isActorErr {
 			// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
@@ -327,6 +331,7 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 		Period:         period,
 		ExpirationTime: in.GetExpirationTime().AsTime(),
 		IsTimer:        in.GetIsTimer(),
+		IsRemote:       true,
 	})
 }
 

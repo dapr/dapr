@@ -20,6 +20,7 @@ import (
 	"errors"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -53,7 +54,6 @@ type Options struct {
 	Table                      table.Interface
 	EntityConfigs              map[string]requestresponse.EntityConfig
 	StoreName                  string
-	HostAddress                string
 	RemindersStoragePartitions int
 
 	// TODO: @joshvanl
@@ -73,10 +73,10 @@ type Statestore struct {
 	resiliency      resiliency.Provider
 	table           table.Interface
 	engine          engine.Interface
+	closed          atomic.Bool
 
 	entityConfigs              map[string]requestresponse.EntityConfig
 	storeName                  string
-	hostAddress                string
 	remindersStoragePartitions int
 }
 
@@ -94,7 +94,6 @@ func New(opts Options) *Statestore {
 		table:                      opts.Table,
 		entityConfigs:              opts.EntityConfigs,
 		storeName:                  opts.StoreName,
-		hostAddress:                opts.HostAddress,
 		remindersStoragePartitions: opts.RemindersStoragePartitions,
 	}
 }
@@ -200,12 +199,10 @@ func (r *Statestore) Create(ctx context.Context, req *requestresponse.CreateRemi
 }
 
 func (r *Statestore) Close() error {
-	// Close the runningCh
-	close(r.runningCh)
-	return nil
-}
-
-func (r *Statestore) Init(ctx context.Context) error {
+	if r.closed.CompareAndSwap(false, true) {
+		// Close the runningCh
+		close(r.runningCh)
+	}
 	return nil
 }
 
@@ -354,7 +351,7 @@ func (r *Statestore) evaluateReminders(ctx context.Context) {
 				} else {
 					stopChan, exists := r.activeReminders.LoadAndDelete(reminderKey)
 					if exists {
-						log.Debugf("Stopping reminder %s on %s as it's active on host", reminderKey, r.hostAddress)
+						log.Debugf("Stopping reminder %s  as it's active on host", reminderKey)
 						close(stopChan.(chan struct{}))
 					}
 				}

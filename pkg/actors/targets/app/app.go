@@ -46,12 +46,7 @@ import (
 
 const daprSeparator = "||"
 
-var (
-	log = logger.NewLogger("dapr.runtime.actors.targets.app")
-
-	// ErrActorDisposed is the error when runtime tries to hold the lock of the disposed actor.
-	ErrActorDisposed = errors.New("actor is already disposed")
-)
+var log = logger.NewLogger("dapr.runtime.actors.targets.app")
 
 type Options struct {
 	ActorType   string
@@ -94,11 +89,6 @@ func Factory(opts Options) targets.Factory {
 		var idleAt atomic.Pointer[time.Time]
 		idleAt.Store(ptr.Of(opts.clock.Now().Add(opts.IdleTimeout)))
 
-		var maxDepth int32 = 32
-		if opts.Reentrancy.MaxStackDepth != nil {
-			maxDepth = int32(*opts.Reentrancy.MaxStackDepth)
-		}
-
 		return &app{
 			actorType:   opts.ActorType,
 			actorID:     actorID,
@@ -109,23 +99,27 @@ func Factory(opts Options) targets.Factory {
 			idleTimeout: opts.IdleTimeout,
 			idleAt:      idleAt,
 			clock:       opts.clock,
-			lock:        internal.NewLock(maxDepth),
+			lock: internal.NewLock(internal.LockOptions{
+				ActorType:  opts.ActorType,
+				Reentrancy: opts.Reentrancy,
+			}),
 		}
 	}
 }
 
 func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	// Create the InvokeMethodRequest
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create InvokeMethodRequest: %w", err)
 	}
 	defer imReq.Close()
 
-	if err = a.lock.Lock(imReq); err != nil {
+	cancel, err := a.lock.LockRequest(imReq)
+	if err != nil {
 		return nil, status.Error(codes.ResourceExhausted, err.Error())
 	}
-	defer a.lock.Unlock()
+	defer cancel()
+
 	a.idleAt.Store(ptr.Of(a.clock.Now().Add(a.idleTimeout)))
 	a.idleQueue.Enqueue(a)
 
@@ -199,8 +193,6 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 }
 
 func (a *app) InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error {
-	// TODO: @joshvanl: lock actor
-
 	invokeMethod := "remind/" + reminder.Name
 	data, err := json.Marshal(&requestresponse.ReminderResponse{
 		DueTime: reminder.DueTime,
@@ -210,8 +202,6 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *requestresponse.Remi
 	if err != nil {
 		return err
 	}
-	policyDef := a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID)
-
 	log.Debug("Executing reminder for actor " + reminder.Key())
 
 	req := internalv1pb.NewInternalInvokeRequest(invokeMethod).
@@ -219,10 +209,7 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *requestresponse.Remi
 		WithData(data).
 		WithContentType(internalv1pb.JSONContentType)
 
-	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
-	_, err = policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
-		return a.InvokeMethod(ctx, req)
-	})
+	_, err = a.InvokeMethod(ctx, req)
 	if err != nil {
 		if !errors.Is(err, actorerrors.ErrReminderCanceled) {
 			log.Errorf("Error executing reminder for actor %s: %v", reminder.Key(), err)
@@ -234,8 +221,6 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *requestresponse.Remi
 }
 
 func (a *app) InvokeTimer(ctx context.Context, reminder *requestresponse.Reminder) error {
-	// TODO: @joshvanl: lock actor
-
 	invokeMethod := "timer/" + reminder.Name
 	data, err := json.Marshal(&requestresponse.TimerResponse{
 		Callback: reminder.Callback,
@@ -246,7 +231,6 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *requestresponse.Reminde
 	if err != nil {
 		return err
 	}
-	policyDef := a.resiliency.ActorPreLockPolicy(reminder.ActorType, reminder.ActorID)
 
 	log.Debug("Executing timer for actor " + reminder.Key())
 
@@ -255,10 +239,7 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *requestresponse.Reminde
 		WithData(data).
 		WithContentType(internalv1pb.JSONContentType)
 
-	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
-	_, err = policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
-		return a.InvokeMethod(ctx, req)
-	})
+	_, err = a.InvokeMethod(ctx, req)
 	if err != nil {
 		if !errors.Is(err, actorerrors.ErrReminderCanceled) {
 			log.Errorf("Error executing timer for actor %s: %v", reminder.Key(), err)
@@ -270,6 +251,8 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *requestresponse.Reminde
 }
 
 func (a *app) Deactivate(ctx context.Context) error {
+	a.lock.Close()
+
 	req := invokev1.NewInvokeMethodRequest("actors/"+a.actorType+"/"+a.actorID).
 		WithActor(a.actorType, a.actorID).
 		WithHTTPExtension(http.MethodDelete, "").
@@ -302,6 +285,11 @@ func (a *app) Key() string {
 	return a.actorType + daprSeparator + a.actorID
 }
 
+// CloseUntil closes the actor but backs out sooner if the duration is reached.
+func (a *app) CloseUntil(d time.Duration) {
+	a.lock.CloseUntil(d)
+}
+
 // ScheduledTime returns the time the actor becomes idle at.
 // This is implemented to comply with the queueable interface.
 func (a *app) ScheduledTime() time.Time {
@@ -310,12 +298,4 @@ func (a *app) ScheduledTime() time.Time {
 
 func (a *app) IdleAt(t time.Time) {
 	a.idleAt.Store(&t)
-}
-
-func (a *app) IsBusy() bool {
-	return a.lock.IsBusy()
-}
-
-func (a *app) Channel() <-chan struct{} {
-	return a.lock.Channel()
 }

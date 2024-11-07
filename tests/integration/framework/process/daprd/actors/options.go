@@ -33,6 +33,8 @@ type options struct {
 	daprdConfigs      []string
 	actorTypeHandlers map[string]http.HandlerFunc
 	handlers          map[string]http.HandlerFunc
+	reentry           *bool
+	reentryMaxDepth   *uint32
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -98,5 +100,17 @@ func WithPeerActor(actor *Actors) Option {
 		WithDB(actor.DB())(o)
 		WithPlacement(actor.Placement())(o)
 		WithScheduler(actor.Scheduler())(o)
+	}
+}
+
+func WithReentry(enabled bool) Option {
+	return func(o *options) {
+		o.reentry = &enabled
+	}
+}
+
+func WithReentryMaxDepth(maxDepth uint32) Option {
+	return func(o *options) {
+		o.reentryMaxDepth = &maxDepth
 	}
 }

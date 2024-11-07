@@ -55,6 +55,7 @@ import (
 	"github.com/dapr/dapr/pkg/config/protocol"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/internal/loader"
 	"github.com/dapr/dapr/pkg/internal/loader/disk"
 	"github.com/dapr/dapr/pkg/internal/loader/kubernetes"
@@ -136,7 +137,9 @@ type DaprRuntime struct {
 
 	tracerProvider *sdktrace.TracerProvider
 
+	// TODO: @joshvanl
 	workflowEngine *wfengine.WorkflowEngine
+	ahtarget       healthz.Target
 
 	wg sync.WaitGroup
 }
@@ -296,6 +299,8 @@ func newDaprRuntime(ctx context.Context,
 		isAppHealthy:   make(chan struct{}),
 		clock:          new(clock.RealClock),
 		httpMiddleware: httpMiddleware,
+
+		ahtarget: runtimeConfig.healthz.AddTarget(),
 	}
 	close(rt.isAppHealthy)
 
@@ -686,6 +691,8 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 			return err
 		}
 	}
+
+	a.ahtarget.Ready()
 
 	return nil
 }
@@ -1080,7 +1087,6 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		AppID:          a.runtimeConfig.id,
 		Namespace:      a.namespace,
 		StateStoreName: actorStateStoreName,
-		HostAddress:    hostAddress,
 
 		EntityConfigs:              a.appConfig.EntityConfigs,
 		DrainRebalancedActors:      a.appConfig.DrainRebalancedActors,
@@ -1101,16 +1107,15 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		StateTTLEnabled:  a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
 
 		Healthz:            a.runtimeConfig.healthz,
+		Hostname:           hostAddress,
 		Port:               a.runtimeConfig.internalGRPCPort,
-		SchedulerReminders: a.runtimeConfig.SchedulerEnabled(),
+		SchedulerReminders: a.globalConfig.IsFeatureEnabled(config.SchedulerReminders),
 
 		// TODO: @joshvanl
 		APILevel: 20,
 
 		// TODO: @joshvanl
 		PlacementAddresses: strings.Split(strings.TrimPrefix(a.runtimeConfig.actorsService, "placement:"), ","),
-
-		Hostname: net.JoinHostPort(hostAddress, strconv.Itoa(a.runtimeConfig.internalGRPCPort)),
 	})
 	if err != nil {
 		return err

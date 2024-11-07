@@ -174,10 +174,6 @@ func (s *scheduler) Close() error {
 	return nil
 }
 
-func (s *scheduler) Init(ctx context.Context) error {
-	return nil
-}
-
 func (s *scheduler) Get(ctx context.Context, req *requestresponse.GetReminderRequest) (*requestresponse.Reminder, error) {
 	internalGetJobReq := &schedulerv1pb.GetJobRequest{
 		Name: req.Name,

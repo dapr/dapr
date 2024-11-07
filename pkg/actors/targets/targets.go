@@ -26,6 +26,7 @@ type Interface interface {
 	InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error
 	InvokeTimer(ctx context.Context, reminder *requestresponse.Reminder) error
 	Deactivate(ctx context.Context) error
+	CloseUntil(timeout time.Duration)
 }
 
 type Idlable interface {
@@ -33,8 +34,6 @@ type Idlable interface {
 	Key() string
 	ScheduledTime() time.Time
 	IdleAt(time.Time)
-	IsBusy() bool
-	Channel() <-chan struct{}
 }
 
 type Factory = func(actorID string) Interface

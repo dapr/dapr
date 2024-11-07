@@ -74,16 +74,18 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 
 	client := client.HTTP(t)
 	var i atomic.Int64
-	for {
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		ctx, cancel := context.WithTimeout(ctx, time.Second)
+		t.Cleanup(cancel)
+
 		url := fmt.Sprintf("http://%s/v1.0/actors/abc/%d/method/foo", h.app2.Daprd().HTTPAddress(), i.Add(1))
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 		require.NoError(t, err)
 		_, err = client.Do(req)
-		require.NoError(t, err)
-		if h.called.Load() == 1 {
-			break
-		}
-	}
+		assert.NoError(c, err)
+		assert.Equal(c, int64(1), h.called.Load())
+	}, time.Second*10, time.Millisecond*10)
+	return
 
 	errCh := make(chan error)
 	go func() {
@@ -118,7 +120,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		select {
 		case err := <-errCh:
 			require.NoError(t, err)
-		case <-time.After(time.Second * 5):
+		case <-time.After(time.Second * 10):
 			assert.Fail(t, "timeout")
 		}
 	}

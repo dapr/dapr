@@ -56,7 +56,7 @@ func (h *http) Setup(t *testing.T) []framework.Option {
 				assert.Equal(t, "/actors/abc/foo/method/timer/foo", r.URL.Path)
 				b, err := io.ReadAll(r.Body)
 				assert.NoError(t, err)
-				assert.Equal(t, `{"data":"hello","callback":"mycallback","dueTime":"0s","period":"1s"}`, string(b))
+				assert.Equal(t, `{"data":"hello","callback":"mycallback","dueTime":"0s","period":"10s"}`, string(b))
 			}
 		}),
 	)
@@ -75,7 +75,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 
 	body := `{
 "dueTime": "0s",
-"period": "1s",
+"period": "10s",
 "data": "hello",
 "callback": "mycallback"
 }`

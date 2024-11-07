@@ -29,4 +29,5 @@ func (lar LookupActorRequest) ActorKey() string {
 type LookupActorResponse struct {
 	Address string
 	AppID   string
+	Local   bool
 }

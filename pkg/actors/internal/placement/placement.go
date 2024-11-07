@@ -34,11 +34,14 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/concurrency/fifo"
-	"github.com/dapr/kit/events/batcher"
 	"github.com/dapr/kit/logger"
 )
 
-var log = logger.NewLogger("dapr.runtime.actors.placement")
+var (
+	log = logger.NewLogger("dapr.runtime.actors.placement")
+
+	ErrorActorTypeNotFound = fmt.Errorf("did not find address for actor")
+)
 
 const (
 	lockOperation   = "lock"
@@ -51,11 +54,9 @@ const (
 type Interface interface {
 	Run(context.Context) error
 	Ready() bool
-	Lock()
+	Lock(context.Context) error
 	Unlock()
-	IsActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool
 	LookupActor(ctx context.Context, req *requestresponse.LookupActorRequest) (*requestresponse.LookupActorResponse, error)
-	SubscribeDisemination(ctx context.Context) <-chan struct{}
 }
 
 type Options struct {
@@ -76,23 +77,24 @@ type placement struct {
 	client     *client.Client
 	actorTable table.Interface
 	reminders  storage.Interface
-	htarget    healthz.Target
 
 	hashTable         *hashing.ConsistentHashTables
 	virtualNodesCache *hashing.VirtualNodesCache
 
-	lock               *lock.Lock
-	lockVersion        atomic.Uint64
-	updateVersion      atomic.Uint64
-	operationLock      *fifo.Mutex
-	disseminateBatcher *batcher.Batcher[int, struct{}]
+	lock          *lock.Lock
+	lockVersion   atomic.Uint64
+	updateVersion atomic.Uint64
+	operationLock *fifo.Mutex
 
-	appID     string
-	namespace string
-	hostname  string
-	port      int
+	appID       string
+	namespace   string
+	hostname    string
+	hostaddress string
+	port        string
 	// TODO: @joshvanl
 	apiLevel uint32
+	isReady  atomic.Bool
+	readyCh  chan struct{}
 	wg       sync.WaitGroup
 	closed   atomic.Bool
 }
@@ -117,16 +119,15 @@ func New(opts Options) (Interface, error) {
 		hashTable: &hashing.ConsistentHashTables{
 			Entries: make(map[string]*hashing.Consistent),
 		},
-		reminders:          opts.Reminders,
-		appID:              opts.AppID,
-		port:               opts.Port,
-		namespace:          opts.Namespace,
-		hostname:           opts.Hostname,
-		apiLevel:           opts.APILevel,
-		operationLock:      fifo.New(),
-		lock:               lock,
-		htarget:            opts.Healthz.AddTarget(),
-		disseminateBatcher: batcher.New[int, struct{}](time.Millisecond * 100),
+		reminders:     opts.Reminders,
+		appID:         opts.AppID,
+		port:          strconv.Itoa(opts.Port),
+		namespace:     opts.Namespace,
+		hostname:      opts.Hostname,
+		apiLevel:      opts.APILevel,
+		operationLock: fifo.New(),
+		lock:          lock,
+		readyCh:       make(chan struct{}),
 	}, nil
 }
 
@@ -140,8 +141,6 @@ func (p *placement) Run(ctx context.Context) error {
 			if err := p.sendHost(ctx, actorTypes); err != nil {
 				return err
 			}
-
-			p.htarget.Ready()
 
 			for {
 				select {
@@ -174,30 +173,16 @@ func (p *placement) Run(ctx context.Context) error {
 	).Run(ctx)
 
 	p.closed.Store(true)
-	p.disseminateBatcher.Close()
 	p.lock.EnsureUnlockTable()
 	return err
 }
 
-func (p *placement) SubscribeDisemination(ctx context.Context) <-chan struct{} {
-	ch := make(chan struct{})
-	if p.closed.Load() {
-		close(ch)
-		return ch
-	}
-
-	p.disseminateBatcher.Subscribe(ctx, ch)
-	return ch
-}
-
+// LookupActor returns the address of the actor.
+// Placement _must_ be locked before calling this method.
 func (p *placement) LookupActor(ctx context.Context, req *requestresponse.LookupActorRequest) (*requestresponse.LookupActorResponse, error) {
-	p.lock.LockLookup()
-	defer p.lock.UnlockLookup()
-
 	table, ok := p.hashTable.Entries[req.ActorType]
 	if !ok {
-		return nil, fmt.Errorf("did not find address for actor %s/%s", req.ActorType, req.ActorID)
-
+		return nil, ErrorActorTypeNotFound
 	}
 
 	host, err := table.GetHost(req.ActorID)
@@ -208,6 +193,7 @@ func (p *placement) LookupActor(ctx context.Context, req *requestresponse.Lookup
 	return &requestresponse.LookupActorResponse{
 		Address: host.Name,
 		AppID:   host.AppID,
+		Local:   p.isActorLocal(host.Name, p.hostname, p.port),
 	}, nil
 }
 
@@ -219,7 +205,7 @@ func (p *placement) sendHost(ctx context.Context, actorTypes []string) error {
 	log.Debugf("Reporting actor types: %v\n", actorTypes)
 
 	err := p.client.Send(ctx, &v1pb.Host{
-		Name:      p.hostname,
+		Name:      p.hostname + ":" + p.port,
 		Entities:  actorTypes,
 		Id:        p.appID,
 		ApiLevel:  p.apiLevel,
@@ -248,13 +234,18 @@ func (p *placement) handleReceive(ctx context.Context, in *v1pb.PlacementOrder) 
 	case updateOperation:
 		p.handleUpdateOperation(ctx, in.GetTables())
 	case unlockOperation:
-		p.updateVersion.Add(1)
-		p.lock.EnsureUnlockTable()
+		p.handleUnlockOperation()
 	}
 }
 
-func (p *placement) Lock() {
+func (p *placement) Lock(ctx context.Context) error {
+	select {
+	case <-p.readyCh:
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 	p.lock.LockLookup()
+	return nil
 }
 
 func (p *placement) Unlock() {
@@ -262,7 +253,6 @@ func (p *placement) Unlock() {
 }
 
 func (p *placement) handleLockOperation(ctx context.Context, tables *v1pb.PlacementTables) {
-	p.disseminateBatcher.Batch(0, struct{}{})
 	p.lock.LockTable()
 	lockVersion := p.lockVersion.Add(1)
 
@@ -315,7 +305,7 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 			return true
 		}
 
-		return lar != nil && !p.IsActorLocal(lar.Address, p.hostname, p.port)
+		return lar != nil && !p.isActorLocal(lar.Address, p.hostname, p.port)
 	})
 
 	p.reminders.OnPlacementTablesUpdated(ctx)
@@ -323,16 +313,32 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 	log.Infof("Placement tables updated, version: %s", in.GetVersion())
 }
 
-func (p *placement) IsActorLocal(targetActorAddress, hostAddress string, grpcPort int) bool {
-	portStr := strconv.Itoa(grpcPort)
+func (p *placement) handleUnlockOperation() {
+	p.updateVersion.Add(1)
 
-	if targetActorAddress == hostAddress+":"+portStr {
+	found := true
+	for _, actorType := range p.actorTable.Types() {
+		if _, ok := p.hashTable.Entries[actorType]; !ok {
+			found = false
+			break
+		}
+	}
+
+	if found && p.isReady.CompareAndSwap(false, true) {
+		close(p.readyCh)
+	}
+
+	p.lock.EnsureUnlockTable()
+}
+
+func (p *placement) isActorLocal(targetActorAddress, hostAddress string, port string) bool {
+	if targetActorAddress == hostAddress+":"+port {
 		// Easy case when there is a perfect match
 		return true
 	}
 
-	if isLocalhost(hostAddress) && strings.HasSuffix(targetActorAddress, ":"+portStr) {
-		return isLocalhost(targetActorAddress[0 : len(targetActorAddress)-len(portStr)-1])
+	if isLocalhost(hostAddress) && strings.HasSuffix(targetActorAddress, ":"+port) {
+		return isLocalhost(targetActorAddress[0 : len(targetActorAddress)-len(port)-1])
 	}
 
 	return false

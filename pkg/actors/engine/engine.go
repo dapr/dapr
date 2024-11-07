@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"math/rand"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -48,20 +47,16 @@ type Interface interface {
 }
 
 type Options struct {
-	Namespace   string
-	HostAddress string
-	Port        int
-	Table       table.Interface
-	Placement   placement.Interface
-	Resiliency  resiliency.Provider
-	GRPC        *manager.Manager
-	IdlerQueue  *queue.Processor[string, targets.Idlable]
+	Namespace  string
+	Table      table.Interface
+	Placement  placement.Interface
+	Resiliency resiliency.Provider
+	GRPC       *manager.Manager
+	IdlerQueue *queue.Processor[string, targets.Idlable]
 }
 
 type engine struct {
-	namespace   string
-	hostAddress string
-	port        int
+	namespace string
 
 	table      table.Interface
 	placement  placement.Interface
@@ -77,26 +72,30 @@ type engine struct {
 
 func New(opts Options) Interface {
 	return &engine{
-		namespace:   opts.Namespace,
-		hostAddress: opts.HostAddress,
-		port:        opts.Port,
-		table:       opts.Table,
-		placement:   opts.Placement,
-		resiliency:  opts.Resiliency,
-		grpc:        opts.GRPC,
-		idlerQueue:  opts.IdlerQueue,
-		lock:        fifo.New(),
-		closeCh:     make(chan struct{}),
+		namespace:  opts.Namespace,
+		table:      opts.Table,
+		placement:  opts.Placement,
+		resiliency: opts.Resiliency,
+		grpc:       opts.GRPC,
+		idlerQueue: opts.IdlerQueue,
+		lock:       fifo.New(),
+		closeCh:    make(chan struct{}),
+		clock:      clock.RealClock{},
 	}
 }
 
 func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	if err := e.placement.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer e.placement.Unlock()
+
 	var res *internalv1pb.InternalInvokeResponse
 	var err error
 	if e.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		res, err = e.callActor(ctx, req)
 	} else {
-		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries))
+		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
 		res, err = policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
 			return e.callActor(ctx, req)
 		})
@@ -113,15 +112,47 @@ func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 }
 
 func (e *engine) CallReminder(ctx context.Context, req *requestresponse.Reminder) error {
-	e.placement.Lock()
+	if err := e.placement.Lock(ctx); err != nil {
+		return err
+	}
 	defer e.placement.Unlock()
 
-	target, ok := e.table.HostedTarget(req.ActorType, req.ActorID)
-	if !ok {
-		return e.callRemoteActorReminder(ctx, req)
+	var err error
+	if e.resiliency.PolicyDefined(req.ActorType, resiliency.ActorPolicy{}) {
+		err = e.callReminder(ctx, req)
+	} else {
+		policyRunner := resiliency.NewRunner[struct{}](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
+		_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+			err := e.callReminder(ctx, req)
+			return struct{}{}, err
+		})
 	}
 
-	var err error
+	return err
+}
+
+func (e *engine) callReminder(ctx context.Context, req *requestresponse.Reminder) error {
+	lar, err := e.placement.LookupActor(ctx, &requestresponse.LookupActorRequest{
+		ActorType: req.ActorType,
+		ActorID:   req.ActorID,
+	})
+	if err != nil {
+		return err
+	}
+
+	if !lar.Local {
+		if req.IsRemote {
+			return backoff.Permanent(errors.New("remote actor moved"))
+		}
+
+		return e.callRemoteActorReminder(ctx, lar, req)
+	}
+
+	target, _, err := e.table.GetOrCreate(req.ActorType, req.ActorID)
+	if err != nil {
+		return err
+	}
+
 	if req.IsTimer {
 		err = target.InvokeTimer(ctx, req)
 	} else {
@@ -155,23 +186,16 @@ func (e *engine) CallReminder(ctx context.Context, req *requestresponse.Reminder
 	return err
 }
 
-var foo = rand.Int()
-
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	e.placement.Lock()
-	defer e.placement.Unlock()
-
-	actor := req.GetActor()
-	actorType := actor.GetActorType()
 	lar, err := e.placement.LookupActor(ctx, &requestresponse.LookupActorRequest{
-		ActorType: actorType,
-		ActorID:   actor.GetActorId(),
+		ActorType: req.GetActor().GetActorType(),
+		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
 		return nil, err
 	}
 
-	if e.placement.IsActorLocal(lar.Address, e.hostAddress, e.port) {
+	if lar.Local {
 		res, err := e.callLocalActor(ctx, req)
 		if err != nil {
 			return nil, backoff.Permanent(err)
@@ -183,20 +207,6 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		return nil, backoff.Permanent(errors.New("remote actor moved"))
 	}
 
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	ch := e.placement.SubscribeDisemination(ctx)
-	var isDisseminating bool
-	go func() {
-		select {
-		case <-ch:
-			isDisseminating = true
-			cancel()
-		case <-ctx.Done():
-		}
-	}()
-
 	res, err := e.callRemoteActor(ctx, lar, req)
 	if err == nil {
 		return res, nil
@@ -204,7 +214,7 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 
 	attempt := resiliency.GetAttempt(ctx)
 	code := status.Code(err)
-	if isDisseminating || code == codes.Unavailable || code == codes.Internal {
+	if code == codes.Unavailable || code == codes.Internal {
 		// Destroy the connection and force a re-connection on the next attempt
 		return res, fmt.Errorf("failed to invoke target %s after %d retries. Error: %w", lar.Address, attempt-1, err)
 	}
@@ -235,15 +245,7 @@ func (e *engine) callRemoteActor(ctx context.Context, lar *requestresponse.Looku
 	return res, nil
 }
 
-func (e *engine) callRemoteActorReminder(ctx context.Context, reminder *requestresponse.Reminder) error {
-	lar, err := e.placement.LookupActor(ctx, &requestresponse.LookupActorRequest{
-		ActorType: reminder.ActorType,
-		ActorID:   reminder.ActorID,
-	})
-	if err != nil {
-		return err
-	}
-
+func (e *engine) callRemoteActorReminder(ctx context.Context, lar *requestresponse.LookupActorResponse, reminder *requestresponse.Reminder) error {
 	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
 	if err != nil {
 		return err

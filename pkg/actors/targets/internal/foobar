@@ -1,0 +1,247 @@
+/*
+Copyright 2024 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package internal
+
+import (
+	"context"
+	"errors"
+	"sync/atomic"
+
+	"github.com/google/uuid"
+
+	"github.com/dapr/dapr/pkg/config"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/kit/concurrency/fifo"
+	"github.com/dapr/kit/logger"
+)
+
+const (
+	defaultMaxStackDepth = 32
+)
+
+var (
+	log = logger.NewLogger("dapr.runtime.actors.lock")
+
+	ErrMaxStackDepthExceeded = errors.New("maximum stack depth exceeded")
+)
+
+type LockOptions struct {
+	ActorType  string
+	Reentrancy config.ReentrancyConfig
+}
+
+type Lock struct {
+	actorType string
+
+	// fifo.Lock is used instead of a sync.Mutex to enforce FIFO ordering of
+	// method execution.
+	lock *fifo.Mutex
+
+	methodLock    chan struct{}
+	activeRequest *string
+
+	stackDepth        int32
+	maxStackDepth     int
+	reentrancyEnabled bool
+
+	// pendingCalls is the number of the current pending actor calls by
+	// turn-based concurrency.
+	pendingCalls atomic.Int32
+}
+
+func NewLock(opts LockOptions) *Lock {
+	maxStackDepth := defaultMaxStackDepth
+	if opts.Reentrancy.Enabled && opts.Reentrancy.MaxStackDepth != nil {
+		maxStackDepth = *opts.Reentrancy.MaxStackDepth
+	}
+
+	return &Lock{
+		actorType:         opts.ActorType,
+		lock:              fifo.New(),
+		methodLock:        make(chan struct{}, 1),
+		maxStackDepth:     maxStackDepth,
+		reentrancyEnabled: opts.Reentrancy.Enabled,
+	}
+}
+
+func (l *Lock) LockAll() context.CancelFunc {
+	diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, l.pendingCalls.Add(1))
+	defer l.pendingCalls.Add(-1)
+
+	l.lock.Lock()
+	l.activeRequest = nil
+	l.stackDepth = 0
+	l.methodLock <- struct{}{}
+	l.lock.Unlock()
+
+	return func() { <-l.methodLock }
+}
+
+func (l *Lock) Lock(req *invokev1.InvokeMethodRequest) (context.CancelFunc, error) {
+	diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, l.pendingCalls.Add(1))
+	defer l.pendingCalls.Add(-1)
+
+	l.lock.Lock()
+	id := l.idFromRequest(req)
+	if id == nil {
+		l.activeRequest = nil
+		l.stackDepth = 0
+		l.methodLock <- struct{}{}
+		l.lock.Unlock()
+		return func() { <-l.methodLock }, nil
+	}
+
+	return nil, nil
+}
+
+func (l *Lock) idFromRequest(req *invokev1.InvokeMethodRequest) *string {
+	if !l.reentrancyEnabled {
+		return nil
+	}
+
+	if md := req.Metadata()["Dapr-Reentrancy-Id"]; md != nil && len(md.GetValues()) > 0 {
+		return &md.GetValues()[0]
+	}
+
+	uuidStr := uuid.New().String()
+	req.AddMetadata(map[string][]string{
+		"Dapr-Reentrancy-Id": {uuidStr},
+	})
+
+	return &uuidStr
+}
+
+//func (l *Lock) Lock(req *invokev1.InvokeMethodRequest) error {
+//	return nil
+//pending := l.pendingActorCalls.Add(1)
+//diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, pending)
+
+//// Reentrancy to determine how we lock.
+//var reentrancyID *string
+//if l.reentrancy.Enabled {
+//	if md := req.Metadata()["Dapr-Reentrancy-Id"]; md != nil && len(md.GetValues()) > 0 {
+//		reentrancyID = ptr.Of(md.GetValues()[0])
+//	} else {
+//		var uuidObj uuid.UUID
+//		var err error
+//		uuidObj, err = uuid.NewRandom()
+//		if err != nil {
+//			return fmt.Errorf("failed to generate UUID: %w", err)
+//		}
+//		uuidStr := uuidObj.String()
+//		req.AddMetadata(map[string][]string{
+//			"Dapr-Reentrancy-Id": {uuidStr},
+//		})
+//		reentrancyID = &uuidStr
+//	}
+//}
+
+//currentRequest := l.getCurrentID()
+
+//if l.stackDepth.Load() == l.maxStackDepth {
+//	return ErrMaxStackDepthExceeded
+//}
+
+//if currentRequest == nil || *currentRequest != *reentrancyID {
+//	l.lockChan <- struct{}{}
+//	l.setCurrentID(reentrancyID)
+//	l.stackDepth.Add(1)
+//} else {
+//	l.stackDepth.Add(1)
+//}
+
+//l.disposeLock.RLock()
+//disposed := l.disposed
+//l.disposeLock.RUnlock()
+//if disposed {
+//	l.Unlock()
+//	return ErrActorDisposed
+//}
+
+//return nil
+//}
+
+func (l *Lock) Unlock() {
+	//pending := l.pendingActorCalls.Add(-1)
+	//if pending == 0 {
+	//	l.disposeLock.Lock()
+	//	if !l.disposed && l.disposeCh != nil {
+	//		l.disposed = true
+	//		close(l.disposeCh)
+	//	}
+	//	l.disposeLock.Unlock()
+	//} else if pending < 0 {
+	//	log.Error("BUGBUG: tried to unlock actor before locking actor.")
+	//	return
+	//}
+
+	//l.stackDepth.Add(-1)
+	//if l.stackDepth.Load() == 0 {
+	//	l.clearCurrentID()
+	//	<-l.lockChan
+	//}
+
+	//diag.DefaultMonitoring.ReportActorPendingCalls(l.actorType, pending)
+}
+
+//// Channel creates or get new dispose channel. This channel is used for draining the actor.
+//func (l *Lock) Channel() <-chan struct{} {
+//	l.disposeLock.RLock()
+//	disposeCh := l.disposeCh
+//	l.disposeLock.RUnlock()
+//
+//	if disposeCh == nil {
+//		// If disposeCh is nil, acquire a write lock and retry
+//		// We need to retry after acquiring a write lock because another goroutine could race us
+//		l.disposeLock.Lock()
+//		disposeCh = l.disposeCh
+//		if disposeCh == nil {
+//			disposeCh = make(chan struct{})
+//			l.disposeCh = disposeCh
+//		}
+//		l.disposeLock.Unlock()
+//	}
+//
+//	return disposeCh
+//}
+//
+//func (l *Lock) getCurrentID() *string {
+//	l.requestLock.Lock()
+//	defer l.requestLock.Unlock()
+//
+//	return l.activeRequest
+//}
+//
+//func (l *Lock) setCurrentID(id *string) {
+//	l.requestLock.Lock()
+//	defer l.requestLock.Unlock()
+//
+//	l.activeRequest = id
+//}
+//
+//func (l *Lock) clearCurrentID() {
+//	l.requestLock.Lock()
+//	defer l.requestLock.Unlock()
+//
+//	l.activeRequest = nil
+//}
+//
+//// IsBusy returns true when pending actor calls are ongoing.
+//func (l *Lock) IsBusy() bool {
+//	l.disposeLock.RLock()
+//	disposed := l.disposed
+//	l.disposeLock.RUnlock()
+//	return !disposed && l.pendingActorCalls.Load() > 0
+//}

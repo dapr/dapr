@@ -133,6 +133,10 @@ func (c *Client) Run(ctx context.Context) error {
 				return fmt.Errorf("failed to halt all actors: %s", err)
 			}
 
+			if ctx.Err() != nil {
+				return ctx.Err()
+			}
+
 			connCtx, cancel = context.WithCancel(ctx)
 			err := c.connectRoundRobin(connCtx)
 			ch <- err
@@ -215,7 +219,9 @@ func (c *Client) Recv(ctx context.Context) (*v1pb.PlacementOrder, error) {
 			return o, nil
 		}
 
-		if s, ok := status.FromError(err); ok && s.Code() == codes.FailedPrecondition {
+		s, ok := status.FromError(err)
+		if ok &&
+			(s.Code() == codes.FailedPrecondition || s.Message() == "placement service is closed") {
 			errCh := make(chan error, 1)
 			c.reconnectCh <- errCh
 
@@ -243,10 +249,7 @@ func (c *Client) Send(ctx context.Context, host *v1pb.Host) error {
 	}
 
 	for {
-		c.lock.LockLookup()
-		stream := *c.stream.Load()
-		c.lock.UnlockLookup()
-		err := stream.Send(host)
+		err := (*c.stream.Load()).Send(host)
 		if err == nil {
 			return nil
 		}

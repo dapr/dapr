@@ -26,7 +26,6 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/internal/health"
-	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/scheduler"
@@ -93,7 +92,6 @@ type Options struct {
 	AppID                   string
 	Namespace               string
 	StateStoreName          string
-	HostAddress             string
 	Hostname                string
 	APILevel                uint32
 	Port                    int
@@ -192,7 +190,7 @@ func New(opts Options) (Interface, error) {
 		}
 	}
 
-	drainOngoingCallTimeout := time.Duration(0)
+	drainOngoingCallTimeout := time.Duration(time.Minute)
 	if len(opts.DrainOngoingCallTimeout) > 0 {
 		drainOngoingCallTimeout, err = time.ParseDuration(opts.DrainOngoingCallTimeout)
 		if err != nil {
@@ -212,7 +210,6 @@ func New(opts Options) (Interface, error) {
 		Resiliency:    opts.Resiliency,
 		EntityConfigs: entityConfigs,
 		StoreName:     opts.StateStoreName,
-		HostAddress:   opts.HostAddress,
 
 		RemindersStoragePartitions: opts.RemindersStoragePartitions,
 		// TODO: @joshvanl
@@ -288,14 +285,12 @@ func New(opts Options) (Interface, error) {
 
 	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
 	a.engine = engine.New(engine.Options{
-		Namespace:   opts.Namespace,
-		HostAddress: opts.HostAddress,
-		Port:        opts.Port,
-		Placement:   placement,
-		GRPC:        opts.GRPC,
-		Table:       table,
-		Resiliency:  opts.Resiliency,
-		IdlerQueue:  a.idlerQueue,
+		Namespace:  opts.Namespace,
+		Placement:  placement,
+		GRPC:       opts.GRPC,
+		Table:      table,
+		Resiliency: opts.Resiliency,
+		IdlerQueue: a.idlerQueue,
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{
@@ -307,6 +302,9 @@ func New(opts Options) (Interface, error) {
 	})
 
 	stateStoreReminderStorage.SetEngine(a.engine)
+
+	// TODO: @joshvanl: remove when placement accepts dynamic actors.
+	a.registerHosted()
 
 	return a, nil
 }
@@ -328,10 +326,11 @@ func (a *actors) Run(ctx context.Context) error {
 				select {
 				case healthy := <-ch:
 					if healthy {
-						a.registerHosted()
+						// TODO: @joshvanl: enable when placement accepts dynamic actors.
+						//a.registerHosted()
 						close(a.readyCh)
 					} else {
-						a.unregisterHosted()
+						//a.unregisterHosted()
 						a.readyLock.Lock()
 						a.readyCh = make(chan struct{})
 						a.readyLock.Unlock()
@@ -450,15 +449,8 @@ func (a *actors) registerHosted() {
 }
 
 func (a *actors) handleIdleActor(target targets.Idlable) {
-	a.placement.Lock()
+	a.placement.Lock(context.Background())
 	defer a.placement.Unlock()
-	if !target.IsBusy() {
-		if err := a.table.Halt(key.ActorTypeAndIDFromKey(target.Key())); err != nil {
-			log.Errorf("Failed to halt idled actor: %s", err)
-		}
-		return
-	}
-
 	target.IdleAt(a.clock.Now().Add(actorBusyReEnqueueInterval))
 	a.idlerQueue.Enqueue(target)
 }

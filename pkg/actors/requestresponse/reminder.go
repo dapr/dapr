@@ -37,6 +37,7 @@ type Reminder struct {
 	ExpirationTime time.Time       `json:"expirationTime,omitempty"`
 	Callback       string          `json:"callback,omitempty"` // Used by timers only
 	IsTimer        bool            `json:"-"`
+	IsRemote       bool            `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.

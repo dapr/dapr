@@ -46,6 +46,7 @@ type http struct {
 func (h *http) Setup(t *testing.T) []framework.Option {
 	h.holdCall = make(chan struct{})
 	h.methodCalled = slice.String()
+	h.called.Store(0)
 
 	h.app1 = actors.New(t,
 		actors.WithActorTypes("abc"),
