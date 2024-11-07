@@ -503,10 +503,10 @@ func TestReporter(t *testing.T) {
 
 	t.Run("event is reported on successful Init",
 		func(t *testing.T) {
-			resultChan := make(chan operatorv1.ResourceResult, 1)
+			resultChan := make(chan *operatorv1.ResourceResult, 1)
 			proc, reg := newTestProc(
 				withReporter(func(_ context.Context, _ componentsapi.Component, result *operatorv1.ResourceResult) error {
-					resultChan <- *result
+					resultChan <- result
 					return nil
 				}))
 
@@ -540,10 +540,10 @@ func TestReporter(t *testing.T) {
 
 	t.Run("event is reported on failed Init",
 		func(t *testing.T) {
-			resultChan := make(chan operatorv1.ResourceResult, 1)
+			resultChan := make(chan *operatorv1.ResourceResult, 1)
 			proc, reg := newTestProc(
 				withReporter(func(_ context.Context, _ componentsapi.Component, result *operatorv1.ResourceResult) error {
-					resultChan <- *result
+					resultChan <- result
 					return nil
 				}))
 
@@ -576,10 +576,10 @@ func TestReporter(t *testing.T) {
 
 	t.Run("event is reported on successful Close",
 		func(t *testing.T) {
-			resultChan := make(chan operatorv1.ResourceResult, 1)
+			resultChan := make(chan *operatorv1.ResourceResult, 1)
 			proc, reg := newTestProc(
 				withReporter(func(_ context.Context, _ componentsapi.Component, result *operatorv1.ResourceResult) error {
-					resultChan <- *result
+					resultChan <- result
 					return nil
 				}))
 
@@ -616,10 +616,10 @@ func TestReporter(t *testing.T) {
 
 	t.Run("event is reported on failed Close",
 		func(t *testing.T) {
-			resultChan := make(chan operatorv1.ResourceResult, 1)
+			resultChan := make(chan *operatorv1.ResourceResult, 1)
 			proc, reg := newTestProc(
 				withReporter(func(_ context.Context, _ componentsapi.Component, result *operatorv1.ResourceResult) error {
-					resultChan <- *result
+					resultChan <- result
 					return nil
 				}))
 
