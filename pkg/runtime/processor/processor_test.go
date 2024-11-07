@@ -15,6 +15,7 @@ package processor
 
 import (
 	"context"
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -33,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/components"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/modes"
+	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -44,15 +46,36 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-func newTestProcWithID(id string) (*Processor, *registry.Registry) {
+// functional options
+type newTestProcOptions func(*Options)
+
+func withID(id string) newTestProcOptions {
+	return func(o *Options) {
+		o.ID = id
+		o.Meta = meta.New(meta.Options{
+			ID:        id,
+			PodName:   "testPodName",
+			Namespace: "test",
+			Mode:      modes.StandaloneMode,
+		})
+	}
+}
+
+func withReporter(r registry.Reporter) newTestProcOptions {
+	return func(o *Options) {
+		o.Reporter = r
+	}
+}
+
+func newTestProc(setters ...newTestProcOptions) (*Processor, *registry.Registry) {
 	reg := registry.New(registry.NewOptions())
-	return New(Options{
-		ID:             id,
+	opts := Options{
+		ID:             "id",
 		Namespace:      "test",
 		Registry:       reg,
 		ComponentStore: compstore.New(),
 		Meta: meta.New(meta.Options{
-			ID:        id,
+			ID:        "id",
 			PodName:   "testPodName",
 			Namespace: "test",
 			Mode:      modes.StandaloneMode,
@@ -65,11 +88,13 @@ func newTestProcWithID(id string) (*Processor, *registry.Registry) {
 		Channels:       new(channels.Channels),
 		GlobalConfig:   new(config.Configuration),
 		Security:       fake.New(),
-	}), reg
-}
+		Reporter:       reg.Reporter(),
+	}
+	for _, setter := range setters {
+		setter(&opts)
+	}
 
-func newTestProc() (*Processor, *registry.Registry) {
-	return newTestProcWithID("id")
+	return New(opts), reg
 }
 
 func TestProcessComponentsAndDependents(t *testing.T) {
@@ -333,7 +358,7 @@ func TestMetadataNamespace(t *testing.T) {
 			},
 		})
 
-	proc, reg := newTestProcWithID("app1")
+	proc, reg := newTestProc(withID("app1"))
 	mockPubSub := new(daprt.MockPubSub)
 
 	reg.PubSubs().RegisterComponent(
@@ -380,7 +405,7 @@ func TestMetadataClientID(t *testing.T) {
 				},
 			})
 
-		proc, reg := newTestProcWithID("myApp")
+		proc, reg := newTestProc(withID("myApp"))
 		mockPubSub := new(daprt.MockPubSub)
 
 		reg.PubSubs().RegisterComponent(
@@ -422,7 +447,7 @@ func TestMetadataClientID(t *testing.T) {
 				},
 			})
 
-		proc, reg := newTestProcWithID(daprt.TestRuntimeConfigID)
+		proc, reg := newTestProc(withID(daprt.TestRuntimeConfigID))
 		mockPubSub := new(daprt.MockPubSub)
 
 		reg.PubSubs().RegisterComponent(
@@ -461,4 +486,171 @@ func TestProcessNoWorkflow(t *testing.T) {
 	proc, _ := newTestProc()
 	_, ok := proc.managers[components.CategoryWorkflow]
 	require.False(t, ok, "workflow cannot be registered as user facing component")
+}
+
+func TestReporter(t *testing.T) {
+	pubsubComponent := componentsapi.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testpubsub",
+		},
+		Spec: componentsapi.ComponentSpec{
+			Type:        "pubsub.mockPubSub",
+			Version:     "v1",
+			Metadata:    daprt.GetFakeMetadataItems(),
+			InitTimeout: "2",
+		},
+	}
+
+	t.Run("event is reported on successful Init",
+		func(t *testing.T) {
+			resultChan := make(chan operatorv1.ResourceResult, 1)
+			proc, reg := newTestProc(
+				withReporter(func(_ context.Context, _ componentsapi.Component, result operatorv1.ResourceResult) error {
+					resultChan <- result
+					return nil
+				}))
+
+			mockPubSub := new(daprt.MockPubSub)
+			reg.PubSubs().RegisterComponent(
+				func(_ logger.Logger) pubsub.PubSub {
+					return mockPubSub
+				},
+				"mockPubSub",
+			)
+
+			mockPubSub.On("Init", mock.Anything).Return(nil)
+			mockPubSub.On("Close").Return(nil)
+
+			err := proc.processComponentAndDependents(context.Background(), pubsubComponent)
+			require.NoError(t, err)
+
+			select {
+			case result := <-resultChan:
+				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.ResourceType)
+				assert.Equal(t, operatorv1.EventType_EVENT_INIT, result.EventType)
+				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_SUCCESS, result.Condition)
+				assert.Equal(t, pubsubComponent.Name, result.Name)
+			case <-time.After(5 * time.Second):
+				t.Error("Timed out waiting for reporter result")
+			}
+
+			err = proc.Close(pubsubComponent)
+			require.NoError(t, err)
+		})
+
+	t.Run("event is reported on failed Init",
+		func(t *testing.T) {
+			resultChan := make(chan operatorv1.ResourceResult, 1)
+			proc, reg := newTestProc(
+				withReporter(func(_ context.Context, _ componentsapi.Component, result operatorv1.ResourceResult) error {
+					resultChan <- result
+					return nil
+				}))
+
+			mockPubSub := new(daprt.MockPubSub)
+			reg.PubSubs().RegisterComponent(
+				func(_ logger.Logger) pubsub.PubSub {
+					return mockPubSub
+				},
+				"mockPubSub",
+			)
+
+			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(fmt.Errorf("error"))
+
+			err := proc.processComponentAndDependents(context.Background(), pubsubComponent)
+			require.Error(t, err)
+
+			select {
+			case result := <-resultChan:
+				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.ResourceType)
+				assert.Equal(t, operatorv1.EventType_EVENT_INIT, result.EventType)
+				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_FAILURE, result.Condition)
+				assert.Equal(t, pubsubComponent.Name, result.Name)
+			case <-time.After(5 * time.Second):
+				t.Error("Timed out waiting for reporter result")
+			}
+
+			err = proc.Close(pubsubComponent)
+			require.NoError(t, err)
+		})
+
+	t.Run("event is reported on successful Close",
+		func(t *testing.T) {
+			resultChan := make(chan operatorv1.ResourceResult, 1)
+			proc, reg := newTestProc(
+				withReporter(func(_ context.Context, _ componentsapi.Component, result operatorv1.ResourceResult) error {
+					resultChan <- result
+					return nil
+				}))
+
+			mockPubSub := new(daprt.MockPubSub)
+			reg.PubSubs().RegisterComponent(
+				func(_ logger.Logger) pubsub.PubSub {
+					return mockPubSub
+				},
+				"mockPubSub",
+			)
+
+			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(nil)
+			mockPubSub.On("Close").Return(nil)
+
+			err := proc.processComponentAndDependents(context.Background(), pubsubComponent)
+			require.NoError(t, err)
+
+			// consume the init message
+			<-resultChan
+
+			err = proc.Close(pubsubComponent)
+			require.NoError(t, err)
+
+			select {
+			case result := <-resultChan:
+				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.ResourceType)
+				assert.Equal(t, operatorv1.EventType_EVENT_CLOSE, result.EventType)
+				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_SUCCESS, result.Condition)
+				assert.Equal(t, pubsubComponent.Name, result.Name)
+			case <-time.After(5 * time.Second):
+				t.Error("Timed out waiting for reporter result")
+			}
+		})
+
+	t.Run("event is reported on failed Close",
+		func(t *testing.T) {
+			resultChan := make(chan operatorv1.ResourceResult, 1)
+			proc, reg := newTestProc(
+				withReporter(func(_ context.Context, _ componentsapi.Component, result operatorv1.ResourceResult) error {
+					resultChan <- result
+					return nil
+				}))
+
+			mockPubSub := new(daprt.MockPubSub)
+			reg.PubSubs().RegisterComponent(
+				func(_ logger.Logger) pubsub.PubSub {
+					return mockPubSub
+				},
+				"mockPubSub",
+			)
+
+			mockPubSub.On("Init", mock.Anything, mock.Anything).Return(nil)
+			mockPubSub.On("Close").Return(fmt.Errorf("error"))
+
+			err := proc.processComponentAndDependents(context.Background(), pubsubComponent)
+			require.NoError(t, err)
+
+			// consume the init message
+			<-resultChan
+
+			err = proc.Close(pubsubComponent)
+			require.Error(t, err)
+
+			select {
+			case result := <-resultChan:
+				assert.Equal(t, operatorv1.ResourceType_RESOURCE_COMPONENT, result.ResourceType)
+				assert.Equal(t, operatorv1.EventType_EVENT_CLOSE, result.EventType)
+				assert.Equal(t, operatorv1.ResourceConditionStatus_STATUS_FAILURE, result.Condition)
+				assert.Equal(t, pubsubComponent.Name, result.Name)
+			case <-time.After(5 * time.Second):
+				t.Error("Timed out waiting for reporter result")
+			}
+		})
 }

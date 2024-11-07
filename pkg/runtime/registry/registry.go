@@ -14,6 +14,9 @@ limitations under the License.
 package registry
 
 import (
+	"context"
+
+	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components/bindings"
 	"github.com/dapr/dapr/pkg/components/configuration"
 	"github.com/dapr/dapr/pkg/components/conversation"
@@ -27,6 +30,7 @@ import (
 	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/components/workflows"
 	messagingv1 "github.com/dapr/dapr/pkg/messaging/v1"
+	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 )
 
@@ -36,6 +40,8 @@ type ComponentRegistry struct {
 	DirectMessaging messagingv1.DirectMessaging
 	CompStore       *compstore.ComponentStore
 }
+
+type Reporter func(context.Context, componentsapi.Component, operatorv1.ResourceResult) error
 
 // Registry is a collection of component registries.
 type Registry struct {
@@ -52,6 +58,7 @@ type Registry struct {
 	crypto          *crypto.Registry
 	conversations   *conversation.Registry
 	componentCb     ComponentsCallback
+	reporter        Reporter
 }
 
 func New(opts *Options) *Registry {
@@ -69,6 +76,7 @@ func New(opts *Options) *Registry {
 		crypto:          opts.crypto,
 		conversations:   opts.conversation,
 		componentCb:     opts.componentsCallback,
+		reporter:        opts.reporter,
 	}
 }
 
@@ -122,4 +130,8 @@ func (r *Registry) Conversations() *conversation.Registry {
 
 func (r *Registry) ComponentsCallback() ComponentsCallback {
 	return r.componentCb
+}
+
+func (r *Registry) Reporter() Reporter {
+	return r.reporter
 }
