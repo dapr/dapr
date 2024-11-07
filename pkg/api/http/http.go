@@ -1118,13 +1118,13 @@ func (a *api) onPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 	if !rawPayload {
 		span := diagUtils.SpanFromContext(r.Context())
-		corID, traceState := diag.TraceIDAndStateFromSpan(span)
+		traceID, traceState := diag.TraceIDAndStateFromSpan(span)
 		envelope, err := runtimePubsub.NewCloudEvent(&runtimePubsub.CloudEvent{
 			Source:          a.universal.AppID(),
 			Topic:           topic,
 			DataContentType: contentType,
 			Data:            body,
-			TraceID:         corID,
+			TraceID:         traceID,
 			TraceState:      traceState,
 			Pubsub:          pubsubName,
 		}, metadata)
@@ -1271,7 +1271,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if !rawPayload {
 		for i := range entries {
 			childSpan := diag.StartProducerSpanChildFromParent(r, span)
-			corID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
+			traceID, traceState := diag.TraceIDAndStateFromSpan(childSpan)
 			// For multiple events in a single bulk call traceParent is different for each event.
 			// Populate W3C traceparent to cloudevent envelope
 			spanMap[i] = childSpan
@@ -1282,7 +1282,7 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 				Topic:           topic,
 				DataContentType: entries[i].ContentType,
 				Data:            entries[i].Event,
-				TraceID:         corID,
+				TraceID:         traceID,
 				TraceState:      traceState,
 				Pubsub:          pubsubName,
 			}, entries[i].Metadata)

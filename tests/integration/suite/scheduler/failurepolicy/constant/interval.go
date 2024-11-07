@@ -1,4 +1,5 @@
-/* Copyright 2024 The Dapr Authors
+/*
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -10,16 +11,16 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package noset
+package constant
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	schedulerv1 "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -28,45 +29,41 @@ import (
 )
 
 func init() {
-	suite.Register(new(failsecond))
+	suite.Register(new(interval))
 }
 
-type failsecond struct {
+type interval struct {
 	scheduler *scheduler.Scheduler
 }
 
-func (f *failsecond) Setup(t *testing.T) []framework.Option {
-	f.scheduler = scheduler.New(t)
+func (i *interval) Setup(t *testing.T) []framework.Option {
+	i.scheduler = scheduler.New(t)
 	return []framework.Option{
-		framework.WithProcesses(f.scheduler),
+		framework.WithProcesses(i.scheduler),
 	}
 }
 
-func (f *failsecond) Run(t *testing.T, ctx context.Context) {
-	f.scheduler.WaitUntilRunning(t, ctx)
+func (i *interval) Run(t *testing.T, ctx context.Context) {
+	i.scheduler.WaitUntilRunning(t, ctx)
 
-	client := f.scheduler.Client(t, ctx)
+	client := i.scheduler.Client(t, ctx)
 
-	_, err := client.ScheduleJob(ctx, f.scheduler.JobNowJob("test", "namespace", "appid1"))
-	require.NoError(t, err)
-
-	var respStatus atomic.Value
-	respStatus.Store(schedulerv1.WatchJobsRequestResultStatus_FAILED)
-
-	triggered := f.scheduler.WatchJobs(t, ctx, &schedulerv1.WatchJobsRequestInitial{
-		AppId: "appid1", Namespace: "namespace",
-	}, &respStatus)
-
-	for range 2 {
-		select {
-		case name := <-triggered:
-			assert.Equal(t, "test", name)
-		case <-time.After(time.Second * 5):
-			require.Fail(t, "timed out waiting for job")
-		}
+	job := i.scheduler.JobNowJob("test", "namespace", "appid1")
+	job.Job.FailurePolicy = &schedulerv1.FailurePolicy{
+		Policy: &schedulerv1.FailurePolicy_Constant{
+			Constant: &schedulerv1.FailurePolicyConstant{
+				Interval:   durationpb.New(time.Second * 3),
+				MaxRetries: nil,
+			},
+		},
 	}
 
-	respStatus.Store(schedulerv1.WatchJobsRequestResultStatus_SUCCESS)
+	_, err := client.ScheduleJob(ctx, job)
+	require.NoError(t, err)
+
+	triggered := i.scheduler.WatchJobsFailed(t, ctx, &schedulerv1.WatchJobsRequestInitial{
+		AppId: "appid1", Namespace: "namespace",
+	})
 
 	select {
 	case name := <-triggered:
@@ -78,6 +75,13 @@ func (f *failsecond) Run(t *testing.T, ctx context.Context) {
 	select {
 	case <-triggered:
 		assert.Fail(t, "unexpected trigger")
-	case <-time.After(time.Second * 2):
+	case <-time.After(time.Second):
+	}
+
+	select {
+	case name := <-triggered:
+		assert.Equal(t, "test", name)
+	case <-time.After(time.Second * 5):
+		require.Fail(t, "timed out waiting for job")
 	}
 }

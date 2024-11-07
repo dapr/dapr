@@ -1,4 +1,5 @@
-/* Copyright 2024 The Dapr Authors
+/*
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -10,11 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package noset
+package constant
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -25,54 +25,53 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/kit/ptr"
 )
 
 func init() {
-	suite.Register(new(failsecond))
+	suite.Register(new(maxretires))
 }
 
-type failsecond struct {
+type maxretires struct {
 	scheduler *scheduler.Scheduler
 }
 
-func (f *failsecond) Setup(t *testing.T) []framework.Option {
-	f.scheduler = scheduler.New(t)
+func (m *maxretires) Setup(t *testing.T) []framework.Option {
+	m.scheduler = scheduler.New(t)
 	return []framework.Option{
-		framework.WithProcesses(f.scheduler),
+		framework.WithProcesses(m.scheduler),
 	}
 }
 
-func (f *failsecond) Run(t *testing.T, ctx context.Context) {
-	f.scheduler.WaitUntilRunning(t, ctx)
+func (m *maxretires) Run(t *testing.T, ctx context.Context) {
+	m.scheduler.WaitUntilRunning(t, ctx)
 
-	client := f.scheduler.Client(t, ctx)
+	client := m.scheduler.Client(t, ctx)
 
-	_, err := client.ScheduleJob(ctx, f.scheduler.JobNowJob("test", "namespace", "appid1"))
+	job := m.scheduler.JobNowJob("test", "namespace", "appid1")
+	job.Job.FailurePolicy = &schedulerv1.FailurePolicy{
+		Policy: &schedulerv1.FailurePolicy_Constant{
+			Constant: &schedulerv1.FailurePolicyConstant{
+				Interval:   nil,
+				MaxRetries: ptr.Of(uint32(4)),
+			},
+		},
+	}
+
+	_, err := client.ScheduleJob(ctx, job)
 	require.NoError(t, err)
 
-	var respStatus atomic.Value
-	respStatus.Store(schedulerv1.WatchJobsRequestResultStatus_FAILED)
-
-	triggered := f.scheduler.WatchJobs(t, ctx, &schedulerv1.WatchJobsRequestInitial{
+	triggered := m.scheduler.WatchJobsFailed(t, ctx, &schedulerv1.WatchJobsRequestInitial{
 		AppId: "appid1", Namespace: "namespace",
-	}, &respStatus)
+	})
 
-	for range 2 {
+	for range 5 {
 		select {
 		case name := <-triggered:
 			assert.Equal(t, "test", name)
 		case <-time.After(time.Second * 5):
 			require.Fail(t, "timed out waiting for job")
 		}
-	}
-
-	respStatus.Store(schedulerv1.WatchJobsRequestResultStatus_SUCCESS)
-
-	select {
-	case name := <-triggered:
-		assert.Equal(t, "test", name)
-	case <-time.After(time.Second * 5):
-		require.Fail(t, "timed out waiting for job")
 	}
 
 	select {

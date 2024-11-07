@@ -204,7 +204,7 @@ service Dapr {
   rpc DeleteJobAlpha1(DeleteJobRequest) returns (DeleteJobResponse) {}
 
   // Converse with a LLM service
-  rpc ConverseAlpha1(ConversationAlpha1Request) returns (ConversationAlpha1Response) {}
+  rpc ConverseAlpha1(ConversationRequest) returns (ConversationResponse) {}
 }
 
 // InvokeServiceRequest represents the request message for Service invocation.
@@ -1279,9 +1279,9 @@ message DeleteJobResponse {
   // Empty
 }
 
-// ConversationAlpha1Request is the request object for Conversation.
-message ConversationAlpha1Request {
-  // The name of Coverstaion component
+// ConversationRequest is the request object for Conversation.
+message ConversationRequest {
+  // The name of Conversation component
   string name = 1;
 
   // The ID of an existing chat (like in ChatGPT)
@@ -1314,19 +1314,19 @@ message ConversationInput {
   optional bool scrubPII = 3;
 }
 
-// ConversationAlpha1Result is the result for one input.
-message ConversationAlpha1Result {
+// ConversationResult is the result for one input.
+message ConversationResult {
   // Result for the one conversation input.
   string result = 1;
   // Parameters for all custom fields.
   map<string, google.protobuf.Any> parameters = 2;
 }
 
-// ConversationAlpha1Response is the response for Conversation.
-message ConversationAlpha1Response {
+// ConversationResponse is the response for Conversation.
+message ConversationResponse {
   // The ID of an existing chat (like in ChatGPT)
   optional string contextID = 1;
 
   // An array of results.
-  repeated ConversationAlpha1Result outputs = 2;
+  repeated ConversationResult outputs = 2;
 }

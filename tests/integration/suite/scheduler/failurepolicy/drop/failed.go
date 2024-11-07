@@ -1,4 +1,5 @@
-/* Copyright 2024 The Dapr Authors
+/*
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -10,11 +11,10 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package noset
+package drop
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
@@ -28,45 +28,38 @@ import (
 )
 
 func init() {
-	suite.Register(new(failsecond))
+	suite.Register(new(failed))
 }
 
-type failsecond struct {
+type failed struct {
 	scheduler *scheduler.Scheduler
 }
 
-func (f *failsecond) Setup(t *testing.T) []framework.Option {
+func (f *failed) Setup(t *testing.T) []framework.Option {
 	f.scheduler = scheduler.New(t)
 	return []framework.Option{
 		framework.WithProcesses(f.scheduler),
 	}
 }
 
-func (f *failsecond) Run(t *testing.T, ctx context.Context) {
+func (f *failed) Run(t *testing.T, ctx context.Context) {
 	f.scheduler.WaitUntilRunning(t, ctx)
 
 	client := f.scheduler.Client(t, ctx)
 
-	_, err := client.ScheduleJob(ctx, f.scheduler.JobNowJob("test", "namespace", "appid1"))
-	require.NoError(t, err)
-
-	var respStatus atomic.Value
-	respStatus.Store(schedulerv1.WatchJobsRequestResultStatus_FAILED)
-
-	triggered := f.scheduler.WatchJobs(t, ctx, &schedulerv1.WatchJobsRequestInitial{
-		AppId: "appid1", Namespace: "namespace",
-	}, &respStatus)
-
-	for range 2 {
-		select {
-		case name := <-triggered:
-			assert.Equal(t, "test", name)
-		case <-time.After(time.Second * 5):
-			require.Fail(t, "timed out waiting for job")
-		}
+	job := f.scheduler.JobNowJob("test", "namespace", "appid1")
+	job.Job.FailurePolicy = &schedulerv1.FailurePolicy{
+		Policy: &schedulerv1.FailurePolicy_Drop{
+			Drop: new(schedulerv1.FailurePolicyDrop),
+		},
 	}
 
-	respStatus.Store(schedulerv1.WatchJobsRequestResultStatus_SUCCESS)
+	_, err := client.ScheduleJob(ctx, job)
+	require.NoError(t, err)
+
+	triggered := f.scheduler.WatchJobsFailed(t, ctx, &schedulerv1.WatchJobsRequestInitial{
+		AppId: "appid1", Namespace: "namespace",
+	})
 
 	select {
 	case name := <-triggered:

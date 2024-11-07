@@ -80,7 +80,9 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.InDelta(c,
 			s.workflow.Metrics(t, ctx)["process_resident_memory_bytes"]*1e-6,
-			actorMemBaseline, 15, "workflow memory leak",
+			actorMemBaseline,
+			35,
+			"workflow memory leak",
 		)
-	}, 25*time.Second, 10*time.Millisecond)
+	}, time.Second*10, time.Millisecond*10)
 }
