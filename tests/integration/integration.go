@@ -16,7 +16,9 @@ package integration
 import (
 	"context"
 	"flag"
+	"fmt"
 	"regexp"
+	"strings"
 	"testing"
 	"time"
 
@@ -49,11 +51,11 @@ func RunIntegrationTests(t *testing.T) {
 	require.False(t, binFailed, "building binaries must succeed")
 
 	focusedTests := make([]suite.NamedCase, 0)
+	skippedTests := 0
 	for _, tcase := range suite.All(t) {
-		// Continue rather than using `t.Skip` to reduce the noise in the test
-		// output.
+		// Continue rather than using `t.Skip` to reduce the noise in the test output.
 		if !focus.MatchString(tcase.Name()) {
-			t.Logf("skipping test case due to focus %s", tcase.Name())
+			skippedTests++
 			continue
 		}
 		focusedTests = append(focusedTests, tcase)
@@ -61,7 +63,13 @@ func RunIntegrationTests(t *testing.T) {
 
 	startTime := time.Now()
 	t.Cleanup(func() {
-		t.Logf("Total integration test execution time: [%d] %s", len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100))
+		executionMessage := fmt.Sprintf("Total integration test execution time for %d test cases: %s", len(focusedTests), time.Since(startTime).Truncate(time.Millisecond*100))
+		t.Logf(strings.Repeat("-", len(executionMessage)))
+		if skippedTests > 0 {
+			t.Logf("%d test cases were skipped due to focus", skippedTests)
+		}
+		t.Logf(executionMessage)
+		t.Logf(strings.Repeat("-", len(executionMessage)))
 	})
 
 	for _, tcase := range focusedTests {
