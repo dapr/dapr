@@ -20,14 +20,48 @@ import (
 	"strings"
 	"time"
 
+	"google.golang.org/protobuf/types/known/timestamppb"
+
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	"github.com/dapr/dapr/pkg/components"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
+	"github.com/dapr/kit/ptr"
 )
 
-// Init initializes a component of a category.
+// Init initializes a component of a category and reports the result.
 func (p *Processor) Init(ctx context.Context, comp componentsapi.Component) error {
+	initerr := p.init(ctx, comp)
+
+	// after performing the initialization, report the result
+	condition := operatorv1.ResourceConditionStatus_STATUS_SUCCESS
+	var reason, message *string
+	if initerr != nil {
+		condition = operatorv1.ResourceConditionStatus_STATUS_FAILURE
+		reason = ptr.Of("ERROR")
+		message = ptr.Of(initerr.Error())
+	}
+
+	if err := p.reporter(ctx, comp,
+		&operatorv1.ResourceResult{
+			ResourceType:        operatorv1.ResourceType_RESOURCE_COMPONENT,
+			EventType:           operatorv1.EventType_EVENT_INIT,
+			Name:                comp.GetName(),
+			Condition:           condition,
+			Reason:              reason,
+			Message:             message,
+			ObservedGeneration:  comp.GetGeneration(),
+			LastTransactionTime: timestamppb.New(time.Now()),
+		}); err != nil {
+		return errors.Join(initerr, fmt.Errorf("error reporting component init result: %w", err), p.Close(comp))
+	}
+
+	return initerr
+}
+
+// init initializes a component of a category.
+func (p *Processor) init(ctx context.Context, comp componentsapi.Component) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
@@ -44,11 +78,47 @@ func (p *Processor) Init(ctx context.Context, comp componentsapi.Component) erro
 		return errors.Join(err, p.compStore.DropPendingComponent())
 	}
 
-	return p.compStore.CommitPendingComponent()
+	if err := p.compStore.CommitPendingComponent(); err != nil {
+		return fmt.Errorf("error committing component: %w", err)
+	}
+
+	return nil
 }
 
-// Close closes the component.
+// Close closes the component and reports the result.
 func (p *Processor) Close(comp componentsapi.Component) error {
+	closeErr := p.internalClose(comp)
+
+	// after performing the initialization, report the result
+	condition := operatorv1.ResourceConditionStatus_STATUS_SUCCESS
+	var reason, message *string
+	if closeErr != nil {
+		condition = operatorv1.ResourceConditionStatus_STATUS_FAILURE
+		reason = ptr.Of("ERROR")
+		message = ptr.Of(closeErr.Error())
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+	defer cancel()
+	if err := p.reporter(ctx, comp,
+		&operatorv1.ResourceResult{
+			ResourceType:        operatorv1.ResourceType_RESOURCE_COMPONENT,
+			EventType:           operatorv1.EventType_EVENT_CLOSE,
+			Name:                comp.GetName(),
+			Condition:           condition,
+			Reason:              reason,
+			Message:             message,
+			ObservedGeneration:  comp.GetGeneration(),
+			LastTransactionTime: timestamppb.New(time.Now()),
+		}); err != nil {
+		return errors.Join(closeErr, fmt.Errorf("error reporting component close result: %w", err))
+	}
+
+	return closeErr
+}
+
+// internalClose closes the component.
+func (p *Processor) internalClose(comp componentsapi.Component) error {
 	p.lock.Lock()
 	defer p.lock.Unlock()
 

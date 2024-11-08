@@ -105,6 +105,9 @@ type Options struct {
 
 	Adapter         rtpubsub.Adapter
 	AdapterStreamer rtpubsub.AdapterStreamer
+
+	// Reporter is the reporter for the operator.
+	Reporter registry.Reporter
 }
 
 // Processor manages the lifecycle of all components categories.
@@ -118,6 +121,7 @@ type Processor struct {
 	workflowBackend WorkflowBackendManager
 	security        security.Handler
 	subscriber      *subscriber.Subscriber
+	reporter        registry.Reporter
 
 	pendingHTTPEndpoints       chan httpendpointsapi.HTTPEndpoint
 	pendingComponents          chan componentsapi.Component
@@ -179,6 +183,12 @@ func New(opts Options) *Processor {
 		Meta:           opts.Meta,
 	})
 
+	// ensure a default no-op reporter
+	reporter := DefaultReporter
+	if opts.Reporter != nil {
+		reporter = opts.Reporter
+	}
+
 	return &Processor{
 		appID:                      opts.ID,
 		pendingHTTPEndpoints:       make(chan httpendpointsapi.HTTPEndpoint),
@@ -193,6 +203,7 @@ func New(opts Options) *Processor {
 		workflowBackend:            wfbe,
 		security:                   opts.Security,
 		subscriber:                 subscriber,
+		reporter:                   reporter,
 		managers: map[components.Category]manager{
 			components.CategoryBindings: binding,
 			components.CategoryConfiguration: configuration.New(configuration.Options{
@@ -255,4 +266,9 @@ func (p *Processor) Process(ctx context.Context) error {
 			return nil
 		},
 	).Run(ctx)
+}
+
+// DefaultReporter is the default resource reporter for the registry. It does nothing.
+func DefaultReporter(context.Context, componentsapi.Component, *operatorv1.ResourceResult) error {
+	return nil
 }
