@@ -99,7 +99,9 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 	r.scheduler2.WaitUntilRunning(t, ctx)
 	t.Cleanup(func() { r.scheduler2.Cleanup(t) })
 
+	var calledLastCount uint64
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Greater(c, r.jobCalled.Load(), called)
-	}, time.Second*10, time.Millisecond*10)
+		calledLastCount = r.jobCalled.Load()
+		assert.Greater(c, calledLastCount, called)
+	}, time.Second*10, time.Millisecond*10, "'calledLastCount': %d, is not greater than 'called': %d", calledLastCount, called)
 }
