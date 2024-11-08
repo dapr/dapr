@@ -99,6 +99,7 @@ var (
 	ErrActorReminderGet              = APIError{"error getting actor reminder: %s", "ERR_ACTOR_REMINDER_GET", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorReminderDelete           = APIError{"error deleting actor reminder: %s", "ERR_ACTOR_REMINDER_DELETE", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorTimerCreate              = APIError{"error creating actor timer: %s", "ERR_ACTOR_TIMER_CREATE", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorMaxStackDepthExceeded    = APIError{"maximum stack depth exceeded", "ERR_ACTOR_STACK_DEPTH", http.StatusTooManyRequests, grpcCodes.ResourceExhausted}
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", "ERR_LOCK_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}

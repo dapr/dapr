@@ -16,9 +16,14 @@ limitations under the License.
 package universal
 
 import (
+	"context"
 	"sync"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors/reminders"
+	"github.com/dapr/dapr/pkg/actors/state"
+	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -58,7 +63,7 @@ type Universal struct {
 
 	extendedMetadataLock sync.RWMutex
 	actors               actors.Interface
-	actorsLock           sync.RWMutex
+	actorsReadyCh        chan struct{}
 }
 
 func New(opts Options) *Universal {
@@ -74,6 +79,7 @@ func New(opts Options) *Universal {
 		appConnectionConfig:         opts.AppConnectionConfig,
 		globalConfig:                opts.GlobalConfig,
 		schedulerClients:            opts.SchedulerClients,
+		actorsReadyCh:               make(chan struct{}),
 	}
 }
 
@@ -97,15 +103,53 @@ func (a *Universal) AppConnectionConfig() config.AppConnectionConfig {
 	return a.appConnectionConfig
 }
 
-func (a *Universal) Actors() actors.Interface {
-	a.actorsLock.RLock()
-	defer a.actorsLock.RUnlock()
-	return a.actors
+func (a *Universal) Actors(ctx context.Context) (actors.Interface, error) {
+	select {
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	case <-a.actorsReadyCh:
+	}
+	return a.actors, nil
+}
+
+func (a *Universal) ActorEngine(ctx context.Context) (engine.Interface, error) {
+	actors, err := a.Actors(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return actors.Engine(ctx)
+}
+
+func (a *Universal) ActorState(ctx context.Context) (state.Interface, error) {
+	actors, err := a.Actors(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return actors.State(ctx)
+}
+
+func (a *Universal) ActorTimers(ctx context.Context) (timers.Interface, error) {
+	actors, err := a.Actors(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return actors.Timers(ctx)
+}
+
+func (a *Universal) ActorReminders(ctx context.Context) (reminders.Interface, error) {
+	actors, err := a.Actors(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	return actors.Reminders(ctx)
 }
 
 func (a *Universal) SetActorRuntime(actors actors.Interface, wfEngine *wfengine.WorkflowEngine) {
-	a.actorsLock.Lock()
-	defer a.actorsLock.Unlock()
 	a.actors = actors
 	a.workflowEngine = wfEngine
+	close(a.actorsReadyCh)
 }

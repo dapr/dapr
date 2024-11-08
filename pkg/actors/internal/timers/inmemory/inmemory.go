@@ -22,6 +22,7 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/kit/events/queue"
@@ -47,7 +48,7 @@ type inmemory struct {
 }
 
 // New returns a TimerProvider.
-func New(opts Options) *inmemory {
+func New(opts Options) timers.Storage {
 	i := &inmemory{
 		engine:            opts.Engine,
 		clock:             clock.RealClock{},

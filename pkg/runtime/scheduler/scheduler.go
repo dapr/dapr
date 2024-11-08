@@ -132,6 +132,7 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 			req:      req,
 			client:   clients[i],
 			channels: m.channels,
+			actors:   m.actorsEngine,
 		}).run
 	}
 

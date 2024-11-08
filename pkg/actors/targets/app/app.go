@@ -39,8 +39,6 @@ import (
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 	"github.com/dapr/kit/utils"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 	"k8s.io/utils/clock"
 )
 
@@ -62,7 +60,6 @@ type app struct {
 	actorType string
 	actorID   string
 
-	reentrancy config.ReentrancyConfig
 	appChannel channel.AppChannel
 	resiliency resiliency.Provider
 	idleQueue  *queue.Processor[string, targets.Idlable]
@@ -92,7 +89,6 @@ func Factory(opts Options) targets.Factory {
 		return &app{
 			actorType:   opts.ActorType,
 			actorID:     actorID,
-			reentrancy:  opts.Reentrancy,
 			appChannel:  opts.AppChannel,
 			resiliency:  opts.Resiliency,
 			idleQueue:   opts.IdleQueue,
@@ -116,7 +112,7 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 
 	cancel, err := a.lock.LockRequest(imReq)
 	if err != nil {
-		return nil, status.Error(codes.ResourceExhausted, err.Error())
+		return nil, err
 	}
 	defer cancel()
 

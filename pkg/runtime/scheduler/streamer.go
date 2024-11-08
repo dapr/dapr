@@ -90,7 +90,7 @@ func (s *streamer) outgoing(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return s.stream.CloseSend()
 		case <-s.stream.Context().Done():
 			return s.stream.Context().Err()
 		case result := <-s.resultCh:
@@ -153,7 +153,6 @@ func (s *streamer) invokeApp(ctx context.Context, job *schedulerv1pb.WatchJobsRe
 
 	response, err := appChannel.TriggerJob(ctx, job.GetName(), job.GetData())
 	if err != nil {
-		// TODO(Cassie): add an orphaned job go routine to retry sending job at a later time
 		return fmt.Errorf("error returned from app channel while sending triggered job to app: %w", err)
 	}
 	if response != nil {

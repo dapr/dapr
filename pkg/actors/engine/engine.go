@@ -101,14 +101,7 @@ func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 		})
 	}
 
-	if err != nil {
-		if res != nil && actorerrors.Is(err) {
-			return res, err
-		}
-		return nil, err
-	}
-
-	return res, nil
+	return res, err
 }
 
 func (e *engine) CallReminder(ctx context.Context, req *requestresponse.Reminder) error {

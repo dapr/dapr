@@ -21,6 +21,7 @@ import (
 
 	contribstate "github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
+	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/messages"
@@ -62,6 +63,7 @@ type Options struct {
 	CompStore  *compstore.ComponentStore
 	Resiliency resiliency.Provider
 	Table      table.Interface
+	Placement  placement.Interface
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	StateTTLEnabled bool
@@ -73,6 +75,7 @@ type state struct {
 	compStore  *compstore.ComponentStore
 	resiliency resiliency.Provider
 	table      table.Interface
+	placement  placement.Interface
 
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
@@ -85,11 +88,15 @@ func New(opts Options) Interface {
 		compStore:       opts.CompStore,
 		resiliency:      opts.Resiliency,
 		table:           opts.Table,
+		placement:       opts.Placement,
 		stateTTLEnabled: opts.StateTTLEnabled,
 	}
 }
 
 func (s *state) Get(ctx context.Context, req *requestresponse.GetStateRequest) (*requestresponse.StateResponse, error) {
+	s.placement.Lock(ctx)
+	defer s.placement.Unlock()
+
 	if _, ok := s.table.HostedTarget(req.ActorType, req.ActorID); !ok {
 		return nil, messages.ErrActorInstanceMissing
 	}
@@ -112,6 +119,7 @@ func (s *state) Get(ctx context.Context, req *requestresponse.GetStateRequest) (
 		Key:      key,
 		Metadata: metadata,
 	}
+
 	resp, err := policyRunner(func(ctx context.Context) (*contribstate.GetResponse, error) {
 		return store.Get(ctx, storeReq)
 	})
@@ -130,6 +138,9 @@ func (s *state) Get(ctx context.Context, req *requestresponse.GetStateRequest) (
 }
 
 func (s *state) GetBulk(ctx context.Context, req *requestresponse.GetBulkStateRequest) (requestresponse.BulkStateResponse, error) {
+	s.placement.Lock(ctx)
+	defer s.placement.Unlock()
+
 	if _, ok := s.table.HostedTarget(req.ActorType, req.ActorID); !ok {
 		return nil, messages.ErrActorInstanceMissing
 	}
@@ -178,6 +189,9 @@ func (s *state) GetBulk(ctx context.Context, req *requestresponse.GetBulkStateRe
 }
 
 func (s *state) TransactionalStateOperation(ctx context.Context, req *requestresponse.TransactionalRequest) (err error) {
+	s.placement.Lock(ctx)
+	defer s.placement.Unlock()
+
 	if _, ok := s.table.HostedTarget(req.ActorType, req.ActorID); !ok {
 		return messages.ErrActorInstanceMissing
 	}

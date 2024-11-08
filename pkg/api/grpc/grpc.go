@@ -1035,7 +1035,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
-	astate, err := a.Actors().State(ctx)
+	astate, err := a.ActorState(ctx)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return nil, err
@@ -1053,6 +1053,11 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 
 	resp, err := astate.Get(ctx, &req)
 	if err != nil {
+		if _, ok := status.FromError(err); ok {
+			apiServerLogger.Debug(err)
+			return nil, err
+		}
+
 		err = messages.ErrActorStateGet.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
@@ -1065,7 +1070,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 }
 
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
-	astate, err := a.Actors().State(ctx)
+	astate, err := a.ActorState(ctx)
 	if err != nil {
 		apiServerLogger.Debug(err)
 		return nil, err
@@ -1120,6 +1125,11 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 	err = astate.TransactionalStateOperation(ctx, &req)
 	if err != nil {
+		if _, ok := status.FromError(err); ok {
+			apiServerLogger.Debug(err)
+			return nil, err
+		}
+
 		err = messages.ErrActorStateTransactionSave.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
@@ -1131,7 +1141,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	response := &runtimev1pb.InvokeActorResponse{}
 
-	engine, err := a.Actors().Engine(ctx)
+	engine, err := a.ActorEngine(ctx)
 	if err != nil {
 		return nil, err
 	}

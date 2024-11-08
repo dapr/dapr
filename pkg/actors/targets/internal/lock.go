@@ -24,6 +24,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/kit/concurrency/fifo"
 	"github.com/dapr/kit/ring"
@@ -31,10 +32,7 @@ import (
 
 const defaultMaxStackDepth = 32
 
-var (
-	ErrMaxStackDepthExceeded = errors.New("maximum stack depth exceeded")
-	ErrLockClosed            = errors.New("actor lock is closed")
-)
+var ErrLockClosed = errors.New("actor lock is closed")
 
 type LockOptions struct {
 	ActorType  string
@@ -199,7 +197,7 @@ func (l *Lock) handleInflight(req *req) (*inflight, error) {
 	if l.reentrancyEnabled && l.inflights.Value.id == id {
 		l.inflights.Value.depth++
 		if l.inflights.Value.depth > l.maxStackDepth {
-			return nil, ErrMaxStackDepthExceeded
+			return nil, messages.ErrActorMaxStackDepthExceeded
 		}
 
 		return l.inflights.Value, nil

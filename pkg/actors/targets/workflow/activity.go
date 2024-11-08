@@ -26,8 +26,6 @@ import (
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
@@ -178,7 +176,7 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalv1pb.InternalI
 func (a *activity) InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error {
 	cancel, err := a.lock.Lock()
 	if err != nil {
-		return status.Error(codes.ResourceExhausted, err.Error())
+		return err
 	}
 	defer cancel()
 
@@ -348,7 +346,7 @@ func (a *activity) InvokeTimer(ctx context.Context, reminder *requestresponse.Re
 // DeactivateActor implements actors.InternalActor
 func (a *activity) DeactivateActor(ctx context.Context) error {
 	log.Debugf("Activity actor '%s': deactivating", a.actorID)
-	a.state = nil // A bit of extra caution, shouldn't be necessary
+	a.aState = nil // A bit of extra caution, shouldn't be necessary
 	return nil
 }
 
@@ -448,7 +446,7 @@ func (a *activity) createReliableReminder(ctx context.Context, data any) error {
 // DeactivateActor implements actors.InternalActor
 func (a *activity) Deactivate(ctx context.Context) error {
 	log.Debugf("Activity actor '%s': deactivating", a.actorID)
-	a.state = nil // A bit of extra caution, shouldn't be necessary
+	a.aState = nil // A bit of extra caution, shouldn't be necessary
 	a.lock.Close()
 	return nil
 }

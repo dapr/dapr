@@ -1092,7 +1092,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		DrainRebalancedActors:      a.appConfig.DrainRebalancedActors,
 		DrainOngoingCallTimeout:    a.appConfig.DrainOngoingCallTimeout,
 		RemindersStoragePartitions: a.appConfig.RemindersStoragePartitions,
-		DefaultActorIdleTimeout:    a.appConfig.ActorIdleTimeout,
+		DefaultIdleTimeout:         a.appConfig.ActorIdleTimeout,
 		HostedActorTypes:           a.appConfig.Entities,
 		Reentrancy:                 a.appConfig.Reentrancy,
 

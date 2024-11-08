@@ -285,7 +285,7 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
 	var res *internalv1pb.InternalInvokeResponse
-	engine, err := a.Actors().Engine(ctx)
+	engine, err := a.ActorEngine(ctx)
 	if err == nil {
 		if in.Metadata == nil {
 			in.Metadata = make(map[string]*internalv1pb.ListStringValue)
@@ -316,7 +316,7 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 // CallActorReminder invokes an internal virtual actor.
 func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
-	engine, err := a.Actors().Engine(ctx)
+	engine, err := a.ActorEngine(ctx)
 	if err != nil {
 		return nil, err
 	}

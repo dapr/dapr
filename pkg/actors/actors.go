@@ -30,7 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/scheduler"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/statestore"
-	"github.com/dapr/dapr/pkg/actors/internal/timers"
+	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/internal/timers/inmemory"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/requestresponse"
@@ -38,6 +38,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/app"
+	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
@@ -60,7 +61,7 @@ const (
 	// re-enqueued with its idle timeout increased by this duration.
 	actorBusyReEnqueueInterval = 10 * time.Second
 
-	defaultActorIdleTimeout     = time.Minute * 60
+	defaultIdleTimeout          = time.Minute * 60
 	defaultOngoingCallTimeout   = time.Second * 60
 	defaultReentrancyStackLimit = 32
 )
@@ -89,18 +90,18 @@ type Options struct {
 	DrainOngoingCallTimeout    string
 	RemindersStoragePartitions int
 
-	AppID                   string
-	Namespace               string
-	StateStoreName          string
-	Hostname                string
-	APILevel                uint32
-	Port                    int
-	PlacementAddresses      []string
-	SchedulerReminders      bool
-	HostedActorTypes        []string
-	HealthEndpoint          string
-	HealthHTTPClient        *http.Client
-	DefaultActorIdleTimeout string
+	AppID              string
+	Namespace          string
+	StateStoreName     string
+	Hostname           string
+	APILevel           uint32
+	Port               int
+	PlacementAddresses []string
+	SchedulerReminders bool
+	HostedActorTypes   []string
+	HealthEndpoint     string
+	HealthHTTPClient   *http.Client
+	DefaultIdleTimeout string
 
 	CompStore        *compstore.ComponentStore
 	Resiliency       resiliency.Provider
@@ -120,7 +121,7 @@ type actors struct {
 	table          table.Interface
 	placement      placement.Interface
 	engine         engine.Interface
-	timerStorage   timers.Storage
+	timerStorage   internaltimers.Storage
 	timers         timers.Interface
 	reentrancy     config.ReentrancyConfig
 	idlerQueue     *queue.Processor[string, targets.Idlable]
@@ -131,10 +132,10 @@ type actors struct {
 	reminderStore  storage.Interface
 	state          actorstate.Interface
 
-	appID                   string
-	hostedActorTypes        []string
-	entityConfigs           map[string]requestresponse.EntityConfig
-	defaultActorIdleTimeout time.Duration
+	appID              string
+	hostedActorTypes   []string
+	entityConfigs      map[string]requestresponse.EntityConfig
+	defaultIdleTimeout time.Duration
 
 	readyCh   chan struct{}
 	readyLock sync.RWMutex
@@ -198,15 +199,38 @@ func New(opts Options) (Interface, error) {
 		}
 	}
 
-	table := table.New(table.Options{
+	idleTimeout := defaultIdleTimeout
+	if len(opts.DefaultIdleTimeout) > 0 {
+		idleTimeout, err = time.ParseDuration(opts.DefaultIdleTimeout)
+		if err != nil {
+			return nil, fmt.Errorf("failed to parse default actor idle timeout: %s", err)
+		}
+	}
+
+	a := &actors{
+		appID:              opts.AppID,
+		reentrancy:         opts.Reentrancy,
+		appChannel:         opts.AppChannel,
+		resiliency:         opts.Resiliency,
+		hostedActorTypes:   opts.HostedActorTypes,
+		entityConfigs:      entityConfigs,
+		checker:            checker,
+		defaultIdleTimeout: idleTimeout,
+		clock:              clock.RealClock{},
+		readyCh:            make(chan struct{}),
+	}
+
+	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
+	a.table = table.New(table.Options{
 		EntityConfigs:           entityConfigs,
 		DrainRebalancedActors:   opts.DrainRebalancedActors,
 		DrainOngoingCallTimeout: drainOngoingCallTimeout,
+		IdlerQueue:              a.idlerQueue,
 	})
 
-	stateStoreReminderStorage := statestore.New(statestore.Options{
+	a.stateReminders = statestore.New(statestore.Options{
 		StateStore:    store,
-		Table:         table,
+		Table:         a.table,
 		Resiliency:    opts.Resiliency,
 		EntityConfigs: entityConfigs,
 		StoreName:     opts.StateStoreName,
@@ -216,14 +240,14 @@ func New(opts Options) (Interface, error) {
 		APILevel: opts.APILevel,
 	})
 
-	var targetReminderStorage storage.Interface = stateStoreReminderStorage
+	a.reminderStore = a.stateReminders
 	if opts.SchedulerReminders {
-		targetReminderStorage = scheduler.New(scheduler.Options{
+		a.reminderStore = scheduler.New(scheduler.Options{
 			Namespace:     opts.Namespace,
 			AppID:         opts.AppID,
 			Clients:       opts.SchedulerClients,
-			StateReminder: stateStoreReminderStorage,
-			Table:         table,
+			StateReminder: a.stateReminders,
+			Table:         a.table,
 			Healthz:       opts.Healthz,
 		})
 	}
@@ -232,11 +256,11 @@ func New(opts Options) (Interface, error) {
 		AppID:     opts.AppID,
 		Addresses: opts.PlacementAddresses,
 		Security:  opts.Security,
-		Table:     table,
+		Table:     a.table,
 		Namespace: opts.Namespace,
 		Hostname:  opts.Hostname,
 		Port:      opts.Port,
-		Reminders: targetReminderStorage,
+		Reminders: a.reminderStore,
 		Healthz:   opts.Healthz,
 		// TODO: @joshvanl
 		APILevel: opts.APILevel,
@@ -244,51 +268,18 @@ func New(opts Options) (Interface, error) {
 	if err != nil {
 		return nil, err
 	}
+	a.placement = placement
 
-	reminders := reminders.New(reminders.Options{
-		Storage: targetReminderStorage,
-		Table:   table,
+	a.reminders = reminders.New(reminders.Options{
+		Storage: a.reminderStore,
+		Table:   a.table,
 	})
 
-	actorIdleTimeout := defaultActorIdleTimeout
-	if len(opts.DefaultActorIdleTimeout) > 0 {
-		actorIdleTimeout, err = time.ParseDuration(opts.DefaultActorIdleTimeout)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse default actor idle timeout: %s", err)
-		}
-	}
-
-	a := &actors{
-		appID:                   opts.AppID,
-		reminders:               reminders,
-		table:                   table,
-		placement:               placement,
-		reentrancy:              opts.Reentrancy,
-		appChannel:              opts.AppChannel,
-		resiliency:              opts.Resiliency,
-		hostedActorTypes:        opts.HostedActorTypes,
-		entityConfigs:           entityConfigs,
-		checker:                 checker,
-		stateReminders:          stateStoreReminderStorage,
-		reminderStore:           targetReminderStorage,
-		defaultActorIdleTimeout: actorIdleTimeout,
-		state: actorstate.New(actorstate.Options{
-			AppID:           opts.AppID,
-			StoreName:       opts.StateStoreName,
-			CompStore:       opts.CompStore,
-			Resiliency:      opts.Resiliency,
-			StateTTLEnabled: opts.StateTTLEnabled,
-		}),
-		clock:   clock.RealClock{},
-		readyCh: make(chan struct{}),
-	}
-
-	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
 	a.engine = engine.New(engine.Options{
 		Namespace:  opts.Namespace,
 		Placement:  placement,
 		GRPC:       opts.GRPC,
-		Table:      table,
+		Table:      a.table,
 		Resiliency: opts.Resiliency,
 		IdlerQueue: a.idlerQueue,
 	})
@@ -298,10 +289,20 @@ func New(opts Options) (Interface, error) {
 	})
 	a.timers = timers.New(timers.Options{
 		Storage: a.timerStorage,
-		Table:   table,
+		Table:   a.table,
 	})
 
-	stateStoreReminderStorage.SetEngine(a.engine)
+	a.stateReminders.SetEngine(a.engine)
+
+	a.state = actorstate.New(actorstate.Options{
+		AppID:           opts.AppID,
+		StoreName:       opts.StateStoreName,
+		CompStore:       opts.CompStore,
+		Resiliency:      opts.Resiliency,
+		StateTTLEnabled: opts.StateTTLEnabled,
+		Table:           a.table,
+		Placement:       a.placement,
+	})
 
 	// TODO: @joshvanl: remove when placement accepts dynamic actors.
 	a.registerHosted()
@@ -315,7 +316,7 @@ func (a *actors) Run(ctx context.Context) error {
 		return nil
 	}
 
-	log.Infof("Actor runtime started. Idle timeout: %v", a.defaultActorIdleTimeout)
+	log.Infof("Actor runtime started. Idle timeout: %v", a.defaultIdleTimeout)
 
 	mngr := concurrency.NewRunnerCloserManager(nil,
 		a.checker.Run,
@@ -432,14 +433,16 @@ func (a *actors) unregisterHosted() {
 
 func (a *actors) registerHosted() {
 	for _, actorType := range a.hostedActorTypes {
-		idleTimeout := a.defaultActorIdleTimeout
+		idleTimeout := a.defaultIdleTimeout
+		reentrancy := a.reentrancy
 		if c, ok := a.entityConfigs[actorType]; ok {
 			idleTimeout = c.ActorIdleTimeout
+			reentrancy = c.ReentrancyConfig
 		}
 
 		a.table.RegisterActorType(actorType, app.Factory(app.Options{
 			ActorType:   actorType,
-			Reentrancy:  a.reentrancy,
+			Reentrancy:  reentrancy,
 			AppChannel:  a.appChannel,
 			Resiliency:  a.resiliency,
 			IdleQueue:   a.idlerQueue,
@@ -449,19 +452,20 @@ func (a *actors) registerHosted() {
 }
 
 func (a *actors) handleIdleActor(target targets.Idlable) {
-	a.placement.Lock(context.Background())
+	if err := a.placement.Lock(context.Background()); err != nil {
+		return
+	}
 	defer a.placement.Unlock()
-	target.IdleAt(a.clock.Now().Add(actorBusyReEnqueueInterval))
-	a.idlerQueue.Enqueue(target)
+
+	log.Debugf("Actor %s is idle, deactivating", target.Key())
+
+	if err := a.table.Halt(context.Background(), target); err != nil {
+		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
+		return
+	}
 }
 
 func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
-	if a == nil {
-		return &runtimev1pb.ActorRuntime{
-			RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
-		}
-	}
-
 	statusMessage := "placement: connected"
 	hostReady := true
 	if !a.placement.Ready() {
@@ -505,7 +509,7 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 func translateEntityConfig(appConfig config.EntityConfig) requestresponse.EntityConfig {
 	domainConfig := requestresponse.EntityConfig{
 		Entities:                   appConfig.Entities,
-		ActorIdleTimeout:           defaultActorIdleTimeout,
+		ActorIdleTimeout:           defaultIdleTimeout,
 		DrainOngoingCallTimeout:    defaultOngoingCallTimeout,
 		DrainRebalancedActors:      appConfig.DrainRebalancedActors,
 		ReentrancyConfig:           appConfig.Reentrancy,

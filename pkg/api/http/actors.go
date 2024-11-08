@@ -183,7 +183,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
-	rem, err := a.universal.Actors().Reminders(ctx)
+	rem, err := a.universal.ActorReminders(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -223,7 +223,7 @@ func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	req.ActorType = chi.URLParamFromCtx(ctx, actorTypeParam)
 	req.ActorID = chi.URLParamFromCtx(ctx, actorIDParam)
 
-	timers, err := a.universal.Actors().Timers(ctx)
+	timers, err := a.universal.ActorTimers(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -275,7 +275,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 		Operations: ops,
 	}
 
-	state, err := a.universal.Actors().State(ctx)
+	state, err := a.universal.ActorState(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		log.Debug(err)
@@ -284,6 +284,12 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 
 	err = state.TransactionalStateOperation(ctx, req)
 	if err != nil {
+		if errors.As(err, new(messages.APIError)) {
+			respondWithError(w, err)
+			log.Debug(err)
+			return
+		}
+
 		msg := messages.ErrActorStateTransactionSave.WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)
@@ -296,7 +302,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 func (a *api) onGetActorReminder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	rem, err := a.universal.Actors().Reminders(ctx)
+	rem, err := a.universal.ActorReminders(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		log.Debug(err)
@@ -342,7 +348,7 @@ func (a *api) onDeleteActorTimer() http.HandlerFunc {
 func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	engine, err := a.universal.Actors().Engine(ctx)
+	engine, err := a.universal.ActorEngine(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -372,6 +378,12 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 
 	res, err := engine.Call(ctx, req)
 	if err != nil {
+		if merr, ok := err.(messages.APIError); ok {
+			respondWithError(w, merr)
+			log.Debug(merr)
+			return
+		}
+
 		actorErr, isActorError := actorerrors.As(err)
 		if !isActorError {
 			msg := messages.ErrActorInvoke.WithFormat(err)
@@ -415,7 +427,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	astate, err := a.universal.Actors().State(ctx)
+	astate, err := a.universal.ActorState(ctx)
 	if err != nil {
 		respondWithError(w, err)
 		return
@@ -431,6 +443,12 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 		Key:       key,
 	})
 	if err != nil {
+		if errors.As(err, new(messages.APIError)) {
+			respondWithError(w, err)
+			log.Debug(err)
+			return
+		}
+
 		msg := messages.ErrActorStateGet.WithFormat(err)
 		respondWithError(w, msg)
 		log.Debug(msg)

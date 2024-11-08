@@ -16,6 +16,7 @@ package actors
 import (
 	"net/http"
 	"strconv"
+	"time"
 
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
@@ -35,6 +36,8 @@ type options struct {
 	handlers          map[string]http.HandlerFunc
 	reentry           *bool
 	reentryMaxDepth   *uint32
+	actorIdleTimeout  *time.Duration
+	entityConfig      []entityConfig
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -112,5 +115,21 @@ func WithReentry(enabled bool) Option {
 func WithReentryMaxDepth(maxDepth uint32) Option {
 	return func(o *options) {
 		o.reentryMaxDepth = &maxDepth
+	}
+}
+
+func WithActorIdleTimeout(timeout time.Duration) Option {
+	return func(o *options) {
+		o.actorIdleTimeout = &timeout
+	}
+}
+
+func WithEntityConfig(opts ...EntityConfig) Option {
+	return func(o *options) {
+		var e entityConfig
+		for _, opt := range opts {
+			opt(&e)
+		}
+		o.entityConfig = append(o.entityConfig, e)
 	}
 }

@@ -15,6 +15,7 @@ package actors
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"runtime"
 	"strings"
@@ -73,6 +74,17 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	} else if opts.reentry != nil {
 		config += fmt.Sprintf(`,"reentrancy":{"enabled":%t}`, *opts.reentry)
 	}
+
+	if opts.actorIdleTimeout != nil {
+		config += fmt.Sprintf(`,"actorIdleTimeout":"%s"`, *opts.actorIdleTimeout)
+	}
+
+	if len(opts.entityConfig) > 0 {
+		b, err := json.Marshal(opts.entityConfig)
+		require.NoError(t, err)
+		config += fmt.Sprintf(`,"entitiesConfig":%s`, string(b))
+	}
+
 	config += "}"
 
 	app := app.New(t, append(handlers, app.WithConfig(config))...)
