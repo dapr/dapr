@@ -137,3 +137,7 @@ func (c *Clients) connectClients(ctx context.Context) error {
 	c.clients = clients
 	return nil
 }
+
+func (c *Clients) ReconnectClients(ctx context.Context) error {
+	return c.connectClients(ctx)
+}

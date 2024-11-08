@@ -15,6 +15,8 @@ package scheduler
 
 import (
 	"context"
+	"runtime"
+	"strings"
 	"time"
 
 	"github.com/dapr/dapr/pkg/actors"
@@ -71,6 +73,10 @@ func (c *connector) run(ctx context.Context) error {
 			log.Infof("Scheduler stream disconnected")
 		} else {
 			log.Errorf("Scheduler stream disconnected: %v", err)
+			if runtime.GOOS == "windows" && strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host.") {
+				log.Error(err)
+				return err
+			}
 		}
 
 		if ctx.Err() != nil {
