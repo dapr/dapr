@@ -22,7 +22,6 @@ import (
 
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	"github.com/dapr/dapr/pkg/messages"
-
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
 
