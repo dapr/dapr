@@ -73,6 +73,14 @@ func (m *Manager) Run(ctx context.Context) error {
 
 	for {
 		if err := m.watchJobs(ctx); err != nil {
+			// don't retry if closing down
+			if ctx.Err() != nil {
+				return nil //nolint:nilerr
+			}
+			if err == io.EOF {
+				log.Warnf("Received EOF, re-establishing connection: %v", err)
+				continue
+			}
 			// special case for windows when the connection is closed by the server
 			// level=error msg="Scheduler stream disconnected: rpc error: code = Unavailable
 			// desc = error reading from server: read tcp 127.0.0.1:63212->127.0.0.1:1026:
@@ -84,14 +92,6 @@ func (m *Manager) Run(ctx context.Context) error {
 					log.Errorf("failed reconnecting clients: %v", err)
 					return err
 				}
-				continue
-			}
-			// don't retry if closing down
-			if ctx.Err() != nil {
-				return nil //nolint:nilerr
-			}
-			if err == io.EOF {
-				log.Warnf("Received EOF, re-establishing connection: %v", err)
 				continue
 			}
 			return fmt.Errorf("error watching scheduler jobs: %w", err)
