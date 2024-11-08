@@ -75,6 +75,7 @@ func (c *Clients) Run(ctx context.Context) error {
 		select {
 		case <-time.After(time.Second):
 		case <-ctx.Done():
+			log.Errorf("clients.go Run ctx.Done. ctx.Err is: %s", ctx.Err())
 			return ctx.Err()
 		}
 	}
@@ -86,6 +87,7 @@ func (c *Clients) Run(ctx context.Context) error {
 	close(c.readyCh)
 	c.htarget.Ready()
 	<-ctx.Done()
+	log.Errorf("clients.go ctx.Done, ctx.Err is: %s", ctx.Err())
 	close(c.closeCh)
 
 	return nil
@@ -102,6 +104,7 @@ func (c *Clients) Next(ctx context.Context) (schedulerv1pb.SchedulerClient, erro
 	case <-c.closeCh:
 		return nil, errors.New("scheduler clients closed")
 	case <-ctx.Done():
+		log.Errorf("clients.go Next ctx.Done. ctx.Err is: %s", ctx.Err())
 		return nil, ctx.Err()
 	}
 
@@ -116,6 +119,7 @@ func (c *Clients) All(ctx context.Context) ([]schedulerv1pb.SchedulerClient, err
 	case <-c.closeCh:
 		return nil, errors.New("scheduler clients closed")
 	case <-ctx.Done():
+		log.Errorf("clients.go All ctx.Done. ctx.Err is: %s", ctx.Err())
 		return nil, ctx.Err()
 	}
 	return c.clients, nil

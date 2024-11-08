@@ -37,6 +37,7 @@ func (c *connector) run(ctx context.Context) error {
 	for {
 		stream, err := c.client.WatchJobs(ctx)
 		if ctx.Err() != nil {
+			log.Errorf("connector.go run after c.client.WatchJobs ctx.Err: %s", ctx.Err())
 			return ctx.Err()
 		}
 
@@ -44,6 +45,7 @@ func (c *connector) run(ctx context.Context) error {
 			log.Errorf("failed to watch scheduler jobs, retrying: %s", err)
 			select {
 			case <-ctx.Done():
+				log.Errorf("connector.go run ctx.Done, ctx.Err is: %s", ctx.Err())
 				return ctx.Err()
 			case <-time.After(time.Second):
 			}
@@ -55,6 +57,7 @@ func (c *connector) run(ctx context.Context) error {
 		if err = stream.Send(c.req); err != nil {
 			select {
 			case <-ctx.Done():
+				log.Errorf("connector.go stream.Send returned an err: %s, ctx.Done, ctx.Err is: %s", err, ctx.Err())
 				return ctx.Err()
 			default:
 				log.Errorf("scheduler stream error, re-connecting: %s", err)
@@ -72,7 +75,7 @@ func (c *connector) run(ctx context.Context) error {
 		if err == nil {
 			log.Infof("Scheduler stream disconnected")
 		} else {
-			log.Errorf("Scheduler stream disconnected: %v", err)
+			log.Errorf("Scheduler stream disconnected: %s", err)
 			if runtime.GOOS == "windows" && strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host.") {
 				log.Error(err)
 				return err
@@ -80,6 +83,7 @@ func (c *connector) run(ctx context.Context) error {
 		}
 
 		if ctx.Err() != nil {
+			log.Errorf("connector.go run ctx.Err: %s", ctx.Err())
 			return ctx.Err()
 		}
 	}

@@ -54,9 +54,11 @@ func (s *streamer) receive(ctx context.Context) error {
 	for {
 		resp, err := s.stream.Recv()
 		if ctx.Err() != nil || errors.Is(err, io.EOF) {
+			log.Errorf("streamer.go receive ctx.Err: %s, err: %s", ctx.Err(), err)
 			return ctx.Err()
 		}
 		if err != nil {
+			log.Errorf("streamer.go receive s.stream.Recv returned an err: %s", err)
 			return err
 		}
 
@@ -88,11 +90,14 @@ func (s *streamer) outgoing(ctx context.Context) error {
 	for {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			log.Errorf("streamer.go outgoing ctx.Done, ctx.Err is: %s", ctx.Err())
+			return s.stream.CloseSend()
 		case <-s.stream.Context().Done():
+			log.Errorf("streamer.go outgoing s.stream.Context().Done, s.stream.Context().Err is: %s", s.stream.Context().Err())
 			return s.stream.Context().Err()
 		case result := <-s.resultCh:
 			if err := s.stream.Send(result); err != nil {
+				log.Errorf("streamer.go outgoing s.stream.Send returned an err: %s", err)
 				return err
 			}
 		}
