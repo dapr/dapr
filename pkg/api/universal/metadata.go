@@ -38,15 +38,7 @@ func (a *Universal) GetMetadata(ctx context.Context, in *runtimev1pb.GetMetadata
 	// This is deprecated, but we still need to support it for backward compatibility.
 	extendedMetadata[daprRuntimeVersionKey] = buildinfo.Version()
 
-	var actorRuntime *runtimev1pb.ActorRuntime
-	select {
-	case <-a.actorsReadyCh:
-		actorRuntime = a.actors.RuntimeStatus()
-	default:
-		actorRuntime = &runtimev1pb.ActorRuntime{
-			RuntimeStatus: runtimev1pb.ActorRuntime_INITIALIZING,
-		}
-	}
+	actorRuntime := a.actors.RuntimeStatus()
 
 	// App connection information
 	appConnectionProperties := &runtimev1pb.AppConnectionProperties{

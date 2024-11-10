@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/timestamppb"
@@ -25,6 +26,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -51,6 +53,7 @@ type Options struct {
 	Table      table.Interface
 	Placement  placement.Interface
 	Resiliency resiliency.Provider
+	Reminders  reminders.Interface
 	GRPC       *manager.Manager
 	IdlerQueue *queue.Processor[string, targets.Idlable]
 }
@@ -61,6 +64,7 @@ type engine struct {
 	table      table.Interface
 	placement  placement.Interface
 	resiliency resiliency.Provider
+	reminders  reminders.Interface
 	grpc       *manager.Manager
 
 	idlerQueue *queue.Processor[string, targets.Idlable]
@@ -153,27 +157,17 @@ func (e *engine) callReminder(ctx context.Context, req *requestresponse.Reminder
 	}
 
 	// If the reminder was cancelled, delete it.
-	// TODO: @joshvanl
 	if errors.Is(err, actorerrors.ErrReminderCanceled) {
-		//a.lock.Lock()
-		//key := constructCompositeKey(reminder.ActorType, reminder.ActorID)
-		//if act, ok := a.internalActors.Get(key); ok && act.Completed() {
-		//	a.internalActors.Del(key)
-		//	a.actorsTable.Delete(key)
-		//}
-		//a.lock.Unlock()
-		//go func() {
-		//	log.Debugf("Deleting reminder which was cancelled: %s", reminder.Key())
-		//	reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-		//	defer cancel()
-		//	if derr := e.reminders.DeleteReminder(reqCtx, &requestresponse.DeleteReminderRequest{
-		//		Name:      req.Name,
-		//		ActorType: req.ActorType,
-		//		ActorID:   req.ActorID,
-		//	}); derr != nil {
-		//		log.Errorf("Error deleting reminder %s: %s", req.Key(), derr)
-		//	}
-		//}()
+		log.Debugf("Deleting reminder which was cancelled: %s", req.Key())
+		reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
+		defer cancel()
+		if derr := e.reminders.Delete(reqCtx, &requestresponse.DeleteReminderRequest{
+			Name:      req.Name,
+			ActorType: req.ActorType,
+			ActorID:   req.ActorID,
+		}); derr != nil {
+			log.Errorf("Error deleting reminder %s: %s", req.Key(), derr)
+		}
 	}
 
 	return err

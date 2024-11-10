@@ -16,18 +16,16 @@ package wfengine
 
 import (
 	"context"
-	"errors"
 	"fmt"
-	"sync"
-	"sync/atomic"
-	"time"
 
 	"github.com/microsoft/durabletask-go/backend"
 	"google.golang.org/grpc"
 
-	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/kit/logger"
 )
 
@@ -39,98 +37,80 @@ var (
 type Options struct {
 	AppID          string
 	Namespace      string
-	ActorEngine    engine.Interface
+	Actors         actors.Interface
 	Spec           config.WorkflowSpec
 	BackendManager processor.WorkflowBackendManager
 }
 
 type WorkflowEngine struct {
-	isRunning atomic.Bool
+	appID     string
+	namespace string
+	actors    actors.Interface
 
-	backend              backend.Backend
-	executor             backend.Executor
-	worker               backend.TaskHubWorker
+	backend        backend.Backend
+	executor       backend.Executor
+	worker         backend.TaskHubWorker
+	backendManager processor.WorkflowBackendManager
+	// TODO: @joshvanl: remove
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 
-	startMutex      sync.Mutex
-	disconnectChan  chan any
-	spec            config.WorkflowSpec
-	wfEngineReady   atomic.Bool
-	wfEngineReadyCh chan struct{}
-}
-
-func IsWorkflowRequest(path string) bool {
-	return backend.IsDurableTaskGrpcRequest(path)
+	initDoneCh chan struct{}
+	readyCh    chan struct{}
+	spec       config.WorkflowSpec
 }
 
 func New(opts Options) *WorkflowEngine {
-	engine := &WorkflowEngine{
-		spec:            opts.Spec,
-		wfEngineReadyCh: make(chan struct{}),
+	return &WorkflowEngine{
+		appID:          opts.AppID,
+		namespace:      opts.Namespace,
+		spec:           opts.Spec,
+		actors:         opts.Actors,
+		backendManager: opts.BackendManager,
+		readyCh:        make(chan struct{}),
+		initDoneCh:     make(chan struct{}),
 	}
+}
 
-	var ok bool
-	if opts.BackendManager != nil {
-		engine.backend, ok = opts.BackendManager.Backend()
+func (wfe *WorkflowEngine) RegisterGrpcServer(grpcServer *grpc.Server) error {
+	select {
+	case <-wfe.initDoneCh:
+	default:
+		return fmt.Errorf("workflow engine not initialized")
 	}
+	wfe.registerGrpcServerFn(grpcServer)
+	return nil
+}
+
+func (wfe *WorkflowEngine) Init() {
+	defer close(wfe.initDoneCh)
+
+	engine, ok := wfe.backendManager.Backend()
 	if !ok {
 		// If no backend was initialized by the manager, create a backend backed by actors
-		// TODO: @joshvanl
-		//engine.backend = actors.New(actors.Options{
-		//	AppID:       opts.AppID,
-		//	Namespace:   opts.Namespace,
-		//	ActorEngine: opts.ActorEngine,
-		//})
+		engine = backendactors.New(wfbackend.Options{
+			AppID:     wfe.appID,
+			Namespace: wfe.namespace,
+			Actors:    wfe.actors,
+		})
 	}
 
-	return engine
+	wfe.backend = engine
+
+	wfe.executor, wfe.registerGrpcServerFn = backend.NewGrpcExecutor(wfe.backend, log)
 }
 
-func (wfe *WorkflowEngine) RegisterGrpcServer(grpcServer *grpc.Server) {
-	wfe.registerGrpcServerFn(grpcServer)
-}
-
-func (wfe *WorkflowEngine) ConfigureGrpcExecutor() {
-	// Enable lazy auto-starting the worker only when a workflow app connects to fetch work items.
-	autoStartCallback := backend.WithOnGetWorkItemsConnectionCallback(func(ctx context.Context) error {
-		// NOTE: We don't propagate the context here because that would cause the engine to shut
-		//       down when the client disconnects and cancels the passed-in context. Once it starts
-		//       up, we want to keep the engine running until the runtime shuts down.
-		if err := wfe.Start(context.Background()); err != nil {
-			// This can happen if the workflow app connects before the sidecar has finished initializing.
-			// The client app is expected to continuously retry until successful.
-			return fmt.Errorf("failed to auto-start the workflow engine: %w", err)
-		}
-		return nil
-	})
-
-	// Create a channel that can be used to disconnect the remote client during shutdown.
-	wfe.disconnectChan = make(chan any, 1)
-	disconnectHelper := backend.WithStreamShutdownChannel(wfe.disconnectChan)
-
-	wfe.executor, wfe.registerGrpcServerFn = backend.NewGrpcExecutor(wfe.backend, log, autoStartCallback, disconnectHelper)
-}
-
-func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
-	// Start could theoretically get called by multiple goroutines concurrently
-	wfe.startMutex.Lock()
-	defer wfe.startMutex.Unlock()
-
-	if wfe.isRunning.Load() {
-		return nil
-	}
-
-	if wfe.executor == nil {
-		return errors.New("gRPC executor is not yet configured")
+func (wfe *WorkflowEngine) Run(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-wfe.initDoneCh:
 	}
 
 	// Register actor backend if backend is actor
-	// TODO: @joshvanl
-	//abe, ok := wfe.backend.(*actors.Actors)
-	//if ok {
-	//	abe.WaitForActorsReady(ctx)
-	//	abe.RegisterActor(ctx)
-	//}
+	abe, ok := wfe.backend.(*backendactors.Actors)
+	if ok {
+		abe.RegisterActor(ctx)
+	}
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
 	orchestrationWorker := backend.NewOrchestrationWorker(
@@ -150,55 +130,28 @@ func (wfe *WorkflowEngine) Start(ctx context.Context) (err error) {
 		return fmt.Errorf("failed to start workflow engine: %w", err)
 	}
 
-	wfe.isRunning.Store(true)
 	log.Info("Workflow engine started")
 
-	wfe.SetWorkflowEngineReadyDone()
+	close(wfe.readyCh)
+	<-ctx.Done()
 
+	if err := wfe.worker.Shutdown(context.Background()); err != nil {
+		return fmt.Errorf("failed to shutdown the workflow worker: %w", err)
+	}
+
+	log.Info("Workflow engine stopped")
 	return nil
 }
 
-func (wfe *WorkflowEngine) Close(ctx context.Context) error {
-	wfe.startMutex.Lock()
-	defer wfe.startMutex.Unlock()
-
-	if !wfe.isRunning.Load() {
+func (wfe *WorkflowEngine) WaitForReady(ctx context.Context) error {
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-wfe.readyCh:
 		return nil
 	}
-
-	if wfe.worker != nil {
-		if wfe.disconnectChan != nil {
-			// Signals to the durabletask-go gRPC service to disconnect the app client.
-			// This is important to complete the graceful shutdown sequence in a timely manner.
-			close(wfe.disconnectChan)
-		}
-		if err := wfe.worker.Shutdown(ctx); err != nil {
-			return fmt.Errorf("failed to shutdown the workflow worker: %w", err)
-		}
-		wfe.isRunning.Store(false)
-		log.Info("Workflow engine stopped")
-	}
-	return nil
 }
 
-// WaitForWorkflowEngineReady waits for the workflow engine to be ready.
-func (wfe *WorkflowEngine) WaitForWorkflowEngineReady(ctx context.Context) {
-	// Quick check to avoid allocating a timer if the workflow engine is ready
-	if wfe.wfEngineReady.Load() {
-		return
-	}
-
-	waitCtx, waitCancel := context.WithTimeout(ctx, 10*time.Second)
-	defer waitCancel()
-
-	select {
-	case <-waitCtx.Done():
-	case <-wfe.wfEngineReadyCh:
-	}
-}
-
-func (wfe *WorkflowEngine) SetWorkflowEngineReadyDone() {
-	if wfe.wfEngineReady.CompareAndSwap(false, true) {
-		close(wfe.wfEngineReadyCh)
-	}
+func IsWorkflowRequest(path string) bool {
+	return backend.IsDurableTaskGrpcRequest(path)
 }

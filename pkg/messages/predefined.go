@@ -91,6 +91,7 @@ var (
 	// Actor.
 	ErrActorReminderOpActorNotHosted = APIError{"operations on actor reminders are only possible on hosted actor types", "ERR_ACTOR_REMINDER_NON_HOSTED", http.StatusForbidden, grpcCodes.PermissionDenied}
 	ErrActorRuntimeNotFound          = APIError{`the state store is not configured to use the actor runtime. Have you set the - name: actorStateStore value: "true" in your state store component file?`, "ERR_ACTOR_RUNTIME_NOT_FOUND", http.StatusInternalServerError, grpcCodes.Internal}
+	ErrActorNoAppChannel             = APIError{"app channel is not initialized", "ERR_ACTOR_NO_APP_CHANNEL", http.StatusBadRequest, grpcCodes.Unavailable}
 	ErrActorInstanceMissing          = APIError{"actor instance is missing", "ERR_ACTOR_INSTANCE_MISSING", http.StatusBadRequest, grpcCodes.Internal}
 	ErrActorInvoke                   = APIError{"error invoke actor method: %s", "ERR_ACTOR_INVOKE_METHOD", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorStateGet                 = APIError{"error getting actor state: %s", "ERR_ACTOR_STATE_GET", http.StatusInternalServerError, grpcCodes.Internal}
@@ -100,6 +101,8 @@ var (
 	ErrActorReminderDelete           = APIError{"error deleting actor reminder: %s", "ERR_ACTOR_REMINDER_DELETE", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorTimerCreate              = APIError{"error creating actor timer: %s", "ERR_ACTOR_TIMER_CREATE", http.StatusInternalServerError, grpcCodes.Internal}
 	ErrActorMaxStackDepthExceeded    = APIError{"maximum stack depth exceeded", "ERR_ACTOR_STACK_DEPTH", http.StatusTooManyRequests, grpcCodes.ResourceExhausted}
+	ErrActorNoPlacement              = APIError{"placement service is not configured", "ERR_ACTOR_NO_PLACEMENT", http.StatusBadRequest, grpcCodes.Unavailable}
+	ErrActorRuntimeClosed            = APIError{"actor runtime is closed", "ERR_ACTOR_RUNTIME_CLOSED", http.StatusServiceUnavailable, grpcCodes.Unavailable}
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", "ERR_LOCK_STORE_NOT_CONFIGURED", http.StatusInternalServerError, grpcCodes.FailedPrecondition}

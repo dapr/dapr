@@ -27,10 +27,7 @@ import (
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 
-	"github.com/dapr/dapr/pkg/actors/engine"
-	"github.com/dapr/dapr/pkg/actors/reminders"
-	actorstate "github.com/dapr/dapr/pkg/actors/state"
-	"github.com/dapr/dapr/pkg/actors/table"
+	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
 	"github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/components/wfbackend/state"
@@ -68,14 +65,11 @@ type Actors struct {
 
 	// TODO: @joshvanl
 	cachingDisabled         bool
-	defaultTimeout          *time.Duration
+	defaultWorkflowTimeout  *time.Duration
+	defaultActivityTimeout  *time.Duration
 	defaultReminderInterval *time.Duration
 	resiliency              resiliency.Provider
-	state                   actorstate.Interface
-	reminders               reminders.Interface
-	actorEngine             engine.Interface
-	actorTable              table.Interface
-	scheduler               wfbackend.WorkflowScheduler
+	actors                  actors.Interface
 
 	// TODO: @joshvanl: remove
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
@@ -87,8 +81,7 @@ func New(opts wfbackend.Options) backend.Backend {
 		appID:             opts.AppID,
 		workflowActorType: ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType: ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
-		actorEngine:       opts.ActorEngine,
-		actorTable:        opts.ActorTable,
+		actors:            opts.Actors,
 
 		// TODO: @joshvanl: remove
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem),
@@ -127,35 +120,35 @@ func getActivityScheduler(activityWorkItemChan chan *backend.ActivityWorkItem) w
 	}
 }
 
-// Actors returns a map of internal actors that are used to implement workflows
-//func (abe *Actors) GetInternalActorsMap() map[string]actors.TargetFactory {
-//	targetFactories := make(map[string]actors.TargetFactory)
-//	targetFactories[abe.config.workflowActorType] = NewWorkflowActor(getWorkflowScheduler(abe.orchestrationWorkItemChan), abe.config, &abe.workflowActorOpts)
-//	targetFactories[abe.config.activityActorType] = NewActivityActor(getActivityScheduler(abe.activityWorkItemChan), abe.config, &abe.activityActorOpts)
-//	return targetFactories
-//}
+func (abe *Actors) RegisterActor(ctx context.Context) error {
+	table, err := abe.actors.Table(ctx)
+	if err != nil {
+		return err
+	}
 
-//func (abe *Actors) SetActorRuntime(ctx context.Context, actorRuntime actors.ActorRuntime) {
-//	abe.actorRuntime = actorRuntime
-//	if abe.actorsReady.CompareAndSwap(false, true) {
-//		close(abe.actorsReadyCh)
-//	}
-//}
-
-func (abe *Actors) RegisterActors() {
-	abe.actorTable.RegisterActorType(abe.workflowActorType, workflow.WorkflowFactory(workflow.WorkflowOptions{
+	table.RegisterActorType(abe.workflowActorType, workflow.WorkflowFactory(workflow.WorkflowOptions{
 		AppID:             abe.appID,
 		WorkflowActorType: abe.workflowActorType,
 		ActivityActorType: abe.activityActorType,
 		CachingDisabled:   abe.cachingDisabled,
-		DefaultTimeout:    abe.defaultTimeout,
+		DefaultTimeout:    abe.defaultWorkflowTimeout,
 		ReminderInterval:  abe.defaultReminderInterval,
 		Resiliency:        abe.resiliency,
-		State:             abe.state,
-		Reminders:         abe.reminders,
-		ActorEngine:       abe.actorEngine,
+		Actors:            abe.actors,
 		Scheduler:         getWorkflowScheduler(abe.orchestrationWorkItemChan),
 	}))
+
+	table.RegisterActorType(abe.activityActorType, workflow.ActivityFactory(workflow.ActivityOptions{
+		AppID:             abe.appID,
+		ActivityActorType: abe.activityActorType,
+		WorkflowActorType: abe.workflowActorType,
+		CachingDisabled:   abe.cachingDisabled,
+		DefaultTimeout:    abe.defaultActivityTimeout,
+		ReminderInterval:  abe.defaultReminderInterval,
+		Actors:            abe.actors,
+	}))
+
+	return nil
 }
 
 // CreateOrchestrationInstance implements backend.Backend and creates a new workflow instance.
@@ -164,10 +157,6 @@ func (abe *Actors) RegisterActors() {
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
 func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
-	if err := abe.validateConfiguration(); err != nil {
-		return err
-	}
-
 	var workflowInstanceID string
 	if es := e.GetExecutionStarted(); es == nil {
 		return errors.New("the history event must be an ExecutionStartedEvent")
@@ -202,7 +191,13 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		WithData(requestBytes).
 		WithContentType(invokev1.JSONContentType)
 	start := time.Now()
-	_, err = abe.actorEngine.Call(ctx, req)
+
+	engine, err := abe.actors.Engine(ctx)
+	if err != nil {
+		return err
+	}
+
+	_, err = engine.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to CREATE workflow, record count and latency metrics.
@@ -222,8 +217,13 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 		WithActor(abe.workflowActorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
 
+	engine, err := abe.actors.Engine(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	start := time.Now()
-	res, err := abe.actorEngine.Call(ctx, req)
+	res, err := engine.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to GET workflow Information, record count and latency metrics.
@@ -278,8 +278,13 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)
 
+	engine, err := abe.actors.Engine(ctx)
+	if err != nil {
+		return err
+	}
+
 	start := time.Now()
-	_, err = abe.actorEngine.Call(ctx, req)
+	_, err = engine.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to ADD EVENT, record count and latency metrics.
@@ -340,7 +345,12 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 		WithActor(abe.workflowActorType, string(owi.InstanceID)).
 		WithContentType(invokev1.OctetStreamContentType)
 
-	res, err := abe.actorEngine.Call(ctx, req)
+	engine, err := abe.actors.Engine(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	res, err := engine.Call(ctx, req)
 	if err != nil {
 		return nil, err
 	}
@@ -374,8 +384,13 @@ func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceI
 		NewInternalInvokeRequest(wfbackend.PurgeWorkflowStateMethod).
 		WithActor(abe.workflowActorType, string(id))
 
+	engine, err := abe.actors.Engine(ctx)
+	if err != nil {
+		return err
+	}
+
 	start := time.Now()
-	_, err := abe.actorEngine.Call(ctx, req)
+	_, err = engine.Call(ctx, req)
 	elapsed := diag.ElapsedSince(start)
 	if err != nil {
 		// failed request to PURGE WORKFLOW, record latency and count metrics.
@@ -389,10 +404,6 @@ func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceI
 
 // Start implements backend.Backend
 func (abe *Actors) Start(ctx context.Context) error {
-	err := abe.validateConfiguration()
-	if err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -405,24 +416,6 @@ func (*Actors) Stop(context.Context) error {
 func (abe *Actors) String() string {
 	return "dapr.actors/v1-beta"
 }
-
-func (abe *Actors) validateConfiguration() error {
-	if abe.actorEngine == nil {
-		return errors.New("actor runtime has not been configured")
-	}
-	return nil
-}
-
-// WaitForActorsReady blocks until the actor runtime is set in the object (or until the context is canceled).
-// TODO: @joshvanl
-//func (abe *Actors) WaitForActorsReady(ctx context.Context) {
-//	select {
-//	case <-ctx.Done():
-//		// No-op
-//	case <-abe.actorsReadyCh:
-//		// No-op
-//	}
-//}
 
 // DisableActorCaching turns off the default caching done by the workflow and activity actors.
 // This method is primarily intended to be used for testing to ensure correct behavior

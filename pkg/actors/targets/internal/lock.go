@@ -84,9 +84,10 @@ func NewLock(opts LockOptions) *Lock {
 		reqCh:             make(chan *req),
 		maxStackDepth:     maxStackDepth,
 		reentrancyEnabled: opts.Reentrancy.Enabled,
-		inflights:         ring.New[*inflight](8),
-		lock:              fifo.New(),
-		closeCh:           make(chan struct{}),
+		// TODO: @joshvanl
+		inflights: ring.New[*inflight](1024),
+		lock:      fifo.New(),
+		closeCh:   make(chan struct{}),
 	}
 
 	l.wg.Add(1)
@@ -173,8 +174,9 @@ func (l *Lock) handleLock(req *req) *resp {
 			if l.inflights.Value != nil {
 				l.pending--
 
-				if l.pending < l.inflights.Len()-8 {
-					l.inflights.Move(l.inflights.Len() - 8).Unlink(8)
+				// TODO: @joshvanl
+				if l.pending < l.inflights.Len()-1024 {
+					l.inflights.Move(l.inflights.Len() - 1024).Unlink(1024)
 				}
 
 				close(l.inflights.Value.startCh)
@@ -217,7 +219,8 @@ func newInflight(id string) *inflight {
 
 func (l *Lock) checkExpand() {
 	if l.inflights.Len() == l.pending {
-		exp := ring.New[*inflight](8)
+		// TODO: @joshvanl
+		exp := ring.New[*inflight](1024)
 		l.inflights.Move(l.pending).Link(exp)
 	}
 }

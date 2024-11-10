@@ -44,6 +44,8 @@ type Options struct {
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
 	SchedulerClients            *clients.Clients
+	Actors                      actors.Interface
+	WorkflowEngine              *wfengine.WorkflowEngine
 }
 
 // Universal contains the implementation of gRPC APIs that are also used by the HTTP server.
@@ -63,7 +65,6 @@ type Universal struct {
 
 	extendedMetadataLock sync.RWMutex
 	actors               actors.Interface
-	actorsReadyCh        chan struct{}
 }
 
 func New(opts Options) *Universal {
@@ -79,7 +80,8 @@ func New(opts Options) *Universal {
 		appConnectionConfig:         opts.AppConnectionConfig,
 		globalConfig:                opts.GlobalConfig,
 		schedulerClients:            opts.SchedulerClients,
-		actorsReadyCh:               make(chan struct{}),
+		actors:                      opts.Actors,
+		workflowEngine:              opts.WorkflowEngine,
 	}
 }
 
@@ -103,53 +105,18 @@ func (a *Universal) AppConnectionConfig() config.AppConnectionConfig {
 	return a.appConnectionConfig
 }
 
-func (a *Universal) Actors(ctx context.Context) (actors.Interface, error) {
-	select {
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	case <-a.actorsReadyCh:
-	}
-	return a.actors, nil
-}
-
 func (a *Universal) ActorEngine(ctx context.Context) (engine.Interface, error) {
-	actors, err := a.Actors(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return actors.Engine(ctx)
+	return a.actors.Engine(ctx)
 }
 
 func (a *Universal) ActorState(ctx context.Context) (state.Interface, error) {
-	actors, err := a.Actors(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return actors.State(ctx)
+	return a.actors.State(ctx)
 }
 
 func (a *Universal) ActorTimers(ctx context.Context) (timers.Interface, error) {
-	actors, err := a.Actors(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return actors.Timers(ctx)
+	return a.actors.Timers(ctx)
 }
 
 func (a *Universal) ActorReminders(ctx context.Context) (reminders.Interface, error) {
-	actors, err := a.Actors(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	return actors.Reminders(ctx)
-}
-
-func (a *Universal) SetActorRuntime(actors actors.Interface, wfEngine *wfengine.WorkflowEngine) {
-	a.actors = actors
-	a.workflowEngine = wfEngine
-	close(a.actorsReadyCh)
+	return a.actors.Reminders(ctx)
 }

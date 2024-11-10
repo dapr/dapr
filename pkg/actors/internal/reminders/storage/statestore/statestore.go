@@ -32,7 +32,7 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
-	"github.com/dapr/dapr/pkg/actors/internal"
+	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
@@ -54,15 +54,12 @@ type Options struct {
 	Table                      table.Interface
 	EntityConfigs              map[string]requestresponse.EntityConfig
 	StoreName                  string
+	APILevel                   *apilevel.APILevel
 	RemindersStoragePartitions int
-
-	// TODO: @joshvanl
-	APILevel uint32
 }
 
 type Statestore struct {
 	clock           clock.WithTicker
-	apiLevel        uint32
 	runningCh       chan struct{}
 	remindersLock   sync.RWMutex
 	reminders       map[string][]ActorReminderReference
@@ -71,6 +68,7 @@ type Statestore struct {
 	evaluationQueue chan struct{}
 	store           actorstate.Backend
 	resiliency      resiliency.Provider
+	apiLevel        *apilevel.APILevel
 	table           table.Interface
 	engine          engine.Interface
 	closed          atomic.Bool
@@ -84,7 +82,6 @@ type Statestore struct {
 func New(opts Options) *Statestore {
 	return &Statestore{
 		clock:                      clock.RealClock{},
-		apiLevel:                   opts.APILevel,
 		runningCh:                  make(chan struct{}),
 		reminders:                  make(map[string][]ActorReminderReference),
 		evaluationChan:             make(chan struct{}, 1),
@@ -94,12 +91,13 @@ func New(opts Options) *Statestore {
 		table:                      opts.Table,
 		entityConfigs:              opts.EntityConfigs,
 		storeName:                  opts.StoreName,
+		apiLevel:                   opts.APILevel,
 		remindersStoragePartitions: opts.RemindersStoragePartitions,
 	}
 }
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
-func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context) {
+func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, _ func(context.Context, *requestresponse.LookupActorRequest) bool) {
 	go func() {
 		// To handle bursts, use a queue so no more than one evaluation can be queued up at the same time, since they'd all fetch the same data anyways
 		select {
@@ -702,7 +700,7 @@ func (r *Statestore) saveRemindersInPartitionRequest(stateKey string, reminders 
 
 	// If APILevelFeatureRemindersProtobuf is enabled, then serialize as protobuf which is more efficient
 	// Otherwise, fall back to sending the data as-is in the request (which will serialize it as JSON)
-	if internal.APILevelFeatureRemindersProtobuf.IsEnabled(r.apiLevel) {
+	if r.apiLevel.Get() >= 20 {
 		var err error
 		req.Value, err = r.serializeRemindersToProto(reminders)
 		if err != nil {

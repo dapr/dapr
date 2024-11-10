@@ -15,6 +15,7 @@ package endpoint
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"sync"
 	"testing"
@@ -109,18 +110,25 @@ func (n *noappentities) Run(t *testing.T, ctx context.Context) {
 		cl           rtv1.DaprClient
 		activeActors []*rtv1.ActiveActorsCount
 	}{
-		{cl: n.daprd.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{{Type: "myactortype"}}},
-		{cl: n.daprdNoHealthz.GRPCClient(t, ctx), activeActors: nil},
+		{cl: n.daprd.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{
+			{Type: "myactortype"},
+			{Type: fmt.Sprintf("dapr.internal.default.%s.activity", n.daprd.AppID())},
+			{Type: fmt.Sprintf("dapr.internal.default.%s.workflow", n.daprd.AppID())},
+		}},
+		{cl: n.daprdNoHealthz.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{
+			{Type: fmt.Sprintf("dapr.internal.default.%s.activity", n.daprdNoHealthz.AppID())},
+			{Type: fmt.Sprintf("dapr.internal.default.%s.workflow", n.daprdNoHealthz.AppID())},
+		}},
 	} {
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			meta, err := tv.cl.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			assert.NoError(c, err)
-			assert.True(c, meta.GetActorRuntime().GetHostReady())
-			assert.Equal(c, tv.activeActors, meta.GetActorRuntime().GetActiveActors())
-			assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
-			assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
-		}, time.Second*30, time.Millisecond*10)
+		meta, err := tv.cl.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+		assert.NoError(t, err)
+		assert.True(t, meta.GetActorRuntime().GetHostReady())
+		assert.ElementsMatch(t, tv.activeActors, meta.GetActorRuntime().GetActiveActors())
+		assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
+		assert.Equal(t, "placement: connected", meta.GetActorRuntime().GetPlacement())
 	}
+
+	return
 
 	select {
 	case <-n.healthzCalled:

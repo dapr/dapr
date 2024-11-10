@@ -33,7 +33,7 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 	"google.golang.org/protobuf/types/known/anypb"
 
-	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/requestresponse"
@@ -60,14 +60,12 @@ type workflow struct {
 	activityActorType string
 
 	resiliency resiliency.Provider
-	state      state.Interface
-	reminders  reminders.Interface
-	engine     engine.Interface
+	actors     actors.Interface
 
 	lock             *internal.Lock
 	reminderInterval time.Duration
 
-	wState          *workflowstate.State
+	state           *workflowstate.State
 	cachingDisabled bool
 
 	scheduler             wfbackend.WorkflowScheduler
@@ -85,11 +83,11 @@ type WorkflowOptions struct {
 	DefaultTimeout    *time.Duration
 	ReminderInterval  *time.Duration
 
-	Resiliency  resiliency.Provider
-	State       state.Interface
-	Reminders   reminders.Interface
-	ActorEngine engine.Interface
-	Scheduler   wfbackend.WorkflowScheduler
+	Resiliency resiliency.Provider
+	State      state.Interface
+	Reminders  reminders.Interface
+	Actors     actors.Interface
+	Scheduler  wfbackend.WorkflowScheduler
 }
 
 func WorkflowFactory(opts WorkflowOptions) targets.Factory {
@@ -114,9 +112,7 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 			reminderInterval:  reminderInterval,
 			defaultTimeout:    defaultTimeout,
 			resiliency:        opts.Resiliency,
-			state:             opts.State,
-			reminders:         opts.Reminders,
-			engine:            opts.ActorEngine,
+			actors:            opts.Actors,
 			lock: internal.NewLock(internal.LockOptions{
 				ActorType: opts.WorkflowActorType,
 			}),
@@ -377,7 +373,11 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *work
 		return err
 	}
 	// This will do the purging
-	err = w.state.TransactionalStateOperation(ctx, req)
+	s, err := w.actors.State(ctx)
+	if err != nil {
+		return err
+	}
+	err = s.TransactionalStateOperation(ctx, req)
 	if err != nil {
 		return err
 	}
@@ -548,7 +548,11 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *requestresponse.Re
 	}
 	// TODO: for optimization make multiple go routines and run them in parallel
 	for activityActorID, operations := range transactionalRequests {
-		err = w.state.TransactionalStateOperation(ctx, &requestresponse.TransactionalRequest{
+		state, err := w.actors.State(ctx)
+		if err != nil {
+			return runCompletedFalse, err
+		}
+		err = state.TransactionalStateOperation(ctx, &requestresponse.TransactionalRequest{
 			ActorType:  w.activityActorType,
 			ActorID:    activityActorID,
 			Operations: operations,
@@ -659,6 +663,11 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *requestresponse.Re
 		}
 	}
 
+	engine, err := w.actors.Engine(ctx)
+	if err != nil {
+		return runCompletedFalse, err
+	}
+
 	// Schedule activities
 	// TODO: Parallelism
 	for _, e := range runtimeState.PendingTasks() {
@@ -685,7 +694,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *requestresponse.Re
 
 		log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", w.actorID, targetActorID)
 
-		_, err = w.engine.Call(ctx, internalsv1pb.
+		_, err = engine.Call(ctx, internalsv1pb.
 			NewInternalInvokeRequest("Execute").
 			WithActor(w.activityActorType, targetActorID).
 			WithData(res.Bytes()).
@@ -722,7 +731,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *requestresponse.Re
 
 			log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", w.actorID, method, msg.TargetInstanceID)
 
-			_, err = w.engine.Call(ctx, internalsv1pb.
+			_, err = engine.Call(ctx, internalsv1pb.
 				NewInternalInvokeRequest(method).
 				WithActor(w.actorType, msg.TargetInstanceID).
 				WithData(requestBytes).
@@ -802,12 +811,16 @@ func (*workflow) recordWorkflowSchedulingLatency(ctx context.Context, esHistoryE
 func (w *workflow) loadInternalState(ctx context.Context) (*workflowstate.State, error) {
 	// See if the state for this actor is already cached in memory
 	if !w.cachingDisabled && w.state != nil {
-		return w.wState, nil
+		return w.state, nil
 	}
 
 	// state is not cached, so try to load it from the state store
 	log.Debugf("Workflow actor '%s': loading workflow state", w.actorID)
-	state, err := workflowstate.LoadWorkflowState(ctx, w.state, w.actorID, workflowstate.Options{
+	astate, err := w.actors.State(ctx)
+	if err != nil {
+		return nil, err
+	}
+	state, err := workflowstate.LoadWorkflowState(ctx, astate, w.actorID, workflowstate.Options{
 		AppID:             w.appID,
 		WorkflowActorType: w.actorType,
 		ActivityActorType: w.activityActorType,
@@ -821,7 +834,7 @@ func (w *workflow) loadInternalState(ctx context.Context) (*workflowstate.State,
 	}
 	if !w.cachingDisabled {
 		// Update cached state
-		w.wState = state
+		w.state = state
 	}
 	return state, nil
 }
@@ -834,7 +847,11 @@ func (w *workflow) saveInternalState(ctx context.Context, state *workflowstate.S
 	}
 
 	log.Debugf("Workflow actor '%s': saving %d keys to actor state store", w.actorID, len(req.Operations))
-	if err = w.state.TransactionalStateOperation(ctx, req); err != nil {
+	astate, err := w.actors.State(ctx)
+	if err != nil {
+		return err
+	}
+	if err = astate.TransactionalStateOperation(ctx, req); err != nil {
 		return err
 	}
 
@@ -843,7 +860,7 @@ func (w *workflow) saveInternalState(ctx context.Context, state *workflowstate.S
 
 	if !w.cachingDisabled {
 		// Update cached state
-		w.wState = state
+		w.state = state
 	}
 	return nil
 }
@@ -863,7 +880,11 @@ func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string
 		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 
-	return reminderName, w.reminders.Create(ctx, &requestresponse.CreateReminderRequest{
+	reminders, err := w.actors.Reminders(ctx)
+	if err != nil {
+		return "", err
+	}
+	return reminderName, reminders.Create(ctx, &requestresponse.CreateReminderRequest{
 		ActorType: w.actorType,
 		ActorID:   w.actorID,
 		Data:      dataEnc,
@@ -885,9 +906,13 @@ func getActivityActorID(workflowID string, taskID int32, generation uint64) stri
 }
 
 func (w *workflow) removeCompletedStateData(ctx context.Context, state *workflowstate.State) error {
+	astate, err := w.actors.State(ctx)
+	if err != nil {
+		return err
+	}
+
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
 	// TODO: for optimization make multiple go routines and run them in parallel
-	var err error
 	for _, e := range state.Inbox {
 		var taskID int32
 		if ts := e.GetTaskCompleted(); ts != nil {
@@ -907,7 +932,7 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *workflow
 				},
 			}},
 		}
-		if err = w.state.TransactionalStateOperation(ctx, &req); err != nil {
+		if err = astate.TransactionalStateOperation(ctx, &req); err != nil {
 			return fmt.Errorf("failed to delete activity state with error: %w", err)
 		}
 	}

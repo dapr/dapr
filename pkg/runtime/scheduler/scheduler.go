@@ -22,8 +22,6 @@ import (
 	"sync/atomic"
 
 	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/actors/engine"
-	"github.com/dapr/dapr/pkg/actors/table"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
@@ -36,18 +34,18 @@ var log = logger.NewLogger("dapr.runtime.scheduler")
 type Options struct {
 	Namespace string
 	AppID     string
+	Actors    actors.Interface
 	Channels  *channels.Channels
 	Clients   *clients.Clients
 }
 
 // Manager manages connections to multiple schedulers.
 type Manager struct {
-	clients      *clients.Clients
-	actorsTable  table.Interface
-	actorsEngine engine.Interface
-	namespace    string
-	appID        string
-	channels     *channels.Channels
+	clients   *clients.Clients
+	actors    actors.Interface
+	namespace string
+	appID     string
+	channels  *channels.Channels
 
 	stopStartCh chan struct{}
 	lock        sync.Mutex
@@ -61,6 +59,7 @@ func New(opts Options) *Manager {
 	return &Manager{
 		namespace:   opts.Namespace,
 		appID:       opts.AppID,
+		actors:      opts.Actors,
 		channels:    opts.Channels,
 		clients:     opts.Clients,
 		stopStartCh: make(chan struct{}, 1),
@@ -101,24 +100,21 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 	case <-m.stopStartCh:
 	}
 
-	var entities []string
-	if m.actorsTable != nil {
-		// TODO: @joshvanl: this is dynamic.
-		entities = m.actorsTable.Types()
-	}
-
 	req := &schedulerv1pb.WatchJobsRequest{
 		WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Initial{
 			Initial: &schedulerv1pb.WatchJobsRequestInitial{
 				AppId:     m.appID,
 				Namespace: m.namespace,
-				ActorTypes: append(entities,
-					fmt.Sprintf("dapr.internal.%s.%s.workflow", m.namespace, m.appID),
-					fmt.Sprintf("dapr.internal.%s.%s.activity", m.namespace, m.appID),
-				),
 			},
 		},
 	}
+
+	if table, err := m.actors.Table(ctx); err == nil {
+		// TODO: @joshvanl: this is dynamic.
+		req.GetInitial().ActorTypes = table.Types()
+	}
+
+	engine, _ := m.actors.Engine(ctx)
 
 	clients, err := m.clients.All(ctx)
 	if err != nil {
@@ -132,7 +128,7 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 			req:      req,
 			client:   clients[i],
 			channels: m.channels,
-			actors:   m.actorsEngine,
+			actors:   engine,
 		}).run
 	}
 
@@ -150,22 +146,9 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 
 // Start starts the scheduler manager with the given actors runtime, if it is
 // enabled, to begin receiving job triggers.
-func (m *Manager) Start(ctx context.Context, actors actors.Interface) error {
+func (m *Manager) Start() error {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-
-	engine, err := actors.Engine(ctx)
-	if err != nil {
-		return err
-	}
-
-	table, err := actors.Table(ctx)
-	if err != nil {
-		return err
-	}
-
-	m.actorsEngine = engine
-	m.actorsTable = table
 
 	if !m.started {
 		m.started = true

@@ -74,6 +74,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
+	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
+	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/pubsub/publisher"
 	"github.com/dapr/dapr/pkg/runtime/pubsub/streamer"
@@ -98,11 +100,11 @@ type DaprRuntime struct {
 	channels          *channels.Channels
 	appConfig         config.ApplicationConfig
 	directMessaging   invokev1.DirectMessaging
-	actor             actors.Interface
+	actors            actors.Interface
+	wfengine          *wfengine.WorkflowEngine
 
 	nameResolver          nr.Resolver
 	hostAddress           string
-	actorStateStoreLock   sync.RWMutex
 	namespace             string
 	podName               string
 	daprUniversal         *universal.Universal
@@ -267,6 +269,30 @@ func newDaprRuntime(ctx context.Context,
 		Healthz:   runtimeConfig.healthz,
 	})
 
+	actors := actors.New(actors.Options{
+		AppID:     runtimeConfig.id,
+		Namespace: namespace,
+		Port:      runtimeConfig.internalGRPCPort,
+		// TODO: @joshvanl
+		PlacementAddresses: strings.Split(strings.TrimPrefix(runtimeConfig.actorsService, "placement:"), ","),
+		SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
+		HealthEndpoint:     channels.AppHTTPEndpoint(),
+		Resiliency:         resiliencyProvider,
+		Security:           sec,
+		SchedulerClients:   schedulerClients,
+		Healthz:            runtimeConfig.healthz,
+		CompStore:          compStore,
+		StateTTLEnabled:    globalConfig.IsFeatureEnabled(config.ActorStateTTL),
+	})
+
+	wfe := wfengine.New(wfengine.Options{
+		AppID:          runtimeConfig.id,
+		Namespace:      namespace,
+		Actors:         actors,
+		Spec:           globalConfig.GetWorkflowSpec(),
+		BackendManager: processor.WorkflowBackend(),
+	})
+
 	rt := &DaprRuntime{
 		runtimeConfig:         runtimeConfig,
 		globalConfig:          globalConfig,
@@ -294,13 +320,15 @@ func newDaprRuntime(ctx context.Context,
 			AppID:     runtimeConfig.id,
 			Channels:  channels,
 			Clients:   schedulerClients,
+			Actors:    actors,
 		}),
 		initComplete:   make(chan struct{}),
 		isAppHealthy:   make(chan struct{}),
 		clock:          new(clock.RealClock),
 		httpMiddleware: httpMiddleware,
-
-		ahtarget: runtimeConfig.healthz.AddTarget(),
+		actors:         actors,
+		wfengine:       wfe,
+		ahtarget:       runtimeConfig.healthz.AddTarget(),
 	}
 	close(rt.isAppHealthy)
 
@@ -315,6 +343,8 @@ func newDaprRuntime(ctx context.Context,
 		rt.processor.Process,
 		rt.reloader.Run,
 		rt.schedulerClients.Run,
+		rt.actors.Run,
+		rt.wfengine.Run,
 		rt.jobsManager.Run,
 		func(ctx context.Context) error {
 			start := time.Now()
@@ -359,9 +389,6 @@ func newDaprRuntime(ctx context.Context,
 			errs[len(comps)] = rt.cleanSockets()
 			return errors.Join(errs...)
 		},
-		rt.stopWorkflow,
-		// TODO: @joshvanl
-		//rt.stopActor,
 		rt.stopTrace,
 		rt.grpc,
 	); err != nil {
@@ -569,6 +596,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
 		SchedulerClients:            a.schedulerClients,
+		Actors:                      a.actors,
 	})
 
 	// Create and start internal and external gRPC servers
@@ -663,18 +691,8 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 	// Load app configuration (for actors) and init actors
 	a.loadAppConfiguration(ctx)
 
-	if a.runtimeConfig.ActorsEnabled() {
-		err := a.initActors(ctx)
-		if err != nil {
-			return fmt.Errorf("failed to initialize actors: %s", err)
-		} else {
-			// Initialize workflow engine
-			// TODO: @joshvanl: Need to still allow sqlite workflows.
-			//if err = a.initWorkflowEngine(ctx); err != nil {
-			//	return err
-			//}
-			a.daprUniversal.SetActorRuntime(a.actor, a.workflowEngine)
-		}
+	if err := a.initActors(ctx); err != nil {
+		return fmt.Errorf("failed to initialize actors: %w", err)
 	}
 
 	if cb := a.runtimeConfig.registry.ComponentsCallback(); cb != nil {
@@ -686,8 +704,12 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 		}
 	}
 
+	if err := a.initWorkflowEngine(ctx); err != nil {
+		return err
+	}
+
 	if a.runtimeConfig.SchedulerEnabled() {
-		if err := a.jobsManager.Start(ctx, a.actor); err != nil {
+		if err := a.jobsManager.Start(); err != nil {
 			return err
 		}
 	}
@@ -697,44 +719,35 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 	return nil
 }
 
-//func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
-//	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.workflowEngine)
-//
-//	// If actors are not enabled, still invoke SetActorRuntime on the workflow engine with `nil` to unblock startup
-//	if abe, ok := a.workflowEngine.Backend.(interface {
-//		SetActorRuntime(ctx context.Context, actorRuntime actors.ActorRuntime)
-//	}); ok {
-//		log.Info("Configuring workflow engine with actors backend")
-//		var actorRuntime actors.ActorRuntime
-//		if a.runtimeConfig.ActorsEnabled() {
-//			actorRuntime = a.actor
-//		}
-//		abe.SetActorRuntime(ctx, actorRuntime)
-//	}
-//
-//	reg := a.runtimeConfig.registry.Workflows()
-//	if reg == nil {
-//		log.Info("No workflow registry available, not registering Dapr workflow component.")
-//		return nil
-//	}
-//
-//	log.Info("Registering component for dapr workflow engine...")
-//	reg.RegisterComponent(wfComponentFactory, "dapr")
-//	wfe := workflow.New(workflow.Options{
-//		Registry:       a.runtimeConfig.registry.Workflows(),
-//		ComponentStore: a.compStore,
-//		Meta:           a.meta,
-//	})
-//	if err := wfe.Init(ctx, wfbackend.ComponentDefinition()); err != nil {
-//		return fmt.Errorf("failed to initialize Dapr workflow component: %w", err)
-//	}
-//
-//	log.Info("Workflow engine initialized.")
-//
-//	return a.runnerCloser.AddCloser(func() error {
-//		return wfe.Close(wfbackend.ComponentDefinition())
-//	})
-//}
+func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
+
+	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.wfengine)
+
+	reg := a.runtimeConfig.registry.Workflows()
+	if reg == nil {
+		log.Info("No workflow registry available, not registering Dapr workflow component.")
+		return nil
+	}
+
+	log.Info("Registering component for dapr workflow engine...")
+	reg.RegisterComponent(wfComponentFactory, "dapr")
+	wfe := workflow.New(workflow.Options{
+		Registry:       a.runtimeConfig.registry.Workflows(),
+		ComponentStore: a.compStore,
+		Meta:           a.meta,
+	})
+	if err := wfe.Init(ctx, wfbackend.ComponentDefinition()); err != nil {
+		return fmt.Errorf("failed to initialize Dapr workflow component: %w", err)
+	}
+
+	a.wfengine.Init()
+
+	log.Info("Workflow engine initialized.")
+
+	return a.runnerCloser.AddCloser(func() error {
+		return wfe.Close(wfbackend.ComponentDefinition())
+	})
+}
 
 // initPluggableComponents discover pluggable components and initialize with their respective registries.
 func (a *DaprRuntime) initPluggableComponents(ctx context.Context) {
@@ -787,7 +800,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		}
 
 		if a.runtimeConfig.SchedulerEnabled() {
-			if err := a.jobsManager.Start(ctx, a.actor); err != nil {
+			if err := a.jobsManager.Start(); err != nil {
 				log.Warnf("failed to subscribe to outbox topics: %s", err)
 
 			}
@@ -1053,13 +1066,12 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	if err != nil {
 		return rterrors.NewInit(rterrors.InitFailure, "actors", err)
 	}
-	a.actorStateStoreLock.Lock()
-	defer a.actorStateStoreLock.Unlock()
 
 	actorStateStoreName, ok := a.processor.State().ActorStateStoreName()
 	if !ok {
 		log.Info("actors: state store is not configured - this is okay for clients but services with hosted actors will fail to initialize!")
 	}
+
 	// Override host address if the internal gRPC listen address is localhost.
 	hostAddress := a.hostAddress
 	if utils.Contains(
@@ -1069,69 +1081,23 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		hostAddress = a.runtimeConfig.internalGRPCListenAddress
 	}
 
-	//actorConfig := actors.NewConfig(actors.ConfigOpts{
-	//	HostAddress:       hostAddress,
-	//	AppID:             a.runtimeConfig.id,
-	//	ActorsService:     a.runtimeConfig.actorsService,
-	//	RemindersService:  a.runtimeConfig.remindersService,
-	//	SchedulerClients:  a.schedulerClients,
-	//	Port:              a.runtimeConfig.internalGRPCPort,
-	//	Namespace:         a.namespace,
-	//	AppConfig:         a.appConfig,
-	//	HealthHTTPClient:  a.channels.AppHTTPClient(),
-	//	HealthEndpoint:    a.channels.AppHTTPEndpoint(),
-	//	AppChannelAddress: a.runtimeConfig.appConnectionConfig.ChannelAddress,
-	//	PodName:           getPodName(),
-	//})
-	act, err := actors.New(actors.Options{
-		AppID:          a.runtimeConfig.id,
-		Namespace:      a.namespace,
-		StateStoreName: actorStateStoreName,
-
+	if err := a.actors.Init(actors.InitOptions{
+		Hostname:                   hostAddress,
 		EntityConfigs:              a.appConfig.EntityConfigs,
 		DrainRebalancedActors:      a.appConfig.DrainRebalancedActors,
 		DrainOngoingCallTimeout:    a.appConfig.DrainOngoingCallTimeout,
 		RemindersStoragePartitions: a.appConfig.RemindersStoragePartitions,
-		DefaultIdleTimeout:         a.appConfig.ActorIdleTimeout,
+		StateStoreName:             actorStateStoreName,
 		HostedActorTypes:           a.appConfig.Entities,
+		HealthHTTPClient:           a.channels.AppHTTPClient(),
+		DefaultIdleTimeout:         a.appConfig.ActorIdleTimeout,
+		GRPC:                       a.grpc,
 		Reentrancy:                 a.appConfig.Reentrancy,
-
-		HealthEndpoint:   a.channels.AppHTTPEndpoint(),
-		HealthHTTPClient: a.channels.AppHTTPClient(),
-		CompStore:        a.compStore,
-		Resiliency:       a.resiliency,
-		Security:         a.sec,
-		SchedulerClients: a.schedulerClients,
-		GRPC:             a.grpc,
-		AppChannel:       a.channels.AppChannel(),
-		StateTTLEnabled:  a.globalConfig.IsFeatureEnabled(config.ActorStateTTL),
-
-		Healthz:            a.runtimeConfig.healthz,
-		Hostname:           hostAddress,
-		Port:               a.runtimeConfig.internalGRPCPort,
-		SchedulerReminders: a.globalConfig.IsFeatureEnabled(config.SchedulerReminders),
-
-		// TODO: @joshvanl
-		APILevel: 20,
-
-		// TODO: @joshvanl
-		PlacementAddresses: strings.Split(strings.TrimPrefix(a.runtimeConfig.actorsService, "placement:"), ","),
-	})
-	if err != nil {
+		AppChannel:                 a.channels.AppChannel(),
+	}); err != nil {
 		return err
 	}
 
-	// TODO: @joshvanl
-	go func() {
-		if err := act.Run(ctx); err != nil {
-			if ctx.Err() != nil {
-				return
-			}
-			panic(err)
-		}
-	}()
-
-	a.actor = act
 	return nil
 }
 
@@ -1271,14 +1237,6 @@ func (a *DaprRuntime) loadHTTPEndpoints(ctx context.Context) error {
 		}
 	}
 
-	return nil
-}
-
-func (a *DaprRuntime) stopWorkflow(ctx context.Context) error {
-	if a.workflowEngine != nil {
-		log.Info("Shutting down workflow engine")
-		return a.workflowEngine.Close(ctx)
-	}
 	return nil
 }
 

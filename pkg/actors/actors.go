@@ -18,13 +18,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"sync"
 	"time"
 
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/health"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
@@ -43,6 +43,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel"
 	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -55,8 +56,6 @@ import (
 )
 
 const (
-	errStateStoreNotFound = "actors: state store does not exist or incorrectly configured"
-
 	// If an idle actor is getting deactivated, but it's still busy, will be
 	// re-enqueued with its idle timeout increased by this duration.
 	actorBusyReEnqueueInterval = 10 * time.Second
@@ -66,57 +65,70 @@ const (
 	defaultReentrancyStackLimit = 32
 )
 
-var (
-	log = logger.NewLogger("dapr.runtime.actor")
+var log = logger.NewLogger("dapr.runtime.actor")
 
-	errStateStoreNotConfigured = errors.New(`actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`)
-)
-
-// Interface is the main runtime for the actors subsystem.
-type Interface interface {
-	Run(context.Context) error
-	Engine(ctx context.Context) (engine.Interface, error)
-	Table(ctx context.Context) (table.Interface, error)
-	State(ctx context.Context) (actorstate.Interface, error)
-	Timers(ctx context.Context) (timers.Interface, error)
-	Reminders(ctx context.Context) (reminders.Interface, error)
-	RuntimeStatus() *runtimev1pb.ActorRuntime
+type Options struct {
+	AppID              string
+	Namespace          string
+	Port               int
+	PlacementAddresses []string
+	SchedulerReminders bool
+	HealthEndpoint     string
+	Resiliency         resiliency.Provider
+	Security           security.Handler
+	SchedulerClients   *clients.Clients
+	Healthz            healthz.Healthz
+	CompStore          *compstore.ComponentStore
+	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+	StateTTLEnabled bool
 }
 
-// Options contains options for NewActors.
-type Options struct {
+type InitOptions struct {
 	EntityConfigs              []config.EntityConfig
 	DrainRebalancedActors      bool
 	DrainOngoingCallTimeout    string
 	RemindersStoragePartitions int
 
-	AppID              string
-	Namespace          string
 	StateStoreName     string
-	Hostname           string
-	APILevel           uint32
-	Port               int
-	PlacementAddresses []string
-	SchedulerReminders bool
 	HostedActorTypes   []string
-	HealthEndpoint     string
 	HealthHTTPClient   *http.Client
 	DefaultIdleTimeout string
+	Hostname           string
 
-	CompStore        *compstore.ComponentStore
-	Resiliency       resiliency.Provider
-	Security         security.Handler
-	SchedulerClients *clients.Clients
-	GRPC             *manager.Manager
-	Reentrancy       config.ReentrancyConfig
-	Healthz          healthz.Healthz
-	AppChannel       channel.AppChannel
+	GRPC       *manager.Manager
+	Reentrancy config.ReentrancyConfig
+	AppChannel channel.AppChannel
+}
 
-	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
-	StateTTLEnabled bool
+// Interface is the main runtime for the actors subsystem.
+type Interface interface {
+	Init(InitOptions) error
+	Run(context.Context) error
+	Engine(context.Context) (engine.Interface, error)
+	Table(context.Context) (table.Interface, error)
+	State(context.Context) (actorstate.Interface, error)
+	Timers(context.Context) (timers.Interface, error)
+	Reminders(context.Context) (reminders.Interface, error)
+	RuntimeStatus() *runtimev1pb.ActorRuntime
 }
 
 type actors struct {
+	appID              string
+	namespace          string
+	hostname           string
+	port               int
+	placementAddresses []string
+	schedulerReminders bool
+	healthEndpoint     string
+	resiliency         resiliency.Provider
+	security           security.Handler
+	schedulerClients   *clients.Clients
+	healthz            healthz.Healthz
+	htarget            healthz.Target
+	compStore          *compstore.ComponentStore
+	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
+	stateTTLEnabled bool
+
 	reminders      reminders.Interface
 	table          table.Interface
 	placement      placement.Interface
@@ -126,37 +138,69 @@ type actors struct {
 	reentrancy     config.ReentrancyConfig
 	idlerQueue     *queue.Processor[string, targets.Idlable]
 	appChannel     channel.AppChannel
-	resiliency     resiliency.Provider
 	checker        *health.Checker
 	stateReminders *statestore.Statestore
 	reminderStore  storage.Interface
 	state          actorstate.Interface
 
-	appID              string
 	hostedActorTypes   []string
 	entityConfigs      map[string]requestresponse.EntityConfig
 	defaultIdleTimeout time.Duration
 
-	readyCh   chan struct{}
-	readyLock sync.RWMutex
+	disabled   error
+	readyCh    chan struct{}
+	initDoneCh chan struct{}
+	closedCh   chan struct{}
 
 	clock clock.Clock
 }
 
 // New create a new actors runtime with given config.
-func New(opts Options) (Interface, error) {
-	if opts.AppChannel == nil {
-		return new(actors), nil
+func New(opts Options) Interface {
+	var disabled error
+	if len(opts.PlacementAddresses) == 0 {
+		disabled = messages.ErrActorNoPlacement
 	}
 
-	storeS, ok := opts.CompStore.GetStateStore(opts.StateStoreName)
+	return &actors{
+		appID:              opts.AppID,
+		namespace:          opts.Namespace,
+		port:               opts.Port,
+		placementAddresses: opts.PlacementAddresses,
+		schedulerReminders: opts.SchedulerReminders,
+		healthEndpoint:     opts.HealthEndpoint,
+		resiliency:         opts.Resiliency,
+		security:           opts.Security,
+		schedulerClients:   opts.SchedulerClients,
+		htarget:            opts.Healthz.AddTarget(),
+		compStore:          opts.CompStore,
+		stateTTLEnabled:    opts.StateTTLEnabled,
+		clock:              clock.RealClock{},
+		disabled:           disabled,
+		healthz:            opts.Healthz,
+		readyCh:            make(chan struct{}),
+		closedCh:           make(chan struct{}),
+		initDoneCh:         make(chan struct{}),
+	}
+}
+
+func (a *actors) Init(opts InitOptions) error {
+	defer close(a.initDoneCh)
+
+	if a.disabled != nil {
+		return nil
+	}
+
+	storeS, ok := a.compStore.GetStateStore(opts.StateStoreName)
 	if !ok {
-		return nil, errors.New(errStateStoreNotFound)
+		a.disabled = messages.ErrActorRuntimeNotFound
+		return nil
 	}
 
 	store, ok := storeS.(actorstate.Backend)
 	if !ok || !state.FeatureETag.IsPresent(store.Features()) || !state.FeatureTransactional.IsPresent(store.Features()) {
-		return nil, errStateStoreNotConfigured
+		a.disabled = messages.ErrActorRuntimeNotFound
+		return nil
 	}
 
 	checker, err := health.New(
@@ -165,11 +209,11 @@ func New(opts Options) (Interface, error) {
 		health.WithUnHealthyStateInterval(time.Second/2),
 		health.WithRequestTimeout(2*time.Second),
 		health.WithHTTPClient(opts.HealthHTTPClient),
-		health.WithAddress(opts.HealthEndpoint+"/healthz"),
-		health.WithHealthz(opts.Healthz),
+		health.WithAddress(a.healthEndpoint+"/healthz"),
+		health.WithHealthz(a.healthz),
 	)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
 	entityConfigs := make(map[string]requestresponse.EntityConfig)
@@ -195,7 +239,7 @@ func New(opts Options) (Interface, error) {
 	if len(opts.DrainOngoingCallTimeout) > 0 {
 		drainOngoingCallTimeout, err = time.ParseDuration(opts.DrainOngoingCallTimeout)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse drain ongoing call timeout: %s", err)
+			return fmt.Errorf("failed to parse drain ongoing call timeout: %s", err)
 		}
 	}
 
@@ -203,22 +247,16 @@ func New(opts Options) (Interface, error) {
 	if len(opts.DefaultIdleTimeout) > 0 {
 		idleTimeout, err = time.ParseDuration(opts.DefaultIdleTimeout)
 		if err != nil {
-			return nil, fmt.Errorf("failed to parse default actor idle timeout: %s", err)
+			return fmt.Errorf("failed to parse default actor idle timeout: %s", err)
 		}
 	}
 
-	a := &actors{
-		appID:              opts.AppID,
-		reentrancy:         opts.Reentrancy,
-		appChannel:         opts.AppChannel,
-		resiliency:         opts.Resiliency,
-		hostedActorTypes:   opts.HostedActorTypes,
-		entityConfigs:      entityConfigs,
-		checker:            checker,
-		defaultIdleTimeout: idleTimeout,
-		clock:              clock.RealClock{},
-		readyCh:            make(chan struct{}),
-	}
+	a.appChannel = opts.AppChannel
+	a.reentrancy = opts.Reentrancy
+	a.hostedActorTypes = opts.HostedActorTypes
+	a.entityConfigs = entityConfigs
+	a.checker = checker
+	a.defaultIdleTimeout = idleTimeout
 
 	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
 	a.table = table.New(table.Options{
@@ -228,47 +266,45 @@ func New(opts Options) (Interface, error) {
 		IdlerQueue:              a.idlerQueue,
 	})
 
-	a.stateReminders = statestore.New(statestore.Options{
-		StateStore:    store,
-		Table:         a.table,
-		Resiliency:    opts.Resiliency,
-		EntityConfigs: entityConfigs,
-		StoreName:     opts.StateStoreName,
+	apiLevel := apilevel.New()
 
+	a.stateReminders = statestore.New(statestore.Options{
+		StateStore:                 store,
+		Table:                      a.table,
+		Resiliency:                 a.resiliency,
+		EntityConfigs:              entityConfigs,
+		StoreName:                  opts.StateStoreName,
+		APILevel:                   apiLevel,
 		RemindersStoragePartitions: opts.RemindersStoragePartitions,
-		// TODO: @joshvanl
-		APILevel: opts.APILevel,
 	})
 
 	a.reminderStore = a.stateReminders
-	if opts.SchedulerReminders {
+	if a.schedulerReminders {
 		a.reminderStore = scheduler.New(scheduler.Options{
-			Namespace:     opts.Namespace,
-			AppID:         opts.AppID,
-			Clients:       opts.SchedulerClients,
+			Namespace:     a.namespace,
+			AppID:         a.appID,
+			Clients:       a.schedulerClients,
 			StateReminder: a.stateReminders,
 			Table:         a.table,
-			Healthz:       opts.Healthz,
+			Healthz:       a.healthz,
 		})
 	}
 
-	placement, err := placement.New(placement.Options{
-		AppID:     opts.AppID,
-		Addresses: opts.PlacementAddresses,
-		Security:  opts.Security,
+	a.placement, err = placement.New(placement.Options{
+		AppID:     a.appID,
+		Addresses: a.placementAddresses,
+		Security:  a.security,
 		Table:     a.table,
-		Namespace: opts.Namespace,
+		Namespace: a.namespace,
 		Hostname:  opts.Hostname,
-		Port:      opts.Port,
+		Port:      a.port,
 		Reminders: a.reminderStore,
-		Healthz:   opts.Healthz,
-		// TODO: @joshvanl
-		APILevel: opts.APILevel,
+		APILevel:  apiLevel,
+		Healthz:   a.healthz,
 	})
 	if err != nil {
-		return nil, err
+		return err
 	}
-	a.placement = placement
 
 	a.reminders = reminders.New(reminders.Options{
 		Storage: a.reminderStore,
@@ -276,12 +312,13 @@ func New(opts Options) (Interface, error) {
 	})
 
 	a.engine = engine.New(engine.Options{
-		Namespace:  opts.Namespace,
-		Placement:  placement,
+		Namespace:  a.namespace,
+		Placement:  a.placement,
 		GRPC:       opts.GRPC,
 		Table:      a.table,
-		Resiliency: opts.Resiliency,
+		Resiliency: a.resiliency,
 		IdlerQueue: a.idlerQueue,
+		Reminders:  a.reminders,
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{
@@ -295,11 +332,11 @@ func New(opts Options) (Interface, error) {
 	a.stateReminders.SetEngine(a.engine)
 
 	a.state = actorstate.New(actorstate.Options{
-		AppID:           opts.AppID,
+		AppID:           a.appID,
 		StoreName:       opts.StateStoreName,
-		CompStore:       opts.CompStore,
-		Resiliency:      opts.Resiliency,
-		StateTTLEnabled: opts.StateTTLEnabled,
+		CompStore:       a.compStore,
+		Resiliency:      a.resiliency,
+		StateTTLEnabled: a.stateTTLEnabled,
 		Table:           a.table,
 		Placement:       a.placement,
 	})
@@ -307,16 +344,27 @@ func New(opts Options) (Interface, error) {
 	// TODO: @joshvanl: remove when placement accepts dynamic actors.
 	a.registerHosted()
 
-	return a, nil
+	return nil
 }
 
 func (a *actors) Run(ctx context.Context) error {
-	if a.appChannel == nil {
+	defer close(a.closedCh)
+
+	select {
+	case <-ctx.Done():
+		return ctx.Err()
+	case <-a.initDoneCh:
+	}
+
+	if a.disabled != nil {
+		close(a.readyCh)
+		a.htarget.Ready()
 		<-ctx.Done()
 		return nil
 	}
 
 	log.Infof("Actor runtime started. Idle timeout: %v", a.defaultIdleTimeout)
+	close(a.readyCh)
 
 	mngr := concurrency.NewRunnerCloserManager(nil,
 		a.checker.Run,
@@ -329,12 +377,12 @@ func (a *actors) Run(ctx context.Context) error {
 					if healthy {
 						// TODO: @joshvanl: enable when placement accepts dynamic actors.
 						//a.registerHosted()
-						close(a.readyCh)
+						a.htarget.Ready()
+
 					} else {
+
+						// TODO: @joshvanl: enable when placement accepts dynamic actors.
 						//a.unregisterHosted()
-						a.readyLock.Lock()
-						a.readyCh = make(chan struct{})
-						a.readyLock.Unlock()
 					}
 				case <-ctx.Done():
 					return nil
@@ -358,9 +406,6 @@ func (a *actors) Run(ctx context.Context) error {
 }
 
 func (a *actors) Engine(ctx context.Context) (engine.Interface, error) {
-	a.readyLock.RLock()
-	defer a.readyLock.RUnlock()
-
 	if err := a.waitForReady(ctx); err != nil {
 		return nil, err
 	}
@@ -369,9 +414,6 @@ func (a *actors) Engine(ctx context.Context) (engine.Interface, error) {
 }
 
 func (a *actors) Table(ctx context.Context) (table.Interface, error) {
-	a.readyLock.RLock()
-	defer a.readyLock.RUnlock()
-
 	if err := a.waitForReady(ctx); err != nil {
 		return nil, err
 	}
@@ -380,9 +422,6 @@ func (a *actors) Table(ctx context.Context) (table.Interface, error) {
 }
 
 func (a *actors) State(ctx context.Context) (actorstate.Interface, error) {
-	a.readyLock.RLock()
-	defer a.readyLock.RUnlock()
-
 	if err := a.waitForReady(ctx); err != nil {
 		return nil, err
 	}
@@ -391,9 +430,6 @@ func (a *actors) State(ctx context.Context) (actorstate.Interface, error) {
 }
 
 func (a *actors) Timers(ctx context.Context) (timers.Interface, error) {
-	a.readyLock.RLock()
-	defer a.readyLock.RUnlock()
-
 	if err := a.waitForReady(ctx); err != nil {
 		return nil, err
 	}
@@ -402,9 +438,6 @@ func (a *actors) Timers(ctx context.Context) (timers.Interface, error) {
 }
 
 func (a *actors) Reminders(ctx context.Context) (reminders.Interface, error) {
-	a.readyLock.RLock()
-	defer a.readyLock.RUnlock()
-
 	if err := a.waitForReady(ctx); err != nil {
 		return nil, err
 	}
@@ -413,13 +446,11 @@ func (a *actors) Reminders(ctx context.Context) (reminders.Interface, error) {
 }
 
 func (a *actors) waitForReady(ctx context.Context) error {
-	if a.appChannel == nil {
-		return errStateStoreNotConfigured
-	}
-
 	select {
+	case <-a.closedCh:
+		return messages.ErrActorRuntimeClosed
 	case <-a.readyCh:
-		return nil
+		return a.disabled
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -466,8 +497,29 @@ func (a *actors) handleIdleActor(target targets.Idlable) {
 }
 
 func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
-	statusMessage := "placement: connected"
+	select {
+	case <-a.initDoneCh:
+		if a.disabled != nil {
+			return &runtimev1pb.ActorRuntime{
+				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
+				Placement:     "placement: disconnected",
+			}
+		}
+	default:
+		if len(a.placementAddresses) == 0 {
+			return &runtimev1pb.ActorRuntime{
+				Placement:     "placement: disconnected",
+				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
+			}
+		} else {
+			return &runtimev1pb.ActorRuntime{
+				RuntimeStatus: runtimev1pb.ActorRuntime_INITIALIZING,
+			}
+		}
+	}
+
 	hostReady := true
+	statusMessage := "placement: connected"
 	if !a.placement.Ready() {
 		statusMessage = "placement: disconnected"
 		hostReady = false
@@ -488,9 +540,10 @@ func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 	}
 
 	return &runtimev1pb.ActorRuntime{
-		ActiveActors: count,
-		Placement:    statusMessage,
-		HostReady:    hostReady,
+		RuntimeStatus: runtimev1pb.ActorRuntime_RUNNING,
+		ActiveActors:  count,
+		Placement:     statusMessage,
+		HostReady:     hostReady,
 	}
 }
 

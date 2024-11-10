@@ -79,12 +79,7 @@ func (a *Universal) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Un
 }
 
 func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.RegisterActorReminderRequest) (*emptypb.Empty, error) {
-	actors, err := a.Actors(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	r, err := actors.Reminders(ctx)
+	r, err := a.ActorReminders(ctx)
 	if err != nil {
 		return nil, err
 	}
@@ -123,12 +118,7 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 }
 
 func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb.UnregisterActorReminderRequest) (*emptypb.Empty, error) {
-	actors, err := a.Actors(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	r, err := actors.Reminders(ctx)
+	r, err := a.ActorReminders(ctx)
 	if err != nil {
 		return nil, err
 	}

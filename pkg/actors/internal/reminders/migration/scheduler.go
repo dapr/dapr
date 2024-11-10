@@ -36,6 +36,7 @@ type ToSchedulerOptions struct {
 	Table              table.Interface
 	StateReminders     storage.Interface
 	SchedulerReminders storage.Interface
+	LookupFn           func(context.Context, *requestresponse.LookupActorRequest) bool
 }
 
 func ToScheduler(ctx context.Context, opts ToSchedulerOptions) error {
@@ -55,7 +56,10 @@ func ToScheduler(ctx context.Context, opts ToSchedulerOptions) error {
 			return err
 		}
 		for i := range stateR {
-			if _, ok := opts.Table.HostedTarget(stateR[i].ActorType, stateR[i].ActorID); ok {
+			if opts.LookupFn(ctx, &requestresponse.LookupActorRequest{
+				ActorType: stateR[i].ActorType,
+				ActorID:   stateR[i].ActorID,
+			}) {
 				log.Debugf("Hosted state reminder %s for actor %s in state store", stateR[i].Key(), stateR[i].ActorID)
 				stateReminders[actorType] = append(stateReminders[actorType], stateR[i])
 			}

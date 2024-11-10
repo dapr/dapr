@@ -105,10 +105,18 @@ func (t *table) Types() []string {
 func (t *table) Len() map[string]int {
 	t.lock.RLock()
 	defer t.lock.RUnlock()
+
 	alen := make(map[string]int)
-	for atype := range alen {
-		alen[atype]++
+	for _, atype := range t.factories.Keys() {
+		alen[atype] = 0
 	}
+
+	t.table.Range(func(akey string, _ targets.Interface) bool {
+		atype, _ := key.ActorTypeAndIDFromKey(akey)
+		alen[atype]++
+		return true
+	})
+
 	return alen
 }
 

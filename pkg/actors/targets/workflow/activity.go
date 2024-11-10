@@ -27,11 +27,9 @@ import (
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 
-	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
-	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/requestresponse"
-	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/internal"
 	"github.com/dapr/dapr/pkg/components/wfbackend"
@@ -61,13 +59,11 @@ type activity struct {
 	actorType         string
 	workflowActorType string
 
-	reminders reminders.Interface
-	state     state.Interface
-	engine    engine.Interface
-	lock      *internal.Lock
+	actors actors.Interface
+	lock   *internal.Lock
 
 	scheduler        wfbackend.ActivityScheduler
-	aState           *activityState
+	state            *activityState
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
@@ -91,12 +87,10 @@ type ActivityOptions struct {
 	DefaultTimeout    *time.Duration
 	ReminderInterval  *time.Duration
 
-	State       state.Interface
-	Reminders   reminders.Interface
-	ActorEngine engine.Interface
+	Actors actors.Interface
 }
 
-func ActivityFactory(opts WorkflowOptions) targets.Factory {
+func ActivityFactory(opts ActivityOptions) targets.Factory {
 	return func(actorID string) targets.Interface {
 		reminderInterval := time.Minute * 1
 		defaultTimeout := time.Hour * 1
@@ -116,9 +110,7 @@ func ActivityFactory(opts WorkflowOptions) targets.Factory {
 			workflowActorType: opts.WorkflowActorType,
 			reminderInterval:  reminderInterval,
 			defaultTimeout:    defaultTimeout,
-			state:             opts.State,
-			reminders:         opts.Reminders,
-			engine:            opts.ActorEngine,
+			actors:            opts.Actors,
 			lock:              internal.NewLock(internal.LockOptions{ActorType: opts.ActivityActorType}),
 		}
 	}
@@ -322,7 +314,12 @@ loop:
 		WithData(resultData).
 		WithContentType(invokev1.OctetStreamContentType)
 
-	_, err = a.engine.Call(ctx, req)
+	engine, err := a.actors.Engine(ctx)
+	if err != nil {
+		return runCompletedFalse, err
+	}
+
+	_, err = engine.Call(ctx, req)
 	switch {
 	case err != nil:
 		// Returning recoverable error, record metrics
@@ -346,14 +343,14 @@ func (a *activity) InvokeTimer(ctx context.Context, reminder *requestresponse.Re
 // DeactivateActor implements actors.InternalActor
 func (a *activity) DeactivateActor(ctx context.Context) error {
 	log.Debugf("Activity actor '%s': deactivating", a.actorID)
-	a.aState = nil // A bit of extra caution, shouldn't be necessary
+	a.state = nil // A bit of extra caution, shouldn't be necessary
 	return nil
 }
 
 func (a *activity) loadActivityState(ctx context.Context) (*activityState, error) {
 	// See if the state for this actor is already cached in memory.
-	if a.aState != nil {
-		return a.aState, nil
+	if a.state != nil {
+		return a.state, nil
 	}
 
 	// Loading from the state store is only expected in process failure recovery scenarios.
@@ -364,7 +361,11 @@ func (a *activity) loadActivityState(ctx context.Context) (*activityState, error
 		ActorID:   a.actorID,
 		Key:       activityStateKey,
 	}
-	res, err := a.state.Get(ctx, &req)
+	astate, err := a.actors.State(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get state: %w", err)
+	}
+	res, err := astate.Get(ctx, &req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to load activity state: %w", err)
 	}
@@ -394,20 +395,31 @@ func (a *activity) saveActivityState(ctx context.Context, state *activityState) 
 			},
 		}},
 	}
-	if err := a.state.TransactionalStateOperation(ctx, &req); err != nil {
+
+	astate, err := a.actors.State(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get state: %w", err)
+	}
+
+	if err := astate.TransactionalStateOperation(ctx, &req); err != nil {
 		return fmt.Errorf("failed to save activity state: %w", err)
 	}
 
 	if !a.cachingDisabled {
-		a.aState = state
+		a.state = state
 	}
 
 	return nil
 }
 
 func (a *activity) purgeActivityState(ctx context.Context) error {
+	astate, err := a.actors.State(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get state: %w", err)
+	}
+
 	log.Debugf("Activity actor '%s': purging activity state", a.actorID)
-	err := a.state.TransactionalStateOperation(ctx, &requestresponse.TransactionalRequest{
+	err = astate.TransactionalStateOperation(ctx, &requestresponse.TransactionalRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		Operations: []requestresponse.TransactionalOperation{{
@@ -432,8 +444,13 @@ func (a *activity) createReliableReminder(ctx context.Context, data any) error {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)
 	}
 
+	reminders, err := a.actors.Reminders(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get reminders: %w", err)
+	}
+
 	// TODO: @joshvanl: change to once shot when using Scheduler.
-	return a.reminders.Create(ctx, &requestresponse.CreateReminderRequest{
+	return reminders.Create(ctx, &requestresponse.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		Data:      dataEnc,
@@ -446,7 +463,7 @@ func (a *activity) createReliableReminder(ctx context.Context, data any) error {
 // DeactivateActor implements actors.InternalActor
 func (a *activity) Deactivate(ctx context.Context) error {
 	log.Debugf("Activity actor '%s': deactivating", a.actorID)
-	a.aState = nil // A bit of extra caution, shouldn't be necessary
+	a.state = nil // A bit of extra caution, shouldn't be necessary
 	a.lock.Close()
 	return nil
 }

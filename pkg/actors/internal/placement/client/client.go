@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"strings"
 	"sync/atomic"
@@ -163,17 +164,18 @@ func (c *Client) Ready() bool {
 
 func (c *Client) connectRoundRobin(ctx context.Context) error {
 	for {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-
 		err := c.connect(ctx)
-		if err != nil {
-			log.Errorf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
-			continue
+		if err == nil {
+			return nil
 		}
 
-		return nil
+		log.Errorf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
+
+		select {
+		case <-time.After(time.Second):
+		case <-ctx.Done():
+			return ctx.Err()
+		}
 	}
 }
 
@@ -210,18 +212,22 @@ func (c *Client) Recv(ctx context.Context) (*v1pb.PlacementOrder, error) {
 	}
 
 	for {
-		if err := ctx.Err(); err != nil {
-			return nil, err
-		}
-
 		o, err := (*c.stream.Load()).Recv()
 		if err == nil {
 			return o, nil
 		}
 
+		if ctx.Err() != nil {
+			return nil, ctx.Err()
+		}
+
 		s, ok := status.FromError(err)
-		if ok &&
-			(s.Code() == codes.FailedPrecondition || s.Message() == "placement service is closed") {
+
+		if (ok &&
+			(s.Code() == codes.FailedPrecondition || s.Message() == "placement service is closed")) ||
+			errors.Is(err, io.EOF) {
+
+			log.Infof("Placement service is closed, reconnecting...")
 			errCh := make(chan error, 1)
 			c.reconnectCh <- errCh
 

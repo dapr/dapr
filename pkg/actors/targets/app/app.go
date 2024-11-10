@@ -166,7 +166,7 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 
 	if imRes.Status().GetCode() != http.StatusOK {
 		respData, _ := imRes.RawDataFull()
-		return nil, fmt.Errorf("error from actor service: %s", string(respData))
+		return nil, fmt.Errorf("error from actor service: (%d) %s", imRes.Status().GetMessage(), string(respData))
 	}
 
 	// Get the protobuf
@@ -265,7 +265,7 @@ func (a *app) Deactivate(ctx context.Context) error {
 	if resp.Status().GetCode() != http.StatusOK {
 		diag.DefaultMonitoring.ActorDeactivationFailed(a.actorType, "status_code_"+strconv.FormatInt(int64(resp.Status().GetCode()), 10))
 		body, _ := resp.RawDataFull()
-		return fmt.Errorf("error from actor service: %s", string(body))
+		return fmt.Errorf("error from actor service: (%d) %s", resp.Status().GetCode(), string(body))
 	}
 
 	a.idleQueue.Dequeue(key.ConstructComposite(a.actorType, a.actorID))

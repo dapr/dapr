@@ -30,12 +30,14 @@ import (
 
 // GetWorkflowBeta1 is the API handler for getting workflow details
 func (a *Universal) GetWorkflowBeta1(ctx context.Context, in *runtimev1pb.GetWorkflowRequest) (*runtimev1pb.GetWorkflowResponse, error) {
+	if err := a.workflowEngine.WaitForReady(ctx); err != nil {
+		return nil, err
+	}
+
 	if err := a.validateInstanceID(in.GetInstanceId(), false /* isCreate */); err != nil {
 		a.logger.Debug(err)
 		return &runtimev1pb.GetWorkflowResponse{}, err
 	}
-
-	a.workflowEngine.WaitForWorkflowEngineReady(ctx)
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -89,7 +91,9 @@ func (a *Universal) StartWorkflowBeta1(ctx context.Context, in *runtimev1pb.Star
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
 
-	a.workflowEngine.WaitForWorkflowEngineReady(ctx)
+	if err := a.workflowEngine.WaitForReady(ctx); err != nil {
+		return nil, err
+	}
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -124,7 +128,9 @@ func (a *Universal) TerminateWorkflowBeta1(ctx context.Context, in *runtimev1pb.
 		return emptyResponse, err
 	}
 
-	a.workflowEngine.WaitForWorkflowEngineReady(ctx)
+	if err := a.workflowEngine.WaitForReady(ctx); err != nil {
+		return nil, err
+	}
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -162,7 +168,9 @@ func (a *Universal) RaiseEventWorkflowBeta1(ctx context.Context, in *runtimev1pb
 		return emptyResponse, err
 	}
 
-	a.workflowEngine.WaitForWorkflowEngineReady(ctx)
+	if err := a.workflowEngine.WaitForReady(ctx); err != nil {
+		return nil, err
+	}
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -193,7 +201,9 @@ func (a *Universal) PauseWorkflowBeta1(ctx context.Context, in *runtimev1pb.Paus
 		return emptyResponse, err
 	}
 
-	a.workflowEngine.WaitForWorkflowEngineReady(ctx)
+	if err := a.workflowEngine.WaitForReady(ctx); err != nil {
+		return nil, err
+	}
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -220,7 +230,9 @@ func (a *Universal) ResumeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Res
 		return emptyResponse, err
 	}
 
-	a.workflowEngine.WaitForWorkflowEngineReady(ctx)
+	if err := a.workflowEngine.WaitForReady(ctx); err != nil {
+		return nil, err
+	}
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {
@@ -247,7 +259,9 @@ func (a *Universal) PurgeWorkflowBeta1(ctx context.Context, in *runtimev1pb.Purg
 		return emptyResponse, err
 	}
 
-	a.workflowEngine.WaitForWorkflowEngineReady(ctx)
+	if err := a.workflowEngine.WaitForReady(ctx); err != nil {
+		return nil, err
+	}
 
 	workflowComponent, err := a.getWorkflowComponent(in.GetWorkflowComponent())
 	if err != nil {

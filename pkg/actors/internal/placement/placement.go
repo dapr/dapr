@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/lock"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
@@ -64,9 +65,9 @@ type Options struct {
 	Namespace string
 	Hostname  string
 	Port      int
-	APILevel  uint32
 	Addresses []string
 
+	APILevel  *apilevel.APILevel
 	Security  security.Handler
 	Table     table.Interface
 	Reminders storage.Interface
@@ -77,6 +78,7 @@ type placement struct {
 	client     *client.Client
 	actorTable table.Interface
 	reminders  storage.Interface
+	apiLevel   *apilevel.APILevel
 
 	hashTable         *hashing.ConsistentHashTables
 	virtualNodesCache *hashing.VirtualNodesCache
@@ -91,12 +93,10 @@ type placement struct {
 	hostname    string
 	hostaddress string
 	port        string
-	// TODO: @joshvanl
-	apiLevel uint32
-	isReady  atomic.Bool
-	readyCh  chan struct{}
-	wg       sync.WaitGroup
-	closed   atomic.Bool
+	isReady     atomic.Bool
+	readyCh     chan struct{}
+	wg          sync.WaitGroup
+	closed      atomic.Bool
 }
 
 func New(opts Options) (Interface, error) {
@@ -124,8 +124,8 @@ func New(opts Options) (Interface, error) {
 		port:          strconv.Itoa(opts.Port),
 		namespace:     opts.Namespace,
 		hostname:      opts.Hostname,
-		apiLevel:      opts.APILevel,
 		operationLock: fifo.New(),
+		apiLevel:      opts.APILevel,
 		lock:          lock,
 		readyCh:       make(chan struct{}),
 	}, nil
@@ -138,6 +138,7 @@ func (p *placement) Run(ctx context.Context) error {
 			ch := p.actorTable.SubscribeToTypeUpdates(ctx)
 
 			actorTypes := p.actorTable.Types()
+			log.Debugf("Reporting actor types: %v\n", actorTypes)
 			if err := p.sendHost(ctx, actorTypes); err != nil {
 				return err
 			}
@@ -202,13 +203,11 @@ func (p *placement) Ready() bool {
 }
 
 func (p *placement) sendHost(ctx context.Context, actorTypes []string) error {
-	log.Debugf("Reporting actor types: %v\n", actorTypes)
-
 	err := p.client.Send(ctx, &v1pb.Host{
 		Name:      p.hostname + ":" + p.port,
 		Entities:  actorTypes,
 		Id:        p.appID,
-		ApiLevel:  p.apiLevel,
+		ApiLevel:  20,
 		Namespace: p.namespace,
 	})
 	if err != nil {
@@ -230,7 +229,7 @@ func (p *placement) handleReceive(ctx context.Context, in *v1pb.PlacementOrder) 
 
 	switch in.GetOperation() {
 	case lockOperation:
-		p.handleLockOperation(ctx, in.GetTables())
+		p.handleLockOperation(ctx)
 	case updateOperation:
 		p.handleUpdateOperation(ctx, in.GetTables())
 	case unlockOperation:
@@ -252,7 +251,7 @@ func (p *placement) Unlock() {
 	p.lock.UnlockLookup()
 }
 
-func (p *placement) handleLockOperation(ctx context.Context, tables *v1pb.PlacementTables) {
+func (p *placement) handleLockOperation(ctx context.Context) {
 	p.lock.LockTable()
 	lockVersion := p.lockVersion.Add(1)
 
@@ -273,10 +272,7 @@ func (p *placement) handleLockOperation(ctx context.Context, tables *v1pb.Placem
 }
 
 func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.PlacementTables) {
-	if in.GetApiLevel() != p.apiLevel {
-		p.apiLevel = in.GetApiLevel()
-		log.Infof("Actor API level in the cluster has been updated to %d", p.apiLevel)
-	}
+	p.apiLevel.Set(in.GetApiLevel())
 
 	entries := make(map[string]*hashing.Consistent)
 
@@ -308,7 +304,10 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 		return lar != nil && !p.isActorLocal(lar.Address, p.hostname, p.port)
 	})
 
-	p.reminders.OnPlacementTablesUpdated(ctx)
+	p.reminders.OnPlacementTablesUpdated(ctx, func(ctx context.Context, req *requestresponse.LookupActorRequest) bool {
+		lar, err := p.LookupActor(ctx, req)
+		return err == nil && lar.Local
+	})
 
 	log.Infof("Placement tables updated, version: %s", in.GetVersion())
 }

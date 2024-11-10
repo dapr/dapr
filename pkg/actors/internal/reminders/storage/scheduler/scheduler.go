@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/migration"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/requestresponse"
@@ -55,6 +56,7 @@ type scheduler struct {
 	table         table.Interface
 	stateReminder storage.Interface
 	htarget       healthz.Target
+	placement     placement.Interface
 }
 
 func New(opts Options) storage.Interface {
@@ -69,11 +71,12 @@ func New(opts Options) storage.Interface {
 }
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
-func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context) {
+func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context, fn func(context.Context, *requestresponse.LookupActorRequest) bool) {
 	err := migration.ToScheduler(ctx, migration.ToSchedulerOptions{
 		Table:              s.table,
 		StateReminders:     s.stateReminder,
 		SchedulerReminders: s,
+		LookupFn:           fn,
 	})
 	if err != nil {
 		log.Errorf("Error attempting to migrate reminders to scheduler: %s", err)
@@ -84,7 +87,7 @@ func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context) {
 func (s *scheduler) DrainRebalancedReminders(actorType string, actorID string) {}
 
 func (s *scheduler) Create(ctx context.Context, reminder *requestresponse.CreateReminderRequest) error {
-	log.Debug("Using Scheduler service for reminders")
+	log.Debug("Using Scheduler service for reminders.")
 	var dueTime *string
 	if len(reminder.DueTime) > 0 {
 		dueTime = ptr.Of(reminder.DueTime)

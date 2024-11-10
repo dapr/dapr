@@ -16,8 +16,7 @@ package wfbackend
 import (
 	"context"
 
-	"github.com/dapr/dapr/pkg/actors/engine"
-	"github.com/dapr/dapr/pkg/actors/table"
+	"github.com/dapr/dapr/pkg/actors"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 )
@@ -33,10 +32,9 @@ const (
 )
 
 type Options struct {
-	AppID       string
-	Namespace   string
-	ActorEngine engine.Interface
-	ActorTable  table.Interface
+	AppID     string
+	Namespace string
+	Actors    actors.Interface
 }
 
 // workflowBackendFactory is a function that returns a workflow backend

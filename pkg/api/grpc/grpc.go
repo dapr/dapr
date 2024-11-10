@@ -38,7 +38,6 @@ import (
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
@@ -61,7 +60,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
-	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/utils"
 	kiterrors "github.com/dapr/kit/errors"
 	"github.com/dapr/kit/logger"
@@ -81,9 +79,6 @@ type API interface {
 
 	// Dapr Service methods
 	runtimev1pb.DaprServer
-
-	// Methods internal to the object
-	SetActorRuntime(actor actors.Interface, wfengine *wfengine.WorkflowEngine)
 }
 
 type api struct {
