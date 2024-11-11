@@ -72,7 +72,10 @@ func (r *reconnect) Setup(t *testing.T) []framework.Option {
 }
 
 func (r *reconnect) Run(t *testing.T, ctx context.Context) {
-	r.scheduler1.Run(t, ctx)
+	sched1ctx, cancel1 := context.WithCancel(ctx)
+	t.Cleanup(cancel1)
+
+	r.scheduler1.Run(t, sched1ctx)
 	t.Cleanup(func() { r.scheduler1.Cleanup(t) })
 	r.scheduler1.WaitUntilRunning(t, ctx)
 	r.daprd.WaitUntilRunning(t, ctx)
@@ -89,7 +92,7 @@ func (r *reconnect) Run(t *testing.T, ctx context.Context) {
 		assert.Positive(c, r.jobCalled.Load())
 	}, time.Second*5, time.Millisecond*10)
 
-	r.scheduler1.Cleanup(t)
+	cancel1()
 
 	called := r.jobCalled.Load()
 	time.Sleep(time.Second * 2)
