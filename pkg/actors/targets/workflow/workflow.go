@@ -35,9 +35,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
-	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/requestresponse"
-	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/internal"
 	"github.com/dapr/dapr/pkg/components/wfbackend"
@@ -84,8 +82,6 @@ type WorkflowOptions struct {
 	ReminderInterval  *time.Duration
 
 	Resiliency resiliency.Provider
-	State      state.Interface
-	Reminders  reminders.Interface
 	Actors     actors.Interface
 	Scheduler  wfbackend.WorkflowScheduler
 }
@@ -133,11 +129,12 @@ func (w *workflow) InvokeMethod(ctx context.Context, req *internalv1pb.InternalI
 	}
 	defer imReq.Close()
 
-	cancel, err := w.lock.LockRequest(imReq)
-	if err != nil {
-		return nil, err
-	}
-	defer cancel()
+	// TODO: @joshvanl: re-add lock once durable task is made sane.
+	//cancel, err := w.lock.Lock()
+	//if err != nil {
+	//	return err
+	//}
+	//defer cancel()
 
 	policyDef := w.resiliency.ActorPostLockPolicy(w.actorType, w.actorID)
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
@@ -194,11 +191,12 @@ func (w *workflow) executeMethod(ctx context.Context, methodName string, request
 
 // InvokeReminder implements actors.InternalActor
 func (w *workflow) InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error {
-	cancel, err := w.lock.Lock()
-	if err != nil {
-		return err
-	}
-	defer cancel()
+	// TODO: @joshvanl: re-add lock once durable task is made sane.
+	//cancel, err := w.lock.Lock()
+	//if err != nil {
+	//	return err
+	//}
+	//defer cancel()
 
 	log.Debugf("Workflow actor '%s': invoking reminder '%s'", w.actorID, reminder.Name)
 
@@ -586,7 +584,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *requestresponse.Re
 	// Request to execute workflow
 	log.Debugf("Workflow actor '%s': scheduling workflow execution with instanceId '%s'", w.actorID, wi.InstanceID)
 	// Schedule the workflow execution by signaling the backend
-	// TODO: @joshvanl
+	// TODO: @joshvanl remove.
 	err = w.scheduler(ctx, wi)
 	if err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -873,7 +871,7 @@ func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string
 		return "", fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
 	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
-	log.Debugf("Workflow actor '%s': creating '%s' reminder with DueTime = '%s'", w.actorID, reminderName, delay)
+	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", w.activityActorType, w.actorID, reminderName, delay)
 
 	dataEnc, err := json.Marshal(data)
 	if err != nil {

@@ -86,8 +86,8 @@ type ActivityOptions struct {
 	CachingDisabled   bool
 	DefaultTimeout    *time.Duration
 	ReminderInterval  *time.Duration
-
-	Actors actors.Interface
+	Scheduler         wfbackend.ActivityScheduler
+	Actors            actors.Interface
 }
 
 func ActivityFactory(opts ActivityOptions) targets.Factory {
@@ -111,6 +111,7 @@ func ActivityFactory(opts ActivityOptions) targets.Factory {
 			reminderInterval:  reminderInterval,
 			defaultTimeout:    defaultTimeout,
 			actors:            opts.Actors,
+			scheduler:         opts.Scheduler,
 			lock:              internal.NewLock(internal.LockOptions{ActorType: opts.ActivityActorType}),
 		}
 	}
@@ -164,7 +165,6 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalv1pb.InternalI
 }
 
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
-// func (a *activity) InvokeReminder(ctx context.Context, reminder actors.Reminder, metadata map[string][]string) error {
 func (a *activity) InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error {
 	cancel, err := a.lock.Lock()
 	if err != nil {
@@ -179,10 +179,12 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *requestresponse
 	if state == nil {
 		return errors.New("no activity state found")
 	}
+	fmt.Printf("<<<%s\n", state)
 
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
 	defer cancelTimeout()
 
+	fmt.Printf("<<going into execute activity: %s\n", state)
 	completed, err := a.executeActivity(timeoutCtx, reminder.Name, state.EventPayload)
 	if completed == runCompletedTrue {
 		a.completed.Store(true)
@@ -214,8 +216,6 @@ func (a *activity) Completed() bool {
 }
 
 func (a *activity) executeActivity(ctx context.Context, name string, eventPayload []byte) (runCompleted, error) {
-	// TODO: @joshvanl: lock actor
-
 	taskEvent, err := backend.UnmarshalHistoryEvent(eventPayload)
 	if err != nil {
 		return runCompletedTrue, err
@@ -438,7 +438,7 @@ func (a *activity) purgeActivityState(ctx context.Context) error {
 
 func (a *activity) createReliableReminder(ctx context.Context, data any) error {
 	const reminderName = "run-activity"
-	log.Debugf("Activity actor '%s': creating reminder '%s' for immediate execution", a.actorID, reminderName)
+	log.Debugf("Activity actor '%s||%s': creating reminder '%s' for immediate execution", a.actorType, a.actorID, reminderName)
 	dataEnc, err := json.Marshal(data)
 	if err != nil {
 		return fmt.Errorf("failed to encode data as JSON: %w", err)

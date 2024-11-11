@@ -239,11 +239,9 @@ func (s *server) StartNonBlocking() error {
 			internalv1pb.RegisterServiceInvocationServer(server, s.api)
 		} else if s.kind == apiServer {
 			runtimev1pb.RegisterDaprServer(server, s.api)
-			if s.workflowEngine != nil {
-				s.logger.Infof("Registering workflow engine for gRPC endpoint: %s", listener.Addr())
-				if err := s.workflowEngine.RegisterGrpcServer(server); err != nil {
-					return err
-				}
+			s.logger.Infof("Registering workflow engine for gRPC endpoint: %s", listener.Addr())
+			if err := s.workflowEngine.RegisterGrpcServer(server); err != nil {
+				return err
 			}
 		}
 

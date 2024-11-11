@@ -200,16 +200,17 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	client := client.HTTP(t)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.Do(req)
-		if err != nil {
-			return false
+		if assert.NoError(c, err) {
+			defer resp.Body.Close()
+			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
 		}
-		defer resp.Body.Close()
-		return http.StatusNoContent == resp.StatusCode
 	}, 30*time.Second, 10*time.Millisecond)
 }
 

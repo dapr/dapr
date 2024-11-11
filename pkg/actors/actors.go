@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"sync/atomic"
 	"time"
 
 	"k8s.io/utils/clock"
@@ -124,8 +125,8 @@ type actors struct {
 	security           security.Handler
 	schedulerClients   *clients.Clients
 	healthz            healthz.Healthz
-	htarget            healthz.Target
-	compStore          *compstore.ComponentStore
+	//htarget            healthz.Target
+	compStore *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
 
@@ -147,7 +148,7 @@ type actors struct {
 	entityConfigs      map[string]requestresponse.EntityConfig
 	defaultIdleTimeout time.Duration
 
-	disabled   error
+	disabled   *atomic.Pointer[error]
 	readyCh    chan struct{}
 	initDoneCh chan struct{}
 	closedCh   chan struct{}
@@ -157,9 +158,10 @@ type actors struct {
 
 // New create a new actors runtime with given config.
 func New(opts Options) Interface {
-	var disabled error
+	var disabled atomic.Pointer[error]
 	if len(opts.PlacementAddresses) == 0 {
-		disabled = messages.ErrActorNoPlacement
+		var err error = messages.ErrActorNoPlacement
+		disabled.Store(&err)
 	}
 
 	return &actors{
@@ -172,34 +174,42 @@ func New(opts Options) Interface {
 		resiliency:         opts.Resiliency,
 		security:           opts.Security,
 		schedulerClients:   opts.SchedulerClients,
-		htarget:            opts.Healthz.AddTarget(),
-		compStore:          opts.CompStore,
-		stateTTLEnabled:    opts.StateTTLEnabled,
-		clock:              clock.RealClock{},
-		disabled:           disabled,
-		healthz:            opts.Healthz,
-		readyCh:            make(chan struct{}),
-		closedCh:           make(chan struct{}),
-		initDoneCh:         make(chan struct{}),
+		//htarget:            opts.Healthz.AddTarget(),
+		compStore:       opts.CompStore,
+		stateTTLEnabled: opts.StateTTLEnabled,
+		clock:           clock.RealClock{},
+		disabled:        &disabled,
+		healthz:         opts.Healthz,
+		readyCh:         make(chan struct{}),
+		closedCh:        make(chan struct{}),
+		initDoneCh:      make(chan struct{}),
 	}
 }
 
 func (a *actors) Init(opts InitOptions) error {
 	defer close(a.initDoneCh)
 
-	if a.disabled != nil {
+	if a.disabled.Load() != nil {
 		return nil
 	}
 
 	storeS, ok := a.compStore.GetStateStore(opts.StateStoreName)
 	if !ok {
-		a.disabled = messages.ErrActorRuntimeNotFound
+		var err error = messages.ErrActorRuntimeNotFound
+		a.disabled.Store(&err)
 		return nil
 	}
 
 	store, ok := storeS.(actorstate.Backend)
 	if !ok || !state.FeatureETag.IsPresent(store.Features()) || !state.FeatureTransactional.IsPresent(store.Features()) {
-		a.disabled = messages.ErrActorRuntimeNotFound
+		var err error = messages.ErrActorRuntimeNotFound
+		a.disabled.Store(&err)
+		return nil
+	}
+
+	if opts.AppChannel == nil {
+		var err error = messages.ErrActorNoAppChannel
+		a.disabled.Store(&err)
 		return nil
 	}
 
@@ -312,13 +322,14 @@ func (a *actors) Init(opts InitOptions) error {
 	})
 
 	a.engine = engine.New(engine.Options{
-		Namespace:  a.namespace,
-		Placement:  a.placement,
-		GRPC:       opts.GRPC,
-		Table:      a.table,
-		Resiliency: a.resiliency,
-		IdlerQueue: a.idlerQueue,
-		Reminders:  a.reminders,
+		Namespace:          a.namespace,
+		SchedulerReminders: a.schedulerReminders,
+		Placement:          a.placement,
+		GRPC:               opts.GRPC,
+		Table:              a.table,
+		Resiliency:         a.resiliency,
+		IdlerQueue:         a.idlerQueue,
+		Reminders:          a.reminders,
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{
@@ -350,15 +361,19 @@ func (a *actors) Init(opts InitOptions) error {
 func (a *actors) Run(ctx context.Context) error {
 	defer close(a.closedCh)
 
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-a.initDoneCh:
+	if a.disabled.Load() == nil {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-a.initDoneCh:
+		}
 	}
 
-	if a.disabled != nil {
+	if err := a.disabled.Load(); err != nil {
+		log.Infof("Actor runtime disabled: %s", *err)
 		close(a.readyCh)
-		a.htarget.Ready()
+		// TODO: @joshvanl
+		//a.htarget.Ready()
 		<-ctx.Done()
 		return nil
 	}
@@ -377,7 +392,7 @@ func (a *actors) Run(ctx context.Context) error {
 					if healthy {
 						// TODO: @joshvanl: enable when placement accepts dynamic actors.
 						//a.registerHosted()
-						a.htarget.Ready()
+						//a.htarget.Ready()
 
 					} else {
 
@@ -446,11 +461,18 @@ func (a *actors) Reminders(ctx context.Context) (reminders.Interface, error) {
 }
 
 func (a *actors) waitForReady(ctx context.Context) error {
+	if err := a.disabled.Load(); err != nil {
+		return *err
+	}
+
 	select {
 	case <-a.closedCh:
 		return messages.ErrActorRuntimeClosed
 	case <-a.readyCh:
-		return a.disabled
+		if err := a.disabled.Load(); err != nil {
+			return *err
+		}
+		return nil
 	case <-ctx.Done():
 		return ctx.Err()
 	}
@@ -499,7 +521,7 @@ func (a *actors) handleIdleActor(target targets.Idlable) {
 func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 	select {
 	case <-a.initDoneCh:
-		if a.disabled != nil {
+		if a.disabled.Load() != nil {
 			return &runtimev1pb.ActorRuntime{
 				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
 				Placement:     "placement: disconnected",

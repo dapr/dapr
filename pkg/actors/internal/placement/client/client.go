@@ -172,7 +172,7 @@ func (c *Client) connectRoundRobin(ctx context.Context) error {
 		log.Errorf("Failed to connect to placement %s: %s", c.addresses[(c.addressIndex-1)%len(c.addresses)], err)
 
 		select {
-		case <-time.After(time.Second):
+		case <-time.After(time.Second / 2):
 		case <-ctx.Done():
 			return ctx.Err()
 		}

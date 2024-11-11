@@ -76,17 +76,18 @@ type Actors struct {
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 }
 
-func New(opts wfbackend.Options) backend.Backend {
+func New(opts wfbackend.Options) (backend.Backend, error) {
 	return &Actors{
 		appID:             opts.AppID,
 		workflowActorType: ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
 		activityActorType: ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
 		actors:            opts.Actors,
+		resiliency:        opts.Resiliency,
 
 		// TODO: @joshvanl: remove
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem),
-	}
+	}, nil
 }
 
 // getWorkflowScheduler returns a WorkflowScheduler func that sends an orchestration work item to the Durable Task Framework.
@@ -104,6 +105,7 @@ func getWorkflowScheduler(orchestrationWorkItemChan chan *backend.OrchestrationW
 }
 
 // getActivityScheduler returns an activityScheduler func that sends an activity work item to the Durable Task Framework.
+// TODO: @joshvanl: remove
 func getActivityScheduler(activityWorkItemChan chan *backend.ActivityWorkItem) wfbackend.ActivityScheduler {
 	return func(ctx context.Context, wi *backend.ActivityWorkItem) error {
 		log.Debugf(
@@ -120,7 +122,7 @@ func getActivityScheduler(activityWorkItemChan chan *backend.ActivityWorkItem) w
 	}
 }
 
-func (abe *Actors) RegisterActor(ctx context.Context) error {
+func (abe *Actors) RegisterActors(ctx context.Context) error {
 	table, err := abe.actors.Table(ctx)
 	if err != nil {
 		return err
@@ -145,6 +147,7 @@ func (abe *Actors) RegisterActor(ctx context.Context) error {
 		CachingDisabled:   abe.cachingDisabled,
 		DefaultTimeout:    abe.defaultActivityTimeout,
 		ReminderInterval:  abe.defaultReminderInterval,
+		Scheduler:         getActivityScheduler(abe.activityWorkItemChan),
 		Actors:            abe.actors,
 	}))
 

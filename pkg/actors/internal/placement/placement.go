@@ -138,7 +138,7 @@ func (p *placement) Run(ctx context.Context) error {
 			ch := p.actorTable.SubscribeToTypeUpdates(ctx)
 
 			actorTypes := p.actorTable.Types()
-			log.Debugf("Reporting actor types: %v\n", actorTypes)
+			log.Debugf("Reporting actor types: %v", actorTypes)
 			if err := p.sendHost(ctx, actorTypes); err != nil {
 				return err
 			}

@@ -22,10 +22,13 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
+	"github.com/dapr/dapr/pkg/actors"
 	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
 	wfbeComp "github.com/dapr/dapr/pkg/components/wfbackend"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
+	rterrors "github.com/dapr/dapr/pkg/runtime/errors"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/kit/logger"
 )
@@ -34,26 +37,35 @@ var log = logger.NewLogger("dapr.runtime.processor.workflowbackend")
 
 type Options struct {
 	AppID          string
+	Namespace      string
 	Registry       *wfbeComp.Registry
 	ComponentStore *compstore.ComponentStore
 	Meta           *meta.Meta
+	Resiliency     resiliency.Provider
+	Actors         actors.Interface
 }
 
 type workflowBackend struct {
-	registry  *wfbeComp.Registry
-	compStore *compstore.ComponentStore
-	meta      *meta.Meta
-	lock      sync.Mutex
-	backend   backend.Backend
-	appID     string
+	registry   *wfbeComp.Registry
+	resiliency resiliency.Provider
+	compStore  *compstore.ComponentStore
+	meta       *meta.Meta
+	lock       sync.Mutex
+	backend    backend.Backend
+	actors     actors.Interface
+	appID      string
+	namespace  string
 }
 
 func New(opts Options) *workflowBackend {
 	return &workflowBackend{
-		registry:  opts.Registry,
-		compStore: opts.ComponentStore,
-		meta:      opts.Meta,
-		appID:     opts.AppID,
+		registry:   opts.Registry,
+		compStore:  opts.ComponentStore,
+		meta:       opts.Meta,
+		appID:      opts.AppID,
+		resiliency: opts.Resiliency,
+		namespace:  opts.Namespace,
+		actors:     opts.Actors,
 	}
 }
 
@@ -80,18 +92,23 @@ func (w *workflowBackend) Init(ctx context.Context, comp compapi.Component) erro
 	}
 
 	// Initialization
-	// TODO: @joshvanl
-	//baseMetadata, err := w.meta.ToBaseMetadata(comp)
-	//if err != nil {
-	//	diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-	//	return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
-	//}
+	baseMetadata, err := w.meta.ToBaseMetadata(comp)
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+	}
 
-	be := beFactory(wfbeComp.Options{
-		AppID: w.appID,
-		// TODO: @joshvanl
-		//Base:  baseMetadata,
+	be, err := beFactory(wfbeComp.Options{
+		AppID:      w.appID,
+		Base:       baseMetadata,
+		Namespace:  w.namespace,
+		Resiliency: w.resiliency,
+		Actors:     w.actors,
 	})
+	if err != nil {
+		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+		return rterrors.NewInit(rterrors.InitComponentFailure, fName, err)
+	}
 
 	log.Infof("Using %s as workflow backend", comp.Spec.Type)
 	diag.DefaultMonitoring.ComponentInitialized(comp.Spec.Type)

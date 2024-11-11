@@ -49,17 +49,19 @@ type Interface interface {
 }
 
 type Options struct {
-	Namespace  string
-	Table      table.Interface
-	Placement  placement.Interface
-	Resiliency resiliency.Provider
-	Reminders  reminders.Interface
-	GRPC       *manager.Manager
-	IdlerQueue *queue.Processor[string, targets.Idlable]
+	Namespace          string
+	Table              table.Interface
+	Placement          placement.Interface
+	Resiliency         resiliency.Provider
+	Reminders          reminders.Interface
+	GRPC               *manager.Manager
+	IdlerQueue         *queue.Processor[string, targets.Idlable]
+	SchedulerReminders bool
 }
 
 type engine struct {
-	namespace string
+	namespace          string
+	schedulerReminders bool
 
 	table      table.Interface
 	placement  placement.Interface
@@ -76,15 +78,17 @@ type engine struct {
 
 func New(opts Options) Interface {
 	return &engine{
-		namespace:  opts.Namespace,
-		table:      opts.Table,
-		placement:  opts.Placement,
-		resiliency: opts.Resiliency,
-		grpc:       opts.GRPC,
-		idlerQueue: opts.IdlerQueue,
-		lock:       fifo.New(),
-		closeCh:    make(chan struct{}),
-		clock:      clock.RealClock{},
+		namespace:          opts.Namespace,
+		schedulerReminders: opts.SchedulerReminders,
+		table:              opts.Table,
+		placement:          opts.Placement,
+		resiliency:         opts.Resiliency,
+		grpc:               opts.GRPC,
+		idlerQueue:         opts.IdlerQueue,
+		reminders:          opts.Reminders,
+		lock:               fifo.New(),
+		closeCh:            make(chan struct{}),
+		clock:              clock.RealClock{},
 	}
 }
 
@@ -114,21 +118,6 @@ func (e *engine) CallReminder(ctx context.Context, req *requestresponse.Reminder
 	}
 	defer e.placement.Unlock()
 
-	var err error
-	if e.resiliency.PolicyDefined(req.ActorType, resiliency.ActorPolicy{}) {
-		err = e.callReminder(ctx, req)
-	} else {
-		policyRunner := resiliency.NewRunner[struct{}](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
-		_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
-			err := e.callReminder(ctx, req)
-			return struct{}{}, err
-		})
-	}
-
-	return err
-}
-
-func (e *engine) callReminder(ctx context.Context, req *requestresponse.Reminder) error {
 	lar, err := e.placement.LookupActor(ctx, &requestresponse.LookupActorRequest{
 		ActorType: req.ActorType,
 		ActorID:   req.ActorID,
@@ -139,7 +128,7 @@ func (e *engine) callReminder(ctx context.Context, req *requestresponse.Reminder
 
 	if !lar.Local {
 		if req.IsRemote {
-			return backoff.Permanent(errors.New("remote actor moved"))
+			return errors.New("remote actor moved")
 		}
 
 		return e.callRemoteActorReminder(ctx, lar, req)
@@ -157,7 +146,8 @@ func (e *engine) callReminder(ctx context.Context, req *requestresponse.Reminder
 	}
 
 	// If the reminder was cancelled, delete it.
-	if errors.Is(err, actorerrors.ErrReminderCanceled) {
+	// TODO: Remove when sheduler workflows are one-shot.
+	if e.schedulerReminders && errors.Is(err, actorerrors.ErrReminderCanceled) {
 		log.Debugf("Deleting reminder which was cancelled: %s", req.Key())
 		reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 		defer cancel()

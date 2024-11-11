@@ -16,7 +16,9 @@ package wfbackend
 import (
 	"context"
 
+	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
 )
@@ -32,13 +34,15 @@ const (
 )
 
 type Options struct {
-	AppID     string
-	Namespace string
-	Actors    actors.Interface
+	AppID         string
+	Namespace     string
+	Actors        actors.Interface
+	Resiliency    resiliency.Provider
+	metadata.Base `json:",inline"`
 }
 
 // workflowBackendFactory is a function that returns a workflow backend
-type workflowBackendFactory func(Options) backend.Backend
+type workflowBackendFactory func(Options) (backend.Backend, error)
 
 // WorkflowScheduler is a func interface for pushing workflow (orchestration) work items into the backend
 // TODO: @joshvanl: remove

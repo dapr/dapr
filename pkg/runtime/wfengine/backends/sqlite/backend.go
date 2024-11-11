@@ -16,16 +16,17 @@ package sqlite
 import (
 	"fmt"
 
+	"github.com/dapr/dapr/pkg/components/wfbackend"
+	"github.com/dapr/kit/logger"
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/backend/sqlite"
-
-	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
-	"github.com/dapr/kit/logger"
 )
 
-func NewSQLiteBackend(md wfbe.Metadata, log logger.Logger) (backend.Backend, error) {
+var log = logger.NewLogger("dapr.wfengine.backend.sqlite")
+
+func NewSQLiteBackend(opts wfbackend.Options) (backend.Backend, error) {
 	sqliteMetadata := &sqliteMetadata{}
-	err := sqliteMetadata.Parse(md.Properties)
+	err := sqliteMetadata.Parse(opts.Base.Properties)
 	if err != nil {
 		log.Errorf("Failed to parse SQLite backend metadata; SQLite backend is not initialized: %v", err)
 		return nil, fmt.Errorf("failed to parse SQLite backend metadata: %w", err)

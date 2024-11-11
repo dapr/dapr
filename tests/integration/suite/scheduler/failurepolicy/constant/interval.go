@@ -72,8 +72,11 @@ func (i *interval) Run(t *testing.T, ctx context.Context) {
 		require.Fail(t, "timed out waiting for job")
 	}
 
-	time.Sleep(time.Second * 2)
-	assert.ElementsMatch(t, []string{"test"}, triggered.Slice())
+	select {
+	case <-triggered:
+		assert.Fail(t, "unexpected trigger")
+	case <-time.After(time.Second):
+	}
 
 	select {
 	case name := <-triggered:

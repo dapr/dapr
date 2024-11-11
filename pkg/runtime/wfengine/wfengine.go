@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/components/wfbackend"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
 	"github.com/dapr/kit/logger"
@@ -31,7 +32,7 @@ import (
 
 var (
 	log             = logger.NewLogger("dapr.runtime.wfengine")
-	wfBackendLogger = logger.NewLogger("wfengine.durabletask.backend")
+	wfBackendLogger = logger.NewLogger("dapr.wfengine.durabletask.backend")
 )
 
 type Options struct {
@@ -40,6 +41,7 @@ type Options struct {
 	Actors         actors.Interface
 	Spec           config.WorkflowSpec
 	BackendManager processor.WorkflowBackendManager
+	Resiliency     resiliency.Provider
 }
 
 type WorkflowEngine struct {
@@ -47,10 +49,10 @@ type WorkflowEngine struct {
 	namespace string
 	actors    actors.Interface
 
-	backend        backend.Backend
-	executor       backend.Executor
 	worker         backend.TaskHubWorker
+	backend        backend.Backend
 	backendManager processor.WorkflowBackendManager
+	resiliency     resiliency.Provider
 	// TODO: @joshvanl: remove
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 
@@ -66,6 +68,7 @@ func New(opts Options) *WorkflowEngine {
 		spec:           opts.Spec,
 		actors:         opts.Actors,
 		backendManager: opts.BackendManager,
+		resiliency:     opts.Resiliency,
 		readyCh:        make(chan struct{}),
 		initDoneCh:     make(chan struct{}),
 	}
@@ -81,22 +84,42 @@ func (wfe *WorkflowEngine) RegisterGrpcServer(grpcServer *grpc.Server) error {
 	return nil
 }
 
-func (wfe *WorkflowEngine) Init() {
+func (wfe *WorkflowEngine) Init() error {
 	defer close(wfe.initDoneCh)
 
 	engine, ok := wfe.backendManager.Backend()
 	if !ok {
 		// If no backend was initialized by the manager, create a backend backed by actors
-		engine = backendactors.New(wfbackend.Options{
-			AppID:     wfe.appID,
-			Namespace: wfe.namespace,
-			Actors:    wfe.actors,
+		actorEngine, err := backendactors.New(wfbackend.Options{
+			AppID:      wfe.appID,
+			Namespace:  wfe.namespace,
+			Actors:     wfe.actors,
+			Resiliency: wfe.resiliency,
 		})
+		if err != nil {
+			return err
+		}
+		engine = actorEngine
 	}
 
+	executor, registerGrpcServerFn := backend.NewGrpcExecutor(engine, log)
+	wfe.registerGrpcServerFn = registerGrpcServerFn
+
+	// There are separate "workers" for executing orchestrations (workflows) and activities
+	orchestrationWorker := backend.NewOrchestrationWorker(
+		engine,
+		executor,
+		wfBackendLogger,
+		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentWorkflowInvocations()))
+	activityWorker := backend.NewActivityTaskWorker(
+		engine,
+		executor,
+		wfBackendLogger,
+		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentActivityInvocations()))
+	wfe.worker = backend.NewTaskHubWorker(engine, orchestrationWorker, activityWorker, wfBackendLogger)
 	wfe.backend = engine
 
-	wfe.executor, wfe.registerGrpcServerFn = backend.NewGrpcExecutor(wfe.backend, log)
+	return nil
 }
 
 func (wfe *WorkflowEngine) Run(ctx context.Context) error {
@@ -106,24 +129,13 @@ func (wfe *WorkflowEngine) Run(ctx context.Context) error {
 	case <-wfe.initDoneCh:
 	}
 
-	// Register actor backend if backend is actor
-	abe, ok := wfe.backend.(*backendactors.Actors)
-	if ok {
-		abe.RegisterActor(ctx)
+	if actorEngine, ok := wfe.backend.(*backendactors.Actors); ok {
+		if err := actorEngine.RegisterActors(ctx); err != nil {
+			log.Errorf("Failed to register workflow actors, workflows disabled: %s", err)
+			<-ctx.Done()
+			return nil
+		}
 	}
-
-	// There are separate "workers" for executing orchestrations (workflows) and activities
-	orchestrationWorker := backend.NewOrchestrationWorker(
-		wfe.backend,
-		wfe.executor,
-		wfBackendLogger,
-		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentWorkflowInvocations()))
-	activityWorker := backend.NewActivityTaskWorker(
-		wfe.backend,
-		wfe.executor,
-		wfBackendLogger,
-		backend.WithMaxParallelism(wfe.spec.GetMaxConcurrentActivityInvocations()))
-	wfe.worker = backend.NewTaskHubWorker(wfe.backend, orchestrationWorker, activityWorker, wfBackendLogger)
 
 	// Start the Durable Task worker, which will allow workflows to be scheduled and execute.
 	if err := wfe.worker.Start(ctx); err != nil {
@@ -150,8 +162,4 @@ func (wfe *WorkflowEngine) WaitForReady(ctx context.Context) error {
 	case <-wfe.readyCh:
 		return nil
 	}
-}
-
-func IsWorkflowRequest(path string) bool {
-	return backend.IsDurableTaskGrpcRequest(path)
 }

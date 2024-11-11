@@ -39,6 +39,11 @@ var statusMap = map[int32]string{
 	7: "SUSPENDED",
 }
 
+type workflowEngineComponent struct {
+	logger logger.Logger
+	client backend.TaskHubClient
+}
+
 func BuiltinWorkflowFactory(engine *WorkflowEngine) func(logger.Logger) workflows.Workflow {
 	return func(logger logger.Logger) workflows.Workflow {
 		return &workflowEngineComponent{
@@ -46,11 +51,6 @@ func BuiltinWorkflowFactory(engine *WorkflowEngine) func(logger.Logger) workflow
 			client: backend.NewTaskHubClient(engine.backend),
 		}
 	}
-}
-
-type workflowEngineComponent struct {
-	logger logger.Logger
-	client backend.TaskHubClient
 }
 
 func (c *workflowEngineComponent) Init(metadata workflows.Metadata) error {

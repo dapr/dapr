@@ -46,14 +46,14 @@ func (s *Registry) RegisterComponent(componentFactory workflowBackendFactory, na
 	}
 }
 
-func (s *Registry) Create(name, version, logName string) (func(Options) backend.Backend, error) {
+func (s *Registry) Create(name, version, logName string) (func(Options) (backend.Backend, error), error) {
 	if method, ok := s.getWorkflowBackendComponent(name, version, logName); ok {
 		return method, nil
 	}
 	return nil, fmt.Errorf("couldn't find wokflow backend %s/%s", name, version)
 }
 
-func (s *Registry) getWorkflowBackendComponent(name, version, logName string) (func(Options) backend.Backend, bool) {
+func (s *Registry) getWorkflowBackendComponent(name, version, logName string) (func(Options) (backend.Backend, error), bool) {
 	nameLower := strings.ToLower(name)
 	versionLower := strings.ToLower(version)
 	workflowFn, ok := s.workflowBackendComponents[nameLower+"/"+versionLower]
@@ -69,8 +69,8 @@ func (s *Registry) getWorkflowBackendComponent(name, version, logName string) (f
 	return nil, false
 }
 
-func (s *Registry) wrapFn(componentFactory workflowBackendFactory, logName string) func(Options) backend.Backend {
-	return func(o Options) backend.Backend {
+func (s *Registry) wrapFn(componentFactory workflowBackendFactory, logName string) func(Options) (backend.Backend, error) {
+	return func(o Options) (backend.Backend, error) {
 		return componentFactory(o)
 	}
 }

@@ -174,7 +174,6 @@ func (l *Lock) handleLock(req *req) *resp {
 			if l.inflights.Value != nil {
 				l.pending--
 
-				// TODO: @joshvanl
 				if l.pending < l.inflights.Len()-1024 {
 					l.inflights.Move(l.inflights.Len() - 1024).Unlink(1024)
 				}
@@ -219,7 +218,6 @@ func newInflight(id string) *inflight {
 
 func (l *Lock) checkExpand() {
 	if l.inflights.Len() == l.pending {
-		// TODO: @joshvanl
 		exp := ring.New[*inflight](1024)
 		l.inflights.Move(l.pending).Link(exp)
 	}
