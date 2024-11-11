@@ -96,9 +96,9 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 				metricEnabled: true,
 			},
 			{
-				name:          "recordErrorCodes is enabled by config",
-				confFile:      "./testdata/metric_rec.yaml",
-				metricEnabled: true,
+				name:                    "recordErrorCodes is enabled by config",
+				confFile:                "./testdata/metric_rec.yaml",
+				metricEnabled:           true,
 				recordErrorCodesEnabled: true,
 			},
 			{

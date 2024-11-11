@@ -55,11 +55,12 @@ func (a *Universal) ActorReadinessCheck(ctx context.Context) error {
 	a.WaitForActorsReady(ctx)
 
 	if a.Actors() == nil {
+		err := messages.ErrActorRuntimeNotFound.RecordAndGet()
 		// Logger may be nil in some tests
 		if a.logger != nil {
-			a.logger.Debug(messages.ErrActorRuntimeNotFound.RecordAndGet())
+			a.logger.Debug(err)
 		}
-		return messages.ErrActorRuntimeNotFound.RecordAndGet()
+		return err
 	}
 
 	return nil
@@ -149,8 +150,9 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 	err = a.Actors().CreateReminder(ctx, req)
 	if err != nil {
 		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted.RecordAndGet())
-			return nil, messages.ErrActorReminderOpActorNotHosted.RecordAndGet()
+			err := messages.ErrActorReminderOpActorNotHosted.RecordAndGet()
+			a.logger.Debug(err)
+			return nil, err
 		}
 
 		err = messages.ErrActorReminderCreate.RecordAndGet().WithFormat(err)
@@ -175,8 +177,9 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 	err = a.Actors().DeleteReminder(ctx, req)
 	if err != nil {
 		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
-			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted.RecordAndGet())
-			return nil, messages.ErrActorReminderOpActorNotHosted.RecordAndGet()
+			err := messages.ErrActorReminderOpActorNotHosted.RecordAndGet()
+			a.logger.Debug(err)
+			return nil, err
 		}
 
 		err = messages.ErrActorReminderDelete.RecordAndGet().WithFormat(err)
