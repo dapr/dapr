@@ -43,7 +43,6 @@ func (w *writecloser) Write(p []byte) (n int, err error) {
 	var errs []error
 
 	for _, writer := range w.writers {
-
 		var n int
 		for n < len(p) {
 			written, err := writer.Write(p[n:])
