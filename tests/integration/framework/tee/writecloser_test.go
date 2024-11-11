@@ -133,6 +133,7 @@ func TestWriteCloser(t *testing.T) {
 		default:
 		}
 
+		// Writes are sequential, so the write to pw2 should block until the first read is complete.
 		assert.Nil(t, pr2resp.Load())
 
 		resp = make([]byte, 1024)
@@ -149,15 +150,17 @@ func TestWriteCloser(t *testing.T) {
 			require.Fail(t, "timeout waiting for write to complete")
 		}
 
-		value := pr2resp.Load()
-		assert.NotNil(t, value)
+		require.EventuallyWithT(t, func(c *assert.CollectT) {
+			value := pr2resp.Load()
+			assert.NotNil(c, value)
 
-		strValue, ok := value.(string)
-		assert.True(t, ok)
+			strValue, ok := value.(string)
+			assert.True(c, ok)
 
-		if ok {
-			assert.Equal(t, "helloworld", strValue[:10])
-		}
+			if ok {
+				assert.Equal(c, "helloworld", strValue[:10])
+			}
+		}, time.Second, 10*time.Millisecond)
 
 		require.NoError(t, w.Close())
 		n, err = pr1.Read(resp)
