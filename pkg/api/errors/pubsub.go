@@ -81,7 +81,7 @@ func (p PubSubError) PublishMessage(topic string, err error) error {
 		codes.Internal,
 		http.StatusInternalServerError,
 		fmt.Sprintf("error when publishing to topic %s in pubsub %s: %s", topic, p.name, err),
-		messages.RecordAndGet(errorcodes.PubsubPublishMessage),
+		errorcodes.PubsubPublishMessage,
 		"PUBLISH_MESSAGE",
 	)
 }
@@ -91,7 +91,7 @@ func (p *PubSubError) PublishForbidden(topic, appID string, err error) error {
 		codes.PermissionDenied,
 		http.StatusForbidden,
 		fmt.Sprintf("topic %s is not allowed for app id %s", topic, appID),
-		messages.RecordAndGet(errorcodes.PubsubForbidden),
+		errorcodes.PubsubForbidden,
 		"FORBIDDEN",
 	)
 }
@@ -104,7 +104,7 @@ func (p PubSubError) TestNotFound(topic string, err error) error {
 		codes.NotFound,
 		http.StatusBadRequest,
 		fmt.Sprintf("pubsub '%s' not found", p.name),
-		messages.RecordAndGet(errorcodes.PubsubNotFound),
+		errorcodes.PubsubNotFound,
 		"TEST_NOT_FOUND",
 	)
 }
@@ -115,7 +115,7 @@ func (p *PubSubMetadataError) NotFound() error {
 		codes.InvalidArgument,
 		http.StatusNotFound,
 		fmt.Sprintf("%s %s is not found", metadata.PubSubType, p.p.name),
-		messages.RecordAndGet(errorcodes.PubsubNotFound),
+		errorcodes.PubsubNotFound,
 		errors.CodeNotFound,
 	)
 }
@@ -126,7 +126,7 @@ func (p *PubSubMetadataError) NotConfigured() error {
 		codes.FailedPrecondition,
 		http.StatusBadRequest,
 		fmt.Sprintf("%s %s is not configured", metadata.PubSubType, p.p.name),
-		messages.RecordAndGet(errorcodes.PubsubNotConfigured),
+		errorcodes.PubsubNotConfigured,
 		errors.CodeNotConfigured,
 	)
 }
@@ -143,7 +143,7 @@ func (p *PubSubMetadataError) NameEmpty() error {
 		codes.InvalidArgument,
 		http.StatusNotFound,
 		"pubsub name is empty",
-		messages.RecordAndGet(errorcodes.PubsubEmpty),
+		errorcodes.PubsubEmpty,
 		"NAME_EMPTY",
 	)
 }
@@ -153,7 +153,7 @@ func (p *PubSubMetadataError) TopicEmpty() error {
 		codes.InvalidArgument,
 		http.StatusNotFound,
 		"topic is empty in pubsub "+p.p.name,
-		messages.RecordAndGet(errorcodes.PubsubTopicNameEmpty),
+		errorcodes.PubsubTopicNameEmpty,
 		"TOPIC_NAME_EMPTY",
 	)
 }
@@ -163,7 +163,7 @@ func (p *PubSubMetadataError) DeserializeError(err error) error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		fmt.Sprintf("failed deserializing metadata. Error: %s", err),
-		messages.RecordAndGet(errorcodes.PubsubRequestMetadata),
+		errorcodes.PubsubRequestMetadata,
 		"METADATA_DESERIALIZATION",
 	)
 }
@@ -173,7 +173,7 @@ func (p *PubSubMetadataError) CloudEventCreation() error {
 		codes.InvalidArgument,
 		http.StatusInternalServerError,
 		"cannot create cloudevent",
-		messages.RecordAndGet(errorcodes.PubsubCloudEventsSer),
+		errorcodes.PubsubCloudEventsSer,
 		"CLOUD_EVENT_CREATION",
 	)
 }
@@ -187,7 +187,7 @@ func (p *PubSubTopicError) MarshalEnvelope() error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		msg,
-		messages.RecordAndGet(errorcodes.PubsubEventsSer),
+		errorcodes.PubsubEventsSer,
 		"MARSHAL_ENVELOPE",
 	)
 }
@@ -202,7 +202,7 @@ func (p *PubSubTopicError) MarshalEvents() error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
-		messages.RecordAndGet(errorcodes.PubsubEventsSer),
+		errorcodes.PubsubEventsSer,
 		"MARSHAL_EVENTS",
 	)
 }
@@ -218,13 +218,14 @@ func (p *PubSubTopicError) UnmarshalEvents(err error) error {
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
-		messages.RecordAndGet(errorcodes.PubsubEventsSer),
+		errorcodes.PubsubEventsSer,
 		"UNMARSHAL_EVENTS",
 	)
 }
 
-func (p *PubSubMetadataError) build(grpcCode codes.Code, httpCode int, msg, tag, errCode string) error {
-	err := errors.NewBuilder(grpcCode, httpCode, msg, tag)
+func (p *PubSubMetadataError) build(grpcCode codes.Code, httpCode int, msg string, tag errorcodes.ErrorCode, errCode string) error {
+	errorCode := messages.RecordAndGet(tag)
+	err := errors.NewBuilder(grpcCode, httpCode, msg, errorCode)
 	if !p.skipResourceInfo {
 		err = err.WithResourceInfo(string(metadata.PubSubType), p.p.name, "", msg)
 	}
