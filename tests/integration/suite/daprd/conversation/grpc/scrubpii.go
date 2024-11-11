@@ -60,7 +60,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub input phone number", func(t *testing.T) {
 		scrubInput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationAlpha1Request{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
@@ -76,7 +76,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("scrub input great phone number", func(t *testing.T) {
 		scrubInput := true
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationAlpha1Request{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
@@ -93,7 +93,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub input email", func(t *testing.T) {
 		scrubInput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationAlpha1Request{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
@@ -110,7 +110,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub input ip address", func(t *testing.T) {
 		scrubInput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationAlpha1Request{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
@@ -127,7 +127,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("scrub all outputs for PII", func(t *testing.T) {
 		scrubOutput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationAlpha1Request{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
@@ -149,7 +149,7 @@ func (s *scrubpii) Run(t *testing.T, ctx context.Context) {
 	t.Run("no scrubbing on good input", func(t *testing.T) {
 		scrubOutput := true
 
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationAlpha1Request{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
