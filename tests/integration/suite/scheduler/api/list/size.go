@@ -53,23 +53,35 @@ func (s *size) Run(t *testing.T, ctx context.Context) {
 
 	data, err := anypb.New(wrapperspb.Bytes(bytes.Repeat([]byte{0x01}, 2e+6)))
 	require.NoError(t, err)
-	for i := range 100 {
-		_, err = client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
-			Name: "test-" + strconv.Itoa(i),
-			Job: &schedulerv1pb.Job{
-				DueTime: ptr.Of("1000s"),
-				Data:    data,
+
+	job := &schedulerv1pb.Job{
+		DueTime: ptr.Of("1000s"),
+		Data:    data,
+	}
+	meta := &schedulerv1pb.JobMetadata{
+		Namespace: "default", AppId: "test",
+		Target: &schedulerv1pb.JobTargetMetadata{
+			Type: &schedulerv1pb.JobTargetMetadata_Job{
+				Job: new(schedulerv1pb.TargetJob),
 			},
-			Metadata: &schedulerv1pb.JobMetadata{
-				Namespace: "default", AppId: "test",
-				Target: &schedulerv1pb.JobTargetMetadata{
-					Type: &schedulerv1pb.JobTargetMetadata_Job{
-						Job: new(schedulerv1pb.TargetJob),
-					},
-				},
-			},
-		})
-		require.NoError(t, err)
+		},
+	}
+
+	errCh := make(chan error)
+	for i := range 10 {
+		go func(i int) {
+			for j := range 10 {
+				_, serr := client.ScheduleJob(ctx, &schedulerv1pb.ScheduleJobRequest{
+					Name: "test-" + strconv.Itoa(i*10+j),
+					Job:  job, Metadata: meta,
+				})
+				errCh <- serr
+			}
+		}(i)
+	}
+
+	for range 100 {
+		require.NoError(t, <-errCh)
 	}
 
 	resp, err := client.ListJobs(ctx, &schedulerv1pb.ListJobsRequest{

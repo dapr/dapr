@@ -43,6 +43,7 @@ type Options struct {
 	crypto             *crypto.Registry
 	conversation       *conversation.Registry
 	componentsCallback ComponentsCallback
+	reporter           Reporter
 }
 
 func NewOptions() *Options {
@@ -135,5 +136,11 @@ func (o *Options) WithConversations(registry *conversation.Registry) *Options {
 // WithComponentsCallback sets the components callback for applications that embed Dapr.
 func (o *Options) WithComponentsCallback(componentsCallback ComponentsCallback) *Options {
 	o.componentsCallback = componentsCallback
+	return o
+}
+
+// WithReporter sets the resource reporter for the registry.
+func (o *Options) WithReporter(reporter Reporter) *Options {
+	o.reporter = reporter
 	return o
 }
