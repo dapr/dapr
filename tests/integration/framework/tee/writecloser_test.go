@@ -155,9 +155,7 @@ func TestWriteCloser(t *testing.T) {
 			assert.NotNil(c, value)
 
 			strValue, ok := value.(string)
-			assert.True(c, ok)
-
-			if ok {
+			if assert.True(c, ok) {
 				assert.Equal(c, "helloworld", strValue[:10])
 			}
 		}, time.Second, 10*time.Millisecond)
