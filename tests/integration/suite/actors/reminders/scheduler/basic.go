@@ -54,7 +54,7 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: schedulerreminders
+ name: schedulerreminders
 spec:
   features:
   - name: SchedulerReminders

@@ -125,10 +125,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	for _, dir := range opts.resourceDirs {
 		args = append(args, "--resources-path="+dir)
 	}
-	if len(opts.configs) > 0 {
-		for _, c := range opts.configs {
-			args = append(args, "--config="+c)
-		}
+	for _, c := range opts.configs {
+		args = append(args, "--config="+c)
 	}
 	if len(opts.placementAddresses) > 0 {
 		args = append(args, "--placement-host-address="+strings.Join(opts.placementAddresses, ","))
@@ -211,7 +209,7 @@ func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 			defer resp.Body.Close()
 			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
 		}
-	}, 30*time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {

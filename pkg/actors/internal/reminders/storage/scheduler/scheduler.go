@@ -87,7 +87,7 @@ func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context, fn func(contex
 func (s *scheduler) DrainRebalancedReminders(actorType string, actorID string) {}
 
 func (s *scheduler) Create(ctx context.Context, reminder *requestresponse.CreateReminderRequest) error {
-	log.Debug("Using Scheduler service for reminders.")
+	log.Info("Using Scheduler service for reminders.")
 	var dueTime *string
 	if len(reminder.DueTime) > 0 {
 		dueTime = ptr.Of(reminder.DueTime)

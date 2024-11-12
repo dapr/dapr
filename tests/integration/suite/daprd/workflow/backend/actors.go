@@ -16,6 +16,7 @@ package backend
 import (
 	"context"
 	"fmt"
+	"net/http"
 	"testing"
 
 	"github.com/microsoft/durabletask-go/api"
@@ -28,6 +29,7 @@ import (
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
@@ -42,8 +44,14 @@ type actors struct {
 }
 
 func (a *actors) Setup(t *testing.T) []framework.Option {
+	// TODO: @joshvanl: REMOVE!!- workflows should not require an app.
+	app := app.New(t,
+		app.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {}),
+	)
+
 	a.place = placement.New(t)
 	a.daprd = daprd.New(t,
+		daprd.WithAppPort(app.Port()),
 		daprd.WithPlacementAddresses(a.place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithResourceFiles(`
@@ -58,7 +66,7 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(a.place, a.daprd),
+		framework.WithProcesses(app, a.place, a.daprd),
 	}
 }
 

@@ -179,12 +179,10 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *requestresponse
 	if state == nil {
 		return errors.New("no activity state found")
 	}
-	fmt.Printf("<<<%s\n", state)
 
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
 	defer cancelTimeout()
 
-	fmt.Printf("<<going into execute activity: %s\n", state)
 	completed, err := a.executeActivity(timeoutCtx, reminder.Name, state.EventPayload)
 	if completed == runCompletedTrue {
 		a.completed.Store(true)

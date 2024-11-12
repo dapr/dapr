@@ -129,12 +129,11 @@ func (w *workflow) InvokeMethod(ctx context.Context, req *internalv1pb.InternalI
 	}
 	defer imReq.Close()
 
-	// TODO: @joshvanl: re-add lock once durable task is made sane.
-	//cancel, err := w.lock.Lock()
-	//if err != nil {
-	//	return err
-	//}
-	//defer cancel()
+	cancel, err := w.lock.LockRequest(imReq)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
 
 	policyDef := w.resiliency.ActorPostLockPolicy(w.actorType, w.actorID)
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
@@ -191,12 +190,11 @@ func (w *workflow) executeMethod(ctx context.Context, methodName string, request
 
 // InvokeReminder implements actors.InternalActor
 func (w *workflow) InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error {
-	// TODO: @joshvanl: re-add lock once durable task is made sane.
-	//cancel, err := w.lock.Lock()
-	//if err != nil {
-	//	return err
-	//}
-	//defer cancel()
+	cancel, err := w.lock.Lock()
+	if err != nil {
+		return err
+	}
+	defer cancel()
 
 	log.Debugf("Workflow actor '%s': invoking reminder '%s'", w.actorID, reminder.Name)
 

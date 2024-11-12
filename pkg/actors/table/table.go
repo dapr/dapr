@@ -182,17 +182,15 @@ func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, bool,
 }
 
 func (t *table) RegisterActorType(actorType string, factory targets.Factory) {
-	t.actorTypesLock.Lock(actorType)
-	defer t.actorTypesLock.Unlock(actorType)
+	t.lock.Lock()
+	defer t.lock.Unlock()
 	t.factories.Store(actorType, factory)
 	t.typeUpdates.Batch(0, t.factories.Keys())
 }
 
 func (t *table) UnRegisterActorType(actorType string) error {
-	t.lock.RLock()
-	defer t.lock.RUnlock()
-	t.actorTypesLock.Lock(actorType)
-	defer t.actorTypesLock.Unlock(actorType)
+	t.lock.Lock()
+	defer t.lock.Unlock()
 
 	t.factories.Delete(actorType)
 

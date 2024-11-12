@@ -78,10 +78,16 @@ func (m *Manager) Run(ctx context.Context) error {
 			if ctx.Err() != nil {
 				return nil //nolint:nilerr
 			}
+
 			if err == io.EOF {
 				log.Warnf("Received EOF, re-establishing connection: %v", err)
 				continue
 			}
+
+			if errors.Is(err, context.Canceled) {
+				continue
+			}
+
 			return fmt.Errorf("error watching scheduler jobs: %w", err)
 		}
 
@@ -110,8 +116,11 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 	}
 
 	if table, err := m.actors.Table(ctx); err == nil {
-		// TODO: @joshvanl: this is dynamic.
-		req.GetInitial().ActorTypes = table.Types()
+		// TODO: @joshvanl: make actor types dynamic.
+		req.GetInitial().ActorTypes = append(table.Types(),
+			fmt.Sprintf("dapr.internal.%s.%s.workflow", m.namespace, m.appID),
+			fmt.Sprintf("dapr.internal.%s.%s.activity", m.namespace, m.appID),
+		)
 	}
 
 	engine, _ := m.actors.Engine(ctx)

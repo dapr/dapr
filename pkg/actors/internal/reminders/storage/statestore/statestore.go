@@ -193,7 +193,6 @@ func (r *Statestore) Create(ctx context.Context, req *requestresponse.CreateRemi
 	}
 
 	// Start the reminder
-	fmt.Printf(">>STARTING REMINDER: %#+v\n", reminder)
 	return r.startReminder(reminder, stop)
 }
 
@@ -998,7 +997,6 @@ func (r *Statestore) startReminder(reminder *requestresponse.Reminder, stopChann
 		eTag := track.Etag
 
 		nextTick, active := reminder.NextTick()
-		fmt.Printf(">>NEXT TICK: %s -- %s\n", time.Now(), nextTick)
 		if !active {
 			log.Infof("Reminder %s has expired", reminderKey)
 			goto delete

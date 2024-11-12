@@ -464,8 +464,6 @@ github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuA
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
 github.com/dapr/components-contrib v1.14.1-0.20241016043026-4ca04dbb61c5 h1:c1Bfqei43MdJNopWi7k1nGIPtPCM79s/dtma/VZc0YM=
 github.com/dapr/components-contrib v1.14.1-0.20241016043026-4ca04dbb61c5/go.mod h1:QD8/ByqnXu7oCG/cqlBpmYMCdmGpwJmeKJnT1Nxhzws=
-github.com/dapr/kit v0.13.1-0.20241015130326-866002abe68a h1:3+EDN84/gtelE14Ka3TW8pP52vC8QdSHKeNIe3JpsYU=
-github.com/dapr/kit v0.13.1-0.20241015130326-866002abe68a/go.mod h1:Hz1W2LmWfA4UX/12MdA+brsf+np6f/1dJt6C6F63cjI=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -488,8 +486,6 @@ github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f/go.mod h1:cu
 github.com/dgryski/go-sip13 v0.0.0-20181026042036-e10d5fee7954/go.mod h1:vAd38F8PWV+bWy6jNmig1y/TA+kYO4g3RSRF0IAv0no=
 github.com/dgryski/trifles v0.0.0-20200323201526-dd97f9abfb48 h1:fRzb/w+pyskVMQ+UbP35JkH8yB7MYb4q/qhBarqZE6g=
 github.com/dgryski/trifles v0.0.0-20200323201526-dd97f9abfb48/go.mod h1:if7Fbed8SFyPtHLHbg49SI7NAdJiC5WIA09pe59rfAA=
-github.com/diagridio/go-etcd-cron v0.3.1-0.20241021143028-8ee6207c5ea9 h1:7+j7UbNs3RekWc+d+jeeUiyABlj1cjTO3s8FCqwqHQ0=
-github.com/diagridio/go-etcd-cron v0.3.1-0.20241021143028-8ee6207c5ea9/go.mod h1:GiH3yYGvU8neLSTYWxQ8ceqU8MeBuDZgp4dij+cNazg=
 github.com/diagridio/go-etcd-cron v0.3.1-0.20241030204150-468a6e23bf53 h1:vjK/MuB/k5DLt56LEw+W33kJmE4s3xf6KmtLnW3hygQ=
 github.com/diagridio/go-etcd-cron v0.3.1-0.20241030204150-468a6e23bf53/go.mod h1:GiH3yYGvU8neLSTYWxQ8ceqU8MeBuDZgp4dij+cNazg=
 github.com/didip/tollbooth/v7 v7.0.1 h1:TkT4sBKoQoHQFPf7blQ54iHrZiTDnr8TceU+MulVAog=
@@ -1052,6 +1048,8 @@ github.com/jonboulle/clockwork v0.4.0 h1:p4Cf1aMWXnXAUh8lVfewRBx1zaTSYKrKMF2g3ST
 github.com/jonboulle/clockwork v0.4.0/go.mod h1:xgRqUGwRcjKCO1vbZUEtSLrqKoPSsUpK7fnezOII0kc=
 github.com/josharian/intern v1.0.0 h1:vlS4z54oSdjm0bgjRigI+G1HpF+tI+9rE5LLzOg8HmY=
 github.com/josharian/intern v1.0.0/go.mod h1:5DoeVV0s6jJacbCEi61lwdGj/aVlrQvzHFFd8Hwg//Y=
+github.com/joshvanl/kit v0.0.0-20241112123414-1d4ab62e8812 h1:GTjGeaXwbUWsQpajblvqPTDZICsjQWNY1l/+lwqEAtg=
+github.com/joshvanl/kit v0.0.0-20241112123414-1d4ab62e8812/go.mod h1:HwFsBKEbcyLanWlDZE7u/jnaDCD/tU+n3pkFNUctQNw=
 github.com/jpillora/backoff v1.0.0/go.mod h1:J/6gKK9jxlEcS3zixgDgUAsiuZ7yrSoa/FX5e0EB2j4=
 github.com/json-iterator/go v1.1.5/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=
 github.com/json-iterator/go v1.1.6/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=

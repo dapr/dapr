@@ -14,7 +14,6 @@ limitations under the License.
 package internal
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -182,7 +181,6 @@ func Test_expand(t *testing.T) {
 	l.lock.Unlock()
 
 	for range 5 {
-		fmt.Printf(">>HERE\n")
 		doneCh <- struct{}{}
 		require.NoError(t, <-errCh)
 		assert.Equal(t, 16, l.inflights.Len())
