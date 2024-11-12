@@ -61,3 +61,14 @@ func (m *errorCodeMetrics) RecordErrorCode(ec errorcodes.ErrorCode) {
 		)
 	}
 }
+
+// RecordJobErrorCode() is used specifically for compsite Jobs API errors which do not follow the older error tag format from the package `errorcodes`
+func (m *errorCodeMetrics) RecordJobErrorCode(compositeJobErrorCode string) {
+	if m.enabled {
+		_ = stats.RecordWithTags(
+			context.TODO(),
+			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, compositeJobErrorCode, categoryKey, errorcodes.CategoryJob),
+			m.errorCodeCount.M(1),
+		)
+	}
+}

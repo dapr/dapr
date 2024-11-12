@@ -137,14 +137,20 @@ var (
 	ErrConversationMissingInputs = APIError{"failed conversing with component %s: missing inputs in request", errorcodes.ConversationMissingInputs, http.StatusBadRequest, grpcCodes.InvalidArgument}
 )
 
-// This will record the error as a metric and return the APIError
+// This will record the error as a metric and return the APIError, which contained the code
 func (e APIError) RecordAndGet() APIError {
 	diag.DefaultErrorCodeMonitoring.RecordErrorCode(e.tag)
 	return e
 }
 
-// This will record the error as a metric and return the APIError string
+// This will record the error as a metric and return the ErrorCode object's code string
 func RecordAndGet(errorCode errorcodes.ErrorCode) string {
 	diag.DefaultErrorCodeMonitoring.RecordErrorCode(errorCode)
 	return errorCode.Code
+}
+
+// This will record the error as a metric and return the composite Jobs API code string, not yet compatible with the ErrorCode structure
+func RecordCompAndGet(compositeJobErrorCode string) string {
+	diag.DefaultErrorCodeMonitoring.RecordJobErrorCode(compositeJobErrorCode)
+	return compositeJobErrorCode
 }

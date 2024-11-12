@@ -23,6 +23,7 @@ const (
 	CategoryPubsub        = "pubsub"
 	CategoryConversation  = "conversation"
 	CategoryLock          = "lock"
+	CategoryJob           = "job"
 	CategoryHealth        = "health"
 	CategoryCommon        = "common"
 )

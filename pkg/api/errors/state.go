@@ -151,7 +151,8 @@ func (s *StateStoreError) build(err *errors.ErrorBuilder, errCode string, metada
 	if !s.skipResourceInfo {
 		err = err.WithResourceInfo("state", s.name, "", "")
 	}
+	compErrCode := errors.CodePrefixStateStore + errCode
 	return err.
-		WithErrorInfo(errors.CodePrefixStateStore+errCode, metadata).
+		WithErrorInfo(messages.RecordCompAndGet(compErrCode), metadata).
 		Build()
 }

@@ -18,6 +18,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 
+	"github.com/dapr/dapr/pkg/messages"
 	kiterrors "github.com/dapr/kit/errors"
 )
 
@@ -40,6 +41,7 @@ const (
 )
 
 func SchedulerURLName(metadata map[string]string) error {
+	compErrCode := string(CodePrefixScheduler + InFixJob + PostFixName)
 	message := "Set the job name in the url only"
 	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
@@ -47,50 +49,54 @@ func SchedulerURLName(metadata map[string]string) error {
 		message,
 		"",
 	).
-		WithErrorInfo(string(CodePrefixScheduler+InFixJob+PostFixName), metadata).
+		WithErrorInfo(messages.RecordCompAndGet(compErrCode), metadata).
 		Build()
 }
 
 func SchedulerScheduleJob(metadata map[string]string, err error) error {
+	compErrCode := string(CodePrefixScheduler + InFixSchedule + PostFixJob)
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
 		MsgScheduleJob+" due to: "+err.Error(),
 		"",
 	).
-		WithErrorInfo(string(CodePrefixScheduler+InFixSchedule+PostFixJob), metadata).
+		WithErrorInfo(messages.RecordCompAndGet(compErrCode), metadata).
 		Build()
 }
 
 func SchedulerGetJob(metadata map[string]string, err error) error {
+	compErrCode := string(CodePrefixScheduler + InFixGet + PostFixJob)
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
 		MsgGetJob+" due to: "+err.Error(),
 		"",
 	).
-		WithErrorInfo(string(CodePrefixScheduler+InFixGet+PostFixJob), metadata).
+		WithErrorInfo(messages.RecordCompAndGet(compErrCode), metadata).
 		Build()
 }
 
 func SchedulerListJobs(metadata map[string]string, err error) error {
+	compErrCode := string(CodePrefixScheduler + InFixList + PostFixJobs)
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
 		MsgListJobs+" due to: "+err.Error(),
 		"",
 	).
-		WithErrorInfo(string(CodePrefixScheduler+InFixList+PostFixJobs), metadata).
+		WithErrorInfo(messages.RecordCompAndGet(compErrCode), metadata).
 		Build()
 }
 
 func SchedulerDeleteJob(metadata map[string]string, err error) error {
+	compErrCode := string(CodePrefixScheduler + InFixDelete + PostFixJob)
 	return kiterrors.NewBuilder(
 		codes.Internal,
 		http.StatusInternalServerError,
 		MsgDeleteJob+" due to: "+err.Error(),
 		"",
 	).
-		WithErrorInfo(string(CodePrefixScheduler+InFixDelete+PostFixJob), metadata).
+		WithErrorInfo(messages.RecordCompAndGet(compErrCode), metadata).
 		Build()
 }

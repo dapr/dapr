@@ -19,6 +19,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 
+	"github.com/dapr/dapr/pkg/messages"
 	kiterrors "github.com/dapr/kit/errors"
 )
 
@@ -38,7 +39,7 @@ func NotFound(name string, componentType string, metadata map[string]string, grp
 		message,
 		legacyTag,
 	).
-		WithErrorInfo(reason, metadata).
+		WithErrorInfo(messages.RecordCompAndGet(reason), metadata).
 		Build()
 }
 
@@ -51,7 +52,7 @@ func NotConfigured(name string, componentType string, metadata map[string]string
 		message,
 		legacyTag,
 	).
-		WithErrorInfo(reason, metadata).
+		WithErrorInfo(messages.RecordCompAndGet(reason), metadata).
 		Build()
 }
 
@@ -63,7 +64,7 @@ func Empty(name string, metadata map[string]string, reason string) error {
 		message,
 		"",
 	).
-		WithErrorInfo(reason, metadata).
+		WithErrorInfo(messages.RecordCompAndGet(reason), metadata).
 		Build()
 }
 
@@ -75,6 +76,6 @@ func IncorrectNegative(name string, metadata map[string]string, reason string) e
 		message,
 		"",
 	).
-		WithErrorInfo(reason, metadata).
+		WithErrorInfo(messages.RecordCompAndGet(reason), metadata).
 		Build()
 }
