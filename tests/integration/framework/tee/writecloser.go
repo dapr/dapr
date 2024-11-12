@@ -44,18 +44,16 @@ func (w *writecloser) Write(p []byte) (n int, err error) {
 
 	for _, writer := range w.writers {
 		var n int
-		for {
-			written, err := writer.Write(p)
-			if err != nil {
+		for n < len(p) {
+			written, err := writer.Write(p[n:])
+			// If an error occurs and no bytes were written, add the error to the list of errors and break.
+			// If any bytes were written, continue writing until all bytes are written.
+			if err != nil && written == 0 {
 				errs = append(errs, err)
 				break
 			}
 
-			// Keep writing until all bytes are written to this writer.
 			n += written
-			if n == len(p) {
-				break
-			}
 		}
 	}
 
