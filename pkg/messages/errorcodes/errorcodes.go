@@ -16,18 +16,18 @@ package errorcodes
 type Category string
 
 const (
-    CategoryActor         Category = "actor"
-    CategoryWorkflow      Category = "workflow"
-    CategoryState         Category = "state"
-    CategoryConfiguration Category = "configuration"
-    CategoryCrypto        Category = "crypto"
-    CategorySecret        Category = "secret"
-    CategoryPubsub        Category = "pubsub"
-    CategoryConversation  Category = "conversation"
-    CategoryLock          Category = "lock"
-    CategoryJob           Category = "job"
-    CategoryHealth        Category = "health"
-    CategoryCommon        Category = "common"
+	CategoryActor         Category = "actor"
+	CategoryWorkflow      Category = "workflow"
+	CategoryState         Category = "state"
+	CategoryConfiguration Category = "configuration"
+	CategoryCrypto        Category = "crypto"
+	CategorySecret        Category = "secret"
+	CategoryPubsub        Category = "pubsub"
+	CategoryConversation  Category = "conversation"
+	CategoryLock          Category = "lock"
+	CategoryJob           Category = "job"
+	CategoryHealth        Category = "health"
+	CategoryCommon        Category = "common"
 )
 
 type ErrorCode struct {

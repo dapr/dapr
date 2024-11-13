@@ -32,7 +32,7 @@ type ErrorResponse struct {
 }
 
 // NewErrorResponse returns a new ErrorResponse.
-func  NewErrorResponse(errorCode errorcodes.ErrorCode, message string) ErrorResponse {
+func NewErrorResponse(errorCode errorcodes.ErrorCode, message string) ErrorResponse {
 	messages.RecordErrorCode(errorCode)
 	return ErrorResponse{
 		ErrorCode: errorCode.Code,
