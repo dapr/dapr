@@ -30,8 +30,8 @@ func TestRecordErrorCode(t *testing.T) {
 
 		m.RecordErrorCode(errorcodes.ActorInstanceMissing)
 
-		viewData, _ := view.RetrieveData("error_code/count")
-		v := view.Find("error_code/count")
+		viewData, _ := view.RetrieveData("error_code/total")
+		v := view.Find("error_code/total")
 
 		allTagsPresent(t, v, viewData[0].Tags)
 		assert.Len(t, viewData, 1)
@@ -50,8 +50,8 @@ func TestRecordErrorCode(t *testing.T) {
 		m.RecordErrorCode(errorcodes.StateBulkGet)
 		m.RecordErrorCode(errorcodes.CommonAPIUnimplemented)
 
-		viewData, _ := view.RetrieveData("error_code/count")
-		v := view.Find("error_code/count")
+		viewData, _ := view.RetrieveData("error_code/total")
+		v := view.Find("error_code/total")
 
 		allTagsPresent(t, v, viewData[0].Tags)
 

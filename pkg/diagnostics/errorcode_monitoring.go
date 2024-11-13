@@ -25,7 +25,7 @@ import (
 )
 
 type errorCodeMetrics struct {
-	errorCodeCount *stats.Int64Measure
+	errorCodeTotal *stats.Int64Measure
 
 	appID   string
 	enabled bool
@@ -33,9 +33,9 @@ type errorCodeMetrics struct {
 
 func newErrorCodeMetrics() *errorCodeMetrics {
 	return &errorCodeMetrics{ //nolint:exhaustruct
-		errorCodeCount: stats.Int64(
-			"error_code/count",
-			"Number of times an error with a specific errorcode was encountered.",
+		errorCodeTotal: stats.Int64(
+			"error_code/total",
+			"Total number of times an error with a specific error code was encountered.",
 			stats.UnitDimensionless),
 
 		enabled: false,
@@ -48,7 +48,7 @@ func (m *errorCodeMetrics) Init(id string) error {
 	m.appID = id
 
 	return view.Register(
-		diagUtils.NewMeasureView(m.errorCodeCount, []tag.Key{appIDKey, errorCodeKey, categoryKey}, view.Count()),
+		diagUtils.NewMeasureView(m.errorCodeTotal, []tag.Key{appIDKey, errorCodeKey, categoryKey}, view.Count()),
 	)
 }
 
@@ -56,8 +56,8 @@ func (m *errorCodeMetrics) RecordErrorCode(ec errorcodes.ErrorCode) {
 	if m.enabled {
 		_ = stats.RecordWithTags(
 			context.TODO(),
-			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, ec.Code, categoryKey, string(ec.Category)),
-			m.errorCodeCount.M(1),
+			diagUtils.WithTags(m.errorCodeTotal.Name(), appIDKey, m.appID, errorCodeKey, ec.Code, categoryKey, string(ec.Category)),
+			m.errorCodeTotal.M(1),
 		)
 	}
 }
@@ -67,8 +67,8 @@ func (m *errorCodeMetrics) RecordCompErrorCode(compositeJobErrorCode string, cat
 	if m.enabled {
 		_ = stats.RecordWithTags(
 			context.TODO(),
-			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, compositeJobErrorCode, categoryKey, string(cat)),
-			m.errorCodeCount.M(1),
+			diagUtils.WithTags(m.errorCodeTotal.Name(), appIDKey, m.appID, errorCodeKey, compositeJobErrorCode, categoryKey, string(cat)),
+			m.errorCodeTotal.M(1),
 		)
 	}
 }
