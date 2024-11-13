@@ -21,6 +21,7 @@ import (
 	"github.com/valyala/fasthttp"
 
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 type fasthttpResponseOption = func(ctx *fasthttp.RequestCtx)
@@ -76,6 +77,7 @@ func universalFastHTTPErrorResponder(reqCtx *fasthttp.RequestCtx, err error) {
 	// Check if it's an APIError object
 	apiErr, ok := err.(messages.APIError)
 	if ok {
+		apiErr.RecordAPIErrorCode()
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(apiErr.HTTPCode(), apiErr))
 		return
 	}
@@ -87,6 +89,6 @@ func universalFastHTTPErrorResponder(reqCtx *fasthttp.RequestCtx, err error) {
 	}
 
 	// Respond with a generic error
-	msg := NewErrorResponse("ERROR", err.Error())
+	msg := NewErrorResponse(errorcodes.CommonGeneric, err.Error())
 	fasthttpRespond(reqCtx, fasthttpResponseWithError(http.StatusInternalServerError, msg))
 }

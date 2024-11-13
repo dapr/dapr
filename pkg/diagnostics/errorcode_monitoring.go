@@ -56,18 +56,18 @@ func (m *errorCodeMetrics) RecordErrorCode(ec errorcodes.ErrorCode) {
 	if m.enabled {
 		_ = stats.RecordWithTags(
 			context.TODO(),
-			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, ec.Code, categoryKey, ec.Category),
+			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, ec.Code, categoryKey, string(ec.Category)),
 			m.errorCodeCount.M(1),
 		)
 	}
 }
 
-// RecordJobErrorCode() is used specifically for compsite Jobs API errors which do not follow the older error tag format from the package `errorcodes`
-func (m *errorCodeMetrics) RecordJobErrorCode(compositeJobErrorCode string) {
+// RecordCompErrorCode() is used specifically for composite errors which do not follow the older error tag format from the package `errorcodes`
+func (m *errorCodeMetrics) RecordCompErrorCode(compositeJobErrorCode string, cat errorcodes.Category) {
 	if m.enabled {
 		_ = stats.RecordWithTags(
 			context.TODO(),
-			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, compositeJobErrorCode, categoryKey, errorcodes.CategoryJob),
+			diagUtils.WithTags(m.errorCodeCount.Name(), appIDKey, m.appID, errorCodeKey, compositeJobErrorCode, categoryKey, string(cat)),
 			m.errorCodeCount.M(1),
 		)
 	}

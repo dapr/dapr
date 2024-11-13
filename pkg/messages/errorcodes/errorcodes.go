@@ -13,24 +13,26 @@ limitations under the License.
 
 package errorcodes
 
+type Category string
+
 const (
-	CategoryActor         = "actor"
-	CategoryWorkflow      = "workflow"
-	CategoryState         = "state"
-	CategoryConfiguration = "configuration"
-	CategoryCrypto        = "crypto"
-	CategorySecret        = "secret"
-	CategoryPubsub        = "pubsub"
-	CategoryConversation  = "conversation"
-	CategoryLock          = "lock"
-	CategoryJob           = "job"
-	CategoryHealth        = "health"
-	CategoryCommon        = "common"
+    CategoryActor         Category = "actor"
+    CategoryWorkflow      Category = "workflow"
+    CategoryState         Category = "state"
+    CategoryConfiguration Category = "configuration"
+    CategoryCrypto        Category = "crypto"
+    CategorySecret        Category = "secret"
+    CategoryPubsub        Category = "pubsub"
+    CategoryConversation  Category = "conversation"
+    CategoryLock          Category = "lock"
+    CategoryJob           Category = "job"
+    CategoryHealth        Category = "health"
+    CategoryCommon        Category = "common"
 )
 
 type ErrorCode struct {
 	Code     string
-	Category string
+	Category Category
 }
 
 var (
@@ -136,4 +138,6 @@ var (
 	CommonMalformedRequest     = ErrorCode{"ERR_MALFORMED_REQUEST", CategoryCommon}
 	CommonMalformedRequestData = ErrorCode{"ERR_MALFORMED_REQUEST_DATA", CategoryCommon}
 	CommonMalformedResponse    = ErrorCode{"ERR_MALFORMED_RESPONSE", CategoryCommon}
+
+	CommonGeneric = ErrorCode{"ERROR", CategoryCommon}
 )

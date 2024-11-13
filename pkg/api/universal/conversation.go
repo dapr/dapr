@@ -28,14 +28,14 @@ import (
 func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.ConversationRequest) (*runtimev1pb.ConversationResponse, error) {
 	// valid component
 	if a.compStore.ConversationsLen() == 0 {
-		err := messages.ErrConversationNotFound.RecordAndGet()
+		err := messages.ErrConversationNotFound
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	component, ok := a.compStore.GetConversation(req.GetName())
 	if !ok {
-		err := messages.ErrConversationNotFound.RecordAndGet().WithFormat(req.GetName())
+		err := messages.ErrConversationNotFound.WithFormat(req.GetName())
 		a.logger.Debug(err)
 		return nil, err
 	}
@@ -48,14 +48,14 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 	}
 
 	if len(req.GetInputs()) == 0 {
-		err := messages.ErrConversationMissingInputs.RecordAndGet().WithFormat(req.GetName())
+		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
 		return nil, err
 	}
 
 	scrubber, err := piiscrubber.NewDefaultScrubber()
 	if err != nil {
-		err := messages.ErrConversationMissingInputs.RecordAndGet().WithFormat(req.GetName())
+		err := messages.ErrConversationMissingInputs.WithFormat(req.GetName())
 		a.logger.Debug(err)
 		return &runtimev1pb.ConversationResponse{}, err
 	}
@@ -66,7 +66,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		if i.GetScrubPII() {
 			scrubbed, sErr := scrubber.ScrubTexts([]string{i.GetMessage()})
 			if sErr != nil {
-				sErr = messages.ErrConversationInvoke.RecordAndGet().WithFormat(req.GetName(), sErr.Error())
+				sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
 				a.logger.Debug(sErr)
 				return &runtimev1pb.ConversationResponse{}, sErr
 			}
@@ -96,7 +96,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 		return rResp, rErr
 	})
 	if err != nil {
-		err = messages.ErrConversationInvoke.RecordAndGet().WithFormat(req.GetName(), err.Error())
+		err = messages.ErrConversationInvoke.WithFormat(req.GetName(), err.Error())
 		a.logger.Debug(err)
 		return &runtimev1pb.ConversationResponse{}, err
 	}
@@ -115,7 +115,7 @@ func (a *Universal) ConverseAlpha1(ctx context.Context, req *runtimev1pb.Convers
 			if req.GetScrubPII() {
 				scrubbed, sErr := scrubber.ScrubTexts([]string{o.Result})
 				if sErr != nil {
-					sErr = messages.ErrConversationInvoke.RecordAndGet().WithFormat(req.GetName(), sErr.Error())
+					sErr = messages.ErrConversationInvoke.WithFormat(req.GetName(), sErr.Error())
 					a.logger.Debug(sErr)
 					return &runtimev1pb.ConversationResponse{}, sErr
 				}

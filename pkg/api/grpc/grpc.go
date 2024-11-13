@@ -267,7 +267,7 @@ var (
 // Deprecated: Use proxy mode service invocation instead.
 func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRequest) (*commonv1pb.InvokeResponse, error) {
 	if a.directMessaging == nil {
-		return nil, messages.ErrDirectInvokeNotReady.RecordAndGet()
+		return nil, messages.ErrDirectInvokeNotReady
 	}
 
 	if invokeServiceDeprecationNoticeShown.CompareAndSwap(false, true) {
@@ -303,7 +303,7 @@ func (a *api) InvokeService(ctx context.Context, in *runtimev1pb.InvokeServiceRe
 			}
 		}
 		if rErr != nil {
-			return rResp, messages.ErrDirectInvoke.RecordAndGet().WithFormat(in.GetId(), rErr)
+			return rResp, messages.ErrDirectInvoke.WithFormat(in.GetId(), rErr)
 		}
 
 		rResp.headers = invokev1.InternalMetadataToGrpcMetadata(ctx, imr.Headers(), true)
@@ -1048,7 +1048,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	})
 
 	if !hosted {
-		err = messages.ErrActorInstanceMissing.RecordAndGet()
+		err = messages.ErrActorInstanceMissing
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1061,7 +1061,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 
 	resp, err := a.Universal.Actors().GetState(ctx, &req)
 	if err != nil {
-		err = messages.ErrActorStateGet.RecordAndGet().WithFormat(err)
+		err = messages.ErrActorStateGet.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1125,7 +1125,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 	})
 
 	if !hosted {
-		err = messages.ErrActorInstanceMissing.RecordAndGet()
+		err = messages.ErrActorInstanceMissing
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1138,7 +1138,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 	err = a.Universal.Actors().TransactionalStateOperation(ctx, &req)
 	if err != nil {
-		err = messages.ErrActorStateTransactionSave.RecordAndGet().WithFormat(err)
+		err = messages.ErrActorStateTransactionSave.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
 	}
@@ -1169,7 +1169,7 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return a.Universal.Actors().Call(ctx, req)
 	})
 	if err != nil && !actorerrors.Is(err) {
-		err = messages.ErrActorInvoke.RecordAndGet().WithFormat(err)
+		err = messages.ErrActorInvoke.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return response, err
 	}

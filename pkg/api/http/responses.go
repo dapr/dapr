@@ -123,7 +123,7 @@ func respondWithProto(w http.ResponseWriter, m protoreflect.ProtoMessage, status
 		EmitUnpopulated: emitUnpopulated,
 	}.Marshal(m)
 	if err != nil {
-		msg := NewErrorResponse(messages.RecordAndGet(errorcodes.CommonInternal), "failed to encode response as JSON: "+err.Error())
+		msg := NewErrorResponse(errorcodes.CommonInternal, "failed to encode response as JSON: "+err.Error())
 		respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
 		log.Debug(msg)
 		return
@@ -142,6 +142,7 @@ func respondWithError(w http.ResponseWriter, err error) {
 	// Check if it's an APIError object
 	apiErr, ok := err.(messages.APIError)
 	if ok {
+		apiErr.RecordAPIErrorCode() // Record metric for error code
 		respondWithData(w, apiErr.HTTPCode(), apiErr.JSONErrorValue())
 		return
 	}
@@ -153,12 +154,12 @@ func respondWithError(w http.ResponseWriter, err error) {
 	}
 
 	if kitErr, ok := err.(*kitErrors.Error); ok {
-		respondWithData(w, kitErr.HTTPStatusCode(), NewErrorResponse("ERROR", kitErr.Error()).JSONErrorValue())
+		respondWithData(w, kitErr.HTTPStatusCode(), NewErrorResponse(errorcodes.CommonGeneric, kitErr.Error()).JSONErrorValue())
 		return
 	}
 
 	// Respond with a generic error
-	msg := NewErrorResponse("ERROR", err.Error())
+	msg := NewErrorResponse(errorcodes.CommonGeneric, err.Error())
 	respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
 }
 

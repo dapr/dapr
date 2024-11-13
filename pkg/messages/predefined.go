@@ -138,19 +138,18 @@ var (
 )
 
 // This will record the error as a metric and return the APIError, which contained the code
-func (e APIError) RecordAndGet() APIError {
+func (e APIError) RecordAPIErrorCode() {
 	diag.DefaultErrorCodeMonitoring.RecordErrorCode(e.tag)
-	return e
 }
 
 // This will record the error as a metric and return the ErrorCode object's code string
-func RecordAndGet(errorCode errorcodes.ErrorCode) string {
+func RecordErrorCode(errorCode errorcodes.ErrorCode) string {
 	diag.DefaultErrorCodeMonitoring.RecordErrorCode(errorCode)
 	return errorCode.Code
 }
 
-// This will record the error as a metric and return the composite Jobs API code string, not yet compatible with the ErrorCode structure
-func RecordCompAndGet(compositeJobErrorCode string) string {
-	diag.DefaultErrorCodeMonitoring.RecordJobErrorCode(compositeJobErrorCode)
+// This will record the error as a metric and return the composite code string, not yet compatible with the ErrorCode structure
+func RecordCompAndGet(compositeJobErrorCode string, cat errorcodes.Category) string {
+	diag.DefaultErrorCodeMonitoring.RecordCompErrorCode(compositeJobErrorCode, cat)
 	return compositeJobErrorCode
 }

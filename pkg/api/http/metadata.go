@@ -143,7 +143,7 @@ func (a *api) onPutMetadata() http.HandlerFunc {
 
 				body, err := io.ReadAll(r.Body)
 				if err != nil {
-					return nil, messages.ErrBodyRead.RecordAndGet().WithFormat(err)
+					return nil, messages.ErrBodyRead.WithFormat(err)
 				}
 				in.Value = string(body)
 

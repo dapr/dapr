@@ -15,6 +15,9 @@ package http
 
 import (
 	"encoding/json"
+
+	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 // errorResponseValue is an interface that applies to ErrorResponse and other errors that can be used as response.
@@ -29,9 +32,10 @@ type ErrorResponse struct {
 }
 
 // NewErrorResponse returns a new ErrorResponse.
-func NewErrorResponse(errorCode, message string) ErrorResponse {
+func  NewErrorResponse(errorCode errorcodes.ErrorCode, message string) ErrorResponse {
+	messages.RecordErrorCode(errorCode)
 	return ErrorResponse{
-		ErrorCode: errorCode,
+		ErrorCode: errorCode.Code,
 		Message:   message,
 	}
 }
