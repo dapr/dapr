@@ -21,9 +21,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/internal/timers"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
@@ -44,7 +44,7 @@ type inmemory struct {
 	activeTimersCount     map[string]*int64
 	activeTimersCountLock sync.RWMutex
 	runningCh             chan struct{}
-	processor             *queue.Processor[string, *requestresponse.Reminder]
+	processor             *queue.Processor[string, *api.Reminder]
 }
 
 // New returns a TimerProvider.
@@ -56,7 +56,7 @@ func New(opts Options) timers.Storage {
 		activeTimersCount: make(map[string]*int64),
 		runningCh:         make(chan struct{}),
 	}
-	i.processor = queue.NewProcessor[string, *requestresponse.Reminder](i.processorExecuteFn)
+	i.processor = queue.NewProcessor[string, *api.Reminder](i.processorExecuteFn)
 	return i
 }
 
@@ -68,7 +68,7 @@ func (i *inmemory) Close() error {
 }
 
 // processorExecuteFn is invoked when the processor executes a reminder.
-func (i *inmemory) processorExecuteFn(reminder *requestresponse.Reminder) {
+func (i *inmemory) processorExecuteFn(reminder *api.Reminder) {
 	err := i.engine.CallReminder(context.TODO(), reminder)
 	diag.DefaultMonitoring.ActorTimerFired(reminder.ActorType, err == nil)
 	if err != nil {
@@ -101,7 +101,7 @@ func (i *inmemory) processorExecuteFn(reminder *requestresponse.Reminder) {
 	i.processor.Enqueue(reminder)
 }
 
-func (i *inmemory) Create(ctx context.Context, reminder *requestresponse.Reminder) error {
+func (i *inmemory) Create(ctx context.Context, reminder *api.Reminder) error {
 	timerKey := reminder.Key()
 
 	log.Debugf("Create timer: %s", reminder.String())
@@ -117,7 +117,7 @@ func (i *inmemory) Create(ctx context.Context, reminder *requestresponse.Reminde
 		// If there's already a timer with the same key, stop it so we can replace it
 		prev, loaded := i.activeTimers.LoadAndDelete(timerKey)
 		if loaded && prev != nil {
-			i.processor.Dequeue(prev.(*requestresponse.Reminder).Key())
+			i.processor.Dequeue(prev.(*api.Reminder).Key())
 			i.updateActiveTimersCount(reminder.ActorType, -1)
 		}
 
@@ -147,7 +147,7 @@ func (i *inmemory) Create(ctx context.Context, reminder *requestresponse.Reminde
 // removeTimerMatching removes a timer from the processor by removing a Reminder objec.
 // This is different from DeleteTimer as it removes the timer only if it's the same object.
 // It is used by CreateTimer.
-func (i *inmemory) removeTimerMatching(reminder *requestresponse.Reminder) {
+func (i *inmemory) removeTimerMatching(reminder *api.Reminder) {
 	// Delete the timer from the table
 	// We can't just call `DeleteTimer` as that could cause a race condition if the timer is also being replaced
 	key := reminder.Key()
@@ -159,7 +159,7 @@ func (i *inmemory) removeTimerMatching(reminder *requestresponse.Reminder) {
 func (i *inmemory) Delete(_ context.Context, timerKey string) {
 	reminderAny, exists := i.activeTimers.LoadAndDelete(timerKey)
 	if exists {
-		reminder := reminderAny.(*requestresponse.Reminder)
+		reminder := reminderAny.(*api.Reminder)
 		i.updateActiveTimersCount(reminder.ActorType, -1)
 		i.processor.Dequeue(reminder.Key())
 	}

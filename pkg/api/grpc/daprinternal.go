@@ -25,8 +25,8 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/acl"
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
@@ -321,8 +321,8 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 		return nil, err
 	}
 
-	period, _ := requestresponse.NewReminderPeriod(in.GetPeriod())
-	return nil, engine.CallReminder(ctx, &requestresponse.Reminder{
+	period, _ := actorapi.NewReminderPeriod(in.GetPeriod())
+	return nil, engine.CallReminder(ctx, &actorapi.Reminder{
 		Name:           in.GetName(),
 		ActorType:      in.GetActorType(),
 		ActorID:        in.GetActorId(),

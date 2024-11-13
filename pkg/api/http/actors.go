@@ -24,9 +24,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/reminders"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
@@ -170,7 +170,7 @@ func (a *api) constructActorEndpoints() []endpoints.Endpoint {
 func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var req requestresponse.CreateReminderRequest
+	var req actorapi.CreateReminderRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
@@ -210,7 +210,7 @@ func (a *api) onCreateActorReminder(w http.ResponseWriter, r *http.Request) {
 func (a *api) onCreateActorTimer(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 
-	var req requestresponse.CreateTimerRequest
+	var req actorapi.CreateTimerRequest
 	err := json.NewDecoder(r.Body).Decode(&req)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
@@ -260,7 +260,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 	actorType := chi.URLParamFromCtx(ctx, actorTypeParam)
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 
-	var ops []requestresponse.TransactionalOperation
+	var ops []actorapi.TransactionalOperation
 	err := json.NewDecoder(r.Body).Decode(&ops)
 	if err != nil {
 		msg := messages.ErrMalformedRequest.WithFormat(err)
@@ -269,7 +269,7 @@ func (a *api) onActorStateTransaction(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	req := &requestresponse.TransactionalRequest{
+	req := &actorapi.TransactionalRequest{
 		ActorID:    actorID,
 		ActorType:  actorType,
 		Operations: ops,
@@ -309,7 +309,7 @@ func (a *api) onGetActorReminder(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	resp, err := rem.Get(ctx, &requestresponse.GetReminderRequest{
+	resp, err := rem.Get(ctx, &actorapi.GetReminderRequest{
 		ActorType: chi.URLParamFromCtx(ctx, actorTypeParam),
 		ActorID:   chi.URLParamFromCtx(ctx, actorIDParam),
 		Name:      chi.URLParamFromCtx(ctx, nameParam),
@@ -437,7 +437,7 @@ func (a *api) onGetActorState(w http.ResponseWriter, r *http.Request) {
 	actorID := chi.URLParamFromCtx(ctx, actorIDParam)
 	key := chi.URLParamFromCtx(ctx, stateKeyParam)
 
-	resp, err := astate.Get(ctx, &requestresponse.GetStateRequest{
+	resp, err := astate.Get(ctx, &actorapi.GetStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Key:       key,

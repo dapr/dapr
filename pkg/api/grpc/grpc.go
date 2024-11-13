@@ -38,8 +38,8 @@ import (
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/api/grpc/proxy/codec"
@@ -1040,7 +1040,7 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	actorID := in.GetActorId()
 	key := in.GetKey()
 
-	req := requestresponse.GetStateRequest{
+	req := actorapi.GetStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Key:       key,
@@ -1073,10 +1073,10 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 
 	actorType := in.GetActorType()
 	actorID := in.GetActorId()
-	actorOps := []requestresponse.TransactionalOperation{}
+	actorOps := []actorapi.TransactionalOperation{}
 
 	for _, op := range in.GetOperations() {
-		var actorOp requestresponse.TransactionalOperation
+		var actorOp actorapi.TransactionalOperation
 		switch op.GetOperationType() {
 		case string(state.OperationUpsert):
 			setReq := map[string]any{
@@ -1088,8 +1088,8 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 				setReq["metadata"] = meta
 			}
 
-			actorOp = requestresponse.TransactionalOperation{
-				Operation: requestresponse.Upsert,
+			actorOp = actorapi.TransactionalOperation{
+				Operation: actorapi.Upsert,
 				Request:   setReq,
 			}
 		case string(state.OperationDelete):
@@ -1098,8 +1098,8 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 				// Actor state do not user other attributes from state request.
 			}
 
-			actorOp = requestresponse.TransactionalOperation{
-				Operation: requestresponse.Delete,
+			actorOp = actorapi.TransactionalOperation{
+				Operation: actorapi.Delete,
 				Request:   delReq,
 			}
 
@@ -1112,7 +1112,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		actorOps = append(actorOps, actorOp)
 	}
 
-	req := requestresponse.TransactionalRequest{
+	req := actorapi.TransactionalRequest{
 		ActorID:    actorID,
 		ActorType:  actorType,
 		Operations: actorOps,

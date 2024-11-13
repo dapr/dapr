@@ -11,23 +11,20 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package requestresponse
+package api
 
-// LookupActorRequest is the request for LookupActor.
-type LookupActorRequest struct {
-	ActorType string
-	ActorID   string
-	NoCache   bool
-}
+import (
+	"time"
 
-// ActorKey returns the key for the actor, which is "type/id".
-func (lar LookupActorRequest) ActorKey() string {
-	return lar.ActorType + "/" + lar.ActorID
-}
+	"github.com/dapr/dapr/pkg/config"
+)
 
-// LookupActorResponse is the response from LookupActor.
-type LookupActorResponse struct {
-	Address string
-	AppID   string
-	Local   bool
+// Remap of config.EntityConfig.
+type EntityConfig struct {
+	Entities                   []string
+	ActorIdleTimeout           time.Duration
+	DrainOngoingCallTimeout    time.Duration
+	DrainRebalancedActors      bool
+	ReentrancyConfig           config.ReentrancyConfig
+	RemindersStoragePartitions int
 }

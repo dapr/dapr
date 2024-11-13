@@ -17,11 +17,11 @@ import (
 	"context"
 	"io"
 
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
+	"github.com/dapr/dapr/pkg/actors/api"
 )
 
 type Storage interface {
 	io.Closer
-	Create(ctx context.Context, reminder *requestresponse.Reminder) error
+	Create(ctx context.Context, reminder *api.Reminder) error
 	Delete(ctx context.Context, timerKey string)
 }

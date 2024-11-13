@@ -28,8 +28,8 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/internal"
 	"github.com/dapr/dapr/pkg/components/wfbackend"
@@ -165,7 +165,7 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalv1pb.InternalI
 }
 
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
-func (a *activity) InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error {
+func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	cancel, err := a.lock.Lock()
 	if err != nil {
 		return err
@@ -263,6 +263,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, eventPayloa
 		}
 	}()
 
+	// TODO: @joshvanl: Remove!
 loop:
 	for {
 		t := time.NewTimer(10 * time.Minute)
@@ -334,7 +335,7 @@ loop:
 }
 
 // InvokeTimer implements actors.InternalActor
-func (a *activity) InvokeTimer(ctx context.Context, reminder *requestresponse.Reminder) error {
+func (a *activity) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder) error {
 	return errors.New("timers are not implemented")
 }
 
@@ -354,7 +355,7 @@ func (a *activity) loadActivityState(ctx context.Context) (*activityState, error
 	// Loading from the state store is only expected in process failure recovery scenarios.
 	log.Debugf("Activity actor '%s': loading activity state", a.actorID)
 
-	req := requestresponse.GetStateRequest{
+	req := actorapi.GetStateRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		Key:       activityStateKey,
@@ -382,12 +383,12 @@ func (a *activity) loadActivityState(ctx context.Context) (*activityState, error
 }
 
 func (a *activity) saveActivityState(ctx context.Context, state *activityState) error {
-	req := requestresponse.TransactionalRequest{
+	req := actorapi.TransactionalRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
-		Operations: []requestresponse.TransactionalOperation{{
-			Operation: requestresponse.Upsert,
-			Request: requestresponse.TransactionalUpsert{
+		Operations: []actorapi.TransactionalOperation{{
+			Operation: actorapi.Upsert,
+			Request: actorapi.TransactionalUpsert{
 				Key:   activityStateKey,
 				Value: state,
 			},
@@ -417,12 +418,12 @@ func (a *activity) purgeActivityState(ctx context.Context) error {
 	}
 
 	log.Debugf("Activity actor '%s': purging activity state", a.actorID)
-	err = astate.TransactionalStateOperation(ctx, &requestresponse.TransactionalRequest{
+	err = astate.TransactionalStateOperation(ctx, &actorapi.TransactionalRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
-		Operations: []requestresponse.TransactionalOperation{{
-			Operation: requestresponse.Delete,
-			Request: requestresponse.TransactionalDelete{
+		Operations: []actorapi.TransactionalOperation{{
+			Operation: actorapi.Delete,
+			Request: actorapi.TransactionalDelete{
 				Key: activityStateKey,
 			},
 		}},
@@ -448,7 +449,7 @@ func (a *activity) createReliableReminder(ctx context.Context, data any) error {
 	}
 
 	// TODO: @joshvanl: change to once shot when using Scheduler.
-	return reminders.Create(ctx, &requestresponse.CreateReminderRequest{
+	return reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		Data:      dataEnc,

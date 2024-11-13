@@ -24,9 +24,9 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/kit/concurrency"
@@ -194,7 +194,7 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 		}
 	}
 
-	return s.actors.CallReminder(ctx, &requestresponse.Reminder{
+	return s.actors.CallReminder(ctx, &api.Reminder{
 		Name:      job.GetName(),
 		ActorType: actor.GetType(),
 		ActorID:   actor.GetId(),

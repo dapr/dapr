@@ -24,6 +24,7 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/health"
@@ -34,7 +35,6 @@ import (
 	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/internal/timers/inmemory"
 	"github.com/dapr/dapr/pkg/actors/reminders"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -145,7 +145,7 @@ type actors struct {
 	state          actorstate.Interface
 
 	hostedActorTypes   []string
-	entityConfigs      map[string]requestresponse.EntityConfig
+	entityConfigs      map[string]api.EntityConfig
 	defaultIdleTimeout time.Duration
 
 	disabled   *atomic.Pointer[error]
@@ -226,7 +226,7 @@ func (a *actors) Init(opts InitOptions) error {
 		return err
 	}
 
-	entityConfigs := make(map[string]requestresponse.EntityConfig)
+	entityConfigs := make(map[string]api.EntityConfig)
 	for _, entityConfg := range opts.EntityConfigs {
 		config := translateEntityConfig(entityConfg)
 		for _, entity := range entityConfg.Entities {
@@ -581,8 +581,8 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 	return nil
 }
 
-func translateEntityConfig(appConfig config.EntityConfig) requestresponse.EntityConfig {
-	domainConfig := requestresponse.EntityConfig{
+func translateEntityConfig(appConfig config.EntityConfig) api.EntityConfig {
+	domainConfig := api.EntityConfig{
 		Entities:                   appConfig.Entities,
 		ActorIdleTimeout:           defaultIdleTimeout,
 		DrainOngoingCallTimeout:    defaultOngoingCallTimeout,

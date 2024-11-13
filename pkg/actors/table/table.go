@@ -21,8 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/kit/concurrency/cmap"
@@ -53,7 +53,7 @@ type Interface interface {
 var log = logger.NewLogger("dapr.runtime.actor.table")
 
 type Options struct {
-	EntityConfigs           map[string]requestresponse.EntityConfig
+	EntityConfigs           map[string]api.EntityConfig
 	DrainRebalancedActors   bool
 	DrainOngoingCallTimeout time.Duration
 	IdlerQueue              *queue.Processor[string, targets.Idlable]
@@ -69,7 +69,7 @@ type table struct {
 	actorTypesLock fifo.Map[string]
 
 	drainRebalancedActors   bool
-	entityConfigs           map[string]requestresponse.EntityConfig
+	entityConfigs           map[string]api.EntityConfig
 	drainOngoingCallTimeout time.Duration
 	idlerQueue              *queue.Processor[string, targets.Idlable]
 

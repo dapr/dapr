@@ -19,15 +19,16 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"k8s.io/utils/clock"
 
-	"github.com/cenkalti/backoff/v4"
+	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/reminders"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
@@ -38,14 +39,13 @@ import (
 	"github.com/dapr/kit/concurrency/fifo"
 	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
-	"google.golang.org/grpc/status"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor.engine")
 
 type Interface interface {
 	Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
-	CallReminder(ctx context.Context, reminder *requestresponse.Reminder) error
+	CallReminder(ctx context.Context, reminder *api.Reminder) error
 }
 
 type Options struct {
@@ -112,13 +112,27 @@ func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 	return res, err
 }
 
-func (e *engine) CallReminder(ctx context.Context, req *requestresponse.Reminder) error {
+func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
+	var err error
+	if e.resiliency.PolicyDefined(req.ActorType, resiliency.ActorPolicy{}) {
+		err = e.callReminder(ctx, req)
+	} else {
+		policyRunner := resiliency.NewRunner[struct{}](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
+		_, err = policyRunner(func(ctx context.Context) (struct{}, error) {
+			return struct{}{}, e.callReminder(ctx, req)
+		})
+	}
+
+	return err
+}
+
+func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 	if err := e.placement.Lock(ctx); err != nil {
 		return err
 	}
 	defer e.placement.Unlock()
 
-	lar, err := e.placement.LookupActor(ctx, &requestresponse.LookupActorRequest{
+	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.ActorType,
 		ActorID:   req.ActorID,
 	})
@@ -136,7 +150,7 @@ func (e *engine) CallReminder(ctx context.Context, req *requestresponse.Reminder
 
 	target, _, err := e.table.GetOrCreate(req.ActorType, req.ActorID)
 	if err != nil {
-		return err
+		return backoff.Permanent(err)
 	}
 
 	if req.IsTimer {
@@ -151,7 +165,7 @@ func (e *engine) CallReminder(ctx context.Context, req *requestresponse.Reminder
 		log.Debugf("Deleting reminder which was cancelled: %s", req.Key())
 		reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
 		defer cancel()
-		if derr := e.reminders.Delete(reqCtx, &requestresponse.DeleteReminderRequest{
+		if derr := e.reminders.Delete(reqCtx, &api.DeleteReminderRequest{
 			Name:      req.Name,
 			ActorType: req.ActorType,
 			ActorID:   req.ActorID,
@@ -160,11 +174,11 @@ func (e *engine) CallReminder(ctx context.Context, req *requestresponse.Reminder
 		}
 	}
 
-	return err
+	return backoff.Permanent(err)
 }
 
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	lar, err := e.placement.LookupActor(ctx, &requestresponse.LookupActorRequest{
+	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
 		ActorID:   req.GetActor().GetActorId(),
 	})
@@ -199,7 +213,7 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	return res, backoff.Permanent(err)
 }
 
-func (e *engine) callRemoteActor(ctx context.Context, lar *requestresponse.LookupActorResponse, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+func (e *engine) callRemoteActor(ctx context.Context, lar *api.LookupActorResponse, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
 	if err != nil {
 		return nil, err
@@ -222,7 +236,7 @@ func (e *engine) callRemoteActor(ctx context.Context, lar *requestresponse.Looku
 	return res, nil
 }
 
-func (e *engine) callRemoteActorReminder(ctx context.Context, lar *requestresponse.LookupActorResponse, reminder *requestresponse.Reminder) error {
+func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupActorResponse, reminder *api.Reminder) error {
 	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
 	if err != nil {
 		return err

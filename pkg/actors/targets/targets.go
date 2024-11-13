@@ -17,14 +17,14 @@ import (
 	"context"
 	"time"
 
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
+	"github.com/dapr/dapr/pkg/actors/api"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 type Interface interface {
 	InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
-	InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error
-	InvokeTimer(ctx context.Context, reminder *requestresponse.Reminder) error
+	InvokeReminder(ctx context.Context, reminder *api.Reminder) error
+	InvokeTimer(ctx context.Context, reminder *api.Reminder) error
 	Deactivate(ctx context.Context) error
 	CloseUntil(timeout time.Duration)
 }

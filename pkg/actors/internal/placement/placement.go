@@ -22,11 +22,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/client"
 	"github.com/dapr/dapr/pkg/actors/internal/placement/lock"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -57,7 +57,7 @@ type Interface interface {
 	Ready() bool
 	Lock(context.Context) error
 	Unlock()
-	LookupActor(ctx context.Context, req *requestresponse.LookupActorRequest) (*requestresponse.LookupActorResponse, error)
+	LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, error)
 }
 
 type Options struct {
@@ -180,7 +180,7 @@ func (p *placement) Run(ctx context.Context) error {
 
 // LookupActor returns the address of the actor.
 // Placement _must_ be locked before calling this method.
-func (p *placement) LookupActor(ctx context.Context, req *requestresponse.LookupActorRequest) (*requestresponse.LookupActorResponse, error) {
+func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, error) {
 	table, ok := p.hashTable.Entries[req.ActorType]
 	if !ok {
 		return nil, ErrorActorTypeNotFound
@@ -191,7 +191,7 @@ func (p *placement) LookupActor(ctx context.Context, req *requestresponse.Lookup
 		return nil, err
 	}
 
-	return &requestresponse.LookupActorResponse{
+	return &api.LookupActorResponse{
 		Address: host.Name,
 		AppID:   host.AppID,
 		Local:   p.isActorLocal(host.Name, p.hostname, p.port),
@@ -292,7 +292,7 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 	p.actorTable.Drain(func(actorType, actorID string) bool {
 		p.reminders.DrainRebalancedReminders(actorType, actorID)
 
-		lar, err := p.LookupActor(ctx, &requestresponse.LookupActorRequest{
+		lar, err := p.LookupActor(ctx, &api.LookupActorRequest{
 			ActorType: actorType,
 			ActorID:   actorID,
 		})
@@ -304,7 +304,7 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 		return lar != nil && !p.isActorLocal(lar.Address, p.hostname, p.port)
 	})
 
-	p.reminders.OnPlacementTablesUpdated(ctx, func(ctx context.Context, req *requestresponse.LookupActorRequest) bool {
+	p.reminders.OnPlacementTablesUpdated(ctx, func(ctx context.Context, req *api.LookupActorRequest) bool {
 		lar, err := p.LookupActor(ctx, req)
 		return err == nil && lar.Local
 	})

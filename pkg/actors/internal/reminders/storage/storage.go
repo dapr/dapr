@@ -17,7 +17,7 @@ import (
 	"context"
 	"io"
 
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
+	"github.com/dapr/dapr/pkg/actors/api"
 )
 
 // Interface is the interface for the object that provides reminders backend
@@ -25,10 +25,10 @@ import (
 type Interface interface {
 	io.Closer
 
-	Get(ctx context.Context, req *requestresponse.GetReminderRequest) (*requestresponse.Reminder, error)
-	Create(ctx context.Context, req *requestresponse.CreateReminderRequest) error
-	Delete(ctx context.Context, req *requestresponse.DeleteReminderRequest) error
-	List(ctx context.Context, req *requestresponse.ListRemindersRequest) ([]*requestresponse.Reminder, error)
+	Get(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error)
+	Create(ctx context.Context, req *api.CreateReminderRequest) error
+	Delete(ctx context.Context, req *api.DeleteReminderRequest) error
+	List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error)
 	DrainRebalancedReminders(actorType string, actorID string)
-	OnPlacementTablesUpdated(ctx context.Context, lookupFn func(context.Context, *requestresponse.LookupActorRequest) bool)
+	OnPlacementTablesUpdated(ctx context.Context, lookupFn func(context.Context, *api.LookupActorRequest) bool)
 }

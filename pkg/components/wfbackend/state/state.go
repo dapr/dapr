@@ -24,7 +24,7 @@ import (
 
 	"github.com/microsoft/durabletask-go/backend"
 
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/kit/logger"
 )
@@ -133,12 +133,12 @@ func (s *State) ClearInbox() {
 	s.inboxAddedCount = 0
 }
 
-func (s *State) GetSaveRequest(actorID string) (*requestresponse.TransactionalRequest, error) {
+func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error) {
 	// TODO: Batching up the save requests into smaller chunks to avoid batch size limits in Dapr state stores.
-	req := &requestresponse.TransactionalRequest{
+	req := &api.TransactionalRequest{
 		ActorType:  s.workflowActorType,
 		ActorID:    actorID,
-		Operations: make([]requestresponse.TransactionalOperation, 0, 100),
+		Operations: make([]api.TransactionalOperation, 0, 100),
 	}
 
 	if err := addStateOperations(req, inboxKeyPrefix, s.Inbox, s.inboxAddedCount, s.inboxRemovedCount); err != nil {
@@ -153,9 +153,9 @@ func (s *State) GetSaveRequest(actorID string) (*requestresponse.TransactionalRe
 	// we're saving changes only to the workflow inbox.
 	// CONSIDER: Only save custom status if it has changed. However, need a way to track this.
 	if s.historyAddedCount > 0 || s.historyRemovedCount > 0 {
-		req.Operations = append(req.Operations, requestresponse.TransactionalOperation{
-			Operation: requestresponse.Upsert,
-			Request:   requestresponse.TransactionalUpsert{Key: customStatusKey, Value: s.CustomStatus},
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Upsert,
+			Request:   api.TransactionalUpsert{Key: customStatusKey, Value: s.CustomStatus},
 		})
 	}
 
@@ -166,9 +166,9 @@ func (s *State) GetSaveRequest(actorID string) (*requestresponse.TransactionalRe
 		HistoryLength: len(s.History),
 		Generation:    s.Generation,
 	}
-	req.Operations = append(req.Operations, requestresponse.TransactionalOperation{
-		Operation: requestresponse.Upsert,
-		Request:   requestresponse.TransactionalUpsert{Key: metadataKey, Value: metadata},
+	req.Operations = append(req.Operations, api.TransactionalOperation{
+		Operation: api.Upsert,
+		Request:   api.TransactionalUpsert{Key: metadataKey, Value: metadata},
 	})
 
 	return req, nil
@@ -271,7 +271,7 @@ func (s *State) DecodeWorkflowState(encodedState []byte) error {
 	return nil
 }
 
-func addStateOperations(req *requestresponse.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent, addedCount int, removedCount int) error {
+func addStateOperations(req *api.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent, addedCount int, removedCount int) error {
 	// TODO: Investigate whether Dapr state stores put limits on batch sizes. It seems some storage
 	//       providers have limits and we need to know if that impacts this algorithm:
 	//       https://learn.microsoft.com/azure/cosmos-db/nosql/transactional-batch#limitations
@@ -281,28 +281,28 @@ func addStateOperations(req *requestresponse.TransactionalRequest, keyPrefix str
 		if err != nil {
 			return err
 		}
-		req.Operations = append(req.Operations, requestresponse.TransactionalOperation{
-			Operation: requestresponse.Upsert,
-			Request:   requestresponse.TransactionalUpsert{Key: getMultiEntryKeyName(keyPrefix, i), Value: data},
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Upsert,
+			Request:   api.TransactionalUpsert{Key: getMultiEntryKeyName(keyPrefix, i), Value: data},
 		})
 	}
 	for i := len(events); i < removedCount; i++ {
-		req.Operations = append(req.Operations, requestresponse.TransactionalOperation{
-			Operation: requestresponse.Delete,
-			Request:   requestresponse.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, i)},
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, i)},
 		})
 	}
 	return nil
 }
 
-func addPurgeStateOperations(req *requestresponse.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent) error {
+func addPurgeStateOperations(req *api.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent) error {
 	// TODO: Investigate whether Dapr state stores put limits on batch sizes. It seems some storage
 	//       providers have limits and we need to know if that impacts this algorithm:
 	//       https://learn.microsoft.com/azure/cosmos-db/nosql/transactional-batch#limitations
 	for i := range events {
-		req.Operations = append(req.Operations, requestresponse.TransactionalOperation{
-			Operation: requestresponse.Delete,
-			Request:   requestresponse.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, i)},
+		req.Operations = append(req.Operations, api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, i)},
 		})
 	}
 	return nil
@@ -313,7 +313,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	loadedRecords := 0
 
 	// Load metadata
-	req := requestresponse.GetStateRequest{
+	req := api.GetStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
 		Key:       metadataKey,
@@ -338,7 +338,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	wState.Inbox = make([]*backend.HistoryEvent, metadata.InboxLength)
 	wState.History = make([]*backend.HistoryEvent, metadata.HistoryLength)
 
-	bulkReq := &requestresponse.GetBulkStateRequest{
+	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
 		// Initializing with size for all the inbox, history, and custom status
@@ -398,12 +398,12 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	return wState, nil
 }
 
-func (s *State) GetPurgeRequest(actorID string) (*requestresponse.TransactionalRequest, error) {
-	req := &requestresponse.TransactionalRequest{
+func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, error) {
+	req := &api.TransactionalRequest{
 		ActorType: s.workflowActorType,
 		ActorID:   actorID,
 		// Initial capacity should be enough to contain the entire inbox, history, and custom status + metadata
-		Operations: make([]requestresponse.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+2),
+		Operations: make([]api.TransactionalOperation, 0, len(s.Inbox)+len(s.History)+2),
 	}
 
 	// Inbox Purging
@@ -417,13 +417,13 @@ func (s *State) GetPurgeRequest(actorID string) (*requestresponse.TransactionalR
 	}
 
 	req.Operations = append(req.Operations,
-		requestresponse.TransactionalOperation{
-			Operation: requestresponse.Delete,
-			Request:   requestresponse.TransactionalDelete{Key: customStatusKey},
+		api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: customStatusKey},
 		},
-		requestresponse.TransactionalOperation{
-			Operation: requestresponse.Delete,
-			Request:   requestresponse.TransactionalDelete{Key: metadataKey},
+		api.TransactionalOperation{
+			Operation: api.Delete,
+			Request:   api.TransactionalDelete{Key: metadataKey},
 		},
 	)
 

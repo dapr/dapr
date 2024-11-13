@@ -22,7 +22,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
@@ -35,21 +34,21 @@ const defaultMaxStackDepth = 32
 var ErrLockClosed = errors.New("actor lock is closed")
 
 type LockOptions struct {
-	ActorType  string
-	Reentrancy config.ReentrancyConfig
+	ActorType         string
+	ReentrancyEnabled bool
+	MaxStackDepth     *int
 }
 
+// Lock is a fifo Mutex which respects reentrancy and stack depth.
 type Lock struct {
 	actorType string
 
 	maxStackDepth     int
 	reentrancyEnabled bool
 
-	pending int
-
 	lock      *fifo.Mutex
 	reqCh     chan *req
-	inflights *ring.Ring[*inflight]
+	inflights *ring.Buffered[inflight]
 
 	closeCh chan struct{}
 	closed  atomic.Bool
@@ -75,19 +74,18 @@ type inflight struct {
 
 func NewLock(opts LockOptions) *Lock {
 	maxStackDepth := defaultMaxStackDepth
-	if opts.Reentrancy.Enabled && opts.Reentrancy.MaxStackDepth != nil {
-		maxStackDepth = *opts.Reentrancy.MaxStackDepth
+	if opts.ReentrancyEnabled && opts.MaxStackDepth != nil {
+		maxStackDepth = *opts.MaxStackDepth
 	}
 
 	l := &Lock{
 		actorType:         opts.ActorType,
 		reqCh:             make(chan *req),
 		maxStackDepth:     maxStackDepth,
-		reentrancyEnabled: opts.Reentrancy.Enabled,
-		// TODO: @joshvanl
-		inflights: ring.New[*inflight](1024),
-		lock:      fifo.New(),
-		closeCh:   make(chan struct{}),
+		reentrancyEnabled: opts.ReentrancyEnabled,
+		inflights:         ring.NewBuffered[inflight](1, 64),
+		lock:              fifo.New(),
+		closeCh:           make(chan struct{}),
 	}
 
 	l.wg.Add(1)
@@ -169,16 +167,8 @@ func (l *Lock) handleLock(req *req) *resp {
 
 		inflight.depth--
 		if inflight.depth == 0 {
-			l.inflights = l.inflights.Next()
-
-			if l.inflights.Value != nil {
-				l.pending--
-
-				if l.pending < l.inflights.Len()-1024 {
-					l.inflights.Move(l.inflights.Len() - 1024).Unlink(1024)
-				}
-
-				close(l.inflights.Value.startCh)
+			if v := l.inflights.RemoveFront(); v != nil {
+				close(v.startCh)
 			}
 		}
 	}
@@ -187,27 +177,51 @@ func (l *Lock) handleLock(req *req) *resp {
 }
 
 func (l *Lock) handleInflight(req *req) (*inflight, error) {
-	id := l.idFromRequest(req.msg)
+	id, ok := l.idFromRequest(req.msg)
 
-	if l.inflights.Value == nil {
-		l.inflights.Value = newInflight(id)
-		close(l.inflights.Value.startCh)
-		return l.inflights.Value, nil
+	// If this is:
+	// 1. a new request which is not accociated with any inflight (the usual base
+	//   case)
+	// 2. reentry is not enabled
+	// 3. there is no current inflight requests
+	// then create a new inflight request and append to the back of the ring
+	// (queue).
+	if !ok || !l.reentrancyEnabled || l.inflights.Len() == 0 {
+		flight := newInflight(id)
+		if l.inflights.Front() == nil {
+			close(flight.startCh)
+		}
+		l.inflights.AppendBack(flight)
+		return flight, nil
 	}
 
-	if l.reentrancyEnabled && l.inflights.Value.id == id {
-		l.inflights.Value.depth++
-		if l.inflights.Value.depth > l.maxStackDepth {
-			return nil, messages.ErrActorMaxStackDepthExceeded
+	// Range over the ring to find the inflight request with the same id. If found,
+	// increment the depth and check if it exceeds the max stack depth.
+	var flight *inflight
+	var err error
+	l.inflights.Range(func(v *inflight) bool {
+		if v.id != id {
+			return true
 		}
 
-		return l.inflights.Value, nil
+		flight = v
+		v.depth++
+		if v.depth > l.maxStackDepth {
+			err = messages.ErrActorMaxStackDepthExceeded
+		}
+
+		return false
+	})
+	if err != nil {
+		return nil, err
 	}
 
-	flight := newInflight(id)
-	l.pending++
-	l.inflights.Move(l.pending).Value = flight
-	l.checkExpand()
+	// If we did not find the inflight request with the same id, create a new one
+	// and append to the back of the ring.
+	if flight == nil {
+		flight = newInflight(id)
+		l.inflights.AppendBack(flight)
+	}
 
 	return flight, nil
 }
@@ -216,28 +230,21 @@ func newInflight(id string) *inflight {
 	return &inflight{id: id, depth: 1, startCh: make(chan struct{})}
 }
 
-func (l *Lock) checkExpand() {
-	if l.inflights.Len() == l.pending {
-		exp := ring.New[*inflight](1024)
-		l.inflights.Move(l.pending).Link(exp)
-	}
-}
-
-func (l *Lock) idFromRequest(req *invokev1.InvokeMethodRequest) string {
-	id := uuid.New().String()
+func (l *Lock) idFromRequest(req *invokev1.InvokeMethodRequest) (string, bool) {
 	if req == nil {
-		return id
+		return uuid.New().String(), false
 	}
 
 	if md := req.Metadata()["Dapr-Reentrancy-Id"]; md != nil && len(md.GetValues()) > 0 {
-		return md.GetValues()[0]
+		return md.GetValues()[0], true
 	}
 
+	id := uuid.New().String()
 	req.AddMetadata(map[string][]string{
 		"Dapr-Reentrancy-Id": {id},
 	})
 
-	return id
+	return id, true
 }
 
 func (l *Lock) Close() {

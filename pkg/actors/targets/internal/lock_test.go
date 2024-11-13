@@ -14,181 +14,194 @@ limitations under the License.
 package internal
 
 import (
+	"context"
 	"testing"
 	"time"
 
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	"github.com/dapr/kit/ptr"
 )
 
-//func Test_Lock(t *testing.T) {
-//	l := NewLock(LockOptions{})
-//	cancel, err := l.Lock()
-//	require.NoError(t, err)
-//	cancel()
-//
-//	cancel, err = l.Lock()
-//	require.NoError(t, err)
-//	cancel()
-//
-//	l.Close()
-//
-//	l = NewLock(LockOptions{})
-//	cancel1, err := l.Lock()
-//	require.NoError(t, err)
-//
-//	errCh := make(chan error)
-//	var cancel2 context.CancelFunc
-//	go func() {
-//		cancel2, err = l.Lock()
-//		errCh <- err
-//	}()
-//
-//	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-//		l.lock.Lock()
-//		assert.Equal(c, 1, l.pending)
-//		l.lock.Unlock()
-//	}, time.Second*5, time.Millisecond*10)
-//
-//	time.Sleep(time.Second)
-//
-//	cancel1()
-//	select {
-//	case err := <-errCh:
-//		require.NoError(t, err)
-//	case <-time.After(time.Second):
-//		assert.Fail(t, "lock not acquired")
-//	}
-//	cancel2()
-//}
-//
-//func Test_LockThree(t *testing.T) {
-//	l := NewLock(LockOptions{})
-//	cancel1, err := l.Lock()
-//	require.NoError(t, err)
-//
-//	errCh := make(chan error)
-//	var cancel2, cancel3 context.CancelFunc
-//	go func() {
-//		var gerr error
-//		cancel2, gerr = l.Lock()
-//		errCh <- gerr
-//	}()
-//	go func() {
-//		var gerr error
-//		cancel3, gerr = l.Lock()
-//		errCh <- gerr
-//	}()
-//
-//	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-//		l.lock.Lock()
-//		assert.Equal(c, 2, l.pending)
-//		l.lock.Unlock()
-//	}, time.Second*5, time.Millisecond*10)
-//
-//	cancel1()
-//	select {
-//	case err := <-errCh:
-//		require.NoError(t, err)
-//	case <-time.After(time.Second):
-//		assert.Fail(t, "lock not acquired")
-//	}
-//	cancel2()
-//
-//	select {
-//	case err := <-errCh:
-//		require.NoError(t, err)
-//	case <-time.After(time.Second):
-//		assert.Fail(t, "lock not acquired")
-//	}
-//
-//	cancel3()
-//
-//	l.Close()
-//}
+func Test_Lock(t *testing.T) {
+	t.Parallel()
 
-//func Test_expand(t *testing.T) {
-//	l := NewLock(LockOptions{
-//		Reentrancy: config.ReentrancyConfig{Enabled: true},
-//	})
-//	t.Cleanup(l.Close)
-//
-//	req := invokev1.NewInvokeMethodRequest("foo")
-//	cancel1, err := l.LockRequest(req)
-//	t.Cleanup(cancel1)
-//	require.NoError(t, err)
-//	assert.Equal(t, 8, l.inflights.Len())
-//
-//	cancel2, err := l.LockRequest(req)
-//	t.Cleanup(cancel2)
-//	require.NoError(t, err)
-//	assert.Equal(t, 8, l.inflights.Len())
-//
-//	for range 7 {
-//		c, err := l.LockRequest(req)
-//		t.Cleanup(c)
-//		require.NoError(t, err)
-//		assert.Equal(t, 8, l.inflights.Len())
-//	}
-//}
+	l := NewLock(LockOptions{})
+	cancel, err := l.Lock()
+	require.NoError(t, err)
+	cancel()
 
-func Test_expand(t *testing.T) {
-	l := NewLock(LockOptions{
-		Reentrancy: config.ReentrancyConfig{Enabled: true},
-	})
-	t.Cleanup(l.Close)
+	cancel, err = l.Lock()
+	require.NoError(t, err)
+	cancel()
+
+	l.Close()
+
+	l = NewLock(LockOptions{})
+	cancel1, err := l.Lock()
+	require.NoError(t, err)
 
 	errCh := make(chan error)
-	doneCh := make(chan struct{})
-	for range 8 {
-		go func() {
-			c, err := l.Lock()
-			<-doneCh
-			c()
-			errCh <- err
-		}()
-	}
-
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, 8, l.inflights.Len())
-	}, time.Second*5, time.Millisecond*10)
-
+	var cancel2 context.CancelFunc
 	go func() {
-		c, err := l.Lock()
-		<-doneCh
-		c()
+		cancel2, err = l.Lock()
 		errCh <- err
 	}()
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		l.lock.Lock()
-		assert.Equal(c, 16, l.inflights.Len())
+		assert.Equal(c, 2, l.inflights.Len())
 		l.lock.Unlock()
 	}, time.Second*5, time.Millisecond*10)
 
-	for range 4 {
+	cancel1()
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		assert.Fail(t, "lock not acquired")
+	}
+	cancel2()
+}
+
+func Test_requestid(t *testing.T) {
+	t.Parallel()
+
+	l := NewLock(LockOptions{ReentrancyEnabled: true})
+	t.Cleanup(l.Close)
+
+	req := invokev1.NewInvokeMethodRequest("foo")
+
+	errCh := make(chan error)
+	for range 32 {
 		go func() {
-			c, err := l.Lock()
-			<-doneCh
-			c()
+			cancel, err := l.LockRequest(req)
 			errCh <- err
+			cancel()
 		}()
 	}
 
-	l.lock.Lock()
-	assert.Equal(t, 16, l.inflights.Len())
-	l.lock.Unlock()
-
-	for range 5 {
-		doneCh <- struct{}{}
-		require.NoError(t, <-errCh)
-		assert.Equal(t, 16, l.inflights.Len())
-	}
-
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		l.lock.Lock()
-		assert.Equal(c, 8, l.inflights.Len())
+		if assert.Equal(c, 1, l.inflights.Len()) {
+			assert.Equal(c, 32, l.inflights.Front().depth)
+		}
 		l.lock.Unlock()
 	}, time.Second*5, time.Millisecond*10)
+
+	_, err := l.LockRequest(req)
+	require.Error(t, err)
+
+	for range 32 {
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			assert.Fail(t, "lock not acquired")
+		}
+	}
+}
+
+func Test_requestidcustom(t *testing.T) {
+	t.Parallel()
+
+	l := NewLock(LockOptions{
+		ReentrancyEnabled: true,
+		MaxStackDepth:     ptr.Of(10),
+	})
+	t.Cleanup(l.Close)
+
+	req := invokev1.NewInvokeMethodRequest("foo")
+
+	errCh := make(chan error)
+	for range 10 {
+		go func() {
+			cancel, err := l.LockRequest(req)
+			errCh <- err
+			cancel()
+		}()
+	}
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		l.lock.Lock()
+		if assert.Equal(c, 1, l.inflights.Len()) {
+			assert.Equal(c, 10, l.inflights.Front().depth)
+		}
+		l.lock.Unlock()
+	}, time.Second*5, time.Millisecond*10)
+
+	_, err := l.LockRequest(req)
+	require.Error(t, err)
+
+	for range 10 {
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			assert.Fail(t, "lock not acquired")
+		}
+	}
+}
+
+func Test_ringid(t *testing.T) {
+	t.Parallel()
+
+	l := NewLock(LockOptions{
+		ReentrancyEnabled: true,
+		MaxStackDepth:     ptr.Of(10),
+	})
+	t.Cleanup(l.Close)
+
+	req1 := invokev1.NewInvokeMethodRequest("foo")
+	req2 := invokev1.NewInvokeMethodRequest("bar")
+
+	errCh := make(chan error)
+	for range 10 {
+		go func() {
+			cancel, err := l.LockRequest(req1)
+			errCh <- err
+			cancel()
+		}()
+		go func() {
+			cancel, err := l.LockRequest(req2)
+			errCh <- err
+			cancel()
+		}()
+	}
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		l.lock.Lock()
+		if assert.Equal(c, 2, l.inflights.Len()) {
+			assert.Equal(c, 10, l.inflights.Front().depth)
+		}
+		l.lock.Unlock()
+	}, time.Second*5, time.Millisecond*10)
+
+	for range 10 {
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			assert.Fail(t, "lock not acquired")
+		}
+	}
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		l.lock.Lock()
+		if assert.Equal(c, 1, l.inflights.Len()) {
+			assert.Equal(c, 10, l.inflights.Front().depth)
+		}
+		l.lock.Unlock()
+	}, time.Second*5, time.Millisecond*10)
+
+	for range 10 {
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second):
+			assert.Fail(t, "lock not acquired")
+		}
+	}
 }

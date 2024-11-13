@@ -23,9 +23,9 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/internal"
 	"github.com/dapr/dapr/pkg/channel"
@@ -188,9 +188,9 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 	return res, nil
 }
 
-func (a *app) InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error {
+func (a *app) InvokeReminder(ctx context.Context, reminder *api.Reminder) error {
 	invokeMethod := "remind/" + reminder.Name
-	data, err := json.Marshal(&requestresponse.ReminderResponse{
+	data, err := json.Marshal(&api.ReminderResponse{
 		DueTime: reminder.DueTime,
 		Period:  reminder.Period.String(),
 		Data:    reminder.Data,
@@ -216,9 +216,9 @@ func (a *app) InvokeReminder(ctx context.Context, reminder *requestresponse.Remi
 	return nil
 }
 
-func (a *app) InvokeTimer(ctx context.Context, reminder *requestresponse.Reminder) error {
+func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 	invokeMethod := "timer/" + reminder.Name
-	data, err := json.Marshal(&requestresponse.TimerResponse{
+	data, err := json.Marshal(&api.TimerResponse{
 		Callback: reminder.Callback,
 		Data:     reminder.Data,
 		DueTime:  reminder.DueTime,

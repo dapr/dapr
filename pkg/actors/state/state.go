@@ -20,9 +20,9 @@ import (
 	"strings"
 
 	contribstate "github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/resiliency"
@@ -43,13 +43,13 @@ var (
 
 type Interface interface {
 	// Get retrieves actor state.
-	Get(ctx context.Context, req *requestresponse.GetStateRequest) (*requestresponse.StateResponse, error)
+	Get(ctx context.Context, req *api.GetStateRequest) (*api.StateResponse, error)
 
 	// GetBulk retrieves actor state in bulk.
-	GetBulk(ctx context.Context, req *requestresponse.GetBulkStateRequest) (requestresponse.BulkStateResponse, error)
+	GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error)
 
 	// TransactionalStateOperation performs a transactional state operation with the actor state store.
-	TransactionalStateOperation(ctx context.Context, req *requestresponse.TransactionalRequest) error
+	TransactionalStateOperation(ctx context.Context, req *api.TransactionalRequest) error
 }
 
 type Backend interface {
@@ -93,7 +93,7 @@ func New(opts Options) Interface {
 	}
 }
 
-func (s *state) Get(ctx context.Context, req *requestresponse.GetStateRequest) (*requestresponse.StateResponse, error) {
+func (s *state) Get(ctx context.Context, req *api.GetStateRequest) (*api.StateResponse, error) {
 	s.placement.Lock(ctx)
 	defer s.placement.Unlock()
 
@@ -128,16 +128,16 @@ func (s *state) Get(ctx context.Context, req *requestresponse.GetStateRequest) (
 	}
 
 	if resp == nil {
-		return &requestresponse.StateResponse{}, nil
+		return &api.StateResponse{}, nil
 	}
 
-	return &requestresponse.StateResponse{
+	return &api.StateResponse{
 		Data:     resp.Data,
 		Metadata: resp.Metadata,
 	}, nil
 }
 
-func (s *state) GetBulk(ctx context.Context, req *requestresponse.GetBulkStateRequest) (requestresponse.BulkStateResponse, error) {
+func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error) {
 	s.placement.Lock(ctx)
 	defer s.placement.Unlock()
 
@@ -175,7 +175,7 @@ func (s *state) GetBulk(ctx context.Context, req *requestresponse.GetBulkStateRe
 	// Add the dapr separator to baseKey
 	baseKey += daprSeparator
 
-	bulkRes := make(requestresponse.BulkStateResponse, len(res))
+	bulkRes := make(api.BulkStateResponse, len(res))
 	for _, r := range res {
 		if r.Error != "" {
 			return nil, fmt.Errorf("failed to retrieve key '%s': %s", r.Key, r.Error)
@@ -188,7 +188,7 @@ func (s *state) GetBulk(ctx context.Context, req *requestresponse.GetBulkStateRe
 	return bulkRes, nil
 }
 
-func (s *state) TransactionalStateOperation(ctx context.Context, req *requestresponse.TransactionalRequest) (err error) {
+func (s *state) TransactionalStateOperation(ctx context.Context, req *api.TransactionalRequest) (err error) {
 	s.placement.Lock(ctx)
 	defer s.placement.Unlock()
 
@@ -201,7 +201,7 @@ func (s *state) TransactionalStateOperation(ctx context.Context, req *requestres
 	metadata := map[string]string{metadataPartitionKey: baseKey}
 	baseKey += daprSeparator
 	for i, o := range req.Operations {
-		operations[i], err = o.StateOperation(baseKey, requestresponse.StateOperationOpts{
+		operations[i], err = o.StateOperation(baseKey, api.StateOperationOpts{
 			Metadata: metadata,
 			// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 			StateTTLEnabled: s.stateTTLEnabled,

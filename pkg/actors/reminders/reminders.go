@@ -17,8 +17,8 @@ import (
 	"context"
 	"errors"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/table"
 )
 
@@ -29,13 +29,13 @@ var (
 
 type Interface interface {
 	// Get retrieves an actor reminder.
-	Get(ctx context.Context, req *requestresponse.GetReminderRequest) (*requestresponse.Reminder, error)
+	Get(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error)
 
 	// Create creates an actor reminder.
-	Create(ctx context.Context, req *requestresponse.CreateReminderRequest) error
+	Create(ctx context.Context, req *api.CreateReminderRequest) error
 
 	// Delete deletes an actor reminder.
-	Delete(ctx context.Context, req *requestresponse.DeleteReminderRequest) error
+	Delete(ctx context.Context, req *api.DeleteReminderRequest) error
 }
 
 type Options struct {
@@ -55,7 +55,7 @@ func New(opts Options) Interface {
 	}
 }
 
-func (r *reminders) Get(ctx context.Context, req *requestresponse.GetReminderRequest) (*requestresponse.Reminder, error) {
+func (r *reminders) Get(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error) {
 	if !r.table.IsActorTypeHosted(req.ActorType) {
 		return nil, ErrReminderOpActorNotHosted
 	}
@@ -63,7 +63,7 @@ func (r *reminders) Get(ctx context.Context, req *requestresponse.GetReminderReq
 	return r.storage.Get(ctx, req)
 }
 
-func (r *reminders) Create(ctx context.Context, req *requestresponse.CreateReminderRequest) error {
+func (r *reminders) Create(ctx context.Context, req *api.CreateReminderRequest) error {
 	if !r.table.IsActorTypeHosted(req.ActorType) {
 		return ErrReminderOpActorNotHosted
 	}
@@ -71,7 +71,7 @@ func (r *reminders) Create(ctx context.Context, req *requestresponse.CreateRemin
 	return r.storage.Create(ctx, req)
 }
 
-func (r *reminders) Delete(ctx context.Context, req *requestresponse.DeleteReminderRequest) error {
+func (r *reminders) Delete(ctx context.Context, req *api.DeleteReminderRequest) error {
 	if !r.table.IsActorTypeHosted(req.ActorType) {
 		return ErrReminderOpActorNotHosted
 	}

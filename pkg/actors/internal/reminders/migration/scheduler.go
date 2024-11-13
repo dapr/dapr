@@ -22,8 +22,8 @@ import (
 
 	"k8s.io/utils/clock"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/kit/logger"
 )
@@ -36,27 +36,27 @@ type ToSchedulerOptions struct {
 	Table              table.Interface
 	StateReminders     storage.Interface
 	SchedulerReminders storage.Interface
-	LookupFn           func(context.Context, *requestresponse.LookupActorRequest) bool
+	LookupFn           func(context.Context, *api.LookupActorRequest) bool
 }
 
 func ToScheduler(ctx context.Context, opts ToSchedulerOptions) error {
 	log.Infof("Running actor reminder migration from state store to scheduler")
 
-	stateReminders := make(map[string][]*requestresponse.Reminder)
-	schedulerReminders := make(map[string][]*requestresponse.Reminder)
+	stateReminders := make(map[string][]*api.Reminder)
+	schedulerReminders := make(map[string][]*api.Reminder)
 
 	actorTypes := opts.Table.Types()
 
 	for _, actorType := range actorTypes {
 		log.Debugf("Listing state reminders for actor type %s", actorType)
-		stateR, err := opts.StateReminders.List(ctx, &requestresponse.ListRemindersRequest{
+		stateR, err := opts.StateReminders.List(ctx, &api.ListRemindersRequest{
 			ActorType: actorType,
 		})
 		if err != nil {
 			return err
 		}
 		for i := range stateR {
-			if opts.LookupFn(ctx, &requestresponse.LookupActorRequest{
+			if opts.LookupFn(ctx, &api.LookupActorRequest{
 				ActorType: stateR[i].ActorType,
 				ActorID:   stateR[i].ActorID,
 			}) {
@@ -66,7 +66,7 @@ func ToScheduler(ctx context.Context, opts ToSchedulerOptions) error {
 		}
 
 		log.Debugf("Listing scheduler reminders for actor type %s", actorType)
-		schedR, err := opts.SchedulerReminders.List(ctx, &requestresponse.ListRemindersRequest{
+		schedR, err := opts.SchedulerReminders.List(ctx, &api.ListRemindersRequest{
 			ActorType: actorType,
 		})
 		if err != nil {
@@ -75,7 +75,7 @@ func ToScheduler(ctx context.Context, opts ToSchedulerOptions) error {
 		schedulerReminders[actorType] = schedR
 	}
 
-	var missingReminders []*requestresponse.Reminder
+	var missingReminders []*api.Reminder
 	for _, actorType := range actorTypes {
 		for _, stateReminder := range stateReminders[actorType] {
 			var exists bool
@@ -111,7 +111,7 @@ func ToScheduler(ctx context.Context, opts ToSchedulerOptions) error {
 			ttl = missing.ExpirationTime.UTC().Format(time.RFC3339)
 		}
 
-		err := opts.SchedulerReminders.Create(ctx, &requestresponse.CreateReminderRequest{
+		err := opts.SchedulerReminders.Create(ctx, &api.CreateReminderRequest{
 			Name:      missing.Name,
 			ActorType: missing.ActorType,
 			ActorID:   missing.ActorID,

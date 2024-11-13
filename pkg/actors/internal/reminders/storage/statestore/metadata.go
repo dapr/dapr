@@ -19,8 +19,8 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 )
 
 // ActorMetadata represents information about the actor type.
@@ -39,7 +39,7 @@ type ActorRemindersMetadata struct {
 type ActorReminderReference struct {
 	ActorMetadataID           string
 	ActorRemindersPartitionID uint32
-	Reminder                  requestresponse.Reminder
+	Reminder                  api.Reminder
 }
 
 func (m *ActorMetadata) calculateReminderPartition(actorID, reminderName string) uint32 {
@@ -56,7 +56,7 @@ func (m *ActorMetadata) calculateReminderPartition(actorID, reminderName string)
 	return (h.Sum32() % uint32(m.RemindersMetadata.PartitionCount)) + 1
 }
 
-func (m *ActorMetadata) createReminderReference(reminder requestresponse.Reminder) ActorReminderReference {
+func (m *ActorMetadata) createReminderReference(reminder api.Reminder) ActorReminderReference {
 	if m.RemindersMetadata.PartitionCount > 0 {
 		return ActorReminderReference{
 			ActorMetadataID:           m.ID,
@@ -89,7 +89,7 @@ func (m *ActorMetadata) calculateEtag(partitionID uint32) *string {
 	return m.RemindersMetadata.PartitionsEtag[partitionID]
 }
 
-func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []ActorReminderReference, actorType, actorID, reminderName string) (bool, []requestresponse.Reminder, string, *string) {
+func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []ActorReminderReference, actorType, actorID, reminderName string) (bool, []api.Reminder, string, *string) {
 	// First, we find the partition
 	var partitionID uint32
 	l := len(reminderRefs)
@@ -113,7 +113,7 @@ func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []ActorReminder
 		l /= m.RemindersMetadata.PartitionCount
 	}
 
-	remindersInPartitionAfterRemoval := make([]requestresponse.Reminder, 0, l)
+	remindersInPartitionAfterRemoval := make([]api.Reminder, 0, l)
 	var found bool
 	for _, reminderRef := range reminderRefs {
 		if reminderRef.Reminder.ActorType == actorType && reminderRef.Reminder.ActorID == actorID && reminderRef.Reminder.Name == reminderName {
@@ -136,10 +136,10 @@ func (m *ActorMetadata) removeReminderFromPartition(reminderRefs []ActorReminder
 	return true, remindersInPartitionAfterRemoval, stateKey, m.calculateEtag(partitionID)
 }
 
-func (m *ActorMetadata) insertReminderInPartition(reminderRefs []ActorReminderReference, reminder requestresponse.Reminder) ([]requestresponse.Reminder, ActorReminderReference, string, *string) {
+func (m *ActorMetadata) insertReminderInPartition(reminderRefs []ActorReminderReference, reminder api.Reminder) ([]api.Reminder, ActorReminderReference, string, *string) {
 	newReminderRef := m.createReminderReference(reminder)
 
-	var remindersInPartitionAfterInsertion []requestresponse.Reminder
+	var remindersInPartitionAfterInsertion []api.Reminder
 	for _, reminderRef := range reminderRefs {
 		// Only the items in the partition to be updated.
 		if reminderRef.ActorRemindersPartitionID == newReminderRef.ActorRemindersPartitionID {

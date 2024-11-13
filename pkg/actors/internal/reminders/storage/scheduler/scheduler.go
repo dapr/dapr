@@ -23,10 +23,10 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/migration"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/table"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/healthz"
@@ -71,7 +71,7 @@ func New(opts Options) storage.Interface {
 }
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
-func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context, fn func(context.Context, *requestresponse.LookupActorRequest) bool) {
+func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context, fn func(context.Context, *api.LookupActorRequest) bool) {
 	err := migration.ToScheduler(ctx, migration.ToSchedulerOptions{
 		Table:              s.table,
 		StateReminders:     s.stateReminder,
@@ -86,7 +86,7 @@ func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context, fn func(contex
 
 func (s *scheduler) DrainRebalancedReminders(actorType string, actorID string) {}
 
-func (s *scheduler) Create(ctx context.Context, reminder *requestresponse.CreateReminderRequest) error {
+func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequest) error {
 	log.Info("Using Scheduler service for reminders.")
 	var dueTime *string
 	if len(reminder.DueTime) > 0 {
@@ -177,7 +177,7 @@ func (s *scheduler) Close() error {
 	return nil
 }
 
-func (s *scheduler) Get(ctx context.Context, req *requestresponse.GetReminderRequest) (*requestresponse.Reminder, error) {
+func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error) {
 	internalGetJobReq := &schedulerv1pb.GetJobRequest{
 		Name: req.Name,
 		Metadata: &schedulerv1pb.JobMetadata{
@@ -215,18 +215,18 @@ func (s *scheduler) Get(ctx context.Context, req *requestresponse.GetReminderReq
 		return nil, err
 	}
 
-	reminder := &requestresponse.Reminder{
+	reminder := &api.Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
 		Data:      jsonBytes,
-		Period:    requestresponse.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
+		Period:    api.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
 		DueTime:   job.GetJob().GetDueTime(),
 	}
 
 	return reminder, nil
 }
 
-func (s *scheduler) Delete(ctx context.Context, req *requestresponse.DeleteReminderRequest) error {
+func (s *scheduler) Delete(ctx context.Context, req *api.DeleteReminderRequest) error {
 	internalDeleteJobReq := &schedulerv1pb.DeleteJobRequest{
 		Name: req.Name,
 		Metadata: &schedulerv1pb.JobMetadata{
@@ -256,7 +256,7 @@ func (s *scheduler) Delete(ctx context.Context, req *requestresponse.DeleteRemin
 	return err
 }
 
-func (s *scheduler) List(ctx context.Context, req *requestresponse.ListRemindersRequest) ([]*requestresponse.Reminder, error) {
+func (s *scheduler) List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error) {
 	client, err := s.clients.Next(ctx)
 	if err != nil {
 		return nil, err
@@ -277,7 +277,7 @@ func (s *scheduler) List(ctx context.Context, req *requestresponse.ListReminders
 	if err != nil {
 		return nil, err
 	}
-	reminders := make([]*requestresponse.Reminder, len(resp.GetJobs()))
+	reminders := make([]*api.Reminder, len(resp.GetJobs()))
 	for i, named := range resp.GetJobs() {
 		actor := named.GetMetadata().GetTarget().GetActor()
 		if actor == nil {
@@ -291,12 +291,12 @@ func (s *scheduler) List(ctx context.Context, req *requestresponse.ListReminders
 			return nil, err
 		}
 
-		reminders[i] = &requestresponse.Reminder{
+		reminders[i] = &api.Reminder{
 			Name:      named.GetName(),
 			ActorID:   actor.GetId(),
 			ActorType: actor.GetType(),
 			Data:      jsonBytes,
-			Period:    requestresponse.NewSchedulerReminderPeriod(job.GetSchedule(), job.GetRepeats()),
+			Period:    api.NewSchedulerReminderPeriod(job.GetSchedule(), job.GetRepeats()),
 			DueTime:   job.GetDueTime(),
 		}
 	}

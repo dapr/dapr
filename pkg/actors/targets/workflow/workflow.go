@@ -34,8 +34,8 @@ import (
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/actors"
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/internal"
 	"github.com/dapr/dapr/pkg/components/wfbackend"
@@ -189,7 +189,7 @@ func (w *workflow) executeMethod(ctx context.Context, methodName string, request
 }
 
 // InvokeReminder implements actors.InternalActor
-func (w *workflow) InvokeReminder(ctx context.Context, reminder *requestresponse.Reminder) error {
+func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
 	cancel, err := w.lock.Lock()
 	if err != nil {
 		return err
@@ -228,7 +228,7 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *requestresponse
 }
 
 // InvokeTimer implements actors.InternalActor
-func (w *workflow) InvokeTimer(ctx context.Context, reminder *requestresponse.Reminder) error {
+func (w *workflow) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder) error {
 	// TODO: @joshvanl: lock actor
 	return errors.New("timers are not implemented")
 }
@@ -477,7 +477,7 @@ func (w *workflow) getWorkflowName(oldEvents, newEvents []*backend.HistoryEvent)
 	return ""
 }
 
-func (w *workflow) runWorkflow(ctx context.Context, reminder *requestresponse.Reminder) (runCompleted, error) {
+func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (runCompleted, error) {
 	state, err := w.loadInternalState(ctx)
 	if err != nil {
 		return runCompletedTrue, fmt.Errorf("error loading internal state: %w", err)
@@ -514,7 +514,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *requestresponse.Re
 	}
 
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
-	transactionalRequests := make(map[string][]requestresponse.TransactionalOperation)
+	transactionalRequests := make(map[string][]actorapi.TransactionalOperation)
 	var esHistoryEvent *backend.HistoryEvent
 
 	for _, e := range state.Inbox {
@@ -529,15 +529,15 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *requestresponse.Re
 			}
 			continue
 		}
-		op := requestresponse.TransactionalOperation{
-			Operation: requestresponse.Delete,
-			Request: requestresponse.TransactionalDelete{
+		op := actorapi.TransactionalOperation{
+			Operation: actorapi.Delete,
+			Request: actorapi.TransactionalDelete{
 				Key: activityStateKey,
 			},
 		}
 		activityActorID := getActivityActorID(w.actorID, taskID, state.Generation)
 		if transactionalRequests[activityActorID] == nil {
-			transactionalRequests[activityActorID] = []requestresponse.TransactionalOperation{op}
+			transactionalRequests[activityActorID] = []actorapi.TransactionalOperation{op}
 		} else {
 			transactionalRequests[activityActorID] = append(transactionalRequests[activityActorID], op)
 		}
@@ -548,7 +548,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *requestresponse.Re
 		if err != nil {
 			return runCompletedFalse, err
 		}
-		err = state.TransactionalStateOperation(ctx, &requestresponse.TransactionalRequest{
+		err = state.TransactionalStateOperation(ctx, &actorapi.TransactionalRequest{
 			ActorType:  w.activityActorType,
 			ActorID:    activityActorID,
 			Operations: operations,
@@ -880,7 +880,7 @@ func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string
 	if err != nil {
 		return "", err
 	}
-	return reminderName, reminders.Create(ctx, &requestresponse.CreateReminderRequest{
+	return reminderName, reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: w.actorType,
 		ActorID:   w.actorID,
 		Data:      dataEnc,
@@ -918,12 +918,12 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *workflow
 		} else {
 			continue
 		}
-		req := requestresponse.TransactionalRequest{
+		req := actorapi.TransactionalRequest{
 			ActorType: w.activityActorType,
 			ActorID:   getActivityActorID(w.actorID, taskID, state.Generation),
-			Operations: []requestresponse.TransactionalOperation{{
-				Operation: requestresponse.Delete,
-				Request: requestresponse.TransactionalDelete{
+			Operations: []actorapi.TransactionalOperation{{
+				Operation: actorapi.Delete,
+				Request: actorapi.TransactionalDelete{
 					Key: activityStateKey,
 				},
 			}},

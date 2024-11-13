@@ -20,8 +20,8 @@ import (
 
 	"google.golang.org/protobuf/types/known/emptypb"
 
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/reminders"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -32,7 +32,7 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 		return nil, err
 	}
 
-	req := &requestresponse.CreateTimerRequest{
+	req := &api.CreateTimerRequest{
 		Name:      in.GetName(),
 		ActorID:   in.GetActorId(),
 		ActorType: in.GetActorType(),
@@ -68,7 +68,7 @@ func (a *Universal) UnregisterActorTimer(ctx context.Context, in *runtimev1pb.Un
 		return nil, err
 	}
 
-	req := &requestresponse.DeleteTimerRequest{
+	req := &api.DeleteTimerRequest{
 		Name:      in.GetName(),
 		ActorID:   in.GetActorId(),
 		ActorType: in.GetActorType(),
@@ -84,7 +84,7 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		return nil, err
 	}
 
-	req := &requestresponse.CreateReminderRequest{
+	req := &api.CreateReminderRequest{
 		Name:      in.GetName(),
 		ActorID:   in.GetActorId(),
 		ActorType: in.GetActorType(),
@@ -123,7 +123,7 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 		return nil, err
 	}
 
-	req := &requestresponse.DeleteReminderRequest{
+	req := &api.DeleteReminderRequest{
 		Name:      in.GetName(),
 		ActorID:   in.GetActorId(),
 		ActorType: in.GetActorType(),

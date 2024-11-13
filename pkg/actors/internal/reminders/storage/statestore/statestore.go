@@ -30,11 +30,11 @@ import (
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/components-contrib/state"
+	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
-	"github.com/dapr/dapr/pkg/actors/requestresponse"
 	actorstate "github.com/dapr/dapr/pkg/actors/state"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -52,7 +52,7 @@ type Options struct {
 	StateStore                 actorstate.Backend
 	Resiliency                 resiliency.Provider
 	Table                      table.Interface
-	EntityConfigs              map[string]requestresponse.EntityConfig
+	EntityConfigs              map[string]api.EntityConfig
 	StoreName                  string
 	APILevel                   *apilevel.APILevel
 	RemindersStoragePartitions int
@@ -73,7 +73,7 @@ type Statestore struct {
 	engine          engine.Interface
 	closed          atomic.Bool
 
-	entityConfigs              map[string]requestresponse.EntityConfig
+	entityConfigs              map[string]api.EntityConfig
 	storeName                  string
 	remindersStoragePartitions int
 }
@@ -97,7 +97,7 @@ func New(opts Options) *Statestore {
 }
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
-func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, _ func(context.Context, *requestresponse.LookupActorRequest) bool) {
+func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, _ func(context.Context, *api.LookupActorRequest) bool) {
 	go func() {
 		// To handle bursts, use a queue so no more than one evaluation can be queued up at the same time, since they'd all fetch the same data anyways
 		select {
@@ -132,7 +132,7 @@ func (r *Statestore) DrainRebalancedReminders(actorType string, actorID string) 
 	}
 }
 
-func (r *Statestore) Create(ctx context.Context, req *requestresponse.CreateReminderRequest) error {
+func (r *Statestore) Create(ctx context.Context, req *api.CreateReminderRequest) error {
 	// Create the new reminder object
 	reminder, err := req.NewReminder(r.clock.Now())
 	if err != nil {
@@ -204,7 +204,7 @@ func (r *Statestore) Close() error {
 	return nil
 }
 
-func (r *Statestore) Get(ctx context.Context, req *requestresponse.GetReminderRequest) (*requestresponse.Reminder, error) {
+func (r *Statestore) Get(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error) {
 	list, _, err := r.getRemindersForActorType(ctx, req.ActorType, false)
 	if err != nil {
 		return nil, err
@@ -212,7 +212,7 @@ func (r *Statestore) Get(ctx context.Context, req *requestresponse.GetReminderRe
 
 	for _, r := range list {
 		if r.Reminder.ActorID == req.ActorID && r.Reminder.Name == req.Name {
-			return &requestresponse.Reminder{
+			return &api.Reminder{
 				Data:    r.Reminder.Data,
 				DueTime: r.Reminder.DueTime,
 				Period:  r.Reminder.Period,
@@ -222,15 +222,15 @@ func (r *Statestore) Get(ctx context.Context, req *requestresponse.GetReminderRe
 	return nil, nil
 }
 
-func (r *Statestore) List(ctx context.Context, req *requestresponse.ListRemindersRequest) ([]*requestresponse.Reminder, error) {
+func (r *Statestore) List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error) {
 	list, _, err := r.getRemindersForActorType(ctx, req.ActorType, false)
 	if err != nil {
 		return nil, err
 	}
 
-	reminders := make([]*requestresponse.Reminder, len(list))
+	reminders := make([]*api.Reminder, len(list))
 	for i, r := range list {
-		reminders[i] = &requestresponse.Reminder{
+		reminders[i] = &api.Reminder{
 			Name:           r.Reminder.Name,
 			ActorID:        r.Reminder.ActorID,
 			ActorType:      r.Reminder.ActorType,
@@ -246,7 +246,7 @@ func (r *Statestore) List(ctx context.Context, req *requestresponse.ListReminder
 	return reminders, nil
 }
 
-func (r *Statestore) Delete(ctx context.Context, req *requestresponse.DeleteReminderRequest) error {
+func (r *Statestore) Delete(ctx context.Context, req *api.DeleteReminderRequest) error {
 	if !r.waitForEvaluationChan() {
 		return errors.New("error deleting reminder: timed out after 30s")
 	}
@@ -383,7 +383,7 @@ func (r *Statestore) waitForEvaluationChan() bool {
 	}
 }
 
-func (r *Statestore) getReminder(reminderName string, actorType string, actorID string) (*requestresponse.Reminder, bool) {
+func (r *Statestore) getReminder(reminderName string, actorType string, actorID string) (*api.Reminder, bool) {
 	r.remindersLock.RLock()
 	reminders := r.reminders[actorType]
 	r.remindersLock.RUnlock()
@@ -499,7 +499,7 @@ func (r *Statestore) doDeleteReminder(ctx context.Context, actorType, actorID, n
 	return err
 }
 
-func (r *Statestore) storeReminder(ctx context.Context, reminder *requestresponse.Reminder, stopChannel chan struct{}) error {
+func (r *Statestore) storeReminder(ctx context.Context, reminder *api.Reminder, stopChannel chan struct{}) error {
 	// Store the reminder in active reminders list
 	reminderKey := reminder.Key()
 
@@ -592,7 +592,7 @@ func (r *Statestore) executeStateStoreTransaction(ctx context.Context, operation
 	return err
 }
 
-func (r *Statestore) serializeRemindersToProto(reminders []requestresponse.Reminder) ([]byte, error) {
+func (r *Statestore) serializeRemindersToProto(reminders []api.Reminder) ([]byte, error) {
 	pb := &internalv1pb.Reminders{
 		Reminders: make([]*internalv1pb.Reminder, len(reminders)),
 	}
@@ -625,37 +625,37 @@ func (r *Statestore) serializeRemindersToProto(reminders []requestresponse.Remin
 	return res, nil
 }
 
-func (r *Statestore) unserialize(data []byte) ([]requestresponse.Reminder, error) {
+func (r *Statestore) unserialize(data []byte) ([]api.Reminder, error) {
 	// Check if we have the protobuf prefix
 	if bytes.HasPrefix(data, []byte{0, 'p', 'b'}) {
 		return r.unserializeRemindersFromProto(data[3:])
 	}
 
 	// Fallback to unserializing from JSON
-	var batch []requestresponse.Reminder
+	var batch []api.Reminder
 	err := json.Unmarshal(data, &batch)
 	return batch, err
 }
 
 //nolint:protogetter
-func (r *Statestore) unserializeRemindersFromProto(data []byte) ([]requestresponse.Reminder, error) {
+func (r *Statestore) unserializeRemindersFromProto(data []byte) ([]api.Reminder, error) {
 	pb := internalv1pb.Reminders{}
 	err := proto.Unmarshal(data, &pb)
 	if err != nil {
 		return nil, fmt.Errorf("failed to unserialize reminders from protobuf: %w", err)
 	}
 
-	res := make([]requestresponse.Reminder, len(pb.GetReminders()))
+	res := make([]api.Reminder, len(pb.GetReminders()))
 	for i, rm := range pb.GetReminders() {
 		if rm == nil {
 			return nil, errors.New("unserialized reminder object is nil")
 		}
-		res[i] = requestresponse.Reminder{
+		res[i] = api.Reminder{
 			ActorID:   rm.ActorId,
 			ActorType: rm.ActorType,
 			Name:      rm.Name,
 			DueTime:   rm.DueTime,
-			Period:    requestresponse.NewEmptyReminderPeriod(),
+			Period:    api.NewEmptyReminderPeriod(),
 		}
 
 		if len(rm.Data) > 0 {
@@ -688,7 +688,7 @@ func (r *Statestore) unserializeRemindersFromProto(data []byte) ([]requestrespon
 	return res, nil
 }
 
-func (r *Statestore) saveRemindersInPartitionRequest(stateKey string, reminders []requestresponse.Reminder, etag *string, metadata map[string]string) (state.SetRequest, error) {
+func (r *Statestore) saveRemindersInPartitionRequest(stateKey string, reminders []api.Reminder, etag *string, metadata map[string]string) (state.SetRequest, error) {
 	req := state.SetRequest{
 		Key:      stateKey,
 		ETag:     etag,
@@ -779,7 +779,7 @@ func (r *Statestore) getRemindersForActorType(ctx context.Context, actorType str
 			}
 
 			// Data can be empty if there's no reminder, when serialized as protobuf
-			var batch []requestresponse.Reminder
+			var batch []api.Reminder
 			if len(resp.Data) == 0 {
 				return nil, nil, fmt.Errorf("no data found for reminder partition %v: %w", resp.Key, err)
 			}
@@ -824,7 +824,7 @@ func (r *Statestore) getRemindersForActorType(ctx context.Context, actorType str
 	}
 	log.Debugf("Read reminders from %s without partition", key)
 
-	var reminders []requestresponse.Reminder
+	var reminders []api.Reminder
 	if len(resp.Data) > 0 {
 		reminders, err = r.unserialize(resp.Data)
 		if err != nil {
@@ -940,9 +940,9 @@ func (r *Statestore) migrateRemindersForActorType(ctx context.Context, actorType
 	}
 	actorMetadata.ID = idObj.String()
 	actorMetadata.RemindersMetadata.PartitionCount = reminderPartitionCount
-	actorRemindersPartitions := make([][]requestresponse.Reminder, actorMetadata.RemindersMetadata.PartitionCount)
+	actorRemindersPartitions := make([][]api.Reminder, actorMetadata.RemindersMetadata.PartitionCount)
 	for i := range actorMetadata.RemindersMetadata.PartitionCount {
-		actorRemindersPartitions[i] = make([]requestresponse.Reminder, 0)
+		actorRemindersPartitions[i] = make([]api.Reminder, 0)
 	}
 
 	// Recalculate partition for each reminder.
@@ -979,7 +979,7 @@ func (r *Statestore) migrateRemindersForActorType(ctx context.Context, actorType
 	return nil
 }
 
-func (r *Statestore) startReminder(reminder *requestresponse.Reminder, stopChannel chan struct{}) error {
+func (r *Statestore) startReminder(reminder *api.Reminder, stopChannel chan struct{}) error {
 	reminderKey := reminder.Key()
 
 	track, err := r.getReminderTrack(context.TODO(), reminderKey)
@@ -1078,7 +1078,7 @@ func (r *Statestore) startReminder(reminder *requestresponse.Reminder, stopChann
 		}
 
 	delete:
-		err = r.Delete(context.TODO(), &requestresponse.DeleteReminderRequest{
+		err = r.Delete(context.TODO(), &api.DeleteReminderRequest{
 			Name:      reminder.Name,
 			ActorID:   reminder.ActorID,
 			ActorType: reminder.ActorType,
@@ -1091,7 +1091,7 @@ func (r *Statestore) startReminder(reminder *requestresponse.Reminder, stopChann
 	return nil
 }
 
-func (r *Statestore) getReminderTrack(ctx context.Context, key string) (*requestresponse.ReminderTrack, error) {
+func (r *Statestore) getReminderTrack(ctx context.Context, key string) (*api.ReminderTrack, error) {
 	var policyDef *resiliency.PolicyDefinition
 	if r.resiliency != nil && !r.resiliency.PolicyDefined(r.storeName, resiliency.ComponentOutboundPolicy) {
 		policyDef = r.resiliency.ComponentOutboundPolicy(r.storeName, resiliency.Statestore)
@@ -1115,7 +1115,7 @@ func (r *Statestore) getReminderTrack(ctx context.Context, key string) (*request
 	if resp == nil {
 		resp = &state.GetResponse{}
 	}
-	track := &requestresponse.ReminderTrack{
+	track := &api.ReminderTrack{
 		RepetitionLeft: -1,
 	}
 	_ = json.Unmarshal(resp.Data, track)
@@ -1124,7 +1124,7 @@ func (r *Statestore) getReminderTrack(ctx context.Context, key string) (*request
 }
 
 func (r *Statestore) updateReminderTrack(ctx context.Context, key string, repetition int, lastInvokeTime time.Time, etag *string) error {
-	track := requestresponse.ReminderTrack{
+	track := api.ReminderTrack{
 		LastFiredTime:  lastInvokeTime,
 		RepetitionLeft: repetition,
 	}
