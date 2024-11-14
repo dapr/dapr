@@ -43,7 +43,7 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 	if err != nil {
 		// This is already an APIError object.
 		a.logger.Debug(err)
-		messages.RecordErrorCode(errorcodes.CommonBadRequest)
+		messages.RecordErrorCodeAndGet(errorcodes.CommonBadRequest)
 		return err
 	}
 
@@ -99,7 +99,7 @@ func (a *api) DecryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err er
 	if err != nil {
 		// This is already an APIError object.
 		a.logger.Debug(err)
-		messages.RecordErrorCode(errorcodes.CommonBadRequest)
+		messages.RecordErrorCodeAndGet(errorcodes.CommonBadRequest)
 		return err
 	}
 

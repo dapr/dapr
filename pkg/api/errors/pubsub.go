@@ -224,7 +224,7 @@ func (p *PubSubTopicError) UnmarshalEvents(err error) error {
 }
 
 func (p *PubSubMetadataError) build(grpcCode codes.Code, httpCode int, msg string, tag errorcodes.ErrorCode, errCode string) error {
-	errorCode := messages.RecordErrorCode(tag)
+	errorCode := messages.RecordErrorCodeAndGet(tag)
 	err := errors.NewBuilder(grpcCode, httpCode, msg, errorCode)
 	if !p.skipResourceInfo {
 		err = err.WithResourceInfo(string(metadata.PubSubType), p.p.name, "", msg)
@@ -241,7 +241,7 @@ func PubSubOutbox(appID string, err error) error {
 		codes.Internal,
 		http.StatusInternalServerError,
 		message,
-		messages.RecordErrorCode(errorcodes.PubsubPublishOutbox),
+		messages.RecordErrorCodeAndGet(errorcodes.PubsubPublishOutbox),
 	).WithErrorInfo(errors.CodePrefixPubSub+"OUTBOX", map[string]string{
 		"appID": appID, "error": err.Error(),
 	}).Build()

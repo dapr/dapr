@@ -318,7 +318,7 @@ func (m MetricSpec) GetHTTPPathMatching() []string {
 	return m.HTTP.PathMatching
 }
 
-// GetRecordErrorCodes returns.name true if `recordErrorCodes` is enabled for metrics
+// GetRecordErrorCodes returns true if `recordErrorCodes` is enabled for metrics
 func (m MetricSpec) GetRecordErrorCodes() bool {
 	if m.RecordErrorCodes == nil {
 		// The default is false

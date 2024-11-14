@@ -960,7 +960,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Delete, err == nil, elapsed)
 
 	if err != nil {
-		statusCode, errMsg, resp := a.stateErrorResponse(err, messages.RecordErrorCode(errorcodes.StateDelete))
+		statusCode, errMsg, resp := a.stateErrorResponse(err, messages.RecordErrorCodeAndGet(errorcodes.StateDelete))
 		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
 
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
@@ -1021,7 +1021,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			data := []byte(fmt.Sprintf("%v", r.Value))
 			val, encErr := encryption.TryEncryptValue(storeName, data)
 			if encErr != nil {
-				statusCode, errMsg, resp := a.stateErrorResponse(encErr, messages.RecordErrorCode(errorcodes.StateSave))
+				statusCode, errMsg, resp := a.stateErrorResponse(encErr, messages.RecordErrorCodeAndGet(errorcodes.StateSave))
 				resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
@@ -1045,7 +1045,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
-		statusCode, errMsg, resp := a.stateErrorResponse(err, messages.RecordErrorCode(errorcodes.StateSave))
+		statusCode, errMsg, resp := a.stateErrorResponse(err, messages.RecordErrorCodeAndGet(errorcodes.StateSave))
 		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
@@ -1347,7 +1347,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			}
 			bulkRes.FailedEntries = append(bulkRes.FailedEntries, resEntry)
 		}
-		bulkRes.ErrorCode = messages.RecordErrorCode(errorcodes.PubsubPublishMessage)
+		bulkRes.ErrorCode = messages.RecordErrorCodeAndGet(errorcodes.PubsubPublishMessage)
 
 		switch {
 		case errors.As(err, &runtimePubsub.NotAllowedError{}):
