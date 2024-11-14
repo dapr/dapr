@@ -24,7 +24,6 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/messages"
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/dapr/pkg/messaging"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -37,13 +36,23 @@ const cryptoFirstChunkTimeout = 5 * time.Second
 
 // EncryptAlpha1 encrypts a message using the Dapr encryption scheme and a key stored in the vault.
 func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err error) { //nolint:nosnakecase
+	err = a.encryptAlpha1(stream)
+	if err != nil {
+		// Record error code if it is an APIError object
+		apiErr, ok := err.(messages.APIError)
+		if ok {
+			apiErr.RecordAPIErrorCode()
+		}
+	}
+	return err
+}
+
+func (a *api) encryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err error) {
 	// Get the first message from the caller containing the options
 	reqProto := &runtimev1pb.EncryptRequest{}
 	err = a.cryptoGetFirstChunk(stream, reqProto)
 	if err != nil {
-		// This is already an APIError object.
 		a.logger.Debug(err)
-		messages.RecordErrorCodeAndGet(errorcodes.CommonBadRequest)
 		return err
 	}
 
@@ -93,13 +102,23 @@ func (a *api) EncryptAlpha1(stream runtimev1pb.Dapr_EncryptAlpha1Server) (err er
 
 // DecryptAlpha1 decrypts a message using the Dapr encryption scheme and a key stored in the vault.
 func (a *api) DecryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err error) { //nolint:nosnakecase
+	err = a.decryptAlpha1(stream)
+	if err != nil {
+		// Record error code if it is an APIError object
+		apiErr, ok := err.(messages.APIError)
+		if ok {
+			apiErr.RecordAPIErrorCode()
+		}
+	}
+	return err
+}
+
+func (a *api) decryptAlpha1(stream runtimev1pb.Dapr_DecryptAlpha1Server) (err error) {
 	// Get the first message from the caller containing the options
 	reqProto := &runtimev1pb.DecryptRequest{}
 	err = a.cryptoGetFirstChunk(stream, reqProto)
 	if err != nil {
-		// This is already an APIError object.
 		a.logger.Debug(err)
-		messages.RecordErrorCodeAndGet(errorcodes.CommonBadRequest)
 		return err
 	}
 
