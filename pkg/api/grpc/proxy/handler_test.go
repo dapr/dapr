@@ -418,7 +418,7 @@ func (s *proxyTestSuite) setupResiliency() {
 		Duration:   200 * time.Millisecond,
 		MaxRetries: 3,
 	}
-	s.policyDef = resiliency.NewPolicyDefinition(testLogger, "test", timeout, rc, nil)
+	s.policyDef = resiliency.NewPolicyDefinition(testLogger, "test", timeout, resiliency.NewRetry(*rc, resiliency.NewRetryConditionMatch()), nil)
 }
 
 func (s *proxyTestSuite) TestResiliencyUnary() {
