@@ -371,13 +371,20 @@ test-race:
 ################################################################################
 # Target: test-integration                                                     #
 ################################################################################
+
+ifeq ($(GOOS),windows)
+TEST_ADDITIONAL_TAGS:=,windows
+else
+TEST_ADDITIONAL_TAGS:=
+endif
+
 .PHONY: test-integration
 test-integration: test-deps
 		CGO_ENABLED=1 gotestsum \
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -timeout=20m -count=1 -v -tags="integration" -integration-parallel=false
+			./tests/integration -timeout=20m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=false
 
 .PHONY: test-integration-parallel
 test-integration-parallel: test-deps
@@ -385,7 +392,7 @@ test-integration-parallel: test-deps
 			--jsonfile $(TEST_OUTPUT_FILE_PREFIX)_integration.json \
 			--format testname \
 			-- \
-			./tests/integration -timeout=20m -count=1 -v -tags="integration" -integration-parallel=true
+			./tests/integration -timeout=20m -count=1 -v -tags="integration$(TEST_ADDITIONAL_TAGS)" -integration-parallel=true
 
 ################################################################################
 # Target: lint                                                                 #
