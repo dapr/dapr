@@ -59,6 +59,7 @@ import (
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/middleware"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
@@ -4634,7 +4635,7 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("non etag error", func(t *testing.T) {
 		a := &api{}
 		err := errors.New("error")
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m, r := a.stateErrorResponse(err, errorcodes.StateSave)
 
 		assert.Equal(t, 500, c)
 		assert.Equal(t, "error", m)
@@ -4644,7 +4645,7 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("etag mismatch error", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m, r := a.stateErrorResponse(err, errorcodes.StateSave)
 
 		assert.Equal(t, 409, c)
 		assert.Equal(t, "possible etag mismatch. error from state store: error", m)
@@ -4654,7 +4655,7 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("etag invalid error", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m, r := a.stateErrorResponse(err, errorcodes.StateSave)
 
 		assert.Equal(t, 400, c)
 		assert.Equal(t, "invalid etag value: error", m)
@@ -4684,7 +4685,7 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("standardized error", func(t *testing.T) {
 		a := &api{}
 		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, gohttp.StatusNotFound, "", "testReason")
-		c, m, r := a.stateErrorResponse(standardizedErr, "ERR_STATE_SAVE")
+		c, m, r := a.stateErrorResponse(standardizedErr, errorcodes.StateSave)
 		assert.Equal(t, 404, c)
 		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", m)
 		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)

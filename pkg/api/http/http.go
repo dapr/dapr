@@ -961,7 +961,7 @@ func (a *api) onDeleteState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Delete, err == nil, elapsed)
 
 	if err != nil {
-		statusCode, errMsg, resp := a.stateErrorResponse(err, diagnostics.RecordErrorCodeAndGet(errorcodes.StateDelete))
+		statusCode, errMsg, resp := a.stateErrorResponse(err, errorcodes.StateDelete)
 		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
 
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
@@ -1022,7 +1022,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 			data := []byte(fmt.Sprintf("%v", r.Value))
 			val, encErr := encryption.TryEncryptValue(storeName, data)
 			if encErr != nil {
-				statusCode, errMsg, resp := a.stateErrorResponse(encErr, diagnostics.RecordErrorCodeAndGet(errorcodes.StateSave))
+				statusCode, errMsg, resp := a.stateErrorResponse(encErr, errorcodes.StateSave)
 				resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
 				fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
@@ -1046,7 +1046,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 	diag.DefaultComponentMonitoring.StateInvoked(reqCtx, storeName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
-		statusCode, errMsg, resp := a.stateErrorResponse(err, diagnostics.RecordErrorCodeAndGet(errorcodes.StateSave))
+		statusCode, errMsg, resp := a.stateErrorResponse(err, errorcodes.StateSave)
 		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
 
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(statusCode, resp))
@@ -1058,11 +1058,13 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 }
 
 // stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error.
-func (a *api) stateErrorResponse(err error, errorCode string) (int, string, ErrorResponse) {
+func (a *api) stateErrorResponse(err error, errorCode errorcodes.ErrorCode) (int, string, ErrorResponse) {
+	diag.RecordErrorCodeAndGet(errorCode)
+
 	etag, code, message := a.etagError(err)
 
 	r := ErrorResponse{
-		ErrorCode: errorCode,
+		ErrorCode: errorCode.Code,
 	}
 	if etag {
 		return code, message, r

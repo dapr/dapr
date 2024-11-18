@@ -41,6 +41,12 @@ func fasthttpResponseWithJSON(code int, obj []byte, metadata map[string]string) 
 
 // fasthttpResponseWithError sets error code and jsonized error message.
 func fasthttpResponseWithError(code int, resp errorResponseValue) fasthttpResponseOption {
+	// Check if it's an APIError object, may be duplicate check, but it is necessary to record error
+	apiErr, ok := resp.(messages.APIError)
+	if ok {
+		diagnostics.RecordAPIErrorCode(apiErr)
+	}
+
 	return fasthttpResponseWithJSON(code, resp.JSONErrorValue(), nil)
 }
 
@@ -78,7 +84,6 @@ func universalFastHTTPErrorResponder(reqCtx *fasthttp.RequestCtx, err error) {
 	// Check if it's an APIError object
 	apiErr, ok := err.(messages.APIError)
 	if ok {
-		diagnostics.RecordAPIErrorCode(apiErr)
 		fasthttpRespond(reqCtx, fasthttpResponseWithError(apiErr.HTTPCode(), apiErr))
 		return
 	}
