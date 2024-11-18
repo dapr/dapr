@@ -64,6 +64,13 @@ spec:
                           type: integer
                         policy:
                           type: string
+                        matching:
+                          properties:
+                            httpStatusCodes:
+                              type: string
+                            gRPCStatusCodes:
+                              type: string
+                          type: object
                       type: object
                     type: object
                   timeouts:
