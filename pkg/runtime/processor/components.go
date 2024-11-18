@@ -225,7 +225,7 @@ func (p *Processor) processComponentAndDependents(ctx context.Context, comp comp
 			return rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), err)
 		}
 
-		log.Errorf("Ignoring error processing component: %s", err)
+		log.Errorf("Ignoring error processing component %s: %s", comp.LogName(), err)
 	}
 
 	log.Info("Component loaded: " + comp.LogName())
