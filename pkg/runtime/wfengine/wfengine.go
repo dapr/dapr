@@ -12,6 +12,7 @@ WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
 See the License for the specific language governing permissions and
 limitations under the License.
 */
+
 package wfengine
 
 import (
@@ -35,6 +36,13 @@ var (
 	wfBackendLogger = logger.NewLogger("dapr.wfengine.durabletask.backend")
 )
 
+type Interface interface {
+	Run(context.Context) error
+	Init() error
+	RegisterGrpcServer(*grpc.Server) error
+	WaitForReady(context.Context) error
+}
+
 type Options struct {
 	AppID          string
 	Namespace      string
@@ -44,7 +52,7 @@ type Options struct {
 	Resiliency     resiliency.Provider
 }
 
-type WorkflowEngine struct {
+type engine struct {
 	appID     string
 	namespace string
 	actors    actors.Interface
@@ -61,8 +69,8 @@ type WorkflowEngine struct {
 	spec       config.WorkflowSpec
 }
 
-func New(opts Options) *WorkflowEngine {
-	return &WorkflowEngine{
+func New(opts Options) Interface {
+	return &engine{
 		appID:          opts.AppID,
 		namespace:      opts.Namespace,
 		spec:           opts.Spec,
@@ -74,17 +82,18 @@ func New(opts Options) *WorkflowEngine {
 	}
 }
 
-func (wfe *WorkflowEngine) RegisterGrpcServer(grpcServer *grpc.Server) error {
+func (wfe *engine) RegisterGrpcServer(grpcServer *grpc.Server) error {
 	select {
 	case <-wfe.initDoneCh:
 	default:
-		return fmt.Errorf("workflow engine not initialized")
+		log.Error("workflow engine not initialized")
+		return nil
 	}
 	wfe.registerGrpcServerFn(grpcServer)
 	return nil
 }
 
-func (wfe *WorkflowEngine) Init() error {
+func (wfe *engine) Init() error {
 	defer close(wfe.initDoneCh)
 
 	engine, ok := wfe.backendManager.Backend()
@@ -122,7 +131,7 @@ func (wfe *WorkflowEngine) Init() error {
 	return nil
 }
 
-func (wfe *WorkflowEngine) Run(ctx context.Context) error {
+func (wfe *engine) Run(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()
@@ -155,7 +164,7 @@ func (wfe *WorkflowEngine) Run(ctx context.Context) error {
 	return nil
 }
 
-func (wfe *WorkflowEngine) WaitForReady(ctx context.Context) error {
+func (wfe *engine) WaitForReady(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
 		return ctx.Err()

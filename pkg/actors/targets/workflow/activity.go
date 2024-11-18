@@ -36,7 +36,6 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 const activityStateKey = "activityState"
@@ -122,7 +121,7 @@ func ActivityFactory(opts ActivityOptions) targets.Factory {
 // activity logic directly, InvokeMethod creates a reminder that executes the activity logic. InvokeMethod
 // returns immediately after creating the reminder, enabling the workflow to continue processing other events
 // in parallel.
-func (a *activity) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 	log.Debugf("Activity actor '%s': invoking method '%s'", a.actorID, req.GetMessage().GetMethod())
 
 	imReq, err := invokev1.FromInternalInvokeRequest(req)
@@ -140,12 +139,12 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalv1pb.InternalI
 	msg := imReq.Message()
 
 	var ar ActivityRequest
-	if err := gob.NewDecoder(bytes.NewReader(msg.GetData().GetValue())).Decode(&ar); err != nil {
+	if err = gob.NewDecoder(bytes.NewReader(msg.GetData().GetValue())).Decode(&ar); err != nil {
 		return nil, fmt.Errorf("failed to decode activity request: %w", err)
 	}
 
 	// Try to load activity state. If we find any, that means the activity invocation is a duplicate.
-	if _, err := a.loadActivityState(ctx); err != nil {
+	if _, err = a.loadActivityState(ctx); err != nil {
 		return nil, err
 	}
 

@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
-	"github.com/dapr/kit/ptr"
 )
 
 func Test_Lock(t *testing.T) {
@@ -75,18 +74,16 @@ func Test_requestid(t *testing.T) {
 	req := invokev1.NewInvokeMethodRequest("foo")
 
 	errCh := make(chan error)
-	for range 32 {
-		go func() {
-			cancel, err := l.LockRequest(req)
-			errCh <- err
-			cancel()
-		}()
-	}
+	go func() {
+		cancel, err := l.LockRequest(req)
+		errCh <- err
+		cancel()
+	}()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		l.lock.Lock()
 		if assert.Equal(c, 1, l.inflights.Len()) {
-			assert.Equal(c, 32, l.inflights.Front().depth)
+			assert.Equal(c, 1, l.inflights.Front().depth)
 		}
 		l.lock.Unlock()
 	}, time.Second*5, time.Millisecond*10)
@@ -94,13 +91,11 @@ func Test_requestid(t *testing.T) {
 	_, err := l.LockRequest(req)
 	require.Error(t, err)
 
-	for range 32 {
-		select {
-		case err := <-errCh:
-			require.NoError(t, err)
-		case <-time.After(time.Second):
-			assert.Fail(t, "lock not acquired")
-		}
+	select {
+	case err := <-errCh:
+		require.NoError(t, err)
+	case <-time.After(time.Second):
+		assert.Fail(t, "lock not acquired")
 	}
 }
 
@@ -109,7 +104,7 @@ func Test_requestidcustom(t *testing.T) {
 
 	l := NewLock(LockOptions{
 		ReentrancyEnabled: true,
-		MaxStackDepth:     ptr.Of(10),
+		MaxStackDepth:     10,
 	})
 	t.Cleanup(l.Close)
 
@@ -150,7 +145,7 @@ func Test_ringid(t *testing.T) {
 
 	l := NewLock(LockOptions{
 		ReentrancyEnabled: true,
-		MaxStackDepth:     ptr.Of(10),
+		MaxStackDepth:     10,
 	})
 	t.Cleanup(l.Close)
 

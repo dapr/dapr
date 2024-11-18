@@ -39,23 +39,13 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var (
-	log                 = logger.NewLogger("dapr.wfengine.backend.actors")
-	errExecutionAborted = errors.New("execution aborted")
-)
+var log = logger.NewLogger("dapr.wfengine.backend.actors")
 
 const (
 	defaultNamespace     = "default"
 	WorkflowNameLabelKey = "workflow"
 	ActivityNameLabelKey = "activity"
 	ActorTypePrefix      = "dapr.internal."
-)
-
-type runCompleted bool
-
-const (
-	runCompletedFalse runCompleted = false
-	runCompletedTrue  runCompleted = true
 )
 
 type Actors struct {
@@ -436,22 +426,22 @@ func (abe *Actors) String() string {
 // Note that this timeout is for a non-blocking step in the workflow (which is expected
 // to always complete almost immediately) and not for the end-to-end workflow execution.
 // TODO: @joshvanl
-//func (abe *Actors) SetWorkflowTimeout(timeout time.Duration) {
-//	abe.workflowActorOpts.defaultTimeout = timeout
-//}
+// func (abe *Actors) SetWorkflowTimeout(timeout time.Duration) {
+// 	abe.workflowActorOpts.defaultTimeout = timeout
+// }
 
 // SetActivityTimeout allows configuring a default timeout for activity executions.
 // If the timeout is exceeded, the activity execution will be abandoned and retried.
 // TODO: @joshvanl
-//func (abe *Actors) SetActivityTimeout(timeout time.Duration) {
-//	abe.activityActorOpts.defaultTimeout = timeout
-//}
+// func (abe *Actors) SetActivityTimeout(timeout time.Duration) {
+// 	abe.activityActorOpts.defaultTimeout = timeout
+// }
 
 // SetActorReminderInterval sets the amount of delay between internal retries for
 // workflow and activity actors. This impacts how long it takes for an operation to
 // restart itself after a timeout or a process failure is encountered while running.
 // TODO: @joshvanl
-//func (abe *Actors) SetActorReminderInterval(interval time.Duration) {
-//	abe.workflowActorOpts.reminderInterval = interval
-//	abe.activityActorOpts.reminderInterval = interval
-//}
+// func (abe *Actors) SetActorReminderInterval(interval time.Duration) {
+// 	abe.workflowActorOpts.reminderInterval = interval
+// 	abe.activityActorOpts.reminderInterval = interval
+// }

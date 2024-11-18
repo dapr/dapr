@@ -15,7 +15,6 @@ package lock
 
 import (
 	"sync"
-	"sync/atomic"
 
 	"github.com/dapr/kit/concurrency/fifo"
 )
@@ -47,8 +46,6 @@ func (l *Lock) EnsureUnlockTable() {
 		l.lookupLock.Unlock()
 	}
 }
-
-var i atomic.Int64
 
 func (l *Lock) LockLookup() {
 	l.lookupLock.RLock()

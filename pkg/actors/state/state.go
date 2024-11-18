@@ -37,9 +37,7 @@ const (
 	errStateStoreNotConfigured = `actors: state store does not exist or incorrectly configured. Have you set the property '{"name": "actorStateStore", "value": "true"}' in your state store component file?`
 )
 
-var (
-	ErrTransactionsTooManyOperations = errors.New("the transaction contains more operations than supported by the state store")
-)
+var ErrTransactionsTooManyOperations = errors.New("the transaction contains more operations than supported by the state store")
 
 type Interface interface {
 	// Get retrieves actor state.

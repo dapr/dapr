@@ -54,16 +54,7 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
-)
-
-const (
-	// If an idle actor is getting deactivated, but it's still busy, will be
-	// re-enqueued with its idle timeout increased by this duration.
-	actorBusyReEnqueueInterval = 10 * time.Second
-
-	defaultIdleTimeout          = time.Minute * 60
-	defaultOngoingCallTimeout   = time.Second * 60
-	defaultReentrancyStackLimit = 32
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.runtime.actor")
@@ -116,7 +107,6 @@ type Interface interface {
 type actors struct {
 	appID              string
 	namespace          string
-	hostname           string
 	port               int
 	placementAddresses []string
 	schedulerReminders bool
@@ -125,8 +115,7 @@ type actors struct {
 	security           security.Handler
 	schedulerClients   *clients.Clients
 	healthz            healthz.Healthz
-	//htarget            healthz.Target
-	compStore *compstore.ComponentStore
+	compStore          *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
 	stateTTLEnabled bool
 
@@ -174,15 +163,14 @@ func New(opts Options) Interface {
 		resiliency:         opts.Resiliency,
 		security:           opts.Security,
 		schedulerClients:   opts.SchedulerClients,
-		//htarget:            opts.Healthz.AddTarget(),
-		compStore:       opts.CompStore,
-		stateTTLEnabled: opts.StateTTLEnabled,
-		clock:           clock.RealClock{},
-		disabled:        &disabled,
-		healthz:         opts.Healthz,
-		readyCh:         make(chan struct{}),
-		closedCh:        make(chan struct{}),
-		initDoneCh:      make(chan struct{}),
+		compStore:          opts.CompStore,
+		stateTTLEnabled:    opts.StateTTLEnabled,
+		clock:              clock.RealClock{},
+		disabled:           &disabled,
+		healthz:            opts.Healthz,
+		readyCh:            make(chan struct{}),
+		closedCh:           make(chan struct{}),
+		initDoneCh:         make(chan struct{}),
 	}
 }
 
@@ -228,7 +216,7 @@ func (a *actors) Init(opts InitOptions) error {
 
 	entityConfigs := make(map[string]api.EntityConfig)
 	for _, entityConfg := range opts.EntityConfigs {
-		config := translateEntityConfig(entityConfg)
+		config := api.TranslateEntityConfig(entityConfg)
 		for _, entity := range entityConfg.Entities {
 			var found bool
 			for _, hostedType := range opts.HostedActorTypes {
@@ -245,7 +233,7 @@ func (a *actors) Init(opts InitOptions) error {
 		}
 	}
 
-	drainOngoingCallTimeout := time.Duration(time.Minute)
+	drainOngoingCallTimeout := time.Minute
 	if len(opts.DrainOngoingCallTimeout) > 0 {
 		drainOngoingCallTimeout, err = time.ParseDuration(opts.DrainOngoingCallTimeout)
 		if err != nil {
@@ -253,7 +241,7 @@ func (a *actors) Init(opts InitOptions) error {
 		}
 	}
 
-	idleTimeout := defaultIdleTimeout
+	idleTimeout := api.DefaultIdleTimeout
 	if len(opts.DefaultIdleTimeout) > 0 {
 		idleTimeout, err = time.ParseDuration(opts.DefaultIdleTimeout)
 		if err != nil {
@@ -261,8 +249,12 @@ func (a *actors) Init(opts InitOptions) error {
 		}
 	}
 
-	a.appChannel = opts.AppChannel
 	a.reentrancy = opts.Reentrancy
+	if a.reentrancy.MaxStackDepth == nil {
+		a.reentrancy.MaxStackDepth = ptr.Of(api.DefaultReentrancyStackLimit)
+	}
+
+	a.appChannel = opts.AppChannel
 	a.hostedActorTypes = opts.HostedActorTypes
 	a.entityConfigs = entityConfigs
 	a.checker = checker
@@ -372,8 +364,6 @@ func (a *actors) Run(ctx context.Context) error {
 	if err := a.disabled.Load(); err != nil {
 		log.Infof("Actor runtime disabled: %s", *err)
 		close(a.readyCh)
-		// TODO: @joshvanl
-		//a.htarget.Ready()
 		<-ctx.Done()
 		return nil
 	}
@@ -388,17 +378,14 @@ func (a *actors) Run(ctx context.Context) error {
 			ch := a.checker.HealthChannel()
 			for {
 				select {
-				case healthy := <-ch:
-					if healthy {
-						// TODO: @joshvanl: enable when placement accepts dynamic actors.
-						//a.registerHosted()
-						//a.htarget.Ready()
-
-					} else {
-
-						// TODO: @joshvanl: enable when placement accepts dynamic actors.
-						//a.unregisterHosted()
-					}
+				case <-ch:
+				// TODO: @joshvanl: enable when placement accepts dynamic actors.
+				// case healthy := <-ch:
+				// if healthy {
+				// 	//a.registerHosted()
+				// } else {
+				// 	//a.unregisterHosted()
+				// }
 				case <-ctx.Done():
 					return nil
 				}
@@ -478,11 +465,12 @@ func (a *actors) waitForReady(ctx context.Context) error {
 	}
 }
 
-func (a *actors) unregisterHosted() {
-	for _, actorType := range a.hostedActorTypes {
-		a.table.UnRegisterActorType(actorType)
-	}
-}
+// TODO: @joshvanl
+// func (a *actors) unregisterHosted() {
+// 	for _, actorType := range a.hostedActorTypes {
+// 		a.table.UnRegisterActorType(actorType)
+// 	}
+// }
 
 func (a *actors) registerHosted() {
 	for _, actorType := range a.hostedActorTypes {
@@ -553,11 +541,12 @@ func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 		hostReady = false
 	}
 
-	var count []*runtimev1pb.ActiveActorsCount
-	for atype, alen := range a.table.Len() {
+	tlen := a.table.Len()
+	count := make([]*runtimev1pb.ActiveActorsCount, 0, len(tlen))
+	for atype, alen := range tlen {
 		count = append(count, &runtimev1pb.ActiveActorsCount{
 			Type:  atype,
-			Count: int32(alen),
+			Count: int32(alen), //nolint:gosec
 		})
 	}
 
@@ -579,32 +568,4 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 		}
 	}
 	return nil
-}
-
-func translateEntityConfig(appConfig config.EntityConfig) api.EntityConfig {
-	domainConfig := api.EntityConfig{
-		Entities:                   appConfig.Entities,
-		ActorIdleTimeout:           defaultIdleTimeout,
-		DrainOngoingCallTimeout:    defaultOngoingCallTimeout,
-		DrainRebalancedActors:      appConfig.DrainRebalancedActors,
-		ReentrancyConfig:           appConfig.Reentrancy,
-		RemindersStoragePartitions: appConfig.RemindersStoragePartitions,
-	}
-
-	idleDuration, err := time.ParseDuration(appConfig.ActorIdleTimeout)
-	if err == nil {
-		domainConfig.ActorIdleTimeout = idleDuration
-	}
-
-	drainCallDuration, err := time.ParseDuration(appConfig.DrainOngoingCallTimeout)
-	if err == nil {
-		domainConfig.DrainOngoingCallTimeout = drainCallDuration
-	}
-
-	if appConfig.Reentrancy.MaxStackDepth == nil {
-		reentrancyLimit := defaultReentrancyStackLimit
-		domainConfig.ReentrancyConfig.MaxStackDepth = &reentrancyLimit
-	}
-
-	return domainConfig
 }

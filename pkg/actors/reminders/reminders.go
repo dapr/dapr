@@ -22,10 +22,8 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 )
 
-var (
-	// TODO: @joshvanl: move errors package
-	ErrReminderOpActorNotHosted = errors.New("operations on actor reminders are only possible on hosted actor types")
-)
+// TODO: @joshvanl: move errors package
+var ErrReminderOpActorNotHosted = errors.New("operations on actor reminders are only possible on hosted actor types")
 
 type Interface interface {
 	// Get retrieves an actor reminder.

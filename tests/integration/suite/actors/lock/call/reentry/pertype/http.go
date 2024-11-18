@@ -15,6 +15,7 @@ package pertype
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	nethttp "net/http"
@@ -87,8 +88,8 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		url := fmt.Sprintf("http://%s/v1.0/actors/abc/123/method/foo", h.app.Daprd().HTTPAddress())
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 		assert.NoError(t, err)
-		_, err = client.Do(req)
-		errCh <- err
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -106,8 +107,8 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 			req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 			assert.NoError(t, err)
 			req.Header.Add("Dapr-Reentrancy-Id", id)
-			_, err = client.Do(req)
-			errCh <- err
+			resp, err := client.Do(req)
+			errCh <- errors.Join(err, resp.Body.Close())
 		}()
 	}
 
@@ -117,7 +118,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 
 	url := fmt.Sprintf("http://%s/v1.0/actors/abc/123/method/foo", h.app.Daprd().HTTPAddress())
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	req.Header.Add("Dapr-Reentrancy-Id", id)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
@@ -125,6 +126,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Equal(t, `{"errorCode":"ERR_ACTOR_STACK_DEPTH","message":"maximum stack depth exceeded"}`, string(b))
+	require.NoError(t, resp.Body.Close())
 
 	for range 23 {
 		h.holdCall <- struct{}{}

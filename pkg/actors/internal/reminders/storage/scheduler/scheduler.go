@@ -24,7 +24,6 @@ import (
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
-	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/migration"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/table"
@@ -56,7 +55,6 @@ type scheduler struct {
 	table         table.Interface
 	stateReminder storage.Interface
 	htarget       healthz.Target
-	placement     placement.Interface
 }
 
 func New(opts Options) storage.Interface {

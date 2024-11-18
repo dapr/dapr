@@ -47,6 +47,7 @@ func getMetadata(t require.TestingT, ctx context.Context, client *http.Client, p
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
+	//nolint:testifylint
 	if !assert.NoError(t, err) {
 		return res
 	}

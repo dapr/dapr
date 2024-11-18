@@ -21,13 +21,14 @@ import (
 	"sync/atomic"
 	"time"
 
+	"k8s.io/utils/clock"
+
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/internal/timers"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
-	"k8s.io/utils/clock"
 )
 
 var log = logger.NewLogger("dapr.runtime.actors.timers.inmemory")

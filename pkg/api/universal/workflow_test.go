@@ -20,12 +20,12 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/dapr/components-contrib/workflows"
-	"github.com/dapr/dapr/pkg/config"
+	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
-	"github.com/dapr/dapr/pkg/runtime/wfengine"
+	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	"github.com/dapr/kit/logger"
 )
@@ -115,10 +115,9 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
 		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		workflowEngine: wfenginefake.New(),
+		actors:         actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -190,10 +189,9 @@ func TestGetWorkflowBeta1API(t *testing.T) {
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
 		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		workflowEngine: wfenginefake.New(),
+		actors:         actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -264,10 +262,9 @@ func TestTerminateWorkflowBeta1API(t *testing.T) {
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
 		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		workflowEngine: wfenginefake.New(),
+		actors:         actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -353,10 +350,9 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
 		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		workflowEngine: wfenginefake.New(),
+		actors:         actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -429,10 +425,9 @@ func TestPauseWorkflowBeta1Api(t *testing.T) {
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
 		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		workflowEngine: wfenginefake.New(),
+		actors:         actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -503,10 +498,9 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
 		compStore:      compStore,
-		actorsReadyCh:  make(chan struct{}),
-		workflowEngine: getWorkflowEngine(),
+		workflowEngine: wfenginefake.New(),
+		actors:         actorsfake.New(),
 	}
-	fakeAPI.SetActorsInitDone()
 
 	for _, tt := range testCases {
 		t.Run(tt.testName, func(t *testing.T) {
@@ -523,11 +517,4 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 			}
 		})
 	}
-}
-
-func getWorkflowEngine() *wfengine.WorkflowEngine {
-	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
-	wfengine := wfengine.NewWorkflowEngine("testAppID", spec, nil)
-	wfengine.SetWorkflowEngineReadyDone()
-	return wfengine
 }

@@ -15,6 +15,7 @@ package chain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	nethttp "net/http"
 	"sync/atomic"
@@ -83,8 +84,9 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		url := fmt.Sprintf("http://%s/v1.0/actors/abc/%d/method/foo", h.app2.Daprd().HTTPAddress(), i.Add(1))
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 		require.NoError(t, err)
-		_, err = client.Do(req)
+		resp, err := client.Do(req)
 		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
 		if h.called.Load() == 1 {
 			break
 		}
@@ -94,8 +96,9 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		url := fmt.Sprintf("http://%s/v1.0/actors/abc/%d/method/foo", h.app2.Daprd().HTTPAddress(), j.Add(1))
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 		require.NoError(t, err)
-		_, err = client.Do(req)
+		resp, err := client.Do(req)
 		require.NoError(t, err)
+		require.NoError(t, resp.Body.Close())
 		if h.called.Load() == 2 {
 			break
 		}
@@ -105,9 +108,9 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	go func() {
 		url := fmt.Sprintf("http://%s/v1.0/actors/abc/%d/method/foo", h.app2.Daprd().HTTPAddress(), i.Load())
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
-		require.NoError(t, err)
-		_, err = client.Do(req)
-		errCh <- err
+		assert.NoError(t, err)
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -119,9 +122,9 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	go func() {
 		url := fmt.Sprintf("http://%s/v1.0/actors/abc/%d/method/bar", h.app2.Daprd().HTTPAddress(), j.Load())
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
-		require.NoError(t, err)
-		_, err = client.Do(req)
-		errCh <- err
+		assert.NoError(t, err)
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -134,9 +137,9 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	go func() {
 		url := fmt.Sprintf("http://%s/v1.0/actors/abc/%d/method/foo", h.app2.Daprd().HTTPAddress(), i.Load())
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
-		require.NoError(t, err)
-		_, err = client.Do(req)
-		errCh <- err
+		assert.NoError(t, err)
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	time.Sleep(time.Second)

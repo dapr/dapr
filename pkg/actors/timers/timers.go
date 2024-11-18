@@ -17,14 +17,12 @@ import (
 	"context"
 	"fmt"
 
+	"k8s.io/utils/clock"
+
 	"github.com/dapr/dapr/pkg/actors/api"
 	internaltimers "github.com/dapr/dapr/pkg/actors/internal/timers"
 	"github.com/dapr/dapr/pkg/actors/table"
-	"github.com/dapr/kit/logger"
-	"k8s.io/utils/clock"
 )
-
-var log = logger.NewLogger("dapr.runtime.actors.timers")
 
 type Interface interface {
 	Create(ctx context.Context, req *api.CreateTimerRequest) error

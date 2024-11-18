@@ -23,11 +23,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/assert"
 )
 
 func init() {
@@ -111,6 +112,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		resp, err := client.Do(req)
 		assert.NoError(t, err)
 		assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+		assert.NoError(t, resp.Body.Close())
 
 		url = fmt.Sprintf("http://%s/v1.0/actors/abc/%d/timers/foo", h.app1.Daprd().HTTPAddress(), i.Load())
 		req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader(body))
@@ -120,6 +122,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
 		assert.Positive(c, h.called1.Load())
 		assert.Positive(c, h.called2.Load())
+		assert.NoError(t, resp.Body.Close())
 	}, time.Second*10, 1)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {

@@ -1,0 +1,610 @@
+=== RUN   TestRegisterActorReminder
+=== RUN   TestRegisterActorReminder/actors_not_initialized
+    actor_test.go:45: 
+        	Error Trace:	/home/josh/go/src/github.com/dapr/dapr/pkg/api/grpc/actor_test.go:45
+        	Error:      	Not equal: 
+        	            	expected: 0xd
+        	            	actual  : 0x0
+        	Test:       	TestRegisterActorReminder/actors_not_initialized
+--- FAIL: TestRegisterActorReminder (0.01s)
+    --- FAIL: TestRegisterActorReminder/actors_not_initialized (0.01s)
+=== RUN   TestUnregisterActorTimer
+=== RUN   TestUnregisterActorTimer/actors_not_initialized
+    actor_test.go:65: 
+        	Error Trace:	/home/josh/go/src/github.com/dapr/dapr/pkg/api/grpc/actor_test.go:65
+        	Error:      	Not equal: 
+        	            	expected: 0xd
+        	            	actual  : 0x0
+        	Test:       	TestUnregisterActorTimer/actors_not_initialized
+--- FAIL: TestUnregisterActorTimer (0.00s)
+    --- FAIL: TestUnregisterActorTimer/actors_not_initialized (0.00s)
+=== RUN   TestCryptoAlpha1
+=== RUN   TestCryptoAlpha1/data_and_options_in_single_chunk
+=== RUN   TestCryptoAlpha1/data_and_options_in_single_chunk/encrypt
+=== RUN   TestCryptoAlpha1/data_and_options_in_single_chunk/decrypt
+=== RUN   TestCryptoAlpha1/one_data_chunk
+=== RUN   TestCryptoAlpha1/one_data_chunk/encrypt
+=== RUN   TestCryptoAlpha1/one_data_chunk/decrypt
+=== RUN   TestCryptoAlpha1/multiple_data_chunks
+=== RUN   TestCryptoAlpha1/multiple_data_chunks/encrypt
+=== RUN   TestCryptoAlpha1/multiple_data_chunks/decrypt_-_whole_header_in_first_chunk
+=== RUN   TestCryptoAlpha1/multiple_data_chunks/decrypt_-_header_split_in_multiple_chunks
+=== RUN   TestCryptoAlpha1/encrypt_large_document
+=== RUN   TestCryptoAlpha1/decrypt_without_header
+=== RUN   TestCryptoAlpha1/invalid_sequence_number
+=== RUN   TestCryptoAlpha1/invalid_sequence_number/encrypt
+=== RUN   TestCryptoAlpha1/invalid_sequence_number/decrypt
+=== RUN   TestCryptoAlpha1/options_in_non-leading_message
+=== RUN   TestCryptoAlpha1/options_in_non-leading_message/encrypt
+=== RUN   TestCryptoAlpha1/options_in_non-leading_message/decrypt
+=== RUN   TestCryptoAlpha1/encrypt_without_required_options
+=== RUN   TestCryptoAlpha1/encrypt_without_required_options/missing_options
+=== RUN   TestCryptoAlpha1/encrypt_without_required_options/missing_component_name
+=== RUN   TestCryptoAlpha1/encrypt_without_required_options/missing_key_name
+=== RUN   TestCryptoAlpha1/encrypt_without_required_options/missing_algorithm
+=== RUN   TestCryptoAlpha1/decrypt_without_required_options
+=== RUN   TestCryptoAlpha1/decrypt_without_required_options/missing_options
+=== RUN   TestCryptoAlpha1/decrypt_without_required_options/missing_component_name
+=== RUN   TestCryptoAlpha1/time_out_while_waiting_for_first_chunk
+=== RUN   TestCryptoAlpha1/time_out_while_waiting_for_first_chunk/encrypt
+=== RUN   TestCryptoAlpha1/time_out_while_waiting_for_first_chunk/decrypt
+--- PASS: TestCryptoAlpha1 (10.04s)
+    --- PASS: TestCryptoAlpha1/data_and_options_in_single_chunk (0.01s)
+        --- PASS: TestCryptoAlpha1/data_and_options_in_single_chunk/encrypt (0.00s)
+        --- PASS: TestCryptoAlpha1/data_and_options_in_single_chunk/decrypt (0.00s)
+    --- PASS: TestCryptoAlpha1/one_data_chunk (0.00s)
+        --- PASS: TestCryptoAlpha1/one_data_chunk/encrypt (0.00s)
+        --- PASS: TestCryptoAlpha1/one_data_chunk/decrypt (0.00s)
+    --- PASS: TestCryptoAlpha1/multiple_data_chunks (0.00s)
+        --- PASS: TestCryptoAlpha1/multiple_data_chunks/encrypt (0.00s)
+        --- PASS: TestCryptoAlpha1/multiple_data_chunks/decrypt_-_whole_header_in_first_chunk (0.00s)
+        --- PASS: TestCryptoAlpha1/multiple_data_chunks/decrypt_-_header_split_in_multiple_chunks (0.00s)
+    --- PASS: TestCryptoAlpha1/encrypt_large_document (0.01s)
+    --- PASS: TestCryptoAlpha1/decrypt_without_header (0.00s)
+    --- PASS: TestCryptoAlpha1/invalid_sequence_number (0.01s)
+        --- PASS: TestCryptoAlpha1/invalid_sequence_number/encrypt (0.00s)
+        --- PASS: TestCryptoAlpha1/invalid_sequence_number/decrypt (0.01s)
+    --- PASS: TestCryptoAlpha1/options_in_non-leading_message (0.00s)
+        --- PASS: TestCryptoAlpha1/options_in_non-leading_message/encrypt (0.00s)
+        --- PASS: TestCryptoAlpha1/options_in_non-leading_message/decrypt (0.00s)
+    --- PASS: TestCryptoAlpha1/encrypt_without_required_options (0.00s)
+        --- PASS: TestCryptoAlpha1/encrypt_without_required_options/missing_options (0.00s)
+        --- PASS: TestCryptoAlpha1/encrypt_without_required_options/missing_component_name (0.00s)
+        --- PASS: TestCryptoAlpha1/encrypt_without_required_options/missing_key_name (0.00s)
+        --- PASS: TestCryptoAlpha1/encrypt_without_required_options/missing_algorithm (0.00s)
+    --- PASS: TestCryptoAlpha1/decrypt_without_required_options (0.00s)
+        --- PASS: TestCryptoAlpha1/decrypt_without_required_options/missing_options (0.00s)
+        --- PASS: TestCryptoAlpha1/decrypt_without_required_options/missing_component_name (0.00s)
+    --- PASS: TestCryptoAlpha1/time_out_while_waiting_for_first_chunk (10.01s)
+        --- PASS: TestCryptoAlpha1/time_out_while_waiting_for_first_chunk/encrypt (5.00s)
+        --- PASS: TestCryptoAlpha1/time_out_while_waiting_for_first_chunk/decrypt (5.00s)
+=== RUN   TestCallLocal
+=== RUN   TestCallLocal/appchannel_is_not_ready
+=== RUN   TestCallLocal/parsing_InternalInvokeRequest_is_failed
+=== RUN   TestCallLocal/invokemethod_returns_error
+--- PASS: TestCallLocal (0.01s)
+    --- PASS: TestCallLocal/appchannel_is_not_ready (0.00s)
+    --- PASS: TestCallLocal/parsing_InternalInvokeRequest_is_failed (0.00s)
+    --- PASS: TestCallLocal/invokemethod_returns_error (0.00s)
+=== RUN   TestCallLocalStream
+=== RUN   TestCallLocalStream/appchannel_is_not_ready
+=== RUN   TestCallLocalStream/parsing_InternalInvokeRequest_is_failed
+=== RUN   TestCallLocalStream/invokemethod_returns_error
+--- PASS: TestCallLocalStream (0.01s)
+    --- PASS: TestCallLocalStream/appchannel_is_not_ready (0.00s)
+    --- PASS: TestCallLocalStream/parsing_InternalInvokeRequest_is_failed (0.00s)
+    --- PASS: TestCallLocalStream/invokemethod_returns_error (0.00s)
+=== RUN   TestCallRemoteAppWithTracing
+--- PASS: TestCallRemoteAppWithTracing (0.00s)
+=== RUN   TestCallActorWithTracing
+--- PASS: TestCallActorWithTracing (0.00s)
+=== RUN   TestEndpointCompleteness
+--- PASS: TestEndpointCompleteness (0.00s)
+=== RUN   TestSetAPIEndpointsMiddleware
+=== RUN   TestSetAPIEndpointsMiddleware/jobs.v1alpha1_endpoints_allowed
+=== RUN   TestSetAPIEndpointsMiddleware/state.v1_endpoints_allowed
+=== RUN   TestSetAPIEndpointsMiddleware/state.v1_endpoints_denied
+=== RUN   TestSetAPIEndpointsMiddleware/state.v1alpha1_endpoints_allowed
+=== RUN   TestSetAPIEndpointsMiddleware/publish_endpoints_allowed
+=== RUN   TestSetAPIEndpointsMiddleware/actors_endpoints_allowed
+=== RUN   TestSetAPIEndpointsMiddleware/bindings_endpoints_allowed
+=== RUN   TestSetAPIEndpointsMiddleware/secrets_endpoints_allowed
+=== RUN   TestSetAPIEndpointsMiddleware/metadata_endpoints_allowed
+=== RUN   TestSetAPIEndpointsMiddleware/shutdown_endpoints_allowed
+=== RUN   TestSetAPIEndpointsMiddleware/invoke_endpoints_allowed
+=== RUN   TestSetAPIEndpointsMiddleware/non-Dapr_runtime_APIs_are_always_allowed
+=== RUN   TestSetAPIEndpointsMiddleware/no_rules,_middlewares_are_nil
+=== RUN   TestSetAPIEndpointsMiddleware/protocol_mismatch,_middlewares_are_nil
+=== RUN   TestSetAPIEndpointsMiddleware/non-overlapping_allowlist_and_denylist
+=== RUN   TestSetAPIEndpointsMiddleware/overlapping_allowlist_and_denylist
+--- PASS: TestSetAPIEndpointsMiddleware (0.03s)
+    --- PASS: TestSetAPIEndpointsMiddleware/jobs.v1alpha1_endpoints_allowed (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/state.v1_endpoints_allowed (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/state.v1_endpoints_denied (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/state.v1alpha1_endpoints_allowed (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/publish_endpoints_allowed (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/actors_endpoints_allowed (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/bindings_endpoints_allowed (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/secrets_endpoints_allowed (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/metadata_endpoints_allowed (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/shutdown_endpoints_allowed (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/invoke_endpoints_allowed (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/non-Dapr_runtime_APIs_are_always_allowed (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/no_rules,_middlewares_are_nil (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/protocol_mismatch,_middlewares_are_nil (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/non-overlapping_allowlist_and_denylist (0.00s)
+    --- PASS: TestSetAPIEndpointsMiddleware/overlapping_allowlist_and_denylist (0.00s)
+=== RUN   TestAPIToken
+=== RUN   TestAPIToken/valid_token
+=== RUN   TestAPIToken/valid_token/unary
+time="2024-11-18T18:15:42.426531873-03:00" level=warning msg="[DEPRECATION NOTICE] InvokeService is deprecated and will be removed in the future, please use proxy mode instead." instance=purple scope=dapr.runtime.grpc.api type=log ver=unknown
+time="2024-11-18T18:15:42.427085446-03:00" level=warning msg="[DEPRECATION NOTICE] Invocation path of gRPC -> HTTP is deprecated and will be removed in the future." instance=purple scope=dapr.runtime.grpc.api type=log ver=unknown
+=== RUN   TestAPIToken/valid_token/stream
+=== RUN   TestAPIToken/invalid_token
+=== RUN   TestAPIToken/invalid_token/unary
+=== RUN   TestAPIToken/invalid_token/stream
+=== RUN   TestAPIToken/missing_token
+=== RUN   TestAPIToken/missing_token/unary
+=== RUN   TestAPIToken/missing_token/stream
+--- PASS: TestAPIToken (0.01s)
+    --- PASS: TestAPIToken/valid_token (0.00s)
+        --- PASS: TestAPIToken/valid_token/unary (0.00s)
+        --- PASS: TestAPIToken/valid_token/stream (0.00s)
+    --- PASS: TestAPIToken/invalid_token (0.00s)
+        --- PASS: TestAPIToken/invalid_token/unary (0.00s)
+        --- PASS: TestAPIToken/invalid_token/stream (0.00s)
+    --- PASS: TestAPIToken/missing_token (0.00s)
+        --- PASS: TestAPIToken/missing_token/unary (0.00s)
+        --- PASS: TestAPIToken/missing_token/stream (0.00s)
+=== RUN   TestInvokeServiceFromHTTPResponse
+=== RUN   TestInvokeServiceFromHTTPResponse/handle_http_200_response_code
+=== RUN   TestInvokeServiceFromHTTPResponse/handle_http_201_response_code
+=== RUN   TestInvokeServiceFromHTTPResponse/handle_http_204_response_code
+=== RUN   TestInvokeServiceFromHTTPResponse/handle_http_404_response_code
+--- PASS: TestInvokeServiceFromHTTPResponse (0.01s)
+    --- PASS: TestInvokeServiceFromHTTPResponse/handle_http_200_response_code (0.00s)
+    --- PASS: TestInvokeServiceFromHTTPResponse/handle_http_201_response_code (0.00s)
+    --- PASS: TestInvokeServiceFromHTTPResponse/handle_http_204_response_code (0.00s)
+    --- PASS: TestInvokeServiceFromHTTPResponse/handle_http_404_response_code (0.00s)
+=== RUN   TestInvokeServiceFromGRPCResponse
+=== RUN   TestInvokeServiceFromGRPCResponse/handle_grpc_response_code
+--- PASS: TestInvokeServiceFromGRPCResponse (0.00s)
+    --- PASS: TestInvokeServiceFromGRPCResponse/handle_grpc_response_code (0.00s)
+=== RUN   TestSecretStoreNotConfigured
+--- PASS: TestSecretStoreNotConfigured (0.00s)
+=== RUN   TestGetSecret
+=== RUN   TestGetSecret/Good_Key_from_unrestricted_store
+=== RUN   TestGetSecret/Good_Key_default_access
+=== RUN   TestGetSecret/Good_Key_restricted_store_access
+=== RUN   TestGetSecret/Error_Key_restricted_store_access
+=== RUN   TestGetSecret/Random_Key_restricted_store_access
+=== RUN   TestGetSecret/Random_Key_accessing_a_store_denied_access_by_default
+=== RUN   TestGetSecret/Random_Key_accessing_a_store_denied_access_by_default#01
+=== RUN   TestGetSecret/Store_doesn't_exist
+--- PASS: TestGetSecret (0.00s)
+    --- PASS: TestGetSecret/Good_Key_from_unrestricted_store (0.00s)
+    --- PASS: TestGetSecret/Good_Key_default_access (0.00s)
+    --- PASS: TestGetSecret/Good_Key_restricted_store_access (0.00s)
+    --- PASS: TestGetSecret/Error_Key_restricted_store_access (0.00s)
+    --- PASS: TestGetSecret/Random_Key_restricted_store_access (0.00s)
+    --- PASS: TestGetSecret/Random_Key_accessing_a_store_denied_access_by_default (0.00s)
+    --- PASS: TestGetSecret/Random_Key_accessing_a_store_denied_access_by_default#01 (0.00s)
+    --- PASS: TestGetSecret/Store_doesn't_exist (0.00s)
+=== RUN   TestGetBulkSecret
+=== RUN   TestGetBulkSecret/Good_Key_from_unrestricted_store
+--- PASS: TestGetBulkSecret (0.00s)
+    --- PASS: TestGetBulkSecret/Good_Key_from_unrestricted_store (0.00s)
+=== RUN   TestGetStateWhenStoreNotConfigured
+--- PASS: TestGetStateWhenStoreNotConfigured (0.00s)
+=== RUN   TestSaveState
+=== RUN   TestSaveState/save_state_with_non-existing_store
+=== RUN   TestSaveState/single_-_save_state
+=== RUN   TestSaveState/single_-_save_state_but_error_occurs
+=== RUN   TestSaveState/single_-_save_state_with_etag_mismatch
+=== RUN   TestSaveState/single_-_save_state_with_etag_invalid
+=== RUN   TestSaveState/multi_-_save_state
+=== RUN   TestSaveState/multi_-_save_state_with_etag_mismatch
+=== RUN   TestSaveState/multi_-_save_state_with_etag_mismatch_and_etag_invalid
+--- PASS: TestSaveState (0.01s)
+    --- PASS: TestSaveState/save_state_with_non-existing_store (0.00s)
+    --- PASS: TestSaveState/single_-_save_state (0.00s)
+    --- PASS: TestSaveState/single_-_save_state_but_error_occurs (0.00s)
+    --- PASS: TestSaveState/single_-_save_state_with_etag_mismatch (0.00s)
+    --- PASS: TestSaveState/single_-_save_state_with_etag_invalid (0.00s)
+    --- PASS: TestSaveState/multi_-_save_state (0.00s)
+    --- PASS: TestSaveState/multi_-_save_state_with_etag_mismatch (0.00s)
+    --- PASS: TestSaveState/multi_-_save_state_with_etag_mismatch_and_etag_invalid (0.00s)
+=== RUN   TestGetState
+=== RUN   TestGetState/get_state
+=== RUN   TestGetState/get_store_with_non-existing_store
+=== RUN   TestGetState/get_store_with_key_but_error_occurs
+--- PASS: TestGetState (0.00s)
+    --- PASS: TestGetState/get_state (0.00s)
+    --- PASS: TestGetState/get_store_with_non-existing_store (0.00s)
+    --- PASS: TestGetState/get_store_with_key_but_error_occurs (0.00s)
+=== RUN   TestGetConfiguration
+=== RUN   TestGetConfiguration/get_state-alpha1
+=== RUN   TestGetConfiguration/get_state
+=== RUN   TestGetConfiguration/get_state-alpha1#01
+=== RUN   TestGetConfiguration/get_state#01
+=== RUN   TestGetConfiguration/get_store_with_non-existing_store-alpha1
+=== RUN   TestGetConfiguration/get_store_with_non-existing_store
+=== RUN   TestGetConfiguration/get_store_with_key_but_error_occurs-alpha1
+=== RUN   TestGetConfiguration/get_store_with_key_but_error_occurs
+--- PASS: TestGetConfiguration (0.01s)
+    --- PASS: TestGetConfiguration/get_state-alpha1 (0.00s)
+    --- PASS: TestGetConfiguration/get_state (0.00s)
+    --- PASS: TestGetConfiguration/get_state-alpha1#01 (0.00s)
+    --- PASS: TestGetConfiguration/get_state#01 (0.00s)
+    --- PASS: TestGetConfiguration/get_store_with_non-existing_store-alpha1 (0.00s)
+    --- PASS: TestGetConfiguration/get_store_with_non-existing_store (0.00s)
+    --- PASS: TestGetConfiguration/get_store_with_key_but_error_occurs-alpha1 (0.00s)
+    --- PASS: TestGetConfiguration/get_store_with_key_but_error_occurs (0.00s)
+=== RUN   TestSubscribeConfiguration
+=== RUN   TestSubscribeConfiguration/get_store_with_single_key-alpha1
+=== RUN   TestSubscribeConfiguration/get_store_with_single_key
+=== RUN   TestSubscribeConfiguration/get_store_with_non-existing_store-alpha1
+=== RUN   TestSubscribeConfiguration/get_store_with_non-existing_store
+=== RUN   TestSubscribeConfiguration/get_store_with_key_but_error_occurs-alpha1
+=== RUN   TestSubscribeConfiguration/get_store_with_key_but_error_occurs
+=== RUN   TestSubscribeConfiguration/get_store_with_multi_keys-alpha1
+=== RUN   TestSubscribeConfiguration/get_store_with_multi_keys
+--- PASS: TestSubscribeConfiguration (0.01s)
+    --- PASS: TestSubscribeConfiguration/get_store_with_single_key-alpha1 (0.00s)
+    --- PASS: TestSubscribeConfiguration/get_store_with_single_key (0.00s)
+    --- PASS: TestSubscribeConfiguration/get_store_with_non-existing_store-alpha1 (0.00s)
+    --- PASS: TestSubscribeConfiguration/get_store_with_non-existing_store (0.00s)
+    --- PASS: TestSubscribeConfiguration/get_store_with_key_but_error_occurs-alpha1 (0.00s)
+    --- PASS: TestSubscribeConfiguration/get_store_with_key_but_error_occurs (0.00s)
+    --- PASS: TestSubscribeConfiguration/get_store_with_multi_keys-alpha1 (0.00s)
+    --- PASS: TestSubscribeConfiguration/get_store_with_multi_keys (0.00s)
+=== RUN   TestUnSubscribeConfiguration
+=== RUN   TestUnSubscribeConfiguration/Test_unsubscribe-alpha1
+time="2024-11-18T18:15:42.520589837-03:00" level=warning msg="Unsubscribing using UnsubscribeConfiguration is deprecated. Disconnect from the SubscribeConfiguration RPC instead." instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestUnSubscribeConfiguration/Test_unsubscribe
+time="2024-11-18T18:15:42.599607801-03:00" level=warning msg="Unsubscribing using UnsubscribeConfiguration is deprecated. Disconnect from the SubscribeConfiguration RPC instead." instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestUnSubscribeConfiguration/Test_unsubscribe_with_multi_keys-alpha1
+time="2024-11-18T18:15:42.677437122-03:00" level=warning msg="Unsubscribing using UnsubscribeConfiguration is deprecated. Disconnect from the SubscribeConfiguration RPC instead." instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestUnSubscribeConfiguration/Test_unsubscribe_with_multi_keys
+time="2024-11-18T18:15:42.753293314-03:00" level=warning msg="Unsubscribing using UnsubscribeConfiguration is deprecated. Disconnect from the SubscribeConfiguration RPC instead." instance=purple scope=grpc.api.test type=log ver=unknown
+--- PASS: TestUnSubscribeConfiguration (0.30s)
+    --- PASS: TestUnSubscribeConfiguration/Test_unsubscribe-alpha1 (0.08s)
+    --- PASS: TestUnSubscribeConfiguration/Test_unsubscribe (0.08s)
+    --- PASS: TestUnSubscribeConfiguration/Test_unsubscribe_with_multi_keys-alpha1 (0.08s)
+    --- PASS: TestUnSubscribeConfiguration/Test_unsubscribe_with_multi_keys (0.07s)
+=== RUN   TestUnsubscribeConfigurationErrScenario
+=== RUN   TestUnsubscribeConfigurationErrScenario/Test_unsubscribe-alpha1
+=== RUN   TestUnsubscribeConfigurationErrScenario/Test_unsubscribe
+--- PASS: TestUnsubscribeConfigurationErrScenario (0.00s)
+    --- PASS: TestUnsubscribeConfigurationErrScenario/Test_unsubscribe-alpha1 (0.00s)
+    --- PASS: TestUnsubscribeConfigurationErrScenario/Test_unsubscribe (0.00s)
+=== RUN   TestGetBulkState
+=== RUN   TestGetBulkState/get_state
+=== RUN   TestGetBulkState/get_store_with_non-existing_store
+=== RUN   TestGetBulkState/get_store_with_key_but_error_occurs
+=== RUN   TestGetBulkState/get_store_with_empty_keys
+--- PASS: TestGetBulkState (0.00s)
+    --- PASS: TestGetBulkState/get_state (0.00s)
+    --- PASS: TestGetBulkState/get_store_with_non-existing_store (0.00s)
+    --- PASS: TestGetBulkState/get_store_with_key_but_error_occurs (0.00s)
+    --- PASS: TestGetBulkState/get_store_with_empty_keys (0.00s)
+=== RUN   TestDeleteState
+=== RUN   TestDeleteState/delete_state
+=== RUN   TestDeleteState/delete_state_with_non-existing_store
+=== RUN   TestDeleteState/delete_state_with_key_but_error_occurs
+=== RUN   TestDeleteState/delete_state_with_etag_mismatch
+=== RUN   TestDeleteState/delete_state_with_etag_invalid
+--- PASS: TestDeleteState (0.01s)
+    --- PASS: TestDeleteState/delete_state (0.00s)
+    --- PASS: TestDeleteState/delete_state_with_non-existing_store (0.00s)
+    --- PASS: TestDeleteState/delete_state_with_key_but_error_occurs (0.00s)
+    --- PASS: TestDeleteState/delete_state_with_etag_mismatch (0.00s)
+    --- PASS: TestDeleteState/delete_state_with_etag_invalid (0.00s)
+=== RUN   TestDeleteBulkState
+=== RUN   TestDeleteBulkState/delete_state_with_non-existing_store
+=== RUN   TestDeleteBulkState/delete_state
+=== RUN   TestDeleteBulkState/delete_state_with_etag_mismatch
+=== RUN   TestDeleteBulkState/delete_state_with_etag_mismatch_and_etag_invalid
+--- PASS: TestDeleteBulkState (0.00s)
+    --- PASS: TestDeleteBulkState/delete_state_with_non-existing_store (0.00s)
+    --- PASS: TestDeleteBulkState/delete_state (0.00s)
+    --- PASS: TestDeleteBulkState/delete_state_with_etag_mismatch (0.00s)
+    --- PASS: TestDeleteBulkState/delete_state_with_etag_mismatch_and_etag_invalid (0.00s)
+=== RUN   TestPublishTopic
+=== RUN   TestPublishTopic/err:_empty_publish_event_request
+=== RUN   TestPublishTopic/err:_publish_event_request_with_empty_topic
+=== RUN   TestPublishTopic/no_err:_publish_event_request_with_topic_and_pubsub_alone
+=== RUN   TestPublishTopic/no_err:_publish_event_request_with_topic,_pubsub_and_ce_metadata_override
+=== RUN   TestPublishTopic/err:_publish_event_request_with_error-topic_and_pubsub
+=== RUN   TestPublishTopic/err:_publish_event_request_with_err-not-found_topic_and_pubsub
+=== RUN   TestPublishTopic/err:_publish_event_request_with_err-not-allowed_topic_and_pubsub
+=== RUN   TestPublishTopic/err:_empty_bulk_publish_event_request
+=== RUN   TestPublishTopic/err:_bulk_publish_event_request_with_duplicate_entry_Ids
+=== RUN   TestPublishTopic/err:_bulk_publish_event_request_with_missing_entry_Ids
+=== RUN   TestPublishTopic/err:_bulk_publish_event_request_with_pubsub_and_empty_topic
+=== RUN   TestPublishTopic/no_err:_bulk_publish_event_request_with_pubsub,_topic_and_empty_entries
+=== RUN   TestPublishTopic/err:_bulk_publish_event_request_with_error-topic_and_pubsub
+=== RUN   TestPublishTopic/err:_bulk_publish_event_request_with_err-not-found_topic_and_pubsub
+=== RUN   TestPublishTopic/err:_bulk_publish_event_request_with_err-not-allowed_topic_and_pubsub
+--- PASS: TestPublishTopic (0.01s)
+    --- PASS: TestPublishTopic/err:_empty_publish_event_request (0.00s)
+    --- PASS: TestPublishTopic/err:_publish_event_request_with_empty_topic (0.00s)
+    --- PASS: TestPublishTopic/no_err:_publish_event_request_with_topic_and_pubsub_alone (0.00s)
+    --- PASS: TestPublishTopic/no_err:_publish_event_request_with_topic,_pubsub_and_ce_metadata_override (0.00s)
+    --- PASS: TestPublishTopic/err:_publish_event_request_with_error-topic_and_pubsub (0.00s)
+    --- PASS: TestPublishTopic/err:_publish_event_request_with_err-not-found_topic_and_pubsub (0.00s)
+    --- PASS: TestPublishTopic/err:_publish_event_request_with_err-not-allowed_topic_and_pubsub (0.00s)
+    --- PASS: TestPublishTopic/err:_empty_bulk_publish_event_request (0.00s)
+    --- PASS: TestPublishTopic/err:_bulk_publish_event_request_with_duplicate_entry_Ids (0.00s)
+    --- PASS: TestPublishTopic/err:_bulk_publish_event_request_with_missing_entry_Ids (0.00s)
+    --- PASS: TestPublishTopic/err:_bulk_publish_event_request_with_pubsub_and_empty_topic (0.00s)
+    --- PASS: TestPublishTopic/no_err:_bulk_publish_event_request_with_pubsub,_topic_and_empty_entries (0.00s)
+    --- PASS: TestPublishTopic/err:_bulk_publish_event_request_with_error-topic_and_pubsub (0.00s)
+    --- PASS: TestPublishTopic/err:_bulk_publish_event_request_with_err-not-found_topic_and_pubsub (0.00s)
+    --- PASS: TestPublishTopic/err:_bulk_publish_event_request_with_err-not-allowed_topic_and_pubsub (0.00s)
+=== RUN   TestBulkPublish
+=== RUN   TestBulkPublish/no_failures
+=== RUN   TestBulkPublish/no_failures_with_ce_metadata_override
+=== RUN   TestBulkPublish/all_failures_from_component
+    grpc_test.go:2636: failedEntries:{entry_id:"1"  error:"error on publish"}  failedEntries:{entry_id:"2"  error:"error on publish"}  failedEntries:{entry_id:"3"  error:"error on publish"}  failedEntries:{entry_id:"4"  error:"error on publish"}
+=== RUN   TestBulkPublish/partial_failures_from_component
+--- PASS: TestBulkPublish (0.01s)
+    --- PASS: TestBulkPublish/no_failures (0.00s)
+    --- PASS: TestBulkPublish/no_failures_with_ce_metadata_override (0.00s)
+    --- PASS: TestBulkPublish/all_failures_from_component (0.00s)
+    --- PASS: TestBulkPublish/partial_failures_from_component (0.00s)
+=== RUN   TestInvokeBinding
+--- PASS: TestInvokeBinding (0.00s)
+=== RUN   TestTransactionStateStoreNotConfigured
+--- PASS: TestTransactionStateStoreNotConfigured (0.00s)
+=== RUN   TestTransactionStateStoreNotImplemented
+--- PASS: TestTransactionStateStoreNotImplemented (0.00s)
+=== RUN   TestExecuteStateTransaction
+=== RUN   TestExecuteStateTransaction/upsert_operation
+=== RUN   TestExecuteStateTransaction/delete_operation
+=== RUN   TestExecuteStateTransaction/unknown_operation
+=== RUN   TestExecuteStateTransaction/error_occurs_when_multi_execute
+=== RUN   TestExecuteStateTransaction/fails_with_too_many_operations
+--- PASS: TestExecuteStateTransaction (0.00s)
+    --- PASS: TestExecuteStateTransaction/upsert_operation (0.00s)
+    --- PASS: TestExecuteStateTransaction/delete_operation (0.00s)
+    --- PASS: TestExecuteStateTransaction/unknown_operation (0.00s)
+    --- PASS: TestExecuteStateTransaction/error_occurs_when_multi_execute (0.00s)
+    --- PASS: TestExecuteStateTransaction/fails_with_too_many_operations (0.00s)
+=== RUN   TestStateStoreErrors
+=== RUN   TestStateStoreErrors/save_etag_mismatch
+=== RUN   TestStateStoreErrors/save_etag_invalid
+=== RUN   TestStateStoreErrors/save_non_etag
+=== RUN   TestStateStoreErrors/delete_etag_mismatch
+=== RUN   TestStateStoreErrors/delete_etag_invalid
+=== RUN   TestStateStoreErrors/delete_non_etag
+=== RUN   TestStateStoreErrors/standardized_error
+--- PASS: TestStateStoreErrors (0.00s)
+    --- PASS: TestStateStoreErrors/save_etag_mismatch (0.00s)
+    --- PASS: TestStateStoreErrors/save_etag_invalid (0.00s)
+    --- PASS: TestStateStoreErrors/save_non_etag (0.00s)
+    --- PASS: TestStateStoreErrors/delete_etag_mismatch (0.00s)
+    --- PASS: TestStateStoreErrors/delete_etag_invalid (0.00s)
+    --- PASS: TestStateStoreErrors/delete_non_etag (0.00s)
+    --- PASS: TestStateStoreErrors/standardized_error (0.00s)
+=== RUN   TestExtractEtag
+=== RUN   TestExtractEtag/no_etag_present
+=== RUN   TestExtractEtag/empty_etag_exists
+=== RUN   TestExtractEtag/non-empty_etag_exists
+--- PASS: TestExtractEtag (0.00s)
+    --- PASS: TestExtractEtag/no_etag_present (0.00s)
+    --- PASS: TestExtractEtag/empty_etag_exists (0.00s)
+    --- PASS: TestExtractEtag/non-empty_etag_exists (0.00s)
+=== RUN   TestQueryState
+--- PASS: TestQueryState (0.01s)
+=== RUN   TestStateStoreQuerierNotImplemented
+--- PASS: TestStateStoreQuerierNotImplemented (0.00s)
+=== RUN   TestStateStoreQuerierEncrypted
+--- PASS: TestStateStoreQuerierEncrypted (0.00s)
+=== RUN   TestGetConfigurationAPI
+=== RUN   TestGetConfigurationAPI/get_configuration_item_-_alpha1
+=== RUN   TestGetConfigurationAPI/get_configuration_item
+--- PASS: TestGetConfigurationAPI (0.00s)
+    --- PASS: TestGetConfigurationAPI/get_configuration_item_-_alpha1 (0.00s)
+    --- PASS: TestGetConfigurationAPI/get_configuration_item (0.00s)
+=== RUN   TestSubscribeConfigurationAPI
+=== RUN   TestSubscribeConfigurationAPI/get_configuration_item_-_alpha1
+=== RUN   TestSubscribeConfigurationAPI/get_configuration_item
+=== RUN   TestSubscribeConfigurationAPI/get_all_configuration_item_for_empty_list_-_alpha1
+=== RUN   TestSubscribeConfigurationAPI/get_all_configuration_item_for_empty_list
+--- PASS: TestSubscribeConfigurationAPI (0.00s)
+    --- PASS: TestSubscribeConfigurationAPI/get_configuration_item_-_alpha1 (0.00s)
+    --- PASS: TestSubscribeConfigurationAPI/get_configuration_item (0.00s)
+    --- PASS: TestSubscribeConfigurationAPI/get_all_configuration_item_for_empty_list_-_alpha1 (0.00s)
+    --- PASS: TestSubscribeConfigurationAPI/get_all_configuration_item_for_empty_list (0.00s)
+=== RUN   TestStateAPIWithResiliency
+time="2024-11-18T18:15:42.832879517-03:00" level=info msg="Loading Resiliency configuration: " instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/get_state_request_retries_with_resiliency
+time="2024-11-18T18:15:42.839629552-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:42.85020668-03:00" level=info msg="Recovered processing operation component[failStore] output after 2 attempts" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/get_state_request_times_out_with_resiliency
+time="2024-11-18T18:15:42.952311404-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/set_state_request_retries_with_resiliency
+time="2024-11-18T18:15:43.064483311-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:43.075890215-03:00" level=info msg="Recovered processing operation component[failStore] output after 2 attempts" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/set_state_request_times_out_with_resiliency
+time="2024-11-18T18:15:43.177391999-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/delete_state_request_retries_with_resiliency
+time="2024-11-18T18:15:43.289818904-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:43.300886898-03:00" level=info msg="Recovered processing operation component[failStore] output after 2 attempts" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/delete_state_request_times_out_with_resiliency
+time="2024-11-18T18:15:43.402069772-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/bulk_state_get_fails_with_bulk_support
+time="2024-11-18T18:15:43.616401912-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/bulk_state_set_recovers_from_single_key_failure_with_resiliency
+time="2024-11-18T18:15:43.729883172-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:43.741149954-03:00" level=info msg="Recovered processing operation component[failStore] output after 2 attempts" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/bulk_state_set_times_out_with_resiliency
+time="2024-11-18T18:15:43.842366327-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/state_transaction_passes_after_retries_with_resiliency
+time="2024-11-18T18:15:43.954639985-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:43.965373111-03:00" level=info msg="Recovered processing operation component[failStore] output after 2 attempts" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/state_transaction_times_out_with_resiliency
+time="2024-11-18T18:15:44.067624009-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/state_query_retries_with_resiliency
+time="2024-11-18T18:15:44.180789825-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:44.191775737-03:00" level=info msg="Recovered processing operation component[failStore] output after 2 attempts" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestStateAPIWithResiliency/state_query_times_out_with_resiliency
+time="2024-11-18T18:15:44.293801643-03:00" level=warning msg="Error processing operation component[failStore] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+--- PASS: TestStateAPIWithResiliency (1.58s)
+    --- PASS: TestStateAPIWithResiliency/get_state_request_retries_with_resiliency (0.01s)
+    --- PASS: TestStateAPIWithResiliency/get_state_request_times_out_with_resiliency (0.21s)
+    --- PASS: TestStateAPIWithResiliency/set_state_request_retries_with_resiliency (0.01s)
+    --- PASS: TestStateAPIWithResiliency/set_state_request_times_out_with_resiliency (0.21s)
+    --- PASS: TestStateAPIWithResiliency/delete_state_request_retries_with_resiliency (0.01s)
+    --- PASS: TestStateAPIWithResiliency/delete_state_request_times_out_with_resiliency (0.21s)
+    --- PASS: TestStateAPIWithResiliency/bulk_state_get_fails_with_bulk_support (0.21s)
+    --- PASS: TestStateAPIWithResiliency/bulk_state_set_recovers_from_single_key_failure_with_resiliency (0.01s)
+    --- PASS: TestStateAPIWithResiliency/bulk_state_set_times_out_with_resiliency (0.21s)
+    --- PASS: TestStateAPIWithResiliency/state_transaction_passes_after_retries_with_resiliency (0.01s)
+    --- PASS: TestStateAPIWithResiliency/state_transaction_times_out_with_resiliency (0.21s)
+    --- PASS: TestStateAPIWithResiliency/state_query_retries_with_resiliency (0.01s)
+    --- PASS: TestStateAPIWithResiliency/state_query_times_out_with_resiliency (0.21s)
+=== RUN   TestConfigurationAPIWithResiliency
+time="2024-11-18T18:15:44.408466513-03:00" level=info msg="Loading Resiliency configuration: " instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestConfigurationAPIWithResiliency/test_get_configuration_retries_with_resiliency
+time="2024-11-18T18:15:44.415449295-03:00" level=warning msg="Error processing operation component[failConfig] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:44.425757262-03:00" level=info msg="Recovered processing operation component[failConfig] output after 2 attempts" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestConfigurationAPIWithResiliency/test_get_configuration_fails_due_to_timeout_with_resiliency
+time="2024-11-18T18:15:44.530004958-03:00" level=warning msg="Error processing operation component[failConfig] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestConfigurationAPIWithResiliency/test_subscribe_configuration_retries_with_resiliency
+time="2024-11-18T18:15:44.644096423-03:00" level=warning msg="Error processing operation component[failConfig] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:44.655441829-03:00" level=info msg="Recovered processing operation component[failConfig] output after 2 attempts" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestConfigurationAPIWithResiliency/test_subscribe_configuration_fails_due_to_timeout_with_resiliency
+time="2024-11-18T18:15:44.757817103-03:00" level=warning msg="Error processing operation component[failConfig] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+--- PASS: TestConfigurationAPIWithResiliency (0.46s)
+    --- PASS: TestConfigurationAPIWithResiliency/test_get_configuration_retries_with_resiliency (0.01s)
+    --- PASS: TestConfigurationAPIWithResiliency/test_get_configuration_fails_due_to_timeout_with_resiliency (0.22s)
+    --- PASS: TestConfigurationAPIWithResiliency/test_subscribe_configuration_retries_with_resiliency (0.01s)
+    --- PASS: TestConfigurationAPIWithResiliency/test_subscribe_configuration_fails_due_to_timeout_with_resiliency (0.21s)
+=== RUN   TestSecretAPIWithResiliency
+time="2024-11-18T18:15:44.87141891-03:00" level=info msg="Loading Resiliency configuration: " instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestSecretAPIWithResiliency/Get_secret_-_retries_on_initial_failure_with_resiliency
+time="2024-11-18T18:15:44.875237086-03:00" level=warning msg="Error processing operation component[failSecret] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:44.885942171-03:00" level=info msg="Recovered processing operation component[failSecret] output after 2 attempts" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestSecretAPIWithResiliency/Get_secret_-_timeout_before_request_ends
+time="2024-11-18T18:15:44.989836082-03:00" level=warning msg="Error processing operation component[failSecret] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestSecretAPIWithResiliency/Get_bulk_secret_-_retries_on_initial_failure_with_resiliency
+time="2024-11-18T18:15:45.105994055-03:00" level=warning msg="Error processing operation component[failSecret] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:45.116820472-03:00" level=info msg="Recovered processing operation component[failSecret] output after 2 attempts" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestSecretAPIWithResiliency/Get_bulk_secret_-_timeout_before_request_ends
+time="2024-11-18T18:15:45.220197858-03:00" level=warning msg="Error processing operation component[failSecret] output. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+--- PASS: TestSecretAPIWithResiliency (0.47s)
+    --- PASS: TestSecretAPIWithResiliency/Get_secret_-_retries_on_initial_failure_with_resiliency (0.01s)
+    --- PASS: TestSecretAPIWithResiliency/Get_secret_-_timeout_before_request_ends (0.22s)
+    --- PASS: TestSecretAPIWithResiliency/Get_bulk_secret_-_retries_on_initial_failure_with_resiliency (0.01s)
+    --- PASS: TestSecretAPIWithResiliency/Get_bulk_secret_-_timeout_before_request_ends (0.22s)
+=== RUN   TestServiceInvocationWithResiliency
+time="2024-11-18T18:15:45.337619432-03:00" level=info msg="Loading Resiliency configuration: " instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestServiceInvocationWithResiliency/Test_invoke_direct_message_retries_with_resiliency
+time="2024-11-18T18:15:45.345024956-03:00" level=warning msg="Error processing operation endpoint[failingApp, failingApp:test]. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:45.355979871-03:00" level=info msg="Recovered processing operation endpoint[failingApp, failingApp:test] after 2 attempts" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestServiceInvocationWithResiliency/Test_invoke_direct_message_fails_with_timeout
+time="2024-11-18T18:15:45.458458024-03:00" level=warning msg="Error processing operation endpoint[failingApp, failingApp:test]. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestServiceInvocationWithResiliency/Test_invoke_direct_messages_fails_after_exhausting_retries
+time="2024-11-18T18:15:45.571190022-03:00" level=warning msg="Error processing operation endpoint[failingApp, failingApp:test]. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+=== RUN   TestServiceInvocationWithResiliency/Test_invoke_direct_messages_opens_circuit_breaker_after_consecutive_failures
+time="2024-11-18T18:15:45.583543618-03:00" level=warning msg="Error processing operation endpoint[circuitBreakerApp, circuitBreakerApp:test]. Retrying in 10ms…" instance=purple scope=grpc.api.test type=log ver=unknown
+time="2024-11-18T18:15:45.62612884-03:00" level=info msg="Circuit breaker \"circuitBreakerApp:test\" changed state from closed to open" instance=purple scope=grpc.api.test type=log ver=unknown
+--- PASS: TestServiceInvocationWithResiliency (0.30s)
+    --- PASS: TestServiceInvocationWithResiliency/Test_invoke_direct_message_retries_with_resiliency (0.01s)
+    --- PASS: TestServiceInvocationWithResiliency/Test_invoke_direct_message_fails_with_timeout (0.21s)
+    --- PASS: TestServiceInvocationWithResiliency/Test_invoke_direct_messages_fails_after_exhausting_retries (0.01s)
+    --- PASS: TestServiceInvocationWithResiliency/Test_invoke_direct_messages_opens_circuit_breaker_after_consecutive_failures (0.05s)
+=== RUN   TestTryLock
+time="2024-11-18T18:15:45.6382194-03:00" level=info msg="Loading Resiliency configuration: " instance=purple scope=fakeLogger type=log ver=unknown
+=== RUN   TestTryLock/error_when_lock_store_not_configured
+=== RUN   TestTryLock/InvalidArgument:_ResourceID_empty
+=== RUN   TestTryLock/InvalidArgument:_LockOwner_empty
+=== RUN   TestTryLock/InvalidArgument:_ExpiryInSeconds_is_not_positive
+=== RUN   TestTryLock/InvalidArgument:_lock_store_not_found
+=== RUN   TestTryLock/successful
+--- PASS: TestTryLock (0.00s)
+    --- PASS: TestTryLock/error_when_lock_store_not_configured (0.00s)
+    --- PASS: TestTryLock/InvalidArgument:_ResourceID_empty (0.00s)
+    --- PASS: TestTryLock/InvalidArgument:_LockOwner_empty (0.00s)
+    --- PASS: TestTryLock/InvalidArgument:_ExpiryInSeconds_is_not_positive (0.00s)
+    --- PASS: TestTryLock/InvalidArgument:_lock_store_not_found (0.00s)
+    --- PASS: TestTryLock/successful (0.00s)
+=== RUN   TestUnlock
+time="2024-11-18T18:15:45.640754101-03:00" level=info msg="Loading Resiliency configuration: " instance=purple scope=fakeLogger type=log ver=unknown
+=== RUN   TestUnlock/error_when_lock_store_not_configured
+=== RUN   TestUnlock/InvalidArgument:_ResourceId_empty
+=== RUN   TestUnlock/InvalidArgument:_lock_owner_empty
+=== RUN   TestUnlock/InvalidArgument:_lock_store_not_found
+=== RUN   TestUnlock/successful
+--- PASS: TestUnlock (0.00s)
+    --- PASS: TestUnlock/error_when_lock_store_not_configured (0.00s)
+    --- PASS: TestUnlock/InvalidArgument:_ResourceId_empty (0.00s)
+    --- PASS: TestUnlock/InvalidArgument:_lock_owner_empty (0.00s)
+    --- PASS: TestUnlock/InvalidArgument:_lock_store_not_found (0.00s)
+    --- PASS: TestUnlock/successful (0.00s)
+=== RUN   TestMetadata
+=== RUN   TestMetadata/Set_Metadata
+=== RUN   TestMetadata/Get_Metadata
+--- PASS: TestMetadata (0.00s)
+    --- PASS: TestMetadata/Set_Metadata (0.00s)
+    --- PASS: TestMetadata/Get_Metadata (0.00s)
+=== RUN   TestGetMiddlewareOptions
+=== RUN   TestGetMiddlewareOptions/should_enable_unary_interceptor_if_tracing_and_metrics_are_enabled
+time="2024-11-18T18:15:45.646800068-03:00" level=info msg="Enabled gRPC tracing middleware" instance=purple scope=dapr.runtime.grpc.test type=log ver=unknown
+time="2024-11-18T18:15:45.646856275-03:00" level=info msg="Enabled gRPC metrics middleware" instance=purple scope=dapr.runtime.grpc.test type=log ver=unknown
+=== RUN   TestGetMiddlewareOptions/should_not_disable_middleware_even_when_SamplingRate_is_0
+time="2024-11-18T18:15:45.646961648-03:00" level=info msg="Enabled gRPC metrics middleware" instance=purple scope=dapr.runtime.grpc.test type=log ver=unknown
+=== RUN   TestGetMiddlewareOptions/should_have_api_access_rules_middleware
+time="2024-11-18T18:15:45.647069438-03:00" level=info msg="Enabled API access list on gRPC server" instance=purple scope=dapr.runtime.grpc.test type=log ver=unknown
+time="2024-11-18T18:15:45.647114187-03:00" level=info msg="Enabled gRPC metrics middleware" instance=purple scope=dapr.runtime.grpc.test type=log ver=unknown
+--- PASS: TestGetMiddlewareOptions (0.00s)
+    --- PASS: TestGetMiddlewareOptions/should_enable_unary_interceptor_if_tracing_and_metrics_are_enabled (0.00s)
+    --- PASS: TestGetMiddlewareOptions/should_not_disable_middleware_even_when_SamplingRate_is_0 (0.00s)
+    --- PASS: TestGetMiddlewareOptions/should_have_api_access_rules_middleware (0.00s)
+=== RUN   TestClose
+=== RUN   TestClose/test_close_with_api_logging_enabled
+time="2024-11-18T18:15:45.648515618-03:00" level=info msg="gRPC server listening on TCP address: 127.0.0.1:32905" instance=purple scope=dapr.runtime.grpc.api type=log ver=unknown
+time="2024-11-18T18:15:45.648559159-03:00" level=info msg="Enabled gRPC tracing middleware" instance=purple scope=dapr.runtime.grpc.api type=log ver=unknown
+time="2024-11-18T18:15:45.648586783-03:00" level=info msg="Enabled gRPC metrics middleware" instance=purple scope=dapr.runtime.grpc.api type=log ver=unknown
+time="2024-11-18T18:15:45.648710448-03:00" level=info msg="Registering workflow engine for gRPC endpoint: 127.0.0.1:32905" instance=purple scope=dapr.runtime.grpc.api type=log ver=unknown
+    network.go:14: Waiting for address "127.0.0.1:32905"
+    network.go:32: Address "127.0.0.1:32905" is ready
+=== RUN   TestClose/test_close_with_api_logging_disabled
+time="2024-11-18T18:15:45.649860592-03:00" level=info msg="gRPC server listening on TCP address: 127.0.0.1:37389" instance=purple scope=dapr.runtime.grpc.api type=log ver=unknown
+time="2024-11-18T18:15:45.649916049-03:00" level=info msg="Enabled gRPC tracing middleware" instance=purple scope=dapr.runtime.grpc.api type=log ver=unknown
+time="2024-11-18T18:15:45.649946049-03:00" level=info msg="Enabled gRPC metrics middleware" instance=purple scope=dapr.runtime.grpc.api type=log ver=unknown
+time="2024-11-18T18:15:45.650047839-03:00" level=info msg="Registering workflow engine for gRPC endpoint: 127.0.0.1:37389" instance=purple scope=dapr.runtime.grpc.api type=log ver=unknown
+    network.go:14: Waiting for address "127.0.0.1:37389"
+    network.go:32: Address "127.0.0.1:37389" is ready
+--- PASS: TestClose (0.00s)
+    --- PASS: TestClose/test_close_with_api_logging_enabled (0.00s)
+    --- PASS: TestClose/test_close_with_api_logging_disabled (0.00s)
+=== RUN   TestGrpcAPILoggingMiddlewares
+=== RUN   TestGrpcAPILoggingMiddlewares/without_user_agent
+{"code":0,"duration":0,"instance":"purple","level":"info","method":"/dapr.proto.runtime.v1.Dapr/GetState","msg":"gRPC API Called","scope":"test-api-logging","time":"2024-11-18T18:15:45.650540746-03:00","type":"log","ver":"unknown"}
+=== RUN   TestGrpcAPILoggingMiddlewares/with_user_agent
+{"code":0,"duration":0,"instance":"purple","level":"info","method":"/dapr.proto.runtime.v1.Dapr/GetState","msg":"gRPC API Called","scope":"test-api-logging","time":"2024-11-18T18:15:45.6507777-03:00","type":"log","useragent":"daprtest/1","ver":"unknown"}
+--- PASS: TestGrpcAPILoggingMiddlewares (0.00s)
+    --- PASS: TestGrpcAPILoggingMiddlewares/without_user_agent (0.00s)
+    --- PASS: TestGrpcAPILoggingMiddlewares/with_user_agent (0.00s)
+=== RUN   TestConsistency
+=== RUN   TestConsistency/valid_eventual
+=== RUN   TestConsistency/valid_strong
+=== RUN   TestConsistency/empty_when_invalid
+--- PASS: TestConsistency (0.00s)
+    --- PASS: TestConsistency/valid_eventual (0.00s)
+    --- PASS: TestConsistency/valid_strong (0.00s)
+    --- PASS: TestConsistency/empty_when_invalid (0.00s)
+=== RUN   TestConcurrency
+=== RUN   TestConcurrency/valid_first_write
+=== RUN   TestConcurrency/valid_last_write
+=== RUN   TestConcurrency/empty_when_invalid
+--- PASS: TestConcurrency (0.00s)
+    --- PASS: TestConcurrency/valid_first_write (0.00s)
+    --- PASS: TestConcurrency/valid_last_write (0.00s)
+    --- PASS: TestConcurrency/empty_when_invalid (0.00s)
+FAIL
+exit status 1
+FAIL	github.com/dapr/dapr/pkg/api/grpc	13.404s

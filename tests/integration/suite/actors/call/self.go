@@ -20,13 +20,14 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -79,14 +80,16 @@ func (s *self) Run(t *testing.T, ctx context.Context) {
 	url := fmt.Sprintf("http://%s/v1.0/actors/abc/a123/method/foo", s.app.Daprd().HTTPAddress())
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 	require.NoError(t, err)
-	_, err = hclient.Do(req)
+	resp, err := hclient.Do(req)
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, int64(2), s.abc.Load())
 
 	url = fmt.Sprintf("http://%s/v1.0/actors/efg/a123/method/foo", s.app.Daprd().HTTPAddress())
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 	require.NoError(t, err)
-	_, err = hclient.Do(req)
+	resp, err = hclient.Do(req)
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, int64(2), s.efg.Load())
 }

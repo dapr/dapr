@@ -21,6 +21,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -29,7 +30,6 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
-	"github.com/stretchr/testify/require"
 )
 
 type Actors struct {
@@ -82,7 +82,7 @@ func New(t *testing.T, fopts ...Option) *Actors {
 	if len(opts.entityConfig) > 0 {
 		b, err := json.Marshal(opts.entityConfig)
 		require.NoError(t, err)
-		config += fmt.Sprintf(`,"entitiesConfig":%s`, string(b))
+		config += `,"entitiesConfig":` + string(b)
 	}
 
 	config += "}"

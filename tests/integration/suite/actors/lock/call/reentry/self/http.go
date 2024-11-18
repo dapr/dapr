@@ -15,6 +15,7 @@ package self
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	nethttp "net/http"
 	"sync/atomic"
@@ -79,8 +80,8 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		url := fmt.Sprintf("http://%s/v1.0/actors/abc/123/method/foo", h.app.Daprd().HTTPAddress())
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 		assert.NoError(t, err)
-		_, err = client.Do(req)
-		errCh <- err
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -98,8 +99,8 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 			req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 			assert.NoError(t, err)
 			req.Header.Add("Dapr-Reentrancy-Id", id)
-			_, err = client.Do(req)
-			errCh <- err
+			resp, err := client.Do(req)
+			errCh <- errors.Join(err, resp.Body.Close())
 		}()
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -115,8 +116,8 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 			req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 			assert.NoError(t, err)
 			req.Header.Add("Dapr-Reentrancy-Id", id)
-			_, err = client.Do(req)
-			errCh <- err
+			resp, err := client.Do(req)
+			errCh <- errors.Join(err, resp.Body.Close())
 		}()
 
 		assert.EventuallyWithT(t, func(c *assert.CollectT) {

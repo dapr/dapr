@@ -45,7 +45,7 @@ type Options struct {
 	GlobalConfig                *config.Configuration
 	SchedulerClients            *clients.Clients
 	Actors                      actors.Interface
-	WorkflowEngine              *wfengine.WorkflowEngine
+	WorkflowEngine              wfengine.Interface
 }
 
 // Universal contains the implementation of gRPC APIs that are also used by the HTTP server.
@@ -60,7 +60,7 @@ type Universal struct {
 	extendedMetadata            map[string]string
 	appConnectionConfig         config.AppConnectionConfig
 	globalConfig                *config.Configuration
-	workflowEngine              *wfengine.WorkflowEngine
+	workflowEngine              wfengine.Interface
 	schedulerClients            *clients.Clients
 
 	extendedMetadataLock sync.RWMutex

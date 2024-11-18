@@ -23,12 +23,13 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd/actors"
 	"github.com/dapr/dapr/tests/integration/suite"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func init() {
@@ -75,10 +76,11 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 
 	url := fmt.Sprintf("http://%s/v1.0/actors/abc/foo/timers/foo", h.app.Daprd().HTTPAddress())
 	req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, strings.NewReader(body))
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	resp, err := client.Do(req)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.GreaterOrEqual(c, h.called.Load(), int64(1))
@@ -86,10 +88,11 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/foo/timers/foo", h.app.Daprd().HTTPAddress())
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodDelete, url, nil)
-	assert.NoError(t, err)
+	require.NoError(t, err)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
 
 	called := h.called.Load()
 	time.Sleep(time.Second * 2)

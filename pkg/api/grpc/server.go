@@ -67,7 +67,7 @@ type Options struct {
 	MetricSpec     config.MetricSpec
 	APISpec        config.APISpec
 	Proxy          messaging.Proxy
-	WorkflowEngine *wfengine.WorkflowEngine
+	WorkflowEngine wfengine.Interface
 	Healthz        healthz.Healthz
 }
 
@@ -94,7 +94,7 @@ type server struct {
 	authToken      string
 	apiSpec        config.APISpec
 	proxy          messaging.Proxy
-	workflowEngine *wfengine.WorkflowEngine
+	workflowEngine wfengine.Interface
 	sec            security.Handler
 	wg             sync.WaitGroup
 	htarget        healthz.Target

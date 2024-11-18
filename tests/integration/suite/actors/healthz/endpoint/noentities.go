@@ -116,7 +116,7 @@ func (n *noentities) Run(t *testing.T, ctx context.Context) {
 		}},
 	} {
 		meta, err := tv.cl.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-		assert.NoError(t, err)
+		require.NoError(t, err)
 		assert.True(t, meta.GetActorRuntime().GetHostReady())
 		assert.ElementsMatch(t, tv.activeActors, meta.GetActorRuntime().GetActiveActors())
 		assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())

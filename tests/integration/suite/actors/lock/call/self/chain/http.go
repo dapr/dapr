@@ -15,6 +15,7 @@ package chain
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	nethttp "net/http"
 	"testing"
@@ -72,8 +73,8 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 
-		_, err = client.Do(req)
-		errCh <- err
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -88,8 +89,8 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 
-		_, err = client.Do(req)
-		errCh <- err
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -107,8 +108,8 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 			return
 		}
 
-		_, err = client.Do(req)
-		errCh <- err
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	time.Sleep(time.Second)

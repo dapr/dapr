@@ -19,6 +19,13 @@ import (
 	"github.com/dapr/dapr/pkg/config"
 )
 
+const (
+	DefaultIdleTimeout = time.Minute * 60
+
+	defaultOngoingCallTimeout   = time.Second * 60
+	DefaultReentrancyStackLimit = 32
+)
+
 // Remap of config.EntityConfig.
 type EntityConfig struct {
 	Entities                   []string
@@ -27,4 +34,32 @@ type EntityConfig struct {
 	DrainRebalancedActors      bool
 	ReentrancyConfig           config.ReentrancyConfig
 	RemindersStoragePartitions int
+}
+
+func TranslateEntityConfig(appConfig config.EntityConfig) EntityConfig {
+	domainConfig := EntityConfig{
+		Entities:                   appConfig.Entities,
+		ActorIdleTimeout:           DefaultIdleTimeout,
+		DrainOngoingCallTimeout:    defaultOngoingCallTimeout,
+		DrainRebalancedActors:      appConfig.DrainRebalancedActors,
+		ReentrancyConfig:           appConfig.Reentrancy,
+		RemindersStoragePartitions: appConfig.RemindersStoragePartitions,
+	}
+
+	idleDuration, err := time.ParseDuration(appConfig.ActorIdleTimeout)
+	if err == nil {
+		domainConfig.ActorIdleTimeout = idleDuration
+	}
+
+	drainCallDuration, err := time.ParseDuration(appConfig.DrainOngoingCallTimeout)
+	if err == nil {
+		domainConfig.DrainOngoingCallTimeout = drainCallDuration
+	}
+
+	if appConfig.Reentrancy.MaxStackDepth == nil {
+		reentrancyLimit := DefaultReentrancyStackLimit
+		domainConfig.ReentrancyConfig.MaxStackDepth = &reentrancyLimit
+	}
+
+	return domainConfig
 }

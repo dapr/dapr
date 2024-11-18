@@ -16,11 +16,12 @@ package wfbackend
 import (
 	"context"
 
+	"github.com/microsoft/durabletask-go/api"
+	"github.com/microsoft/durabletask-go/backend"
+
 	"github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/resiliency"
-	"github.com/microsoft/durabletask-go/api"
-	"github.com/microsoft/durabletask-go/backend"
 )
 
 const (

@@ -24,6 +24,8 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	clocktesting "k8s.io/utils/clock/testing"
+
+	"github.com/dapr/dapr/pkg/healthz"
 )
 
 func TestApplyOptions(t *testing.T) {
@@ -151,6 +153,7 @@ func testChecker(t *testing.T, initialCode int64, opts ...Option) (<-chan bool, 
 	checker, err := New(append(opts,
 		WithAddress(server.URL),
 		WithClock(clock),
+		WithHealthz(healthz.New()),
 	)...)
 	require.NoError(t, err)
 

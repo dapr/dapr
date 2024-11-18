@@ -94,7 +94,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		Key:       "key1",
 	})
 	require.NoError(t, err)
-	assert.Empty(t, res.Data)
+	assert.Empty(t, res.GetData())
 
 	_, err = client.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
 		ActorType: "abc",
@@ -127,7 +127,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		Key:       "key2",
 	})
 	require.NoError(t, err)
-	assert.Equal(t, "myvalue2", string(res.Data))
+	assert.Equal(t, "myvalue2", string(res.GetData()))
 
 	_, err = client.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
 		ActorType: "abc",
@@ -151,12 +151,12 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		Key:       "key1",
 	})
 	require.NoError(t, err)
-	assert.Empty(t, res.Data)
+	assert.Empty(t, res.GetData())
 	res, err = client.GetActorState(ctx, &rtv1.GetActorStateRequest{
 		ActorType: "abc",
 		ActorId:   "123",
 		Key:       "key2",
 	})
 	require.NoError(t, err)
-	assert.Empty(t, res.Data)
+	assert.Empty(t, res.GetData())
 }

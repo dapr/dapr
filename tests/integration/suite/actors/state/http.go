@@ -60,9 +60,11 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, nethttp.StatusBadRequest, resp.StatusCode)
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, `{"errorCode":"ERR_ACTOR_INSTANCE_MISSING","message":"actor instance is missing"}`, string(b))
 
 	reqBody := `[{"operation":"upsert","request":{"key":"key1","value":"value1"}}]`
@@ -74,6 +76,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, nethttp.StatusBadRequest, resp.StatusCode)
 	b, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, `{"errorCode":"ERR_ACTOR_INSTANCE_MISSING","message":"actor instance is missing"}`, string(b))
 
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/123/method/foo", h.app.Daprd().HTTPAddress())
@@ -82,9 +85,11 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
 
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/123/state/key1", h.app.Daprd().HTTPAddress())
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, url, nil)
+	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
@@ -92,6 +97,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	b, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Empty(t, b)
+	require.NoError(t, resp.Body.Close())
 
 	reqBody = `[{"operation":"upsert","request":{"key":"key1","value":"value1"}},{"operation":"upsert","request":{"key":"key2","value":"value2"}}]`
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/123/state", h.app.Daprd().HTTPAddress())
@@ -100,17 +106,22 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
 
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/123/state/key1", h.app.Daprd().HTTPAddress())
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, url, nil)
+	require.NoError(t, err)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
 	b, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
+	require.NoError(t, resp.Body.Close())
+
 	assert.Equal(t, []byte(`"value1"`), b)
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/123/state/key2", h.app.Daprd().HTTPAddress())
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, url, nil)
+	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusOK, resp.StatusCode)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
@@ -118,6 +129,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	b, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Equal(t, []byte(`"value2"`), b)
+	require.NoError(t, resp.Body.Close())
 
 	reqBody = `[{"operation":"delete","request":{"key":"key1"}},{"operation":"delete","request":{"key":"key2"}}]`
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/123/state", h.app.Daprd().HTTPAddress())
@@ -126,21 +138,26 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
 
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/123/state/key1", h.app.Daprd().HTTPAddress())
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, url, nil)
+	require.NoError(t, err)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
 	b, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Empty(t, b)
+	require.NoError(t, resp.Body.Close())
 	url = fmt.Sprintf("http://%s/v1.0/actors/abc/123/state/key2", h.app.Daprd().HTTPAddress())
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodGet, url, nil)
+	require.NoError(t, err)
 	resp, err = client.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, nethttp.StatusNoContent, resp.StatusCode)
 	b, err = io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Empty(t, b)
+	require.NoError(t, resp.Body.Close())
 }

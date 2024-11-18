@@ -29,14 +29,12 @@ import (
 	"github.com/dapr/kit/ring"
 )
 
-const defaultMaxStackDepth = 32
-
 var ErrLockClosed = errors.New("actor lock is closed")
 
 type LockOptions struct {
 	ActorType         string
 	ReentrancyEnabled bool
-	MaxStackDepth     *int
+	MaxStackDepth     int
 }
 
 // Lock is a fifo Mutex which respects reentrancy and stack depth.
@@ -73,9 +71,9 @@ type inflight struct {
 }
 
 func NewLock(opts LockOptions) *Lock {
-	maxStackDepth := defaultMaxStackDepth
-	if opts.ReentrancyEnabled && opts.MaxStackDepth != nil {
-		maxStackDepth = *opts.MaxStackDepth
+	maxStackDepth := opts.MaxStackDepth
+	if opts.ReentrancyEnabled && opts.MaxStackDepth < 1 {
+		maxStackDepth = 1
 	}
 
 	l := &Lock{

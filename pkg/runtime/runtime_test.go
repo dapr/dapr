@@ -72,6 +72,7 @@ import (
 	"github.com/dapr/dapr/pkg/config/protocol"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
+	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	"github.com/dapr/dapr/pkg/security"
 
 	pb "github.com/dapr/dapr/pkg/api/grpc/proxy/testservice"
@@ -792,6 +793,7 @@ func NewTestDaprRuntimeWithID(t *testing.T, mode modes.DaprMode, id string) (*Da
 	}
 	rt.runtimeConfig.mode = mode
 	rt.channels.Refresh()
+	rt.wfengine = wfenginefake.New()
 	return rt, nil
 }
 
@@ -823,7 +825,7 @@ func NewTestDaprRuntimeConfig(t *testing.T, mode modes.DaprMode, appProtocol str
 		mode:                         mode,
 		httpPort:                     DefaultDaprHTTPPort,
 		internalGRPCPort:             0,
-		apiGRPCPort:                  DefaultDaprAPIGRPCPort,
+		apiGRPCPort:                  0,
 		apiListenAddresses:           []string{DefaultAPIListenAddress},
 		publicPort:                   nil,
 		profilePort:                  DefaultProfilePort,
@@ -921,7 +923,7 @@ func TestInitActors(t *testing.T) {
 		r.channels.Refresh()
 
 		err = r.initActors(context.TODO())
-		require.Error(t, err)
+		require.NoError(t, err)
 	})
 
 	t.Run("the state stores can still be initialized normally", func(t *testing.T) {
@@ -939,7 +941,6 @@ func TestInitActors(t *testing.T) {
 		defer stopRuntime(t, r)
 		r.channels.Refresh()
 
-		assert.Nil(t, r.actor)
 		assert.NotNil(t, r.compStore.ListStateStores())
 		assert.Equal(t, 0, r.compStore.StateStoresLen())
 	})
@@ -963,7 +964,7 @@ func TestInitActors(t *testing.T) {
 		assert.False(t, ok)
 		assert.Equal(t, "", name)
 		err = r.initActors(context.TODO())
-		require.Error(t, err)
+		require.NoError(t, err)
 	})
 }
 
@@ -1229,7 +1230,7 @@ func TestComponentsCallback(t *testing.T) {
 	select {
 	case <-c:
 	case <-time.After(10 * time.Second):
-		t.Fatal("timed out waiting for component callback")
+		assert.Fail(t, "timed out waiting for component callback")
 	}
 
 	assert.True(t, callbackInvoked.Load(), "component callback was not invoked")
@@ -1343,6 +1344,7 @@ func TestShutdownWithWait(t *testing.T) {
 			},
 			"kubernetesMock",
 		)
+		rt.wfengine = wfenginefake.New()
 
 		dir := t.TempDir()
 		rt.runtimeConfig.standalone.ResourcesPath = []string{dir}
@@ -1505,6 +1507,7 @@ spec:
 			},
 			"kubernetesMock",
 		)
+		rt.wfengine = wfenginefake.New()
 
 		dir := t.TempDir()
 		rt.runtimeConfig.standalone.ResourcesPath = []string{dir}
@@ -2072,8 +2075,6 @@ func TestGracefulShutdownActors(t *testing.T) {
 	// assert
 	require.NoError(t, err, "expected no error")
 
-	require.NoError(t, rt.initActors(context.TODO()))
-
 	cancel()
 
 	select {
@@ -2084,7 +2085,7 @@ func TestGracefulShutdownActors(t *testing.T) {
 	}
 
 	var activeActCount int32
-	runtimeStatus := rt.actor.GetRuntimeStatus(context.Background())
+	runtimeStatus := rt.actors.RuntimeStatus()
 	for _, v := range runtimeStatus.GetActiveActors() {
 		activeActCount += v.GetCount()
 	}

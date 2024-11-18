@@ -100,7 +100,7 @@ type DaprRuntime struct {
 	appConfig         config.ApplicationConfig
 	directMessaging   invokev1.DirectMessaging
 	actors            actors.Interface
-	wfengine          *wfengine.WorkflowEngine
+	wfengine          wfengine.Interface
 
 	nameResolver          nr.Resolver
 	hostAddress           string
@@ -555,7 +555,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 	a.flushOutstandingComponents(ctx)
 
 	// Creating workflow engine after components are loaded
-	if err := a.initWorkflowEngine(ctx); err != nil {
+	if err = a.initWorkflowEngine(ctx); err != nil {
 		return err
 	}
 
@@ -793,7 +793,6 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 		if a.runtimeConfig.SchedulerEnabled() {
 			if err := a.jobsManager.Start(); err != nil {
 				log.Warnf("failed to subscribe to outbox topics: %s", err)
-
 			}
 		}
 

@@ -187,7 +187,8 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if lar.Local {
-		res, err := e.callLocalActor(ctx, req)
+		var res *internalv1pb.InternalInvokeResponse
+		res, err = e.callLocalActor(ctx, req)
 		if err != nil {
 			return nil, backoff.Permanent(err)
 		}
@@ -263,7 +264,7 @@ func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 }
 
 func (e *engine) callLocalActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	target, err := e.getOrCreateActor(req.Actor.ActorType, req.Actor.ActorId)
+	target, err := e.getOrCreateActor(req.GetActor().GetActorType(), req.GetActor().GetActorId())
 	if err != nil {
 		return nil, err
 	}

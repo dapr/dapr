@@ -154,8 +154,7 @@ spec:
 
 	assert.Len(t, d.db.ActorReminders(t, ctx, "myactortype").Reminders, 100)
 	assert.Len(t, d.db.ActorReminders(t, ctx, "myactortype2").Reminders, 100)
-	// TODO: @joshvanl
-	//assert.Len(t, d.scheduler.EtcdJobs(t, ctx), 100)
+	assert.Len(t, d.scheduler.EtcdJobs(t, ctx), 100)
 
 	daprd6.Run(t, ctx)
 	t.Cleanup(func() { daprd6.Cleanup(t) })
@@ -163,8 +162,7 @@ spec:
 
 	assert.Len(t, d.db.ActorReminders(t, ctx, "myactortype").Reminders, 100)
 	assert.Len(t, d.db.ActorReminders(t, ctx, "myactortype2").Reminders, 100)
-	// TODO: @joshvanl
-	//assert.Len(t, d.scheduler.EtcdJobs(t, ctx), 200)
+	assert.Len(t, d.scheduler.EtcdJobs(t, ctx), 200)
 
 	daprd2.Cleanup(t)
 	daprd3.Cleanup(t)

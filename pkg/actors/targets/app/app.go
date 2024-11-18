@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	"k8s.io/utils/clock"
+
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
@@ -39,7 +41,6 @@ import (
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/ptr"
 	"github.com/dapr/kit/utils"
-	"k8s.io/utils/clock"
 )
 
 const daprSeparator = "||"
@@ -73,7 +74,7 @@ type app struct {
 
 	// idleAt is the time after which this actor is considered to be idle.
 	// When the actor is locked, idleAt is updated by adding the idleTimeout to the current time.
-	idleAt atomic.Pointer[time.Time]
+	idleAt *atomic.Pointer[time.Time]
 
 	clock clock.Clock
 }
@@ -86,6 +87,14 @@ func Factory(opts Options) targets.Factory {
 		var idleAt atomic.Pointer[time.Time]
 		idleAt.Store(ptr.Of(opts.clock.Now().Add(opts.IdleTimeout)))
 
+		lopts := internal.LockOptions{
+			ActorType:         opts.ActorType,
+			ReentrancyEnabled: opts.Reentrancy.Enabled,
+		}
+		if opts.Reentrancy.MaxStackDepth != nil {
+			lopts.MaxStackDepth = *opts.Reentrancy.MaxStackDepth
+		}
+
 		return &app{
 			actorType:   opts.ActorType,
 			actorID:     actorID,
@@ -93,12 +102,9 @@ func Factory(opts Options) targets.Factory {
 			resiliency:  opts.Resiliency,
 			idleQueue:   opts.IdleQueue,
 			idleTimeout: opts.IdleTimeout,
-			idleAt:      idleAt,
+			idleAt:      &idleAt,
 			clock:       opts.clock,
-			lock: internal.NewLock(internal.LockOptions{
-				ActorType:  opts.ActorType,
-				Reentrancy: opts.Reentrancy,
-			}),
+			lock:        internal.NewLock(lopts),
 		}
 	}
 }
@@ -166,7 +172,7 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 
 	if imRes.Status().GetCode() != http.StatusOK {
 		respData, _ := imRes.RawDataFull()
-		return nil, fmt.Errorf("error from actor service: (%d) %s", imRes.Status().GetMessage(), string(respData))
+		return nil, fmt.Errorf("error from actor service: (%d) %s", imRes.Status().GetCode(), string(respData))
 	}
 
 	// Get the protobuf

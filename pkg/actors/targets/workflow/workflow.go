@@ -44,7 +44,6 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
-	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/logger"
 )
@@ -117,7 +116,7 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 }
 
 // InvokeMethod implements actors.InternalActor
-func (w *workflow) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+func (w *workflow) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
 	if req.GetMessage() == nil {
 		return nil, errors.New("message is nil in request")
 	}
@@ -136,16 +135,16 @@ func (w *workflow) InvokeMethod(ctx context.Context, req *internalv1pb.InternalI
 	defer cancel()
 
 	policyDef := w.resiliency.ActorPostLockPolicy(w.actorType, w.actorID)
-	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
+	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
 	msg := imReq.Message()
-	return policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
+	return policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
 		resData, err := w.executeMethod(ctx, msg.GetMethod(), msg.GetData().GetValue())
 		if err != nil {
 			return nil, fmt.Errorf("error from internal actor: %w", err)
 		}
 
-		return &internalv1pb.InternalInvokeResponse{
-			Status: &internalv1pb.Status{
+		return &internalsv1pb.InternalInvokeResponse{
+			Status: &internalsv1pb.Status{
 				Code: http.StatusOK,
 			},
 			Message: &commonv1pb.InvokeResponse{
@@ -542,13 +541,15 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 			transactionalRequests[activityActorID] = append(transactionalRequests[activityActorID], op)
 		}
 	}
+
+	astate, err := w.actors.State(ctx)
+	if err != nil {
+		return runCompletedFalse, err
+	}
+
 	// TODO: for optimization make multiple go routines and run them in parallel
 	for activityActorID, operations := range transactionalRequests {
-		state, err := w.actors.State(ctx)
-		if err != nil {
-			return runCompletedFalse, err
-		}
-		err = state.TransactionalStateOperation(ctx, &actorapi.TransactionalRequest{
+		err = astate.TransactionalStateOperation(ctx, &actorapi.TransactionalRequest{
 			ActorType:  w.activityActorType,
 			ActorID:    activityActorID,
 			Operations: operations,
@@ -679,7 +680,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		}
 
 		var res bytes.Buffer
-		if err := gob.NewEncoder(&res).Encode(&ActivityRequest{
+		if err = gob.NewEncoder(&res).Encode(&ActivityRequest{
 			HistoryEvent: eventData,
 		}); err != nil {
 			return runCompletedTrue, err
@@ -733,8 +734,6 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 				WithData(requestBytes).
 				WithContentType(invokev1.OctetStreamContentType),
 			)
-
-			//_, err = w.actors.Call(ctx, req)
 			if err != nil {
 				executionStatus = diag.StatusRecoverable
 				// workflow-related actor methods are never expected to return errors

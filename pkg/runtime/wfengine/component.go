@@ -44,11 +44,11 @@ type workflowEngineComponent struct {
 	client backend.TaskHubClient
 }
 
-func BuiltinWorkflowFactory(engine *WorkflowEngine) func(logger.Logger) workflows.Workflow {
+func BuiltinWorkflowFactory(eng Interface) func(logger.Logger) workflows.Workflow {
 	return func(logger logger.Logger) workflows.Workflow {
 		return &workflowEngineComponent{
 			logger: logger,
-			client: backend.NewTaskHubClient(engine.backend),
+			client: backend.NewTaskHubClient(eng.(*engine).backend),
 		}
 	}
 }

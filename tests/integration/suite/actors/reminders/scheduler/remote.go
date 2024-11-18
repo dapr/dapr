@@ -93,7 +93,7 @@ spec:
 		})
 
 		for _, id := range r.actorIDs {
-			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s", id), func(http.ResponseWriter, *http.Request) {
+			handler.HandleFunc("/actors/myactortype/"+id, func(http.ResponseWriter, *http.Request) {
 			})
 			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/remind/remindermethod", id), func(http.ResponseWriter, *http.Request) {
 				r.lock.Lock()

@@ -61,15 +61,10 @@ func fakeStore() state.Store {
 	return daprt.NewFakeStateStore()
 }
 
-func init() {
-	wfengine.SetLogLevel(logger.DebugLevel)
-}
-
 // TestStartWorkflowEngine validates that starting the workflow engine returns no errors.
 func TestStartWorkflowEngine(t *testing.T) {
 	ctx := context.Background()
 	engine := getEngine(t, ctx)
-	engine.ConfigureGrpcExecutor()
 	grpcServer := grpc.NewServer()
 	engine.RegisterGrpcServer(grpcServer)
 	err := engine.Start(ctx)
@@ -78,13 +73,13 @@ func TestStartWorkflowEngine(t *testing.T) {
 
 // GetTestOptions returns an array of functions for configuring the workflow engine. Each
 // string returned by each function can be used as the name of the test configuration.
-func GetTestOptions() []func(wfe *wfengine.WorkflowEngine) string {
-	return []func(wfe *wfengine.WorkflowEngine) string{
-		func(wfe *wfengine.WorkflowEngine) string {
+func GetTestOptions() []func(wfe wfengine.Interface) string {
+	return []func(wfe wfengine.Interface) string{
+		func(wfe wfengine.Interface) string {
 			// caching enabled, etc.
 			return "default options"
 		},
-		func(wfe *wfengine.WorkflowEngine) string {
+		func(wfe wfengine.Interface) string {
 			// disable caching to test recovery from failure
 			if abe, ok := wfe.Backend.(*actorsbe.ActorBackend); ok {
 				abe.DisableActorCaching(true)
@@ -906,12 +901,12 @@ func TestPauseResumeWorkflow(t *testing.T) {
 	}
 }
 
-func startEngine(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine) {
+func startEngine(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backend.TaskHubClient, wfengine.Interface) {
 	client, engine, _ := startEngineAndGetStore(ctx, t, r)
 	return client, engine
 }
 
-func startEngineAndGetStore(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backend.TaskHubClient, *wfengine.WorkflowEngine, *daprt.FakeStateStore) {
+func startEngineAndGetStore(ctx context.Context, t *testing.T, r *task.TaskRegistry) (backend.TaskHubClient, wfengine.Interface, *daprt.FakeStateStore) {
 	var client backend.TaskHubClient
 	engine, store := getEngineAndStateStore(t, ctx)
 	engine.SetExecutor(func(be backend.Backend) backend.Executor {
@@ -922,7 +917,7 @@ func startEngineAndGetStore(ctx context.Context, t *testing.T, r *task.TaskRegis
 	return client, engine, store
 }
 
-func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
+func getEngine(t *testing.T, ctx context.Context) wfengine.Interface {
 	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
 
 	processor := processor.New(processor.Options{
@@ -957,7 +952,7 @@ func getEngine(t *testing.T, ctx context.Context) *wfengine.WorkflowEngine {
 	return engine
 }
 
-func getEngineAndStateStore(t *testing.T, ctx context.Context) (*wfengine.WorkflowEngine, *daprt.FakeStateStore) {
+func getEngineAndStateStore(t *testing.T, ctx context.Context) (wfengine.Interface, *daprt.FakeStateStore) {
 	spec := config.WorkflowSpec{MaxConcurrentWorkflowInvocations: 100, MaxConcurrentActivityInvocations: 100}
 	processor := processor.New(processor.Options{
 		Registry:     registry.New(registry.NewOptions()),

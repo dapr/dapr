@@ -21,6 +21,8 @@ import (
 	"sync"
 	"time"
 
+	"k8s.io/utils/clock"
+
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -31,9 +33,11 @@ import (
 	"github.com/dapr/kit/events/batcher"
 	"github.com/dapr/kit/events/queue"
 	"github.com/dapr/kit/logger"
-	"k8s.io/utils/clock"
 )
 
+var log = logger.NewLogger("dapr.runtime.actor.table")
+
+//nolint:interfacebloat
 type Interface interface {
 	io.Closer
 
@@ -49,8 +53,6 @@ type Interface interface {
 	Drain(fn func(actorType, actorID string) bool)
 	Len() map[string]int
 }
-
-var log = logger.NewLogger("dapr.runtime.actor.table")
 
 type Options struct {
 	EntityConfigs           map[string]api.EntityConfig

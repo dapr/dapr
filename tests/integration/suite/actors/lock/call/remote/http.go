@@ -15,6 +15,7 @@ package remote
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	nethttp "net/http"
 	"sync/atomic"
@@ -75,25 +76,22 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	client := client.HTTP(t)
 	var i atomic.Int64
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		ctx, cancel := context.WithTimeout(ctx, time.Second)
-		t.Cleanup(cancel)
-
 		url := fmt.Sprintf("http://%s/v1.0/actors/abc/%d/method/foo", h.app2.Daprd().HTTPAddress(), i.Add(1))
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 		require.NoError(t, err)
-		_, err = client.Do(req)
+		resp, err := client.Do(req)
 		assert.NoError(c, err)
+		assert.NoError(c, resp.Body.Close())
 		assert.Equal(c, int64(1), h.called.Load())
 	}, time.Second*10, time.Millisecond*10)
-	return
 
 	errCh := make(chan error)
 	go func() {
 		url := fmt.Sprintf("http://%s/v1.0/actors/abc/%d/method/foo", h.app2.Daprd().HTTPAddress(), i.Load())
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
-		require.NoError(t, err)
-		_, err = client.Do(req)
-		errCh <- err
+		assert.NoError(t, err)
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -103,9 +101,9 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	go func() {
 		url := fmt.Sprintf("http://%s/v1.0/actors/abc/%d/method/foo", h.app2.Daprd().HTTPAddress(), i.Load())
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
-		require.NoError(t, err)
-		_, err = client.Do(req)
-		errCh <- err
+		assert.NoError(t, err)
+		resp, err := client.Do(req)
+		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 
 	time.Sleep(time.Second)

@@ -23,9 +23,11 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/lock"
 	"github.com/dapr/dapr/pkg/actors/table"
@@ -35,8 +37,6 @@ import (
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
-	"github.com/spiffe/go-spiffe/v2/spiffeid"
-	"google.golang.org/grpc/status"
 )
 
 const grpcServiceConfig = `{"loadBalancingPolicy":"round_robin"}`
@@ -139,6 +139,7 @@ func (c *Client) Run(ctx context.Context) error {
 			}
 
 			connCtx, cancel = context.WithCancel(ctx)
+			defer cancel()
 			err := c.connectRoundRobin(connCtx)
 			ch <- err
 			c.lock.EnsureUnlockTable()
@@ -186,6 +187,7 @@ func (c *Client) connect(ctx context.Context) error {
 
 	var err error
 	if c.conn == nil || len(c.addresses) > 1 {
+		//nolint:staticcheck
 		c.conn, err = grpc.DialContext(ctx, c.addresses[c.addressIndex%len(c.addresses)], c.grpcOpts...)
 		if err != nil {
 			return err
@@ -226,7 +228,6 @@ func (c *Client) Recv(ctx context.Context) (*v1pb.PlacementOrder, error) {
 		if (ok &&
 			(s.Code() == codes.FailedPrecondition || s.Message() == "placement service is closed")) ||
 			errors.Is(err, io.EOF) {
-
 			log.Infof("Placement service is closed, reconnecting...")
 			errCh := make(chan error, 1)
 			c.reconnectCh <- errCh

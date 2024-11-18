@@ -74,8 +74,9 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 		assert.NoError(c, err)
 
-		_, err = client.Do(req)
+		resp, err := client.Do(req)
 		assert.NoError(c, err)
+		assert.NoError(c, resp.Body.Close())
 
 		assert.Positive(c, h.called1.Load())
 		assert.Positive(c, h.called2.Load())
@@ -89,8 +90,9 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 		assert.NoError(c, err)
 
-		_, err = client.Do(req)
+		resp, err := client.Do(req)
 		assert.NoError(c, err)
+		assert.NoError(c, resp.Body.Close())
 
 		assert.Greater(c, h.called1.Load(), called1)
 		assert.Greater(c, h.called2.Load(), called2)

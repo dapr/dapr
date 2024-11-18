@@ -16,10 +16,11 @@ package sqlite
 import (
 	"fmt"
 
-	"github.com/dapr/dapr/pkg/components/wfbackend"
-	"github.com/dapr/kit/logger"
 	"github.com/microsoft/durabletask-go/backend"
 	"github.com/microsoft/durabletask-go/backend/sqlite"
+
+	"github.com/dapr/dapr/pkg/components/wfbackend"
+	"github.com/dapr/kit/logger"
 )
 
 var log = logger.NewLogger("dapr.wfengine.backend.sqlite")

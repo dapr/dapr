@@ -410,6 +410,8 @@ func (s *serviceMetrics) ActorTimers(actorType string, timers int64) {
 
 // ReportActorPendingCalls records the current pending actor locks.
 func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks int32) {
+	// TODO: This is growing forever, ensure metrics are removed when the value
+	// is 0.
 	if s.enabled {
 		s.pendingActorCallsLock.Lock()
 		defer s.pendingActorCallsLock.Unlock()

@@ -48,7 +48,7 @@ func init() {
 
 type basic struct {
 	daprd *daprd.Daprd
-	//daprd2     *daprd.Daprd
+	// daprd2     *daprd.Daprd
 	place      *placement.Placement
 	scheduler  *procscheduler.Scheduler
 	httpClient *http.Client
@@ -67,11 +67,11 @@ spec:
   - name: SchedulerReminders
     enabled: true`), 0o600))
 
-	//db := sqlite.New(t,
-	//	sqlite.WithActorStateStore(true),
-	//	sqlite.WithMetadata("busyTimeout", "10s"),
-	//	sqlite.WithMetadata("disableWAL", "true"),
-	//)
+	//  db := sqlite.New(t,
+	//  	sqlite.WithActorStateStore(true),
+	//  	sqlite.WithMetadata("busyTimeout", "10s"),
+	//  	sqlite.WithMetadata("disableWAL", "true"),
+	//  )
 
 	handler := http.NewServeMux()
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
@@ -84,25 +84,25 @@ spec:
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithPlacementAddresses(b.place.Address()),
-		//daprd.WithResourceFiles(db.GetComponent(t)),
+		// daprd.WithResourceFiles(db.GetComponent(t)),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithSchedulerAddresses(b.scheduler.Address()),
 		daprd.WithConfigs(configFile),
 	)
 
-	// TODO: @joshvanl: make actors dynamic.
-	//b.daprd2 = daprd.New(t,
-	//	daprd.WithAppID(b.daprd.AppID()),
-	//	daprd.WithAppPort(srv.Port()),
-	//	daprd.WithAppProtocol("http"),
-	//	daprd.WithPlacementAddresses(b.place.Address()),
-	//	daprd.WithResourceFiles(db.GetComponent(t)),
-	//	daprd.WithSchedulerAddresses(b.scheduler.Address()),
-	//	daprd.WithConfigs(configFile),
-	//)
+	// TODO: @joshvanl: make workflow actors dynamic to client connection.
+	//  b.daprd2 = daprd.New(t,
+	//  	daprd.WithAppID(b.daprd.AppID()),
+	//  	daprd.WithAppPort(srv.Port()),
+	//  	daprd.WithAppProtocol("http"),
+	//  	daprd.WithPlacementAddresses(b.place.Address()),
+	//  	daprd.WithResourceFiles(db.GetComponent(t)),
+	//  	daprd.WithSchedulerAddresses(b.scheduler.Address()),
+	//  	daprd.WithConfigs(configFile),
+	//  )
 
 	return []framework.Option{
-		//framework.WithProcesses(db, b.scheduler, b.place, srv, b.daprd2, b.daprd),
+		// framework.WithProcesses(db, b.scheduler, b.place, srv, b.daprd2, b.daprd),
 		framework.WithProcesses(b.scheduler, b.place, srv, b.daprd),
 	}
 }
@@ -111,7 +111,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	b.scheduler.WaitUntilRunning(t, ctx)
 	b.place.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
-	//b.daprd2.WaitUntilRunning(t, ctx)
+	// b.daprd2.WaitUntilRunning(t, ctx)
 
 	b.httpClient = frameworkclient.HTTP(t)
 
@@ -149,7 +149,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	})
 
 	// TODO: @joshvanl: re-enable after workflow refactor.
-	//t.Run("terminate", func(t *testing.T) {
+	// t.Run("terminate", func(t *testing.T) {
 	//	delayTime := 4 * time.Second
 	//	var executedActivity atomic.Bool
 	//	r := task.NewTaskRegistry()
@@ -219,7 +219,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 	//	// Verify that none of the N2 suborchestrations executed the activity
 	//	assert.False(t, executedActivity.Load())
-	//})
+	// })
 
 	t.Run("purge", func(t *testing.T) {
 		r := task.NewTaskRegistry()
@@ -314,19 +314,20 @@ func (b *basic) startWorkflow(ctx context.Context, t *testing.T, name string, in
 	return response.InstanceID
 }
 
+// TODO: @joshvanl
 // terminate workflow
-func (b *basic) terminateWorkflow(t *testing.T, ctx context.Context, instanceID string) {
-	// use http client to terminate the workflow
-	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", b.daprd.HTTPPort(), instanceID)
-	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
-	defer cancel()
-	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
-	require.NoError(t, err)
-	resp, err := b.httpClient.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-	require.Equal(t, http.StatusAccepted, resp.StatusCode)
-}
+// func (b *basic) terminateWorkflow(t *testing.T, ctx context.Context, instanceID string) {
+//	// use http client to terminate the workflow
+//	reqURL := fmt.Sprintf("http://localhost:%d/v1.0-beta1/workflows/dapr/%s/terminate", b.daprd.HTTPPort(), instanceID)
+//	reqCtx, cancel := context.WithTimeout(ctx, 20*time.Second)
+//	defer cancel()
+//	req, err := http.NewRequestWithContext(reqCtx, http.MethodPost, reqURL, nil)
+//	require.NoError(t, err)
+//	resp, err := b.httpClient.Do(req)
+//	require.NoError(t, err)
+//	defer resp.Body.Close()
+//	require.Equal(t, http.StatusAccepted, resp.StatusCode)
+// }
 
 // purge workflow
 func (b *basic) purgeWorkflow(t *testing.T, ctx context.Context, instanceID string) {

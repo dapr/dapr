@@ -15,7 +15,7 @@ package placement
 
 import (
 	"context"
-	"fmt"
+	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -41,7 +41,7 @@ import (
 var (
 	log = logger.NewLogger("dapr.runtime.actors.placement")
 
-	ErrorActorTypeNotFound = fmt.Errorf("did not find address for actor")
+	ErrActorTypeNotFound = errors.New("did not find address for actor")
 )
 
 const (
@@ -88,15 +88,14 @@ type placement struct {
 	updateVersion atomic.Uint64
 	operationLock *fifo.Mutex
 
-	appID       string
-	namespace   string
-	hostname    string
-	hostaddress string
-	port        string
-	isReady     atomic.Bool
-	readyCh     chan struct{}
-	wg          sync.WaitGroup
-	closed      atomic.Bool
+	appID     string
+	namespace string
+	hostname  string
+	port      string
+	isReady   atomic.Bool
+	readyCh   chan struct{}
+	wg        sync.WaitGroup
+	closed    atomic.Bool
 }
 
 func New(opts Options) (Interface, error) {
@@ -183,7 +182,7 @@ func (p *placement) Run(ctx context.Context) error {
 func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, error) {
 	table, ok := p.hashTable.Entries[req.ActorType]
 	if !ok {
-		return nil, ErrorActorTypeNotFound
+		return nil, ErrActorTypeNotFound
 	}
 
 	host, err := table.GetHost(req.ActorID)
@@ -254,6 +253,8 @@ func (p *placement) Unlock() {
 func (p *placement) handleLockOperation(ctx context.Context) {
 	p.lock.LockTable()
 	lockVersion := p.lockVersion.Add(1)
+
+	clear(p.hashTable.Entries)
 
 	// If we don't receive an unlock in 10 seconds, unlock the table.
 	p.wg.Add(1)
