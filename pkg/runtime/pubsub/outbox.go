@@ -24,6 +24,7 @@ import (
 	"github.com/cenkalti/backoff/v4"
 	"github.com/google/uuid"
 
+	"github.com/dapr/components-contrib/metadata"
 	contribPubsub "github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/apis/components/v1alpha1"
@@ -177,12 +178,16 @@ func (o *outboxImpl) PublishInternal(ctx context.Context, stateStore string, ope
 
 				if proj.ContentType != nil {
 					contentType = *proj.ContentType
+				} else if ct, ok := proj.Metadata[metadata.ContentType]; ok {
+					contentType = ct
 				}
 			} else {
 				payload = sr.Value
 
 				if sr.ContentType != nil {
 					contentType = *sr.ContentType
+				} else if ct, ok := sr.Metadata[metadata.ContentType]; ok {
+					contentType = ct
 				}
 			}
 
