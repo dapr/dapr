@@ -142,7 +142,6 @@ func TestActorReminderWithAppCrash(t *testing.T) {
 	reminder := actorReminder{
 		Data:    "reminderdataonappcrash",
 		DueTime: "10s",
-		Period:  "1s",
 	}
 	reminderBody, err := json.Marshal(reminder)
 	require.NoError(t, err)
@@ -154,6 +153,15 @@ func TestActorReminderWithAppCrash(t *testing.T) {
 		// Registering reminder
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reminderBody)
 		require.NoError(t, err)
+
+		// This test must be timed:
+		// t0 -> app started and is healthy (after any late app start)
+		// t1 -> reminder is registered
+		// t2 = t1 + 8s -> app is terminated
+		// t3 = t1 + 10s -> reminder is due but app is down.
+		// t4 = t2 + 10s -> app is healthy again
+		// t5 = t4 + 20s -> validate that reminder was fired.
+		time.Sleep(8 * time.Second)
 
 		t.Logf("Restarting app %s ...", appName)
 		// Shutdown the app
@@ -178,7 +186,7 @@ func TestActorReminderWithAppCrash(t *testing.T) {
 
 				return nil
 			},
-			backoff.WithMaxRetries(backoff.NewConstantBackOff(5*time.Second), 30),
+			backoff.WithMaxRetries(backoff.NewConstantBackOff(1*time.Second), 10),
 			func(err error, d time.Duration) {
 				t.Logf("Error while validating reminder trigger logs: '%v' - retrying in %s", err, d)
 			},
