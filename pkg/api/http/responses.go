@@ -152,7 +152,7 @@ func respondWithError(w http.ResponseWriter, err error) {
 	}
 
 	if kitErr, ok := err.(*kitErrors.Error); ok {
-		respondWithData(w, kitErr.HTTPStatusCode(), NewErrorResponse("ERROR", kitErr.Error()).JSONErrorValue())
+		respondWithData(w, kitErr.HTTPStatusCode(), kitErr.JSONErrorValue())
 		return
 	}
 

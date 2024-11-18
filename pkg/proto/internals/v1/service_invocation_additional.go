@@ -122,12 +122,6 @@ func (x *InternalInvokeRequest) WithHTTPHeaders(header http.Header) *InternalInv
 	return x
 }
 
-// WithFastHTTPHeaders sets metadata from fasthttp request headers.
-func (x *InternalInvokeRequest) WithFastHTTPHeaders(header fasthttpHeaders) *InternalInvokeRequest {
-	x.Metadata = FastHTTPHeadersToInternalMetadata(header)
-	return x
-}
-
 // IsHTTPResponse returns true if response status code is http response status.
 func (x *InternalInvokeResponse) IsHTTPResponse() bool {
 	if x == nil {
@@ -174,28 +168,5 @@ func HTTPHeadersToInternalMetadata(header http.Header) map[string]*ListStringVal
 			internalMD[key].Values = append(internalMD[key].Values, val...)
 		}
 	}
-	return internalMD
-}
-
-// Covers *fasthttp.RequestHeader and *fasthttp.ResponseHeader
-type fasthttpHeaders interface {
-	Len() int
-	VisitAll(f func(key []byte, value []byte))
-}
-
-// FastHTTPHeadersToInternalMetadata converts fasthttp headers to Dapr internal metadata map.
-func FastHTTPHeadersToInternalMetadata(header fasthttpHeaders) map[string]*ListStringValue {
-	internalMD := make(map[string]*ListStringValue, header.Len())
-	header.VisitAll(func(key []byte, value []byte) {
-		// Note: fasthttp headers can never be binary (only gRPC supports binary headers)
-		keyStr := string(key)
-		if internalMD[keyStr] == nil || len(internalMD[keyStr].Values) == 0 {
-			internalMD[keyStr] = &ListStringValue{
-				Values: []string{string(value)},
-			}
-		} else {
-			internalMD[keyStr].Values = append(internalMD[keyStr].Values, string(value))
-		}
-	})
 	return internalMD
 }
