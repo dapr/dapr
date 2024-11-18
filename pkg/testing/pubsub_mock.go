@@ -46,7 +46,8 @@ func (m *MockPubSub) Subscribe(_ context.Context, req pubsub.SubscribeRequest, h
 
 // Close is a mock close method.
 func (m *MockPubSub) Close() error {
-	return nil
+	args := m.Called()
+	return args.Error(0)
 }
 
 func (m *MockPubSub) Features() []pubsub.Feature {
