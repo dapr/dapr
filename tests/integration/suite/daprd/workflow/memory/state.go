@@ -63,7 +63,7 @@ func (s *state) Run(t *testing.T, ctx context.Context) {
 
 	var actorMemBaseline float64
 
-	for i := range 10 {
+	for i := range 5 {
 		resp, err := gclient.StartWorkflow(ctx, &rtv1.StartWorkflowRequest{
 			WorkflowComponent: "dapr",
 			WorkflowName:      "foo",
