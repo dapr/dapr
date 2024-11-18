@@ -21,7 +21,7 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/components-contrib/metadata"
-	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/kit/errors"
 )
@@ -153,6 +153,6 @@ func (s *StateStoreError) build(err *errors.ErrorBuilder, errCode string, metada
 	}
 	compErrCode := errors.CodePrefixStateStore + errCode
 	return err.
-		WithErrorInfo(messages.RecordCompAndGet(compErrCode, errorcodes.CategoryState), metadata).
+		WithErrorInfo(diagnostics.RecordCompAndGet(compErrCode, errorcodes.CategoryState), metadata).
 		Build()
 }

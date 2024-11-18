@@ -63,11 +63,11 @@ func (e APIError) Message() string {
 }
 
 // Tag returns the value of the tag property.
-func (e APIError) Tag() string {
+func (e APIError) Tag() errorcodes.ErrorCode {
 	if e.tag.Code == "" {
-		return defaultTag
+		return errorcodes.ErrorCode{}
 	}
-	return e.tag.Code
+	return e.tag
 }
 
 // HTTPCode returns the value of the HTTPCode property.
@@ -95,7 +95,7 @@ func (e APIError) JSONErrorValue() []byte {
 		ErrorCode string `json:"errorCode"`
 		Message   string `json:"message"`
 	}{
-		ErrorCode: e.Tag(),
+		ErrorCode: e.Tag().Code,
 		Message:   e.Message(),
 	})
 	return b

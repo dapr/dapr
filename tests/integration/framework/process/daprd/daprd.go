@@ -349,6 +349,7 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 		for _, m := range mf.GetMetric() {
 			metricName := mf.GetName()
 			labels := ""
+			// t.Log(metricName)
 			for _, l := range m.GetLabel() {
 				labels += "|" + l.GetName() + ":" + l.GetValue()
 			}
@@ -376,17 +377,27 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	return metrics
 }
 
+func (d *Daprd) HTTPGet(t *testing.T, ctx context.Context, path string, expectedCode int) {
+	t.Helper()
+	d.httpxxx(t, ctx, http.MethodGet, path, nil, expectedCode)
+}
+
+func (d *Daprd) HTTPPost(t *testing.T, ctx context.Context, path string, body io.Reader, expectedCode int, headers ...string) {
+	t.Helper()
+	d.httpxxx(t, ctx, http.MethodPost, path, body, expectedCode, headers...)
+}
+
 func (d *Daprd) HTTPGet2xx(t *testing.T, ctx context.Context, path string) {
 	t.Helper()
-	d.http2xx(t, ctx, http.MethodGet, path, nil)
+	d.httpxxx(t, ctx, http.MethodGet, path, nil, http.StatusOK)
 }
 
 func (d *Daprd) HTTPPost2xx(t *testing.T, ctx context.Context, path string, body io.Reader, headers ...string) {
 	t.Helper()
-	d.http2xx(t, ctx, http.MethodPost, path, body, headers...)
+	d.httpxxx(t, ctx, http.MethodPost, path, body, http.StatusOK, headers...)
 }
 
-func (d *Daprd) http2xx(t *testing.T, ctx context.Context, method, path string, body io.Reader, headers ...string) {
+func (d *Daprd) httpxxx(t *testing.T, ctx context.Context, method, path string, body io.Reader, expectedCode int, headers ...string) {
 	t.Helper()
 
 	require.Zero(t, len(headers)%2, "headers must be key-value pairs")
@@ -405,8 +416,9 @@ func (d *Daprd) http2xx(t *testing.T, ctx context.Context, method, path string, 
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
-	require.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code: "+string(b))
-	require.Less(t, resp.StatusCode, 300, "expected 2xx status code: "+string(b))
+
+	require.GreaterOrEqual(t, resp.StatusCode, expectedCode, strconv.Itoa(expectedCode)+"status code expected: "+string(b))
+	require.Less(t, resp.StatusCode, expectedCode+100, strconv.Itoa(expectedCode)+"status code expected: "+string(b))
 }
 
 func (d *Daprd) GetMetaRegisteredComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {

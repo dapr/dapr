@@ -124,7 +124,7 @@ func TestAPIError_Tag(t *testing.T) {
 		{
 			name:   "no tag",
 			fields: fields{tag: errorcodes.ErrorCode{}},
-			want:   defaultTag,
+			want:   "",
 		},
 	}
 	for _, tt := range tests {
@@ -132,7 +132,7 @@ func TestAPIError_Tag(t *testing.T) {
 			e := APIError{
 				tag: tt.fields.tag,
 			}
-			if got := e.Tag(); got != tt.want {
+			if got := e.Tag().Code; got != tt.want {
 				t.Errorf("APIError.Tag() = %v, want %v", got, tt.want)
 			}
 		})

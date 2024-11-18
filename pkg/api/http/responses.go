@@ -23,6 +23,7 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
@@ -142,7 +143,7 @@ func respondWithError(w http.ResponseWriter, err error) {
 	// Check if it's an APIError object
 	apiErr, ok := err.(messages.APIError)
 	if ok {
-		apiErr.RecordAPIErrorCode() // Record metric for error code
+		diagnostics.RecordAPIErrorCode(apiErr) // Record metric for error code
 		respondWithData(w, apiErr.HTTPCode(), apiErr.JSONErrorValue())
 		return
 	}

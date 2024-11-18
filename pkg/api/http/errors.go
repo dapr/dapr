@@ -16,7 +16,7 @@ package http
 import (
 	"encoding/json"
 
-	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
@@ -33,7 +33,7 @@ type ErrorResponse struct {
 
 // NewErrorResponse returns a new ErrorResponse.
 func NewErrorResponse(errorCode errorcodes.ErrorCode, message string) ErrorResponse {
-	messages.RecordErrorCodeAndGet(errorCode)
+	diagnostics.RecordErrorCodeAndGet(errorCode)
 	return ErrorResponse{
 		ErrorCode: errorCode.Code,
 		Message:   message,

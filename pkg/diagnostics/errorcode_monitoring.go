@@ -21,6 +21,7 @@ import (
 	"go.opencensus.io/tag"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
@@ -71,4 +72,35 @@ func (m *errorCodeMetrics) RecordCompErrorCode(compositeJobErrorCode string, cat
 			m.errorCodeTotal.M(1),
 		)
 	}
+}
+
+// RecordAPIErrorCode will record the APIError as a metric
+func RecordAPIErrorCode(e messages.APIError) {
+	DefaultErrorCodeMonitoring.RecordErrorCode(e.Tag())
+}
+
+// TryRecordAPIErrorCode will attempt to record the APIError error as a metric
+func TryRecordAPIErrorCode(err error) {
+	if err == nil {
+		return
+	}
+
+	// Check if it's an APIError object
+	apiErr, ok := err.(messages.APIError)
+	if ok {
+		RecordAPIErrorCode(apiErr)
+		return
+	}
+}
+
+// RecordErrorCodeAndGet will record the error as a metric and return the ErrorCode object's code string
+func RecordErrorCodeAndGet(errorCode errorcodes.ErrorCode) string {
+	DefaultErrorCodeMonitoring.RecordErrorCode(errorCode)
+	return errorCode.Code
+}
+
+// RecordCompAndGet will record the error as a metric and return the composite code string, not yet compatible with the ErrorCode structure
+func RecordCompAndGet(compositeJobErrorCode string, cat errorcodes.Category) string {
+	DefaultErrorCodeMonitoring.RecordCompErrorCode(compositeJobErrorCode, cat)
+	return compositeJobErrorCode
 }
