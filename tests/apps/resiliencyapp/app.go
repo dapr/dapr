@@ -155,6 +155,10 @@ func resiliencyBindingHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Seen %s %d times.", message.ID, callCount)
 
 	callTracking[message.ID] = append(callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
+	if message.ResponseCode != nil {
+		w.WriteHeader(*message.ResponseCode)
+		return
+	}
 	if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
 		if message.Timeout != nil {
 			// This request can still succeed if the resiliency policy timeout is longer than this sleep.
@@ -205,6 +209,10 @@ func resiliencyPubsubHandler(w http.ResponseWriter, r *http.Request) {
 	log.Printf("Seen %s %d times.", message.ID, callCount)
 
 	callTracking[message.ID] = append(callTracking[message.ID], CallRecord{Count: callCount, TimeSeen: time.Now()})
+	if message.ResponseCode != nil {
+		w.WriteHeader(*message.ResponseCode)
+		return
+	}
 	if message.MaxFailureCount != nil && callCount < *message.MaxFailureCount {
 		if message.Timeout != nil {
 			// This request can still succeed if the resiliency policy timeout is longer than this sleep.

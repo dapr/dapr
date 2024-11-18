@@ -81,6 +81,11 @@ async function handleIssueCommentCreate({ github, context }) {
     const username = context.actor.toLowerCase()
     const isFromPulls = !!payload.issue.pull_request
     const commentBody = ((payload.comment.body || '') + '').trim()
+    console.log(`    Issue(owner/repo/number): ${issue.owner}/${issue.repo}/${issue.number} 
+        Actor(current username / id): ${username} / ${payload.comment.user.id}
+        CommentID: ${payload.comment.id}
+        CreatedAt: ${payload.comment.created_at}`
+    )
 
     if (!commentBody || !commentBody.startsWith('/')) {
         // Not a command
@@ -89,6 +94,7 @@ async function handleIssueCommentCreate({ github, context }) {
 
     const commandParts = commentBody.split(/\s+/)
     const command = commandParts.shift()
+    console.log(`    Command: ${command}`)
 
     // Commands that can be executed by anyone.
     if (command == '/assign') {
