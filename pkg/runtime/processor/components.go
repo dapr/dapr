@@ -219,9 +219,13 @@ func (p *Processor) processComponentAndDependents(ctx context.Context, comp comp
 		err = fmt.Errorf("init timeout for component %s exceeded after %s", comp.LogName(), timeout.String())
 	}
 	if err != nil {
-		log.Errorf("Failed to init component %s: %s", comp.LogName(), err)
-		diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
-		return rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), err)
+		if !comp.Spec.IgnoreErrors {
+			log.Errorf("Failed to init component %s: %s", comp.LogName(), err)
+			diag.DefaultMonitoring.ComponentInitFailed(comp.Spec.Type, "init", comp.ObjectMeta.Name)
+			return rterrors.NewInit(rterrors.InitComponentFailure, comp.LogName(), err)
+		}
+
+		log.Errorf("Ignoring error processing component: %s", err)
 	}
 
 	log.Info("Component loaded: " + comp.LogName())
