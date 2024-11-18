@@ -11,7 +11,7 @@ require (
 	github.com/argoproj/argo-rollouts v1.4.1
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
-	github.com/dapr/components-contrib v1.14.1-0.20241016043026-4ca04dbb61c5
+	github.com/dapr/components-contrib v1.14.1-0.20241104052509-b969bbfe8867
 	github.com/dapr/kit v0.13.1-0.20241015130326-866002abe68a
 	github.com/diagridio/go-etcd-cron v0.3.1-0.20241113192108-260d6b1861d3
 	github.com/evanphx/json-patch/v5 v5.9.0
@@ -123,7 +123,7 @@ require (
 	github.com/AzureAD/microsoft-authentication-library-for-go v1.2.2 // indirect
 	github.com/Code-Hex/go-generics-cache v1.3.1 // indirect
 	github.com/DataDog/zstd v1.5.2 // indirect
-	github.com/IBM/sarama v1.42.2 // indirect
+	github.com/IBM/sarama v1.43.3 // indirect
 	github.com/OneOfOne/xxhash v1.2.8 // indirect
 	github.com/PaesslerAG/gval v1.0.0 // indirect
 	github.com/RoaringBitmap/roaring v1.1.0 // indirect
@@ -212,7 +212,7 @@ require (
 	github.com/dubbogo/triple v1.1.8 // indirect
 	github.com/dustin/go-humanize v1.0.1 // indirect
 	github.com/dvsekhvalnov/jose2go v1.6.0 // indirect
-	github.com/eapache/go-resiliency v1.5.0 // indirect
+	github.com/eapache/go-resiliency v1.7.0 // indirect
 	github.com/eapache/go-xerial-snappy v0.0.0-20230731223053-c322873962e3 // indirect
 	github.com/eapache/queue v1.1.0 // indirect
 	github.com/eclipse/paho.mqtt.golang v1.4.3 // indirect
@@ -309,6 +309,7 @@ require (
 	github.com/k0kubun/pp v3.0.1+incompatible // indirect
 	github.com/klauspost/compress v1.17.10 // indirect
 	github.com/knadh/koanf v1.4.1 // indirect
+	github.com/kr/fs v0.1.0 // indirect
 	github.com/kubemq-io/kubemq-go v1.7.9 // indirect
 	github.com/kubemq-io/protobuf v1.3.1 // indirect
 	github.com/kylelemons/godebug v1.1.0 // indirect
@@ -363,6 +364,7 @@ require (
 	github.com/pierrec/lz4/v4 v4.1.21 // indirect
 	github.com/pkg/browser v0.0.0-20240102092130-5ac0b6a4141c // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pkg/sftp v1.13.6 // indirect
 	github.com/pkoukk/tiktoken-go v0.1.6 // indirect
 	github.com/pmezard/go-difflib v1.0.1-0.20181226105442-5d4384ee4fb2 // indirect
 	github.com/power-devops/perfstat v0.0.0-20210106213030-5aafc221ea8c // indirect
