@@ -281,7 +281,8 @@ func New(opts Options) (*Subscription, error) {
 			}
 			return nil, pErr
 		})
-		if err != nil {
+		// when runtime shutting down, don't send to DLQ
+		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
 			if route.DeadLetterTopic != "" {
