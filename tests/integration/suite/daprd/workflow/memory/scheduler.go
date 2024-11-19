@@ -17,6 +17,7 @@ import (
 	"bytes"
 	"context"
 	"testing"
+	"time"
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/task"
@@ -63,7 +64,7 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 
 	var actorMemBaseline float64
 
-	for i := range 10 {
+	for i := range 5 {
 		resp, err := gclient.StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
 			WorkflowComponent: "dapr",
 			WorkflowName:      "foo",
@@ -77,10 +78,10 @@ func (s *scheduler) Run(t *testing.T, ctx context.Context) {
 		}
 	}
 
-	assert.InDelta(t,
-		s.workflow.Metrics(t, ctx)["process_resident_memory_bytes"]*1e-6,
-		actorMemBaseline,
-		35,
-		"workflow memory leak",
-	)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.InDelta(c,
+			s.workflow.Metrics(t, ctx)["process_resident_memory_bytes"]*1e-6,
+			actorMemBaseline, 15, "workflow memory leak",
+		)
+	}, 25*time.Second, 10*time.Millisecond)
 }

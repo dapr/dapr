@@ -234,6 +234,7 @@ jobs:
     runs-on: "${{ matrix.os }}"
     permissions:
       contents: read
+      packages: write
     needs: [unit-tests, integration-tests]
     env:
       GOOS: "${{ matrix.target_os }}"
@@ -526,6 +527,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:
