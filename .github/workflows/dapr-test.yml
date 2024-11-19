@@ -285,7 +285,8 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v5
+        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
+        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
         with:
           go-version-file: "go.mod"
       - name: Login to Azure
@@ -458,7 +459,8 @@ jobs:
           ref: ${{ env.CHECKOUT_REF }}
       - name: Set up Go
         id: setup-go
-        uses: actions/setup-go@v5
+        # TODO: use actions/setup-go after https://github.com/actions/setup-go/pull/515 is merged and released
+        uses: antontroshin/setup-go@bda02de8887c9946189f81e7e59512914aeb9ea4
         with:
           go-version-file: "go.mod"
       - uses: azure/setup-kubectl@v3
