@@ -11,6 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
+//nolint:errname
 package errorcodes
 
 type Category string
@@ -33,6 +34,10 @@ const (
 type ErrorCode struct {
 	Code     string
 	Category Category
+}
+
+func (e *ErrorCode) Error() string {
+	return e.Code
 }
 
 var (

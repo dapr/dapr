@@ -15,13 +15,13 @@ package diagnostics
 
 import (
 	"context"
+	"errors"
 
 	"go.opencensus.io/stats"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
@@ -74,33 +74,25 @@ func (m *errorCodeMetrics) RecordCompErrorCode(compositeJobErrorCode string, cat
 	}
 }
 
-// RecordAPIErrorCode will record the APIError as a metric
-func RecordAPIErrorCode(e messages.APIError) {
-	DefaultErrorCodeMonitoring.RecordErrorCode(e.Tag())
-}
-
-// TryRecordAPIErrorCode will attempt to record the APIError error as a metric
-func TryRecordAPIErrorCode(err error) {
-	if err == nil {
-		return
-	}
-
-	// Check if it's an APIError object
-	apiErr, ok := err.(messages.APIError)
+// TryRecordErrorCode is called at the end/middleware of HTTP/gRPC calls and will attempt to find the ErrorCode in an error and record it
+func TryRecordErrorCode(err error) bool {
+	var errorCode *errorcodes.ErrorCode
+	ok := errors.As(err, &errorCode)
 	if ok {
-		RecordAPIErrorCode(apiErr)
-		return
+		DefaultErrorCodeMonitoring.RecordErrorCode(*errorCode)
+		return true
 	}
+	return false
 }
 
-// RecordErrorCodeAndGet will record the error as a metric and return the ErrorCode object's code string
-func RecordErrorCodeAndGet(errorCode errorcodes.ErrorCode) string {
+// RecordErrorCodeEarly will record an ErrorCode before the structure is lost (which cannot be recorded at the end/middleware)
+func RecordErrorCodeEarly(errorCode errorcodes.ErrorCode) string {
 	DefaultErrorCodeMonitoring.RecordErrorCode(errorCode)
 	return errorCode.Code
 }
 
-// RecordCompAndGet will record the error as a metric and return the composite code string, not yet compatible with the ErrorCode structure
-func RecordCompAndGet(compositeJobErrorCode string, cat errorcodes.Category) string {
+// RecordErrorCodeComp will record a composite error code, not yet defined as an ErrorCode
+func RecordErrorCodeComp(compositeJobErrorCode string, cat errorcodes.Category) string {
 	DefaultErrorCodeMonitoring.RecordCompErrorCode(compositeJobErrorCode, cat)
 	return compositeJobErrorCode
 }

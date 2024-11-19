@@ -153,6 +153,6 @@ func (s *StateStoreError) build(err *errors.ErrorBuilder, errCode string, metada
 	}
 	compErrCode := errors.CodePrefixStateStore + errCode
 	return err.
-		WithErrorInfo(diagnostics.RecordCompAndGet(compErrCode, errorcodes.CategoryState), metadata).
+		WithErrorInfo(diagnostics.RecordErrorCodeComp(compErrCode, errorcodes.CategoryState), metadata).
 		Build()
 }

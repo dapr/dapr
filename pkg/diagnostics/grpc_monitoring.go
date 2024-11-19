@@ -227,7 +227,7 @@ func (g *grpcMetrics) UnaryServerInterceptor() func(ctx context.Context, req int
 			size = g.getPayloadSize(resp)
 		}
 		g.ServerRequestSent(ctx, info.FullMethod, status.Code(err).String(), int64(g.getPayloadSize(req)), int64(size), start)
-		TryRecordAPIErrorCode(err)
+		TryRecordErrorCode(err)
 		return resp, err
 	}
 }
@@ -248,7 +248,7 @@ func (g *grpcMetrics) UnaryClientInterceptor() func(ctx context.Context, method 
 		} else {
 			g.ClientRequestReceived(ctx, method, status.Code(err).String(), int64(g.getPayloadSize(req)), int64(resSize), start)
 		}
-		TryRecordAPIErrorCode(err)
+		TryRecordErrorCode(err)
 		return err
 	}
 }
@@ -266,7 +266,7 @@ func (g *grpcMetrics) StreamingServerInterceptor() grpc.StreamServerInterceptor 
 		now := time.Now()
 		err := handler(srv, ss)
 		g.StreamServerRequestSent(ctx, info.FullMethod, status.Code(err).String(), now)
-		TryRecordAPIErrorCode(err)
+		TryRecordErrorCode(err)
 		return err
 	}
 }
@@ -284,7 +284,7 @@ func (g *grpcMetrics) StreamingClientInterceptor() grpc.StreamServerInterceptor 
 		now := time.Now()
 		err := handler(srv, ss)
 		g.StreamClientRequestSent(ctx, info.FullMethod, status.Code(err).String(), now)
-		TryRecordAPIErrorCode(err)
+		TryRecordErrorCode(err)
 		return err
 	}
 }

@@ -20,6 +20,7 @@ import (
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
 
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
@@ -62,6 +63,28 @@ func TestRecordErrorCode(t *testing.T) {
 			} else if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.CommonAPIUnimplemented.Code}) {
 				assert.Equal(t, int64(1), metric.Data.(*view.CountData).Value)
 				assert.True(t, TagAndValuePresent(metric.Tags, tag.Tag{Key: categoryKey, Value: "common"}))
+			}
+		}
+	})
+
+	t.Run("record different error structures", func(t *testing.T) {
+		_ = DefaultErrorCodeMonitoring.Init("app-id")
+
+		assert.True(t, TryRecordErrorCode(&errorcodes.WorkflowComponentMissing))
+		assert.True(t, TryRecordErrorCode(&messages.ErrCryptoGetKey))
+
+		viewData, _ := view.RetrieveData("error_code/total")
+		v := view.Find("error_code/total")
+
+		allTagsPresent(t, v, viewData[0].Tags)
+
+		for _, metric := range viewData {
+			if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.WorkflowComponentMissing.Code}) {
+				assert.Equal(t, int64(1), metric.Data.(*view.CountData).Value)
+				assert.True(t, TagAndValuePresent(metric.Tags, tag.Tag{Key: categoryKey, Value: string(errorcodes.CategoryWorkflow)}))
+			} else if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.CryptoKey.Code}) {
+				assert.Equal(t, int64(1), metric.Data.(*view.CountData).Value)
+				assert.True(t, TagAndValuePresent(metric.Tags, tag.Tag{Key: categoryKey, Value: string(errorcodes.CategoryCrypto)}))
 			}
 		}
 	})

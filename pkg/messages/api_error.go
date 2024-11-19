@@ -114,6 +114,14 @@ func (e APIError) Is(targetI error) bool {
 		e.httpCode == target.httpCode
 }
 
+// Unwrap implements the interface that allows usage of error unwrapping with As()
+func (e APIError) Unwrap() error {
+	if e.tag.Code == "" {
+		return nil
+	}
+	return &e.tag
+}
+
 // String returns the string representation, useful for debugging.
 func (e APIError) String() string {
 	return fmt.Sprintf(errStringFormat, e.grpcCode, e.Message())

@@ -44,7 +44,7 @@ func fasthttpResponseWithError(code int, resp errorResponseValue) fasthttpRespon
 	// Check if it's an APIError object, may be duplicate check, but it is necessary to record error
 	apiErr, ok := resp.(messages.APIError)
 	if ok {
-		diagnostics.RecordAPIErrorCode(apiErr)
+		diagnostics.TryRecordErrorCode(apiErr)
 	}
 
 	return fasthttpResponseWithJSON(code, resp.JSONErrorValue(), nil)

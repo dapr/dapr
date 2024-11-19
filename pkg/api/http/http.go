@@ -1059,7 +1059,7 @@ func (a *api) onPostState(reqCtx *fasthttp.RequestCtx) {
 
 // stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error.
 func (a *api) stateErrorResponse(err error, errorCode errorcodes.ErrorCode) (int, string, ErrorResponse) {
-	diag.RecordErrorCodeAndGet(errorCode)
+	diag.TryRecordErrorCode(&errorCode)
 
 	etag, code, message := a.etagError(err)
 
@@ -1350,7 +1350,7 @@ func (a *api) onBulkPublish(reqCtx *fasthttp.RequestCtx) {
 			}
 			bulkRes.FailedEntries = append(bulkRes.FailedEntries, resEntry)
 		}
-		bulkRes.ErrorCode = diagnostics.RecordErrorCodeAndGet(errorcodes.PubsubPublishMessage)
+		bulkRes.ErrorCode = diagnostics.RecordErrorCodeEarly(errorcodes.PubsubPublishMessage)
 
 		switch {
 		case errors.As(err, &runtimePubsub.NotAllowedError{}):

@@ -143,7 +143,7 @@ func respondWithError(w http.ResponseWriter, err error) {
 	// Check if it's an APIError object
 	apiErr, ok := err.(messages.APIError)
 	if ok {
-		diagnostics.RecordAPIErrorCode(apiErr) // Record metric for error code
+		diagnostics.TryRecordErrorCode(apiErr) // Record metric for error code
 		respondWithData(w, apiErr.HTTPCode(), apiErr.JSONErrorValue())
 		return
 	}
