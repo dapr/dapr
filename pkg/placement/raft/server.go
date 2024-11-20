@@ -382,6 +382,12 @@ func (s *Server) ApplyCommand(cmdType CommandType, data DaprHostMember) (bool, e
 	s.lock.RLock()
 	defer s.lock.RUnlock()
 
+	// Since our raft store is specialised for storing actor hosts, we don't need to do upsert here,
+	// A command that removes all actor types from a host is equivalent to removing that host from the table.
+	if cmdType == MemberUpsert && len(data.Entities) == 0 {
+		cmdType = MemberRemove
+	}
+
 	cmdLog, err := makeRaftLogCommand(cmdType, data)
 	if err != nil {
 		return false, err
