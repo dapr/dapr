@@ -111,6 +111,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 		"--app-health-threshold=" + strconv.Itoa(opts.appHealthProbeThreshold),
 		"--mode=" + opts.mode,
 		"--enable-mtls=" + strconv.FormatBool(opts.enableMTLS),
+		"--enable-profiling",
 	}
 
 	if opts.appPort != nil {
@@ -164,7 +165,7 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	return &Daprd{
 		exec:             exec.New(t, binary.EnvValue("daprd"), args, opts.execOpts...),
 		ports:            fp,
-		httpClient:       client.HTTP(t),
+		httpClient:       client.HTTPWithTimeout(t, 30*time.Second),
 		appID:            opts.appID,
 		namespace:        ns,
 		appProtocol:      opts.appProtocol,
@@ -377,48 +378,52 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	return metrics
 }
 
-func (d *Daprd) HTTPGet(t *testing.T, ctx context.Context, path string, expectedCode int) {
-	t.Helper()
+func (d *Daprd) MetricResidentMemoryMi(t *testing.T, ctx context.Context) float64 {
+	return d.Metrics(t, ctx)["process_resident_memory_bytes"] * 1e-6
+}
+
+func (d *Daprd) HTTPGet(t assert.TestingT, ctx context.Context, path string, expectedCode int) {
 	d.httpxxx(t, ctx, http.MethodGet, path, nil, expectedCode)
 }
 
-func (d *Daprd) HTTPPost(t *testing.T, ctx context.Context, path string, body io.Reader, expectedCode int, headers ...string) {
-	t.Helper()
+func (d *Daprd) HTTPPost(t assert.TestingT, ctx context.Context, path string, body io.Reader, expectedCode int, headers ...string) {
 	d.httpxxx(t, ctx, http.MethodPost, path, body, expectedCode, headers...)
 }
 
-func (d *Daprd) HTTPGet2xx(t *testing.T, ctx context.Context, path string) {
-	t.Helper()
+func (d *Daprd) HTTPGet2xx(t assert.TestingT, ctx context.Context, path string) {
 	d.httpxxx(t, ctx, http.MethodGet, path, nil, http.StatusOK)
 }
 
-func (d *Daprd) HTTPPost2xx(t *testing.T, ctx context.Context, path string, body io.Reader, headers ...string) {
-	t.Helper()
+func (d *Daprd) HTTPPost2xx(t assert.TestingT, ctx context.Context, path string, body io.Reader, headers ...string) {
 	d.httpxxx(t, ctx, http.MethodPost, path, body, http.StatusOK, headers...)
 }
 
-func (d *Daprd) httpxxx(t *testing.T, ctx context.Context, method, path string, body io.Reader, expectedCode int, headers ...string) {
-	t.Helper()
+func (d *Daprd) HTTPDelete2xx(t assert.TestingT, ctx context.Context, path string, body io.Reader, headers ...string) {
+	d.httpxxx(t, ctx, http.MethodDelete, path, body, http.StatusOK, headers...)
+}
 
-	require.Zero(t, len(headers)%2, "headers must be key-value pairs")
+func (d *Daprd) httpxxx(t assert.TestingT, ctx context.Context, method, path string, body io.Reader, expectedCode int, headers ...string) {
+	assert.Zero(t, len(headers)%2, "headers must be key-value pairs")
 
 	path = strings.TrimPrefix(path, "/")
 	url := fmt.Sprintf("http://%s/%s", d.HTTPAddress(), path)
 	req, err := http.NewRequestWithContext(ctx, method, url, body)
-	require.NoError(t, err)
+	//nolint:testifylint
+	assert.NoError(t, err)
 
 	for i := 0; i < len(headers); i += 2 {
 		req.Header.Set(headers[i], headers[i+1])
 	}
 
 	resp, err := d.httpClient.Do(req)
-	require.NoError(t, err)
-	b, err := io.ReadAll(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
+	if assert.NoError(t, err) {
+		b, err := io.ReadAll(resp.Body)
+		assert.NoError(t, err)
+		assert.NoError(t, resp.Body.Close())
 
-	require.GreaterOrEqual(t, resp.StatusCode, expectedCode, strconv.Itoa(expectedCode)+"status code expected: "+string(b))
-	require.Less(t, resp.StatusCode, expectedCode+100, strconv.Itoa(expectedCode)+"status code expected: "+string(b))
+		assert.GreaterOrEqual(t, resp.StatusCode, expectedCode, strconv.Itoa(expectedCode)+"status code expected: "+string(b))
+		assert.Less(t, resp.StatusCode, expectedCode+100, strconv.Itoa(expectedCode)+"status code expected: "+string(b))
+	}
 }
 
 func (d *Daprd) GetMetaRegisteredComponents(t assert.TestingT, ctx context.Context) []*rtv1.RegisteredComponents {
