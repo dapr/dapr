@@ -27,6 +27,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/credentials/insecure"
+	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 	clocktesting "k8s.io/utils/clock/testing"
 
@@ -103,7 +104,9 @@ func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.T
 	require.NoError(t, err)
 
 	client := v1pb.NewPlacementClient(conn)
-	stream, err := client.ReportDaprStatus(context.Background())
+
+	bgCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(GRPCContextKeyAcceptVNodes, "false"))
+	stream, err := client.ReportDaprStatus(bgCtx)
 	require.NoError(t, err)
 
 	return conn, tcpConn.(*net.TCPConn), stream
@@ -304,4 +307,59 @@ func TestMemberRegistration_Leadership(t *testing.T) {
 		// where dapr runtime disconnects the connection from placement service unexpectedly.
 		require.NoError(t, conn.Close())
 	})
+}
+
+func TestRequiresUpdateInPlacementTables(t *testing.T) {
+	hostWithActors := &v1pb.Host{
+		Name:      "127.0.0.1:50100",
+		Namespace: "ns1",
+		Entities:  []string{"actor1", "actor2"},
+		Id:        "testAppID1",
+		Load:      1,
+	}
+
+	hostWithNoActors := &v1pb.Host{
+		Name:      "127.0.0.1:50100",
+		Namespace: "ns1",
+		Entities:  []string{},
+		Id:        "testAppID1",
+		Load:      1,
+	}
+
+	tests := []struct {
+		name        string
+		isActorHost bool
+		host        *v1pb.Host
+		expected    bool
+	}{
+		{
+			name:        "host with actors - updating actor types",
+			isActorHost: true,
+			host:        hostWithActors,
+			expected:    true,
+		},
+		{
+			name:        "host with no actors - registering new actors",
+			isActorHost: false,
+			host:        hostWithActors,
+			expected:    true,
+		},
+		{
+			name:        "host with actors - removing all actors",
+			isActorHost: true,
+			host:        hostWithNoActors,
+			expected:    true,
+		},
+		{
+			name:        "host with no actors - not registering any new actors",
+			isActorHost: false,
+			host:        hostWithNoActors,
+			expected:    false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			assert.Equal(t, tt.expected, requiresUpdateInPlacementTables(tt.host, &tt.isActorHost))
+		})
+	}
 }
