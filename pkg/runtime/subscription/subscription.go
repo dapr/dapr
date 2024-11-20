@@ -272,6 +272,7 @@ func New(opts Options) (*Subscription, error) {
 					derr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
 					if derr != nil {
 						log.Warnf("failed to send dropped message to dead letter queue for topic %s: %v", msgTopic, derr)
+						return nil, pErr
 					}
 				}
 				return nil, nil
@@ -280,14 +281,19 @@ func New(opts Options) (*Subscription, error) {
 			}
 			return nil, pErr
 		})
+		// when runtime shutting down, don't send to DLQ
 		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
-			if route.DeadLetterTopic == "" {
-				return err
+			if route.DeadLetterTopic != "" {
+				if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+					// dlq has been configured and message is successfully sent to dlq.
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
+					return nil
+				}
 			}
-			_ = s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
-			return nil
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+			return err
 		}
 		return err
 	})
