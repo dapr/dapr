@@ -201,25 +201,18 @@ type DaprClient interface {
 	// Deprecated: Do not use.
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Deprecated: Do not use.
 	// Starts a new instance of a workflow
 	StartWorkflowBeta1(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error)
-	// Deprecated: Do not use.
 	// Gets details about a started workflow instance
 	GetWorkflowBeta1(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error)
-	// Deprecated: Do not use.
 	// Purge Workflow
 	PurgeWorkflowBeta1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Deprecated: Do not use.
 	// Terminates a running workflow instance
 	TerminateWorkflowBeta1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Deprecated: Do not use.
 	// Pauses a running workflow instance
 	PauseWorkflowBeta1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Deprecated: Do not use.
 	// Resumes a paused workflow instance
 	ResumeWorkflowBeta1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
-	// Deprecated: Do not use.
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Shutdown the sidecar
@@ -784,7 +777,6 @@ func (c *daprClient) RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEven
 	return out, nil
 }
 
-// Deprecated: Do not use.
 func (c *daprClient) StartWorkflowBeta1(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error) {
 	out := new(StartWorkflowResponse)
 	err := c.cc.Invoke(ctx, Dapr_StartWorkflowBeta1_FullMethodName, in, out, opts...)
@@ -794,7 +786,6 @@ func (c *daprClient) StartWorkflowBeta1(ctx context.Context, in *StartWorkflowRe
 	return out, nil
 }
 
-// Deprecated: Do not use.
 func (c *daprClient) GetWorkflowBeta1(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error) {
 	out := new(GetWorkflowResponse)
 	err := c.cc.Invoke(ctx, Dapr_GetWorkflowBeta1_FullMethodName, in, out, opts...)
@@ -804,7 +795,6 @@ func (c *daprClient) GetWorkflowBeta1(ctx context.Context, in *GetWorkflowReques
 	return out, nil
 }
 
-// Deprecated: Do not use.
 func (c *daprClient) PurgeWorkflowBeta1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_PurgeWorkflowBeta1_FullMethodName, in, out, opts...)
@@ -814,7 +804,6 @@ func (c *daprClient) PurgeWorkflowBeta1(ctx context.Context, in *PurgeWorkflowRe
 	return out, nil
 }
 
-// Deprecated: Do not use.
 func (c *daprClient) TerminateWorkflowBeta1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_TerminateWorkflowBeta1_FullMethodName, in, out, opts...)
@@ -824,7 +813,6 @@ func (c *daprClient) TerminateWorkflowBeta1(ctx context.Context, in *TerminateWo
 	return out, nil
 }
 
-// Deprecated: Do not use.
 func (c *daprClient) PauseWorkflowBeta1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_PauseWorkflowBeta1_FullMethodName, in, out, opts...)
@@ -834,7 +822,6 @@ func (c *daprClient) PauseWorkflowBeta1(ctx context.Context, in *PauseWorkflowRe
 	return out, nil
 }
 
-// Deprecated: Do not use.
 func (c *daprClient) ResumeWorkflowBeta1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_ResumeWorkflowBeta1_FullMethodName, in, out, opts...)
@@ -844,7 +831,6 @@ func (c *daprClient) ResumeWorkflowBeta1(ctx context.Context, in *ResumeWorkflow
 	return out, nil
 }
 
-// Deprecated: Do not use.
 func (c *daprClient) RaiseEventWorkflowBeta1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_RaiseEventWorkflowBeta1_FullMethodName, in, out, opts...)
@@ -1006,25 +992,18 @@ type DaprServer interface {
 	// Deprecated: Do not use.
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowAlpha1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error)
-	// Deprecated: Do not use.
 	// Starts a new instance of a workflow
 	StartWorkflowBeta1(context.Context, *StartWorkflowRequest) (*StartWorkflowResponse, error)
-	// Deprecated: Do not use.
 	// Gets details about a started workflow instance
 	GetWorkflowBeta1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error)
-	// Deprecated: Do not use.
 	// Purge Workflow
 	PurgeWorkflowBeta1(context.Context, *PurgeWorkflowRequest) (*emptypb.Empty, error)
-	// Deprecated: Do not use.
 	// Terminates a running workflow instance
 	TerminateWorkflowBeta1(context.Context, *TerminateWorkflowRequest) (*emptypb.Empty, error)
-	// Deprecated: Do not use.
 	// Pauses a running workflow instance
 	PauseWorkflowBeta1(context.Context, *PauseWorkflowRequest) (*emptypb.Empty, error)
-	// Deprecated: Do not use.
 	// Resumes a paused workflow instance
 	ResumeWorkflowBeta1(context.Context, *ResumeWorkflowRequest) (*emptypb.Empty, error)
-	// Deprecated: Do not use.
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowBeta1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error)
 	// Shutdown the sidecar

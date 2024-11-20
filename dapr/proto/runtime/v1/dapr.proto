@@ -186,39 +186,26 @@ service Dapr {
   }
 
   // Starts a new instance of a workflow
-  rpc StartWorkflowBeta1 (StartWorkflowRequest) returns (StartWorkflowResponse) {
-    option deprecated = true;
-  }
+  rpc StartWorkflowBeta1 (StartWorkflowRequest) returns (StartWorkflowResponse) {}
 
   // Gets details about a started workflow instance
-  rpc GetWorkflowBeta1 (GetWorkflowRequest) returns (GetWorkflowResponse) {
-    option deprecated = true;
-  }
+  rpc GetWorkflowBeta1 (GetWorkflowRequest) returns (GetWorkflowResponse) {}
 
   // Purge Workflow
-  rpc PurgeWorkflowBeta1 (PurgeWorkflowRequest) returns (google.protobuf.Empty) {
-    option deprecated = true;
-  }
+  rpc PurgeWorkflowBeta1 (PurgeWorkflowRequest) returns (google.protobuf.Empty) {}
 
   // Terminates a running workflow instance
-  rpc TerminateWorkflowBeta1 (TerminateWorkflowRequest) returns (google.protobuf.Empty) {
-    option deprecated = true;
-  }
+  rpc TerminateWorkflowBeta1 (TerminateWorkflowRequest) returns (google.protobuf.Empty) {}
 
   // Pauses a running workflow instance
-  rpc PauseWorkflowBeta1 (PauseWorkflowRequest) returns (google.protobuf.Empty) {
-    option deprecated = true;
-  }
+  rpc PauseWorkflowBeta1 (PauseWorkflowRequest) returns (google.protobuf.Empty) {}
 
   // Resumes a paused workflow instance
-  rpc ResumeWorkflowBeta1 (ResumeWorkflowRequest) returns (google.protobuf.Empty) {
-    option deprecated = true;
-  }
+  rpc ResumeWorkflowBeta1 (ResumeWorkflowRequest) returns (google.protobuf.Empty) {}
 
   // Raise an event to a running workflow instance
-  rpc RaiseEventWorkflowBeta1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {
-    option deprecated = true;
-  }
+  rpc RaiseEventWorkflowBeta1 (RaiseEventWorkflowRequest) returns (google.protobuf.Empty) {}
+  
   // Shutdown the sidecar
   rpc Shutdown (ShutdownRequest) returns (google.protobuf.Empty) {}
 
