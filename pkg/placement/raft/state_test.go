@@ -17,6 +17,8 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+
+	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
 func TestNewDaprHostMemberState(t *testing.T) {
@@ -396,4 +398,76 @@ func TestUpdateAPILevel(t *testing.T) {
 
 		require.Equal(t, uint32(20), s.data.APILevel)
 	})
+}
+
+func TestDaprHostMemberState_UpsertRequired(t *testing.T) {
+	tests := []struct {
+		name             string
+		existingEntities []string
+		newEntities      []string
+		want             bool
+	}{
+		{
+			name:             "existing record - change in entities",
+			existingEntities: []string{"a", "b", "c"},
+			newEntities:      []string{"a", "b"},
+			want:             true,
+		},
+		{
+			name:             "existing record - no change in entities",
+			existingEntities: []string{"a", "b", "c"},
+			newEntities:      []string{"a", "b", "c"},
+			want:             false,
+		},
+		{
+			name:             "existing record - remove all entities",
+			existingEntities: []string{"a", "b", "c"},
+			newEntities:      nil,
+			want:             true,
+		},
+		{
+			name:             "no previous record - new entities",
+			existingEntities: nil,
+			newEntities:      []string{"a", "b", "c"},
+			want:             true,
+		},
+		{
+			name:             "no previous record - no entities",
+			existingEntities: nil,
+			newEntities:      nil,
+			want:             false,
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			s := &DaprHostMemberState{
+				data: DaprHostMemberStateData{},
+			}
+			if tt.existingEntities != nil {
+				s.data.Namespace = map[string]*daprNamespace{
+					"ns": {
+						Members: map[string]*DaprHostMember{
+							"m1": {
+								Name:      "m1",
+								AppID:     "app1",
+								Namespace: "ns",
+								Entities:  tt.existingEntities,
+							},
+						},
+					},
+				}
+			}
+
+			host := &placementv1pb.Host{
+				Name:      "m1",
+				Id:        "app1",
+				Namespace: "ns",
+				Entities:  tt.newEntities,
+			}
+
+			if got := s.UpsertRequired("ns", host); got != tt.want {
+				t.Errorf("DaprHostMemberState.UpsertRequired() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
