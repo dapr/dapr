@@ -208,7 +208,10 @@ func (s *DaprHostMemberState) UpsertRequired(ns string, new *placementv1pb.Host)
 
 	n, ok := s.data.Namespace[ns]
 	if !ok {
-		return true // If the member doesn't exist, we need to upsert
+		// There aren't any hosts in this namespace currently
+		// If the new host is reporting new actor types, we need to upsert
+		// If it isn't reporting new actor types, no upsert is required
+		return new.GetEntities() != nil
 	}
 	if m, ok := n.Members[new.GetName()]; ok {
 		// If all attributes match, no upsert is required

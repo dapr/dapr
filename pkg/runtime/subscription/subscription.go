@@ -148,6 +148,17 @@ func New(opts Options) (*Subscription, error) {
 		data := msg.Data
 		if rawPayload {
 			cloudEvent = contribpubsub.FromRawPayload(msg.Data, msgTopic, name)
+			if traceid, ok := msg.Metadata[contribpubsub.TraceIDField]; ok {
+				cloudEvent[contribpubsub.TraceIDField] = traceid
+			}
+			if traceparent, ok := msg.Metadata[contribpubsub.TraceParentField]; ok {
+				cloudEvent[contribpubsub.TraceParentField] = traceparent
+				// traceparent supersedes traceid
+				cloudEvent[contribpubsub.TraceIDField] = traceparent
+			}
+			if tracestate, ok := msg.Metadata[contribpubsub.TraceStateField]; ok {
+				cloudEvent[contribpubsub.TraceStateField] = tracestate
+			}
 			data, err = json.Marshal(cloudEvent)
 			if err != nil {
 				log.Errorf("error serializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
@@ -162,6 +173,7 @@ func New(opts Options) (*Subscription, error) {
 				return err
 			}
 		} else {
+			// all messages consumed with "rawPayload=false" are deserialized as a CloudEvent, even when the payload is not a CloudEvent
 			err = json.Unmarshal(msg.Data, &cloudEvent)
 			if err != nil {
 				log.Errorf("error deserializing cloud event in pubsub %s and topic %s: %s", name, msgTopic, err)
@@ -174,6 +186,25 @@ func New(opts Options) (*Subscription, error) {
 				}
 				diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
 				return err
+			}
+
+			// fallback to message metadata to propagate the tracing information
+			if _, ok := cloudEvent[contribpubsub.TraceIDField]; !ok {
+				if traceid, ok := msg.Metadata[contribpubsub.TraceIDField]; ok {
+					cloudEvent[contribpubsub.TraceIDField] = traceid
+				}
+			}
+			if _, ok := cloudEvent[contribpubsub.TraceParentField]; !ok {
+				if traceparent, ok := msg.Metadata[contribpubsub.TraceParentField]; ok {
+					cloudEvent[contribpubsub.TraceParentField] = traceparent
+					// traceparent supersedes traceid
+					cloudEvent[contribpubsub.TraceIDField] = traceparent
+				}
+			}
+			if _, ok := cloudEvent[contribpubsub.TraceStateField]; !ok {
+				if tracestate, ok := msg.Metadata[contribpubsub.TraceStateField]; ok {
+					cloudEvent[contribpubsub.TraceStateField] = tracestate
+				}
 			}
 		}
 
@@ -241,6 +272,7 @@ func New(opts Options) (*Subscription, error) {
 					derr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
 					if derr != nil {
 						log.Warnf("failed to send dropped message to dead letter queue for topic %s: %v", msgTopic, derr)
+						return nil, pErr
 					}
 				}
 				return nil, nil
@@ -249,14 +281,19 @@ func New(opts Options) (*Subscription, error) {
 			}
 			return nil, pErr
 		})
+		// when runtime shutting down, don't send to DLQ
 		if err != nil && err != context.Canceled {
 			// Sending msg to dead letter queue.
 			// If no DLQ is configured, return error for backwards compatibility (component-level retry).
-			if route.DeadLetterTopic == "" {
-				return err
+			if route.DeadLetterTopic != "" {
+				if dlqErr := s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic); dlqErr == nil {
+					// dlq has been configured and message is successfully sent to dlq.
+					diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Drop)), "", msgTopic, 0)
+					return nil
+				}
 			}
-			_ = s.sendToDeadLetter(ctx, name, msg, route.DeadLetterTopic)
-			return nil
+			diag.DefaultComponentMonitoring.PubsubIngressEvent(ctx, name, strings.ToLower(string(contribpubsub.Retry)), "", msgTopic, 0)
+			return err
 		}
 		return err
 	})

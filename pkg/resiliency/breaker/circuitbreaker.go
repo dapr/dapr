@@ -47,6 +47,7 @@ type CircuitBreaker struct {
 	// If it evaluates to true, the circuit breaker will be placed
 	// into the open state.
 	// Default is consecutiveFailures > 5.
+	// Other possible values: `requests`, `totalFailures`
 	Trip *expr.Expr `mapstructure:"trip"`
 
 	breaker *gobreaker.CircuitBreaker
