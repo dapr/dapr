@@ -83,14 +83,24 @@ Create etcd client http ports list dynamically based on replicaCount.
 {{- end -}}
 
 {{/*
-Gets the number of replicas. If global.ha.enabled is true, then 3. Otherwise, 1.
+Gets the number of replicas.
+- If `global.scheduler.enabled` is false, replicas = 0.
+- If `global.ha.enabled` is true:
+  - If `global.scheduler.enabled` is true, replicas = 3.
+- If `global.ha.enabled` is false:
+  - If `local ha` is true and `global.scheduler.enabled` is true, replicas = 3.
+  - If `local ha` is false and `global.scheduler.enabled` is true, replicas = 1.
 */}}
 {{- define "dapr_scheduler.get-replicas" -}}
 {{-   $replicas := 0 }}
-{{-   if and (eq true .Values.global.ha.enabled) (eq .Values.global.scheduler.enabled true) }}
-{{-       $replicas = 3 }}
-{{-   else if and (eq false .Values.global.ha.enabled) (eq .Values.global.scheduler.enabled true) -}}
-{{-       $replicas = 1 }}
+{{-   if (eq true .Values.global.scheduler.enabled) }}
+{{-     if eq true .Values.global.ha.enabled }}
+{{-         $replicas = 3 }}
+{{-     else if eq true .Values.ha }}
+{{-         $replicas = 3 }}
+{{-     else }}
+{{-         $replicas = 1 }}
+{{-     end }}
 {{-   end }}
 {{-   $replicas }}
 {{- end -}}
