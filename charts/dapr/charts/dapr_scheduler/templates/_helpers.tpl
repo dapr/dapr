@@ -88,8 +88,8 @@ Gets the number of replicas.
 - If `global.ha.enabled` is true:
   - If `global.scheduler.enabled` is true, replicas = 3.
 - If `global.ha.enabled` is false:
-  - If `local ha` is true and `global.scheduler.enabled` is true, replicas = 3.
-  - If `local ha` is false and `global.scheduler.enabled` is true, replicas = 1.
+  - If `dapr_scheduler.ha` is true and `global.scheduler.enabled` is true, replicas = 3.
+  - If `dapr_scheduler.ha` is false and `global.scheduler.enabled` is true, replicas = 1.
 */}}
 {{- define "dapr_scheduler.get-replicas" -}}
 {{-   $replicas := 0 }}
