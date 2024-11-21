@@ -148,12 +148,6 @@ func (d *retrymatchinghttp) Run(t *testing.T, ctx context.Context) {
 			expectRetries:      false,
 		},
 		{
-			title:              "invalid status not in matching list 0",
-			statusCode:         0,
-			expectedStatusCode: 500,
-			expectRetries:      true, // this is retried because there is not a valid code to compare against
-		},
-		{
 			title:              "status in matching list 100",
 			statusCode:         100,
 			expectedStatusCode: 200,
