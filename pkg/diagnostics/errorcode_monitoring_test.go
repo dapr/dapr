@@ -14,14 +14,17 @@ limitations under the License.
 package diagnostics
 
 import (
+	"net/http"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
 	"go.opencensus.io/stats/view"
 	"go.opencensus.io/tag"
+	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
+	"github.com/dapr/kit/errors"
 )
 
 func TestRecordErrorCode(t *testing.T) {
@@ -70,8 +73,20 @@ func TestRecordErrorCode(t *testing.T) {
 	t.Run("record different error structures", func(t *testing.T) {
 		_ = DefaultErrorCodeMonitoring.Init("app-id")
 
-		assert.True(t, TryRecordErrorCode(&errorcodes.WorkflowComponentMissing))
-		assert.True(t, TryRecordErrorCode(&messages.ErrCryptoGetKey))
+		assert.True(t, RecordErrorCode(&errorcodes.WorkflowComponentMissing))
+		assert.True(t, RecordErrorCode(messages.NewAPIErrorHTTP("error message", errorcodes.WorkflowComponentMissing, 502)))
+		assert.True(t, RecordErrorCode(&messages.ErrCryptoGetKey))
+		assert.True(
+			t,
+			RecordErrorCode(errors.NewBuilder(
+				codes.InvalidArgument,
+				http.StatusBadRequest,
+				"test-message",
+				"",
+				string(errorcodes.CategoryCrypto),
+			).WithErrorInfo(errorcodes.CryptoKey.Code, nil).Build(),
+			),
+		)
 
 		viewData, _ := view.RetrieveData("error_code/total")
 		v := view.Find("error_code/total")
@@ -80,10 +95,10 @@ func TestRecordErrorCode(t *testing.T) {
 
 		for _, metric := range viewData {
 			if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.WorkflowComponentMissing.Code}) {
-				assert.Equal(t, int64(1), metric.Data.(*view.CountData).Value)
+				assert.Equal(t, int64(2), metric.Data.(*view.CountData).Value)
 				assert.True(t, TagAndValuePresent(metric.Tags, tag.Tag{Key: categoryKey, Value: string(errorcodes.CategoryWorkflow)}))
 			} else if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.CryptoKey.Code}) {
-				assert.Equal(t, int64(1), metric.Data.(*view.CountData).Value)
+				assert.Equal(t, int64(2), metric.Data.(*view.CountData).Value)
 				assert.True(t, TagAndValuePresent(metric.Tags, tag.Tag{Key: categoryKey, Value: string(errorcodes.CategoryCrypto)}))
 			}
 		}

@@ -21,7 +21,6 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/components-contrib/metadata"
-	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/kit/errors"
 )
@@ -50,6 +49,7 @@ func (s *StateStoreError) NotFound(appID string) error {
 			http.StatusBadRequest,
 			msg,
 			errorcodes.StateStoreNotFound.Code,
+			string(errorcodes.CategoryState),
 		),
 		errors.CodeNotFound,
 		meta,
@@ -69,6 +69,7 @@ func (s *StateStoreError) NotConfigured(appID string) error {
 			http.StatusInternalServerError,
 			msg,
 			errorcodes.StateStoreNotConfigured.Code,
+			string(errorcodes.CategoryState),
 		),
 		errors.CodeNotConfigured,
 		meta,
@@ -82,6 +83,7 @@ func (s *StateStoreError) InvalidKeyName(key string, msg string) error {
 			http.StatusBadRequest,
 			msg,
 			errorcodes.CommonMalformedRequest.Code,
+			string(errorcodes.CategoryState),
 		).WithFieldViolation(key, msg),
 		errors.CodeIllegalKey,
 		nil,
@@ -97,6 +99,7 @@ func (s *StateStoreError) TransactionsNotSupported() error {
 			http.StatusInternalServerError,
 			fmt.Sprintf("state store %s doesn't support transactions", s.name),
 			errorcodes.StateStoreNotSupported.Code, // TODO: @elena-kolevska this misleading and also used for different things ("query unsupported"); it should be removed in the next major version
+			string(errorcodes.CategoryState),
 		).WithHelpLink("https://docs.dapr.io/reference/components-reference/supported-state-stores/", "Check the list of state stores and the features they support"),
 		"TRANSACTIONS_NOT_SUPPORTED",
 		nil,
@@ -110,6 +113,7 @@ func (s *StateStoreError) TooManyTransactionalOps(count int, max int) error {
 			http.StatusBadRequest,
 			fmt.Sprintf("the transaction contains %d operations, which is more than what the state store supports: %d", count, max),
 			errorcodes.StateStoreTooManyTransactions.Code,
+			string(errorcodes.CategoryState),
 		),
 		"TOO_MANY_TRANSACTIONS",
 		map[string]string{
@@ -128,6 +132,7 @@ func (s *StateStoreError) QueryUnsupported() error {
 			http.StatusInternalServerError,
 			"state store does not support querying",
 			errorcodes.StateStoreNotSupported.Code,
+			string(errorcodes.CategoryState),
 		),
 		"QUERYING_"+errors.CodeNotSupported,
 		nil,
@@ -141,6 +146,7 @@ func (s *StateStoreError) QueryFailed(detail string) error {
 			http.StatusInternalServerError,
 			fmt.Sprintf("state store %s query failed: %s", s.name, detail),
 			errorcodes.StateQuery.Code,
+			string(errorcodes.CategoryState),
 		),
 		errors.CodePostfixQueryFailed,
 		nil,
@@ -153,6 +159,6 @@ func (s *StateStoreError) build(err *errors.ErrorBuilder, errCode string, metada
 	}
 	compErrCode := errors.CodePrefixStateStore + errCode
 	return err.
-		WithErrorInfo(diagnostics.RecordErrorCodeComp(compErrCode, errorcodes.CategoryState), metadata).
+		WithErrorInfo(compErrCode, metadata).
 		Build()
 }

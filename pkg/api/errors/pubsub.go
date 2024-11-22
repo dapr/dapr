@@ -20,7 +20,6 @@ import (
 	"google.golang.org/grpc/codes"
 
 	"github.com/dapr/components-contrib/metadata"
-	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/kit/errors"
 )
@@ -224,8 +223,8 @@ func (p *PubSubTopicError) UnmarshalEvents(err error) error {
 }
 
 func (p *PubSubMetadataError) build(grpcCode codes.Code, httpCode int, msg string, tag errorcodes.ErrorCode, errCode string) error {
-	errorCode := diagnostics.RecordErrorCodeEarly(tag)
-	err := errors.NewBuilder(grpcCode, httpCode, msg, errorCode)
+	// TODO: this is an example of replacing RecordErrorCodeEarly
+	err := errors.NewBuilder(grpcCode, httpCode, msg, tag.Code, string(tag.Category))
 	if !p.skipResourceInfo {
 		err = err.WithResourceInfo(string(metadata.PubSubType), p.p.name, "", msg)
 	}
@@ -241,7 +240,8 @@ func PubSubOutbox(appID string, err error) error {
 		codes.Internal,
 		http.StatusInternalServerError,
 		message,
-		diagnostics.RecordErrorCodeEarly(errorcodes.PubsubPublishOutbox),
+		errorcodes.PubsubPublishOutbox.Code,
+		string(errorcodes.CategoryPubsub),
 	).WithErrorInfo(errors.CodePrefixPubSub+"OUTBOX", map[string]string{
 		"appID": appID, "error": err.Error(),
 	}).Build()

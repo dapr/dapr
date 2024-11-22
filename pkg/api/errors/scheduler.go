@@ -18,7 +18,6 @@ import (
 
 	"google.golang.org/grpc/codes"
 
-	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	kiterrors "github.com/dapr/kit/errors"
 )
@@ -49,8 +48,9 @@ func SchedulerURLName(metadata map[string]string) error {
 		http.StatusBadRequest,
 		message,
 		"",
+		string(errorcodes.CategoryJob),
 	).
-		WithErrorInfo(diagnostics.RecordErrorCodeComp(compErrCode, errorcodes.CategoryJob), metadata).
+		WithErrorInfo(compErrCode, metadata).
 		Build()
 }
 
@@ -61,8 +61,9 @@ func SchedulerScheduleJob(metadata map[string]string, err error) error {
 		http.StatusInternalServerError,
 		MsgScheduleJob+" due to: "+err.Error(),
 		"",
+		string(errorcodes.CategoryJob),
 	).
-		WithErrorInfo(diagnostics.RecordErrorCodeComp(compErrCode, errorcodes.CategoryJob), metadata).
+		WithErrorInfo(compErrCode, metadata).
 		Build()
 }
 
@@ -73,8 +74,9 @@ func SchedulerGetJob(metadata map[string]string, err error) error {
 		http.StatusInternalServerError,
 		MsgGetJob+" due to: "+err.Error(),
 		"",
+		string(errorcodes.CategoryJob),
 	).
-		WithErrorInfo(diagnostics.RecordErrorCodeComp(compErrCode, errorcodes.CategoryJob), metadata).
+		WithErrorInfo(compErrCode, metadata).
 		Build()
 }
 
@@ -85,8 +87,9 @@ func SchedulerListJobs(metadata map[string]string, err error) error {
 		http.StatusInternalServerError,
 		MsgListJobs+" due to: "+err.Error(),
 		"",
+		string(errorcodes.CategoryJob),
 	).
-		WithErrorInfo(diagnostics.RecordErrorCodeComp(compErrCode, errorcodes.CategoryJob), metadata).
+		WithErrorInfo(compErrCode, metadata).
 		Build()
 }
 
@@ -97,7 +100,8 @@ func SchedulerDeleteJob(metadata map[string]string, err error) error {
 		http.StatusInternalServerError,
 		MsgDeleteJob+" due to: "+err.Error(),
 		"",
+		string(errorcodes.CategoryJob),
 	).
-		WithErrorInfo(diagnostics.RecordErrorCodeComp(compErrCode, errorcodes.CategoryJob), metadata).
+		WithErrorInfo(compErrCode, metadata).
 		Build()
 }

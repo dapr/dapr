@@ -113,7 +113,7 @@ func KitErrorFromStatus(s *status.Status) (error, bool) {
 		return s.Err(), false
 	}
 
-	return kiterrors.NewBuilder(s.Code(), httpCode, s.Message(), info.GetMetadata()[tagField]).
+	return kiterrors.NewBuilder(s.Code(), httpCode, s.Message(), info.GetMetadata()[tagField], "unknown").
 		WithDetails(&errdetails.ErrorInfo{
 			Domain: info.GetDomain(),
 			Reason: info.GetReason(),

@@ -44,6 +44,11 @@ type APIError struct {
 	grpcCode grpcCodes.Code
 }
 
+// NewAPIErrorHTTP allows creation of a new APIError object for use in HTTP responses only
+func NewAPIErrorHTTP(message string, tag errorcodes.ErrorCode, httpCode int) APIError {
+	return APIError{message: message, tag: tag, httpCode: httpCode}
+}
+
 // WithFormat returns a copy of the error with the message going through fmt.Sprintf with the arguments passed to this method.
 func (e APIError) WithFormat(a ...any) APIError {
 	return APIError{
@@ -63,11 +68,8 @@ func (e APIError) Message() string {
 }
 
 // Tag returns the value of the tag property.
-func (e APIError) Tag() errorcodes.ErrorCode {
-	if e.tag.Code == "" {
-		return errorcodes.ErrorCode{}
-	}
-	return e.tag
+func (e APIError) Tag() string {
+	return e.tag.Code
 }
 
 // HTTPCode returns the value of the HTTPCode property.
@@ -95,7 +97,7 @@ func (e APIError) JSONErrorValue() []byte {
 		ErrorCode string `json:"errorCode"`
 		Message   string `json:"message"`
 	}{
-		ErrorCode: e.Tag().Code,
+		ErrorCode: e.Tag(),
 		Message:   e.Message(),
 	})
 	return b

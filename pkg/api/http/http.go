@@ -413,9 +413,9 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 
 	b, err := json.Marshal(req.Data)
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.CommonMalformedRequestData, fmt.Sprintf(messages.ErrMalformedRequestData, err))
-		respondWithData(w, nethttp.StatusInternalServerError, msg.JSONErrorValue())
-		log.Debug(msg)
+		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrMalformedRequestData, err), errorcodes.CommonMalformedRequestData, nethttp.StatusInternalServerError)
+		respondWithError(w, resp)
+		log.Debug(resp)
 		return
 	}
 
@@ -453,9 +453,9 @@ func (a *api) onOutputBindingMessage(w nethttp.ResponseWriter, r *nethttp.Reques
 	}
 
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.ConversationInvokeOutputBinding, fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err))
-		respondWithData(w, nethttp.StatusInternalServerError, msg.JSONErrorValue())
-		log.Debug(msg)
+		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrInvokeOutputBinding, name, err), errorcodes.ConversationInvokeOutputBinding, nethttp.StatusInternalServerError)
+		respondWithError(w, resp)
+		log.Debug(resp)
 		return
 	}
 
@@ -536,9 +536,9 @@ func (a *api) onBulkGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 			code = kerr.HTTPStatusCode()
 		}
 
-		msg := NewErrorResponse(errorcodes.StateBulkGet, err.Error())
-		respondWithData(w, code, msg.JSONErrorValue())
-		log.Debug(msg)
+		resp := messages.NewAPIErrorHTTP(err.Error(), errorcodes.StateBulkGet, code)
+		respondWithError(w, resp)
+		log.Debug(resp)
 		return
 	}
 
@@ -642,9 +642,9 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 			code = kerr.HTTPStatusCode()
 		}
 
-		msg := NewErrorResponse(errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
-		respondWithData(w, code, msg.JSONErrorValue())
-		log.Debug(msg)
+		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()), errorcodes.StateGet, code)
+		respondWithError(w, resp)
+		log.Debug(resp)
 		return
 	}
 
@@ -656,9 +656,9 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	if encryption.EncryptedStateStore(storeName) {
 		val, err := encryption.TryDecryptValue(storeName, resp.Data)
 		if err != nil {
-			msg := NewErrorResponse(errorcodes.StateGet, fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()))
-			respondWithData(w, nethttp.StatusInternalServerError, msg.JSONErrorValue())
-			log.Debug(msg)
+			resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateGet, key, storeName, err.Error()), errorcodes.StateGet, nethttp.StatusInternalServerError)
+			respondWithError(w, resp)
+			log.Debug(resp)
 			return
 		}
 
@@ -676,20 +676,20 @@ func (a *api) onGetState(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 func (a *api) getConfigurationStoreWithRequestValidation(w nethttp.ResponseWriter, r *nethttp.Request) (configuration.Store, string, error) {
 	if a.universal.CompStore().ConfigurationsLen() == 0 {
-		msg := NewErrorResponse(errorcodes.ConfigurationStoreNotConfigured, messages.ErrConfigurationStoresNotConfigured)
-		respondWithData(w, nethttp.StatusInternalServerError, msg.JSONErrorValue())
-		log.Debug(msg)
-		return nil, "", errors.New(msg.Message)
+		resp := messages.NewAPIErrorHTTP(messages.ErrConfigurationStoresNotConfigured, errorcodes.ConfigurationStoreNotConfigured, nethttp.StatusInternalServerError)
+		respondWithError(w, resp)
+		log.Debug(resp)
+		return nil, "", errors.New(resp.Message())
 	}
 
 	storeName := chi.URLParam(r, storeNameParam)
 
 	conf, ok := a.universal.CompStore().GetConfiguration(storeName)
 	if !ok {
-		msg := NewErrorResponse(errorcodes.ConfigurationStoreNotFound, fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName))
-		respondWithData(w, nethttp.StatusBadRequest, msg.JSONErrorValue())
-		log.Debug(msg)
-		return nil, "", errors.New(msg.Message)
+		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationStoreNotFound, storeName), errorcodes.ConfigurationStoreNotFound, nethttp.StatusBadRequest)
+		respondWithError(w, resp)
+		log.Debug(resp)
+		return nil, "", errors.New(resp.Message())
 	}
 	return conf, storeName, nil
 }
@@ -805,9 +805,9 @@ func (a *api) onSubscribeConfiguration(w nethttp.ResponseWriter, r *nethttp.Requ
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.ConfigurationSubscribe, fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()))
-		respondWithData(w, nethttp.StatusInternalServerError, msg.JSONErrorValue())
-		log.Debug(msg)
+		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationSubscribe, keys, storeName, err.Error()), errorcodes.ConfigurationSubscribe, nethttp.StatusInternalServerError)
+		respondWithError(w, resp)
+		log.Debug(resp)
 		return
 	}
 
@@ -886,9 +886,9 @@ func (a *api) onGetConfiguration(w nethttp.ResponseWriter, r *nethttp.Request) {
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), storeName, diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.ConfigurationGet, fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()))
-		respondWithData(w, nethttp.StatusInternalServerError, msg.JSONErrorValue())
-		log.Debug(msg)
+		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrConfigurationGet, keys, storeName, err.Error()), errorcodes.ConfigurationGet, nethttp.StatusInternalServerError)
+		respondWithError(w, resp)
+		log.Debug(resp)
 		return
 	}
 
@@ -952,10 +952,10 @@ func (a *api) onDeleteState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	diag.DefaultComponentMonitoring.StateInvoked(r.Context(), storeName, diag.Delete, err == nil, elapsed)
 
 	if err != nil {
-		statusCode, errMsg, resp := a.stateErrorResponse(err, errorcodes.StateDelete)
-		resp.Message = fmt.Sprintf(messages.ErrStateDelete, key, errMsg)
-		respondWithData(w, statusCode, resp.JSONErrorValue())
-		log.Debug(resp.Message)
+		statusCode, errMsg := a.stateErrorResponse(err)
+		apiResp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateDelete, key, errMsg), errorcodes.StateDelete, statusCode)
+		respondWithError(w, apiResp)
+		log.Debug(apiResp)
 		return
 	}
 	respondWithEmpty(w)
@@ -969,17 +969,18 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.CommonMalformedRequest, err.Error())
-		respondWithData(w, nethttp.StatusBadRequest, msg.JSONErrorValue())
-		log.Debug(msg)
+		// TODO: remove usage of NewErrorResponse, just make an APIError and use respondWithError()
+		resp := messages.NewAPIErrorHTTP(err.Error(), errorcodes.CommonMalformedRequest, nethttp.StatusBadRequest)
+		respondWithError(w, resp)
+		log.Debug(resp)
 		return
 	}
 	reqs := []state.SetRequest{}
 	err = json.NewDecoder(r.Body).Decode(&reqs)
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.CommonMalformedRequest, err.Error())
-		respondWithData(w, nethttp.StatusBadRequest, msg.JSONErrorValue())
-		log.Debug(msg)
+		resp := messages.NewAPIErrorHTTP(err.Error(), errorcodes.CommonMalformedRequest, nethttp.StatusBadRequest)
+		respondWithError(w, resp)
+		log.Debug(resp)
 		return
 	}
 	if len(reqs) == 0 {
@@ -991,9 +992,9 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 
 	for i, r := range reqs {
 		if len(reqs[i].Key) == 0 {
-			msg := NewErrorResponse(errorcodes.CommonMalformedRequest, `"key" is a required field`)
-			respondWithData(w, nethttp.StatusBadRequest, msg.JSONErrorValue())
-			log.Debug(msg)
+			resp := messages.NewAPIErrorHTTP(`"key" is a required field`, errorcodes.CommonMalformedRequest, nethttp.StatusBadRequest)
+			respondWithError(w, resp)
+			log.Debug(resp)
 			return
 		}
 
@@ -1018,11 +1019,10 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 			data := []byte(fmt.Sprintf("%v", r.Value))
 			val, encErr := encryption.TryEncryptValue(storeName, data)
 			if encErr != nil {
-				statusCode, errMsg, resp := a.stateErrorResponse(encErr, errorcodes.StateSave)
-				resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
-
-				respondWithData(w, statusCode, resp.JSONErrorValue())
-				log.Debug(resp.Message)
+				statusCode, errMsg := a.stateErrorResponse(encErr)
+				apiResp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateSave, storeName, errMsg), errorcodes.StateSave, statusCode)
+				respondWithError(w, apiResp)
+				log.Debug(apiResp)
 				return
 			}
 
@@ -1042,11 +1042,10 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	diag.DefaultComponentMonitoring.StateInvoked(r.Context(), storeName, diag.Set, err == nil, elapsed)
 
 	if err != nil {
-		statusCode, errMsg, resp := a.stateErrorResponse(err, errorcodes.StateSave)
-		resp.Message = fmt.Sprintf(messages.ErrStateSave, storeName, errMsg)
-
-		respondWithData(w, statusCode, resp.JSONErrorValue())
-		log.Debug(resp.Message)
+		statusCode, errMsg := a.stateErrorResponse(err)
+		apiResp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateSave, storeName, errMsg), errorcodes.StateSave, statusCode)
+		respondWithError(w, apiResp)
+		log.Debug(apiResp)
 		return
 	}
 
@@ -1054,25 +1053,20 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 }
 
 // stateErrorResponse takes a state store error and returns a corresponding status code, error message and modified user error.
-func (a *api) stateErrorResponse(err error, errorCode errorcodes.ErrorCode) (int, string, ErrorResponse) {
-	diag.TryRecordErrorCode(&errorCode)
-
+func (a *api) stateErrorResponse(err error) (int, string) {
 	etag, code, message := a.etagError(err)
 
-	r := ErrorResponse{
-		ErrorCode: errorCode.Code,
-	}
 	if etag {
-		return code, message, r
+		return code, message
 	}
 	message = err.Error()
 
 	standardizedErr, ok := kiterrors.FromError(err)
 	if ok {
-		return standardizedErr.HTTPStatusCode(), standardizedErr.Error(), r
+		return standardizedErr.HTTPStatusCode(), standardizedErr.Error()
 	}
 
-	return nethttp.StatusInternalServerError, message, r
+	return nethttp.StatusInternalServerError, message
 }
 
 // etagError checks if the error from the state store is an etag error and returns a bool for indication,
@@ -1351,7 +1345,6 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 			}
 			bulkRes.FailedEntries = append(bulkRes.FailedEntries, resEntry)
 		}
-		bulkRes.ErrorCode = diagnostics.RecordErrorCodeEarly(errorcodes.PubsubPublishMessage)
 
 		switch {
 		case errors.As(err, &runtimePubsub.NotAllowedError{}):
@@ -1377,6 +1370,8 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 		}
 
 		// Return the error along with the list of failed entries.
+		// Error is recorded early as special response metadata errors are needed and respondWithError() will not be used
+		bulkRes.ErrorCode = diagnostics.RecordErrorCodeEarly(errorcodes.PubsubPublishMessage)
 		resData, _ := json.Marshal(bulkRes)
 		if standardizedErr, ok := kiterrors.FromError(err); ok {
 			setResponseMetadataHeaders(w, map[string]string{"responseData": string(resData), "error": standardizedErr.Error()})
@@ -1571,11 +1566,9 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 
 			operations = append(operations, delReq)
 		default:
-			msg := NewErrorResponse(
-				errorcodes.StateNotSupportedOperation,
-				fmt.Sprintf(messages.ErrNotSupportedStateOperation, o.Operation))
-			respondWithData(w, nethttp.StatusBadRequest, msg.JSONErrorValue())
-			log.Debug(msg)
+			resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrNotSupportedStateOperation, o.Operation), errorcodes.StateNotSupportedOperation, nethttp.StatusBadRequest)
+			respondWithError(w, resp)
+			log.Debug(resp)
 			return
 		}
 	}
@@ -1597,11 +1590,9 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 				data := []byte(fmt.Sprintf("%v", req.Value))
 				val, err := encryption.TryEncryptValue(storeName, data)
 				if err != nil {
-					msg := NewErrorResponse(
-						errorcodes.StateSave,
-						fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()))
-					respondWithData(w, nethttp.StatusBadRequest, msg.JSONErrorValue())
-					log.Debug(msg)
+					resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateSave, storeName, err.Error()), errorcodes.StateSave, nethttp.StatusBadRequest)
+					respondWithError(w, resp)
+					log.Debug(resp)
 					return
 				}
 
@@ -1642,9 +1633,9 @@ func (a *api) onPostStateTransaction(w nethttp.ResponseWriter, r *nethttp.Reques
 	diag.DefaultComponentMonitoring.StateInvoked(context.Background(), storeName, diag.StateTransaction, err == nil, elapsed)
 
 	if err != nil {
-		msg := NewErrorResponse(errorcodes.StateTransaction, fmt.Sprintf(messages.ErrStateTransaction, err.Error()))
-		respondWithData(w, nethttp.StatusInternalServerError, msg.JSONErrorValue())
-		log.Debug(msg)
+		resp := messages.NewAPIErrorHTTP(fmt.Sprintf(messages.ErrStateTransaction, err.Error()), errorcodes.StateTransaction, nethttp.StatusInternalServerError)
+		respondWithError(w, resp)
+		log.Debug(resp)
 	} else {
 		respondWithEmpty(w)
 	}

@@ -491,6 +491,9 @@ replace (
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 )
 
+// TODO: temp replace while PR not merged
+replace github.com/dapr/kit => github.com/jake-engelberg/kit v0.13.1-0.20241122000053-705b0d08ecc3
+
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
 
