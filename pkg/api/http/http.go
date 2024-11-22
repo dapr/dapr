@@ -969,7 +969,6 @@ func (a *api) onPostState(w nethttp.ResponseWriter, r *nethttp.Request) {
 	}
 
 	if err != nil {
-		// TODO: remove usage of NewErrorResponse, just make an APIError and use respondWithError()
 		resp := messages.NewAPIErrorHTTP(err.Error(), errorcodes.CommonMalformedRequest, nethttp.StatusBadRequest)
 		respondWithError(w, resp)
 		log.Debug(resp)

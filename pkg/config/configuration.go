@@ -748,6 +748,10 @@ func (c *Configuration) sortMetricsSpec() {
 	if c.Spec.MetricsSpec.LatencyDistributionBuckets != nil {
 		c.Spec.MetricSpec.LatencyDistributionBuckets = c.Spec.MetricsSpec.LatencyDistributionBuckets
 	}
+
+	if c.Spec.MetricsSpec.RecordErrorCodes != nil {
+		c.Spec.MetricSpec.RecordErrorCodes = c.Spec.MetricsSpec.RecordErrorCodes
+	}
 }
 
 // Validate the secrets configuration and sort to the allowed and denied lists if present.

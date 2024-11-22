@@ -156,7 +156,6 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		err = json.Unmarshal([]byte(string(body)), &data)
 		require.NoError(t, err)
 
-		// TODO: enable recordErrorCodes and test here
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)

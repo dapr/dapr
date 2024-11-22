@@ -223,7 +223,6 @@ func (p *PubSubTopicError) UnmarshalEvents(err error) error {
 }
 
 func (p *PubSubMetadataError) build(grpcCode codes.Code, httpCode int, msg string, tag errorcodes.ErrorCode, errCode string) error {
-	// TODO: this is an example of replacing RecordErrorCodeEarly
 	err := errors.NewBuilder(grpcCode, httpCode, msg, tag.Code, string(tag.Category))
 	if !p.skipResourceInfo {
 		err = err.WithResourceInfo(string(metadata.PubSubType), p.p.name, "", msg)
