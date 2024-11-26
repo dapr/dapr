@@ -350,7 +350,6 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 		for _, m := range mf.GetMetric() {
 			metricName := mf.GetName()
 			labels := ""
-			// t.Log(metricName)
 			for _, l := range m.GetLabel() {
 				labels += "|" + l.GetName() + ":" + l.GetValue()
 			}

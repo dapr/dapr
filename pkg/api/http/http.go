@@ -40,8 +40,7 @@ import (
 	"github.com/dapr/dapr/pkg/channel/http"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
-	"github.com/dapr/dapr/pkg/diagnostics"      //nolint:stylecheck
-	diag "github.com/dapr/dapr/pkg/diagnostics" //nolint:stylecheck
+	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
@@ -1369,13 +1368,12 @@ func (a *api) onBulkPublish(w nethttp.ResponseWriter, r *nethttp.Request) {
 		}
 
 		// Return the error along with the list of failed entries.
-		// Error is recorded early as special response metadata errors are needed and respondWithError() will not be used
-		bulkRes.ErrorCode = diagnostics.RecordErrorCodeEarly(errorcodes.PubsubPublishMessage)
+		bulkRes.ErrorCode = errorcodes.PubsubPublishMessage.Code
 		resData, _ := json.Marshal(bulkRes)
 		if standardizedErr, ok := kiterrors.FromError(err); ok {
 			setResponseMetadataHeaders(w, map[string]string{"responseData": string(resData), "error": standardizedErr.Error()})
 			closeChildSpans(standardizedErr.HTTPStatusCode())
-			respondWithData(w, standardizedErr.HTTPStatusCode(), resData)
+			respondWithDataAndRecordError(w, standardizedErr.HTTPStatusCode(), resData, &errorcodes.PubsubPublishMessage)
 		}
 		return
 	}

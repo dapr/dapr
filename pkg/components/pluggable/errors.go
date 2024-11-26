@@ -20,6 +20,7 @@ import (
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	kiterrors "github.com/dapr/kit/errors"
 )
 
@@ -113,7 +114,7 @@ func KitErrorFromStatus(s *status.Status) (error, bool) {
 		return s.Err(), false
 	}
 
-	return kiterrors.NewBuilder(s.Code(), httpCode, s.Message(), info.GetMetadata()[tagField], "unknown").
+	return kiterrors.NewBuilder(s.Code(), httpCode, s.Message(), info.GetMetadata()[tagField], string(errorcodes.CategoryPluggable)).
 		WithDetails(&errdetails.ErrorInfo{
 			Domain: info.GetDomain(),
 			Reason: info.GetReason(),

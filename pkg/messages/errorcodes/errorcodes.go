@@ -29,6 +29,7 @@ const (
 	CategoryJob           Category = "job"
 	CategoryHealth        Category = "health"
 	CategoryCommon        Category = "common"
+	CategoryPluggable     Category = "pluggable-component"
 )
 
 type ErrorCode struct {

@@ -85,9 +85,3 @@ func RecordErrorCode(err error) bool {
 
 	return false
 }
-
-// RecordErrorCodeEarly will record an ErrorCode before the structure is lost (which cannot be recorded at the end/middleware)
-func RecordErrorCodeEarly(errorCode errorcodes.ErrorCode) string {
-	DefaultErrorCodeMonitoring.RecordErrorCode(errorCode)
-	return errorCode.Code
-}
