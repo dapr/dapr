@@ -279,7 +279,7 @@ func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequ
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	errCh = make(chan error)
+	errCh := make(chan error)
 
 	go func() {
 		err := p.disseminateOperationOnHosts(ctx, req, lockOperation)
