@@ -75,6 +75,7 @@ import (
 	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	"github.com/dapr/dapr/pkg/security"
 
+	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	pb "github.com/dapr/dapr/pkg/api/grpc/proxy/testservice"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
@@ -804,6 +805,7 @@ func NewTestDaprRuntimeWithProtocol(t *testing.T, mode modes.DaprMode, protocol 
 		return nil, err
 	}
 	rt.runtimeConfig.mode = mode
+	rt.actors = actorsfake.New()
 	rt.channels.Refresh()
 	return rt, nil
 }

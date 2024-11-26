@@ -100,7 +100,7 @@ func (a *allenabled) Run(t *testing.T, ctx context.Context) {
 		meta, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		assert.NoError(c, err)
 		assert.True(c, meta.GetActorRuntime().GetHostReady())
-		assert.Len(c, meta.GetActorRuntime().GetActiveActors(), 3)
+		assert.Len(c, meta.GetActorRuntime().GetActiveActors(), 1)
 		assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 		assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
 	}, time.Second*10, time.Millisecond*10)

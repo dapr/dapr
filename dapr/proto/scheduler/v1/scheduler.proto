@@ -59,6 +59,15 @@ message TargetActorReminder {
   string type = 2;
 }
 
+// JobTargetType is the type of the job target.
+enum JobTargetType {
+  // JOB_TARGET_TYPE_JOB is the job target type.
+  JOB_TARGET_TYPE_JOB = 0;
+
+  // JOB_TARGET_TYPE_ACTOR_REMINDER is the actor reminder target type.
+  JOB_TARGET_TYPE_ACTOR_REMINDER = 1;
+}
+
 // JobTargetMetadata holds the typed metadata associated with the job for
 // different origins.
 message JobTargetMetadata {
@@ -100,6 +109,10 @@ message WatchJobsRequestInitial {
 
   // actor_types is the optional list of actor types to watch for.
   repeated string actor_types = 3;
+
+  // accept_job_types is the list of job types which the client is willing can
+  // accept.
+  repeated JobTargetType accept_job_types = 4;
 }
 
 // WatchJobsRequestResultStatus is sent by clients to signal where the job

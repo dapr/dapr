@@ -87,13 +87,12 @@ func (s *staging) Run(t *testing.T, ctx context.Context) {
 	time.Sleep(time.Second * 2)
 	assert.Equal(t, int64(0), s.got.Load())
 
+	t.Cleanup(func() { s.actors2.Cleanup(t) })
 	s.actors2.Run(t, ctx)
-	t.Cleanup(func() {
-		s.actors2.Cleanup(t)
-	})
 	s.actors2.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Equal(c, int64(1), s.got.Load())
 	}, time.Second*10, time.Millisecond*10)
+	s.actors2.Cleanup(t)
 }

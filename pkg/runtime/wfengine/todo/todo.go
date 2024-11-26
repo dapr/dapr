@@ -1,27 +1,10 @@
-/*
-Copyright 2021 The Dapr Authors
-Licensed under the Apache License, Version 2.0 (the "License");
-you may not use this file except in compliance with the License.
-You may obtain a copy of the License at
-    http://www.apache.org/licenses/LICENSE-2.0
-Unless required by applicable law or agreed to in writing, software
-distributed under the License is distributed on an "AS IS" BASIS,
-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-See the License for the specific language governing permissions and
-limitations under the License.
-*/
-
-package wfbackend
+package todo
 
 import (
 	"context"
 
 	"github.com/microsoft/durabletask-go/api"
 	"github.com/microsoft/durabletask-go/backend"
-
-	"github.com/dapr/components-contrib/metadata"
-	"github.com/dapr/dapr/pkg/actors"
-	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 const (
@@ -34,17 +17,6 @@ const (
 	GetWorkflowStateMethod       = "GetWorkflowState"
 )
 
-type Options struct {
-	AppID         string
-	Namespace     string
-	Actors        actors.Interface
-	Resiliency    resiliency.Provider
-	metadata.Base `json:",inline"`
-}
-
-// workflowBackendFactory is a function that returns a workflow backend
-type workflowBackendFactory func(Options) (backend.Backend, error)
-
 // WorkflowScheduler is a func interface for pushing workflow (orchestration) work items into the backend
 // TODO: @joshvanl: remove
 type WorkflowScheduler func(ctx context.Context, wi *backend.OrchestrationWorkItem) error
@@ -56,4 +28,13 @@ type ActivityScheduler func(ctx context.Context, wi *backend.ActivityWorkItem) e
 type CreateWorkflowInstanceRequest struct {
 	Policy          *api.OrchestrationIdReusePolicy `json:"policy"`
 	StartEventBytes []byte                          `json:"startEventBytes"`
+}
+
+type DurableTimer struct {
+	Bytes      []byte `json:"bytes"`
+	Generation uint64 `json:"generation"`
+}
+
+func NewDurableTimer(bytes []byte, generation uint64) DurableTimer {
+	return DurableTimer{bytes, generation}
 }

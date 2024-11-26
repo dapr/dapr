@@ -44,7 +44,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/processor/secret"
 	"github.com/dapr/dapr/pkg/runtime/processor/state"
 	"github.com/dapr/dapr/pkg/runtime/processor/subscriber"
-	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 	rtpubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/security"
@@ -178,16 +177,6 @@ func New(opts Options) *Processor {
 		Channels:       opts.Channels,
 	})
 
-	wfbe := wfbackend.New(wfbackend.Options{
-		AppID:          opts.ID,
-		Registry:       opts.Registry.WorkflowBackends(),
-		ComponentStore: opts.ComponentStore,
-		Meta:           opts.Meta,
-		Namespace:      opts.Namespace,
-		Resiliency:     opts.Resiliency,
-		Actors:         opts.Actors,
-	})
-
 	// ensure a default no-op reporter
 	reporter := DefaultReporter
 	if opts.Reporter != nil {
@@ -205,7 +194,6 @@ func New(opts Options) *Processor {
 		state:                      state,
 		binding:                    binding,
 		secret:                     secret,
-		workflowBackend:            wfbe,
 		security:                   opts.Security,
 		subscriber:                 subscriber,
 		reporter:                   reporter,
@@ -233,9 +221,8 @@ func New(opts Options) *Processor {
 				ComponentStore: opts.ComponentStore,
 				Subscriber:     subscriber,
 			}),
-			components.CategorySecretStore:     secret,
-			components.CategoryStateStore:      state,
-			components.CategoryWorkflowBackend: wfbe,
+			components.CategorySecretStore: secret,
+			components.CategoryStateStore:  state,
 			components.CategoryMiddleware: middleware.New(middleware.Options{
 				Meta:         opts.Meta,
 				RegistryHTTP: opts.Registry.HTTPMiddlewares(),

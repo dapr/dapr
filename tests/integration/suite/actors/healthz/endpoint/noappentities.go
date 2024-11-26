@@ -15,7 +15,6 @@ package endpoint
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"sync"
 	"testing"
@@ -64,6 +63,7 @@ func (n *noappentities) Setup(t *testing.T) []framework.Option {
 				close(n.healthzCalled)
 			})
 		}),
+		prochttp.WithHandlerFunc("/actors/myactortype/myactorid", func(w http.ResponseWriter, r *http.Request) {}),
 		prochttp.WithHandlerFunc(pathMethodFoo, func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`OK`))
 		}),
@@ -114,13 +114,8 @@ func (n *noappentities) Run(t *testing.T, ctx context.Context) {
 	}{
 		{cl: n.daprd.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{
 			{Type: "myactortype"},
-			{Type: fmt.Sprintf("dapr.internal.default.%s.activity", n.daprd.AppID())},
-			{Type: fmt.Sprintf("dapr.internal.default.%s.workflow", n.daprd.AppID())},
 		}},
-		{cl: n.daprdNoHealthz.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{
-			{Type: fmt.Sprintf("dapr.internal.default.%s.activity", n.daprdNoHealthz.AppID())},
-			{Type: fmt.Sprintf("dapr.internal.default.%s.workflow", n.daprdNoHealthz.AppID())},
-		}},
+		{cl: n.daprdNoHealthz.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{}},
 	} {
 		meta, err := tv.cl.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)
@@ -155,7 +150,7 @@ func (n *noappentities) Run(t *testing.T, ctx context.Context) {
 	meta, err := n.daprd.GRPCClient(t, ctx).GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 	require.NoError(t, err)
 	assert.True(t, meta.GetActorRuntime().GetHostReady())
-	assert.Len(t, meta.GetActorRuntime().GetActiveActors(), 3)
+	assert.Len(t, meta.GetActorRuntime().GetActiveActors(), 1)
 	assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 	assert.Equal(t, "placement: connected", meta.GetActorRuntime().GetPlacement())
 }

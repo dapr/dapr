@@ -41,24 +41,17 @@ func init() {
 type path struct {
 	daprd         *daprd.Daprd
 	place         *placement.Placement
-	healthzCalled chan struct{}
 	customHealthz chan struct{}
 	rootCalled    atomic.Bool
 }
 
 func (p *path) Setup(t *testing.T) []framework.Option {
-	p.healthzCalled = make(chan struct{})
 	p.customHealthz = make(chan struct{})
 
-	var honce, conce sync.Once
+	var conce sync.Once
 	srv := prochttp.New(t,
 		prochttp.WithHandlerFunc("/dapr/config", func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`{"entities": ["myactortype"]}`))
-		}),
-		prochttp.WithHandlerFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
-			honce.Do(func() {
-				close(p.healthzCalled)
-			})
 		}),
 		prochttp.WithHandlerFunc("/customhealthz", func(w http.ResponseWriter, r *http.Request) {
 			conce.Do(func() {
@@ -100,7 +93,7 @@ func (p *path) Run(t *testing.T, ctx context.Context) {
 		meta, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		assert.NoError(c, err)
 		assert.True(c, meta.GetActorRuntime().GetHostReady())
-		assert.Len(c, meta.GetActorRuntime().GetActiveActors(), 3)
+		assert.Len(c, meta.GetActorRuntime().GetActiveActors(), 1)
 		assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 		assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
 	}, time.Second*30, time.Millisecond*10)
@@ -109,12 +102,6 @@ func (p *path) Run(t *testing.T, ctx context.Context) {
 	case <-p.customHealthz:
 	case <-time.After(time.Second * 15):
 		assert.Fail(t, "timed out waiting for healthz call")
-	}
-
-	select {
-	case <-p.healthzCalled:
-	case <-time.After(time.Second * 15):
-		assert.Fail(t, "/healthz endpoint should still have been called for actor health check")
 	}
 
 	client := client.HTTP(t)

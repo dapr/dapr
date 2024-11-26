@@ -79,6 +79,7 @@ type placement struct {
 	actorTable table.Interface
 	reminders  storage.Interface
 	apiLevel   *apilevel.APILevel
+	htarget    healthz.Target
 
 	hashTable         *hashing.ConsistentHashTables
 	virtualNodesCache *hashing.VirtualNodesCache
@@ -125,6 +126,7 @@ func New(opts Options) (Interface, error) {
 		hostname:      opts.Hostname,
 		operationLock: fifo.New(),
 		apiLevel:      opts.APILevel,
+		htarget:       opts.Healthz.AddTarget(),
 		lock:          lock,
 		readyCh:       make(chan struct{}),
 	}, nil
@@ -134,21 +136,23 @@ func (p *placement) Run(ctx context.Context) error {
 	err := concurrency.NewRunnerManager(
 		p.client.Run,
 		func(ctx context.Context) error {
-			ch := p.actorTable.SubscribeToTypeUpdates(ctx)
-
-			actorTypes := p.actorTable.Types()
-			log.Debugf("Reporting actor types: %v", actorTypes)
+			ch, actorTypes := p.actorTable.SubscribeToTypeUpdates(ctx)
+			log.Infof("Reporting actor types: %v", actorTypes)
 			if err := p.sendHost(ctx, actorTypes); err != nil {
 				return err
 			}
 
+			tch := time.NewTicker(statusReportHeartbeatInterval)
+			defer tch.Stop()
+
 			for {
 				select {
 				case actorTypes = <-ch:
+					log.Infof("Updating actor types: %v", actorTypes)
 					// TODO: @joshvanl: it is a nonsense to be sending the same actor
 					// types over and over again, *every second*. This should be removed
 					// ASAP.
-				case <-time.After(statusReportHeartbeatInterval):
+				case <-tch.C:
 				case <-ctx.Done():
 					return nil
 				}
@@ -160,6 +164,7 @@ func (p *placement) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			defer p.wg.Wait()
+			defer p.lock.EnsureUnlockTable()
 
 			for {
 				in, err := p.client.Recv(ctx)
@@ -232,7 +237,7 @@ func (p *placement) handleReceive(ctx context.Context, in *v1pb.PlacementOrder) 
 	case updateOperation:
 		p.handleUpdateOperation(ctx, in.GetTables())
 	case unlockOperation:
-		p.handleUnlockOperation()
+		p.handleUnlockOperation(ctx)
 	}
 }
 
@@ -266,6 +271,7 @@ func (p *placement) handleLockOperation(ctx context.Context) {
 			p.operationLock.Lock()
 			defer p.operationLock.Unlock()
 			if p.updateVersion.Load() < lockVersion {
+				p.updateVersion.Store(lockVersion)
 				p.lock.EnsureUnlockTable()
 			}
 		}
@@ -305,15 +311,10 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 		return lar != nil && !p.isActorLocal(lar.Address, p.hostname, p.port)
 	})
 
-	p.reminders.OnPlacementTablesUpdated(ctx, func(ctx context.Context, req *api.LookupActorRequest) bool {
-		lar, err := p.LookupActor(ctx, req)
-		return err == nil && lar.Local
-	})
-
 	log.Infof("Placement tables updated, version: %s", in.GetVersion())
 }
 
-func (p *placement) handleUnlockOperation() {
+func (p *placement) handleUnlockOperation(ctx context.Context) {
 	p.updateVersion.Add(1)
 
 	found := true
@@ -324,10 +325,21 @@ func (p *placement) handleUnlockOperation() {
 		}
 	}
 
-	if found && p.isReady.CompareAndSwap(false, true) {
-		close(p.readyCh)
+	if found {
+		p.reminders.OnPlacementTablesUpdated(ctx, func(ctx context.Context, req *api.LookupActorRequest) bool {
+			if ctx.Err() != nil {
+				return false
+			}
+			lar, err := p.LookupActor(ctx, req)
+			return err == nil && lar.Local
+		})
+
+		if p.isReady.CompareAndSwap(false, true) {
+			close(p.readyCh)
+		}
 	}
 
+	p.htarget.Ready()
 	p.lock.EnsureUnlockTable()
 }
 

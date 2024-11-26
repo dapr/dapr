@@ -1,5 +1,5 @@
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -39,26 +39,17 @@ var statusMap = map[int32]string{
 	7: "SUSPENDED",
 }
 
-type workflowEngineComponent struct {
+type client struct {
 	logger logger.Logger
 	client backend.TaskHubClient
 }
 
-func BuiltinWorkflowFactory(eng Interface) func(logger.Logger) workflows.Workflow {
-	return func(logger logger.Logger) workflows.Workflow {
-		return &workflowEngineComponent{
-			logger: logger,
-			client: backend.NewTaskHubClient(eng.(*engine).backend),
-		}
-	}
-}
-
-func (c *workflowEngineComponent) Init(metadata workflows.Metadata) error {
+func (c *client) Init(metadata workflows.Metadata) error {
 	c.logger.Info("Initializing Dapr workflow component")
 	return nil
 }
 
-func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.StartRequest) (*workflows.StartResponse, error) {
+func (c *client) Start(ctx context.Context, req *workflows.StartRequest) (*workflows.StartResponse, error) {
 	if req.WorkflowName == "" {
 		return nil, errors.New("a workflow name is required")
 	}
@@ -99,7 +90,7 @@ func (c *workflowEngineComponent) Start(ctx context.Context, req *workflows.Star
 	return res, nil
 }
 
-func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.TerminateRequest) error {
+func (c *client) Terminate(ctx context.Context, req *workflows.TerminateRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -116,7 +107,7 @@ func (c *workflowEngineComponent) Terminate(ctx context.Context, req *workflows.
 	return nil
 }
 
-func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.PurgeRequest) error {
+func (c *client) Purge(ctx context.Context, req *workflows.PurgeRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -133,7 +124,7 @@ func (c *workflowEngineComponent) Purge(ctx context.Context, req *workflows.Purg
 	return nil
 }
 
-func (c *workflowEngineComponent) RaiseEvent(ctx context.Context, req *workflows.RaiseEventRequest) error {
+func (c *client) RaiseEvent(ctx context.Context, req *workflows.RaiseEventRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -156,7 +147,7 @@ func (c *workflowEngineComponent) RaiseEvent(ctx context.Context, req *workflows
 	return nil
 }
 
-func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+func (c *client) Get(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
 	if req.InstanceID == "" {
 		return nil, errors.New("a workflow instance ID is required")
 	}
@@ -195,7 +186,7 @@ func (c *workflowEngineComponent) Get(ctx context.Context, req *workflows.GetReq
 	return res, nil
 }
 
-func (c *workflowEngineComponent) Pause(ctx context.Context, req *workflows.PauseRequest) error {
+func (c *client) Pause(ctx context.Context, req *workflows.PauseRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -208,7 +199,7 @@ func (c *workflowEngineComponent) Pause(ctx context.Context, req *workflows.Paus
 	return nil
 }
 
-func (c *workflowEngineComponent) Resume(ctx context.Context, req *workflows.ResumeRequest) error {
+func (c *client) Resume(ctx context.Context, req *workflows.ResumeRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -221,7 +212,7 @@ func (c *workflowEngineComponent) Resume(ctx context.Context, req *workflows.Res
 	return nil
 }
 
-func (c *workflowEngineComponent) PurgeWorkflow(ctx context.Context, req *workflows.PurgeRequest) error {
+func (c *client) PurgeWorkflow(ctx context.Context, req *workflows.PurgeRequest) error {
 	if req.InstanceID == "" {
 		return errors.New("a workflow instance ID is required")
 	}
@@ -245,6 +236,6 @@ func getStatusString(status int32) string {
 	return "UNKNOWN"
 }
 
-func (c *workflowEngineComponent) Close() error {
+func (c *client) Close() error {
 	return nil
 }

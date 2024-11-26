@@ -137,7 +137,7 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 
 	if !lar.Local {
 		if req.IsRemote {
-			return errors.New("remote actor moved")
+			return backoff.Permanent(errors.New("remote actor moved"))
 		}
 
 		return e.callRemoteActorReminder(ctx, lar, req)

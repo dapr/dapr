@@ -81,6 +81,7 @@ spec:
 	l.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithConfigs(configFile),
+		daprd.WithAppHealthCheck(true),
 		daprd.WithPlacementAddresses(l.place.Address()),
 		daprd.WithAppPort(srv.Port()),
 	)
@@ -96,8 +97,8 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 
 	select {
 	case <-l.healthzCalled:
-	case <-time.After(time.Second * 15):
-		t.Fatal("timed out waiting for healthz call")
+	case <-time.After(time.Second * 10):
+		require.Fail(t, "timed out waiting for healthz call")
 	}
 
 	client := client.HTTP(t)

@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"slices"
 	"sync"
 	"time"
 
@@ -45,9 +46,9 @@ type Interface interface {
 	IsActorTypeHosted(actorType string) bool
 	HostedTarget(actorType, actorKey string) (targets.Interface, bool)
 	GetOrCreate(actorType, actorID string) (targets.Interface, bool, error)
-	RegisterActorType(actorType string, factory targets.Factory)
-	UnRegisterActorType(actorType string) error
-	SubscribeToTypeUpdates(ctx context.Context) <-chan []string
+	RegisterActorTypes(opts RegisterActorTypeOptions)
+	UnRegisterActorTypes(actorTypes ...string) error
+	SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string)
 	HaltAll() error
 	Halt(ctx context.Context, target targets.Idlable) error
 	Drain(fn func(actorType, actorID string) bool)
@@ -55,10 +56,23 @@ type Interface interface {
 }
 
 type Options struct {
+	IdlerQueue *queue.Processor[string, targets.Idlable]
+}
+
+type ActorTypeFactory struct {
+	Type    string
+	Factory targets.Factory
+}
+
+type ActorHostOptions struct {
 	EntityConfigs           map[string]api.EntityConfig
 	DrainRebalancedActors   bool
 	DrainOngoingCallTimeout time.Duration
-	IdlerQueue              *queue.Processor[string, targets.Idlable]
+}
+
+type RegisterActorTypeOptions struct {
+	HostOptions *ActorHostOptions
+	Factories   []ActorTypeFactory
 }
 
 type table struct {
@@ -81,9 +95,9 @@ type table struct {
 
 func New(opts Options) Interface {
 	return &table{
-		entityConfigs:           opts.EntityConfigs,
-		drainRebalancedActors:   opts.DrainRebalancedActors,
-		drainOngoingCallTimeout: opts.DrainOngoingCallTimeout,
+		drainRebalancedActors:   true,
+		drainOngoingCallTimeout: time.Minute,
+		entityConfigs:           make(map[string]api.EntityConfig),
 		factories:               cmap.NewMap[string, targets.Factory](),
 		table:                   cmap.NewMap[string, targets.Interface](),
 		actorTypesLock:          fifo.NewMap[string](),
@@ -183,18 +197,30 @@ func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, bool,
 	return target, true, nil
 }
 
-func (t *table) RegisterActorType(actorType string, factory targets.Factory) {
+func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
-	t.factories.Store(actorType, factory)
+
+	if opts := opts.HostOptions; opts != nil {
+		t.drainOngoingCallTimeout = opts.DrainOngoingCallTimeout
+		t.drainRebalancedActors = opts.DrainRebalancedActors
+		t.entityConfigs = opts.EntityConfigs
+	}
+
+	for _, opt := range opts.Factories {
+		t.factories.Store(opt.Type, opt.Factory)
+	}
+
 	t.typeUpdates.Batch(0, t.factories.Keys())
 }
 
-func (t *table) UnRegisterActorType(actorType string) error {
+func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 
-	t.factories.Delete(actorType)
+	for _, atype := range actorTypes {
+		t.factories.Delete(atype)
+	}
 
 	var (
 		wg   sync.WaitGroup
@@ -203,7 +229,7 @@ func (t *table) UnRegisterActorType(actorType string) error {
 
 	t.table.Range(func(akey string, target targets.Interface) bool {
 		atype, _ := key.ActorTypeAndIDFromKey(akey)
-		if actorType == atype {
+		if slices.Contains(actorTypes, atype) {
 			wg.Add(1)
 			go func(akey string) {
 				defer wg.Done()
@@ -277,12 +303,12 @@ func (t *table) haltInLock(actorKey string) error {
 	return target.Deactivate(context.Background())
 }
 
-func (t *table) SubscribeToTypeUpdates(ctx context.Context) <-chan []string {
+func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	ch := make(chan []string)
 	t.typeUpdates.Subscribe(ctx, ch)
-	return ch
+	return ch, t.factories.Keys()
 }
 
 func (t *table) drain(actorKey, actorType string, target targets.Interface) {

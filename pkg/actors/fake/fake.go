@@ -19,6 +19,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	enginefake "github.com/dapr/dapr/pkg/actors/engine/fake"
+	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	remindersfake "github.com/dapr/dapr/pkg/actors/reminders/fake"
 	"github.com/dapr/dapr/pkg/actors/state"
@@ -30,113 +31,150 @@ import (
 )
 
 type Fake struct {
-	fnInitFn          func(actors.InitOptions) error
-	fnRunFn           func(context.Context) error
-	fnEngineFn        func(context.Context) (engine.Interface, error)
-	fnTableFn         func(context.Context) (table.Interface, error)
-	fnStateFn         func(context.Context) (state.Interface, error)
-	fnTimersFn        func(context.Context) (timers.Interface, error)
-	fnRemindersFn     func(context.Context) (reminders.Interface, error)
-	fnRuntimeStatusFn func() *runtimev1pb.ActorRuntime
+	fnInit                   func(actors.InitOptions) error
+	fnRun                    func(context.Context) error
+	fnEngine                 func(context.Context) (engine.Interface, error)
+	fnTable                  func(context.Context) (table.Interface, error)
+	fnState                  func(context.Context) (state.Interface, error)
+	fnTimers                 func(context.Context) (timers.Interface, error)
+	fnReminders              func(context.Context) (reminders.Interface, error)
+	fnRuntimeStatus          func() *runtimev1pb.ActorRuntime
+	fnRegisterHosted         func(hostconfig.Config) error
+	fnUnRegisterHosted       func(actorTypes ...string)
+	fnWaitForRegisteredHosts func(ctx context.Context) error
 }
 
 func New() *Fake {
 	return &Fake{
-		fnInitFn: func(actors.InitOptions) error {
+		fnInit: func(actors.InitOptions) error {
 			return nil
 		},
-		fnRunFn: func(context.Context) error {
+		fnRun: func(context.Context) error {
 			return nil
 		},
-		fnEngineFn: func(context.Context) (engine.Interface, error) {
+		fnEngine: func(context.Context) (engine.Interface, error) {
 			return enginefake.New(), nil
 		},
-		fnTableFn: func(context.Context) (table.Interface, error) {
+		fnTable: func(context.Context) (table.Interface, error) {
 			return nil, nil
 		},
-		fnStateFn: func(context.Context) (state.Interface, error) {
+		fnState: func(context.Context) (state.Interface, error) {
 			return statefake.New(), nil
 		},
-		fnTimersFn: func(context.Context) (timers.Interface, error) {
+		fnTimers: func(context.Context) (timers.Interface, error) {
 			return timersfake.New(), nil
 		},
-		fnRemindersFn: func(context.Context) (reminders.Interface, error) {
+		fnReminders: func(context.Context) (reminders.Interface, error) {
 			return remindersfake.New(), nil
 		},
-		fnRuntimeStatusFn: func() *runtimev1pb.ActorRuntime {
+		fnRuntimeStatus: func() *runtimev1pb.ActorRuntime {
+			return nil
+		},
+		fnRegisterHosted: func(hostconfig.Config) error {
+			return nil
+		},
+		fnUnRegisterHosted: func(...string) {},
+		fnWaitForRegisteredHosts: func(context.Context) error {
 			return nil
 		},
 	}
 }
 
 func (f *Fake) WithInit(fn func(actors.InitOptions) error) *Fake {
-	f.fnInitFn = fn
+	f.fnInit = fn
 	return f
 }
 
 func (f *Fake) WithRun(fn func(context.Context) error) *Fake {
-	f.fnRunFn = fn
+	f.fnRun = fn
 	return f
 }
 
 func (f *Fake) WithEngine(fn func(context.Context) (engine.Interface, error)) *Fake {
-	f.fnEngineFn = fn
+	f.fnEngine = fn
 	return f
 }
 
 func (f *Fake) WithTable(fn func(context.Context) (table.Interface, error)) *Fake {
-	f.fnTableFn = fn
+	f.fnTable = fn
 	return f
 }
 
 func (f *Fake) WithState(fn func(context.Context) (state.Interface, error)) *Fake {
-	f.fnStateFn = fn
+	f.fnState = fn
 	return f
 }
 
 func (f *Fake) WithTimers(fn func(context.Context) (timers.Interface, error)) *Fake {
-	f.fnTimersFn = fn
+	f.fnTimers = fn
 	return f
 }
 
 func (f *Fake) WithReminders(fn func(context.Context) (reminders.Interface, error)) *Fake {
-	f.fnRemindersFn = fn
+	f.fnReminders = fn
 	return f
 }
 
 func (f *Fake) WithRuntimeStatus(fn func() *runtimev1pb.ActorRuntime) *Fake {
-	f.fnRuntimeStatusFn = fn
+	f.fnRuntimeStatus = fn
+	return f
+}
+
+func (f *Fake) WithRegisterHosted(fn func(hostconfig.Config) error) *Fake {
+	f.fnRegisterHosted = fn
+	return f
+}
+
+func (f *Fake) WithUnRegisterHosted(fn func(...string)) *Fake {
+	f.fnUnRegisterHosted = fn
+	return f
+}
+
+func (f *Fake) WithWaitForRegisteredHosts(fn func(context.Context) error) *Fake {
+	f.fnWaitForRegisteredHosts = fn
 	return f
 }
 
 func (f *Fake) Init(opts actors.InitOptions) error {
-	return f.fnInitFn(opts)
+	return f.fnInit(opts)
 }
 
 func (f *Fake) Run(ctx context.Context) error {
-	return f.fnRunFn(ctx)
+	return f.fnRun(ctx)
 }
 
 func (f *Fake) Engine(ctx context.Context) (engine.Interface, error) {
-	return f.fnEngineFn(ctx)
+	return f.fnEngine(ctx)
 }
 
 func (f *Fake) Table(ctx context.Context) (table.Interface, error) {
-	return f.fnTableFn(ctx)
+	return f.fnTable(ctx)
 }
 
 func (f *Fake) State(ctx context.Context) (state.Interface, error) {
-	return f.fnStateFn(ctx)
+	return f.fnState(ctx)
 }
 
 func (f *Fake) Timers(ctx context.Context) (timers.Interface, error) {
-	return f.fnTimersFn(ctx)
+	return f.fnTimers(ctx)
 }
 
 func (f *Fake) Reminders(ctx context.Context) (reminders.Interface, error) {
-	return f.fnRemindersFn(ctx)
+	return f.fnReminders(ctx)
 }
 
 func (f *Fake) RuntimeStatus() *runtimev1pb.ActorRuntime {
-	return f.fnRuntimeStatusFn()
+	return f.fnRuntimeStatus()
+}
+
+func (f *Fake) RegisterHosted(cfg hostconfig.Config) error {
+	return f.fnRegisterHosted(cfg)
+}
+
+func (f *Fake) WaitForRegisteredHosts(ctx context.Context) error {
+	return f.fnWaitForRegisteredHosts(ctx)
+}
+
+func (f *Fake) UnRegisterHosted(ids ...string) {
+	f.fnUnRegisterHosted(ids...)
 }
