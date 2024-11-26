@@ -50,10 +50,11 @@ const (
 )
 
 type Options struct {
-	AppID      string
-	Namespace  string
-	Actors     actors.Interface
-	Resiliency resiliency.Provider
+	AppID              string
+	Namespace          string
+	Actors             actors.Interface
+	Resiliency         resiliency.Provider
+	SchedulerReminders bool
 }
 
 type Actors struct {
@@ -68,6 +69,7 @@ type Actors struct {
 	defaultReminderInterval *time.Duration
 	resiliency              resiliency.Provider
 	actors                  actors.Interface
+	schedulerReminders      bool
 
 	// TODO: @joshvanl: remove
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
@@ -76,11 +78,12 @@ type Actors struct {
 
 func New(opts Options) (*Actors, error) {
 	return &Actors{
-		appID:             opts.AppID,
-		workflowActorType: ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
-		activityActorType: ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
-		actors:            opts.Actors,
-		resiliency:        opts.Resiliency,
+		appID:              opts.AppID,
+		workflowActorType:  ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
+		activityActorType:  ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
+		actors:             opts.Actors,
+		resiliency:         opts.Resiliency,
+		schedulerReminders: opts.SchedulerReminders,
 
 		// TODO: @joshvanl: remove
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem),
@@ -132,28 +135,30 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 				{
 					Type: abe.workflowActorType,
 					Factory: workflow.WorkflowFactory(workflow.WorkflowOptions{
-						AppID:             abe.appID,
-						WorkflowActorType: abe.workflowActorType,
-						ActivityActorType: abe.activityActorType,
-						CachingDisabled:   abe.cachingDisabled,
-						DefaultTimeout:    abe.defaultWorkflowTimeout,
-						ReminderInterval:  abe.defaultReminderInterval,
-						Resiliency:        abe.resiliency,
-						Actors:            abe.actors,
-						Scheduler:         getWorkflowScheduler(abe.orchestrationWorkItemChan),
+						AppID:              abe.appID,
+						WorkflowActorType:  abe.workflowActorType,
+						ActivityActorType:  abe.activityActorType,
+						CachingDisabled:    abe.cachingDisabled,
+						DefaultTimeout:     abe.defaultWorkflowTimeout,
+						ReminderInterval:   abe.defaultReminderInterval,
+						Resiliency:         abe.resiliency,
+						Actors:             abe.actors,
+						Scheduler:          getWorkflowScheduler(abe.orchestrationWorkItemChan),
+						SchedulerReminders: abe.schedulerReminders,
 					}),
 				},
 				{
 					Type: abe.activityActorType,
 					Factory: workflow.ActivityFactory(workflow.ActivityOptions{
-						AppID:             abe.appID,
-						ActivityActorType: abe.activityActorType,
-						WorkflowActorType: abe.workflowActorType,
-						CachingDisabled:   abe.cachingDisabled,
-						DefaultTimeout:    abe.defaultActivityTimeout,
-						ReminderInterval:  abe.defaultReminderInterval,
-						Scheduler:         getActivityScheduler(abe.activityWorkItemChan),
-						Actors:            abe.actors,
+						AppID:              abe.appID,
+						ActivityActorType:  abe.activityActorType,
+						WorkflowActorType:  abe.workflowActorType,
+						CachingDisabled:    abe.cachingDisabled,
+						DefaultTimeout:     abe.defaultActivityTimeout,
+						ReminderInterval:   abe.defaultReminderInterval,
+						Scheduler:          getActivityScheduler(abe.activityWorkItemChan),
+						Actors:             abe.actors,
+						SchedulerReminders: abe.schedulerReminders,
 					}),
 				},
 			},

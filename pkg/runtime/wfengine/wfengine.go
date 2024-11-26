@@ -44,12 +44,13 @@ type Interface interface {
 }
 
 type Options struct {
-	AppID          string
-	Namespace      string
-	Actors         actors.Interface
-	Spec           config.WorkflowSpec
-	BackendManager processor.WorkflowBackendManager
-	Resiliency     resiliency.Provider
+	AppID              string
+	Namespace          string
+	Actors             actors.Interface
+	Spec               config.WorkflowSpec
+	BackendManager     processor.WorkflowBackendManager
+	Resiliency         resiliency.Provider
+	SchedulerReminders bool
 }
 
 type engine struct {
@@ -67,10 +68,11 @@ type engine struct {
 func New(opts Options) (Interface, error) {
 	// If no backend was initialized by the manager, create a backend backed by actors
 	abackend, err := backendactors.New(backendactors.Options{
-		AppID:      opts.AppID,
-		Namespace:  opts.Namespace,
-		Actors:     opts.Actors,
-		Resiliency: opts.Resiliency,
+		AppID:              opts.AppID,
+		Namespace:          opts.Namespace,
+		Actors:             opts.Actors,
+		Resiliency:         opts.Resiliency,
+		SchedulerReminders: opts.SchedulerReminders,
 	})
 	if err != nil {
 		return nil, err
