@@ -294,15 +294,15 @@ func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequ
 		if err != nil {
 			errCh <- fmt.Errorf("dissemination of 'unlock' failed: %v", err)
 		}
-		errCh <- nil;
-	}();
+		errCh <- nil
+	}()
 
 	select {
-	case err := <- errCh:
+	case err := <-errCh:
 		if err != nil {
 			return err
 		}
-	case <- ctx.Done():
+	case <-ctx.Done():
 		return fmt.Errorf("performTablesUpdate failed: %v", ctx.Err())
 	}
 
