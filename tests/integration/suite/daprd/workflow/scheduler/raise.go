@@ -137,7 +137,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(c, "SUSPENDED", get.GetRuntimeStatus())
 	}, time.Second*5, time.Millisecond*10)
 
-	_, err = gclient.ResumeWorkflowAlpha1(ctx, &rtv1.ResumeWorkflowRequest{
+	_, err = gclient.ResumeWorkflowBeta1(ctx, &rtv1.ResumeWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
 		WorkflowComponent: "dapr",
 	})

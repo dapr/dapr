@@ -80,7 +80,10 @@ spec:
 			strings.ReplaceAll(c.storeNames[i], "'", "''"))
 	}
 
-	c.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(files...))
+	c.daprd = procdaprd.New(t,
+		procdaprd.WithResourceFiles(files...),
+		procdaprd.WithDaprGracefulShutdownSeconds(10),
+	)
 
 	return []framework.Option{
 		framework.WithProcesses(c.daprd),

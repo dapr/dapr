@@ -36,7 +36,7 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
-	"github.com/dapr/kit/concurrency"
+	"github.com/dapr/kit/concurrency/cmap"
 	"github.com/dapr/kit/logger"
 )
 
@@ -114,7 +114,7 @@ type Service struct {
 	membershipCh chan hostMemberChange
 
 	// disseminateLocks is a map of lock per namespace for disseminating the hashing tables
-	disseminateLocks concurrency.MutexMap[string]
+	disseminateLocks cmap.Mutex[string]
 
 	// disseminateNextTime is the time when the hashing tables for a namespace are disseminated.
 	disseminateNextTime haxmap.Map[string, *atomic.Int64]
@@ -194,7 +194,7 @@ func NewPlacementService(opts ServiceOpts) *Service {
 		clock:               &clock.RealClock{},
 		closedCh:            make(chan struct{}),
 		sec:                 opts.SecProvider,
-		disseminateLocks:    concurrency.NewMutexMap[string](),
+		disseminateLocks:    cmap.NewMutex[string](),
 		memberUpdateCount:   *haxmap.New[string, *atomic.Uint32](),
 		disseminateNextTime: *haxmap.New[string, *atomic.Int64](),
 		keepAliveTime:       opts.KeepAliveTime,
@@ -262,7 +262,7 @@ func (p *Service) Start(ctx context.Context) error {
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
 func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
 	registeredMemberID := ""
-	isActorRuntime := false
+	isActorHost := false
 
 	clientID, err := p.validateClient(stream)
 	if err != nil {
@@ -330,11 +330,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				}
 			}
 
-			// Ensure that the incoming runtime is actor instance.
-			isActorRuntime = len(req.GetEntities()) > 0
-			if !isActorRuntime {
-				// we already disseminated the existing tables to this member,
-				// so we can ignore the rest if it's a non-actor.
+			if !requiresUpdateInPlacementTables(req, &isActorHost) {
 				continue
 			}
 
@@ -377,7 +373,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				log.Debugf("Stream connection is disconnected with the error: %v", err)
 			}
 
-			if isActorRuntime {
+			if requiresUpdateInPlacementTables(req, &isActorHost) {
 				select {
 				case p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberRemove,
@@ -478,4 +474,18 @@ func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
 	}
 
 	return nil
+}
+
+func requiresUpdateInPlacementTables(req *placementv1pb.Host, isActorHost *bool) bool {
+	// If the member is reporting no entities it's either a
+	// - non-actor runtime or
+	// - a host that used to have actors (isActorHost=true) but has now unregistered all its actors (common for workflows actors)
+	// In the former case, we don't need to update the placement tables, because there are no member changes
+	// In the latter case, we do need to update the placement tables, because we're removing a member that was previously registered
+
+	reportsActors := len(req.GetEntities()) > 0
+	existsInPlacementTables := *isActorHost // if the member had previously reported actors
+	*isActorHost = reportsActors
+
+	return reportsActors || existsInPlacementTables
 }
