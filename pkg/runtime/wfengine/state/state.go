@@ -22,7 +22,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/microsoft/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/state"

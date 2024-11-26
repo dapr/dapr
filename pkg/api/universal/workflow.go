@@ -19,13 +19,13 @@ import (
 	"unicode"
 
 	"github.com/google/uuid"
-	"github.com/microsoft/durabletask-go/api"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/durabletask-go/api"
 )
 
 // GetWorkflowBeta1 is the API handler for getting workflow details

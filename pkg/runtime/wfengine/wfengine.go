@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/microsoft/durabletask-go/backend"
 	"google.golang.org/grpc"
 
 	"github.com/dapr/components-contrib/workflows"
@@ -29,6 +28,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/processor"
 	backendactors "github.com/dapr/dapr/pkg/runtime/wfengine/backends/actors"
+	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/logger"
 )
 
