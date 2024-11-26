@@ -279,18 +279,31 @@ func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequ
 	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 	defer cancel()
 
-	// Perform each update on all hosts in sequence
-	err := p.disseminateOperationOnHosts(ctx, req, lockOperation)
-	if err != nil {
-		return fmt.Errorf("dissemination of 'lock' failed: %v", err)
-	}
-	err = p.disseminateOperationOnHosts(ctx, req, updateOperation)
-	if err != nil {
-		return fmt.Errorf("dissemination of 'update' failed: %v", err)
-	}
-	err = p.disseminateOperationOnHosts(ctx, req, unlockOperation)
-	if err != nil {
-		return fmt.Errorf("dissemination of 'unlock' failed: %v", err)
+	errCh = make(chan error)
+
+	go func() {
+		err := p.disseminateOperationOnHosts(ctx, req, lockOperation)
+		if err != nil {
+			errCh <- fmt.Errorf("dissemination of 'lock' failed: %v", err)
+		}
+		err = p.disseminateOperationOnHosts(ctx, req, updateOperation)
+		if err != nil {
+			errCh <- fmt.Errorf("dissemination of 'update' failed: %v", err)
+		}
+		err = p.disseminateOperationOnHosts(ctx, req, unlockOperation)
+		if err != nil {
+			errCh <- fmt.Errorf("dissemination of 'unlock' failed: %v", err)
+		}
+		errCh <- nil;
+	}();
+
+	select {
+	case err := <- errCh:
+		if err != nil {
+			return err
+		}
+	case <- ctx.Done():
+		return fmt.Errorf("performTablesUpdate failed: %v", ctx.Err())
 	}
 
 	log.Debugf("performTablesUpdate succeed in %v", p.clock.Since(startedAt))
