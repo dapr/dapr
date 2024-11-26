@@ -69,6 +69,8 @@ type workflow struct {
 	scheduler             todo.WorkflowScheduler
 	activityResultAwaited atomic.Bool
 	completed             atomic.Bool
+	schedulerReminders    bool
+
 	// TODO: @joshvanl: remove
 	defaultTimeout time.Duration
 }
@@ -81,9 +83,10 @@ type WorkflowOptions struct {
 	DefaultTimeout    *time.Duration
 	ReminderInterval  *time.Duration
 
-	Resiliency resiliency.Provider
-	Actors     actors.Interface
-	Scheduler  todo.WorkflowScheduler
+	Resiliency         resiliency.Provider
+	Actors             actors.Interface
+	Scheduler          todo.WorkflowScheduler
+	SchedulerReminders bool
 }
 
 func WorkflowFactory(opts WorkflowOptions) targets.Factory {
@@ -99,16 +102,17 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 		}
 
 		return &workflow{
-			appID:             opts.AppID,
-			actorID:           actorID,
-			actorType:         opts.WorkflowActorType,
-			activityActorType: opts.ActivityActorType,
-			scheduler:         opts.Scheduler,
-			cachingDisabled:   opts.CachingDisabled,
-			reminderInterval:  reminderInterval,
-			defaultTimeout:    defaultTimeout,
-			resiliency:        opts.Resiliency,
-			actors:            opts.Actors,
+			appID:              opts.AppID,
+			actorID:            actorID,
+			actorType:          opts.WorkflowActorType,
+			activityActorType:  opts.ActivityActorType,
+			scheduler:          opts.Scheduler,
+			cachingDisabled:    opts.CachingDisabled,
+			reminderInterval:   reminderInterval,
+			defaultTimeout:     defaultTimeout,
+			resiliency:         opts.Resiliency,
+			actors:             opts.Actors,
+			schedulerReminders: opts.SchedulerReminders,
 			lock: internal.NewLock(internal.LockOptions{
 				ActorType: opts.WorkflowActorType,
 			}),
@@ -881,14 +885,23 @@ func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string
 	if err != nil {
 		return "", err
 	}
+
+	var period string
+	var oneshot bool
+	if w.schedulerReminders {
+		oneshot = true
+	} else {
+		period = w.reminderInterval.String()
+	}
+
 	return reminderName, reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: w.actorType,
 		ActorID:   w.actorID,
 		Data:      dataEnc,
 		DueTime:   delay.String(),
 		Name:      reminderName,
-		// TODO: @joshvanl: remove when using scheduler to make once shot.
-		Period: w.reminderInterval.String(),
+		Period:    period,
+		IsOneShot: oneshot,
 	})
 }
 
