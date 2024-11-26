@@ -40,6 +40,7 @@ import (
 	nr "github.com/dapr/components-contrib/nameresolution"
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/api/grpc"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	"github.com/dapr/dapr/pkg/api/http"
@@ -73,8 +74,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/hotreload"
 	"github.com/dapr/dapr/pkg/runtime/meta"
 	"github.com/dapr/dapr/pkg/runtime/processor"
-	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
-	"github.com/dapr/dapr/pkg/runtime/processor/workflow"
 	"github.com/dapr/dapr/pkg/runtime/pubsub"
 	"github.com/dapr/dapr/pkg/runtime/pubsub/publisher"
 	"github.com/dapr/dapr/pkg/runtime/pubsub/streamer"
@@ -282,7 +281,7 @@ func newDaprRuntime(ctx context.Context,
 		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
 	}
 
-	wfe := wfengine.New(wfengine.Options{
+	wfe, err := wfengine.New(wfengine.Options{
 		AppID:          runtimeConfig.id,
 		Namespace:      namespace,
 		Actors:         actors,
@@ -290,6 +289,9 @@ func newDaprRuntime(ctx context.Context,
 		BackendManager: processor.WorkflowBackend(),
 		Resiliency:     resiliencyProvider,
 	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create workflow engine: %w", err)
+	}
 
 	rt := &DaprRuntime{
 		runtimeConfig:         runtimeConfig,
@@ -555,11 +557,6 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.flushOutstandingComponents(ctx)
 
-	// Creating workflow engine after components are loaded
-	if err = a.initWorkflowEngine(ctx); err != nil {
-		return err
-	}
-
 	err = a.loadHTTPEndpoints(ctx)
 	if err != nil {
 		log.Warnf("failed to load HTTP endpoints: %s", err)
@@ -646,6 +643,10 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 
 	a.initDirectMessaging(a.nameResolver)
 
+	if err := a.initActors(ctx); err != nil {
+		return fmt.Errorf("failed to initialize actors: %w", err)
+	}
+
 	a.runtimeConfig.outboundHealthz.AddTarget().Ready()
 	if err := a.blockUntilAppIsReady(ctx); err != nil {
 		return err
@@ -688,10 +689,6 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 	// Load app configuration (for actors) and init actors
 	a.loadAppConfiguration(ctx)
 
-	if err := a.initActors(ctx); err != nil {
-		return fmt.Errorf("failed to initialize actors: %w", err)
-	}
-
 	if cb := a.runtimeConfig.registry.ComponentsCallback(); cb != nil {
 		if err := cb(registry.ComponentRegistry{
 			DirectMessaging: a.directMessaging,
@@ -700,45 +697,8 @@ func (a *DaprRuntime) appHealthReadyInit(ctx context.Context) error {
 			return fmt.Errorf("failed to register components with callback: %w", err)
 		}
 	}
-	if a.runtimeConfig.SchedulerEnabled() {
-		if err := a.jobsManager.Start(); err != nil {
-			return err
-		}
-	}
 
 	return nil
-}
-
-func (a *DaprRuntime) initWorkflowEngine(ctx context.Context) error {
-	wfComponentFactory := wfengine.BuiltinWorkflowFactory(a.wfengine)
-
-	reg := a.runtimeConfig.registry.Workflows()
-	if reg == nil {
-		log.Info("No workflow registry available, not registering Dapr workflow component.")
-		return nil
-	}
-
-	log.Info("Registering component for dapr workflow engine...")
-	reg.RegisterComponent(wfComponentFactory, "dapr")
-	wfe := workflow.New(workflow.Options{
-		Registry:       a.runtimeConfig.registry.Workflows(),
-		ComponentStore: a.compStore,
-		Meta:           a.meta,
-	})
-
-	if err := a.wfengine.Init(); err != nil {
-		return err
-	}
-
-	if err := wfe.Init(ctx, wfbackend.ComponentDefinition()); err != nil {
-		return fmt.Errorf("failed to initialize Dapr workflow component: %w", err)
-	}
-
-	log.Info("Workflow engine initialized.")
-
-	return a.runnerCloser.AddCloser(func() error {
-		return wfe.Close(wfbackend.ComponentDefinition())
-	})
 }
 
 // initPluggableComponents discover pluggable components and initialize with their respective registries.
@@ -791,11 +751,20 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			log.Warnf("failed to subscribe to outbox topics: %s", err)
 		}
 
-		if a.runtimeConfig.SchedulerEnabled() {
-			if err := a.jobsManager.Start(); err != nil {
-				log.Warnf("failed to subscribe to outbox topics: %s", err)
-			}
+		if err := a.actors.RegisterHosted(hostconfig.Config{
+			EntityConfigs:              a.appConfig.EntityConfigs,
+			DrainRebalancedActors:      a.appConfig.DrainRebalancedActors,
+			DrainOngoingCallTimeout:    a.appConfig.DrainOngoingCallTimeout,
+			RemindersStoragePartitions: a.appConfig.RemindersStoragePartitions,
+			HostedActorTypes:           a.appConfig.Entities,
+			DefaultIdleTimeout:         a.appConfig.ActorIdleTimeout,
+			Reentrancy:                 a.appConfig.Reentrancy,
+			AppChannel:                 a.channels.AppChannel(),
+		}); err != nil {
+			log.Warnf("Failed to register hosted actors: %s", err)
 		}
+
+		a.jobsManager.StartApp()
 
 	case apphealth.AppStatusUnhealthy:
 		select {
@@ -804,15 +773,13 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			close(a.isAppHealthy)
 		}
 
+		a.jobsManager.StopApp()
+
 		// Stop topic subscriptions and input bindings
 		a.processor.Subscriber().StopAppSubscriptions()
 		a.processor.Binding().StopReadingFromBindings(false)
 
-		if a.runtimeConfig.SchedulerEnabled() {
-			if a.jobsManager != nil {
-				a.jobsManager.Stop()
-			}
-		}
+		a.actors.UnRegisterHosted(a.appConfig.Entities...)
 	}
 }
 
@@ -1073,18 +1040,9 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	}
 
 	if err := a.actors.Init(actors.InitOptions{
-		Hostname:                   hostAddress,
-		EntityConfigs:              a.appConfig.EntityConfigs,
-		DrainRebalancedActors:      a.appConfig.DrainRebalancedActors,
-		DrainOngoingCallTimeout:    a.appConfig.DrainOngoingCallTimeout,
-		RemindersStoragePartitions: a.appConfig.RemindersStoragePartitions,
-		StateStoreName:             actorStateStoreName,
-		HostedActorTypes:           a.appConfig.Entities,
-		HealthHTTPClient:           a.channels.AppHTTPClient(),
-		DefaultIdleTimeout:         a.appConfig.ActorIdleTimeout,
-		GRPC:                       a.grpc,
-		Reentrancy:                 a.appConfig.Reentrancy,
-		AppChannel:                 a.channels.AppChannel(),
+		Hostname:       hostAddress,
+		StateStoreName: actorStateStoreName,
+		GRPC:           a.grpc,
 	}); err != nil {
 		return err
 	}

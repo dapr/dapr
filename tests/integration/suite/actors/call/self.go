@@ -41,6 +41,9 @@ type self struct {
 }
 
 func (s *self) Setup(t *testing.T) []framework.Option {
+	s.abc.Store(0)
+	s.efg.Store(0)
+
 	s.app = actors.New(t,
 		actors.WithActorTypes("abc", "efg"),
 		actors.WithActorTypeHandler("abc", func(_ nethttp.ResponseWriter, r *nethttp.Request) {

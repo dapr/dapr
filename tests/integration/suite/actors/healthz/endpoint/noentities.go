@@ -15,7 +15,6 @@ package endpoint
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"sync"
 	"testing"
@@ -107,13 +106,8 @@ func (n *noentities) Run(t *testing.T, ctx context.Context) {
 	}{
 		{cl: n.daprdWithEntities.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{
 			{Type: "myactortype"},
-			{Type: fmt.Sprintf("dapr.internal.default.%s.activity", n.daprdWithEntities.AppID())},
-			{Type: fmt.Sprintf("dapr.internal.default.%s.workflow", n.daprdWithEntities.AppID())},
 		}},
-		{cl: n.daprd.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{
-			{Type: fmt.Sprintf("dapr.internal.default.%s.activity", n.daprd.AppID())},
-			{Type: fmt.Sprintf("dapr.internal.default.%s.workflow", n.daprd.AppID())},
-		}},
+		{cl: n.daprd.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{}},
 	} {
 		meta, err := tv.cl.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		require.NoError(t, err)

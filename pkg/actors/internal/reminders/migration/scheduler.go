@@ -16,8 +16,10 @@ package migration
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"math"
+	"sync"
 	"time"
 
 	"k8s.io/utils/clock"
@@ -103,26 +105,38 @@ func ToScheduler(ctx context.Context, opts ToSchedulerOptions) error {
 	}
 
 	log.Infof("Found %d missing scheduler reminders from state store", len(missingReminders))
-	for _, missing := range missingReminders {
-		log.Infof("Creating missing scheduler reminder %s", missing.Key())
+	errs := make([]error, len(missingReminders))
+	var wg sync.WaitGroup
+	wg.Add(len(missingReminders))
+	for i, missing := range missingReminders {
+		go func(i int, missing *api.Reminder) {
+			defer wg.Done()
 
-		var ttl string
-		if !missing.ExpirationTime.IsZero() {
-			ttl = missing.ExpirationTime.UTC().Format(time.RFC3339)
-		}
+			log.Infof("Creating missing scheduler reminder %s", missing.Key())
 
-		err := opts.SchedulerReminders.Create(ctx, &api.CreateReminderRequest{
-			Name:      missing.Name,
-			ActorType: missing.ActorType,
-			ActorID:   missing.ActorID,
-			Data:      missing.Data,
-			DueTime:   missing.DueTime,
-			Period:    missing.Period.String(),
-			TTL:       ttl,
-		})
-		if err != nil {
-			return fmt.Errorf("failed to migrate reminder %s: %w", missing.Key(), err)
-		}
+			var ttl string
+			if !missing.ExpirationTime.IsZero() {
+				ttl = missing.ExpirationTime.UTC().Format(time.RFC3339)
+			}
+
+			err := opts.SchedulerReminders.Create(ctx, &api.CreateReminderRequest{
+				Name:      missing.Name,
+				ActorType: missing.ActorType,
+				ActorID:   missing.ActorID,
+				Data:      missing.Data,
+				DueTime:   missing.DueTime,
+				Period:    missing.Period.String(),
+				TTL:       ttl,
+			})
+			if err != nil {
+				errs[i] = fmt.Errorf("failed to create reminder %s: %w", missing.Key(), err)
+			}
+		}(i, missing)
+	}
+
+	wg.Wait()
+	if err := errors.Join(errs...); err != nil {
+		return err
 	}
 
 	log.Infof("Migrated %d reminders from state store to scheduler successfully", len(missingReminders))

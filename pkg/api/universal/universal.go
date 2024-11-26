@@ -106,17 +106,29 @@ func (a *Universal) AppConnectionConfig() config.AppConnectionConfig {
 }
 
 func (a *Universal) ActorEngine(ctx context.Context) (engine.Interface, error) {
+	if err := a.actors.WaitForRegisteredHosts(ctx); err != nil {
+		return nil, err
+	}
 	return a.actors.Engine(ctx)
 }
 
 func (a *Universal) ActorState(ctx context.Context) (state.Interface, error) {
+	if err := a.actors.WaitForRegisteredHosts(ctx); err != nil {
+		return nil, err
+	}
 	return a.actors.State(ctx)
 }
 
 func (a *Universal) ActorTimers(ctx context.Context) (timers.Interface, error) {
+	if err := a.actors.WaitForRegisteredHosts(ctx); err != nil {
+		return nil, err
+	}
 	return a.actors.Timers(ctx)
 }
 
 func (a *Universal) ActorReminders(ctx context.Context) (reminders.Interface, error) {
+	if err := a.actors.WaitForRegisteredHosts(ctx); err != nil {
+		return nil, err
+	}
 	return a.actors.Reminders(ctx)
 }

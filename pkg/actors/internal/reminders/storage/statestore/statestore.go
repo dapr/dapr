@@ -49,13 +49,11 @@ const metadataPartitionKey = "partitionKey"
 var log = logger.NewLogger("dapr.runtime.actor.reminders.statestore")
 
 type Options struct {
-	StateStore                 actorstate.Backend
-	Resiliency                 resiliency.Provider
-	Table                      table.Interface
-	EntityConfigs              map[string]api.EntityConfig
-	StoreName                  string
-	APILevel                   *apilevel.APILevel
-	RemindersStoragePartitions int
+	StateStore actorstate.Backend
+	Resiliency resiliency.Provider
+	Table      table.Interface
+	StoreName  string
+	APILevel   *apilevel.APILevel
 }
 
 type Statestore struct {
@@ -73,26 +71,25 @@ type Statestore struct {
 	engine          engine.Interface
 	closed          atomic.Bool
 
-	entityConfigs              map[string]api.EntityConfig
 	storeName                  string
+	entityConfigs              map[string]api.EntityConfig
 	remindersStoragePartitions int
+	ready                      atomic.Bool
 }
 
 // New returns a reminders provider.
 func New(opts Options) *Statestore {
 	return &Statestore{
-		clock:                      clock.RealClock{},
-		runningCh:                  make(chan struct{}),
-		reminders:                  make(map[string][]ActorReminderReference),
-		evaluationChan:             make(chan struct{}, 1),
-		evaluationQueue:            make(chan struct{}, 1),
-		resiliency:                 opts.Resiliency,
-		store:                      opts.StateStore,
-		table:                      opts.Table,
-		entityConfigs:              opts.EntityConfigs,
-		storeName:                  opts.StoreName,
-		apiLevel:                   opts.APILevel,
-		remindersStoragePartitions: opts.RemindersStoragePartitions,
+		clock:           clock.RealClock{},
+		runningCh:       make(chan struct{}),
+		reminders:       make(map[string][]ActorReminderReference),
+		evaluationChan:  make(chan struct{}, 1),
+		evaluationQueue: make(chan struct{}, 1),
+		resiliency:      opts.Resiliency,
+		store:           opts.StateStore,
+		table:           opts.Table,
+		storeName:       opts.StoreName,
+		apiLevel:        opts.APILevel,
 	}
 }
 
@@ -205,6 +202,10 @@ func (r *Statestore) Close() error {
 }
 
 func (r *Statestore) Get(ctx context.Context, req *api.GetReminderRequest) (*api.Reminder, error) {
+	if !r.ready.Load() {
+		return nil, errors.New("statestore reminders is not ready")
+	}
+
 	list, _, err := r.getRemindersForActorType(ctx, req.ActorType, false)
 	if err != nil {
 		return nil, err
@@ -223,6 +224,10 @@ func (r *Statestore) Get(ctx context.Context, req *api.GetReminderRequest) (*api
 }
 
 func (r *Statestore) List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error) {
+	if !r.ready.Load() {
+		return nil, errors.New("statestore reminders is not ready")
+	}
+
 	list, _, err := r.getRemindersForActorType(ctx, req.ActorType, false)
 	if err != nil {
 		return nil, err
@@ -247,6 +252,10 @@ func (r *Statestore) List(ctx context.Context, req *api.ListRemindersRequest) ([
 }
 
 func (r *Statestore) Delete(ctx context.Context, req *api.DeleteReminderRequest) error {
+	if !r.ready.Load() {
+		return errors.New("statestore reminders is not ready")
+	}
+
 	if !r.waitForEvaluationChan() {
 		return errors.New("error deleting reminder: timed out after 30s")
 	}
@@ -1152,7 +1161,8 @@ func (r *Statestore) updateReminderTrack(ctx context.Context, key string, repeti
 	return err
 }
 
-// :(
+// TODO: :(
+// Statestore option will be removed completely in v1.16
 func (r *Statestore) SetEngine(engine engine.Interface) {
 	r.engine = engine
 }
@@ -1166,4 +1176,12 @@ func isEtagMismatchError(err error) bool {
 		return etagErr.Kind() == state.ETagMismatch
 	}
 	return false
+}
+
+// TODO:  :(
+// Statestore option will be removed completely in v1.16
+func (r *Statestore) SetEntityConfigsRemindersStoragePartitions(entityConfigs map[string]api.EntityConfig, remindersStoragePartitions int) {
+	r.entityConfigs = entityConfigs
+	r.remindersStoragePartitions = remindersStoragePartitions
+	r.ready.Store(true)
 }

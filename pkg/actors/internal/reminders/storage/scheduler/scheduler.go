@@ -58,6 +58,7 @@ type scheduler struct {
 }
 
 func New(opts Options) storage.Interface {
+	log.Info("Using Scheduler service for reminders.")
 	return &scheduler{
 		clients:       opts.Clients,
 		namespace:     opts.Namespace,
@@ -70,6 +71,7 @@ func New(opts Options) storage.Interface {
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
 func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context, fn func(context.Context, *api.LookupActorRequest) bool) {
+	defer s.htarget.Ready()
 	err := migration.ToScheduler(ctx, migration.ToSchedulerOptions{
 		Table:              s.table,
 		StateReminders:     s.stateReminder,
@@ -79,13 +81,11 @@ func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context, fn func(contex
 	if err != nil {
 		log.Errorf("Error attempting to migrate reminders to scheduler: %s", err)
 	}
-	s.htarget.Ready()
 }
 
 func (s *scheduler) DrainRebalancedReminders(actorType string, actorID string) {}
 
 func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequest) error {
-	log.Info("Using Scheduler service for reminders.")
 	var dueTime *string
 	if len(reminder.DueTime) > 0 {
 		dueTime = ptr.Of(reminder.DueTime)

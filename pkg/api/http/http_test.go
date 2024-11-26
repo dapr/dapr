@@ -43,7 +43,6 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	workflowContrib "github.com/dapr/components-contrib/workflows"
 	actorsapi "github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	enginefake "github.com/dapr/dapr/pkg/actors/engine/fake"
@@ -2441,13 +2440,8 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 func TestV1Beta1Workflow(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
-	fakeWorkflowComponent := &daprt.MockWorkflow{}
-
-	componentName := "dapr"
-
 	resiliencyConfig := resiliency.FromConfigurations(logger.NewLogger("workflow.test"), testResiliency)
 	compStore := compstore.New()
-	compStore.AddWorkflow(componentName, fakeWorkflowComponent)
 
 	testAPI := &api{
 		healthz: healthz.New(),
@@ -2456,6 +2450,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 			CompStore:      compStore,
 			Resiliency:     resiliencyConfig,
 			WorkflowEngine: wfenginefake.New(),
+			Actors:         actorsfake.New(),
 		}),
 	}
 
@@ -2464,40 +2459,6 @@ func TestV1Beta1Workflow(t *testing.T) {
 	/////////////////////
 	// START API TESTS //
 	/////////////////////
-
-	t.Run("Start with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/workflowName/start"
-
-		req := workflowContrib.StartRequest{
-			WorkflowName: "Non-existent-workflow",
-		}
-
-		b, _ := json.Marshal(&req)
-
-		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
-	})
-
-	t.Run("Start with no instance ID", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start"
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 202, resp.StatusCode)
-
-		// assert that we got a response back like:
-		// {"instanceID": "some-random-value"}
-		assert.Nil(t, resp.ErrorBody)
-		assert.NotNil(t, resp.JSONBody)
-		rspMap := resp.JSONBody.(map[string]interface{})
-		assert.NotNil(t, rspMap)
-		assert.Contains(t, rspMap, "instanceID")
-		instanceID := rspMap["instanceID"].(string)
-		assert.NotEmpty(t, instanceID) // the instance ID should be a non-empty, random value string (e.g. UUID)
-	})
 
 	t.Run("Start with invalid instance ID", func(t *testing.T) {
 		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start?instanceID=invalid$ID"
@@ -2522,37 +2483,9 @@ func TestV1Beta1Workflow(t *testing.T) {
 		assert.Equal(t, messages.ErrInstanceIDTooLong.WithFormat(maxInstanceIDLength).Message(), resp.ErrorBody["message"])
 	})
 
-	t.Run("Start with explicit instance ID", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start?instanceID=my-explicit-ID"
-		resp := fakeServer.DoRequest("POST", apiPath, []byte("input payload"), nil)
-		assert.Equal(t, 202, resp.StatusCode)
-
-		// assert that we got a response back like:
-		// {"instanceID": "my-explicit-ID"}
-		assert.Nil(t, resp.ErrorBody)
-		assert.NotNil(t, resp.JSONBody)
-		rspMap := resp.JSONBody.(map[string]interface{})
-		assert.NotNil(t, rspMap)
-		assert.Contains(t, rspMap, "instanceID")
-		instanceID := rspMap["instanceID"].(string)
-		assert.Equal(t, "my-explicit-ID", instanceID) // the ID we provided should be returned
-	})
-
 	/////////////////////
 	// GET API TESTS ////
 	/////////////////////
-
-	t.Run("Get with non existent workflow component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID"
-
-		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
-	})
 
 	t.Run("Get with valid api call", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
@@ -2568,38 +2501,11 @@ func TestV1Beta1Workflow(t *testing.T) {
 		assert.NotNil(t, resp.JSONBody)
 		rspMap := resp.JSONBody.(map[string]interface{})
 		assert.NotNil(t, rspMap)
-		assert.Len(t, rspMap, 5) // check this in case we add more fields to the response
-		assert.Contains(t, rspMap, "instanceID")
-		assert.Equal(t, "myInstanceID", rspMap["instanceID"])
-		assert.Contains(t, rspMap, "workflowName")
-		assert.Equal(t, "mockWorkflowName", rspMap["workflowName"]) // The mock is designed to always return "mockWorkflowName" for workflow name
-		assert.Contains(t, rspMap, "runtimeStatus")
-		assert.Equal(t, "TESTING", rspMap["runtimeStatus"]) // the mock is designed to always return "TESTING" for runtime status
-		assert.Contains(t, rspMap, "createdAt")
-		createdAtStr := rspMap["createdAt"].(string)
-		_, err := time.Parse(time.RFC3339, createdAtStr) // we expect timestamps to be in RFC3339 format
-		require.NoError(t, err)
-		assert.Contains(t, rspMap, "lastUpdatedAt")
-		lastUpdatedAtStr := rspMap["lastUpdatedAt"].(string)
-		_, err = time.Parse(time.RFC3339, lastUpdatedAtStr) // we expect timestamps to be in RFC3339 format
-		require.NoError(t, err)
 	})
 
 	/////////////////////////
 	// TERMINATE API TESTS //
 	/////////////////////////
-
-	t.Run("Terminate with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/terminate"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
-	})
 
 	t.Run("Terminate with valid API path", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
@@ -2618,26 +2524,6 @@ func TestV1Beta1Workflow(t *testing.T) {
 	// RAISE EVENT API TESTS //
 	///////////////////////////
 
-	t.Run("Raise Event with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/raiseEvent/fakeEvent"
-
-		req := workflowContrib.RaiseEventRequest{
-			InstanceID: "",
-			EventName:  "",
-			EventData:  nil,
-		}
-
-		b, _ := json.Marshal(&req)
-
-		resp := fakeServer.DoRequest("POST", apiPath, b, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
-	})
-
 	t.Run("Raise Event with valid API path", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'RaiseEvent' method implemented to simply return nil
@@ -2655,18 +2541,6 @@ func TestV1Beta1Workflow(t *testing.T) {
 	// PAUSE API TESTS //
 	/////////////////////////
 
-	t.Run("Pause with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/pause"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
-	})
-
 	t.Run("Pause with valid API path", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'pause' method implemented to simply return nil
@@ -2683,18 +2557,6 @@ func TestV1Beta1Workflow(t *testing.T) {
 	/////////////////////////
 	// RESUME API TESTS //
 	/////////////////////////
-
-	t.Run("Resume with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/resume"
-
-		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
-		assert.Equal(t, 400, resp.StatusCode)
-
-		// assert
-		assert.NotNil(t, resp.ErrorBody)
-		assert.Equal(t, "ERR_WORKFLOW_COMPONENT_NOT_FOUND", resp.ErrorBody["errorCode"])
-		assert.Equal(t, fmt.Sprintf(messages.ErrWorkflowComponentDoesNotExist.Message(), "non-existent-component"), resp.ErrorBody["message"])
-	})
 
 	t.Run("Resume with valid API path", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.

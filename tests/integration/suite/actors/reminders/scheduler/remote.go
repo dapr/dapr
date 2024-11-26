@@ -150,10 +150,10 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 	}
 
-	assert.Eventually(t, func() bool {
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.lock.Lock()
 		defer r.lock.Unlock()
-		return len(r.methodcalled.Load().([]string)) == r.actorIDsNum
+		assert.Len(c, r.methodcalled.Load().([]string), r.actorIDsNum)
 	}, time.Second*5, time.Millisecond*10)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {

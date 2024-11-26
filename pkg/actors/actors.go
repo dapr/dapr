@@ -17,7 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -26,8 +26,8 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
-	"github.com/dapr/dapr/pkg/actors/internal/health"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/scheduler"
@@ -41,8 +41,6 @@ import (
 	"github.com/dapr/dapr/pkg/actors/targets/app"
 	"github.com/dapr/dapr/pkg/actors/timers"
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
-	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/modes"
@@ -76,23 +74,14 @@ type Options struct {
 }
 
 type InitOptions struct {
-	EntityConfigs              []config.EntityConfig
-	DrainRebalancedActors      bool
-	DrainOngoingCallTimeout    string
-	RemindersStoragePartitions int
-
-	StateStoreName     string
-	HostedActorTypes   []string
-	HealthHTTPClient   *http.Client
-	DefaultIdleTimeout string
-	Hostname           string
-
-	GRPC       *manager.Manager
-	Reentrancy config.ReentrancyConfig
-	AppChannel channel.AppChannel
+	StateStoreName string
+	Hostname       string
+	GRPC           *manager.Manager
 }
 
 // Interface is the main runtime for the actors subsystem.
+//
+//nolint:interfacebloat
 type Interface interface {
 	Init(InitOptions) error
 	Run(context.Context) error
@@ -102,6 +91,9 @@ type Interface interface {
 	Timers(context.Context) (timers.Interface, error)
 	Reminders(context.Context) (reminders.Interface, error)
 	RuntimeStatus() *runtimev1pb.ActorRuntime
+	RegisterHosted(hostconfig.Config) error
+	UnRegisterHosted(actorTypes ...string)
+	WaitForRegisteredHosts(ctx context.Context) error
 }
 
 type actors struct {
@@ -125,22 +117,18 @@ type actors struct {
 	engine         engine.Interface
 	timerStorage   internaltimers.Storage
 	timers         timers.Interface
-	reentrancy     config.ReentrancyConfig
 	idlerQueue     *queue.Processor[string, targets.Idlable]
-	appChannel     channel.AppChannel
-	checker        *health.Checker
 	stateReminders *statestore.Statestore
 	reminderStore  storage.Interface
 	state          actorstate.Interface
-
-	hostedActorTypes   []string
-	entityConfigs      map[string]api.EntityConfig
-	defaultIdleTimeout time.Duration
 
 	disabled   *atomic.Pointer[error]
 	readyCh    chan struct{}
 	initDoneCh chan struct{}
 	closedCh   chan struct{}
+
+	registerDoneCh   chan struct{}
+	registerDoneLock sync.RWMutex
 
 	clock clock.Clock
 }
@@ -171,6 +159,7 @@ func New(opts Options) Interface {
 		readyCh:            make(chan struct{}),
 		closedCh:           make(chan struct{}),
 		initDoneCh:         make(chan struct{}),
+		registerDoneCh:     make(chan struct{}),
 	}
 }
 
@@ -194,90 +183,17 @@ func (a *actors) Init(opts InitOptions) error {
 		a.disabled.Store(&err)
 		return nil
 	}
-
-	if opts.AppChannel == nil {
-		var err error = messages.ErrActorNoAppChannel
-		a.disabled.Store(&err)
-		return nil
-	}
-
-	checker, err := health.New(
-		health.WithFailureThreshold(4),
-		health.WithHealthyStateInterval(5*time.Second),
-		health.WithUnHealthyStateInterval(time.Second/2),
-		health.WithRequestTimeout(2*time.Second),
-		health.WithHTTPClient(opts.HealthHTTPClient),
-		health.WithAddress(a.healthEndpoint+"/healthz"),
-		health.WithHealthz(a.healthz),
-	)
-	if err != nil {
-		return err
-	}
-
-	entityConfigs := make(map[string]api.EntityConfig)
-	for _, entityConfg := range opts.EntityConfigs {
-		config := api.TranslateEntityConfig(entityConfg)
-		for _, entity := range entityConfg.Entities {
-			var found bool
-			for _, hostedType := range opts.HostedActorTypes {
-				if hostedType == entity {
-					entityConfigs[entity] = config
-					found = true
-					break
-				}
-			}
-
-			if !found {
-				log.Warnf("Configuration specified for non-hosted actor type: %s", entity)
-			}
-		}
-	}
-
-	drainOngoingCallTimeout := time.Minute
-	if len(opts.DrainOngoingCallTimeout) > 0 {
-		drainOngoingCallTimeout, err = time.ParseDuration(opts.DrainOngoingCallTimeout)
-		if err != nil {
-			return fmt.Errorf("failed to parse drain ongoing call timeout: %s", err)
-		}
-	}
-
-	idleTimeout := api.DefaultIdleTimeout
-	if len(opts.DefaultIdleTimeout) > 0 {
-		idleTimeout, err = time.ParseDuration(opts.DefaultIdleTimeout)
-		if err != nil {
-			return fmt.Errorf("failed to parse default actor idle timeout: %s", err)
-		}
-	}
-
-	a.reentrancy = opts.Reentrancy
-	if a.reentrancy.MaxStackDepth == nil {
-		a.reentrancy.MaxStackDepth = ptr.Of(api.DefaultReentrancyStackLimit)
-	}
-
-	a.appChannel = opts.AppChannel
-	a.hostedActorTypes = opts.HostedActorTypes
-	a.entityConfigs = entityConfigs
-	a.checker = checker
-	a.defaultIdleTimeout = idleTimeout
-
 	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
-	a.table = table.New(table.Options{
-		EntityConfigs:           entityConfigs,
-		DrainRebalancedActors:   opts.DrainRebalancedActors,
-		DrainOngoingCallTimeout: drainOngoingCallTimeout,
-		IdlerQueue:              a.idlerQueue,
-	})
+	a.table = table.New(table.Options{IdlerQueue: a.idlerQueue})
 
 	apiLevel := apilevel.New()
 
 	a.stateReminders = statestore.New(statestore.Options{
-		StateStore:                 store,
-		Table:                      a.table,
-		Resiliency:                 a.resiliency,
-		EntityConfigs:              entityConfigs,
-		StoreName:                  opts.StateStoreName,
-		APILevel:                   apiLevel,
-		RemindersStoragePartitions: opts.RemindersStoragePartitions,
+		Resiliency: a.resiliency,
+		StateStore: store,
+		Table:      a.table,
+		StoreName:  opts.StateStoreName,
+		APILevel:   apiLevel,
 	})
 
 	a.reminderStore = a.stateReminders
@@ -292,6 +208,7 @@ func (a *actors) Init(opts InitOptions) error {
 		})
 	}
 
+	var err error
 	a.placement, err = placement.New(placement.Options{
 		AppID:     a.appID,
 		Addresses: a.placementAddresses,
@@ -344,9 +261,6 @@ func (a *actors) Init(opts InitOptions) error {
 		Placement:       a.placement,
 	})
 
-	// TODO: @joshvanl: remove when placement accepts dynamic actors.
-	a.registerHosted()
-
 	return nil
 }
 
@@ -361,35 +275,29 @@ func (a *actors) Run(ctx context.Context) error {
 		}
 	}
 
+	close(a.readyCh)
+
 	if err := a.disabled.Load(); err != nil {
 		log.Infof("Actor runtime disabled: %s", *err)
-		close(a.readyCh)
 		<-ctx.Done()
 		return nil
 	}
 
-	log.Infof("Actor runtime started. Idle timeout: %v", a.defaultIdleTimeout)
-	close(a.readyCh)
+	log.Info("Actor runtime started")
 
 	mngr := concurrency.NewRunnerCloserManager(nil,
-		a.checker.Run,
-		a.placement.Run,
 		func(ctx context.Context) error {
-			ch := a.checker.HealthChannel()
-			for {
-				select {
-				case <-ch:
-				// TODO: @joshvanl: enable when placement accepts dynamic actors.
-				// case healthy := <-ch:
-				// if healthy {
-				// 	//a.registerHosted()
-				// } else {
-				// 	//a.unregisterHosted()
-				// }
-				case <-ctx.Done():
-					return nil
-				}
+			select {
+			case <-a.registerDoneCh:
+			case <-ctx.Done():
+				return ctx.Err()
 			}
+			return a.placement.Run(ctx)
+		},
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			log.Info("Actor runtime shutting down")
+			return nil
 		},
 	)
 
@@ -399,11 +307,11 @@ func (a *actors) Run(ctx context.Context) error {
 		a.reminderStore,
 		a.timerStorage,
 		a.idlerQueue,
-		a.checker.Close,
 	); err != nil {
 		return err
 	}
 
+	defer log.Info("Actor runtime stopped")
 	return mngr.Run(ctx)
 }
 
@@ -465,30 +373,125 @@ func (a *actors) waitForReady(ctx context.Context) error {
 	}
 }
 
-// TODO: @joshvanl
-// func (a *actors) unregisterHosted() {
-// 	for _, actorType := range a.hostedActorTypes {
-// 		a.table.UnRegisterActorType(actorType)
-// 	}
-// }
+func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
+	defer func() {
+		a.registerDoneLock.Lock()
+		close(a.registerDoneCh)
+		a.registerDoneLock.Unlock()
+	}()
 
-func (a *actors) registerHosted() {
-	for _, actorType := range a.hostedActorTypes {
-		idleTimeout := a.defaultIdleTimeout
-		reentrancy := a.reentrancy
-		if c, ok := a.entityConfigs[actorType]; ok {
+	if err := a.disabled.Load(); err != nil {
+		return nil
+	}
+
+	entityConfigs := make(map[string]api.EntityConfig)
+	for _, entityConfg := range cfg.EntityConfigs {
+		config := api.TranslateEntityConfig(entityConfg)
+		for _, entity := range entityConfg.Entities {
+			var found bool
+			for _, hostedType := range cfg.HostedActorTypes {
+				if hostedType == entity {
+					entityConfigs[entity] = config
+					found = true
+					break
+				}
+			}
+
+			if !found {
+				log.Warnf("Configuration specified for non-hosted actor type: %s", entity)
+			}
+		}
+	}
+
+	drainOngoingCallTimeout := time.Minute
+	if len(cfg.DrainOngoingCallTimeout) > 0 {
+		var err error
+		drainOngoingCallTimeout, err = time.ParseDuration(cfg.DrainOngoingCallTimeout)
+		if err != nil {
+			return fmt.Errorf("failed to parse drain ongoing call timeout: %s", err)
+		}
+	}
+
+	idleTimeout := api.DefaultIdleTimeout
+	if len(cfg.DefaultIdleTimeout) > 0 {
+		var err error
+		idleTimeout, err = time.ParseDuration(cfg.DefaultIdleTimeout)
+		if err != nil {
+			return fmt.Errorf("failed to parse default actor idle timeout: %s", err)
+		}
+	}
+
+	reentrancy := cfg.Reentrancy
+	if reentrancy.MaxStackDepth == nil {
+		reentrancy.MaxStackDepth = ptr.Of(api.DefaultReentrancyStackLimit)
+	}
+
+	factories := make([]table.ActorTypeFactory, 0, len(cfg.HostedActorTypes))
+	for _, actorType := range cfg.HostedActorTypes {
+		idleTimeout := idleTimeout
+		reentrancy := reentrancy
+		if c, ok := entityConfigs[actorType]; ok {
 			idleTimeout = c.ActorIdleTimeout
 			reentrancy = c.ReentrancyConfig
 		}
 
-		a.table.RegisterActorType(actorType, app.Factory(app.Options{
-			ActorType:   actorType,
-			Reentrancy:  reentrancy,
-			AppChannel:  a.appChannel,
-			Resiliency:  a.resiliency,
-			IdleQueue:   a.idlerQueue,
-			IdleTimeout: idleTimeout,
-		}))
+		factories = append(factories, table.ActorTypeFactory{
+			Type: actorType,
+			Factory: app.Factory(app.Options{
+				ActorType:   actorType,
+				Reentrancy:  reentrancy,
+				AppChannel:  cfg.AppChannel,
+				Resiliency:  a.resiliency,
+				IdleQueue:   a.idlerQueue,
+				IdleTimeout: idleTimeout,
+			}),
+		})
+	}
+
+	a.stateReminders.SetEntityConfigsRemindersStoragePartitions(
+		entityConfigs,
+		cfg.RemindersStoragePartitions,
+	)
+
+	log.Infof("Registering hosted actors: %v", cfg.HostedActorTypes)
+	a.table.RegisterActorTypes(table.RegisterActorTypeOptions{
+		Factories: factories,
+		HostOptions: &table.ActorHostOptions{
+			EntityConfigs:           entityConfigs,
+			DrainRebalancedActors:   true,
+			DrainOngoingCallTimeout: drainOngoingCallTimeout,
+		},
+	})
+
+	return nil
+}
+
+func (a *actors) UnRegisterHosted(actorTypes ...string) {
+	if a.disabled.Load() != nil {
+		return
+	}
+
+	a.table.UnRegisterActorTypes(actorTypes...)
+
+	a.registerDoneLock.Lock()
+	a.registerDoneCh = make(chan struct{})
+	a.registerDoneLock.Unlock()
+}
+
+func (a *actors) WaitForRegisteredHosts(ctx context.Context) error {
+	if err := a.disabled.Load(); err != nil {
+		return *err
+	}
+
+	a.registerDoneLock.RLock()
+	rch := a.registerDoneCh
+	a.registerDoneLock.RUnlock()
+
+	select {
+	case <-rch:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
 	}
 }
 
@@ -508,7 +511,7 @@ func (a *actors) handleIdleActor(target targets.Idlable) {
 
 func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 	select {
-	case <-a.initDoneCh:
+	case <-a.registerDoneCh:
 		if a.disabled.Load() != nil {
 			return &runtimev1pb.ActorRuntime{
 				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,

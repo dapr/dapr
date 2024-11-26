@@ -47,22 +47,23 @@ type Manager struct {
 	appID     string
 	channels  *channels.Channels
 
-	stopStartCh chan struct{}
-	lock        sync.Mutex
-	started     bool
-	stopped     bool
-	running     atomic.Bool
-	wg          sync.WaitGroup
+	lock sync.Mutex
+
+	appCh      chan struct{}
+	appRunning bool
+
+	running atomic.Bool
+	wg      sync.WaitGroup
 }
 
 func New(opts Options) *Manager {
 	return &Manager{
-		namespace:   opts.Namespace,
-		appID:       opts.AppID,
-		actors:      opts.Actors,
-		channels:    opts.Channels,
-		clients:     opts.Clients,
-		stopStartCh: make(chan struct{}, 1),
+		namespace: opts.Namespace,
+		appID:     opts.AppID,
+		actors:    opts.Actors,
+		channels:  opts.Channels,
+		clients:   opts.Clients,
+		appCh:     make(chan struct{}),
 	}
 }
 
@@ -71,41 +72,87 @@ func (m *Manager) Run(ctx context.Context) error {
 	if !m.running.CompareAndSwap(false, true) {
 		return errors.New("scheduler manager is already running")
 	}
+	defer m.wg.Wait()
+
+	var ch <-chan []string = make(chan []string)
+	var actorTypes []string
+	if table, err := m.actors.Table(ctx); err == nil {
+		ch, actorTypes = table.SubscribeToTypeUpdates(ctx)
+	}
 
 	for {
-		if err := m.watchJobs(ctx); err != nil {
-			// don't retry if closing down
-			if ctx.Err() != nil {
-				return nil //nolint:nilerr
-			}
+		m.lock.Lock()
+		appRunning := m.appRunning
+		appCh := m.appCh
+		m.lock.Unlock()
 
-			if err == io.EOF {
-				log.Warnf("Received EOF, re-establishing connection: %v", err)
-				continue
+		if !appRunning && len(actorTypes) == 0 {
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-appCh:
+			case actorTypes = <-ch:
 			}
-
-			if errors.Is(err, context.Canceled) {
-				continue
-			}
-
-			return fmt.Errorf("error watching scheduler jobs: %w", err)
 		}
 
-		// don't retry if closing down
-		if ctx.Err() != nil {
-			return nil //nolint:nilerr
+		m.lock.Lock()
+		appCh = m.appCh
+		appRunning = m.appRunning
+		m.lock.Unlock()
+
+		if !appRunning && len(actorTypes) == 0 {
+			continue
+		}
+
+		lctx, cancel := context.WithCancel(ctx)
+
+		m.wg.Add(1)
+		go func() {
+			select {
+			case <-lctx.Done():
+			case actorTypes = <-ch:
+			case <-appCh:
+			}
+			cancel()
+			m.wg.Done()
+		}()
+
+		err := m.loop(lctx, appRunning, actorTypes)
+		cancel()
+		if cerr := ctx.Err(); cerr != nil {
+			return cerr
+		}
+
+		if err != nil {
+			log.Warnf("Error watching scheduler jobs: %v", err)
 		}
 	}
 }
 
-// watchJobs watches for job triggers from all scheduler clients.
-func (m *Manager) watchJobs(ctx context.Context) error {
-	select {
-	case <-ctx.Done():
-		return ctx.Err()
-	case <-m.stopStartCh:
+func (m *Manager) loop(ctx context.Context, appTarget bool, actorTypes []string) error {
+	err := m.watchJobs(ctx, appTarget, actorTypes)
+	if err == nil {
+		return nil
 	}
 
+	if ctx.Err() != nil {
+		return ctx.Err()
+	}
+
+	if err == io.EOF {
+		log.Warnf("Received EOF, re-establishing connection: %v", err)
+		return nil
+	}
+
+	if errors.Is(err, context.Canceled) {
+		return nil
+	}
+
+	return fmt.Errorf("error watching scheduler jobs: %w", err)
+}
+
+// watchJobs watches for job triggers from all scheduler clients.
+func (m *Manager) watchJobs(ctx context.Context, appTarget bool, actorTypes []string) error {
 	req := &schedulerv1pb.WatchJobsRequest{
 		WatchJobRequestType: &schedulerv1pb.WatchJobsRequest_Initial{
 			Initial: &schedulerv1pb.WatchJobsRequestInitial{
@@ -115,23 +162,33 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 		},
 	}
 
-	if table, err := m.actors.Table(ctx); err == nil {
-		// TODO: @joshvanl: make actor types dynamic.
-		req.GetInitial().ActorTypes = append(table.Types(),
-			fmt.Sprintf("dapr.internal.%s.%s.workflow", m.namespace, m.appID),
-			fmt.Sprintf("dapr.internal.%s.%s.activity", m.namespace, m.appID),
-		)
+	var acceptJobTypes []schedulerv1pb.JobTargetType
+	if appTarget {
+		acceptJobTypes = append(acceptJobTypes, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_JOB)
 	}
 
-	engine, _ := m.actors.Engine(ctx)
+	if len(actorTypes) > 0 {
+		acceptJobTypes = append(acceptJobTypes, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER)
+		req.GetInitial().ActorTypes = actorTypes
+	}
+
+	req.GetInitial().AcceptJobTypes = acceptJobTypes
 
 	clients, err := m.clients.All(ctx)
 	if err != nil {
 		return err
 	}
 
-	runners := make([]concurrency.Runner, len(clients)+1)
+	if len(clients) == 0 {
+		log.Debug("No scheduler clients available, not watching jobs")
+		<-ctx.Done()
+		return ctx.Err()
+	}
 
+	runners := make([]concurrency.Runner, len(clients))
+
+	// Accept engine to be nil, and ignore the disabled error.
+	engine, _ := m.actors.Engine(ctx)
 	for i := range clients {
 		runners[i] = (&connector{
 			req:      req,
@@ -141,42 +198,21 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 		}).run
 	}
 
-	runners[len(clients)] = func(ctx context.Context) error {
-		select {
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-m.stopStartCh:
-			return nil
-		}
-	}
-
 	return concurrency.NewRunnerManager(runners...).Run(ctx)
 }
 
-// Start starts the scheduler manager with the given actors runtime, if it is
-// enabled, to begin receiving job triggers.
-func (m *Manager) Start() error {
+func (m *Manager) StartApp() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-
-	if !m.started {
-		m.started = true
-		m.stopped = false
-		close(m.stopStartCh)
-		m.stopStartCh = make(chan struct{}, 1)
-	}
-
-	return nil
+	m.appRunning = true
+	close(m.appCh)
+	m.appCh = make(chan struct{}, 1)
 }
 
-// Stop stops the scheduler manager, which stops watching for job triggers.
-func (m *Manager) Stop() {
+func (m *Manager) StopApp() {
 	m.lock.Lock()
 	defer m.lock.Unlock()
-	if m.started && !m.stopped {
-		m.stopped = true
-		m.started = false
-		m.stopStartCh <- struct{}{}
-		m.wg.Wait()
-	}
+	m.appRunning = false
+	close(m.appCh)
+	m.appCh = make(chan struct{}, 1)
 }

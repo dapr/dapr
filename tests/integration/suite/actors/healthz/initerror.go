@@ -15,7 +15,6 @@ package healthz
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"sync"
@@ -77,6 +76,7 @@ func (i *initerror) Setup(t *testing.T) []framework.Option {
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(i.place.Address()),
 		daprd.WithAppPort(srv.Port()),
+		daprd.WithAppHealthCheck(true),
 	)
 
 	return []framework.Option{
@@ -133,8 +133,6 @@ func (i *initerror) Run(t *testing.T, ctx context.Context) {
 
 	assert.ElementsMatch(t, []*rtv1.ActiveActorsCount{
 		{Type: "myactortype", Count: 1},
-		{Type: fmt.Sprintf("dapr.internal.default.%s.workflow", i.daprd.AppID()), Count: 0},
-		{Type: fmt.Sprintf("dapr.internal.default.%s.activity", i.daprd.AppID()), Count: 0},
 	}, meta.GetActorRuntime().GetActiveActors())
 	assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 }

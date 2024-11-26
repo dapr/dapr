@@ -32,10 +32,11 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/internal"
-	"github.com/dapr/dapr/pkg/components/wfbackend"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 )
 
 const activityStateKey = "activityState"
@@ -61,7 +62,7 @@ type activity struct {
 	actors actors.Interface
 	lock   *internal.Lock
 
-	scheduler        wfbackend.ActivityScheduler
+	scheduler        todo.ActivityScheduler
 	state            *activityState
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
@@ -85,7 +86,7 @@ type ActivityOptions struct {
 	CachingDisabled   bool
 	DefaultTimeout    *time.Duration
 	ReminderInterval  *time.Duration
-	Scheduler         wfbackend.ActivityScheduler
+	Scheduler         todo.ActivityScheduler
 	Actors            actors.Interface
 }
 
@@ -198,7 +199,7 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 	case errors.Is(err, context.Canceled):
 		log.Warnf("%s: received cancellation signal while waiting for activity execution '%s'", a.actorID, reminder.Name)
 		return nil
-	case wfbackend.IsRecoverableError(err):
+	case wferrors.IsRecoverable(err):
 		log.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", a.actorID, err)
 		return nil
 	default: // Other error
@@ -243,13 +244,13 @@ func (a *activity) executeActivity(ctx context.Context, name string, eventPayloa
 	//       to handle the case where the app crashes and never responds to the workflow. It may be necessary to
 	//       introduce some kind of heartbeat protocol to help identify such cases.
 	callback := make(chan bool)
-	wi.Properties[wfbackend.CallbackChannelProperty] = callback
+	wi.Properties[todo.CallbackChannelProperty] = callback
 	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
 	err = a.scheduler(ctx, wi)
 	if errors.Is(err, context.DeadlineExceeded) {
-		return runCompletedFalse, wfbackend.NewRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
+		return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 	} else if err != nil {
-		return runCompletedFalse, wfbackend.NewRecoverableError(fmt.Errorf("failed to schedule an activity execution: %w", err))
+		return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to schedule an activity execution: %w", err))
 	}
 	// Activity execution started
 	start := time.Now()
@@ -292,7 +293,7 @@ loop:
 			} else {
 				// Activity execution failed with recoverable error
 				executionStatus = diag.StatusRecoverable
-				return runCompletedFalse, wfbackend.NewRecoverableError(errExecutionAborted) // AbandonActivityWorkItem was called
+				return runCompletedFalse, wferrors.NewRecoverable(errExecutionAborted) // AbandonActivityWorkItem was called
 			}
 		}
 	}
@@ -307,7 +308,7 @@ loop:
 	}
 
 	req := internalsv1pb.
-		NewInternalInvokeRequest(wfbackend.AddWorkflowEventMethod).
+		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
 		WithActor(a.workflowActorType, workflowID).
 		WithData(resultData).
 		WithContentType(invokev1.OctetStreamContentType)
@@ -322,7 +323,7 @@ loop:
 	case err != nil:
 		// Returning recoverable error, record metrics
 		executionStatus = diag.StatusRecoverable
-		return runCompletedFalse, wfbackend.NewRecoverableError(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", wfbackend.AddWorkflowEventMethod, err))
+		return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", todo.AddWorkflowEventMethod, err))
 	case wi.Result.GetTaskCompleted() != nil:
 		// Activity execution completed successfully
 		executionStatus = diag.StatusSuccess
@@ -460,6 +461,7 @@ func (a *activity) createReliableReminder(ctx context.Context, data any) error {
 
 // DeactivateActor implements actors.InternalActor
 func (a *activity) Deactivate(ctx context.Context) error {
+	// TODO: @joshvanl: close everything else in this actor and wait
 	log.Debugf("Activity actor '%s': deactivating", a.actorID)
 	a.state = nil // A bit of extra caution, shouldn't be necessary
 	a.lock.Close()

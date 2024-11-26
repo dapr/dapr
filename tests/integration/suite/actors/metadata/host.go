@@ -15,7 +15,6 @@ package metadata
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -100,8 +99,6 @@ func (m *host) Run(t *testing.T, ctx context.Context) {
 
 		assert.ElementsMatch(t, []metadataActiveActors{
 			{Type: "myactortype"},
-			{Type: fmt.Sprintf("dapr.internal.default.%s.activity", m.daprd.AppID())},
-			{Type: fmt.Sprintf("dapr.internal.default.%s.workflow", m.daprd.AppID())},
 		}, res.ActorRuntime.ActiveActors)
 	}, 10*time.Second, 10*time.Millisecond)
 }

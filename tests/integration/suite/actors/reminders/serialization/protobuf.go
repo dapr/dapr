@@ -78,6 +78,7 @@ INSERT INTO state VALUES
 		daprd.WithResourceFiles(p.db.GetComponent(t)),
 		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(p.place.Port())),
 		daprd.WithAppPort(p.srv.Port()),
+		daprd.WithAppHealthCheck(true),
 	)
 
 	return []framework.Option{

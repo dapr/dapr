@@ -28,13 +28,14 @@ import (
 	"github.com/microsoft/durabletask-go/backend"
 
 	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets/workflow"
-	"github.com/dapr/dapr/pkg/components/wfbackend"
-	"github.com/dapr/dapr/pkg/components/wfbackend/state"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/logger"
 )
@@ -47,6 +48,13 @@ const (
 	ActivityNameLabelKey = "activity"
 	ActorTypePrefix      = "dapr.internal."
 )
+
+type Options struct {
+	AppID      string
+	Namespace  string
+	Actors     actors.Interface
+	Resiliency resiliency.Provider
+}
 
 type Actors struct {
 	appID             string
@@ -66,7 +74,7 @@ type Actors struct {
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 }
 
-func New(opts wfbackend.Options) (backend.Backend, error) {
+func New(opts Options) (*Actors, error) {
 	return &Actors{
 		appID:             opts.AppID,
 		workflowActorType: ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
@@ -82,7 +90,7 @@ func New(opts wfbackend.Options) (backend.Backend, error) {
 
 // getWorkflowScheduler returns a WorkflowScheduler func that sends an orchestration work item to the Durable Task Framework.
 // TODO: @joshvanl: remove
-func getWorkflowScheduler(orchestrationWorkItemChan chan *backend.OrchestrationWorkItem) wfbackend.WorkflowScheduler {
+func getWorkflowScheduler(orchestrationWorkItemChan chan *backend.OrchestrationWorkItem) todo.WorkflowScheduler {
 	return func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 		log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 		select {
@@ -96,7 +104,7 @@ func getWorkflowScheduler(orchestrationWorkItemChan chan *backend.OrchestrationW
 
 // getActivityScheduler returns an activityScheduler func that sends an activity work item to the Durable Task Framework.
 // TODO: @joshvanl: remove
-func getActivityScheduler(activityWorkItemChan chan *backend.ActivityWorkItem) wfbackend.ActivityScheduler {
+func getActivityScheduler(activityWorkItemChan chan *backend.ActivityWorkItem) todo.ActivityScheduler {
 	return func(ctx context.Context, wi *backend.ActivityWorkItem) error {
 		log.Debugf(
 			"%s: scheduling [%s#%d] activity execution with durabletask engine",
@@ -113,35 +121,55 @@ func getActivityScheduler(activityWorkItemChan chan *backend.ActivityWorkItem) w
 }
 
 func (abe *Actors) RegisterActors(ctx context.Context) error {
+	atable, err := abe.actors.Table(ctx)
+	if err != nil {
+		return err
+	}
+
+	atable.RegisterActorTypes(
+		table.RegisterActorTypeOptions{
+			Factories: []table.ActorTypeFactory{
+				{
+					Type: abe.workflowActorType,
+					Factory: workflow.WorkflowFactory(workflow.WorkflowOptions{
+						AppID:             abe.appID,
+						WorkflowActorType: abe.workflowActorType,
+						ActivityActorType: abe.activityActorType,
+						CachingDisabled:   abe.cachingDisabled,
+						DefaultTimeout:    abe.defaultWorkflowTimeout,
+						ReminderInterval:  abe.defaultReminderInterval,
+						Resiliency:        abe.resiliency,
+						Actors:            abe.actors,
+						Scheduler:         getWorkflowScheduler(abe.orchestrationWorkItemChan),
+					}),
+				},
+				{
+					Type: abe.activityActorType,
+					Factory: workflow.ActivityFactory(workflow.ActivityOptions{
+						AppID:             abe.appID,
+						ActivityActorType: abe.activityActorType,
+						WorkflowActorType: abe.workflowActorType,
+						CachingDisabled:   abe.cachingDisabled,
+						DefaultTimeout:    abe.defaultActivityTimeout,
+						ReminderInterval:  abe.defaultReminderInterval,
+						Scheduler:         getActivityScheduler(abe.activityWorkItemChan),
+						Actors:            abe.actors,
+					}),
+				},
+			},
+		},
+	)
+
+	return nil
+}
+
+func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 	table, err := abe.actors.Table(ctx)
 	if err != nil {
 		return err
 	}
 
-	table.RegisterActorType(abe.workflowActorType, workflow.WorkflowFactory(workflow.WorkflowOptions{
-		AppID:             abe.appID,
-		WorkflowActorType: abe.workflowActorType,
-		ActivityActorType: abe.activityActorType,
-		CachingDisabled:   abe.cachingDisabled,
-		DefaultTimeout:    abe.defaultWorkflowTimeout,
-		ReminderInterval:  abe.defaultReminderInterval,
-		Resiliency:        abe.resiliency,
-		Actors:            abe.actors,
-		Scheduler:         getWorkflowScheduler(abe.orchestrationWorkItemChan),
-	}))
-
-	table.RegisterActorType(abe.activityActorType, workflow.ActivityFactory(workflow.ActivityOptions{
-		AppID:             abe.appID,
-		ActivityActorType: abe.activityActorType,
-		WorkflowActorType: abe.workflowActorType,
-		CachingDisabled:   abe.cachingDisabled,
-		DefaultTimeout:    abe.defaultActivityTimeout,
-		ReminderInterval:  abe.defaultReminderInterval,
-		Scheduler:         getActivityScheduler(abe.activityWorkItemChan),
-		Actors:            abe.actors,
-	}))
-
-	return nil
+	return table.UnRegisterActorTypes(abe.workflowActorType, abe.activityActorType)
 }
 
 // CreateOrchestrationInstance implements backend.Backend and creates a new workflow instance.
@@ -169,7 +197,7 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		return err
 	}
 
-	requestBytes, err := json.Marshal(wfbackend.CreateWorkflowInstanceRequest{
+	requestBytes, err := json.Marshal(todo.CreateWorkflowInstanceRequest{
 		Policy:          policy,
 		StartEventBytes: eventData,
 	})
@@ -179,7 +207,7 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 
 	// Invoke the well-known workflow actor directly, which will be created by this invocation request.
 	// Note that this request goes directly to the actor runtime, bypassing the API layer.
-	req := internalsv1pb.NewInternalInvokeRequest(wfbackend.CreateWorkflowInstanceMethod).
+	req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
 		WithActor(abe.workflowActorType, workflowInstanceID).
 		WithData(requestBytes).
 		WithContentType(invokev1.JSONContentType)
@@ -206,7 +234,7 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*api.OrchestrationMetadata, error) {
 	// Invoke the corresponding actor, which internally stores its own workflow metadata
 	req := internalsv1pb.
-		NewInternalInvokeRequest(wfbackend.GetWorkflowMetadataMethod).
+		NewInternalInvokeRequest(todo.GetWorkflowMetadataMethod).
 		WithActor(abe.workflowActorType, string(id)).
 		WithContentType(invokev1.OctetStreamContentType)
 
@@ -239,7 +267,7 @@ func (*Actors) AbandonActivityWorkItem(ctx context.Context, wi *backend.Activity
 	log.Warnf("%s: aborting activity execution (::%d)", wi.InstanceID, wi.NewEvent.GetEventId())
 
 	// Sending false signals the waiting activity actor to abort the activity execution.
-	if channel, ok := wi.Properties[wfbackend.CallbackChannelProperty]; ok {
+	if channel, ok := wi.Properties[todo.CallbackChannelProperty]; ok {
 		channel.(chan bool) <- false
 	}
 	return nil
@@ -251,7 +279,7 @@ func (*Actors) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.Orc
 	log.Warnf("%s: aborting workflow execution", wi.InstanceID)
 
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
-	if channel, ok := wi.Properties[wfbackend.CallbackChannelProperty]; ok {
+	if channel, ok := wi.Properties[todo.CallbackChannelProperty]; ok {
 		channel.(chan bool) <- false
 	}
 	return nil
@@ -266,7 +294,7 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 
 	// Send the event to the corresponding workflow actor, which will store it in its event inbox.
 	req := internalsv1pb.
-		NewInternalInvokeRequest(wfbackend.AddWorkflowEventMethod).
+		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
 		WithActor(abe.workflowActorType, string(id)).
 		WithData(data).
 		WithContentType(invokev1.OctetStreamContentType)
@@ -292,14 +320,14 @@ func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.Instance
 // CompleteActivityWorkItem implements backend.Backend
 func (*Actors) CompleteActivityWorkItem(ctx context.Context, wi *backend.ActivityWorkItem) error {
 	// Sending true signals the waiting activity actor to complete the execution normally.
-	wi.Properties[wfbackend.CallbackChannelProperty].(chan bool) <- true
+	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
 }
 
 // CompleteOrchestrationWorkItem implements backend.Backend
 func (*Actors) CompleteOrchestrationWorkItem(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 	// Sending true signals the waiting workflow actor to complete the execution normally.
-	wi.Properties[wfbackend.CallbackChannelProperty].(chan bool) <- true
+	wi.Properties[todo.CallbackChannelProperty].(chan bool) <- true
 	return nil
 }
 
@@ -334,7 +362,7 @@ func (abe *Actors) GetActivityWorkItem(ctx context.Context) (*backend.ActivityWo
 func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
 	// Invoke the corresponding actor, which internally stores its own workflow state.
 	req := internalsv1pb.
-		NewInternalInvokeRequest(wfbackend.GetWorkflowStateMethod).
+		NewInternalInvokeRequest(todo.GetWorkflowStateMethod).
 		WithActor(abe.workflowActorType, string(owi.InstanceID)).
 		WithContentType(invokev1.OctetStreamContentType)
 
@@ -374,7 +402,7 @@ func (abe *Actors) GetOrchestrationWorkItem(ctx context.Context) (*backend.Orche
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
 func (abe *Actors) PurgeOrchestrationState(ctx context.Context, id api.InstanceID) error {
 	req := internalsv1pb.
-		NewInternalInvokeRequest(wfbackend.PurgeWorkflowStateMethod).
+		NewInternalInvokeRequest(todo.PurgeWorkflowStateMethod).
 		WithActor(abe.workflowActorType, string(id))
 
 	engine, err := abe.actors.Engine(ctx)

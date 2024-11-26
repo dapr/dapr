@@ -95,15 +95,15 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 		meta, err := gclient.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
 		assert.NoError(c, err)
 		assert.True(c, meta.GetActorRuntime().GetHostReady())
-		assert.Len(c, meta.GetActorRuntime().GetActiveActors(), 3)
+		assert.Len(c, meta.GetActorRuntime().GetActiveActors(), 1)
 		assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
 		assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
 	}, time.Second*30, time.Millisecond*10)
 
 	select {
 	case <-n.healthzCalled:
-	case <-time.After(time.Second * 15):
-		t.Fatal("timed out waiting for healthz call")
+		t.Fatal("unexpected healthz called")
+	default:
 	}
 
 	client := client.HTTP(t)

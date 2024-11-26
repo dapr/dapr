@@ -1,7 +1,5 @@
-//go:build wfbackendsqlite
-
 /*
-Copyright 2023 The Dapr Authors
+Copyright 2024 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -13,13 +11,21 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package components
+package wfbackend
 
-import (
-	wfbeLoader "github.com/dapr/dapr/pkg/components/wfbackend"
-	"github.com/dapr/dapr/pkg/runtime/wfengine/backends/sqlite"
-)
+type recoverable struct {
+	cause error
+}
 
-func init() {
-	wfbeLoader.DefaultRegistry.RegisterComponent(sqlite.NewSQLiteBackend, "sqlite")
+func NewRecoverable(err error) error {
+	return &recoverable{cause: err}
+}
+
+func IsRecoverable(err error) bool {
+	_, ok := err.(*recoverable)
+	return ok
+}
+
+func (err *recoverable) Error() string {
+	return err.cause.Error()
 }
