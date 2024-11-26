@@ -506,3 +506,5 @@ replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
 //
 // Then, run `make modtidy-all` in this repository.
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
+
+replace github.com/microsoft/durabletask-go => github.com/joshvanl/durabletask-go v0.0.0-20241126024649-0c682b2c7456
