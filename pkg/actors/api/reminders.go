@@ -36,6 +36,7 @@ type CreateReminderRequest struct {
 	DueTime   string          `json:"dueTime"`
 	Period    string          `json:"period"`
 	TTL       string          `json:"ttl"`
+	IsOneShot bool            `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.

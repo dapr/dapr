@@ -62,12 +62,13 @@ type activity struct {
 	actors actors.Interface
 	lock   *internal.Lock
 
-	scheduler        todo.ActivityScheduler
-	state            *activityState
-	cachingDisabled  bool
-	defaultTimeout   time.Duration
-	reminderInterval time.Duration
-	completed        atomic.Bool
+	scheduler          todo.ActivityScheduler
+	state              *activityState
+	cachingDisabled    bool
+	defaultTimeout     time.Duration
+	reminderInterval   time.Duration
+	completed          atomic.Bool
+	schedulerReminders bool
 }
 
 // ActivityRequest represents a request by a worklow to invoke an activity.
@@ -80,14 +81,15 @@ type activityState struct {
 }
 
 type ActivityOptions struct {
-	AppID             string
-	ActivityActorType string
-	WorkflowActorType string
-	CachingDisabled   bool
-	DefaultTimeout    *time.Duration
-	ReminderInterval  *time.Duration
-	Scheduler         todo.ActivityScheduler
-	Actors            actors.Interface
+	AppID              string
+	ActivityActorType  string
+	WorkflowActorType  string
+	CachingDisabled    bool
+	DefaultTimeout     *time.Duration
+	ReminderInterval   *time.Duration
+	Scheduler          todo.ActivityScheduler
+	Actors             actors.Interface
+	SchedulerReminders bool
 }
 
 func ActivityFactory(opts ActivityOptions) targets.Factory {
@@ -103,16 +105,17 @@ func ActivityFactory(opts ActivityOptions) targets.Factory {
 		}
 
 		return &activity{
-			appID:             opts.AppID,
-			actorID:           actorID,
-			actorType:         opts.ActivityActorType,
-			cachingDisabled:   opts.CachingDisabled,
-			workflowActorType: opts.WorkflowActorType,
-			reminderInterval:  reminderInterval,
-			defaultTimeout:    defaultTimeout,
-			actors:            opts.Actors,
-			scheduler:         opts.Scheduler,
-			lock:              internal.NewLock(internal.LockOptions{ActorType: opts.ActivityActorType}),
+			appID:              opts.AppID,
+			actorID:            actorID,
+			actorType:          opts.ActivityActorType,
+			cachingDisabled:    opts.CachingDisabled,
+			workflowActorType:  opts.WorkflowActorType,
+			reminderInterval:   reminderInterval,
+			defaultTimeout:     defaultTimeout,
+			actors:             opts.Actors,
+			scheduler:          opts.Scheduler,
+			schedulerReminders: opts.SchedulerReminders,
+			lock:               internal.NewLock(internal.LockOptions{ActorType: opts.ActivityActorType}),
 		}
 	}
 }
@@ -448,14 +451,22 @@ func (a *activity) createReliableReminder(ctx context.Context, data any) error {
 		return fmt.Errorf("failed to get reminders: %w", err)
 	}
 
-	// TODO: @joshvanl: change to once shot when using Scheduler.
+	var period string
+	var oneshot bool
+	if a.schedulerReminders {
+		oneshot = true
+	} else {
+		period = a.reminderInterval.String()
+	}
+
 	return reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		Data:      dataEnc,
 		DueTime:   "0s",
 		Name:      reminderName,
-		Period:    a.reminderInterval.String(),
+		Period:    period,
+		IsOneShot: oneshot,
 	})
 }
 

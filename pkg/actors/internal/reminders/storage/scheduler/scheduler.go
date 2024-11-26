@@ -18,9 +18,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"time"
 
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/durationpb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -112,14 +114,27 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 		}
 	}
 
+	var failurePolicy *schedulerv1pb.FailurePolicy
+	if reminder.IsOneShot {
+		failurePolicy = &schedulerv1pb.FailurePolicy{
+			Policy: &schedulerv1pb.FailurePolicy_Constant{
+				Constant: &schedulerv1pb.FailurePolicyConstant{
+					Interval:   durationpb.New(time.Second),
+					MaxRetries: nil,
+				},
+			},
+		}
+	}
+
 	internalScheduleJobReq := &schedulerv1pb.ScheduleJobRequest{
 		Name: reminder.Name,
 		Job: &schedulerv1pb.Job{
-			Schedule: schedule,
-			Repeats:  repeats,
-			DueTime:  dueTime,
-			Ttl:      ttl,
-			Data:     dataAny,
+			Schedule:      schedule,
+			Repeats:       repeats,
+			DueTime:       dueTime,
+			Ttl:           ttl,
+			Data:          dataAny,
+			FailurePolicy: failurePolicy,
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
 			AppId:     s.appID,
