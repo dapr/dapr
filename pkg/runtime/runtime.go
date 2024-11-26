@@ -282,12 +282,13 @@ func newDaprRuntime(ctx context.Context,
 	}
 
 	wfe, err := wfengine.New(wfengine.Options{
-		AppID:          runtimeConfig.id,
-		Namespace:      namespace,
-		Actors:         actors,
-		Spec:           globalConfig.GetWorkflowSpec(),
-		BackendManager: processor.WorkflowBackend(),
-		Resiliency:     resiliencyProvider,
+		AppID:              runtimeConfig.id,
+		Namespace:          namespace,
+		Actors:             actors,
+		Spec:               globalConfig.GetWorkflowSpec(),
+		BackendManager:     processor.WorkflowBackend(),
+		Resiliency:         resiliencyProvider,
+		SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("failed to create workflow engine: %w", err)
