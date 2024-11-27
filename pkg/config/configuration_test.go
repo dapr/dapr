@@ -85,14 +85,21 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 
 	t.Run("metrics spec", func(t *testing.T) {
 		testCases := []struct {
-			name          string
-			confFile      string
-			metricEnabled bool
+			name                    string
+			confFile                string
+			metricEnabled           bool
+			recordErrorCodesEnabled bool
 		}{
 			{
 				name:          "metric is enabled by default",
 				confFile:      "./testdata/config.yaml",
 				metricEnabled: true,
+			},
+			{
+				name:                    "recordErrorCodes is enabled by config",
+				confFile:                "./testdata/metric_rec.yaml",
+				metricEnabled:           true,
+				recordErrorCodesEnabled: true,
 			},
 			{
 				name:          "metric is disabled by config",
@@ -106,6 +113,7 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 				config, err := LoadStandaloneConfiguration(tc.confFile)
 				require.NoError(t, err)
 				assert.Equal(t, tc.metricEnabled, config.Spec.MetricSpec.GetEnabled())
+				assert.Equal(t, tc.recordErrorCodesEnabled, config.Spec.MetricSpec.GetRecordErrorCodes())
 			})
 		}
 	})
