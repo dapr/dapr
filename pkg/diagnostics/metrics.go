@@ -42,6 +42,8 @@ var (
 	DefaultResiliencyMonitoring = newResiliencyMetrics()
 	// DefaultWorkflowMonitoring holds workflow specific metrics.
 	DefaultWorkflowMonitoring = newWorkflowMetrics()
+	// DefaultErrorCodeMonitoring holds error code specific metrics.
+	DefaultErrorCodeMonitoring = newErrorCodeMetrics()
 )
 
 // <<10 -> KBs; <<20 -> MBs; <<30 -> GBs
@@ -77,6 +79,12 @@ func InitMetrics(appID, namespace string, metricSpec config.MetricSpec) error {
 
 	if err := DefaultWorkflowMonitoring.Init(appID, namespace, latencyDistribution); err != nil {
 		return err
+	}
+
+	if metricSpec.GetRecordErrorCodes() {
+		if err := DefaultErrorCodeMonitoring.Init(appID); err != nil {
+			return err
+		}
 	}
 
 	// Set reporting period of views

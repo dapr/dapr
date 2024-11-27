@@ -381,20 +381,27 @@ func (d *Daprd) MetricResidentMemoryMi(t *testing.T, ctx context.Context) float6
 	return d.Metrics(t, ctx)["process_resident_memory_bytes"] * 1e-6
 }
 
-func (d *Daprd) HTTPGet2xx(t *testing.T, ctx context.Context, path string) {
-	t.Helper()
-	d.http2xx(t, ctx, http.MethodGet, path, nil)
+func (d *Daprd) HTTPGet(t assert.TestingT, ctx context.Context, path string, expectedCode int) {
+	d.httpxxx(t, ctx, http.MethodGet, path, nil, expectedCode)
+}
+
+func (d *Daprd) HTTPPost(t assert.TestingT, ctx context.Context, path string, body io.Reader, expectedCode int, headers ...string) {
+	d.httpxxx(t, ctx, http.MethodPost, path, body, expectedCode, headers...)
+}
+
+func (d *Daprd) HTTPGet2xx(t assert.TestingT, ctx context.Context, path string) {
+	d.httpxxx(t, ctx, http.MethodGet, path, nil, http.StatusOK)
 }
 
 func (d *Daprd) HTTPPost2xx(t assert.TestingT, ctx context.Context, path string, body io.Reader, headers ...string) {
-	d.http2xx(t, ctx, http.MethodPost, path, body, headers...)
+	d.httpxxx(t, ctx, http.MethodPost, path, body, http.StatusOK, headers...)
 }
 
 func (d *Daprd) HTTPDelete2xx(t assert.TestingT, ctx context.Context, path string, body io.Reader, headers ...string) {
-	d.http2xx(t, ctx, http.MethodDelete, path, body, headers...)
+	d.httpxxx(t, ctx, http.MethodDelete, path, body, http.StatusOK, headers...)
 }
 
-func (d *Daprd) http2xx(t assert.TestingT, ctx context.Context, method, path string, body io.Reader, headers ...string) {
+func (d *Daprd) httpxxx(t assert.TestingT, ctx context.Context, method, path string, body io.Reader, expectedCode int, headers ...string) {
 	assert.Zero(t, len(headers)%2, "headers must be key-value pairs")
 
 	path = strings.TrimPrefix(path, "/")
@@ -412,8 +419,9 @@ func (d *Daprd) http2xx(t assert.TestingT, ctx context.Context, method, path str
 		b, err := io.ReadAll(resp.Body)
 		assert.NoError(t, err)
 		assert.NoError(t, resp.Body.Close())
-		assert.GreaterOrEqual(t, resp.StatusCode, 200, "expected 2xx status code: "+string(b))
-		assert.Less(t, resp.StatusCode, 300, "expected 2xx status code: "+string(b))
+
+		assert.GreaterOrEqual(t, resp.StatusCode, expectedCode, strconv.Itoa(expectedCode)+"status code expected: "+string(b))
+		assert.Less(t, resp.StatusCode, expectedCode+100, strconv.Itoa(expectedCode)+"status code expected: "+string(b))
 	}
 }
 
