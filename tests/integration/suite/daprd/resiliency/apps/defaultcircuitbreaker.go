@@ -98,7 +98,7 @@ spec:
 
 func (d *defaultcircuitbreaker) Run(t *testing.T, ctx context.Context) {
 	d.daprdClient.WaitUntilRunning(t, ctx)
-	d.daprdServer.WaitUntilRunning(t, ctx)
+	d.daprdServer.WaitUntilAppHealth(t, ctx)
 
 	t.Run("circuit breaker does not open after consecutive successes", func(t *testing.T) {
 		reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/circuitbreaker_ok", d.daprdClient.HTTPPort(), d.daprdServer.AppID())
