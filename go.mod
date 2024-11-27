@@ -492,7 +492,7 @@ replace (
 )
 
 // TODO: temp replace while PR not merged
-replace github.com/dapr/kit => github.com/jake-engelberg/kit v0.13.1-0.20241122000053-705b0d08ecc3
+replace github.com/dapr/kit => github.com/jake-engelberg/kit v0.13.1-0.20241122163053-a0907ae62313
 
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all

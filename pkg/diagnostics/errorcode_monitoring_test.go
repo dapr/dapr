@@ -22,6 +22,7 @@ import (
 	"go.opencensus.io/tag"
 	"google.golang.org/grpc/codes"
 
+	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	"github.com/dapr/kit/errors"
@@ -87,6 +88,7 @@ func TestRecordErrorCode(t *testing.T) {
 			).WithErrorInfo(errorcodes.CryptoKey.Code, nil).Build(),
 			),
 		)
+		assert.True(t, RecordErrorCode(apierrors.PubSub("pubsub-name").WithMetadata(nil).NotFound()))
 
 		viewData, _ := view.RetrieveData("error_code/total")
 		v := view.Find("error_code/total")
@@ -100,6 +102,9 @@ func TestRecordErrorCode(t *testing.T) {
 			} else if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.CryptoKey.Code}) {
 				assert.Equal(t, int64(2), metric.Data.(*view.CountData).Value)
 				assert.True(t, TagAndValuePresent(metric.Tags, tag.Tag{Key: categoryKey, Value: string(errorcodes.CategoryCrypto)}))
+			} else if TagAndValuePresent(metric.Tags, tag.Tag{Key: errorCodeKey, Value: errorcodes.PubsubNotFound.Code}) {
+				assert.Equal(t, int64(1), metric.Data.(*view.CountData).Value)
+				assert.True(t, TagAndValuePresent(metric.Tags, tag.Tag{Key: categoryKey, Value: string(errorcodes.CategoryPubsub)}))
 			}
 		}
 	})
