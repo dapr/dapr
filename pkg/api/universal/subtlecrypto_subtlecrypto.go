@@ -158,8 +158,9 @@ func (a *Universal) SubtleEncryptAlpha1(ctx context.Context, in *runtimev1pb.Sub
 	if err != nil {
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
-		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = messages.ErrCryptoOperation.WithFormat("failed to encrypt")
+		apiError := messages.ErrCryptoOperation
+		a.logger.Debug(apiError.WithFormat(err))
+		err = apiError.WithFormat("failed to encrypt")
 		return &runtimev1pb.SubtleEncryptResponse{}, err
 	}
 
@@ -190,8 +191,9 @@ func (a *Universal) SubtleDecryptAlpha1(ctx context.Context, in *runtimev1pb.Sub
 	if err != nil {
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
-		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = messages.ErrCryptoOperation.WithFormat("failed to decrypt")
+		apiError := messages.ErrCryptoOperation
+		a.logger.Debug(apiError)
+		err = apiError.WithFormat("failed to decrypt")
 		return &runtimev1pb.SubtleDecryptResponse{}, err
 	}
 
@@ -232,8 +234,9 @@ func (a *Universal) SubtleWrapKeyAlpha1(ctx context.Context, in *runtimev1pb.Sub
 	if err != nil {
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
-		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = messages.ErrCryptoOperation.WithFormat("failed to wrap key")
+		apiError := messages.ErrCryptoOperation
+		a.logger.Debug(apiError.WithFormat(err))
+		err = apiError.WithFormat("failed to wrap key")
 		return &runtimev1pb.SubtleWrapKeyResponse{}, err
 	}
 
@@ -264,8 +267,9 @@ func (a *Universal) SubtleUnwrapKeyAlpha1(ctx context.Context, in *runtimev1pb.S
 	if err != nil {
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
-		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = messages.ErrCryptoOperation.WithFormat("failed to unwrap key")
+		apiError := messages.ErrCryptoOperation
+		a.logger.Debug(apiError.WithFormat(err))
+		err = apiError.WithFormat("failed to unwrap key")
 		return &runtimev1pb.SubtleUnwrapKeyResponse{}, err
 	}
 
@@ -305,8 +309,9 @@ func (a *Universal) SubtleSignAlpha1(ctx context.Context, in *runtimev1pb.Subtle
 	if err != nil {
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
-		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = messages.ErrCryptoOperation.WithFormat("failed to sign")
+		apiError := messages.ErrCryptoOperation
+		a.logger.Debug(apiError.WithFormat(err))
+		err = apiError.WithFormat("failed to sign")
 		return &runtimev1pb.SubtleSignResponse{}, err
 	}
 
@@ -336,8 +341,9 @@ func (a *Universal) SubtleVerifyAlpha1(ctx context.Context, in *runtimev1pb.Subt
 	if err != nil {
 		// We are not going to return the exact error from the component to the user, because an error that is too specific could allow for various side channel attacks (e.g. AES-CBC and padding oracle attacks)
 		// We will log the full error as a debug log, but only return a generic one to the user
-		a.logger.Debug(messages.ErrCryptoOperation.WithFormat(err))
-		err = messages.ErrCryptoOperation.WithFormat("failed to verify signature")
+		apiError := messages.ErrCryptoOperation
+		a.logger.Debug(apiError.WithFormat(err))
+		err = apiError.WithFormat("failed to verify signature")
 		return &runtimev1pb.SubtleVerifyResponse{}, err
 	}
 

@@ -66,6 +66,13 @@ Dapr uses prometheus process and go collectors by default.
 
 ## Dapr Runtime metrics
 
+### Error code metrics
+
+[errorcode metrics](../../pkg/diagnostics/errorcode_monitoring.go)
+
+* error_code_count: Number of times an error with a specific error code occurred.
+
+
 ### Service related metrics
 
 [service metrics](../../pkg/diagnostics/service_monitoring.go)

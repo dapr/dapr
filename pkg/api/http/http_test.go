@@ -58,6 +58,7 @@ import (
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/middleware"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
@@ -4617,31 +4618,34 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("non etag error", func(t *testing.T) {
 		a := &api{}
 		err := errors.New("error")
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m := a.stateErrorResponse(err)
+		apiResp := messages.NewAPIErrorHTTP(m, errorcodes.StateSave, c)
 
-		assert.Equal(t, 500, c)
-		assert.Equal(t, "error", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		assert.Equal(t, 500, apiResp.HTTPCode())
+		assert.Equal(t, "error", apiResp.Message())
+		assert.Equal(t, "ERR_STATE_SAVE", apiResp.Tag())
 	})
 
 	t.Run("etag mismatch error", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m := a.stateErrorResponse(err)
+		apiResp := messages.NewAPIErrorHTTP(m, errorcodes.StateSave, c)
 
-		assert.Equal(t, 409, c)
-		assert.Equal(t, "possible etag mismatch. error from state store: error", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		assert.Equal(t, 409, apiResp.HTTPCode())
+		assert.Equal(t, "possible etag mismatch. error from state store: error", apiResp.Message())
+		assert.Equal(t, "ERR_STATE_SAVE", apiResp.Tag())
 	})
 
 	t.Run("etag invalid error", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m := a.stateErrorResponse(err)
+		apiResp := messages.NewAPIErrorHTTP(m, errorcodes.StateSave, c)
 
-		assert.Equal(t, 400, c)
-		assert.Equal(t, "invalid etag value: error", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		assert.Equal(t, 400, apiResp.HTTPCode())
+		assert.Equal(t, "invalid etag value: error", apiResp.Message())
+		assert.Equal(t, "ERR_STATE_SAVE", apiResp.Tag())
 	})
 
 	t.Run("etag error mismatch", func(t *testing.T) {
@@ -4666,11 +4670,12 @@ func TestStateStoreErrors(t *testing.T) {
 
 	t.Run("standardized error", func(t *testing.T) {
 		a := &api{}
-		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, nethttp.StatusNotFound, "", "testReason")
-		c, m, r := a.stateErrorResponse(standardizedErr, "ERR_STATE_SAVE")
-		assert.Equal(t, 404, c)
-		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, nethttp.StatusNotFound, "", "testReason", "testCategory")
+		c, m := a.stateErrorResponse(standardizedErr)
+		apiResp := messages.NewAPIErrorHTTP(m, errorcodes.StateSave, c)
+		assert.Equal(t, 404, apiResp.HTTPCode())
+		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", apiResp.Message())
+		assert.Equal(t, "ERR_STATE_SAVE", apiResp.Tag())
 	})
 }
 

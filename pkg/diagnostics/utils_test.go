@@ -30,3 +30,12 @@ func allTagsPresent(t *testing.T, v *view.View, tags []tag.Tag) {
 		assert.True(t, found)
 	}
 }
+
+func TagAndValuePresent(tags []tag.Tag, desired tag.Tag) bool {
+	for _, k := range tags {
+		if k.Key.Name() == desired.Key.Name() && k.Value == desired.Value {
+			return true
+		}
+	}
+	return false
+}
