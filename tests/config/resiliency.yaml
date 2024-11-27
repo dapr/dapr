@@ -13,6 +13,13 @@ spec:
         policy: constant
         duration: 10ms
         maxRetries: 5
+      fiveRetriesWithMatch:
+        policy: constant
+        duration: 10ms
+        maxRetries: 5
+        matching:
+          httpStatusCodes: "500"
+          gRPCStatusCodes: "2"
 
     circuitBreakers:
       simpleCB:
@@ -24,12 +31,12 @@ spec:
     apps:
       resiliencyapp:
         timeout: fast
-        retry: fiveRetries
+        retry: fiveRetriesWithMatch
         circuitBreaker: simpleCB
 
       resiliencyappgrpc:
         timeout: fast
-        retry: fiveRetries
+        retry: fiveRetriesWithMatch
         circuitBreaker: simpleCB
 
     actors:
@@ -43,15 +50,15 @@ spec:
 
     components:
       dapr-resiliency-binding:
-        inbound: 
+        inbound:
           timeout: fast
-          retry: fiveRetries
+          retry: fiveRetriesWithMatch
         outbound:
           timeout: fast
-          retry: fiveRetries
+          retry: fiveRetriesWithMatch
 
       dapr-resiliency-binding-grpc:
-        inbound: 
+        inbound:
           timeout: fast
           retry: fiveRetries
         outbound:
@@ -61,7 +68,7 @@ spec:
       dapr-resiliency-pubsub:
         inbound:
           timeout: fast
-          retry: fiveRetries
+          retry: fiveRetriesWithMatch
         outbound:
           timeout: fast
-          retry: fiveRetries
+          retry: fiveRetriesWithMatch

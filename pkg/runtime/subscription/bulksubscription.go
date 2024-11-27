@@ -590,6 +590,14 @@ func (s *Subscription) publishBulkMessageGRPC(ctx context.Context, bulkSubCallDa
 		bscData.bulkSubDiag.statusWiseDiag[string(contribpubsub.Retry)] += int64(len(psm.pubSubMessages))
 		bscData.bulkSubDiag.elapsed = elapsed
 		populateBulkSubscribeResponsesWithError(psm, bulkResponses, err)
+
+		// return error status code for resiliency to decide on retry
+		if hasErrStatus {
+			// TODO: Update types to uint32
+			//nolint:gosec
+			return resiliency.NewCodeError(int32(errStatus.Code()), err)
+		}
+
 		// on error from application, return error for redelivery of event
 		return err
 	}

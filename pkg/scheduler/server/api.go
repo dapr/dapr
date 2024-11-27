@@ -39,13 +39,15 @@ func (s *Server) ScheduleJob(ctx context.Context, req *schedulerv1pb.ScheduleJob
 
 	job := req.GetJob()
 
+	//nolint:protogetter
 	apiJob := &api.Job{
-		Schedule: job.Schedule, //nolint:protogetter
-		DueTime:  job.DueTime,  //nolint:protogetter
-		Ttl:      job.Ttl,      //nolint:protogetter
-		Repeats:  job.Repeats,  //nolint:protogetter
-		Metadata: serialized.Metadata(),
-		Payload:  job.GetData(),
+		Schedule:      job.Schedule,
+		DueTime:       job.DueTime,
+		Ttl:           job.Ttl,
+		Repeats:       job.Repeats,
+		Metadata:      serialized.Metadata(),
+		Payload:       job.GetData(),
+		FailurePolicy: schedFPToCron(job.FailurePolicy),
 	}
 
 	err = cron.Add(ctx, serialized.Name(), apiJob)
@@ -101,11 +103,12 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 	return &schedulerv1pb.GetJobResponse{
 		//nolint:protogetter
 		Job: &schedulerv1pb.Job{
-			Schedule: job.Schedule,
-			DueTime:  job.DueTime,
-			Ttl:      job.Ttl,
-			Repeats:  job.Repeats,
-			Data:     job.GetPayload(),
+			Schedule:      job.Schedule,
+			DueTime:       job.DueTime,
+			Ttl:           job.Ttl,
+			Repeats:       job.Repeats,
+			Data:          job.GetPayload(),
+			FailurePolicy: cronFPToSched(job.FailurePolicy),
 		},
 	}, nil
 }
@@ -133,16 +136,18 @@ func (s *Server) ListJobs(ctx context.Context, req *schedulerv1pb.ListJobsReques
 			return nil, fmt.Errorf("failed to parse job metadata: %w", err)
 		}
 
+		j := job.GetJob()
 		jobs = append(jobs, &schedulerv1pb.NamedJob{
 			Name:     job.GetName()[strings.LastIndex(job.GetName(), "||")+2:],
 			Metadata: meta,
 			//nolint:protogetter
 			Job: &schedulerv1pb.Job{
-				Schedule: job.GetJob().Schedule,
-				DueTime:  job.GetJob().DueTime,
-				Ttl:      job.GetJob().Ttl,
-				Repeats:  job.GetJob().Repeats,
-				Data:     job.GetJob().GetPayload(),
+				Schedule:      j.Schedule,
+				DueTime:       j.DueTime,
+				Ttl:           j.Ttl,
+				Repeats:       j.Repeats,
+				Data:          j.GetPayload(),
+				FailurePolicy: cronFPToSched(j.FailurePolicy),
 			},
 		})
 	}
@@ -159,7 +164,9 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 		return err
 	}
 
-	s.connectionPool.Add(initial, stream)
+	if err := s.cron.AddWatch(initial, stream); err != nil {
+		return err
+	}
 
 	monitoring.RecordSidecarsConnectedCount(1)
 	defer monitoring.RecordSidecarsConnectedCount(-1)
@@ -168,5 +175,61 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 		return errors.New("server is closing")
 	case <-stream.Context().Done():
 		return stream.Context().Err()
+	}
+}
+
+//nolint:protogetter
+func schedFPToCron(fp *schedulerv1pb.FailurePolicy) *api.FailurePolicy {
+	if fp == nil {
+		return nil
+	}
+
+	switch fp.GetPolicy().(type) {
+	case *schedulerv1pb.FailurePolicy_Constant:
+		return &api.FailurePolicy{
+			Policy: &api.FailurePolicy_Constant{
+				Constant: &api.FailurePolicyConstant{
+					Interval:   fp.GetConstant().Interval,
+					MaxRetries: fp.GetConstant().MaxRetries,
+				},
+			},
+		}
+	case *schedulerv1pb.FailurePolicy_Drop:
+		return &api.FailurePolicy{
+			Policy: &api.FailurePolicy_Drop{
+				Drop: new(api.FailurePolicyDrop),
+			},
+		}
+
+	default:
+		return nil
+	}
+}
+
+//nolint:protogetter
+func cronFPToSched(fp *api.FailurePolicy) *schedulerv1pb.FailurePolicy {
+	if fp == nil {
+		return nil
+	}
+
+	switch fp.GetPolicy().(type) {
+	case *api.FailurePolicy_Constant:
+		return &schedulerv1pb.FailurePolicy{
+			Policy: &schedulerv1pb.FailurePolicy_Constant{
+				Constant: &schedulerv1pb.FailurePolicyConstant{
+					Interval:   fp.GetConstant().Interval,
+					MaxRetries: fp.GetConstant().MaxRetries,
+				},
+			},
+		}
+	case *api.FailurePolicy_Drop:
+		return &schedulerv1pb.FailurePolicy{
+			Policy: &schedulerv1pb.FailurePolicy_Drop{
+				Drop: new(schedulerv1pb.FailurePolicyDrop),
+			},
+		}
+
+	default:
+		return nil
 	}
 }

@@ -18,7 +18,7 @@ import (
 	"testing"
 
 	"github.com/diagridio/go-etcd-cron/api"
-	etcdcronfake "github.com/diagridio/go-etcd-cron/tests/fake"
+	etcdcronfake "github.com/diagridio/go-etcd-cron/tests/framework/fake"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	corev1 "k8s.io/api/core/v1"

@@ -59,7 +59,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 	client := b.daprd.GRPCClient(t, ctx)
 
 	t.Run("good input", func(t *testing.T) {
-		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationAlpha1Request{
+		resp, err := client.ConverseAlpha1(ctx, &rtv1.ConversationRequest{
 			Name: "echo",
 			Inputs: []*rtv1.ConversationInput{
 				{
