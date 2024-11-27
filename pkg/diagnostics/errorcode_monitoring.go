@@ -57,6 +57,10 @@ func (m *errorCodeMetrics) Init(id string) error {
 
 func (m *errorCodeMetrics) RecordErrorCode(ec errorcodes.ErrorCode) {
 	if m.enabled {
+		if ec.Code == "" || ec.Category == "" {
+			log.Errorf("ErrorCode is malformed: Code = %s, Category = %s", ec.Code, ec.Category)
+			return
+		}
 		_ = stats.RecordWithTags(
 			context.TODO(),
 			diagUtils.WithTags(m.errorCodeTotal.Name(), appIDKey, m.appID, errorCodeKey, ec.Code, categoryKey, string(ec.Category)),

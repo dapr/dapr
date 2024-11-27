@@ -12,7 +12,7 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.14.1-0.20241104052509-b969bbfe8867
-	github.com/dapr/kit v0.13.1-0.20241015130326-866002abe68a
+	github.com/dapr/kit v0.13.1-0.20241127165251-30e2c24840b4
 	github.com/diagridio/go-etcd-cron v0.3.1-0.20241113192108-260d6b1861d3
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
@@ -490,9 +490,6 @@ replace (
 	github.com/gobwas/pool => github.com/gobwas/pool v0.2.1
 	github.com/toolkits/concurrent => github.com/niean/gotools v0.0.0-20151221085310-ff3f51fc5c60
 )
-
-// TODO: temp replace while PR not merged
-replace github.com/dapr/kit => github.com/jake-engelberg/kit v0.13.1-0.20241122163053-a0907ae62313
 
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
