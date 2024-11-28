@@ -29,9 +29,7 @@ import (
 	"github.com/microsoft/durabletask-go/client"
 	"github.com/microsoft/durabletask-go/task"
 
-	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
-	fclient "github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
@@ -43,10 +41,8 @@ func init() {
 }
 
 type order struct {
-	daprd      *daprd.Daprd
-	place      *placement.Placement
-	httpClient *http.Client
-	grpcClient runtimev1pb.DaprClient
+	daprd *daprd.Daprd
+	place *placement.Placement
 }
 
 func (o *order) Setup(t *testing.T) []framework.Option {
@@ -72,8 +68,6 @@ func (o *order) Run(t *testing.T, ctx context.Context) {
 	o.place.WaitUntilRunning(t, ctx)
 	o.daprd.WaitUntilRunning(t, ctx)
 
-	o.httpClient = fclient.HTTP(t)
-
 	conn, err := grpc.DialContext(ctx, //nolint:staticcheck
 		o.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
@@ -81,7 +75,6 @@ func (o *order) Run(t *testing.T, ctx context.Context) {
 	)
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-	o.grpcClient = runtimev1pb.NewDaprClient(conn)
 
 	backendClient := client.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
 
