@@ -128,9 +128,7 @@ func (d *reconnect) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 
 		err = backendClient.RaiseEvent(ctx, id, "event1")
-		if err != nil {
-			t.Logf("failed to raise event: %v", err)
-		}
+		require.NoError(t, err)
 
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
