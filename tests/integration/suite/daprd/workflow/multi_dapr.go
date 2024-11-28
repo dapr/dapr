@@ -56,7 +56,7 @@ func (m *multiDapr) Setup(t *testing.T) []framework.Option {
 	procs := []process.Interface{
 		m.place,
 	}
-	for i := 0; i < 3; i++ {
+	for i := range 3 {
 		srv := prochttp.New(t, prochttp.WithHandler(handler))
 		m.daprds = append(m.daprds, daprd.New(t,
 			daprd.WithAppPort(srv.Port()),

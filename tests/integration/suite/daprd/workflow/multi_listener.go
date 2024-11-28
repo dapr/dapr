@@ -17,11 +17,10 @@ import (
 	"context"
 	"fmt"
 	"net/http"
-	"sync"
 	"testing"
 
-	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/sync/errgroup"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
 
@@ -88,37 +87,50 @@ func (m *multiListener) Run(t *testing.T, ctx context.Context) {
 			return fmt.Sprintf("Hello, %s!", name), nil
 		})
 
-		var wg sync.WaitGroup
-		for i := 0; i < 5; i++ {
-			wg.Add(1)
-			go func() {
-				defer wg.Done()
+		var g errgroup.Group
+		for i := range 5 {
+			g.Go(func() error {
 				conn, err := grpc.DialContext(ctx, //nolint:staticcheck
 					m.daprd.GRPCAddress(),
 					grpc.WithTransportCredentials(insecure.NewCredentials()),
 					grpc.WithBlock(), //nolint:staticcheck
 				)
-				require.NoError(t, err)
+				if err != nil {
+					return err
+				}
+
 				t.Cleanup(func() { require.NoError(t, conn.Close()) })
 				backendClient := client.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
 
 				taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-				require.NoError(t, backendClient.StartWorkItemListener(taskhubCtx, r))
+				if err := backendClient.StartWorkItemListener(taskhubCtx, r); err != nil {
+					return err
+				}
 				defer cancelTaskhub()
 
 				if i == 0 {
 					// only the first worker will schedule the orchestration
-					_, err = backendClient.ScheduleNewOrchestration(ctx, "ConnectMultipleListenersToSingleDaprd", api.WithInstanceID("Dapr"), api.WithInput("Dapr"))
-					require.NoError(t, err)
+					if _, err := backendClient.ScheduleNewOrchestration(ctx, "ConnectMultipleListenersToSingleDaprd", api.WithInstanceID("Dapr"), api.WithInput("Dapr")); err != nil {
+						return err
+					}
 				}
 
 				metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID("Dapr"), api.WithFetchPayloads(true))
-				require.NoError(t, err)
-				assert.True(t, metadata.IsComplete())
-				assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
-			}()
+				if err != nil {
+					return err
+				}
+
+				if !metadata.IsComplete() {
+					return fmt.Errorf("orchestration is not complete")
+				}
+				if metadata.SerializedOutput != `"Hello, Dapr!"` {
+					return fmt.Errorf("unexpected output: %s", metadata.SerializedOutput)
+				}
+
+				return nil
+			})
 		}
 
-		wg.Wait()
+		require.NoError(t, g.Wait())
 	})
 }
