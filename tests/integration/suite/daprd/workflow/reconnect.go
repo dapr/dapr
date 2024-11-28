@@ -75,12 +75,12 @@ func (d *reconnect) Run(t *testing.T, ctx context.Context) {
 
 	d.httpClient = fclient.HTTP(t)
 
-	conn, err := grpc.DialContext(ctx, //nolint:staticcheck
+	conn, derr := grpc.DialContext(ctx, //nolint:staticcheck
 		d.daprd.GRPCAddress(),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
 		grpc.WithBlock(), //nolint:staticcheck
 	)
-	require.NoError(t, err)
+	require.NoError(t, derr)
 	t.Cleanup(func() { require.NoError(t, conn.Close()) })
 	d.grpcClient = runtimev1pb.NewDaprClient(conn)
 
@@ -94,11 +94,10 @@ func (d *reconnect) Run(t *testing.T, ctx context.Context) {
 				return nil, err
 			}
 			var output string
-			err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
-			if err != nil {
+			if err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output); err != nil {
 				return nil, err
 			}
-			err = ctx.WaitForSingleEvent("event1", 1*time.Minute).Await(nil)
+			err := ctx.WaitForSingleEvent("event1", 1*time.Minute).Await(nil)
 			return output, err
 		})
 		r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
@@ -132,14 +131,14 @@ func (d *reconnect) Run(t *testing.T, ctx context.Context) {
 
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.RuntimeStatus == api.RUNTIME_STATUS_COMPLETED)
+		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
 		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
 	})
 
 	t.Run("reconnect_during_activity", func(t *testing.T) {
 		numActivities := 5
 		activities := make(chan struct{}, numActivities)
-		for i := 0; i < numActivities-1; i++ {
+		for range numActivities - 1 {
 			activities <- struct{}{}
 		}
 
@@ -150,14 +149,14 @@ func (d *reconnect) Run(t *testing.T, ctx context.Context) {
 				return nil, err
 			}
 			var output string
-			for i := 0; i < numActivities; i++ {
+			for range numActivities {
 				err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
 				if err != nil {
 					return nil, err
 				}
 			}
 
-			return output, err
+			return output, nil
 		})
 		r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
 			var name string
@@ -188,11 +187,11 @@ func (d *reconnect) Run(t *testing.T, ctx context.Context) {
 		_, err = backendClient.WaitForOrchestrationStart(ctx, id)
 		require.NoError(t, err)
 
-		activities <- struct{}{}
+		activities <- struct{}{} // release the last activity
 
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.RuntimeStatus == api.RUNTIME_STATUS_COMPLETED)
+		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
 		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
 	})
 }
