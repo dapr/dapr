@@ -234,6 +234,7 @@ jobs:
     runs-on: "${{ matrix.os }}"
     permissions:
       contents: read
+      packages: write
     needs: [unit-tests, integration-tests]
     env:
       GOOS: "${{ matrix.target_os }}"
@@ -491,7 +492,7 @@ jobs:
       - name: lists artifacts
         run: ls -l ${{ env.ARTIFACT_DIR }}
       - name: publish binaries to github
-        if: startswith(github.ref, 'refs/tags/v')
+        if: startswith(github.ref, 'refs/tags/v') && ${{ env.ALPHA_RELEASE }} != "true"
         run: |
           echo "installing github-release-cli..."
           sudo npm install --silent --no-progress -g github-release-cli@2.1.0
@@ -526,6 +527,7 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      packages: write
     strategy:
       fail-fast: false
       matrix:

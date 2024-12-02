@@ -23,7 +23,9 @@ import (
 	"google.golang.org/protobuf/encoding/protojson"
 	"google.golang.org/protobuf/reflect/protoreflect"
 
+	"github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 const (
@@ -92,6 +94,12 @@ func respondWithData(w http.ResponseWriter, code int, data []byte) {
 	}
 }
 
+// respondWithDataAndRecordError is equivalent to respondWithData but also wraps in error code recording
+func respondWithDataAndRecordError(w http.ResponseWriter, code int, data []byte, err error) {
+	diagnostics.RecordErrorCode(err)
+	respondWithData(w, code, data)
+}
+
 // respondWithEmpty sends an empty response with 204 status code.
 func respondWithEmpty(w http.ResponseWriter) {
 	w.WriteHeader(http.StatusNoContent)
@@ -122,8 +130,8 @@ func respondWithProto(w http.ResponseWriter, m protoreflect.ProtoMessage, status
 		EmitUnpopulated: emitUnpopulated,
 	}.Marshal(m)
 	if err != nil {
-		msg := NewErrorResponse("ERR_INTERNAL", "failed to encode response as JSON: "+err.Error())
-		respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
+		msg := NewErrorResponse(errorcodes.CommonInternal, "failed to encode response as JSON: "+err.Error())
+		respondWithDataAndRecordError(w, http.StatusInternalServerError, msg.JSONErrorValue(), &errorcodes.CommonInternal)
 		log.Debug(msg)
 		return
 	}
@@ -137,6 +145,9 @@ func respondWithError(w http.ResponseWriter, err error) {
 	if err == nil {
 		return
 	}
+
+	// Record metric for error code, succeeds only if is apiError or kitError
+	diagnostics.RecordErrorCode(err)
 
 	// Check if it's an APIError object
 	apiErr, ok := err.(messages.APIError)
@@ -152,12 +163,12 @@ func respondWithError(w http.ResponseWriter, err error) {
 	}
 
 	if kitErr, ok := err.(*kitErrors.Error); ok {
-		respondWithData(w, kitErr.HTTPStatusCode(), NewErrorResponse("ERROR", kitErr.Error()).JSONErrorValue())
+		respondWithData(w, kitErr.HTTPStatusCode(), kitErr.JSONErrorValue())
 		return
 	}
 
 	// Respond with a generic error
-	msg := NewErrorResponse("ERROR", err.Error())
+	msg := NewErrorResponse(errorcodes.CommonGeneric, err.Error())
 	respondWithData(w, http.StatusInternalServerError, msg.JSONErrorValue())
 }
 

@@ -138,7 +138,7 @@ func (c *customerrors) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	require.NoError(t, resp.Body.Close())
 	assert.Equal(t, 509, resp.StatusCode)
-	assert.Equal(t, `{"errorCode":"ERROR","message":"api error: code = AlreadyExists desc = query-error"}`, string(b))
+	assert.Equal(t, `{"errorCode":"query-tag","message":"query-error","details":[{"@type":"type.googleapis.com/google.rpc.ErrorInfo","domain":"query-domain","metadata":null,"reason":"query-reason"}]}`, string(b))
 
 	body := strings.NewReader(`[{"key":"key1","value":"value1"},{"key":"key2","value":"value2"}]`)
 	req, err = nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, stateURL, body)

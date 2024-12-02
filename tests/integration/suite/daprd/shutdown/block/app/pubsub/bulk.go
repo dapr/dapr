@@ -134,10 +134,6 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 	}
 
 	daprdStopped := make(chan struct{})
-	go func() {
-		b.daprd.Cleanup(t)
-		close(daprdStopped)
-	}()
 	t.Cleanup(func() {
 		select {
 		case <-daprdStopped:
@@ -145,6 +141,10 @@ func (b *bulk) Run(t *testing.T, ctx context.Context) {
 			assert.Fail(t, "daprd did not exit in time")
 		}
 	})
+	go func() {
+		b.daprd.Cleanup(t)
+		close(daprdStopped)
+	}()
 
 LOOP:
 	for {

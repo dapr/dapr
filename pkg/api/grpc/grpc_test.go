@@ -2918,7 +2918,7 @@ func TestStateStoreErrors(t *testing.T) {
 
 	t.Run("standardized error", func(t *testing.T) {
 		a := &api{}
-		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, http.StatusNotFound, "", "testReason")
+		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, http.StatusNotFound, "", "testReason", "testCategory")
 		err2 := a.stateErrorResponse(standardizedErr, messages.ErrStateSave, "a", standardizedErr.Error())
 
 		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", err2.Error())
