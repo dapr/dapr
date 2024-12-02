@@ -23,6 +23,8 @@ import (
 	"sync/atomic"
 	"time"
 
+	apiErrors "github.com/dapr/dapr/pkg/api/errors"
+
 	"github.com/alphadose/haxmap"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
@@ -221,7 +223,7 @@ func (p *Service) Start(ctx context.Context) error {
 
 	sec, err := p.sec.Handler(ctx)
 	if err != nil {
-		return err
+		return errors.New("context error occurred")
 	}
 
 	serverListener, err := net.Listen("tcp", fmt.Sprintf("%s:%d", p.listenAddress, p.port))
@@ -320,7 +322,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 		case nil:
 
 			if clientID != nil && req.GetId() != clientID.AppID() {
-				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
+				return apiErrors.PlacementServicePermissionDenied(fmt.Sprintf("client ID %s is not allowed", req.GetId()))
 			}
 
 			if registeredMemberID == "" {
@@ -394,7 +396,7 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatusServer) (*spiffe.Parsed, error) {
 	sec, err := p.sec.Handler(stream.Context())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "")
+		return nil, apiErrors.PlacementServiceInternalError(fmt.Sprintf("internal or context error: %s", err))
 	}
 
 	if !sec.MTLSEnabled() {
@@ -404,7 +406,7 @@ func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatus
 	clientID, ok, err := spiffe.FromGRPCContext(stream.Context())
 	if err != nil || !ok {
 		log.Debugf("failed to get client ID from context: err=%v, ok=%t", err, ok)
-		return nil, status.Errorf(codes.Unauthenticated, "failed to get client ID from context")
+		return nil, apiErrors.PlacementServiceMalFormedSpiffeId(fmt.Sprintf("error with the Spiffe id: %s", err))
 	}
 
 	return clientID, nil
@@ -413,11 +415,11 @@ func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatus
 func (p *Service) receiveAndValidateFirstMessage(stream placementv1pb.Placement_ReportDaprStatusServer, clientID *spiffe.Parsed) (*placementv1pb.Host, error) {
 	firstMessage, err := stream.Recv()
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to receive the first message: %v", err)
+		return nil, apiErrors.PlacementServiceFailedToReceiveMessage(fmt.Sprintf("failed to receive the first message: %v", err))
 	}
 
 	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
-		return nil, status.Errorf(codes.PermissionDenied, "provided app ID %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetId(), clientID.AppID())
+		return nil, apiErrors.PlacementServicePermissionDenied(fmt.Sprintf("provided app ID %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetId(), clientID.AppID()))
 	}
 
 	// For older versions that are not sending their namespace as part of the message
@@ -427,7 +429,7 @@ func (p *Service) receiveAndValidateFirstMessage(stream placementv1pb.Placement_
 	}
 
 	if clientID != nil && firstMessage.GetNamespace() != clientID.Namespace() {
-		return nil, status.Errorf(codes.PermissionDenied, "provided client namespace %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetNamespace(), clientID.Namespace())
+		return nil, apiErrors.PlacementServicePermissionDenied(fmt.Sprintf("provided client namespace %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetNamespace(), clientID.Namespace()))
 	}
 
 	return firstMessage, nil
@@ -454,7 +456,7 @@ func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprd
 		}
 		err = p.performTablesUpdate(context.Background(), updateReq)
 		if err != nil {
-			return registeredMemberID, err
+			return registeredMemberID, apiErrors.PlacementServiceFailedTableUpdate(fmt.Sprintf("failed to update the dapr runtime tables; %s", err))
 		}
 	}
 
@@ -470,7 +472,7 @@ func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
 
 	// Ensure that the reported API level is at least equal to the current one in the cluster
 	if req.GetApiLevel() < clusterAPILevel {
-		return status.Errorf(codes.FailedPrecondition, "The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.GetApiLevel())
+		return apiErrors.PlacementServiceFailedPrecondition(fmt.Sprintf("The cluster's Actor API level is %d, which is higher than the reported API level %d", clusterAPILevel, req.GetApiLevel()))
 	}
 
 	return nil
