@@ -24,6 +24,7 @@ service:
 nameOverride: ""
 fullnameOverride: ""
 webhookFailurePolicy: Ignore
+webhookTimeoutSeconds: 10
 sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
 sidecarRunAsNonRoot: true
