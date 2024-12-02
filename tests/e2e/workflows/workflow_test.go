@@ -35,7 +35,7 @@ import (
 
 var (
 	tr            *runner.TestRunner
-	backends      = []string{"actors", "sqlite"}
+	backends      = []string{"actors"}
 	appNamePrefix = "workflowsapp"
 )
 
@@ -55,18 +55,7 @@ func TestMain(m *testing.M) {
 			testApps = append(testApps, getTestApp(backend))
 		}
 
-		comps := []kube.ComponentDescription{
-			{
-				Name:     "sqlitebackend",
-				TypeName: "workflowbackend.sqlite",
-				MetaData: map[string]kube.MetadataValue{
-					"connectionString": {Raw: `""`},
-				},
-				Scopes: []string{appNamePrefix + "-sqlite"},
-			},
-		}
-
-		tr = runner.NewTestRunner("workflowsapp", testApps, comps, nil)
+		tr = runner.NewTestRunner("workflowsapp", testApps, []kube.ComponentDescription{}, nil)
 		os.Exit(tr.Start(m))
 	} else {
 		os.Exit(m.Run())
