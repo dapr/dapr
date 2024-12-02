@@ -18,7 +18,7 @@ import (
 )
 
 const (
-	daprSeparator = "||"
+	DaprSeparator = "||"
 )
 
 // ActorHostedRequest is the request object for checking if an actor is hosted on this instance.
@@ -29,7 +29,7 @@ type ActorHostedRequest struct {
 
 // ActorKey returns the key of the actor for this request.
 func (r ActorHostedRequest) ActorKey() string {
-	return r.ActorType + daprSeparator + r.ActorID
+	return r.ActorType + DaprSeparator + r.ActorID
 }
 
 // DeleteStateRequest is the request object for deleting an actor state.
@@ -41,7 +41,7 @@ type DeleteStateRequest struct {
 
 // ActorKey returns the key of the actor for this request.
 func (r DeleteStateRequest) ActorKey() string {
-	return r.ActorType + daprSeparator + r.ActorID
+	return r.ActorType + DaprSeparator + r.ActorID
 }
 
 // GetStateRequest is the request object for getting actor state.
@@ -53,7 +53,7 @@ type GetStateRequest struct {
 
 // ActorKey returns the key of the actor for this request.
 func (r GetStateRequest) ActorKey() string {
-	return r.ActorType + daprSeparator + r.ActorID
+	return r.ActorType + DaprSeparator + r.ActorID
 }
 
 // GetBulkStateRequest is the request object for getting bulk actor state.
@@ -65,7 +65,7 @@ type GetBulkStateRequest struct {
 
 // ActorKey returns the key of the actor for this request.
 func (r GetBulkStateRequest) ActorKey() string {
-	return r.ActorType + daprSeparator + r.ActorID
+	return r.ActorType + DaprSeparator + r.ActorID
 }
 
 // ReminderResponse is the payload that is sent to an Actor SDK API for execution.

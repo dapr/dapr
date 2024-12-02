@@ -93,11 +93,6 @@ func New(opts Options) Interface {
 }
 
 func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	if err := e.placement.Lock(ctx); err != nil {
-		return nil, err
-	}
-	defer e.placement.Unlock()
-
 	var res *internalv1pb.InternalInvokeResponse
 	var err error
 	if e.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
@@ -178,6 +173,11 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 }
 
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	if err := e.placement.Lock(ctx); err != nil {
+		return nil, err
+	}
+	defer e.placement.Unlock()
+
 	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
 		ActorID:   req.GetActor().GetActorId(),
