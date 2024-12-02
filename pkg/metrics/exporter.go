@@ -1,3 +1,16 @@
+/*
+Copyright 2024 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
 package metrics
 
 import (
@@ -9,8 +22,7 @@ import (
 	"strconv"
 	"time"
 
-	ocprom "contrib.go.opencensus.io/exporter/prometheus"
-	prom "github.com/prometheus/client_golang/prometheus"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/kit/logger"
@@ -24,11 +36,9 @@ const (
 
 // Exporter is the interface for metrics exporters.
 type Exporter interface {
-	// Start initializes metrics exporter
 	Start(context.Context) error
 }
 
-// exporter is the base struct.
 type exporter struct {
 	namespace     string
 	enabled       bool
@@ -38,9 +48,7 @@ type exporter struct {
 	htarget       healthz.Target
 }
 
-// New creates new metrics Exporter instance with given options.
 func New(opts Options) Exporter {
-	// TODO: support multiple exporters
 	return &exporter{
 		htarget:       opts.Healthz.AddTarget(),
 		namespace:     opts.Namespace,
@@ -51,11 +59,9 @@ func New(opts Options) Exporter {
 	}
 }
 
-// Start initializes and runs the opencensus exporter.
 func (e *exporter) Start(ctx context.Context) error {
 	if !e.enabled {
 		e.htarget.Ready()
-		// Block until context is cancelled.
 		<-ctx.Done()
 		return nil
 	}
@@ -65,14 +71,6 @@ func (e *exporter) Start(ctx context.Context) error {
 		return fmt.Errorf("failed to parse metrics port: %w", err)
 	}
 
-	ocExporter, err := ocprom.NewExporter(ocprom.Options{
-		Namespace: e.namespace,
-		Registry:  prom.DefaultRegisterer.(*prom.Registry),
-	})
-	if err != nil {
-		return fmt.Errorf("failed to create Prometheus exporter: %w", err)
-	}
-
 	addr := fmt.Sprintf("%s:%d", e.listenAddress, port)
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
@@ -80,7 +78,7 @@ func (e *exporter) Start(ctx context.Context) error {
 	}
 	e.logger.Infof("metrics server started on %s%s", addr, defaultMetricsPath)
 	mux := http.NewServeMux()
-	mux.Handle(defaultMetricsPath, ocExporter)
+	mux.Handle(defaultMetricsPath, promhttp.Handler())
 
 	server := &http.Server{
 		Handler:     mux,
