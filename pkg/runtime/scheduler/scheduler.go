@@ -18,6 +18,8 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"runtime"
+	"strings"
 	"sync"
 	"sync/atomic"
 
@@ -74,10 +76,24 @@ func (m *Manager) Run(ctx context.Context) error {
 		if err := m.watchJobs(ctx); err != nil {
 			// don't retry if closing down
 			if ctx.Err() != nil {
+				log.Errorf("scheduler.go m.watchJobs returned err and ctx.Err(). err: %s, ctx.Err: %s", err, ctx.Err())
 				return nil //nolint:nilerr
 			}
 			if err == io.EOF {
 				log.Warnf("Received EOF, re-establishing connection: %v", err)
+				continue
+			}
+			// special case for windows when the connection is closed by the server
+			// level=error msg="Scheduler stream disconnected: rpc error: code = Unavailable
+			// desc = error reading from server: read tcp 127.0.0.1:63212->127.0.0.1:1026:
+			// wsarecv: An existing connection was forcibly closed by the remote host."
+			if runtime.GOOS == "windows" && strings.Contains(err.Error(), "An existing connection was forcibly closed by the remote host") {
+				log.Error(err)
+				err = m.clients.ReconnectClients(ctx)
+				if err != nil {
+					log.Errorf("failed reconnecting clients: %v", err)
+					return err
+				}
 				continue
 			}
 			return fmt.Errorf("error watching scheduler jobs: %w", err)
@@ -85,6 +101,7 @@ func (m *Manager) Run(ctx context.Context) error {
 
 		// don't retry if closing down
 		if ctx.Err() != nil {
+			log.Errorf("scheduler.go Run ctx.Err: %s", ctx.Err())
 			return nil //nolint:nilerr
 		}
 	}
@@ -94,6 +111,7 @@ func (m *Manager) Run(ctx context.Context) error {
 func (m *Manager) watchJobs(ctx context.Context) error {
 	select {
 	case <-ctx.Done():
+		log.Errorf("scheduler.go watchJobs ctx.Done. ctx.Err is: %s", ctx.Err())
 		return ctx.Err()
 	case <-m.stopStartCh:
 	}
@@ -118,6 +136,7 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 
 	clients, err := m.clients.All(ctx)
 	if err != nil {
+		log.Errorf("scheduler.go m.clients.All returned err: %s", err)
 		return err
 	}
 
@@ -135,8 +154,10 @@ func (m *Manager) watchJobs(ctx context.Context) error {
 	runners[len(clients)] = func(ctx context.Context) error {
 		select {
 		case <-ctx.Done():
+			log.Errorf("scheduler.go last runner ctx.Done, ctx.Err is: %s", ctx.Err())
 			return ctx.Err()
 		case <-m.stopStartCh:
+			log.Info("scheduler.go m.stopStartCh triggered")
 			return nil
 		}
 	}
