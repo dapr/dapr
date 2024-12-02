@@ -14,6 +14,7 @@ limitations under the License.
 package http
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
@@ -33,6 +34,7 @@ import (
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 )
 
 var endpointGroupActorV1State = &endpoints.EndpointGroup{
@@ -376,7 +378,11 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 		// Save headers to internal metadata
 		WithHTTPHeaders(r.Header)
 
-	res, err := engine.Call(ctx, req)
+	policyDef := a.universal.Resiliency().ActorPreLockPolicy(actorType, actorID)
+	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
+	res, err := policyRunner(func(ctx context.Context) (*internalsv1pb.InternalInvokeResponse, error) {
+		return engine.Call(ctx, req)
+	})
 	if err != nil {
 		if merr, ok := err.(messages.APIError); ok {
 			respondWithError(w, merr)
