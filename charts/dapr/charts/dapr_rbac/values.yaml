@@ -1,4 +1,4 @@
 secretReader:
-  enabled: true
+  enabled: false
   namespace: default
 component: rbac
