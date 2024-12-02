@@ -44,6 +44,7 @@ func WithValues(values ...string) OptionFunc {
 	}
 }
 
+// WithGlobalValues adds a "global." prefix to the value(s) provided to use the global values in the helm chart.
 func WithGlobalValues(values ...string) OptionFunc {
 	return func(o *options) {
 		for _, v := range values {
@@ -55,6 +56,12 @@ func WithGlobalValues(values ...string) OptionFunc {
 func WithShowOnlySchedulerSTS() OptionFunc {
 	return func(o *options) {
 		o.showOnly = append(o.showOnly, "charts/dapr_scheduler/templates/dapr_scheduler_statefulset.yaml")
+	}
+}
+
+func WithShowOnlyPlacementSTS() OptionFunc {
+	return func(o *options) {
+		o.showOnly = append(o.showOnly, "charts/dapr_placement/templates/dapr_placement_statefulset.yaml")
 	}
 }
 
@@ -90,7 +97,7 @@ func WithShowOnly(chart, tplYamlFileName string) OptionFunc {
 		if !strings.HasSuffix(tplYamlFileName, ".yaml") {
 			tplYamlFileName += ".yaml"
 		}
-		o.showOnly = append(o.showOnly, fmt.Sprintf("%s/templates/%s", chart, tplYamlFileName))
+		o.showOnly = append(o.showOnly, fmt.Sprintf("charts/%s/templates/%s", chart, tplYamlFileName))
 	}
 }
 
