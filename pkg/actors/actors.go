@@ -376,7 +376,11 @@ func (a *actors) waitForReady(ctx context.Context) error {
 func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 	defer func() {
 		a.registerDoneLock.Lock()
-		close(a.registerDoneCh)
+		select {
+		case <-a.registerDoneCh:
+		default:
+			close(a.registerDoneCh)
+		}
 		a.registerDoneLock.Unlock()
 	}()
 
