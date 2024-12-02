@@ -21,6 +21,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
+	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -104,7 +105,7 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 	}
 	err = r.Create(ctx, req)
 	if err != nil {
-		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
 			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
 			return nil, messages.ErrActorReminderOpActorNotHosted
 		}
@@ -130,7 +131,7 @@ func (a *Universal) UnregisterActorReminder(ctx context.Context, in *runtimev1pb
 
 	err = r.Delete(ctx, req)
 	if err != nil {
-		if errors.Is(err, actors.ErrReminderOpActorNotHosted) {
+		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {
 			a.logger.Debug(messages.ErrActorReminderOpActorNotHosted)
 			return nil, messages.ErrActorReminderOpActorNotHosted
 		}

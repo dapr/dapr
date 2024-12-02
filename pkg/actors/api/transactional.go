@@ -52,7 +52,7 @@ type TransactionalRequest struct {
 
 // ActorKey returns the key of the actor for this request.
 func (r TransactionalRequest) ActorKey() string {
-	return r.ActorType + daprSeparator + r.ActorID
+	return r.ActorType + DaprSeparator + r.ActorID
 }
 
 // TransactionalOperation is the request object for a state operation participating in a transaction.

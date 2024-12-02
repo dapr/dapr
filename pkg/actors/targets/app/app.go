@@ -43,8 +43,6 @@ import (
 	"github.com/dapr/kit/utils"
 )
 
-const daprSeparator = "||"
-
 var log = logger.NewLogger("dapr.runtime.actors.targets.app")
 
 type Options struct {
@@ -284,7 +282,7 @@ func (a *app) Deactivate(ctx context.Context) error {
 // Key returns the key for this unique actor.
 // This is implemented to comply with the queueable interface.
 func (a *app) Key() string {
-	return a.actorType + daprSeparator + a.actorID
+	return a.actorType + api.DaprSeparator + a.actorID
 }
 
 // CloseUntil closes the actor but backs out sooner if the duration is reached.

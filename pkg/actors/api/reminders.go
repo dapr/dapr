@@ -40,12 +40,12 @@ type CreateReminderRequest struct {
 
 // ActorKey returns the key of the actor for this reminder.
 func (req CreateReminderRequest) ActorKey() string {
-	return req.ActorType + daprSeparator + req.ActorID
+	return req.ActorType + DaprSeparator + req.ActorID
 }
 
 // Key returns the key for this unique reminder.
 func (req CreateReminderRequest) Key() string {
-	return req.ActorType + daprSeparator + req.ActorID + daprSeparator + req.Name
+	return req.ActorType + DaprSeparator + req.ActorID + DaprSeparator + req.Name
 }
 
 // NewReminder returns a new Reminder from a CreateReminderRequest object.
@@ -83,12 +83,12 @@ type CreateTimerRequest struct {
 
 // ActorKey returns the key of the actor for this timer.
 func (req CreateTimerRequest) ActorKey() string {
-	return req.ActorType + daprSeparator + req.ActorID
+	return req.ActorType + DaprSeparator + req.ActorID
 }
 
 // Key returns the key for this unique timer.
 func (req CreateTimerRequest) Key() string {
-	return req.ActorType + daprSeparator + req.ActorID + daprSeparator + req.Name
+	return req.ActorType + DaprSeparator + req.ActorID + DaprSeparator + req.Name
 }
 
 // NewReminder returns a new Timer from a CreateTimerRequest object.
@@ -174,12 +174,12 @@ type DeleteReminderRequest struct {
 
 // ActorKey returns the key of the actor for this reminder.
 func (req DeleteReminderRequest) ActorKey() string {
-	return req.ActorType + daprSeparator + req.ActorID
+	return req.ActorType + DaprSeparator + req.ActorID
 }
 
 // Key returns the key for this unique reminder.
 func (req DeleteReminderRequest) Key() string {
-	return req.ActorType + daprSeparator + req.ActorID + daprSeparator + req.Name
+	return req.ActorType + DaprSeparator + req.ActorID + DaprSeparator + req.Name
 }
 
 type ListRemindersRequest struct {
@@ -195,10 +195,10 @@ type DeleteTimerRequest struct {
 
 // ActorKey returns the key of the actor for this timer.
 func (req DeleteTimerRequest) ActorKey() string {
-	return req.ActorType + daprSeparator + req.ActorID
+	return req.ActorType + DaprSeparator + req.ActorID
 }
 
 // Key returns the key for this unique timer.
 func (req DeleteTimerRequest) Key() string {
-	return req.ActorType + daprSeparator + req.ActorID + daprSeparator + req.Name
+	return req.ActorType + DaprSeparator + req.ActorID + DaprSeparator + req.Name
 }

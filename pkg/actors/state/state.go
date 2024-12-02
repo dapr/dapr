@@ -30,7 +30,6 @@ import (
 )
 
 const (
-	daprSeparator        = "||"
 	metadataPartitionKey = "partitionKey"
 
 	errStateStoreNotFound      = "actors: state store does not exist or incorrectly configured"
@@ -171,7 +170,7 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.
 	}
 
 	// Add the dapr separator to baseKey
-	baseKey += daprSeparator
+	baseKey += api.DaprSeparator
 
 	bulkRes := make(api.BulkStateResponse, len(res))
 	for _, r := range res {
@@ -197,7 +196,7 @@ func (s *state) TransactionalStateOperation(ctx context.Context, req *api.Transa
 	operations := make([]contribstate.TransactionalStateOperation, len(req.Operations))
 	baseKey := key.ConstructComposite(s.appID, req.ActorKey())
 	metadata := map[string]string{metadataPartitionKey: baseKey}
-	baseKey += daprSeparator
+	baseKey += api.DaprSeparator
 	for i, o := range req.Operations {
 		operations[i], err = o.StateOperation(baseKey, api.StateOperationOpts{
 			Metadata: metadata,

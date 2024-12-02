@@ -42,12 +42,12 @@ type Reminder struct {
 
 // ActorKey returns the key of the actor for this reminder.
 func (r Reminder) ActorKey() string {
-	return r.ActorType + daprSeparator + r.ActorID
+	return r.ActorType + DaprSeparator + r.ActorID
 }
 
 // Key returns the key for this unique reminder.
 func (r Reminder) Key() string {
-	return r.ActorType + daprSeparator + r.ActorID + daprSeparator + r.Name
+	return r.ActorType + DaprSeparator + r.ActorID + DaprSeparator + r.Name
 }
 
 // NextTick returns the time the reminder should tick again next.

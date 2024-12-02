@@ -13,15 +13,17 @@ limitations under the License.
 
 package key
 
-import "strings"
+import (
+	"strings"
 
-const daprSeparator = "||"
+	"github.com/dapr/dapr/pkg/actors/api"
+)
 
 func ConstructComposite(keys ...string) string {
-	return strings.Join(keys, daprSeparator)
+	return strings.Join(keys, api.DaprSeparator)
 }
 
 func ActorTypeAndIDFromKey(key string) (string, string) {
-	typ, id, _ := strings.Cut(key, daprSeparator)
+	typ, id, _ := strings.Cut(key, api.DaprSeparator)
 	return typ, id
 }
