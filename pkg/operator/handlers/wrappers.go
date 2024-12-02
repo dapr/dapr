@@ -59,3 +59,19 @@ func (r *RolloutWrapper) GetTemplateAnnotations() map[string]string {
 func (r *RolloutWrapper) GetObject() client.Object {
 	return &r.Rollout
 }
+
+type DaemonSetWrapper struct {
+	appsv1.DaemonSet
+}
+
+func (d *DaemonSetWrapper) GetMatchLabels() map[string]string {
+	return d.Spec.Selector.MatchLabels
+}
+
+func (d *DaemonSetWrapper) GetTemplateAnnotations() map[string]string {
+	return d.Spec.Template.ObjectMeta.Annotations
+}
+
+func (d *DaemonSetWrapper) GetObject() client.Object {
+	return &d.DaemonSet
+}
