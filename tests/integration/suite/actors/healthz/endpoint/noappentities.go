@@ -142,8 +142,7 @@ func (n *noappentities) Run(t *testing.T, ctx context.Context) {
 
 	select {
 	case <-n.noHealthzCalled:
-		// TODO: @joshvanl: reenable once actor healthz has rolled into app.
-		// assert.Fail(t, "healthz on health disabled and empty entities should not be called")
+		assert.Fail(t, "healthz on health disabled and empty entities should not be called")
 	default:
 	}
 
