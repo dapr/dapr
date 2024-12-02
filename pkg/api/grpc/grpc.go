@@ -1143,7 +1143,11 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 
 	req := in.ToInternalInvokeRequest()
 
-	res, err := engine.Call(ctx, req)
+	policyDef := a.Universal.Resiliency().ActorPreLockPolicy(in.GetActorType(), in.GetActorId())
+	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
+	res, err := policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
+		return engine.Call(ctx, req)
+	})
 	if err != nil {
 		if _, ok := status.FromError(err); ok {
 			apiServerLogger.Debug(err)
