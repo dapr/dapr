@@ -54,5 +54,5 @@ metadata:
   name: schedulerreminders
 spec:
   features:
-    - name: SchedulerReminders
-      enabled: true
+  - name: SchedulerReminders
+    enabled: true
