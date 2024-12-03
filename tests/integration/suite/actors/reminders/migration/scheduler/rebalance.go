@@ -39,6 +39,7 @@ type rebalance struct {
 func (r *rebalance) Setup(t *testing.T) []framework.Option {
 	r.actor1 = actors.New(t,
 		actors.WithActorTypes("myactortype"),
+		actors.WithFeatureSchedulerReminders(false),
 	)
 	r.actor2 = actors.New(t,
 		actors.WithDB(r.actor1.DB()),
