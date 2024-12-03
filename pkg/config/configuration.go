@@ -73,6 +73,10 @@ const (
 	defaultMaxActivityConcurrentInvocations = 100
 )
 
+var defaultFeatures = map[Feature]bool{
+	SchedulerReminders: true,
+}
+
 // Configuration is an internal (and duplicate) representation of Dapr's Configuration CRD.
 type Configuration struct {
 	metav1.TypeMeta `json:",inline" yaml:",inline"`
@@ -521,6 +525,7 @@ func LoadStandaloneConfiguration(configs ...string) (*Configuration, error) {
 	}
 
 	conf.sortMetricsSpec()
+	conf.SetDefaultFeatures()
 	return conf, nil
 }
 
@@ -550,6 +555,7 @@ func LoadKubernetesConfiguration(config string, namespace string, podName string
 	}
 
 	conf.sortMetricsSpec()
+	conf.SetDefaultFeatures()
 	return conf, nil
 }
 
@@ -666,9 +672,19 @@ func (c *Configuration) LoadFeatures() {
 	forced := buildinfo.Features()
 	c.featuresEnabled = make(map[Feature]struct{}, len(c.Spec.Features)+len(forced))
 	for _, feature := range c.Spec.Features {
-		if feature.Name == "" || !feature.Enabled {
+		if feature.Name == "" {
 			continue
 		}
+
+		// If the feature is disabled in configuration, remove it from the list of default enabled features if it exists
+		if !feature.Enabled {
+			_, exists := c.featuresEnabled[feature.Name]
+			if exists {
+				delete(c.featuresEnabled, feature.Name)
+			}
+			continue
+		}
+
 		c.featuresEnabled[feature.Name] = struct{}{}
 	}
 	for _, v := range forced {
@@ -832,6 +848,28 @@ func (c *Configuration) sortAndValidateSecretsConfiguration() error {
 	}
 
 	return nil
+}
+
+func (c *Configuration) SetDefaultFeatures() {
+	if c.Spec.Features == nil {
+		c.Spec.Features = make([]FeatureSpec, 0)
+	}
+
+	for feature, enabled := range defaultFeatures {
+		featureSpecExists := false
+		for _, featureSpec := range c.Spec.Features {
+			if featureSpec.Name == feature {
+				featureSpecExists = true
+				break
+			}
+		}
+		if !featureSpecExists {
+			c.Spec.Features = append(c.Spec.Features, FeatureSpec{
+				Name:    feature,
+				Enabled: enabled,
+			})
+		}
+	}
 }
 
 // ToYAML returns the ConfigurationSpec represented as YAML.

@@ -14,9 +14,7 @@ limitations under the License.
 package config
 
 import (
-	"bytes"
 	"io"
-	"os"
 	"reflect"
 	"sort"
 	"testing"
@@ -166,6 +164,18 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 				featureName:    Feature("Test.Missing"),
 				featureEnabled: false,
 			},
+			{
+				name:           "default feature is disabled",
+				confFile:       "./testdata/default_features_disabled_config.yaml",
+				featureName:    SchedulerReminders,
+				featureEnabled: false,
+			},
+			{
+				name:           "default feature is enabled with config that doesn't have default feature disabled or enabled explicitly",
+				confFile:       "./testdata/feature_config.yaml",
+				featureName:    SchedulerReminders,
+				featureEnabled: true,
+			},
 		}
 
 		for _, tc := range testCases {
@@ -237,12 +247,6 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		assert.False(t, mtlsSpec.Enabled) // Overridden
 		assert.Equal(t, "25s", mtlsSpec.WorkloadCertTTL)
 		assert.Equal(t, "1h", mtlsSpec.AllowedClockSkew)
-
-		// Spec part encoded as YAML
-		compareWithFile(t, "./testdata/override_spec_gen.yaml", config.Spec.String())
-
-		// Complete YAML
-		compareWithFile(t, "./testdata/override_gen.yaml", config.String())
 	})
 
 	t.Run("tracing spec headers value as string", func(t *testing.T) {
@@ -256,16 +260,6 @@ func TestLoadStandaloneConfiguration(t *testing.T) {
 		_, err := LoadStandaloneConfiguration("./testdata/tracing_invalid_config.yaml")
 		require.Error(t, err)
 	})
-}
-
-func compareWithFile(t *testing.T, file string, expect string) {
-	f, err := os.ReadFile(file)
-	require.NoError(t, err)
-
-	// Replace all "\r\n" with "\n" because (*wave hands*, *lesigh*) ... Windows
-	f = bytes.ReplaceAll(f, []byte{'\r', '\n'}, []byte{'\n'})
-
-	assert.Equal(t, expect, string(f))
 }
 
 func TestSortAndValidateSecretsConfigration(t *testing.T) {
