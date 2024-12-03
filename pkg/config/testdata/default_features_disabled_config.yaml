@@ -1,11 +1,8 @@
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
-  name: omithealthchecksconfig
+  name: daprConfig
 spec:
   features:
   - name: SchedulerReminders
     enabled: false
-  logging:
-    apiLogging:
-      omitHealthChecks: true

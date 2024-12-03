@@ -41,7 +41,6 @@ type data struct {
 func (d *data) Setup(t *testing.T) []framework.Option {
 	d.got = make(chan string, 1)
 	d.actors = actors.New(t,
-		actors.WithFeatureSchedulerReminders(true),
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(_ http.ResponseWriter, req *http.Request) {
 			got, err := io.ReadAll(req.Body)
@@ -71,7 +70,7 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 
 	select {
 	case got := <-d.got:
-		assert.JSONEq(t, `{"data":"bXlkYXRh","dueTime":"","period":""}`, got)
+		assert.JSONEq(t, `{"data":"bXlkYXRh","dueTime":"0s","period":"1000s"}`, got)
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for reminder")
 	}
