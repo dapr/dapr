@@ -119,7 +119,7 @@ func (a *Actors) GRPCConn(t *testing.T, ctx context.Context) *grpc.ClientConn {
 
 func (a *Actors) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
-	return a.daprd.Metrics(t, ctx)
+	return a.daprd.Metrics(t, ctx).All()
 }
 
 func (a *Actors) Placement() *placement.Placement {

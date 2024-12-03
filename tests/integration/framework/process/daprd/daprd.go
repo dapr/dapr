@@ -336,7 +336,7 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
 }
 
 func (d *Daprd) MetricResidentMemoryMi(t *testing.T, ctx context.Context) float64 {
-	return d.Metrics(t, ctx)["process_resident_memory_bytes"] * 1e-6
+	return d.Metrics(t, ctx).All()["process_resident_memory_bytes"] * 1e-6
 }
 
 func (d *Daprd) HTTPGet(t assert.TestingT, ctx context.Context, path string, expectedCode int) {
