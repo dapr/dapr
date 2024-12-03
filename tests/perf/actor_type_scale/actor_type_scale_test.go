@@ -87,7 +87,10 @@ func TestActorIdStress(t *testing.T) {
 	require.NoError(t, err)
 
 	k6Test := loadtest.NewK6("./test.js", loadtest.WithParallelism(1), loadtest.WithRunnerEnvVar("ACTORS_TYPES", actorsTypes))
-	// defer k6Test.Dispose()
+	defer k6Test.Dispose()
+
+	require.NoError(t, tr.Platform.WaitForAppReadiness(serviceApplicationName))
+
 	t.Log("running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
 	sm, err := loadtest.K6ResultDefault(k6Test)

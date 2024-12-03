@@ -296,7 +296,12 @@ func TestActorReminderSchedulerRegistrationPerformance(t *testing.T) {
 	assert.Equal(t, 0, daprResult.RetCodes.Num400)
 	assert.Equal(t, 0, daprResult.RetCodes.Num500)
 	assert.Equal(t, 0, restarts)
-	assert.InDelta(t, targetSchedulerQPS, daprResult.ActualQPS, 100)
+
+	// only care if the delta is too big if its a performance regression.
+	// if the actual performance is higher than expected, than we dont need to check
+	if daprResult.ActualQPS < targetSchedulerQPS {
+		assert.InDelta(t, targetSchedulerQPS, daprResult.ActualQPS, 100)
+	}
 }
 
 type actorReminderRequest struct {

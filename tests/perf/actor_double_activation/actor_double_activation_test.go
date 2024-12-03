@@ -17,6 +17,7 @@ limitations under the License.
 package actor_double_activation
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"testing"
@@ -41,22 +42,23 @@ func TestMain(m *testing.M) {
 
 	testApps := []kube.AppDescription{
 		{
-			AppName:           serviceApplicationName,
-			DaprEnabled:       true,
-			ImageName:         "perf-actor-activation-locker",
-			Config:            "redishostconfig",
-			Replicas:          3,
-			IngressEnabled:    true,
-			MetricsEnabled:    true,
-			AppPort:           3000,
-			DaprCPULimit:      "4.0",
-			DaprCPURequest:    "0.1",
-			DaprMemoryLimit:   "512Mi",
-			DaprMemoryRequest: "250Mi",
-			AppCPULimit:       "4.0",
-			AppCPURequest:     "0.1",
-			AppMemoryLimit:    "512Mi",
-			AppMemoryRequest:  "256Mi",
+			AppName:             serviceApplicationName,
+			DaprEnabled:         true,
+			ImageName:           "perf-actor-activation-locker",
+			Config:              "redishostconfig",
+			Replicas:            3,
+			IngressEnabled:      true,
+			MetricsEnabled:      true,
+			AppPort:             3000,
+			DaprCPULimit:        "4.0",
+			DaprCPURequest:      "0.1",
+			DaprMemoryLimit:     "512Mi",
+			DaprMemoryRequest:   "250Mi",
+			AppCPULimit:         "4.0",
+			AppCPURequest:       "0.1",
+			AppMemoryLimit:      "512Mi",
+			AppMemoryRequest:    "256Mi",
+			DebugLoggingEnabled: true,
 		},
 	}
 
@@ -71,15 +73,19 @@ func TestActorDoubleActivation(t *testing.T) {
 
 	// Check if test app endpoint is available
 	t.Logf("Test app url: %s", testServiceAppURL)
-	err := utils.HealthCheckApps(testServiceAppURL + "/health")
+	_, err := utils.HTTPGetNTimes(testServiceAppURL+"/health", numHealthChecks)
 	require.NoError(t, err, "Health checks failed")
 
 	k6Test := loadtest.NewK6(
 		"./test.js",
 		loadtest.WithParallelism(3),
 		loadtest.WithRunnerEnvVar("TEST_APP_NAME", serviceApplicationName),
+		loadtest.WithCtx(context.Background()),
+		loadtest.EnableLog(),
 	)
 	defer k6Test.Dispose()
+
+	require.NoError(t, tr.Platform.WaitForAppReadiness(serviceApplicationName))
 
 	t.Log("Running the k6 load test...")
 	require.NoError(t, tr.Platform.LoadTest(k6Test))
@@ -107,6 +113,10 @@ func TestActorDoubleActivation(t *testing.T) {
 		Restarts(restarts).
 		OutputK6(sm.RunnersResults).
 		Flush()
+
+	t.Logf("target dapr app consumed %vm CPU and %vMb of Memory", appUsage.CPUm, appUsage.MemoryMb)
+	t.Logf("target dapr sidecar consumed %vm CPU and %vMb of Memory", sidecarUsage.CPUm, sidecarUsage.MemoryMb)
+	t.Logf("target dapr app or sidecar restarted %v times", restarts)
 
 	require.Truef(t, sm.Pass, "test has not passed, results: %s", string(bts))
 	t.Logf("Test summary `%s`", string(bts))
