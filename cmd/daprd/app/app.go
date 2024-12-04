@@ -178,6 +178,7 @@ func Run() {
 				AppHealthThreshold:            opts.AppHealthThreshold,
 				AppChannelAddress:             opts.AppChannelAddress,
 				EnableAPILogging:              opts.EnableAPILogging,
+				EnableWorkflowVerboseLogging:  opts.EnableWorkflowVerboseLogging,
 				Config:                        opts.Config,
 				Metrics: metrics.Options{
 					Enabled:   opts.Metrics.Enabled(),

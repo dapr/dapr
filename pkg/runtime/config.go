@@ -114,6 +114,7 @@ type Config struct {
 	Registry                      *registry.Options
 	Security                      security.Handler
 	Healthz                       healthz.Healthz
+	EnableWorkflowVerboseLogging  bool
 }
 
 type internalConfig struct {
@@ -149,6 +150,7 @@ type internalConfig struct {
 	metricsExporter              metrics.Exporter
 	healthz                      healthz.Healthz
 	outboundHealthz              healthz.Healthz
+	enableWorkflowVerboseLogging bool
 }
 
 func (i internalConfig) ActorsEnabled() bool {
@@ -299,6 +301,7 @@ func (c *Config) toInternal() (*internalConfig, error) {
 		maxRequestBodySize:           c.MaxRequestSize,
 		readBufferSize:               c.ReadBufferSize,
 		enableAPILogging:             c.EnableAPILogging,
+		enableWorkflowVerboseLogging: c.EnableWorkflowVerboseLogging,
 		appConnectionConfig: config.AppConnectionConfig{
 			ChannelAddress:      c.AppChannelAddress,
 			HealthCheckHTTPPath: c.AppHealthCheckPath,

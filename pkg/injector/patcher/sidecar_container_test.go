@@ -1016,6 +1016,18 @@ func TestGetSidecarContainer(t *testing.T) {
 		},
 	}))
 
+	t.Run("sidecar container should have workflow verbose logging", testSuiteGenerator([]testCase{
+		{
+			name: "enabled workflow verbose logging",
+			annotations: map[string]string{
+				annotations.KeyEnableWorkflowVerboseLogging: "true",
+			},
+			assertFn: func(t *testing.T, container *corev1.Container) {
+				assert.Contains(t, container.Args, "--enable-wf-verbose-logging")
+			},
+		},
+	}))
+
 	t.Run("sidecar container should have env vars injected", testCaseFn(testCase{
 		annotations: map[string]string{
 			annotations.KeyEnableProfiling: "true",

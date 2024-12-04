@@ -187,6 +187,10 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 		args = append(args, "--dapr-block-shutdown-duration", *c.BlockShutdownDuration)
 	}
 
+	if c.EnableWorkflowVerboseLogging {
+		args = append(args, "--enable-wf-verbose-logging")
+	}
+
 	// When debugging is enabled, we need to override the command and the flags
 	if c.EnableDebug {
 		ports = append(ports, corev1.ContainerPort{

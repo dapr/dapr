@@ -46,21 +46,23 @@ type Config struct {
 	ReadOnlyRootFilesystem            string `envconfig:"SIDECAR_READ_ONLY_ROOT_FILESYSTEM"`
 	EnableK8sDownwardAPIs             string `envconfig:"ENABLE_K8S_DOWNWARD_APIS"`
 	SidecarDropALLCapabilities        string `envconfig:"SIDECAR_DROP_ALL_CAPABILITIES"`
+	EnableWorkflowVerboseLogging      string `envconfig:"ENABLE_WORKFLOW_VERBOSE_LOGGING"`
 
 	TrustAnchorsFile        string `envconfig:"DAPR_TRUST_ANCHORS_FILE"`
 	ControlPlaneTrustDomain string `envconfig:"DAPR_CONTROL_PLANE_TRUST_DOMAIN"`
 	SentryAddress           string `envconfig:"DAPR_SENTRY_ADDRESS"`
 
-	parsedActorsEnabled              bool
-	parsedActorsService              patcher.Service
-	parsedRemindersService           patcher.Service
-	parsedRunAsNonRoot               bool
-	parsedReadOnlyRootFilesystem     bool
-	parsedEnableK8sDownwardAPIs      bool
-	parsedSidecarDropALLCapabilities bool
-	parsedEntrypointTolerations      []corev1.Toleration
-	parsedRunAsUser                  *int64
-	parsedRunAsGroup                 *int64
+	parsedActorsEnabled                bool
+	parsedActorsService                patcher.Service
+	parsedRemindersService             patcher.Service
+	parsedRunAsNonRoot                 bool
+	parsedReadOnlyRootFilesystem       bool
+	parsedEnableK8sDownwardAPIs        bool
+	parsedSidecarDropALLCapabilities   bool
+	parsedEntrypointTolerations        []corev1.Toleration
+	parsedRunAsUser                    *int64
+	parsedRunAsGroup                   *int64
+	parsedEnableWorkflowVerboseLogging bool
 }
 
 // NewConfigWithDefaults returns a Config object with default values already
@@ -144,6 +146,10 @@ func (c Config) GetDropCapabilities() bool {
 	return c.parsedSidecarDropALLCapabilities
 }
 
+func (c Config) GetEnableWorkflowVerboseLogging() bool {
+	return c.parsedEnableWorkflowVerboseLogging
+}
+
 func (c Config) GetActorsEnabled() bool {
 	return c.parsedActorsEnabled
 }
@@ -190,6 +196,7 @@ func (c *Config) parse() (err error) {
 	c.parsedReadOnlyRootFilesystem = isTruthyDefaultTrue(c.ReadOnlyRootFilesystem)
 	c.parsedEnableK8sDownwardAPIs = kitutils.IsTruthy(c.EnableK8sDownwardAPIs)
 	c.parsedSidecarDropALLCapabilities = kitutils.IsTruthy(c.SidecarDropALLCapabilities)
+	c.parsedEnableWorkflowVerboseLogging = kitutils.IsTruthy(c.EnableWorkflowVerboseLogging)
 
 	// Parse the runAsUser and runAsGroup
 	c.parsedRunAsUser, err = parseStringToInt64Pointer(c.RunAsUser)

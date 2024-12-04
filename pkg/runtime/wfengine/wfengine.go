@@ -56,10 +56,27 @@ func IsWorkflowRequest(path string) bool {
 	return backend.IsDurableTaskGrpcRequest(path)
 }
 
-func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager processor.WorkflowBackendManager) *WorkflowEngine {
+type workflowEngineOpts struct {
+	enableVerboseLogging bool
+}
+
+func WithVerboseLogging() func(*workflowEngineOpts) {
+	return func(opts *workflowEngineOpts) {
+		opts.enableVerboseLogging = true
+	}
+}
+
+type WorkflowEngineOption func(*workflowEngineOpts)
+
+func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager processor.WorkflowBackendManager, opts ...WorkflowEngineOption) *WorkflowEngine {
 	engine := &WorkflowEngine{
 		spec:            spec,
 		wfEngineReadyCh: make(chan struct{}),
+	}
+
+	wfopts := &workflowEngineOpts{}
+	for _, opt := range opts {
+		opt(wfopts)
 	}
 
 	var ok bool
@@ -75,6 +92,11 @@ func NewWorkflowEngine(appID string, spec config.WorkflowSpec, backendManager pr
 		if err != nil {
 			// Should never happen
 			wfLogger.Errorf("Failed to initialize actors backend for workflow: %v", err)
+		}
+
+		// verbose logging is only implemented in actors backend
+		if wfopts.enableVerboseLogging {
+			engine.Backend.(*actorsbe.ActorBackend).SetEnableVerboseLogging()
 		}
 	}
 

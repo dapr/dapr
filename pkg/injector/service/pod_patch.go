@@ -74,6 +74,7 @@ func (i *injector) getPodPatchOperations(ctx context.Context, ar *admissionv1.Ad
 	sidecar.ReadOnlyRootFilesystem = i.config.GetReadOnlyRootFilesystem()
 	sidecar.EnableK8sDownwardAPIs = i.config.GetEnableK8sDownwardAPIs()
 	sidecar.SidecarDropALLCapabilities = i.config.GetDropCapabilities()
+	sidecar.EnableWorkflowVerboseLogging = i.config.GetEnableWorkflowVerboseLogging()
 	sidecar.ControlPlaneNamespace = i.controlPlaneNamespace
 	sidecar.ControlPlaneTrustDomain = i.controlPlaneTrustDomain
 	sidecar.SentrySPIFFEID = i.sentrySPIFFEID.String()

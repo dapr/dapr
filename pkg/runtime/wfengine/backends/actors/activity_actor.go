@@ -48,6 +48,7 @@ type activityActor struct {
 	reminderInterval time.Duration
 	config           actorsBackendConfig
 	completed        atomic.Bool
+	verboseLogf      func(format string, args ...interface{})
 }
 
 // ActivityRequest represents a request by a worklow to invoke an activity.
@@ -66,6 +67,7 @@ type activityActorOpts struct {
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
+	verboseLogging   bool
 }
 
 // NewActivityActor creates an internal activity actor for executing workflow activity logic.
@@ -79,6 +81,10 @@ func NewActivityActor(scheduler activityScheduler, backendConfig actorsBackendCo
 			reminderInterval: 1 * time.Minute,
 			config:           backendConfig,
 			cachingDisabled:  opts.cachingDisabled,
+			verboseLogf:      wfLogger.Debugf,
+		}
+		if opts.verboseLogging {
+			a.verboseLogf = wfLogger.Infof
 		}
 
 		if opts.defaultTimeout > 0 {
@@ -200,7 +206,8 @@ func (a *activityActor) executeActivity(ctx context.Context, name string, eventP
 	//       introduce some kind of heartbeat protocol to help identify such cases.
 	callback := make(chan bool)
 	wi.Properties[CallbackChannelProperty] = callback
-	wfLogger.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
+	activityInfo := "activity [" + activityName + "]"
+	a.verboseLogf("Activity actor '%s': %s starting for workflow with instanceId '%s'", a.actorID, activityInfo, wi.InstanceID)
 	err = a.scheduler(ctx, wi)
 	if errors.Is(err, context.DeadlineExceeded) {
 		return runCompletedFalse, newRecoverableError(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
@@ -231,9 +238,9 @@ loop:
 			return runCompletedFalse, ctx.Err() // will be retried
 		case <-t.C:
 			if deadline, ok := ctx.Deadline(); ok {
-				wfLogger.Warnf("Activity actor '%s': '%s' is still running - will keep waiting until '%v'", a.actorID, name, deadline)
+				wfLogger.Warnf("Activity actor '%s': %s is still running - will keep waiting until '%v'", a.actorID, activityInfo, deadline)
 			} else {
-				wfLogger.Warnf("Activity actor '%s': '%s' is still running - will keep waiting indefinitely", a.actorID, name)
+				wfLogger.Warnf("Activity actor '%s': %s is still running - will keep waiting indefinitely", a.actorID, activityInfo)
 			}
 		case completed := <-callback:
 			if !t.Stop() {
@@ -250,7 +257,7 @@ loop:
 			}
 		}
 	}
-	wfLogger.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
+	a.verboseLogf("Activity actor '%s': %s completed for workflow with instanceId '%s'", a.actorID, activityInfo, wi.InstanceID)
 
 	// publish the result back to the workflow actor as a new event to be processed
 	resultData, err := backend.MarshalHistoryEvent(wi.Result)

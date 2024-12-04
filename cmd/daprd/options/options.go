@@ -82,6 +82,7 @@ type Options struct {
 	AppChannelAddress             string
 	Logger                        logger.Options
 	Metrics                       *metrics.FlagOptions
+	EnableWorkflowVerboseLogging  bool
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -163,6 +164,8 @@ func New(origArgs []string) (*Options, error) {
 	fs.IntVar(&opts.AppHealthProbeTimeout, "app-health-probe-timeout", int(config.AppHealthConfigDefaultProbeTimeout/time.Millisecond), "Timeout for app health probes in milliseconds")
 	fs.IntVar(&opts.AppHealthThreshold, "app-health-threshold", int(config.AppHealthConfigDefaultThreshold), "Number of consecutive failures for the app to be considered unhealthy")
 	fs.StringVar(&opts.AppChannelAddress, "app-channel-address", runtime.DefaultChannelAddress, "The network address the application listens on")
+	fs.BoolVar(&opts.EnableWorkflowVerboseLogging, "enable-wf-verbose-logging", false, "Enable verbose logging of workflows. This will significantly increase the log verbosity when running workflow activities which can result in memory or disk exhaustion if logs are being collected.")
+	fs.MarkDeprecated("enable-wf-verbose-logging", "This flag is temporary. Enabling this flag will significantly increase the log verbosity when running workflow activities which can result in memory or disk exhaustion if logs are being collected.")
 
 	// Add flags for actors, placement, and reminders
 	// --placement-host-address is a legacy (but not deprecated) flag that is translated to the actors-service flag
