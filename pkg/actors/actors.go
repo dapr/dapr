@@ -514,18 +514,20 @@ func (a *actors) handleIdleActor(target targets.Idlable) {
 }
 
 func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
+	const placementDisconnected = "placement: disconnected"
+
 	select {
 	case <-a.registerDoneCh:
 		if a.disabled.Load() != nil {
 			return &runtimev1pb.ActorRuntime{
 				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
-				Placement:     "placement: disconnected",
+				Placement:     placementDisconnected,
 			}
 		}
 	default:
 		if len(a.placementAddresses) == 0 {
 			return &runtimev1pb.ActorRuntime{
-				Placement:     "placement: disconnected",
+				Placement:     placementDisconnected,
 				RuntimeStatus: runtimev1pb.ActorRuntime_DISABLED,
 			}
 		} else {
@@ -538,7 +540,7 @@ func (a *actors) RuntimeStatus() *runtimev1pb.ActorRuntime {
 	hostReady := true
 	statusMessage := "placement: connected"
 	if !a.placement.Ready() {
-		statusMessage = "placement: disconnected"
+		statusMessage = placementDisconnected
 		hostReady = false
 	}
 

@@ -71,9 +71,8 @@ type engine struct {
 
 	idlerQueue *queue.Processor[string, targets.Idlable]
 
-	lock    *fifo.Mutex
-	closeCh chan struct{}
-	clock   clock.Clock
+	lock  *fifo.Mutex
+	clock clock.Clock
 }
 
 func New(opts Options) Interface {
@@ -87,7 +86,6 @@ func New(opts Options) Interface {
 		idlerQueue:         opts.IdlerQueue,
 		reminders:          opts.Reminders,
 		lock:               fifo.New(),
-		closeCh:            make(chan struct{}),
 		clock:              clock.RealClock{},
 	}
 }

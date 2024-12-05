@@ -562,8 +562,8 @@ type WatchJobsRequestInitial struct {
 	Namespace string `protobuf:"bytes,2,opt,name=namespace,proto3" json:"namespace,omitempty"`
 	// actor_types is the optional list of actor types to watch for.
 	ActorTypes []string `protobuf:"bytes,3,rep,name=actor_types,json=actorTypes,proto3" json:"actor_types,omitempty"`
-	// accept_job_types is the list of job types which the client is willing can
-	// accept.
+	// accept_job_types is the list of job types which the client will watch for
+	// and accept upon triggering accept.
 	AcceptJobTypes []JobTargetType `protobuf:"varint,4,rep,packed,name=accept_job_types,json=acceptJobTypes,proto3,enum=dapr.proto.scheduler.v1.JobTargetType" json:"accept_job_types,omitempty"`
 }
 

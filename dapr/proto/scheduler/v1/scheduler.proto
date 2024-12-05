@@ -110,8 +110,8 @@ message WatchJobsRequestInitial {
   // actor_types is the optional list of actor types to watch for.
   repeated string actor_types = 3;
 
-  // accept_job_types is the list of job types which the client is willing can
-  // accept.
+  // accept_job_types is the list of job types which the client will watch for
+  // and accept upon triggering accept.
   repeated JobTargetType accept_job_types = 4;
 }
 
