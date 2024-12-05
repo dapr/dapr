@@ -14,9 +14,7 @@ limitations under the License.
 package workflow
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -24,8 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
-	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/pkg/actors"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
@@ -37,6 +34,8 @@ import (
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
 )
 
 const activityStateKey = "activityState"
@@ -63,21 +62,12 @@ type activity struct {
 	lock   *internal.Lock
 
 	scheduler          todo.ActivityScheduler
-	state              *activityState
+	state              *backend.HistoryEvent
 	cachingDisabled    bool
 	defaultTimeout     time.Duration
 	reminderInterval   time.Duration
 	completed          atomic.Bool
 	schedulerReminders bool
-}
-
-// ActivityRequest represents a request by a worklow to invoke an activity.
-type ActivityRequest struct {
-	HistoryEvent []byte
-}
-
-type activityState struct {
-	EventPayload []byte
 }
 
 type ActivityOptions struct {
@@ -142,8 +132,8 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 
 	msg := imReq.Message()
 
-	var ar ActivityRequest
-	if err = gob.NewDecoder(bytes.NewReader(msg.GetData().GetValue())).Decode(&ar); err != nil {
+	var his backend.HistoryEvent
+	if err = proto.Unmarshal(msg.GetData().GetValue(), &his); err != nil {
 		return nil, fmt.Errorf("failed to decode activity request: %w", err)
 	}
 
@@ -157,9 +147,7 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 	}
 
 	// Save the request details to the state store in case we need it after recovering from a failure.
-	if err = a.saveActivityState(ctx, &activityState{
-		EventPayload: ar.HistoryEvent,
-	}); err != nil {
+	if err = a.saveActivityState(ctx, &his); err != nil {
 		return nil, err
 	}
 
@@ -186,7 +174,7 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
 	defer cancelTimeout()
 
-	completed, err := a.executeActivity(timeoutCtx, reminder.Name, state.EventPayload)
+	completed, err := a.executeActivity(timeoutCtx, reminder.Name, state)
 	if completed == runCompletedTrue {
 		a.completed.Store(true)
 	}
@@ -216,11 +204,7 @@ func (a *activity) Completed() bool {
 	return a.completed.Load()
 }
 
-func (a *activity) executeActivity(ctx context.Context, name string, eventPayload []byte) (runCompleted, error) {
-	taskEvent, err := backend.UnmarshalHistoryEvent(eventPayload)
-	if err != nil {
-		return runCompletedTrue, err
-	}
+func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *backend.HistoryEvent) (runCompleted, error) {
 	activityName := ""
 	if ts := taskEvent.GetTaskScheduled(); ts != nil {
 		activityName = ts.GetName()
@@ -238,7 +222,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, eventPayloa
 		SequenceNumber: int64(taskEvent.GetEventId()),
 		InstanceID:     api.InstanceID(workflowID),
 		NewEvent:       taskEvent,
-		Properties:     make(map[string]interface{}),
+		Properties:     make(map[string]any),
 	}
 
 	// Executing activity code is a one-way operation. We must wait for the app code to report its completion, which
@@ -249,7 +233,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, eventPayloa
 	callback := make(chan bool)
 	wi.Properties[todo.CallbackChannelProperty] = callback
 	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
-	err = a.scheduler(ctx, wi)
+	err := a.scheduler(ctx, wi)
 	if errors.Is(err, context.DeadlineExceeded) {
 		return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
 	} else if err != nil {
@@ -303,7 +287,7 @@ loop:
 	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
 
 	// publish the result back to the workflow actor as a new event to be processed
-	resultData, err := backend.MarshalHistoryEvent(wi.Result)
+	resultData, err := proto.Marshal(wi.Result)
 	if err != nil {
 		// Returning non-recoverable error
 		executionStatus = diag.StatusFailed
@@ -314,7 +298,7 @@ loop:
 		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
 		WithActor(a.workflowActorType, workflowID).
 		WithData(resultData).
-		WithContentType(invokev1.OctetStreamContentType)
+		WithContentType(invokev1.ProtobufContentType)
 
 	engine, err := a.actors.Engine(ctx)
 	if err != nil {
@@ -349,7 +333,7 @@ func (a *activity) DeactivateActor(ctx context.Context) error {
 	return nil
 }
 
-func (a *activity) loadActivityState(ctx context.Context) (*activityState, error) {
+func (a *activity) loadActivityState(ctx context.Context) (*backend.HistoryEvent, error) {
 	// See if the state for this actor is already cached in memory.
 	if a.state != nil {
 		return a.state, nil
@@ -369,23 +353,28 @@ func (a *activity) loadActivityState(ctx context.Context) (*activityState, error
 	}
 	res, err := astate.Get(ctx, &req)
 	if err != nil {
-		return &activityState{}, fmt.Errorf("failed to load activity state: %w", err)
+		return nil, fmt.Errorf("failed to load activity state: %w", err)
 	}
 
 	if len(res.Data) == 0 {
 		// no data was found - this is expected on the initial invocation of the activity actor.
-		return &activityState{}, nil
+		return nil, nil
 	}
 
-	state := &activityState{}
-	err = json.Unmarshal(res.Data, state)
-	if err != nil {
-		return &activityState{}, fmt.Errorf("failed to unmarshal activity state: %w", err)
+	var state backend.HistoryEvent
+	if err = proto.Unmarshal(res.Data, &state); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal activity state: %w", err)
 	}
-	return state, nil
+
+	return &state, nil
 }
 
-func (a *activity) saveActivityState(ctx context.Context, state *activityState) error {
+func (a *activity) saveActivityState(ctx context.Context, state *backend.HistoryEvent) error {
+	data, err := proto.Marshal(state)
+	if err != nil {
+		return err
+	}
+
 	req := actorapi.TransactionalRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
@@ -393,7 +382,7 @@ func (a *activity) saveActivityState(ctx context.Context, state *activityState) 
 			Operation: actorapi.Upsert,
 			Request: actorapi.TransactionalUpsert{
 				Key:   activityStateKey,
-				Value: state,
+				Value: data,
 			},
 		}},
 	}

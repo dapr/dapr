@@ -256,7 +256,7 @@ func (a *app) Deactivate(ctx context.Context) error {
 	req := invokev1.NewInvokeMethodRequest("actors/"+a.actorType+"/"+a.actorID).
 		WithActor(a.actorType, a.actorID).
 		WithHTTPExtension(http.MethodDelete, "").
-		WithContentType(invokev1.JSONContentType)
+		WithContentType(invokev1.ProtobufContentType)
 	defer req.Close()
 
 	resp, err := a.appChannel.InvokeMethod(ctx, req, "")
