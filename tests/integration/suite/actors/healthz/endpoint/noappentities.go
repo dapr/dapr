@@ -63,8 +63,11 @@ func (n *noappentities) Setup(t *testing.T) []framework.Option {
 				close(n.healthzCalled)
 			})
 		}),
+		prochttp.WithHandlerFunc("/actors/myactortype/myactorid", func(w http.ResponseWriter, r *http.Request) {}),
 		prochttp.WithHandlerFunc(pathMethodFoo, func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`OK`))
+		}),
+		prochttp.WithHandlerFunc("/actors/myactortype/myactorid", func(w http.ResponseWriter, r *http.Request) {
 		}),
 	)
 
@@ -109,17 +112,17 @@ func (n *noappentities) Run(t *testing.T, ctx context.Context) {
 		cl           rtv1.DaprClient
 		activeActors []*rtv1.ActiveActorsCount
 	}{
-		{cl: n.daprd.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{{Type: "myactortype"}}},
-		{cl: n.daprdNoHealthz.GRPCClient(t, ctx), activeActors: nil},
+		{cl: n.daprd.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{
+			{Type: "myactortype"},
+		}},
+		{cl: n.daprdNoHealthz.GRPCClient(t, ctx), activeActors: []*rtv1.ActiveActorsCount{}},
 	} {
-		assert.EventuallyWithT(t, func(c *assert.CollectT) {
-			meta, err := tv.cl.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
-			assert.NoError(c, err)
-			assert.True(c, meta.GetActorRuntime().GetHostReady())
-			assert.Equal(c, tv.activeActors, meta.GetActorRuntime().GetActiveActors())
-			assert.Equal(c, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
-			assert.Equal(c, "placement: connected", meta.GetActorRuntime().GetPlacement())
-		}, time.Second*30, time.Millisecond*10)
+		meta, err := tv.cl.GetMetadata(ctx, new(rtv1.GetMetadataRequest))
+		require.NoError(t, err)
+		assert.True(t, meta.GetActorRuntime().GetHostReady())
+		assert.ElementsMatch(t, tv.activeActors, meta.GetActorRuntime().GetActiveActors())
+		assert.Equal(t, rtv1.ActorRuntime_RUNNING, meta.GetActorRuntime().GetRuntimeStatus())
+		assert.Equal(t, "placement: connected", meta.GetActorRuntime().GetPlacement())
 	}
 
 	select {

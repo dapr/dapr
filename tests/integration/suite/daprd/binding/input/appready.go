@@ -139,12 +139,12 @@ func (a *appready) Run(t *testing.T, ctx context.Context) {
 
 	// Should stop calling binding when app becomes unhealthy
 	a.appHealthy.Store(false)
-	assert.Eventually(t, func() bool {
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := httpClient.Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
-		return resp.StatusCode == http.StatusInternalServerError
-	}, time.Second*5, 10*time.Millisecond)
+		assert.Equal(c, http.StatusInternalServerError, resp.StatusCode)
+	}, time.Second*10, 10*time.Millisecond)
 	called = a.bindingCalled.Load()
 	time.Sleep(time.Second * 2)
 	assert.Equal(t, called, a.bindingCalled.Load())

@@ -70,6 +70,9 @@ spec:
 			w.WriteHeader(http.StatusOK)
 		})
 
+		handler.HandleFunc("/actors/myactortype/foo", func(http.ResponseWriter, *http.Request) {
+		})
+
 		for i := range 100 {
 			handler.HandleFunc("/actors/myactortype/foo/method/remind/"+strconv.Itoa(i), func(http.ResponseWriter, *http.Request) {
 				called.Add(1)

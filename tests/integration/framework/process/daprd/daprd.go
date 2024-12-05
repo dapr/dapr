@@ -126,10 +126,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	for _, dir := range opts.resourceDirs {
 		args = append(args, "--resources-path="+dir)
 	}
-	if len(opts.configs) > 0 {
-		for _, c := range opts.configs {
-			args = append(args, "--config="+c)
-		}
+	for _, c := range opts.configs {
+		args = append(args, "--config="+c)
 	}
 	if len(opts.placementAddresses) > 0 {
 		args = append(args, "--placement-host-address="+strings.Join(opts.placementAddresses, ","))
@@ -201,17 +199,18 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	client := client.HTTP(t)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.Do(req)
-		if err != nil {
-			return false
+		if assert.NoError(c, err) {
+			defer resp.Body.Close()
+			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
 		}
-		defer resp.Body.Close()
-		return http.StatusNoContent == resp.StatusCode
-	}, 30*time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {

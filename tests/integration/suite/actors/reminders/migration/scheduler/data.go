@@ -52,6 +52,8 @@ func (d *data) Setup(t *testing.T) []framework.Option {
 	d.db = sqlite.New(t, sqlite.WithActorStateStore(true))
 	d.app = app.New(t,
 		app.WithConfig(`{"entities": ["myactortype"]}`),
+		app.WithHandlerFunc("/actors/myactortype/myactorid", func(_ http.ResponseWriter, r *http.Request) {
+		}),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/myreminder", func(_ http.ResponseWriter, r *http.Request) {
 			b, err := io.ReadAll(r.Body)
 			assert.NoError(t, err)

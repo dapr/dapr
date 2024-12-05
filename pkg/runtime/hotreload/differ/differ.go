@@ -22,10 +22,7 @@ import (
 	subapi "github.com/dapr/dapr/pkg/apis/subscriptions/v2alpha1"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/runtime/meta"
-	"github.com/dapr/dapr/pkg/runtime/processor/wfbackend"
 )
-
-var wfengineComp = wfbackend.ComponentDefinition()
 
 // Resource is a generic type constraint.
 type Resource interface {
@@ -63,11 +60,6 @@ func Diff[T Resource](resources *LocalRemoteResources[T]) *Result[T] {
 			// Ignore the built-in Kubernetes secret store and workflow engine.
 			if comp.Name == secretstores.BuiltinKubernetesSecretStore &&
 				comp.Spec.Type == "secretstores.kubernetes" {
-				return true
-			}
-
-			if comp.Name == wfengineComp.Name &&
-				comp.Spec.Type == wfengineComp.Spec.Type {
 				return true
 			}
 		}

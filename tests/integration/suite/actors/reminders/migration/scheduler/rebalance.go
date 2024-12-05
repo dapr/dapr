@@ -17,6 +17,7 @@ import (
 	"context"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -93,8 +94,11 @@ func (r *rebalance) Run(t *testing.T, ctx context.Context) {
 		assert.Len(t, r.actor1.DB().ActorReminders(t, ctx, "myactortype").Reminders, 200)
 		assert.Len(t, r.actor2.DB().ActorReminders(t, ctx, "myactortype").Reminders, 200)
 		assert.Len(t, daprd.DB().ActorReminders(t, ctx, "myactortype").Reminders, 200)
-		assert.NotEmpty(t, r.actor1.Scheduler().EtcdJobs(t, ctx))
-		assert.NotEmpty(t, daprd.Scheduler().EtcdJobs(t, ctx))
+
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
+			assert.NotEmpty(c, r.actor1.Scheduler().EtcdJobs(t, ctx))
+			assert.NotEmpty(c, daprd.Scheduler().EtcdJobs(t, ctx))
+		}, time.Second*5, time.Millisecond*10)
 		daprd.Cleanup(t)
 	})
 }

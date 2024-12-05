@@ -62,6 +62,7 @@ func (d *defaultS) Setup(t *testing.T) []framework.Option {
 		daprd.WithResourceFiles(d.db.GetComponent(t)),
 		daprd.WithPlacementAddresses("127.0.0.1:"+strconv.Itoa(d.place.Port())),
 		daprd.WithAppPort(d.srv.Port()),
+		daprd.WithAppHealthCheck(true),
 	)
 
 	return []framework.Option{

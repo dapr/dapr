@@ -77,6 +77,8 @@ spec:
 	)
 
 	app := app.New(t,
+		app.WithHandlerFunc("/actors/myactortype/myactorid", func(http.ResponseWriter, *http.Request) {
+		}),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/remindermethod", func(http.ResponseWriter, *http.Request) {
 			r.triggered.Add(1)
 		}),
