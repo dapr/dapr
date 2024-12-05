@@ -145,8 +145,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		id := api.InstanceID(b.startWorkflow(ctx, t, "SingleActivity", "Dapr"))
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
-		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 
 	t.Run("terminate", func(t *testing.T) {
@@ -195,7 +195,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				meta, err := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
 				require.NoError(t, err)
 				// All orchestrations should be running
-				assert.Equal(c, api.RUNTIME_STATUS_RUNNING.String(), meta.RuntimeStatus.String())
+				assert.Equal(c, api.RUNTIME_STATUS_RUNNING.String(), meta.GetRuntimeStatus().String())
 			}
 		}, 10*time.Second, 10*time.Millisecond)
 
@@ -205,7 +205,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		// Wait for the root orchestration to complete and verify its terminated status
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
-		require.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.RuntimeStatus)
+		require.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.GetRuntimeStatus())
 
 		// Wait for all N2 suborchestrations to complete
 		orchIDs := []string{}
@@ -244,7 +244,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
-		require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+		require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.GetRuntimeStatus())
 
 		// Purge the root orchestration
 		b.purgeWorkflow(t, ctx, string(id))
@@ -286,8 +286,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		id := api.InstanceID(b.startWorkflow(ctx, t, "root", "Dapr"))
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
-		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 }
 

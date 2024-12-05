@@ -14,18 +14,18 @@ limitations under the License.
 package state
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
 	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
 
-	"github.com/dapr/durabletask-go/backend"
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/state"
+	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/logger"
 )
 
@@ -51,7 +51,7 @@ type State struct {
 
 	Inbox        []*backend.HistoryEvent
 	History      []*backend.HistoryEvent
-	CustomStatus string
+	CustomStatus *wrapperspb.StringValue
 	Generation   uint64
 
 	// change tracking
@@ -61,14 +61,7 @@ type State struct {
 	historyRemovedCount int
 }
 
-type serializableWorkflowState struct {
-	Inbox        [][]byte
-	History      [][]byte
-	CustomStatus string
-	Generation   uint64
-}
-
-type WorkflowStateMetadata struct {
+type workflowStateMetadata struct {
 	InboxLength   int
 	HistoryLength int
 	Generation    uint64
@@ -90,7 +83,7 @@ func (s *State) Reset() {
 	s.historyAddedCount = 0
 	s.historyRemovedCount += len(s.History)
 	s.History = nil
-	s.CustomStatus = ""
+	s.CustomStatus = nil
 	s.Generation++
 }
 
@@ -113,7 +106,7 @@ func (s *State) ApplyRuntimeStateChanges(runtimeState *backend.OrchestrationRunt
 	s.History = append(s.History, newHistoryEvents...)
 	s.historyAddedCount += len(newHistoryEvents)
 
-	s.CustomStatus = runtimeState.CustomStatus.GetValue()
+	s.CustomStatus = runtimeState.CustomStatus
 }
 
 func (s *State) AddToInbox(e *backend.HistoryEvent) {
@@ -161,7 +154,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 
 	// Every time we save, we also update the metadata with information about the size of the history and inbox,
 	// as well as the generation of the workflow.
-	metadata := WorkflowStateMetadata{
+	metadata := workflowStateMetadata{
 		InboxLength:   len(s.Inbox),
 		HistoryLength: len(s.History),
 		Generation:    s.Generation,
@@ -196,7 +189,7 @@ func (s *State) String() string {
 			history[i] = "[" + v.String() + "]"
 		}
 	}
-	return fmt.Sprintf("Inbox:%s\nHistory:%s\nCustomStatus:%s\nGeneration:%d\ninboxAddedCount:%d\ninboxRemovedCount:%d\nhistoryAddedCount:%d\nhistoryRemovedCount:%d\nconfig:%s",
+	return fmt.Sprintf("Inbox:%s\nHistory:%s\nCustomStatus:%v\nGeneration:%d\ninboxAddedCount:%d\ninboxRemovedCount:%d\nhistoryAddedCount:%d\nhistoryRemovedCount:%d\nconfig:%s",
 		strings.Join(inbox, ", "), strings.Join(history, ", "),
 		s.CustomStatus, s.Generation,
 		s.inboxAddedCount, s.inboxRemovedCount,
@@ -208,66 +201,27 @@ func (s *State) String() string {
 // EncodeWorkflowState encodes the workflow state into a byte array.
 // It only encodes the inbox, history, and custom status.
 func (s *State) EncodeWorkflowState() ([]byte, error) {
-	// Encode history events
-	encodedHistory := make([][]byte, len(s.History))
-	for i, event := range s.History {
-		encodedEvent, err := backend.MarshalHistoryEvent(event)
-		if err != nil {
-			return nil, err
-		}
-		encodedHistory[i] = encodedEvent
-	}
-	encodedInbox := make([][]byte, len(s.Inbox))
-	for i, event := range s.Inbox {
-		encodedEvent, err := backend.MarshalHistoryEvent(event)
-		if err != nil {
-			return nil, err
-		}
-		encodedInbox[i] = encodedEvent
-	}
-
-	// Encode workflowState
-	var resBuffer bytes.Buffer
-	if err := gob.NewEncoder(&resBuffer).Encode(&serializableWorkflowState{
-		Inbox:        encodedInbox,
-		History:      encodedHistory,
+	return proto.Marshal(&backend.WorkflowState{
+		Inbox:        s.Inbox,
+		History:      s.History,
 		CustomStatus: s.CustomStatus,
 		Generation:   s.Generation,
-	}); err != nil {
-		return nil, err
-	}
-	return resBuffer.Bytes(), nil
+	})
 }
 
 // DecodeWorkflowState decodes the workflow state from a byte array encoded using `EncodeWorkflowState`.
 // It only decodes the inbox, history, and custom status.
 func (s *State) DecodeWorkflowState(encodedState []byte) error {
-	// Decode workflowState
-	var decodedState serializableWorkflowState
-
-	if err := gob.NewDecoder(bytes.NewReader(encodedState)).Decode(&decodedState); err != nil {
+	var decodedState backend.WorkflowState
+	if err := proto.Unmarshal(encodedState, &decodedState); err != nil {
 		return err
 	}
 
-	// Decode history events
-	s.History = make([]*backend.HistoryEvent, len(decodedState.History))
-	for i, encodedEvent := range decodedState.History {
-		event, err := backend.UnmarshalHistoryEvent(encodedEvent)
-		if err != nil {
-			return err
-		}
-		s.History[i] = event
-	}
-	s.Inbox = make([]*backend.HistoryEvent, len(decodedState.Inbox))
-	for i, encodedEvent := range decodedState.Inbox {
-		event, err := backend.UnmarshalHistoryEvent(encodedEvent)
-		if err != nil {
-			return err
-		}
-		s.Inbox[i] = event
-	}
-	s.CustomStatus = decodedState.CustomStatus
-	s.Generation = decodedState.Generation
+	s.Inbox = decodedState.GetInbox()
+	s.History = decodedState.GetHistory()
+	s.CustomStatus = decodedState.CustomStatus //nolint:protogetter
+	s.Generation = decodedState.GetGeneration()
+
 	return nil
 }
 
@@ -276,8 +230,7 @@ func addStateOperations(req *api.TransactionalRequest, keyPrefix string, events 
 	//       providers have limits and we need to know if that impacts this algorithm:
 	//       https://learn.microsoft.com/azure/cosmos-db/nosql/transactional-batch#limitations
 	for i := len(events) - addedCount; i < len(events); i++ {
-		e := events[i]
-		data, err := backend.MarshalHistoryEvent(e)
+		data, err := proto.Marshal(events[i])
 		if err != nil {
 			return err
 		}
@@ -327,7 +280,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		// no state found
 		return nil, nil
 	}
-	var metadata WorkflowStateMetadata
+	var metadata workflowStateMetadata
 	if err = json.Unmarshal(res.Data, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 	}
@@ -371,8 +324,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		if bulkRes[key] == nil {
 			return nil, fmt.Errorf("failed to load inbox state key '%s': not found", key)
 		}
-		wState.Inbox[i], err = backend.UnmarshalHistoryEvent(bulkRes[key])
-		if err != nil {
+		if err = proto.Unmarshal(bulkRes[key], wState.Inbox[i]); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
 		}
 	}
@@ -381,8 +333,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		if bulkRes[key] == nil {
 			return nil, fmt.Errorf("failed to load history state key '%s': not found", key)
 		}
-		wState.History[i], err = backend.UnmarshalHistoryEvent(bulkRes[key])
-		if err != nil {
+		if err = proto.Unmarshal(bulkRes[key], wState.History[i]); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)
 		}
 	}
