@@ -115,6 +115,7 @@ type SidecarConfig struct {
 	ComponentContainer                  string  `annotation:"dapr.io/component-container"`
 	InjectPluggableComponents           bool    `annotation:"dapr.io/inject-pluggable-components"`
 	AppChannelAddress                   string  `annotation:"dapr.io/app-channel-address"`
+	EnableWorkflowVerboseLogging        bool    `annotation:"dapr.io/enable-workflow-verbose-logging" default:"false"`
 
 	pod *corev1.Pod
 }

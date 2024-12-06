@@ -58,6 +58,7 @@ type workflowActor struct {
 	config                actorsBackendConfig
 	activityResultAwaited atomic.Bool
 	completed             atomic.Bool
+	verboseLogf           func(format string, args ...interface{})
 }
 
 type durableTimer struct {
@@ -93,6 +94,7 @@ type workflowActorOpts struct {
 	cachingDisabled  bool
 	defaultTimeout   time.Duration
 	reminderInterval time.Duration
+	verboseLogging   bool
 }
 
 func NewWorkflowActor(scheduler workflowScheduler, config actorsBackendConfig, opts *workflowActorOpts) actors.InternalActorFactory {
@@ -105,6 +107,7 @@ func NewWorkflowActor(scheduler workflowScheduler, config actorsBackendConfig, o
 			reminderInterval: 1 * time.Minute,
 			config:           config,
 			cachingDisabled:  opts.cachingDisabled,
+			verboseLogf:      wfLogger.Debugf,
 		}
 
 		if opts.defaultTimeout > 0 {
@@ -112,6 +115,9 @@ func NewWorkflowActor(scheduler workflowScheduler, config actorsBackendConfig, o
 		}
 		if opts.reminderInterval > 0 {
 			wf.reminderInterval = opts.reminderInterval
+		}
+		if opts.verboseLogging {
+			wf.verboseLogf = wfLogger.Infof
 		}
 
 		return wf
@@ -223,9 +229,9 @@ func (wf *workflowActor) createWorkflowInstance(ctx context.Context, request []b
 		return errors.New("invalid execution start event")
 	} else {
 		if es.GetParentInstance() == nil {
-			wfLogger.Debugf("Workflow actor '%s': creating workflow '%s' with instanceId '%s'", wf.actorID, es.GetName(), es.GetOrchestrationInstance().GetInstanceId())
+			wf.verboseLogf("Workflow actor '%s': creating workflow [%s] with instanceId '%s'", wf.actorID, es.GetName(), es.GetOrchestrationInstance().GetInstanceId())
 		} else {
-			wfLogger.Debugf("Workflow actor '%s': creating child workflow '%s' with instanceId '%s' parentWorkflow '%s' parentWorkflowId '%s'", es.GetName(), es.GetOrchestrationInstance().GetInstanceId(), es.GetParentInstance().GetName(), es.GetParentInstance().GetOrchestrationInstance().GetInstanceId())
+			wf.verboseLogf("Workflow actor '%s': creating child workflow [%s] with instanceId '%s' parentWorkflow '%s' parentWorkflowId '%s'", es.GetName(), es.GetOrchestrationInstance().GetInstanceId(), es.GetParentInstance().GetName(), es.GetParentInstance().GetOrchestrationInstance().GetInstanceId())
 		}
 	}
 
@@ -400,7 +406,13 @@ func (wf *workflowActor) addWorkflowEvent(ctx context.Context, historyEventBytes
 	if err != nil {
 		return err
 	}
-	wfLogger.Debugf("Workflow actor '%s': adding event '%v' to the workflow inbox", wf.actorID, e)
+	if er := e.GetEventRaised(); er != nil {
+		// log raised external events
+		wf.verboseLogf("Workflow actor '%s': adding eventRaised [%s] with input [%s] to the workflow inbox", wf.actorID, er.GetName(), er.GetInput())
+	} else {
+		wfLogger.Debugf("Workflow actor '%s': adding event '%v' to the workflow inbox", wf.actorID, e)
+	}
+
 	state.AddToInbox(e)
 
 	if _, err := wf.createReliableReminder(ctx, "new-event", nil, 0); err != nil {
@@ -559,7 +571,7 @@ func (wf *workflowActor) runWorkflow(ctx context.Context, reminder actors.Intern
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
 	// will use this updated generation value for their duplication execution handling.
 	if runtimeState.ContinuedAsNew() {
-		wfLogger.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", wf.actorID, wi.InstanceID)
+		wf.verboseLogf("Workflow actor '%s': workflow with instanceId '%s' continued as new", wf.actorID, wi.InstanceID)
 		state.Generation += 1
 	}
 

@@ -457,3 +457,8 @@ func (abe *ActorBackend) SetActorReminderInterval(interval time.Duration) {
 	abe.workflowActorOpts.reminderInterval = interval
 	abe.activityActorOpts.reminderInterval = interval
 }
+
+func (abe *ActorBackend) SetEnableVerboseLogging() {
+	abe.workflowActorOpts.verboseLogging = true
+	abe.activityActorOpts.verboseLogging = true
+}
