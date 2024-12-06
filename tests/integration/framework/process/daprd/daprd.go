@@ -329,7 +329,7 @@ func (d *Daprd) ProfilePort() int {
 }
 
 // Metrics Returns a subset of metrics scraped from the metrics endpoint
-func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
+func (d *Daprd) Metrics(t *testing.T, ctx context.Context, desiredNameAndLabelPairs ...string) map[string]float64 {
 	t.Helper()
 
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()), nil)
@@ -349,10 +349,43 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	for _, mf := range metricFamilies {
 		for _, m := range mf.GetMetric() {
 			metricName := mf.GetName()
-			labels := ""
-			for _, l := range m.GetLabel() {
-				labels += "|" + l.GetName() + ":" + l.GetValue()
+			if len(desiredNameAndLabelPairs) > 0 && desiredNameAndLabelPairs[0] != metricName {
+				continue
 			}
+
+			// Only add labels that match the desired labels
+			desiredLabelPairs := desiredNameAndLabelPairs[1:]
+			labels := ""
+			if len(desiredLabelPairs) > 0 {
+				hasUndesiredLabelPair := false
+				for _, l := range m.GetLabel() {
+					for _, desired := range desiredLabelPairs {
+
+						// LabelPair is a key:value in itself, check key
+						if !strings.Contains(desired, l.GetName()+":") {
+							continue
+						}
+
+						// Now check key:value in entirety, prevent adding if found undesired value
+						labelPair := l.GetName() + ":" + l.GetValue()
+						if labelPair == desired {
+							labels += "|" + labelPair
+						} else {
+							hasUndesiredLabelPair = true
+						}
+					}
+				}
+
+				if hasUndesiredLabelPair {
+					continue
+				}
+			} else {
+				// If no desired labels specified, include all labels
+				for _, l := range m.GetLabel() {
+					labels += "|" + l.GetName() + ":" + l.GetValue()
+				}
+			}
+
 			if counter := m.GetCounter(); counter != nil {
 				metrics[metricName+labels] = counter.GetValue()
 				continue
@@ -375,6 +408,16 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	}
 
 	return metrics
+}
+
+func (d *Daprd) FoundMetric(t *testing.T, ctx context.Context, desiredValue int, desiredNameAndLabelPairs ...string) bool {
+	metrics := d.Metrics(t, ctx, desiredNameAndLabelPairs...)
+	if len(metrics) == 1 {
+		for _, v := range metrics {
+			return v == float64(desiredValue)
+		}
+	}
+	return false
 }
 
 func (d *Daprd) MetricResidentMemoryMi(t *testing.T, ctx context.Context) float64 {
