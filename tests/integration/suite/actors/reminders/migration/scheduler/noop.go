@@ -63,9 +63,6 @@ func (n *noop) Run(t *testing.T, ctx context.Context) {
 		daprd.WithPlacementAddresses(n.place.Address()),
 		daprd.WithSchedulerAddresses(n.scheduler.Address()),
 		daprd.WithAppPort(n.app.Port()),
-	}
-
-	daprd1 := daprd.New(t, append(opts,
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -75,7 +72,10 @@ spec:
   features:
   - name: SchedulerReminders
     enabled: false
-`))...)
+`),
+	}
+
+	daprd1 := daprd.New(t, opts...)
 	daprd2 := daprd.New(t, opts...)
 
 	daprd1.Run(t, ctx)

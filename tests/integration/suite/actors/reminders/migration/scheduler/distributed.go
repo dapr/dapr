@@ -63,14 +63,14 @@ func (d *distributed) Setup(t *testing.T) []framework.Option {
 }
 
 func (d *distributed) Run(t *testing.T, ctx context.Context) {
-	schedConfig := `apiVersion: dapr.io/v1alpha1
+	schedOffConfig := `apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
   name: schedulerreminders
 spec:
   features:
   - name: SchedulerReminders
-    enabled: true
+    enabled: false
 `
 
 	optsApp1 := []daprd.Option{
@@ -78,20 +78,19 @@ spec:
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithSchedulerAddresses(d.scheduler.Address()),
 		daprd.WithAppPort(d.app1.Port()),
+		daprd.WithConfigManifests(t, schedOffConfig),
 	}
 	optsApp2 := []daprd.Option{
 		daprd.WithResourceFiles(d.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithSchedulerAddresses(d.scheduler.Address()),
 		daprd.WithAppPort(d.app2.Port()),
-		daprd.WithConfigManifests(t, schedConfig),
 	}
 	optsApp1WithScheduler := []daprd.Option{
 		daprd.WithResourceFiles(d.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithSchedulerAddresses(d.scheduler.Address()),
 		daprd.WithAppPort(d.app1.Port()),
-		daprd.WithConfigManifests(t, schedConfig),
 	}
 
 	daprd1 := daprd.New(t, optsApp1...)
