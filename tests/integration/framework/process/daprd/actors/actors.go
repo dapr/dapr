@@ -95,6 +95,7 @@ func New(t *testing.T, fopts ...Option) *Actors {
 		daprd.WithResourceFiles(opts.db.GetComponent(t)),
 		daprd.WithConfigManifests(t, opts.daprdConfigs...),
 		daprd.WithScheduler(opts.scheduler),
+		daprd.WithResourceFiles(opts.resources...),
 	}
 
 	return &Actors{

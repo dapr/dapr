@@ -38,6 +38,7 @@ type options struct {
 	reentryMaxDepth   *uint32
 	actorIdleTimeout  *time.Duration
 	entityConfig      []entityConfig
+	resources         []string
 }
 
 func WithDB(db *sqlite.SQLite) Option {
@@ -131,5 +132,11 @@ func WithEntityConfig(opts ...EntityConfig) Option {
 			opt(&e)
 		}
 		o.entityConfig = append(o.entityConfig, e)
+	}
+}
+
+func WithResources(resources ...string) Option {
+	return func(o *options) {
+		o.resources = append(o.resources, resources...)
 	}
 }

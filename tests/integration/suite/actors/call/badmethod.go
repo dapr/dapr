@@ -39,9 +39,7 @@ type badmethod struct {
 func (b *badmethod) Setup(t *testing.T) []framework.Option {
 	b.actors = actors.New(t,
 		actors.WithActorTypes("abc"),
-		actors.WithHandler("/actors/abc/ii", func(w nethttp.ResponseWriter, r *nethttp.Request) {
-			fmt.Printf(">>HERE\n")
-		}),
+		actors.WithHandler("/actors/abc/ii", func(w nethttp.ResponseWriter, r *nethttp.Request) {}),
 	)
 
 	return []framework.Option{

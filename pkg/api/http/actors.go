@@ -384,6 +384,12 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 		return engine.Call(ctx, req)
 	})
 	if err != nil {
+		if merr, ok := err.(messages.APIError); ok {
+			respondWithError(w, merr)
+			log.Debug(merr)
+			return
+		}
+
 		actorErr, isActorError := actorerrors.As(err)
 		if !isActorError {
 			msg := messages.ErrActorInvoke.WithFormat(err)
