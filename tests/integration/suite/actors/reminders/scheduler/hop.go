@@ -119,7 +119,7 @@ func (h *hop) Run(t *testing.T, ctx context.Context) {
 			DueTime:   "0s",
 			Data:      []byte("reminderdata"),
 		})
-		require.NoError(t, err)
+		require.NoError(t, err, "failed to register reminder iteration"+strconv.Itoa(i))
 	}
 
 	assert.Eventually(t, func() bool {
