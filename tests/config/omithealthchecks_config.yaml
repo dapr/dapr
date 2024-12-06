@@ -3,6 +3,15 @@ kind: Configuration
 metadata:
   name: omithealthchecksconfig
 spec:
+  logging:
+    apiLogging:
+      omitHealthChecks: true
+---
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: omithealthchecksconfig-statereminders
+spec:
   features:
   - name: SchedulerReminders
     enabled: false

@@ -104,7 +104,7 @@ func TestMain(m *testing.M) {
 			ImageName:           "e2e-actorfeatures",
 			Replicas:            1,
 			IngressEnabled:      true,
-			Config:              "omithealthchecksconfig",
+			Config:              "omithealthchecksconfig-statereminders",
 			DaprCPULimit:        "2.0",
 			DaprCPURequest:      "0.1",
 			AppCPULimit:         "2.0",
