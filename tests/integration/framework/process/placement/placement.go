@@ -255,6 +255,7 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 				select {
 				case placementUpdateCh <- tables:
 				case <-ctx.Done():
+					return
 				}
 			}
 		}
@@ -292,10 +293,26 @@ func (p *Placement) AssertRegisterHostFails(t *testing.T, ctx context.Context, a
 	err = stream.Send(msg)
 	require.NoError(t, err, "failed to send message")
 
+	// Set up a receive context with timeout
+	recvCtx, recvCancel := context.WithTimeout(ctx, 5*time.Second)
+	defer recvCancel()
+
+	doneCh := make(chan struct{})
+	var recvErr error
+	go func() {
+		_, recvErr = stream.Recv()
+		close(doneCh)
+	}()
+
+	select {
+	case <-doneCh:
+	case <-recvCtx.Done():
+		assert.Fail(t, "Timed out waiting for server response in AssertRegisterHostFails")
+	}
 	// Should fail here
-	_, err = stream.Recv()
-	require.Error(t, err)
-	require.Equalf(t, codes.FailedPrecondition, status.Code(err), "error was: %v", err)
+
+	require.Error(t, recvErr)
+	require.Equalf(t, codes.FailedPrecondition, status.Code(recvErr), "error was: %v", recvErr)
 }
 
 // CheckAPILevelInState Checks the API level reported in the state table matched.

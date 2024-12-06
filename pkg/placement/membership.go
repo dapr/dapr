@@ -154,6 +154,7 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 						log.Errorf("fail to apply command: %v", raftErr)
 					} else {
 						if op.cmdType == raft.MemberRemove {
+							log.Debugf("Removing disconnected member: %s", op.host.Name)
 							updateCount = p.handleDisconnectedMember(op, updateCount)
 						}
 
@@ -190,6 +191,7 @@ func (p *Service) handleDisconnectedMember(op hostMemberChange, updated bool) bo
 	// - remove namespace-specific data structures to prevent memory-leaks
 	// - prevent next dissemination, because there are no more hosts in the namespace
 	if p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace) == 0 {
+		log.Debugf("Removing last member (%s) in namespace: %s", op.host.Name, op.host.Namespace)
 		p.disseminateLocks.Delete(op.host.Namespace)
 		p.disseminateNextTime.Del(op.host.Namespace)
 		p.memberUpdateCount.Del(op.host.Namespace)
@@ -245,8 +247,8 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 	}
 
 	log.Infof(
-		"Start disseminating tables for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion())
+		"Start disseminating tables for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s, api level: %d",
+		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion(), req.tables.GetApiLevel())
 
 	if err := p.performTablesUpdate(ctx, req); err != nil {
 		return err
@@ -266,7 +268,7 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 // It first locks so no further dapr can be taken it. Once placement table is locked
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
-func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequest) error {
+func (p *Service) performTablesUpdate(parentCtx context.Context, req *tablesUpdateRequest) error {
 	// TODO: error from disseminationOperation needs to be handled properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
@@ -276,7 +278,7 @@ func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequ
 		req.SetAPILevel(p.minAPILevel, p.maxAPILevel)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(parentCtx, 15*time.Second)
 	defer cancel()
 
 	// Perform each update on all hosts in sequence
@@ -345,15 +347,39 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 			return nil
 		}
 
-		if err := target.stream.Send(o); err != nil {
-			remoteAddr := "n/a"
-			if p, ok := peer.FromContext(target.stream.Context()); ok {
-				remoteAddr = p.Addr.String()
+		sendCtx, sendCancelFn := context.WithTimeout(ctx, 5*time.Second)
+		defer sendCancelFn()
+
+		errCh := make(chan error)
+
+		go func() {
+			errCh <- target.stream.Send(o)
+		}()
+
+		select {
+		case <-sendCtx.Done():
+			// This code path is reached when the stream hangs or is slow to respond
+			// This can happen in some environments when the sidecar is not properly shutdown, or
+			// the sidecar is unresponsive, so the stream buffer fills up
+			// In this case, we should not wait for the stream to respond, but instead return an error
+			// and cancel the stream context
+			if target.cancelFn != nil {
+				target.cancelFn()
 			}
-			log.Errorf("Error updating runtime host %q on %q operation: %v", remoteAddr, operation, err)
-			return err
+
+			return fmt.Errorf("timeout sending to target %s", target.hostID)
+		case err := <-errCh:
+			if err != nil {
+				remoteAddr := "n/a"
+				if p, ok := peer.FromContext(target.stream.Context()); ok {
+					remoteAddr = p.Addr.String()
+				}
+				log.Errorf("Error updating runtime host %q on %q operation: %v", remoteAddr, operation, err)
+				return err
+			}
+
+			return nil
 		}
-		return nil
 	},
 		backoff,
 		func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
