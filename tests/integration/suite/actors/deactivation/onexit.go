@@ -16,6 +16,7 @@ package deactivation
 import (
 	"context"
 	"net/http"
+	"runtime"
 	"sync/atomic"
 	"testing"
 
@@ -40,6 +41,10 @@ type onexit struct {
 }
 
 func (o *onexit) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Skipping test on Windows as is not compatible")
+	}
+
 	o.calledABC.Store(0)
 	o.calledDEF.Store(false)
 	o.calledXYZ.Store(false)
