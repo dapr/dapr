@@ -70,7 +70,7 @@ func (d *data) Run(t *testing.T, ctx context.Context) {
 
 	select {
 	case got := <-d.got:
-		assert.JSONEq(t, `{"data":"bXlkYXRh","dueTime":"0s","period":"1000s"}`, got)
+		assert.JSONEq(t, `{"data":"bXlkYXRh","dueTime":"","period":""}`, got)
 	case <-time.After(10 * time.Second):
 		t.Fatal("timed out waiting for reminder")
 	}

@@ -15,6 +15,7 @@ package scheduler
 
 import (
 	"context"
+	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -119,7 +120,7 @@ func (h *hop) Run(t *testing.T, ctx context.Context) {
 			DueTime:   "0s",
 			Data:      []byte("reminderdata"),
 		})
-		require.NoError(t, err)
+		require.NoError(t, err, fmt.Sprintf("failed to register reminder iteration %d", i))
 	}
 
 	assert.Eventually(t, func() bool {
