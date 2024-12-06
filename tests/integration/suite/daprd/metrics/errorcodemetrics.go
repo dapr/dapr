@@ -15,8 +15,6 @@ package metrics
 
 import (
 	"context"
-	"os"
-	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -36,32 +34,14 @@ func init() {
 
 // errorcodemetrics tests daprd error code metrics for workflows
 type errorcodemetrics struct {
-	daprd  *daprd.Daprd
-	place  *placement.Placement
-	resDir string
+	daprd *daprd.Daprd
+	place *placement.Placement
 }
 
 func (e *errorcodemetrics) Setup(t *testing.T) []framework.Option {
 	e.place = placement.New(t)
 
 	app := app.New(t)
-
-	configFile := filepath.Join(t.TempDir(), "config.yaml")
-	require.NoError(t, os.WriteFile(configFile, []byte(`
-apiVersion: dapr.io/v1alpha1
-kind: Configuration
-metadata:
-  name: errorcodemetrics
-spec:
-  metric:
-    enabled: true
-    recordErrorCodes: true
-  metrics:
-    enabled: true
-    recordErrorCodes: true
-`), 0o600))
-
-	e.resDir = t.TempDir()
 
 	e.daprd = daprd.New(t,
 		daprd.WithAppPort(app.Port()),
@@ -70,8 +50,7 @@ spec:
 		daprd.WithPlacementAddresses(e.place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithLogLevel("debug"),
-		daprd.WithConfigs(configFile),
-		daprd.WithResourcesDir(e.resDir),
+		daprd.WithErrorCodeMetrics(t),
 	)
 
 	return []framework.Option{
