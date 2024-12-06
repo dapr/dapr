@@ -34,6 +34,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	"github.com/dapr/dapr/pkg/messages"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/concurrency/fifo"
@@ -188,6 +189,9 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		var res *internalv1pb.InternalInvokeResponse
 		res, err = e.callLocalActor(ctx, req)
 		if err != nil {
+			if errors.Is(err, messages.ErrActorMaxStackDepthExceeded) {
+				return res, backoff.Permanent(err)
+			}
 			return res, err
 		}
 		return res, nil
