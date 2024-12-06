@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -40,24 +41,30 @@ func init() {
 
 type raise struct {
 	daprd *daprd.Daprd
+	place *placement.Placement
+	sched *scheduler.Scheduler
 }
 
 func (r *raise) Setup(t *testing.T) []framework.Option {
 	app := app.New(t)
-	place := placement.New(t)
+	r.place = placement.New(t)
+	r.sched = scheduler.New(t)
 
 	r.daprd = daprd.New(t,
 		daprd.WithAppPort(app.Port()),
-		daprd.WithPlacementAddresses(place.Address()),
+		daprd.WithPlacementAddresses(r.place.Address()),
 		daprd.WithInMemoryActorStateStore("statestore"),
+		daprd.WithSchedulerAddresses(r.sched.Address()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(place, app, r.daprd),
+		framework.WithProcesses(r.place, r.sched, app, r.daprd),
 	}
 }
 
 func (r *raise) Run(t *testing.T, ctx context.Context) {
+	r.sched.WaitUntilRunning(t, ctx)
+	r.place.WaitUntilRunning(t, ctx)
 	r.daprd.WaitUntilRunning(t, ctx)
 
 	gclient := r.daprd.GRPCClient(t, ctx)
