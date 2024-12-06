@@ -323,3 +323,26 @@ func WithScheduler(scheduler *scheduler.Scheduler) Option {
 		WithSchedulerAddresses(scheduler.Address())(o)
 	}
 }
+
+func WithErrorCodeMetrics(t *testing.T) Option {
+	tempDir := t.TempDir()
+	configFile := filepath.Join(tempDir, "config.yaml")
+	require.NoError(t, os.WriteFile(configFile, []byte(`
+apiVersion: dapr.io/v1alpha1
+kind: Configuration
+metadata:
+  name: errorcodemetrics
+spec:
+  metric:
+    enabled: true
+    recordErrorCodes: true
+  metrics:
+    enabled: true
+    recordErrorCodes: true
+`), 0o600))
+
+	return func(o *options) {
+		WithConfigs(configFile)(o)
+		WithResourcesDir(tempDir)(o)
+	}
+}
