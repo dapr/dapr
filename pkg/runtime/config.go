@@ -235,6 +235,8 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		return nil, fmt.Errorf("error setting tracing spec from env: %s", err)
 	}
 
+	globalConfig.SetDefaultFeatures()
+
 	globalConfig.LoadFeatures()
 	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {
 		log.Info("Enabled features: " + strings.Join(enabledFeatures, " "))

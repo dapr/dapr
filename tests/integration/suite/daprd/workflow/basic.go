@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -52,6 +53,7 @@ func init() {
 type basic struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
+	sched      *scheduler.Scheduler
 	httpClient *http.Client
 	grpcClient runtimev1pb.DaprClient
 }
@@ -62,20 +64,23 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		w.Write([]byte(""))
 	})
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
+	b.sched = scheduler.New(t)
 	b.place = placement.New(t)
 	b.daprd = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithPlacementAddresses(b.place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithSchedulerAddresses(b.sched.Address()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(b.place, srv, b.daprd),
+		framework.WithProcesses(b.place, b.sched, srv, b.daprd),
 	}
 }
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
+	b.sched.WaitUntilRunning(t, ctx)
 	b.place.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
 
