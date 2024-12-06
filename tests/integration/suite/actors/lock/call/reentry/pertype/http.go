@@ -122,7 +122,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	req.Header.Add("Dapr-Reentrancy-Id", id)
 	resp, err := client.Do(req)
 	require.NoError(t, err)
-	assert.Equal(t, nethttp.StatusTooManyRequests, resp.StatusCode)
+	assert.Equal(t, nethttp.StatusInternalServerError, resp.StatusCode)
 	b, err := io.ReadAll(resp.Body)
 	require.NoError(t, err)
 	assert.Equal(t, `{"errorCode":"ERR_ACTOR_STACK_DEPTH","message":"maximum stack depth exceeded"}`, string(b))
