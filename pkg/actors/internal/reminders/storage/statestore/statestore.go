@@ -94,7 +94,7 @@ func New(opts Options) *Statestore {
 }
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
-func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, _ func(context.Context, *api.LookupActorRequest) bool) {
+func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(context.Context, *api.LookupActorRequest) bool) {
 	go func() {
 		// To handle bursts, use a queue so no more than one evaluation can be queued up at the same time, since they'd all fetch the same data anyways
 		select {
@@ -106,7 +106,7 @@ func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, _ func(contex
 		}
 
 		// r.evaluationQueue is released in the handler after obtaining the evaluationChan lock
-		r.evaluateReminders(ctx)
+		r.evaluateReminders(ctx, fn)
 	}()
 }
 
@@ -297,7 +297,7 @@ func (r *Statestore) Delete(ctx context.Context, req *api.DeleteReminderRequest)
 	return nil
 }
 
-func (r *Statestore) evaluateReminders(ctx context.Context) {
+func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(context.Context, *api.LookupActorRequest) bool) {
 	// Wait for the evaluation channel
 	select {
 	case r.evaluationChan <- struct{}{}:
@@ -342,7 +342,10 @@ func (r *Statestore) evaluateReminders(ctx context.Context) {
 				rmd := vals[i].Reminder
 				reminderKey := rmd.Key()
 
-				if r.table.IsActorTypeHosted(rmd.ActorKey()) {
+				if lookupFn(ctx, &api.LookupActorRequest{
+					ActorType: rmd.ActorType,
+					ActorID:   rmd.ActorID,
+				}) {
 					stop := make(chan struct{})
 					_, exists := r.activeReminders.LoadOrStore(reminderKey, stop)
 					if !exists {
