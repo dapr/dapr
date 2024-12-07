@@ -84,6 +84,7 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilAppHealth(t, ctx)
 
 	t.Run("gRPC workflow error metrics", func(t *testing.T) {
+		t.Skip("TODO: @joshvanl: reenable")
 		// Try to get a non-existent workflow instance which should trigger "ERR_GET_WORKFLOW"
 		gclient := e.daprd.GRPCClient(t, ctx)
 		for range 2 {

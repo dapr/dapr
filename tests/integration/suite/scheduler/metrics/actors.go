@@ -48,6 +48,7 @@ func (a *actors) Setup(t *testing.T) []framework.Option {
 	a.scheduler = scheduler.New(t)
 
 	app := app.New(t,
+		app.WithHandlerFunc("/actors/myactortype/myactorid", func(http.ResponseWriter, *http.Request) {}),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/remindermethod", func(http.ResponseWriter, *http.Request) {
 			a.triggered.Add(1)
 		}),

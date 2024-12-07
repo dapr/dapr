@@ -98,11 +98,11 @@ func (c *Clients) Next(ctx context.Context) (schedulerv1pb.SchedulerClient, erro
 	}
 
 	select {
-	case <-c.readyCh:
 	case <-c.closeCh:
 		return nil, errors.New("scheduler clients closed")
 	case <-ctx.Done():
 		return nil, ctx.Err()
+	case <-c.readyCh:
 	}
 
 	//nolint:gosec

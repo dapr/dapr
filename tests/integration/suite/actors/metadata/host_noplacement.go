@@ -89,9 +89,8 @@ func (m *hostNoPlacement) Run(t *testing.T, ctx context.Context) {
 		assert.Equal(t, "RUNNING", res.ActorRuntime.RuntimeStatus)
 		assert.False(t, res.ActorRuntime.HostReady)
 		assert.Equal(t, "placement: disconnected", res.ActorRuntime.Placement)
-		if assert.Len(t, res.ActorRuntime.ActiveActors, 1) {
-			assert.Equal(t, "myactortype", res.ActorRuntime.ActiveActors[0].Type)
-			assert.Equal(t, 0, res.ActorRuntime.ActiveActors[0].Count)
-		}
+		assert.ElementsMatch(t, []metadataActiveActors{
+			{Type: "myactortype"},
+		}, res.ActorRuntime.ActiveActors)
 	}, 10*time.Second, 10*time.Millisecond)
 }

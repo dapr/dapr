@@ -16,8 +16,9 @@ package workflow
 import (
 	"testing"
 
-	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/require"
+
+	"github.com/dapr/durabletask-go/task"
 )
 
 type Option func(*options)

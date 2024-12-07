@@ -16,6 +16,7 @@ package pool
 import (
 	"context"
 	"errors"
+	"slices"
 	"sync"
 	"sync/atomic"
 
@@ -78,8 +79,14 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 	p.lock.Lock()
 	defer p.lock.Unlock()
 
+	var id uint64
 	nsPool, ok := p.nsPool[req.GetNamespace()]
-	if !ok {
+	if ok {
+		for ok {
+			id++
+			_, ok = nsPool.conns[id]
+		}
+	} else {
 		nsPool = &namespacedPool{
 			appID:     make(map[string][]uint64),
 			actorType: make(map[string][]uint64),
@@ -89,23 +96,24 @@ func (p *Pool) Add(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv
 		p.nsPool[req.GetNamespace()] = nsPool
 	}
 
-	ok = true
-	var id uint64
-	for ok {
-		id++
-		_, ok = nsPool.conns[id]
+	var prefixes []string
+
+	// To account for backwards compatibility where older clients did not use
+	// this field, we assume a connected client and implement both app jobs, as
+	// well as actor job types. We can remove this in v1.16
+	ts := req.GetAcceptJobTypes()
+	if len(ts) == 0 || slices.Contains(ts, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_JOB) {
+		log.Infof("Adding a Sidecar connection to Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
+		nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], id)
+		prefixes = append(prefixes, "app||"+req.GetNamespace()+"||"+req.GetAppId()+"||")
 	}
 
-	prefixes := make([]string, 0, len(req.GetActorTypes())+1)
-
-	log.Debugf("Adding a Sidecar connection to Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
-	nsPool.appID[req.GetAppId()] = append(nsPool.appID[req.GetAppId()], id)
-	prefixes = append(prefixes, "app||"+req.GetNamespace()+"||"+req.GetAppId()+"||")
-
-	for _, actorType := range req.GetActorTypes() {
-		log.Debugf("Adding a Sidecar connection to Scheduler for actor type: %s/%s.", req.GetNamespace(), actorType)
-		nsPool.actorType[actorType] = append(nsPool.actorType[actorType], id)
-		prefixes = append(prefixes, "actorreminder||"+req.GetNamespace()+"||"+actorType+"||")
+	if len(ts) == 0 || slices.Contains(ts, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER) {
+		for _, actorType := range req.GetActorTypes() {
+			log.Infof("Adding a Sidecar connection to Scheduler for actor type: %s/%s.", req.GetNamespace(), actorType)
+			nsPool.actorType[actorType] = append(nsPool.actorType[actorType], id)
+			prefixes = append(prefixes, "actorreminder||"+req.GetNamespace()+"||"+actorType+"||")
+		}
 	}
 
 	cancel, err := p.cron.DeliverablePrefixes(stream.Context(), prefixes...)
@@ -146,34 +154,42 @@ func (p *Pool) remove(req *schedulerv1pb.WatchJobsRequestInitial, id uint64, can
 
 	delete(nsPool.conns, id)
 
-	log.Infof("Removing a Sidecar connection from Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
-	for i := 0; i < len(appIDConns); i++ {
-		if appIDConns[i] == id {
-			appIDConns = append(appIDConns[:i], appIDConns[i+1:]...)
-			break
-		}
-	}
-
-	nsPool.appID[req.GetAppId()] = appIDConns
-
-	for _, actorType := range req.GetActorTypes() {
-		actorTypeConns, ok := nsPool.actorType[actorType]
-		if !ok {
-			continue
-		}
-
-		log.Infof("Removing a Sidecar connection from Scheduler for actor type: %s/%s.", req.GetNamespace(), actorType)
-		for i := 0; i < len(actorTypeConns); i++ {
-			if actorTypeConns[i] == id {
-				actorTypeConns = append(actorTypeConns[:i], actorTypeConns[i+1:]...)
+	// To account for backwards compatibility where older clients did not use
+	// this field, we assume a connected client and implement both app jobs, as
+	// well as actor job types. We can remove this in v1.16
+	ts := req.GetAcceptJobTypes()
+	if len(ts) == 0 || slices.Contains(ts, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_JOB) {
+		log.Infof("Removing a Sidecar connection from Scheduler for appID: %s/%s.", req.GetNamespace(), req.GetAppId())
+		for i := 0; i < len(appIDConns); i++ {
+			if appIDConns[i] == id {
+				appIDConns = append(appIDConns[:i], appIDConns[i+1:]...)
 				break
 			}
 		}
 
-		nsPool.actorType[actorType] = actorTypeConns
+		nsPool.appID[req.GetAppId()] = appIDConns
+	}
 
-		if len(nsPool.actorType[actorType]) == 0 {
-			delete(nsPool.actorType, actorType)
+	if len(ts) == 0 || slices.Contains(ts, schedulerv1pb.JobTargetType_JOB_TARGET_TYPE_ACTOR_REMINDER) {
+		for _, actorType := range req.GetActorTypes() {
+			actorTypeConns, ok := nsPool.actorType[actorType]
+			if !ok {
+				continue
+			}
+
+			log.Infof("Removing a Sidecar connection from Scheduler for actor type: %s/%s.", req.GetNamespace(), actorType)
+			for i := 0; i < len(actorTypeConns); i++ {
+				if actorTypeConns[i] == id {
+					actorTypeConns = append(actorTypeConns[:i], actorTypeConns[i+1:]...)
+					break
+				}
+			}
+
+			nsPool.actorType[actorType] = actorTypeConns
+
+			if len(nsPool.actorType[actorType]) == 0 {
+				delete(nsPool.actorType, actorType)
+			}
 		}
 	}
 

@@ -64,7 +64,7 @@ env:
   # Whether to collect TCP dumps
   TCP_DUMPS: "false"
   # Additional build tags for Dapr
-  DAPR_GO_BUILD_TAGS: "subtlecrypto,wfbackendsqlite"
+  DAPR_GO_BUILD_TAGS: "subtlecrypto"
   # Useful for upgrade/downgrade/compatibility tests
   # TODO: Make this auto-populated based on GitHub's releases.
   DAPR_TEST_N_MINUS_1_IMAGE: "ghcr.io/dapr/daprd:1.13.0"

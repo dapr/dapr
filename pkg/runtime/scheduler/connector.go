@@ -17,7 +17,7 @@ import (
 	"context"
 	"time"
 
-	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/engine"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 )
@@ -26,7 +26,7 @@ type connector struct {
 	req      *schedulerv1pb.WatchJobsRequest
 	client   schedulerv1pb.SchedulerClient
 	channels *channels.Channels
-	actors   actors.ActorRuntime
+	actors   engine.Interface
 }
 
 // run starts the scheduler connector. Attempts to re-connect to the Scheduler
@@ -63,8 +63,8 @@ func (c *connector) run(ctx context.Context) error {
 		err = (&streamer{
 			stream:   stream,
 			resultCh: make(chan *schedulerv1pb.WatchJobsRequest),
-			actors:   c.actors,
 			channels: c.channels,
+			actors:   c.actors,
 		}).run(ctx)
 
 		if err == nil {

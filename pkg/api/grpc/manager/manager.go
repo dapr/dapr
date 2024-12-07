@@ -248,6 +248,8 @@ func (g *Manager) StartCollector() {
 		for {
 			select {
 			case <-g.closeCh:
+				g.localConn.DestroyAll()
+				g.remoteConns.Purge()
 				return
 			case <-t.C:
 				g.localConn.Purge()
