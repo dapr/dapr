@@ -116,7 +116,7 @@ func (d *reconnect) Run(t *testing.T, ctx context.Context) {
 
 		metadata, err := client.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.GetRuntimeStatus())
 		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 
@@ -177,7 +177,7 @@ func (d *reconnect) Run(t *testing.T, ctx context.Context) {
 
 		metadata, err := client.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+		assert.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.GetRuntimeStatus())
 		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 }

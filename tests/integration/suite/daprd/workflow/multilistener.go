@@ -15,6 +15,7 @@ package workflow
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"testing"
 
@@ -94,14 +95,14 @@ func (m *multilistener) Run(t *testing.T, ctx context.Context) {
 				backendClient := client.NewTaskHubGrpcClient(conn, backend.DefaultLogger())
 
 				taskhubCtx, cancelTaskhub := context.WithCancel(ctx)
-				if err := backendClient.StartWorkItemListener(taskhubCtx, r); err != nil {
+				defer cancelTaskhub()
+				if err = backendClient.StartWorkItemListener(taskhubCtx, r); err != nil {
 					return err
 				}
-				defer cancelTaskhub()
 
 				if i == 0 {
 					// only the first worker will schedule the orchestration
-					if _, err := backendClient.ScheduleNewOrchestration(ctx, "ConnectMultipleListenersToSingleDaprd", api.WithInstanceID("Dapr"), api.WithInput("Dapr")); err != nil {
+					if _, err = backendClient.ScheduleNewOrchestration(ctx, "ConnectMultipleListenersToSingleDaprd", api.WithInstanceID("Dapr"), api.WithInput("Dapr")); err != nil {
 						return err
 					}
 				}
@@ -112,7 +113,7 @@ func (m *multilistener) Run(t *testing.T, ctx context.Context) {
 				}
 
 				if !api.OrchestrationMetadataIsComplete(metadata) {
-					return fmt.Errorf("orchestration is not complete")
+					return errors.New("orchestration is not complete")
 				}
 				if metadata.GetOutput().GetValue() != `"Hello, Dapr!"` {
 					return fmt.Errorf("unexpected output: %s", metadata.GetOutput().GetValue())
