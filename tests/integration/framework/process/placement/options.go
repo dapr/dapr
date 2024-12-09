@@ -41,6 +41,7 @@ type options struct {
 	maxAPILevel         *int
 	minAPILevel         *int
 	metadataEnabled     bool
+	disseminateTimeout  string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -132,5 +133,11 @@ func WithMinAPILevel(val int) Option {
 func WithMetadataEnabled(enabled bool) Option {
 	return func(o *options) {
 		o.metadataEnabled = enabled
+	}
+}
+
+func WithDisseminateTimeout(timeout string) Option {
+	return func(o *options) {
+		o.disseminateTimeout = timeout
 	}
 }
