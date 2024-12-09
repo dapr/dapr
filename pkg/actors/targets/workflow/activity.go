@@ -1,0 +1,377 @@
+/*
+Copyright 2024 The Dapr Authors
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+    http://www.apache.org/licenses/LICENSE-2.0
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/
+
+package workflow
+
+import (
+	"context"
+	"errors"
+	"fmt"
+	"strings"
+	"sync/atomic"
+	"time"
+
+	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/anypb"
+
+	"github.com/dapr/dapr/pkg/actors"
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
+	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/internal"
+	diag "github.com/dapr/dapr/pkg/diagnostics"
+	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
+	wferrors "github.com/dapr/dapr/pkg/runtime/wfengine/errors"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+)
+
+const activityStateKey = "activityState"
+
+var (
+	errExecutionAborted    = errors.New("execution aborted")
+	ErrDuplicateInvocation = errors.New("duplicate invocation")
+)
+
+type runCompleted bool
+
+const (
+	runCompletedFalse runCompleted = false
+	runCompletedTrue  runCompleted = true
+)
+
+type activity struct {
+	appID             string
+	actorID           string
+	actorType         string
+	workflowActorType string
+
+	actors actors.Interface
+	lock   *internal.Lock
+
+	scheduler          todo.ActivityScheduler
+	cachingDisabled    bool
+	defaultTimeout     time.Duration
+	reminderInterval   time.Duration
+	completed          atomic.Bool
+	schedulerReminders bool
+}
+
+type ActivityOptions struct {
+	AppID              string
+	ActivityActorType  string
+	WorkflowActorType  string
+	CachingDisabled    bool
+	DefaultTimeout     *time.Duration
+	ReminderInterval   *time.Duration
+	Scheduler          todo.ActivityScheduler
+	Actors             actors.Interface
+	SchedulerReminders bool
+}
+
+func ActivityFactory(opts ActivityOptions) targets.Factory {
+	return func(actorID string) targets.Interface {
+		reminderInterval := time.Minute * 1
+		defaultTimeout := time.Hour * 1
+
+		if opts.ReminderInterval != nil {
+			reminderInterval = *opts.ReminderInterval
+		}
+		if opts.DefaultTimeout != nil {
+			defaultTimeout = *opts.DefaultTimeout
+		}
+
+		return &activity{
+			appID:              opts.AppID,
+			actorID:            actorID,
+			actorType:          opts.ActivityActorType,
+			cachingDisabled:    opts.CachingDisabled,
+			workflowActorType:  opts.WorkflowActorType,
+			reminderInterval:   reminderInterval,
+			defaultTimeout:     defaultTimeout,
+			actors:             opts.Actors,
+			scheduler:          opts.Scheduler,
+			schedulerReminders: opts.SchedulerReminders,
+			lock:               internal.NewLock(internal.LockOptions{ActorType: opts.ActivityActorType}),
+		}
+	}
+}
+
+// InvokeMethod implements actors.InternalActor and schedules the background execution of a workflow activity.
+// Activities are scheduled by workflows and can execute for arbitrary lengths of time. Instead of executing
+// activity logic directly, InvokeMethod creates a reminder that executes the activity logic. InvokeMethod
+// returns immediately after creating the reminder, enabling the workflow to continue processing other events
+// in parallel.
+func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	log.Debugf("Activity actor '%s': invoking method '%s'", a.actorID, req.GetMessage().GetMethod())
+
+	imReq, err := invokev1.FromInternalInvokeRequest(req)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create InvokeMethodRequest: %w", err)
+	}
+	defer imReq.Close()
+
+	cancel, err := a.lock.LockRequest(imReq)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
+	msg := imReq.Message()
+
+	var his backend.HistoryEvent
+	if err = proto.Unmarshal(msg.GetData().GetValue(), &his); err != nil {
+		return nil, fmt.Errorf("failed to decode activity request: %w", err)
+	}
+
+	if msg.GetMethod() == "PurgeWorkflowState" {
+		return nil, a.purgeActivityState(ctx)
+	}
+
+	// The actual execution is triggered by a reminder
+	return nil, a.createReliableReminder(ctx, &his)
+}
+
+// InvokeReminder implements actors.InternalActor and executes the activity logic.
+func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
+	cancel, err := a.lock.Lock()
+	if err != nil {
+		return err
+	}
+	defer cancel()
+
+	log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
+
+	var state backend.HistoryEvent
+	if err = reminder.Data.UnmarshalTo(&state); err != nil {
+		return fmt.Errorf("failed to decode activity reminder: %w", err)
+	}
+
+	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
+	defer cancelTimeout()
+
+	completed, err := a.executeActivity(timeoutCtx, reminder.Name, &state)
+	if completed == runCompletedTrue {
+		a.completed.Store(true)
+	}
+
+	// Returning nil signals that we want the execution to be retried in the next period interval
+	switch {
+	case err == nil:
+		// We delete the reminder on success and on non-recoverable errors.
+		return actorerrors.ErrReminderCanceled
+	case errors.Is(err, context.DeadlineExceeded):
+		log.Warnf("%s: execution of '%s' timed-out and will be retried later: %v", a.actorID, reminder.Name, err)
+		return err
+	case errors.Is(err, context.Canceled):
+		log.Warnf("%s: received cancellation signal while waiting for activity execution '%s'", a.actorID, reminder.Name)
+		if a.schedulerReminders {
+			return err
+		}
+		return nil
+	case wferrors.IsRecoverable(err):
+		log.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", a.actorID, err)
+		if a.schedulerReminders {
+			return err
+		}
+		return nil
+	default: // Other error
+		log.Errorf("%s: execution failed with a non-recoverable error: %v", a.actorID, err)
+		// TODO: Reply with a failure - this requires support from durabletask-go to produce TaskFailure results
+		return actorerrors.ErrReminderCanceled
+	}
+}
+
+func (a *activity) Completed() bool {
+	return a.completed.Load()
+}
+
+func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *backend.HistoryEvent) (runCompleted, error) {
+	activityName := ""
+	if ts := taskEvent.GetTaskScheduled(); ts != nil {
+		activityName = ts.GetName()
+	} else {
+		return runCompletedTrue, fmt.Errorf("invalid activity task event: '%s'", taskEvent.String())
+	}
+
+	endIndex := strings.Index(a.actorID, "::")
+	if endIndex < 0 {
+		return runCompletedTrue, fmt.Errorf("invalid activity actor ID: '%s'", a.actorID)
+	}
+	workflowID := a.actorID[0:endIndex]
+
+	wi := &backend.ActivityWorkItem{
+		SequenceNumber: int64(taskEvent.GetEventId()),
+		InstanceID:     api.InstanceID(workflowID),
+		NewEvent:       taskEvent,
+		Properties:     make(map[string]any),
+	}
+
+	// Executing activity code is a one-way operation. We must wait for the app code to report its completion, which
+	// will trigger this callback channel.
+	// TODO: Need to come up with a design for timeouts. Some activities may need to run for hours but we also need
+	//       to handle the case where the app crashes and never responds to the workflow. It may be necessary to
+	//       introduce some kind of heartbeat protocol to help identify such cases.
+	callback := make(chan bool)
+	wi.Properties[todo.CallbackChannelProperty] = callback
+	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
+	err := a.scheduler(ctx, wi)
+	if errors.Is(err, context.DeadlineExceeded) {
+		return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("timed-out trying to schedule an activity execution - this can happen if too many activities are running in parallel or if the workflow engine isn't running: %w", err))
+	} else if err != nil {
+		return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to schedule an activity execution: %w", err))
+	}
+	// Activity execution started
+	start := time.Now()
+	executionStatus := ""
+	elapsed := float64(0)
+	// Record metrics on exit
+	defer func() {
+		if executionStatus != "" {
+			diag.DefaultWorkflowMonitoring.ActivityExecutionEvent(ctx, activityName, executionStatus, elapsed)
+		}
+	}()
+
+	select {
+	case <-ctx.Done():
+		// Activity execution failed with recoverable error
+		elapsed = diag.ElapsedSince(start)
+		executionStatus = diag.StatusRecoverable
+		return runCompletedFalse, ctx.Err() // will be retried
+	case completed := <-callback:
+		elapsed = diag.ElapsedSince(start)
+		if !completed {
+			// Activity execution failed with recoverable error
+			executionStatus = diag.StatusRecoverable
+			return runCompletedFalse, wferrors.NewRecoverable(errExecutionAborted) // AbandonActivityWorkItem was called
+		}
+	}
+	log.Debugf("Activity actor '%s': activity completed for workflow with instanceId '%s' activityName '%s'", a.actorID, wi.InstanceID, name)
+
+	// publish the result back to the workflow actor as a new event to be processed
+	resultData, err := proto.Marshal(wi.Result)
+	if err != nil {
+		// Returning non-recoverable error
+		executionStatus = diag.StatusFailed
+		return runCompletedTrue, err
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.AddWorkflowEventMethod).
+		WithActor(a.workflowActorType, workflowID).
+		WithData(resultData).
+		WithContentType(invokev1.ProtobufContentType)
+
+	engine, err := a.actors.Engine(ctx)
+	if err != nil {
+		return runCompletedFalse, err
+	}
+
+	_, err = engine.Call(ctx, req)
+	switch {
+	case err != nil:
+		// Returning recoverable error, record metrics
+		executionStatus = diag.StatusRecoverable
+		return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to invoke '%s' method on workflow actor: %w", todo.AddWorkflowEventMethod, err))
+	case wi.Result.GetTaskCompleted() != nil:
+		// Activity execution completed successfully
+		executionStatus = diag.StatusSuccess
+	case wi.Result.GetTaskFailed() != nil:
+		// Activity execution failed
+		executionStatus = diag.StatusFailed
+	}
+	return runCompletedTrue, nil
+}
+
+// InvokeTimer implements actors.InternalActor
+func (a *activity) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder) error {
+	return errors.New("timers are not implemented")
+}
+
+// DeactivateActor implements actors.InternalActor
+func (a *activity) DeactivateActor(ctx context.Context) error {
+	log.Debugf("Activity actor '%s': deactivating", a.actorID)
+	return nil
+}
+
+func (a *activity) purgeActivityState(ctx context.Context) error {
+	astate, err := a.actors.State(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get state: %w", err)
+	}
+
+	log.Debugf("Activity actor '%s': purging activity state", a.actorID)
+	err = astate.TransactionalStateOperation(ctx, &actorapi.TransactionalRequest{
+		ActorType: a.actorType,
+		ActorID:   a.actorID,
+		Operations: []actorapi.TransactionalOperation{{
+			Operation: actorapi.Delete,
+			Request: actorapi.TransactionalDelete{
+				Key: activityStateKey,
+			},
+		}},
+	})
+	if err != nil {
+		return fmt.Errorf("failed to delete activity state with error: %w", err)
+	}
+
+	return nil
+}
+
+func (a *activity) createReliableReminder(ctx context.Context, his *backend.HistoryEvent) error {
+	const reminderName = "run-activity"
+	log.Debugf("Activity actor '%s||%s': creating reminder '%s' for immediate execution", a.actorType, a.actorID, reminderName)
+
+	reminders, err := a.actors.Reminders(ctx)
+	if err != nil {
+		return fmt.Errorf("failed to get reminders: %w", err)
+	}
+
+	var period string
+	var oneshot bool
+	if a.schedulerReminders {
+		oneshot = true
+	} else {
+		period = a.reminderInterval.String()
+	}
+
+	anydata, err := anypb.New(his)
+	if err != nil {
+		return err
+	}
+
+	return reminders.Create(ctx, &actorapi.CreateReminderRequest{
+		ActorType: a.actorType,
+		ActorID:   a.actorID,
+		DueTime:   "0s",
+		Name:      reminderName,
+		Period:    period,
+		IsOneShot: oneshot,
+		Data:      anydata,
+	})
+}
+
+// DeactivateActor implements actors.InternalActor
+func (a *activity) Deactivate(ctx context.Context) error {
+	// TODO: @joshvanl: close everything else in this actor and wait
+	log.Debugf("Activity actor '%s': deactivating", a.actorID)
+	a.lock.Close()
+	return nil
+}
+
+// CloseUntil closes the actor but backs out sooner if the duration is reached.
+func (a *activity) CloseUntil(d time.Duration) {
+	a.lock.CloseUntil(d)
+}

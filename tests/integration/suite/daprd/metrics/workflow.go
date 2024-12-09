@@ -18,10 +18,6 @@ import (
 	"errors"
 	"testing"
 
-	"github.com/microsoft/durabletask-go/api"
-	"github.com/microsoft/durabletask-go/backend"
-	"github.com/microsoft/durabletask-go/client"
-	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -31,6 +27,10 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
@@ -98,7 +98,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 		// Verify metrics
 		metrics := w.daprd.Metrics(t, ctx)
@@ -113,7 +113,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		metadata, err := taskhubClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 		// Verify metrics
 		metrics := w.daprd.Metrics(t, ctx)

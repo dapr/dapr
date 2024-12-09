@@ -19,6 +19,7 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -48,6 +49,10 @@ type deactivateOnPlacementFail struct {
 }
 
 func (h *deactivateOnPlacementFail) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("This test is not supported on Windows")
+	}
+
 	h.invokedActorsCh = make(chan string, 2)
 	h.deactivatedActorsCh = make(chan string, 2)
 
