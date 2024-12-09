@@ -442,39 +442,3 @@ func (*Actors) Stop(context.Context) error {
 func (abe *Actors) String() string {
 	return "dapr.actors/v1-beta"
 }
-
-// DisableActorCaching turns off the default caching done by the workflow and activity actors.
-// This method is primarily intended to be used for testing to ensure correct behavior
-// when actors are newly activated on nodes, but without requiring the actor to actually
-// go through activation.
-// TODO: @joshvanl
-//
-//	func (abe *Actors) DisableActorCaching(disable bool) {
-//		abe.workflowActorOpts.cachingDisabled = disable
-//		abe.activityActorOpts.cachingDisabled = disable
-//	}
-//
-// SetWorkflowTimeout allows configuring a default timeout for workflow execution steps.
-// If the timeout is exceeded, the workflow execution step will be abandoned and retried.
-// Note that this timeout is for a non-blocking step in the workflow (which is expected
-// to always complete almost immediately) and not for the end-to-end workflow execution.
-// TODO: @joshvanl
-// func (abe *Actors) SetWorkflowTimeout(timeout time.Duration) {
-// 	abe.workflowActorOpts.defaultTimeout = timeout
-// }
-
-// SetActivityTimeout allows configuring a default timeout for activity executions.
-// If the timeout is exceeded, the activity execution will be abandoned and retried.
-// TODO: @joshvanl
-// func (abe *Actors) SetActivityTimeout(timeout time.Duration) {
-// 	abe.activityActorOpts.defaultTimeout = timeout
-// }
-
-// SetActorReminderInterval sets the amount of delay between internal retries for
-// workflow and activity actors. This impacts how long it takes for an operation to
-// restart itself after a timeout or a process failure is encountered while running.
-// TODO: @joshvanl
-// func (abe *Actors) SetActorReminderInterval(interval time.Duration) {
-// 	abe.workflowActorOpts.reminderInterval = interval
-// 	abe.activityActorOpts.reminderInterval = interval
-// }

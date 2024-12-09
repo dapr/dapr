@@ -74,10 +74,10 @@ func (m *Manager) Run(ctx context.Context) error {
 	}
 	defer m.wg.Wait()
 
-	var ch <-chan []string = make(chan []string)
+	var typeUpdateCh <-chan []string = make(chan []string)
 	var actorTypes []string
 	if table, err := m.actors.Table(ctx); err == nil {
-		ch, actorTypes = table.SubscribeToTypeUpdates(ctx)
+		typeUpdateCh, actorTypes = table.SubscribeToTypeUpdates(ctx)
 	}
 
 	for {
@@ -91,7 +91,7 @@ func (m *Manager) Run(ctx context.Context) error {
 			case <-ctx.Done():
 				return ctx.Err()
 			case <-appCh:
-			case actorTypes = <-ch:
+			case actorTypes = <-typeUpdateCh:
 			}
 		}
 
@@ -110,7 +110,7 @@ func (m *Manager) Run(ctx context.Context) error {
 		go func() {
 			select {
 			case <-lctx.Done():
-			case actorTypes = <-ch:
+			case actorTypes = <-typeUpdateCh:
 			case <-appCh:
 			}
 			cancel()
