@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"time"
 
 	"github.com/cenkalti/backoff/v4"
 	"google.golang.org/grpc/codes"
@@ -39,10 +38,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/concurrency/fifo"
 	"github.com/dapr/kit/events/queue"
-	"github.com/dapr/kit/logger"
 )
-
-var log = logger.NewLogger("dapr.runtime.actor.engine")
 
 type Interface interface {
 	Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
@@ -151,21 +147,6 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 		err = target.InvokeTimer(ctx, req)
 	} else {
 		err = target.InvokeReminder(ctx, req)
-	}
-
-	// If the reminder was cancelled, delete it.
-	// TODO: Remove when sheduler workflows are one-shot.
-	if e.schedulerReminders && errors.Is(err, actorerrors.ErrReminderCanceled) {
-		log.Debugf("Deleting reminder which was cancelled: %s", req.Key())
-		reqCtx, cancel := context.WithTimeout(context.Background(), time.Second*15)
-		defer cancel()
-		if derr := e.reminders.Delete(reqCtx, &api.DeleteReminderRequest{
-			Name:      req.Name,
-			ActorType: req.ActorType,
-			ActorID:   req.ActorID,
-		}); derr != nil {
-			log.Errorf("Error deleting reminder %s: %s", req.Key(), derr)
-		}
 	}
 
 	return backoff.Permanent(err)

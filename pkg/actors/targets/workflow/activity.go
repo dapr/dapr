@@ -15,7 +15,6 @@ package workflow
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
@@ -152,7 +151,7 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 	}
 
 	// The actual execution is triggered by a reminder
-	return nil, a.createReliableReminder(ctx, nil)
+	return nil, a.createReliableReminder(ctx)
 }
 
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
@@ -189,9 +188,15 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 		return err
 	case errors.Is(err, context.Canceled):
 		log.Warnf("%s: received cancellation signal while waiting for activity execution '%s'", a.actorID, reminder.Name)
+		if a.schedulerReminders {
+			return err
+		}
 		return nil
 	case wferrors.IsRecoverable(err):
 		log.Warnf("%s: execution failed with a recoverable error and will be retried later: %v", a.actorID, err)
+		if a.schedulerReminders {
+			return err
+		}
 		return nil
 	default: // Other error
 		log.Errorf("%s: execution failed with a non-recoverable error: %v", a.actorID, err)
@@ -427,13 +432,9 @@ func (a *activity) purgeActivityState(ctx context.Context) error {
 	return nil
 }
 
-func (a *activity) createReliableReminder(ctx context.Context, data any) error {
+func (a *activity) createReliableReminder(ctx context.Context) error {
 	const reminderName = "run-activity"
 	log.Debugf("Activity actor '%s||%s': creating reminder '%s' for immediate execution", a.actorType, a.actorID, reminderName)
-	dataEnc, err := json.Marshal(data)
-	if err != nil {
-		return fmt.Errorf("failed to encode data as JSON: %w", err)
-	}
 
 	reminders, err := a.actors.Reminders(ctx)
 	if err != nil {
@@ -451,7 +452,6 @@ func (a *activity) createReliableReminder(ctx context.Context, data any) error {
 	return reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
-		Data:      dataEnc,
 		DueTime:   "0s",
 		Name:      reminderName,
 		Period:    period,

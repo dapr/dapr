@@ -17,7 +17,6 @@ import (
 	"context"
 	"crypto/rand"
 	"encoding/base64"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -64,8 +63,7 @@ type workflow struct {
 	lock             *internal.Lock
 	reminderInterval time.Duration
 
-	state           *wfenginestate.State
-	cachingDisabled bool
+	state *wfenginestate.State
 
 	scheduler             todo.WorkflowScheduler
 	activityResultAwaited atomic.Bool
@@ -108,7 +106,6 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 			actorType:          opts.WorkflowActorType,
 			activityActorType:  opts.ActivityActorType,
 			scheduler:          opts.Scheduler,
-			cachingDisabled:    opts.CachingDisabled,
 			reminderInterval:   reminderInterval,
 			defaultTimeout:     defaultTimeout,
 			resiliency:         opts.Resiliency,
@@ -344,6 +341,11 @@ func (w *workflow) createIfCompleted(ctx context.Context, runtimeState *backend.
 }
 
 func (w *workflow) scheduleWorkflowStart(ctx context.Context, startEvent *backend.HistoryEvent, state *wfenginestate.State) error {
+	state.AddToInbox(startEvent)
+	if err := w.saveInternalState(ctx, state); err != nil {
+		return err
+	}
+
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
@@ -351,8 +353,7 @@ func (w *workflow) scheduleWorkflowStart(ctx context.Context, startEvent *backen
 		return err
 	}
 
-	state.AddToInbox(startEvent)
-	return w.saveInternalState(ctx, state)
+	return nil
 }
 
 // This method cleans up a workflow associated with the given actorID
@@ -493,22 +494,18 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 	}
 
 	if strings.HasPrefix(reminder.Name, "timer-") {
-		var timerData todo.DurableTimer
-		if err = json.Unmarshal(reminder.Data, &timerData); err != nil {
+		var durableTimer backend.DurableTimer
+		if err = reminder.Data.UnmarshalTo(&durableTimer); err != nil {
 			// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
 			return runCompletedTrue, err
 		}
-		if timerData.Generation < state.Generation {
-			log.Infof("Workflow actor '%s': ignoring durable timer from previous generation '%v'", w.actorID, timerData.Generation)
+
+		if durableTimer.GetGeneration() < state.Generation {
+			log.Infof("Workflow actor '%s': ignoring durable timer from previous generation '%v'", w.actorID, durableTimer.GetGeneration())
 			return runCompletedFalse, nil
-		} else {
-			var e backend.HistoryEvent
-			if err = proto.Unmarshal(timerData.Bytes, &e); err != nil {
-				// Likely the result of an incompatible durable task timer format change. This is non-recoverable.
-				return runCompletedTrue, fmt.Errorf("failed to unmarshal timer data %w", err)
-			}
-			state.Inbox = append(state.Inbox, &e)
 		}
+
+		state.Inbox = append(state.Inbox, durableTimer.GetTimerEvent())
 	}
 
 	if len(state.Inbox) == 0 {
@@ -636,17 +633,15 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 			if tf == nil {
 				return runCompletedTrue, errors.New("invalid event in the PendingTimers list")
 			}
-			var timerBytes []byte
-			timerBytes, err = proto.Marshal(t)
-			if err != nil {
-				return runCompletedTrue, fmt.Errorf("failed to marshal pending timer data: %w", err)
-			}
 			delay := time.Until(tf.GetFireAt().AsTime())
 			if delay < 0 {
 				delay = 0
 			}
 			reminderPrefix := "timer-" + strconv.Itoa(int(tf.GetTimerId()))
-			data := todo.NewDurableTimer(timerBytes, state.Generation)
+			data := &backend.DurableTimer{
+				TimerEvent: t,
+				Generation: state.Generation,
+			}
 			log.Debugf("Workflow actor '%s': creating reminder '%s' for the durable timer", w.actorID, reminderPrefix)
 			if _, err = w.createReliableReminder(ctx, reminderPrefix, data, delay); err != nil {
 				executionStatus = diag.StatusRecoverable
@@ -806,7 +801,7 @@ func (*workflow) recordWorkflowSchedulingLatency(ctx context.Context, esHistoryE
 
 func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State, error) {
 	// See if the state for this actor is already cached in memory
-	if !w.cachingDisabled && w.state != nil {
+	if w.state != nil {
 		return w.state, nil
 	}
 
@@ -828,10 +823,8 @@ func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State,
 		// No such state exists in the state store
 		return nil, nil
 	}
-	if !w.cachingDisabled {
-		// Update cached state
-		w.state = state
-	}
+	// Update cached state
+	w.state = state
 	return state, nil
 }
 
@@ -854,27 +847,20 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 	// ResetChangeTracking should always be called after a save operation succeeds
 	state.ResetChangeTracking()
 
-	if !w.cachingDisabled {
-		// Update cached state
-		w.state = state
-	}
+	// Update cached state
+	w.state = state
 	return nil
 }
 
-func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string, data any, delay time.Duration) (string, error) {
-	// Reminders need to have unique names or else they may not fire in certain race conditions.
+func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string, data proto.Message, delay time.Duration) (string, error) {
 	b := make([]byte, 6)
 	_, err := io.ReadFull(rand.Reader, b)
 	if err != nil {
 		return "", fmt.Errorf("failed to generate reminder ID: %w", err)
 	}
+
 	reminderName := namePrefix + "-" + base64.RawURLEncoding.EncodeToString(b)
 	log.Debugf("Workflow actor '%s||%s': creating '%s' reminder with DueTime = '%s'", w.activityActorType, w.actorID, reminderName, delay)
-
-	dataEnc, err := json.Marshal(data)
-	if err != nil {
-		return reminderName, fmt.Errorf("failed to encode data as JSON: %w", err)
-	}
 
 	reminders, err := w.actors.Reminders(ctx)
 	if err != nil {
@@ -889,10 +875,18 @@ func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string
 		period = w.reminderInterval.String()
 	}
 
+	var adata *anypb.Any
+	if data != nil {
+		adata, err = anypb.New(data)
+		if err != nil {
+			return "", err
+		}
+	}
+
 	return reminderName, reminders.Create(ctx, &actorapi.CreateReminderRequest{
 		ActorType: w.actorType,
 		ActorID:   w.actorID,
-		Data:      dataEnc,
+		Data:      adata,
 		DueTime:   delay.String(),
 		Name:      reminderName,
 		Period:    period,

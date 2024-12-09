@@ -15,7 +15,6 @@ package state
 
 import (
 	"context"
-	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -59,12 +58,6 @@ type State struct {
 	inboxRemovedCount   int
 	historyAddedCount   int
 	historyRemovedCount int
-}
-
-type workflowStateMetadata struct {
-	InboxLength   int
-	HistoryLength int
-	Generation    uint64
 }
 
 func NewState(opts Options) *State {
@@ -154,14 +147,13 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 
 	// Every time we save, we also update the metadata with information about the size of the history and inbox,
 	// as well as the generation of the workflow.
-	metadata := workflowStateMetadata{
-		InboxLength:   len(s.Inbox),
-		HistoryLength: len(s.History),
-		Generation:    s.Generation,
-	}
 	req.Operations = append(req.Operations, api.TransactionalOperation{
 		Operation: api.Upsert,
-		Request:   api.TransactionalUpsert{Key: metadataKey, Value: metadata},
+		Request: api.TransactionalUpsert{Key: metadataKey, Value: &backend.WorkflowStateMetadata{
+			InboxLength:   uint64(len(s.Inbox)),
+			HistoryLength: uint64(len(s.History)),
+			Generation:    s.Generation,
+		}},
 	})
 
 	return req, nil
@@ -236,13 +228,15 @@ func addStateOperations(req *api.TransactionalRequest, keyPrefix string, events 
 		}
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Upsert,
-			Request:   api.TransactionalUpsert{Key: getMultiEntryKeyName(keyPrefix, i), Value: data},
+			//nolint:gosec
+			Request: api.TransactionalUpsert{Key: getMultiEntryKeyName(keyPrefix, uint64(i)), Value: data},
 		})
 	}
 	for i := len(events); i < removedCount; i++ {
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
-			Request:   api.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, i)},
+			//nolint:gosec
+			Request: api.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, uint64(i))},
 		})
 	}
 	return nil
@@ -255,7 +249,8 @@ func addPurgeStateOperations(req *api.TransactionalRequest, keyPrefix string, ev
 	for i := range events {
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Delete,
-			Request:   api.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, i)},
+			//nolint:gosec
+			Request: api.TransactionalDelete{Key: getMultiEntryKeyName(keyPrefix, uint64(i))},
 		})
 	}
 	return nil
@@ -280,32 +275,32 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		// no state found
 		return nil, nil
 	}
-	var metadata workflowStateMetadata
-	if err = json.Unmarshal(res.Data, &metadata); err != nil {
+	var metadata backend.WorkflowStateMetadata
+	if err = proto.Unmarshal(res.Data, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 	}
 
 	// Load inbox, history, and custom status using a bulk request
 	wState := NewState(opts)
-	wState.Generation = metadata.Generation
-	wState.Inbox = make([]*backend.HistoryEvent, metadata.InboxLength)
-	wState.History = make([]*backend.HistoryEvent, metadata.HistoryLength)
+	wState.Generation = metadata.GetGeneration()
+	wState.Inbox = make([]*backend.HistoryEvent, metadata.GetInboxLength())
+	wState.History = make([]*backend.HistoryEvent, metadata.GetHistoryLength())
 
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
 		ActorID:   actorID,
 		// Initializing with size for all the inbox, history, and custom status
-		Keys: make([]string, metadata.InboxLength+metadata.HistoryLength+1),
+		Keys: make([]string, metadata.GetInboxLength()+metadata.GetHistoryLength()+1),
 	}
 
 	var n int
 	bulkReq.Keys[n] = customStatusKey
 	n++
-	for i := range metadata.InboxLength {
+	for i := range metadata.GetInboxLength() {
 		bulkReq.Keys[n] = getMultiEntryKeyName(inboxKeyPrefix, i)
 		n++
 	}
-	for i := range metadata.HistoryLength {
+	for i := range metadata.GetHistoryLength() {
 		bulkReq.Keys[n] = getMultiEntryKeyName(historyKeyPrefix, i)
 		n++
 	}
@@ -319,7 +314,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	// Parse responses
 	loadedRecords += len(bulkRes)
 	var key string
-	for i := range metadata.InboxLength {
+	for i := range metadata.GetInboxLength() {
 		key = getMultiEntryKeyName(inboxKeyPrefix, i)
 		if bulkRes[key] == nil {
 			return nil, fmt.Errorf("failed to load inbox state key '%s': not found", key)
@@ -328,7 +323,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
 		}
 	}
-	for i := range metadata.HistoryLength {
+	for i := range metadata.GetHistoryLength() {
 		key = getMultiEntryKeyName(historyKeyPrefix, i)
 		if bulkRes[key] == nil {
 			return nil, fmt.Errorf("failed to load history state key '%s': not found", key)
@@ -339,7 +334,7 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	}
 
 	if len(bulkRes[customStatusKey]) > 0 {
-		err = json.Unmarshal(bulkRes[customStatusKey], &wState.CustomStatus)
+		err = proto.Unmarshal(bulkRes[customStatusKey], wState.CustomStatus)
 		if err != nil {
 			return nil, fmt.Errorf("failed to unmarshal JSON from custom status key entry: %w", err)
 		}
@@ -381,6 +376,6 @@ func (s *State) GetPurgeRequest(actorID string) (*api.TransactionalRequest, erro
 	return req, nil
 }
 
-func getMultiEntryKeyName(prefix string, i int) string {
+func getMultiEntryKeyName(prefix string, i uint64) string {
 	return fmt.Sprintf("%s-%06d", prefix, i)
 }

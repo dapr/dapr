@@ -508,3 +508,5 @@ replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
 // This ensures that go.mod and go.sum are up-to-date for each go.mod file.
 
 replace github.com/dapr/components-contrib => github.com/joshvanl/components-contrib v0.0.0-20241205002559-5b1e913a0864
+
+replace github.com/dapr/durabletask-go => ../my-my-task
