@@ -223,15 +223,29 @@ func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 
-	jsonBytes, err := protojson.Marshal(job.GetJob().GetData())
-	if err != nil {
-		return nil, err
+	var data json.RawMessage
+	//nolint:protogetter
+	if dd := job.GetJob().Data; dd != nil {
+		msg, err := dd.UnmarshalNew()
+		if err != nil {
+			return nil, err
+		}
+
+		switch msg := msg.(type) {
+		case *wrapperspb.BytesValue:
+			data = msg.Value
+		default:
+			data, err = protojson.Marshal(msg)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
 
 	reminder := &api.Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
-		Data:      jsonBytes,
+		Data:      data,
 		Period:    api.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
 		DueTime:   job.GetJob().GetDueTime(),
 	}
