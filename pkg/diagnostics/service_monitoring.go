@@ -3,6 +3,7 @@ package diagnostics
 import (
 	"context"
 	"strconv"
+	"sync"
 	"time"
 
 	"go.opencensus.io/stats"
@@ -78,9 +79,11 @@ type serviceMetrics struct {
 	serviceInvocationResponseReceivedTotal   *stats.Int64Measure
 	serviceInvocationResponseReceivedLatency *stats.Float64Measure
 
-	appID   string
-	ctx     context.Context
-	enabled bool
+	appID                 string
+	ctx                   context.Context
+	enabled               bool
+	pendingActorCalls     map[string]int32
+	pendingActorCallsLock sync.Mutex
 }
 
 // newServiceMetrics returns serviceMetrics instance with default service metric stats.
@@ -205,8 +208,9 @@ func newServiceMetrics() *serviceMetrics {
 			stats.UnitMilliseconds),
 
 		// TODO: use the correct context for each request
-		ctx:     context.Background(),
-		enabled: false,
+		ctx:               context.Background(),
+		pendingActorCalls: make(map[string]int32),
+		enabled:           false,
 	}
 }
 
@@ -408,11 +412,16 @@ func (s *serviceMetrics) ActorTimers(actorType string, timers int64) {
 
 // ReportActorPendingCalls records the current pending actor locks.
 func (s *serviceMetrics) ReportActorPendingCalls(actorType string, pendingLocks int32) {
+	// TODO: This is growing forever, ensure metrics are removed when the value
+	// is 0.
 	if s.enabled {
+		s.pendingActorCallsLock.Lock()
+		defer s.pendingActorCallsLock.Unlock()
+		s.pendingActorCalls[actorType] += pendingLocks
 		stats.RecordWithTags(
 			s.ctx,
 			diagUtils.WithTags(s.actorPendingCalls.Name(), appIDKey, s.appID, actorTypeKey, actorType),
-			s.actorPendingCalls.M(int64(pendingLocks)))
+			s.actorPendingCalls.M(int64(s.pendingActorCalls[actorType])))
 	}
 }
 

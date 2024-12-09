@@ -108,6 +108,14 @@ func (s *Serializer) FromWatch(stream schedulerv1pb.Scheduler_WatchJobsServer) (
 		return nil, err
 	}
 
+	typesImpl := make(map[schedulerv1pb.JobTargetType]struct{})
+	for _, t := range initial.GetAcceptJobTypes() {
+		if _, ok := typesImpl[t]; ok {
+			return nil, fmt.Errorf("duplicate target type specified: %s", t)
+		}
+		typesImpl[t] = struct{}{}
+	}
+
 	return initial, nil
 }
 

@@ -254,7 +254,9 @@ func reentrantCallHandler(w http.ResponseWriter, r *http.Request) {
 
 	resp, err := httpClient.Do(req)
 
-	log.Printf("Call status: %d", resp.StatusCode)
+	if resp != nil {
+		log.Printf("Call status: %d", resp.StatusCode)
+	}
 	if err != nil || resp.StatusCode == http.StatusInternalServerError {
 		w.WriteHeader(http.StatusInternalServerError)
 		appendLog(mux.Vars(r)["actorType"], mux.Vars(r)["id"], "Error "+mux.Vars(r)["method"])

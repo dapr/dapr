@@ -92,6 +92,7 @@ func (i *rebalancing) Setup(t *testing.T) []framework.Option {
 			daprd.WithAppPort(i.srv[j].Port()),
 			// Daprd is super noisy in debug mode when connecting to placement.
 			daprd.WithLogLevel("info"),
+			daprd.WithAppHealthCheck(true),
 		)
 	}
 

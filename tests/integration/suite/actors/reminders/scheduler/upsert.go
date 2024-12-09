@@ -60,6 +60,7 @@ spec:
 
 	app := app.New(t,
 		app.WithConfig(`{"entities": ["myactortype"]}`),
+		app.WithHandlerFunc("/actors/myactortype/myactorid", func(http.ResponseWriter, *http.Request) {}),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/remind/xyz",
 			func(_ http.ResponseWriter, r *http.Request) { u.methodcalled.Add(1) }),
 		app.WithHandlerFunc("/actors/myactortype/myactorid/method/foo", func(http.ResponseWriter, *http.Request) {}),
