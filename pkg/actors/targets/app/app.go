@@ -23,6 +23,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"github.com/cenkalti/backoff/v4"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -167,6 +168,10 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 		return nil, errors.New("error from actor service: response object is nil")
 	}
 	defer imRes.Close()
+
+	if imRes.Status().GetCode() == http.StatusNotFound {
+		return nil, backoff.Permanent(fmt.Errorf("actor method not found: %s", msg.GetMethod()))
+	}
 
 	if imRes.Status().GetCode() != http.StatusOK {
 		respData, _ := imRes.RawDataFull()

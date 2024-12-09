@@ -17,7 +17,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
@@ -191,8 +190,7 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		res, err = e.callLocalActor(ctx, req)
 		if err != nil {
 			if merr, ok := err.(messages.APIError); ok &&
-				(merr.Is(messages.ErrActorMaxStackDepthExceeded) ||
-					merr.HTTPCode() == http.StatusNotFound) {
+				merr.Is(messages.ErrActorMaxStackDepthExceeded) {
 				return res, backoff.Permanent(err)
 			}
 			return res, err
