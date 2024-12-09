@@ -2611,7 +2611,7 @@ func TestV1Alpha1DistributedLock(t *testing.T) {
 	})
 }
 
-func TestV1Beta1Workflow(t *testing.T) {
+func TestV1Workflow(t *testing.T) {
 	fakeServer := newFakeHTTPServer()
 
 	fakeWorkflowComponent := &daprt.MockWorkflow{}
@@ -2644,7 +2644,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	/////////////////////
 
 	t.Run("Start with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/workflowName/start"
+		apiPath := "v1.0/workflows/non-existent-component/workflowName/start"
 
 		req := workflowContrib.StartRequest{
 			WorkflowName: "Non-existent-workflow",
@@ -2662,7 +2662,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	})
 
 	t.Run("Start with no instance ID", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start"
+		apiPath := "v1.0/workflows/dapr/workflowName/start"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
 
@@ -2678,7 +2678,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	})
 
 	t.Run("Start with invalid instance ID", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start?instanceID=invalid$ID"
+		apiPath := "v1.0/workflows/dapr/workflowName/start?instanceID=invalid$ID"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
 
@@ -2690,7 +2690,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 
 	t.Run("Start with too long instance ID", func(t *testing.T) {
 		maxInstanceIDLength := 64
-		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start?instanceID=this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed"
+		apiPath := "v1.0/workflows/dapr/workflowName/start?instanceID=this_is_a_very_long_instance_id_that_is_longer_than_64_characters_and_therefore_should_not_be_allowed"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
 
@@ -2701,7 +2701,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	})
 
 	t.Run("Start with explicit instance ID", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/dapr/workflowName/start?instanceID=my-explicit-ID"
+		apiPath := "v1.0/workflows/dapr/workflowName/start?instanceID=my-explicit-ID"
 		resp := fakeServer.DoRequest("POST", apiPath, []byte("input payload"), nil)
 		assert.Equal(t, 202, resp.StatusCode)
 
@@ -2721,7 +2721,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	/////////////////////
 
 	t.Run("Get with non existent workflow component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID"
+		apiPath := "v1.0/workflows/non-existent-component/instanceID"
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
@@ -2735,7 +2735,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	t.Run("Get with valid api call", func(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'get' method implemented to return a dummy response.
-		apiPath := "v1.0-beta1/workflows/dapr/myInstanceID"
+		apiPath := "v1.0/workflows/dapr/myInstanceID"
 
 		resp := fakeServer.DoRequest("GET", apiPath, nil, nil)
 		assert.Equal(t, 200, resp.StatusCode)
@@ -2768,7 +2768,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	/////////////////////////
 
 	t.Run("Terminate with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/terminate"
+		apiPath := "v1.0/workflows/non-existent-component/instanceID/terminate"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
@@ -2783,7 +2783,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'terminate' method implemented to simply return nil
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/terminate"
+		apiPath := "v1.0/workflows/dapr/instanceID/terminate"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2797,7 +2797,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	///////////////////////////
 
 	t.Run("Raise Event with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/raiseEvent/fakeEvent"
+		apiPath := "v1.0/workflows/non-existent-component/instanceID/raiseEvent/fakeEvent"
 
 		req := workflowContrib.RaiseEventRequest{
 			InstanceID: "",
@@ -2820,7 +2820,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'RaiseEvent' method implemented to simply return nil
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/raiseEvent/fakeEvent"
+		apiPath := "v1.0/workflows/dapr/instanceID/raiseEvent/fakeEvent"
 
 		resp := fakeServer.DoRequest("POST", apiPath, []byte("event payload"), nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2834,7 +2834,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	/////////////////////////
 
 	t.Run("Pause with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/pause"
+		apiPath := "v1.0/workflows/non-existent-component/instanceID/pause"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
@@ -2849,7 +2849,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'pause' method implemented to simply return nil
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/pause"
+		apiPath := "v1.0/workflows/dapr/instanceID/pause"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2863,7 +2863,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 	/////////////////////////
 
 	t.Run("Resume with non existent component", func(t *testing.T) {
-		apiPath := "v1.0-beta1/workflows/non-existent-component/instanceID/resume"
+		apiPath := "v1.0/workflows/non-existent-component/instanceID/resume"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 400, resp.StatusCode)
@@ -2878,7 +2878,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'resume' method implemented to simply return nil
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/resume"
+		apiPath := "v1.0/workflows/dapr/instanceID/resume"
 
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
@@ -2895,7 +2895,7 @@ func TestV1Beta1Workflow(t *testing.T) {
 		// Note that this test passes even though there is no workflow implemented.
 		// This is due to the fact that the 'fakecomponent' has the 'purge' method implemented to simply return nil
 
-		apiPath := "v1.0-beta1/workflows/dapr/instanceID/purge"
+		apiPath := "v1.0/workflows/dapr/instanceID/purge"
 		resp := fakeServer.DoRequest("POST", apiPath, nil, nil)
 		assert.Equal(t, 202, resp.StatusCode)
 

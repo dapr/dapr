@@ -35,7 +35,7 @@ const (
 	fakeInstanceID    = "fake-instance-ID__123"
 )
 
-func TestStartWorkflowBeta1API(t *testing.T) {
+func TestStartWorkflowAPI(t *testing.T) {
 	fakeWorkflowName := "fakeWorkflow"
 
 	fakeWorkflows := map[string]workflows.Workflow{
@@ -127,7 +127,7 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 				InstanceId:        tt.instanceID,
 				WorkflowName:      tt.workflowName,
 			}
-			_, err := fakeAPI.StartWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.StartWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -138,7 +138,7 @@ func TestStartWorkflowBeta1API(t *testing.T) {
 	}
 }
 
-func TestGetWorkflowBeta1API(t *testing.T) {
+func TestGetWorkflowAPI(t *testing.T) {
 	fakeWorkflows := map[string]workflows.Workflow{
 		fakeComponentName: &daprt.MockWorkflow{},
 	}
@@ -201,7 +201,7 @@ func TestGetWorkflowBeta1API(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.GetWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.GetWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -212,7 +212,7 @@ func TestGetWorkflowBeta1API(t *testing.T) {
 	}
 }
 
-func TestTerminateWorkflowBeta1API(t *testing.T) {
+func TestTerminateWorkflowAPI(t *testing.T) {
 	fakeWorkflows := map[string]workflows.Workflow{
 		fakeComponentName: &daprt.MockWorkflow{},
 	}
@@ -275,7 +275,7 @@ func TestTerminateWorkflowBeta1API(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.TerminateWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.TerminateWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -286,7 +286,7 @@ func TestTerminateWorkflowBeta1API(t *testing.T) {
 	}
 }
 
-func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
+func TestRaiseEventWorkflowApi(t *testing.T) {
 	fakeEventName := "fake_event_name"
 
 	fakeWorkflows := map[string]workflows.Workflow{
@@ -366,7 +366,7 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 				EventName:         tt.eventName,
 				EventData:         []byte("fake_input"),
 			}
-			_, err := fakeAPI.RaiseEventWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.RaiseEventWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -377,7 +377,7 @@ func TestRaiseEventWorkflowBeta1Api(t *testing.T) {
 	}
 }
 
-func TestPauseWorkflowBeta1Api(t *testing.T) {
+func TestPauseWorkflowApi(t *testing.T) {
 	fakeWorkflows := map[string]workflows.Workflow{
 		fakeComponentName: &daprt.MockWorkflow{},
 	}
@@ -440,7 +440,7 @@ func TestPauseWorkflowBeta1Api(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.PauseWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.PauseWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
@@ -451,7 +451,7 @@ func TestPauseWorkflowBeta1Api(t *testing.T) {
 	}
 }
 
-func TestResumeWorkflowBeta1Api(t *testing.T) {
+func TestResumeWorkflowApi(t *testing.T) {
 	fakeWorkflows := map[string]workflows.Workflow{
 		fakeComponentName: &daprt.MockWorkflow{},
 	}
@@ -514,7 +514,7 @@ func TestResumeWorkflowBeta1Api(t *testing.T) {
 				WorkflowComponent: tt.workflowComponent,
 				InstanceId:        tt.instanceID,
 			}
-			_, err := fakeAPI.ResumeWorkflowBeta1(context.Background(), req)
+			_, err := fakeAPI.ResumeWorkflow(context.Background(), req)
 
 			if tt.expectedError == nil {
 				require.NoError(t, err)
