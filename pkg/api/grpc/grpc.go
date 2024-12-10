@@ -46,10 +46,12 @@ import (
 	"github.com/dapr/dapr/pkg/api/universal"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/diagnostics"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/outbox"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -540,6 +542,7 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	}
 
 	if err != nil {
+		diagnostics.RecordErrorCodeEarly(&errorcodes.BindingInvokeOutputBinding)
 		err = status.Errorf(codes.Internal, messages.ErrInvokeOutputBinding, in.GetName(), err.Error())
 		apiServerLogger.Debug(err)
 		return r, err
@@ -663,6 +666,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 		if ok {
 			err = kerr.GRPCStatus().Err()
 		} else {
+			diagnostics.RecordErrorCodeEarly(&errorcodes.StateGet)
 			err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
 		}
 
@@ -676,6 +680,7 @@ func (a *api) GetState(ctx context.Context, in *runtimev1pb.GetStateRequest) (*r
 	if encryption.EncryptedStateStore(in.GetStoreName()) {
 		val, err := encryption.TryDecryptValue(in.GetStoreName(), getResponse.Data)
 		if err != nil {
+			diagnostics.RecordErrorCodeEarly(&errorcodes.StateGet)
 			err = status.Errorf(codes.Internal, messages.ErrStateGet, in.GetKey(), in.GetStoreName(), err.Error())
 			a.logger.Debug(err)
 			return &runtimev1pb.GetStateResponse{}, err
@@ -766,6 +771,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Set, err == nil, elapsed)
 
 	if err != nil {
+		diagnostics.RecordErrorCodeEarly(&errorcodes.StateSave)
 		err = a.stateErrorResponse(err, messages.ErrStateSave, in.GetStoreName(), err.Error())
 		a.logger.Debug(err)
 		return empty, err
@@ -832,6 +838,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Delete, err == nil, elapsed)
 
 	if err != nil {
+		diagnostics.RecordErrorCodeEarly(&errorcodes.StateDelete)
 		err = a.stateErrorResponse(err, messages.ErrStateDelete, in.GetKey(), err.Error())
 		a.logger.Debug(err)
 		return empty, err
@@ -882,6 +889,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.BulkDelete, err == nil, elapsed)
 
 	if err != nil {
+		diagnostics.RecordErrorCodeEarly(&errorcodes.StateBulkDelete)
 		err = a.stateErrorResponse(err, messages.ErrStateDeleteBulk, in.GetStoreName(), err.Error())
 		a.logger.Debug(err)
 		return empty, err
@@ -962,6 +970,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 			operations = append(operations, delReq)
 
 		default:
+			diagnostics.RecordErrorCodeEarly(&errorcodes.StateNotSupportedOperation)
 			err := status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, inputReq.GetOperationType())
 			apiServerLogger.Debug(err)
 			return &emptypb.Empty{}, err
@@ -984,6 +993,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 				data := []byte(fmt.Sprintf("%v", req.Value))
 				val, err := encryption.TryEncryptValue(in.GetStoreName(), data)
 				if err != nil {
+					diagnostics.RecordErrorCodeEarly(&errorcodes.StateTransaction)
 					err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
 					apiServerLogger.Debug(err)
 					return &emptypb.Empty{}, err
@@ -1025,6 +1035,7 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.StateTransaction, err == nil, elapsed)
 
 	if err != nil {
+		diagnostics.RecordErrorCodeEarly(&errorcodes.StateTransaction)
 		err = status.Errorf(codes.Internal, messages.ErrStateTransaction, err.Error())
 		apiServerLogger.Debug(err)
 		return &emptypb.Empty{}, err
@@ -1111,6 +1122,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 			}
 
 		default:
+			diagnostics.RecordErrorCodeEarly(&errorcodes.StateNotSupportedOperation)
 			err = status.Errorf(codes.Unimplemented, messages.ErrNotSupportedStateOperation, op.GetOperationType())
 			apiServerLogger.Debug(err)
 			return nil, err
@@ -1190,11 +1202,13 @@ func stringValueOrEmpty(value *string) string {
 
 func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
 	if a.CompStore().ConfigurationsLen() == 0 {
+		diagnostics.RecordErrorCodeEarly(&errorcodes.ConfigurationStoreNotConfigured)
 		return nil, status.Error(codes.FailedPrecondition, messages.ErrConfigurationStoresNotConfigured)
 	}
 
 	conf, ok := a.CompStore().GetConfiguration(name)
 	if !ok {
+		diagnostics.RecordErrorCodeEarly(&errorcodes.ConfigurationStoreNotFound)
 		return nil, status.Errorf(codes.InvalidArgument, messages.ErrConfigurationStoreNotFound, name)
 	}
 	return conf, nil
@@ -1226,6 +1240,7 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(ctx, in.GetStoreName(), diag.Get, err == nil, elapsed)
 
 	if err != nil {
+		diagnostics.RecordErrorCodeEarly(&errorcodes.ConfigurationGet)
 		err = status.Errorf(codes.Internal, messages.ErrConfigurationGet, req.Keys, in.GetStoreName(), err.Error())
 		apiServerLogger.Debug(err)
 		return response, err
@@ -1379,6 +1394,7 @@ func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.S
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.GetStoreName(), diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
+		diagnostics.RecordErrorCodeEarly(&errorcodes.ConfigurationSubscribe)
 		err = status.Errorf(codes.InvalidArgument, messages.ErrConfigurationSubscribe, componentReq.Keys, request.GetStoreName(), err)
 		apiServerLogger.Debug(err)
 		return "", err
@@ -1416,6 +1432,7 @@ func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb
 	subscribeID := request.GetId()
 	_, ok := a.CompStore().GetConfigurationSubscribe(subscribeID)
 	if !ok {
+		diagnostics.RecordErrorCodeEarly(&errorcodes.ConfigurationUnsubscribe)
 		return &runtimev1pb.UnsubscribeConfigurationResponse{
 			Ok:      false,
 			Message: fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, "subscription does not exist"),

@@ -89,3 +89,8 @@ func RecordErrorCode(err error) bool {
 
 	return false
 }
+
+// RecordErrorCodeEarly is a wrapper function for RecordErrorCode to signal temp usage of RecordErrorCode where error codes were not placed in a response
+func RecordErrorCodeEarly(err error) bool {
+	return RecordErrorCode(err)
+}
