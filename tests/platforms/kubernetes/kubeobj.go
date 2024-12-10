@@ -70,6 +70,9 @@ var (
 	// TargetArch is the default architecture affinity for Kubernetes nodes.
 	TargetArch = "amd64"
 
+	// TargetArchArm
+	TargetArchArm = "arm64"
+
 	// Controls whether API logging is enabled
 	EnableAPILogging = true
 
@@ -228,7 +231,7 @@ func buildPodTemplate(appDesc AppDescription) apiv1.PodTemplateSpec {
 		apiv1.NodeSelectorRequirement{
 			Key:      "kubernetes.io/arch",
 			Operator: "In",
-			Values:   []string{TargetArch},
+			Values:   []string{TargetArch, TargetArchArm},
 		},
 	)
 

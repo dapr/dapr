@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -37,14 +38,17 @@ func init() {
 }
 
 type actors struct {
-	daprd *daprd.Daprd
-	place *placement.Placement
+	daprd     *daprd.Daprd
+	place     *placement.Placement
+	scheduler *scheduler.Scheduler
 }
 
 func (a *actors) Setup(t *testing.T) []framework.Option {
+	a.scheduler = scheduler.New(t)
 	a.place = placement.New(t)
 	a.daprd = daprd.New(t,
 		daprd.WithPlacementAddresses(a.place.Address()),
+		daprd.WithSchedulerAddresses(a.scheduler.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithResourceFiles(`
 apiVersion: dapr.io/v1alpha1
@@ -58,11 +62,13 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(a.place, a.daprd),
+		framework.WithProcesses(a.place, a.scheduler, a.daprd),
 	}
 }
 
 func (a *actors) Run(t *testing.T, ctx context.Context) {
+	a.scheduler.WaitUntilRunning(t, ctx)
+	a.place.WaitUntilRunning(t, ctx)
 	a.daprd.WaitUntilRunning(t, ctx)
 
 	comps := a.daprd.GetMetaRegisteredComponents(t, ctx)

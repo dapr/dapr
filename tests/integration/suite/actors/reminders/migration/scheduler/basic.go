@@ -64,8 +64,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		daprd.WithAppPort(b.app.Port()),
 	}
 
-	daprd1 := daprd.New(t, opts...)
-	daprd2 := daprd.New(t, append(opts,
+	daprd1 := daprd.New(t, append(opts,
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -74,8 +73,9 @@ metadata:
 spec:
   features:
   - name: SchedulerReminders
-    enabled: true
+    enabled: false
 `))...)
+	daprd2 := daprd.New(t, opts...)
 
 	daprd1.Run(t, ctx)
 	daprd1.WaitUntilRunning(t, ctx)

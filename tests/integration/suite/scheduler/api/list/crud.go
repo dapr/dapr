@@ -46,7 +46,6 @@ func (c *crud) Setup(t *testing.T) []framework.Option {
 
 	c.actors = actors.New(t,
 		actors.WithActorTypes("myactortype"),
-		actors.WithFeatureSchedulerReminders(true),
 		actors.WithScheduler(c.scheduler),
 		actors.WithPlacement(place),
 	)

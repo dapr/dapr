@@ -29,6 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -38,11 +39,14 @@ func init() {
 
 // workflow tests daprd metrics for workflows
 type workflow struct {
-	daprd *daprd.Daprd
-	place *placement.Placement
+	daprd     *daprd.Daprd
+	place     *placement.Placement
+	scheduler *scheduler.Scheduler
 }
 
 func (w *workflow) Setup(t *testing.T) []framework.Option {
+	w.scheduler = scheduler.New(t)
+
 	w.place = placement.New(t)
 
 	app := app.New(t)
@@ -53,14 +57,16 @@ func (w *workflow) Setup(t *testing.T) []framework.Option {
 		daprd.WithAppID("myapp"),
 		daprd.WithPlacementAddresses(w.place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithSchedulerAddresses(w.scheduler.Address()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(w.place, app, w.daprd),
+		framework.WithProcesses(w.place, w.scheduler, app, w.daprd),
 	}
 }
 
 func (w *workflow) Run(t *testing.T, ctx context.Context) {
+	w.scheduler.WaitUntilRunning(t, ctx)
 	w.place.WaitUntilRunning(t, ctx)
 	w.daprd.WaitUntilRunning(t, ctx)
 

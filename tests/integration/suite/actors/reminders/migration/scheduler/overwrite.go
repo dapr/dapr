@@ -72,7 +72,7 @@ func (o *overwrite) Run(t *testing.T, ctx context.Context) {
 		daprd.WithAppPort(o.app.Port()),
 	}
 
-	optsWithScheduler := []daprd.Option{
+	optsWithoutScheduler := []daprd.Option{
 		daprd.WithResourceFiles(o.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(o.place.Address()),
 		daprd.WithSchedulerAddresses(o.scheduler.Address()),
@@ -85,13 +85,13 @@ metadata:
 spec:
   features:
   - name: SchedulerReminders
-    enabled: true
+    enabled: false
 `),
 	}
 
-	daprd1 := daprd.New(t, optsWithScheduler...)
-	daprd2 := daprd.New(t, opts...)
-	daprd3 := daprd.New(t, optsWithScheduler...)
+	daprd1 := daprd.New(t, opts...)
+	daprd2 := daprd.New(t, optsWithoutScheduler...)
+	daprd3 := daprd.New(t, opts...)
 
 	daprd1.Run(t, ctx)
 	daprd1.WaitUntilRunning(t, ctx)
