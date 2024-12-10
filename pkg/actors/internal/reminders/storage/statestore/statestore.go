@@ -70,7 +70,6 @@ type Statestore struct {
 	table           table.Interface
 	engine          engine.Interface
 	closed          atomic.Bool
-	wg              sync.WaitGroup
 
 	storeName                  string
 	entityConfigs              map[string]api.EntityConfig
@@ -111,21 +110,14 @@ func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(conte
 	}()
 }
 
-func (r *Statestore) DrainRebalancedReminders(actorType string, actorID string) {
-	r.remindersLock.RLock()
-	reminders := r.reminders[actorType]
-	r.remindersLock.RUnlock()
-
-	for _, rem := range reminders {
-		// rem.Reminder refers to the actual reminder struct that is saved in the db
-		if rem.Reminder.ActorType != actorType || rem.Reminder.ActorID != actorID {
-			continue
-		}
-
-		reminderKey := rem.Reminder.Key()
-		stopChan, exists := r.activeReminders.LoadAndDelete(reminderKey)
-		if exists {
-			close(stopChan.(chan struct{}))
+func (r *Statestore) DrainRebalancedReminders() {
+	for _, remtypes := range r.reminders {
+		for _, rem := range remtypes {
+			reminderKey := rem.Reminder.Key()
+			stopChan, exists := r.activeReminders.LoadAndDelete(reminderKey)
+			if exists {
+				close(stopChan.(chan struct{}))
+			}
 		}
 	}
 }
@@ -322,6 +314,7 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 		return
 	}
 
+	var wg sync.WaitGroup
 	for _, t := range ats {
 		vals, _, err := r.getRemindersForActorType(ctx, t, true)
 		if err != nil {
@@ -334,9 +327,9 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 		r.reminders[t] = vals
 		r.remindersLock.Unlock()
 
-		r.wg.Add(1)
+		wg.Add(1)
 		go func() {
-			defer r.wg.Done()
+			defer wg.Done()
 
 			for i := range vals {
 				rmd := vals[i].Reminder
@@ -368,7 +361,7 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 			}
 		}()
 	}
-	r.wg.Wait()
+	wg.Wait()
 }
 
 func (r *Statestore) waitForEvaluationChan() bool {
@@ -1001,10 +994,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stopChannel chan stru
 
 	reminder.UpdateFromTrack(track)
 
-	r.wg.Add(1)
 	go func() {
-		defer r.wg.Done()
-
 		var (
 			nextTimer clock.Timer
 			err       error

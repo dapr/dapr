@@ -85,7 +85,7 @@ func (s *scheduler) OnPlacementTablesUpdated(ctx context.Context, fn func(contex
 	}
 }
 
-func (s *scheduler) DrainRebalancedReminders(actorType string, actorID string) {}
+func (s *scheduler) DrainRebalancedReminders() {}
 
 func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequest) error {
 	var dueTime *string

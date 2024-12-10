@@ -29,6 +29,6 @@ type Interface interface {
 	Create(ctx context.Context, req *api.CreateReminderRequest) error
 	Delete(ctx context.Context, req *api.DeleteReminderRequest) error
 	List(ctx context.Context, req *api.ListRemindersRequest) ([]*api.Reminder, error)
-	DrainRebalancedReminders(actorType string, actorID string)
+	DrainRebalancedReminders()
 	OnPlacementTablesUpdated(ctx context.Context, lookupFn func(context.Context, *api.LookupActorRequest) bool)
 }
