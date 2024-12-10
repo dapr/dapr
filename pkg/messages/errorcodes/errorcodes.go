@@ -57,6 +57,7 @@ var (
 	ErrActorMaxStackDepthExceeded = ErrorCode{"ERR_ACTOR_STACK_DEPTH", CategoryActor}
 	ErrActorNoPlacement           = ErrorCode{"ERR_ACTOR_NO_PLACEMENT", CategoryActor}
 	ErrActorRuntimeClosed         = ErrorCode{"ERR_ACTOR_RUNTIME_CLOSED", CategoryActor}
+	ErrActorNamespaceRequired     = ErrorCode{"ERR_ACTOR_NAMESPACE_REQUIRED", CategoryActor}
 
 	// Workflows (Building block)
 	WorkflowGet                       = ErrorCode{"ERR_GET_WORKFLOW", CategoryWorkflow}

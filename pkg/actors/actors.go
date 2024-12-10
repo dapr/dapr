@@ -15,7 +15,6 @@ package actors
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"sync"
 	"sync/atomic"
@@ -138,6 +137,7 @@ func New(opts Options) Interface {
 	var disabled atomic.Pointer[error]
 	if len(opts.PlacementAddresses) == 0 {
 		var err error = messages.ErrActorNoPlacement
+		log.Warnf("Actor runtime disabled: %s", err)
 		disabled.Store(&err)
 	}
 
@@ -407,7 +407,7 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		}
 	}
 
-	drainOngoingCallTimeout := time.Minute
+	drainOngoingCallTimeout := api.DefaultOngoingCallTimeout
 	if len(cfg.DrainOngoingCallTimeout) > 0 {
 		var err error
 		drainOngoingCallTimeout, err = time.ParseDuration(cfg.DrainOngoingCallTimeout)
@@ -573,7 +573,7 @@ func ValidateHostEnvironment(mTLSEnabled bool, mode modes.DaprMode, namespace st
 	switch mode {
 	case modes.KubernetesMode:
 		if mTLSEnabled && namespace == "" {
-			return errors.New("actors must have a namespace configured when running in Kubernetes mode")
+			return messages.ErrActorNamespaceRequired
 		}
 	}
 	return nil

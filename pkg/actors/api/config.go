@@ -17,14 +17,17 @@ import (
 	"time"
 
 	"github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/kit/logger"
 )
 
 const (
 	DefaultIdleTimeout = time.Minute * 60
 
-	defaultOngoingCallTimeout   = time.Second * 60
+	DefaultOngoingCallTimeout   = time.Second * 60
 	DefaultReentrancyStackLimit = 32
 )
+
+var log = logger.NewLogger("dapr.runtime.actor.config")
 
 // Remap of config.EntityConfig.
 type EntityConfig struct {
@@ -36,24 +39,36 @@ type EntityConfig struct {
 	RemindersStoragePartitions int
 }
 
+// TranslateEntityConfig converts a user-defined configuration into a
+// domain-specific EntityConfig.
 func TranslateEntityConfig(appConfig config.EntityConfig) EntityConfig {
 	domainConfig := EntityConfig{
 		Entities:                   appConfig.Entities,
 		ActorIdleTimeout:           DefaultIdleTimeout,
-		DrainOngoingCallTimeout:    defaultOngoingCallTimeout,
+		DrainOngoingCallTimeout:    DefaultOngoingCallTimeout,
 		DrainRebalancedActors:      appConfig.DrainRebalancedActors,
 		ReentrancyConfig:           appConfig.Reentrancy,
 		RemindersStoragePartitions: appConfig.RemindersStoragePartitions,
 	}
 
-	idleDuration, err := time.ParseDuration(appConfig.ActorIdleTimeout)
-	if err == nil {
-		domainConfig.ActorIdleTimeout = idleDuration
+	var idleDuration time.Duration
+	if len(appConfig.ActorIdleTimeout) > 0 {
+		var err error
+		idleDuration, err = time.ParseDuration(appConfig.ActorIdleTimeout)
+		if err == nil {
+			log.Warnf("Invalid actor idle timeout value %s, using default value %s", appConfig.ActorIdleTimeout, DefaultIdleTimeout)
+			domainConfig.ActorIdleTimeout = idleDuration
+		}
 	}
 
-	drainCallDuration, err := time.ParseDuration(appConfig.DrainOngoingCallTimeout)
-	if err == nil {
-		domainConfig.DrainOngoingCallTimeout = drainCallDuration
+	var drainCallDuration time.Duration
+	if len(appConfig.DrainOngoingCallTimeout) > 0 {
+		var err error
+		drainCallDuration, err = time.ParseDuration(appConfig.DrainOngoingCallTimeout)
+		log.Warnf("Invalid drain ongoing call timeout value %s, using default value %s", appConfig.DrainOngoingCallTimeout, DefaultOngoingCallTimeout)
+		if err == nil {
+			domainConfig.DrainOngoingCallTimeout = drainCallDuration
+		}
 	}
 
 	if appConfig.Reentrancy.MaxStackDepth == nil {

@@ -198,6 +198,8 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 		return res, nil
 	}
 
+	// If this is a dapr-dapr call and the actor didn't pass the local check
+	// above, it means it has been moved in the meantime
 	if _, ok := req.GetMetadata()["X-Dapr-Remote"]; ok {
 		return nil, backoff.Permanent(errors.New("remote actor moved"))
 	}

@@ -105,6 +105,7 @@ var (
 	ErrActorMaxStackDepthExceeded    = APIError{"maximum stack depth exceeded", errorcodes.ErrActorMaxStackDepthExceeded, http.StatusInternalServerError, grpcCodes.ResourceExhausted}
 	ErrActorNoPlacement              = APIError{"placement service is not configured", errorcodes.ErrActorNoPlacement, http.StatusBadRequest, grpcCodes.Unavailable}
 	ErrActorRuntimeClosed            = APIError{"actor runtime is closed", errorcodes.ErrActorRuntimeClosed, http.StatusServiceUnavailable, grpcCodes.Unavailable}
+	ErrActorNamespaceRequired        = APIError{"actors must have a namespace configured when running in Kubernetes mode", errorcodes.ErrActorNamespaceRequired, http.StatusPreconditionFailed, grpcCodes.FailedPrecondition}
 
 	// Lock.
 	ErrLockStoresNotConfigured    = APIError{"lock store is not configured", errorcodes.LockStoreNotConfigured, http.StatusInternalServerError, grpcCodes.FailedPrecondition}
