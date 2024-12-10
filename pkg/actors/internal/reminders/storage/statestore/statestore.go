@@ -96,7 +96,6 @@ func New(opts Options) *Statestore {
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
 func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(context.Context, *api.LookupActorRequest) bool) {
-	r.wg.Wait()
 	go func() {
 		// To handle bursts, use a queue so no more than one evaluation can be queued up at the same time, since they'd all fetch the same data anyways
 		select {
