@@ -64,6 +64,7 @@ func (n *noapp) Setup(t *testing.T) []framework.Option {
 		prochttp.WithHandlerFunc(pathMethodFoo, func(w http.ResponseWriter, r *http.Request) {
 			w.Write([]byte(`OK`))
 		}),
+		prochttp.WithHandlerFunc("/actors/myactortype/myactorid", func(w http.ResponseWriter, r *http.Request) {}),
 		prochttp.WithHandlerFunc("/", func(w http.ResponseWriter, r *http.Request) {
 			n.rootCalled.Store(true)
 			w.WriteHeader(http.StatusInternalServerError)
@@ -101,8 +102,8 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 
 	select {
 	case <-n.healthzCalled:
-	case <-time.After(time.Second * 15):
-		t.Fatal("timed out waiting for healthz call")
+		t.Fatal("unexpected healthz called")
+	default:
 	}
 
 	client := client.HTTP(t)

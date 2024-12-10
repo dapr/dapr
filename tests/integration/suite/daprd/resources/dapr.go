@@ -38,7 +38,7 @@ func (d *dapr) Setup(t *testing.T) []framework.Option {
 	d.logline = logline.New(t,
 		logline.WithStdoutLineContains(
 			"Component loaded: dapr (state.in-memory/v1)",
-			"Workflow engine initialized.",
+			"Workflow engine started",
 		),
 	)
 

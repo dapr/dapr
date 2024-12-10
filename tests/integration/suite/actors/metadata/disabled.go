@@ -67,7 +67,7 @@ func (m *disabled) Run(t *testing.T, ctx context.Context) {
 		res := getMetadata(t, ctx, client, m.daprd.HTTPPort())
 		assert.Equal(t, "DISABLED", res.ActorRuntime.RuntimeStatus)
 		assert.False(t, res.ActorRuntime.HostReady)
-		assert.Empty(t, res.ActorRuntime.Placement)
+		assert.Equal(t, "placement: disconnected", res.ActorRuntime.Placement)
 		assert.Empty(t, res.ActorRuntime.ActiveActors)
 	}, 10*time.Second, 10*time.Millisecond)
 }

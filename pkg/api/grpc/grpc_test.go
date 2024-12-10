@@ -50,7 +50,8 @@ import (
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/secretstores"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/actors"
+	"github.com/dapr/dapr/pkg/actors/engine"
+	"github.com/dapr/dapr/pkg/actors/fake"
 	daprerrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/api/universal"
@@ -73,6 +74,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
 	runtimePubsub "github.com/dapr/dapr/pkg/runtime/pubsub"
+	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	daprt "github.com/dapr/dapr/pkg/testing"
 	testtrace "github.com/dapr/dapr/pkg/testing/trace"
 	"github.com/dapr/kit/logger"
@@ -281,20 +283,29 @@ func startTestServerWithTracing() (*grpc.Server, *string, *bufconn.Listener) {
 	return server, &buffer, lis
 }
 
-func startTestServerAPI(srv runtimev1pb.DaprServer) (*grpc.Server, *bufconn.Listener) {
+func startTestServerAPI(t *testing.T, srv runtimev1pb.DaprServer) *bufconn.Listener {
 	lis := bufconn.Listen(bufconnBufSize)
 
 	server := grpc.NewServer(
 		grpc.UnaryInterceptor(metadata.SetMetadataInContextUnary),
 	)
-	go func() {
-		runtimev1pb.RegisterDaprServer(server, srv)
-		if err := server.Serve(lis); err != nil {
-			panic(err)
+	runtimev1pb.RegisterDaprServer(server, srv)
+
+	errCh := make(chan error)
+	t.Cleanup(func() {
+		server.Stop()
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second * 5):
+			t.Fatalf("timeout waiting for server to stop")
 		}
+	})
+	go func() {
+		errCh <- server.Serve(lis)
 	}()
 
-	return server, lis
+	return lis
 }
 
 func startInternalServer(testAPIServer *api) (*grpc.Server, *bufconn.Listener) {
@@ -311,7 +322,7 @@ func startInternalServer(testAPIServer *api) (*grpc.Server, *bufconn.Listener) {
 	return server, lis
 }
 
-func startDaprAPIServer(testAPIServer *api, token string) (*grpc.Server, *bufconn.Listener) {
+func startDaprAPIServer(t *testing.T, testAPIServer *api, token string) *bufconn.Listener {
 	lis := bufconn.Listen(bufconnBufSize)
 
 	interceptors := []grpc.UnaryServerInterceptor{
@@ -330,14 +341,22 @@ func startDaprAPIServer(testAPIServer *api, token string) (*grpc.Server, *bufcon
 	}
 
 	server := grpc.NewServer(opts...)
+	errCh := make(chan error, 1)
+	t.Cleanup(func() {
+		server.Stop()
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(5 * time.Second):
+			t.Fatalf("timeout waiting for server to stop")
+		}
+	})
 	go func() {
 		runtimev1pb.RegisterDaprServer(server, testAPIServer)
-		if err := server.Serve(lis); err != nil {
-			panic(err)
-		}
+		errCh <- server.Serve(lis)
 	}()
 
-	return server, lis
+	return lis
 }
 
 func createTestClient(lis *bufconn.Listener) *grpc.ClientConn {
@@ -376,6 +395,10 @@ func TestAPIToken(t *testing.T) {
 			AppID:      "fakeAPI",
 			Resiliency: resiliency.New(nil),
 			Logger:     log,
+			Actors: fake.New().WithEngine(func(context.Context) (engine.Interface, error) {
+				return nil, messages.ErrActorRuntimeNotFound
+			}),
+			WorkflowEngine: wfenginefake.New(),
 		}),
 		directMessaging: mockDirectMessaging,
 	}
@@ -396,8 +419,7 @@ func TestAPIToken(t *testing.T) {
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
 		// Run test server
-		server, lis := startDaprAPIServer(fakeAPI, token)
-		defer server.Stop()
+		lis := startDaprAPIServer(t, fakeAPI, token)
 
 		// Create gRPC test client
 		clientConn := createTestClient(lis)
@@ -464,9 +486,7 @@ func TestAPIToken(t *testing.T) {
 			"fakeAppID",
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
-		// Run test server
-		server, lis := startDaprAPIServer(fakeAPI, token)
-		defer server.Stop()
+		lis := startDaprAPIServer(t, fakeAPI, token)
 
 		// Create gRPC test client
 		clientConn := createTestClient(lis)
@@ -530,8 +550,7 @@ func TestAPIToken(t *testing.T) {
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
 		// Run test server
-		server, lis := startDaprAPIServer(fakeAPI, token)
-		defer server.Stop()
+		lis := startDaprAPIServer(t, fakeAPI, token)
 
 		// Create gRPC test client
 		clientConn := createTestClient(lis)
@@ -650,9 +669,7 @@ func TestInvokeServiceFromHTTPResponse(t *testing.T) {
 				"fakeAppID",
 				mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
-			// Run test server
-			server, lis := startDaprAPIServer(fakeAPI, "")
-			defer server.Stop()
+			lis := startDaprAPIServer(t, fakeAPI, "")
 
 			// Create gRPC test client
 			clientConn := createTestClient(lis)
@@ -725,8 +742,7 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 			mock.AnythingOfType("*v1.InvokeMethodRequest")).Return(fakeResp, nil).Once()
 
 		// Run test server
-		server, lis := startDaprAPIServer(fakeAPI, "")
-		defer server.Stop()
+		lis := startDaprAPIServer(t, fakeAPI, "")
 
 		// Create gRPC test client
 		clientConn := createTestClient(lis)
@@ -759,7 +775,7 @@ func TestInvokeServiceFromGRPCResponse(t *testing.T) {
 }
 
 func TestSecretStoreNotConfigured(t *testing.T) {
-	server, lis := startDaprAPIServer(&api{
+	lis := startDaprAPIServer(t, &api{
 		logger: logger.NewLogger("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			Logger:    logger.NewLogger("grpc.api.test"),
@@ -767,7 +783,6 @@ func TestSecretStoreNotConfigured(t *testing.T) {
 			CompStore: compstore.New(),
 		}),
 	}, "")
-	defer server.Stop()
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -896,8 +911,7 @@ func TestGetSecret(t *testing.T) {
 		}),
 	}
 	// Run test server
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	// Create gRPC test client
 	clientConn := createTestClient(lis)
@@ -974,8 +988,7 @@ func TestGetBulkSecret(t *testing.T) {
 		}),
 	}
 	// Run test server
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	// Create gRPC test client
 	clientConn := createTestClient(lis)
@@ -1003,7 +1016,7 @@ func TestGetBulkSecret(t *testing.T) {
 }
 
 func TestGetStateWhenStoreNotConfigured(t *testing.T) {
-	server, lis := startDaprAPIServer(&api{
+	lis := startDaprAPIServer(t, &api{
 		logger: logger.NewLogger("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
@@ -1012,7 +1025,6 @@ func TestGetStateWhenStoreNotConfigured(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}, "")
-	defer server.Stop()
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -1096,8 +1108,7 @@ func TestSaveState(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	// create client
 	clientConn := createTestClient(lis)
@@ -1257,8 +1268,7 @@ func TestGetState(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -1372,8 +1382,7 @@ func TestGetConfiguration(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -1555,8 +1564,7 @@ func TestSubscribeConfiguration(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -1771,8 +1779,7 @@ func TestUnSubscribeConfiguration(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -1936,8 +1943,7 @@ func TestUnsubscribeConfigurationErrScenario(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -2016,8 +2022,7 @@ func TestGetBulkState(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -2156,8 +2161,7 @@ func TestDeleteState(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -2268,8 +2272,7 @@ func TestDeleteBulkState(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -2390,8 +2393,7 @@ func TestPublishTopic(t *testing.T) {
 	mock.On("Features").Return([]pubsub.Feature{})
 	srv.Universal.CompStore().AddPubSub("pubsub", &runtimePubsub.PubsubItem{Component: &mock})
 
-	server, lis := startTestServerAPI(srv)
-	defer server.Stop()
+	lis := startTestServerAPI(t, srv)
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -2586,8 +2588,7 @@ func TestBulkPublish(t *testing.T) {
 	mock.On("Features").Return([]pubsub.Feature{})
 	fakeAPI.Universal.CompStore().AddPubSub("pubsub", &runtimePubsub.PubsubItem{Component: &mock})
 
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -2662,8 +2663,7 @@ func TestInvokeBinding(t *testing.T) {
 			return &bindings.InvokeResponse{Data: []byte("ok"), Metadata: req.Metadata}, nil
 		},
 	}
-	server, lis := startTestServerAPI(srv)
-	defer server.Stop()
+	lis := startTestServerAPI(t, srv)
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -2685,14 +2685,13 @@ func TestInvokeBinding(t *testing.T) {
 }
 
 func TestTransactionStateStoreNotConfigured(t *testing.T) {
-	server, lis := startDaprAPIServer(&api{
+	lis := startDaprAPIServer(t, &api{
 		Universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
 			Logger:    logger.NewLogger("grpc.api.test"),
 			CompStore: compstore.New(),
 		}),
 	}, "")
-	defer server.Stop()
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -2705,14 +2704,13 @@ func TestTransactionStateStoreNotConfigured(t *testing.T) {
 func TestTransactionStateStoreNotImplemented(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", &daprt.MockStateStore{})
-	server, lis := startDaprAPIServer(&api{
+	lis := startDaprAPIServer(t, &api{
 		Universal: universal.New(universal.Options{
 			AppID:     "fakeAPI",
 			Logger:    logger.NewLogger("grpc.api.test"),
 			CompStore: compStore,
 		}),
 	}, "")
-	defer server.Stop()
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -2764,8 +2762,7 @@ func TestExecuteStateTransaction(t *testing.T) {
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
 		outbox:        outboxfake.New(),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -3037,7 +3034,7 @@ func TestQueryState(t *testing.T) {
 
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", fakeStore)
-	server, lis := startTestServerAPI(&api{
+	lis := startTestServerAPI(t, &api{
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			Logger:     logger.NewLogger("grpc.api.test"),
@@ -3045,7 +3042,6 @@ func TestQueryState(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	})
-	defer server.Stop()
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -3086,14 +3082,13 @@ func TestStateStoreQuerierNotImplemented(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddStateStore("store1", &daprt.MockStateStore{})
 
-	server, lis := startDaprAPIServer(&api{
+	lis := startDaprAPIServer(t, &api{
 		Universal: universal.New(universal.Options{
 			Logger:     logger.NewLogger("grpc.api.test"),
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),
 	}, "")
-	defer server.Stop()
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -3110,7 +3105,7 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 	encryption.AddEncryptedStateStore(storeName, encryption.ComponentEncryptionKeys{})
 	compStore := compstore.New()
 	compStore.AddStateStore(storeName, &mockStateStoreQuerier{})
-	server, lis := startDaprAPIServer(&api{
+	lis := startDaprAPIServer(t, &api{
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			Logger:     logger.NewLogger("grpc.api.test"),
@@ -3118,7 +3113,6 @@ func TestStateStoreQuerierEncrypted(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}, "")
-	defer server.Stop()
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -3141,14 +3135,13 @@ type getConfigurationFn func(ctx context.Context, in *runtimev1pb.GetConfigurati
 func TestGetConfigurationAPI(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", &mockConfigStore{})
-	server, lis := startDaprAPIServer(&api{
+	lis := startDaprAPIServer(t, &api{
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
 			CompStore:  compStore,
 			Resiliency: resiliency.New(nil),
 		}),
 	}, "")
-	defer server.Stop()
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -3180,7 +3173,7 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 	compStore := compstore.New()
 	compStore.AddConfiguration("store1", &mockConfigStore{})
 
-	server, lis := startDaprAPIServer(&api{
+	lis := startDaprAPIServer(t, &api{
 		logger: logger.NewLogger("grpc.api.test"),
 		Universal: universal.New(universal.Options{
 			AppID:      "fakeAPI",
@@ -3188,7 +3181,6 @@ func TestSubscribeConfigurationAPI(t *testing.T) {
 			Resiliency: resiliency.New(nil),
 		}),
 	}, "")
-	defer server.Stop()
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -3328,8 +3320,7 @@ func TestStateAPIWithResiliency(t *testing.T) {
 		pubsubAdapter: &daprt.MockPubSubAdapter{},
 		outbox:        outboxfake.New(),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -3556,8 +3547,7 @@ func TestConfigurationAPIWithResiliency(t *testing.T) {
 			Resiliency: resiliency.FromConfigurations(logger.NewLogger("grpc.api.test"), testResiliency),
 		}),
 	}
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
@@ -3637,8 +3627,7 @@ func TestSecretAPIWithResiliency(t *testing.T) {
 		}),
 	}
 	// Run test server
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	// Create gRPC test client
 	clientConn := createTestClient(lis)
@@ -3721,8 +3710,7 @@ func TestServiceInvocationWithResiliency(t *testing.T) {
 	}
 
 	// Run test server
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	// Create gRPC test client
 	clientConn := createTestClient(lis)
@@ -4201,13 +4189,19 @@ func TestMetadata(t *testing.T) {
 		},
 	})
 
-	mockActors := new(actors.MockActors)
-	mockActors.On("GetRuntimeStatus")
-
 	a := &api{
 		Universal: universal.New(universal.Options{
-			AppID:     "fakeAPI",
-			Actors:    mockActors,
+			AppID: "fakeAPI",
+			Actors: fake.New().WithRuntimeStatus(func() *runtimev1pb.ActorRuntime {
+				return &runtimev1pb.ActorRuntime{
+					RuntimeStatus: runtimev1pb.ActorRuntime_RUNNING,
+					HostReady:     true,
+					ActiveActors: []*runtimev1pb.ActiveActorsCount{
+						{Type: "abcd", Count: 10},
+						{Type: "xyz", Count: 5},
+					},
+				}
+			}),
 			Logger:    logger.NewLogger("grpc.api.test"),
 			CompStore: compStore,
 			GetComponentsCapabilitiesFn: func() map[string][]string {
@@ -4237,10 +4231,7 @@ func TestMetadata(t *testing.T) {
 		}),
 	}
 
-	a.Universal.SetActorsInitDone()
-
-	server, lis := startDaprAPIServer(a, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, a, "")
 
 	clientConn := createTestClient(lis)
 	defer clientConn.Close()
