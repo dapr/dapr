@@ -78,8 +78,9 @@ var (
 	StateTransaction              = ErrorCode{"ERR_STATE_TRANSACTION", CategoryState}
 	StateSave                     = ErrorCode{"ERR_STATE_SAVE", CategoryState}
 	StateGet                      = ErrorCode{"ERR_STATE_GET", CategoryState}
-	StateDelete                   = ErrorCode{"ERR_STATE_DELETE", CategoryState}
 	StateBulkGet                  = ErrorCode{"ERR_STATE_BULK_GET", CategoryState}
+	StateDelete                   = ErrorCode{"ERR_STATE_DELETE", CategoryState}
+	StateBulkDelete               = ErrorCode{"ERR_STATE_BULK_DELETE", CategoryState}
 	StateQuery                    = ErrorCode{"ERR_STATE_QUERY", CategoryState}
 	StateStoreNotFound            = ErrorCode{"ERR_STATE_STORE_NOT_FOUND", CategoryState}
 	StateStoreNotConfigured       = ErrorCode{"ERR_STATE_STORE_NOT_CONFIGURED", CategoryState}
