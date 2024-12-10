@@ -70,6 +70,7 @@ type Statestore struct {
 	table           table.Interface
 	engine          engine.Interface
 	closed          atomic.Bool
+	wg              sync.WaitGroup
 
 	storeName                  string
 	entityConfigs              map[string]api.EntityConfig
@@ -95,6 +96,7 @@ func New(opts Options) *Statestore {
 
 // OnPlacementTablesUpdated is invoked when the actors runtime received an updated placement tables.
 func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(context.Context, *api.LookupActorRequest) bool) {
+	r.wg.Wait()
 	go func() {
 		// To handle bursts, use a queue so no more than one evaluation can be queued up at the same time, since they'd all fetch the same data anyways
 		select {
@@ -321,7 +323,6 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 		return
 	}
 
-	var wg sync.WaitGroup
 	for _, t := range ats {
 		vals, _, err := r.getRemindersForActorType(ctx, t, true)
 		if err != nil {
@@ -334,9 +335,9 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 		r.reminders[t] = vals
 		r.remindersLock.Unlock()
 
-		wg.Add(1)
+		r.wg.Add(1)
 		go func() {
-			defer wg.Done()
+			defer r.wg.Done()
 
 			for i := range vals {
 				rmd := vals[i].Reminder
@@ -368,7 +369,7 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 			}
 		}()
 	}
-	wg.Wait()
+	r.wg.Wait()
 }
 
 func (r *Statestore) waitForEvaluationChan() bool {
@@ -1001,7 +1002,10 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stopChannel chan stru
 
 	reminder.UpdateFromTrack(track)
 
+	r.wg.Add(1)
 	go func() {
+		defer r.wg.Done()
+
 		var (
 			nextTimer clock.Timer
 			err       error

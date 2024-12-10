@@ -40,6 +40,7 @@ type period struct {
 }
 
 func (p *period) Setup(t *testing.T) []framework.Option {
+	p.count.Store(0)
 	p.actors = actors.New(t,
 		actors.WithActorTypes("foo"),
 		actors.WithActorTypeHandler("foo", func(w http.ResponseWriter, r *http.Request) {
@@ -50,9 +51,20 @@ func (p *period) Setup(t *testing.T) []framework.Option {
 		}),
 		actors.WithFeatureSchedulerReminders(false),
 	)
+	actors2 := actors.New(t,
+		actors.WithActorTypes("foo"),
+		actors.WithActorTypeHandler("foo", func(w http.ResponseWriter, r *http.Request) {
+			if r.Method == http.MethodDelete {
+				return
+			}
+			p.count.Add(1)
+		}),
+		actors.WithFeatureSchedulerReminders(false),
+		actors.WithPeerActor(p.actors),
+	)
 
 	return []framework.Option{
-		framework.WithProcesses(p.actors),
+		framework.WithProcesses(actors2, p.actors),
 	}
 }
 
