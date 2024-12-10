@@ -200,9 +200,9 @@ func TestActorReminder(t *testing.T) {
 	} {
 		t.Run(a.appName, func(t *testing.T) {
 			testActorReminder(t, a.appName, a.actorName)
-			testActorReminderPeriod(t, a.appName, a.actorName)
 			testActorReminderTTL(t, a.appName, a.actorName)
 			testActorReminderNonHostedActor(t, a.appName, a.actorName)
+			testActorReminderPeriod(t, a.appName, a.actorName)
 		})
 	}
 }
