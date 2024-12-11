@@ -17,19 +17,21 @@ package errorcodes
 type Category string
 
 const (
-	CategoryActor         Category = "actor"
-	CategoryWorkflow      Category = "workflow"
-	CategoryState         Category = "state"
-	CategoryConfiguration Category = "configuration"
-	CategoryCrypto        Category = "crypto"
-	CategorySecret        Category = "secret"
-	CategoryPubsub        Category = "pubsub"
-	CategoryConversation  Category = "conversation"
-	CategoryLock          Category = "lock"
-	CategoryJob           Category = "job"
-	CategoryHealth        Category = "health"
-	CategoryCommon        Category = "common"
-	CategoryPluggable     Category = "pluggable-component"
+	CategoryActor             Category = "actor"
+	CategoryWorkflow          Category = "workflow"
+	CategoryState             Category = "state"
+	CategoryConfiguration     Category = "configuration"
+	CategoryCrypto            Category = "crypto"
+	CategorySecret            Category = "secret"
+	CategoryPubsub            Category = "pubsub"
+	CategoryConversation      Category = "conversation"
+	CategoryServiceInvocation Category = "service-invocation"
+	CategoryBinding           Category = "binding"
+	CategoryLock              Category = "lock"
+	CategoryJob               Category = "job"
+	CategoryHealth            Category = "health"
+	CategoryCommon            Category = "common"
+	CategoryPluggable         Category = "pluggable-component"
 )
 
 type ErrorCode struct {
@@ -117,12 +119,16 @@ var (
 	PubsubTopicNameEmpty  = ErrorCode{"ERR_TOPIC_NAME_EMPTY", CategoryPubsub}
 
 	// Conversation (Building block)
-	ConversationInvalidParms        = ErrorCode{"ERR_CONVERSATION_INVALID_PARMS", CategoryConversation}
-	ConversationInvoke              = ErrorCode{"ERR_CONVERSATION_INVOKE", CategoryConversation}
-	ConversationMissingInputs       = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", CategoryConversation}
-	ConversationNotFound            = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", CategoryConversation}
-	ConversationDirectInvoke        = ErrorCode{"ERR_DIRECT_INVOKE", CategoryConversation}
-	ConversationInvokeOutputBinding = ErrorCode{"ERR_INVOKE_OUTPUT_BINDING", CategoryConversation}
+	ConversationInvalidParms  = ErrorCode{"ERR_CONVERSATION_INVALID_PARMS", CategoryConversation}
+	ConversationInvoke        = ErrorCode{"ERR_CONVERSATION_INVOKE", CategoryConversation}
+	ConversationMissingInputs = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", CategoryConversation}
+	ConversationNotFound      = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", CategoryConversation}
+
+	// Service Invocation / Direct Messaging (Building block)
+	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", CategoryServiceInvocation}
+
+	// Bindings (Building block)
+	BindingInvokeOutputBinding = ErrorCode{"ERR_INVOKE_OUTPUT_BINDING", CategoryBinding}
 
 	// Distributed Lock (Building block)
 	LockTry                = ErrorCode{"ERR_TRY_LOCK", CategoryLock}
