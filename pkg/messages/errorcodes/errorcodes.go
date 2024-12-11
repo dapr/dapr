@@ -145,5 +145,15 @@ var (
 	CommonMalformedRequestData = ErrorCode{"ERR_MALFORMED_REQUEST_DATA", CategoryCommon}
 	CommonMalformedResponse    = ErrorCode{"ERR_MALFORMED_RESPONSE", CategoryCommon}
 
+	// Scheduler/Jobs API
+	SchedulerScheduleJob   = ErrorCode{"SCHEDULER_SCHEDULE_JOB", CategoryJob}
+	SchedulerJobName       = ErrorCode{"SCHEDULER_JOB_NAME", CategoryJob}
+	SchedulerJobNameEmpty  = ErrorCode{"SCHEDULER_JOB_NAME_EMPTY", CategoryJob}
+	SchedulerGetJob        = ErrorCode{"SCHEDULER_GET_JOB", CategoryJob}
+	SchedulerListJobs      = ErrorCode{"SCHEDULER_LIST_JOBS", CategoryJob} // Not used yet
+	SchedulerDeleteJob     = ErrorCode{"SCHEDULER_DELETE_JOB", CategoryJob}
+	SchedulerEmpty         = ErrorCode{"SCHEDULER_EMPTY", CategoryJob}
+	SchedulerScheduleEmpty = ErrorCode{"SCHEDULER_SCHEDULE_EMPTY", CategoryJob}
+
 	CommonGeneric = ErrorCode{"ERROR", CategoryCommon}
 )

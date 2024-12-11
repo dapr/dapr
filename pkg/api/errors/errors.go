@@ -58,16 +58,16 @@ func NotConfigured(name string, componentType string, metadata map[string]string
 		Build()
 }
 
-func Empty(name string, metadata map[string]string, reason string, category errorcodes.Category) error {
+func Empty(name string, metadata map[string]string, errorCode errorcodes.ErrorCode) error {
 	message := name + " is empty"
 	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
 		"",
-		string(category),
+		string(errorCode.Category),
 	).
-		WithErrorInfo(reason, metadata).
+		WithErrorInfo(errorCode.Code, metadata).
 		Build()
 }
 
