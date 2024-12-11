@@ -23,29 +23,8 @@ import (
 	kiterrors "github.com/dapr/kit/errors"
 )
 
-const (
-	InFixName     ReasonSegment = "NAME_"
-	InFixNegative ReasonSegment = "NEGATIVE_"
-	PostFixName   ReasonSegment = "NAME"
-	PostFixEmpty  ReasonSegment = "EMPTY"
-)
-
 func NotFound(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string, category errorcodes.Category) error {
 	message := fmt.Sprintf("%s %s is not found", componentType, name)
-
-	return kiterrors.NewBuilder(
-		grpcCode,
-		httpCode,
-		message,
-		legacyTag,
-		string(category),
-	).
-		WithErrorInfo(reason, metadata).
-		Build()
-}
-
-func NotConfigured(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string, category errorcodes.Category) error {
-	message := componentType + " " + name + " is not configured"
 
 	return kiterrors.NewBuilder(
 		grpcCode,
@@ -68,18 +47,5 @@ func Empty(name string, metadata map[string]string, errorCode errorcodes.ErrorCo
 		string(errorCode.Category),
 	).
 		WithErrorInfo(errorCode.Code, metadata).
-		Build()
-}
-
-func IncorrectNegative(name string, metadata map[string]string, reason string, category errorcodes.Category) error {
-	message := name + " cannot be negative"
-	return kiterrors.NewBuilder(
-		codes.InvalidArgument,
-		http.StatusBadRequest,
-		message,
-		"",
-		string(category),
-	).
-		WithErrorInfo(reason, metadata).
 		Build()
 }
