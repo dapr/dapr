@@ -12,3 +12,27 @@ limitations under the License.
 */
 
 package client
+
+import (
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+)
+
+func TestAddDNSResolverPrefix(t *testing.T) {
+	testCases := []struct {
+		addr          []string
+		resolverAdded []string
+	}{
+		{
+			addr:          []string{"placement1:50005", "placement2:50005", "placement3:50005"},
+			resolverAdded: []string{"dns:///placement1:50005", "dns:///placement2:50005", "dns:///placement3:50005"},
+		}, {
+			addr:          []string{"192.168.0.100:50005", "192.168.0.101:50005", "192.168.0.102:50005"},
+			resolverAdded: []string{"192.168.0.100:50005", "192.168.0.101:50005", "192.168.0.102:50005"},
+		},
+	}
+	for _, tc := range testCases {
+		assert.EqualValues(t, tc.resolverAdded, addDNSResolverPrefix(tc.addr))
+	}
+}

@@ -112,9 +112,9 @@ func New(opts Options) (*Client, error) {
 }
 
 func (c *Client) Run(ctx context.Context) error {
-	connCtx, cancel := context.WithCancel(ctx)
+	connCtx, connCancel := context.WithCancel(ctx)
 	if err := c.connectRoundRobin(connCtx); err != nil {
-		cancel()
+		connCancel()
 		return err
 	}
 
@@ -127,7 +127,7 @@ func (c *Client) Run(ctx context.Context) error {
 		case ch := <-c.reconnectCh:
 			c.ready.Store(false)
 			c.lock.LockTable()
-			cancel()
+			connCancel()
 
 			if err := c.table.HaltAll(); err != nil {
 				c.lock.EnsureUnlockTable()
@@ -138,8 +138,8 @@ func (c *Client) Run(ctx context.Context) error {
 				return ctx.Err()
 			}
 
-			connCtx, cancel = context.WithCancel(ctx)
-			defer cancel()
+			connCtx, connCancel = context.WithCancel(ctx)
+			defer connCancel()
 			err := c.connectRoundRobin(connCtx)
 			ch <- err
 			c.lock.EnsureUnlockTable()
@@ -151,7 +151,7 @@ func (c *Client) Run(ctx context.Context) error {
 
 		case <-ctx.Done():
 			c.ready.Store(false)
-			cancel()
+			connCancel()
 			c.lock.LockTable()
 			defer c.lock.EnsureUnlockTable()
 			return c.table.HaltAll()
@@ -186,6 +186,11 @@ func (c *Client) connect(ctx context.Context) error {
 	}()
 
 	var err error
+	// If we're trying to connect to the same address, we reuse the existing
+	// connection.
+	// This is not just an optimisation, but a necessary feature for the
+	// round-robin load balancer to work correctly when connecting to the
+	// placement headless service in k8s
 	if c.conn == nil || len(c.addresses) > 1 {
 		//nolint:staticcheck
 		c.conn, err = grpc.DialContext(ctx, c.addresses[c.addressIndex%len(c.addresses)], c.grpcOpts...)

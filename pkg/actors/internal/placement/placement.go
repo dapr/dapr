@@ -15,7 +15,6 @@ package placement
 
 import (
 	"context"
-	"errors"
 	"strconv"
 	"strings"
 	"sync"
@@ -30,6 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/messages"
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
@@ -38,11 +38,7 @@ import (
 	"github.com/dapr/kit/logger"
 )
 
-var (
-	log = logger.NewLogger("dapr.runtime.actors.placement")
-
-	ErrActorTypeNotFound = errors.New("did not find address for actor")
-)
+var log = logger.NewLogger("dapr.runtime.actors.placement")
 
 const (
 	lockOperation   = "lock"
@@ -187,7 +183,7 @@ func (p *placement) Run(ctx context.Context) error {
 func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, error) {
 	table, ok := p.hashTable.Entries[req.ActorType]
 	if !ok {
-		return nil, ErrActorTypeNotFound
+		return nil, messages.ErrActorNoAddress
 	}
 
 	host, err := table.GetHost(req.ActorID)
@@ -272,6 +268,7 @@ func (p *placement) handleLockOperation(ctx context.Context) {
 			defer p.operationLock.Unlock()
 			if p.updateVersion.Load() < lockVersion {
 				p.updateVersion.Store(lockVersion)
+				clear(p.hashTable.Entries)
 				p.lock.EnsureUnlockTable()
 			}
 		}
