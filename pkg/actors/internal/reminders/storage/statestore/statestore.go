@@ -40,6 +40,7 @@ import (
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
+	"github.com/dapr/kit/concurrency/cmap"
 	"github.com/dapr/kit/logger"
 	"github.com/dapr/kit/retry"
 )
@@ -56,12 +57,17 @@ type Options struct {
 	APILevel   *apilevel.APILevel
 }
 
+type reminderStop struct {
+	stopCh  chan struct{}
+	stopped chan struct{}
+}
+
 type Statestore struct {
 	clock           clock.WithTicker
 	runningCh       chan struct{}
 	remindersLock   sync.RWMutex
 	reminders       map[string][]ActorReminderReference
-	activeReminders sync.Map
+	activeReminders cmap.Map[string, *reminderStop]
 	evaluationChan  chan struct{}
 	evaluationQueue chan struct{}
 	store           actorstate.Backend
@@ -70,7 +76,6 @@ type Statestore struct {
 	table           table.Interface
 	engine          engine.Interface
 	closed          atomic.Bool
-	wg              sync.WaitGroup
 
 	storeName                  string
 	entityConfigs              map[string]api.EntityConfig
@@ -91,6 +96,7 @@ func New(opts Options) *Statestore {
 		table:           opts.Table,
 		storeName:       opts.StoreName,
 		apiLevel:        opts.APILevel,
+		activeReminders: cmap.NewMap[string, *reminderStop](),
 	}
 }
 
@@ -115,9 +121,10 @@ func (r *Statestore) DrainRebalancedReminders() {
 	for _, remtypes := range r.reminders {
 		for _, rem := range remtypes {
 			reminderKey := rem.Reminder.Key()
-			stopChan, exists := r.activeReminders.LoadAndDelete(reminderKey)
+			stop, exists := r.activeReminders.LoadAndDelete(reminderKey)
 			if exists {
-				close(stopChan.(chan struct{}))
+				close(stop.stopCh)
+				<-stop.stopped
 			}
 		}
 	}
@@ -151,7 +158,10 @@ func (r *Statestore) Create(ctx context.Context, req *api.CreateReminderRequest)
 		}
 	}
 
-	stop := make(chan struct{})
+	stop := &reminderStop{
+		stopCh:  make(chan struct{}),
+		stopped: make(chan struct{}),
+	}
 
 	config := retry.DefaultConfig()
 	config.Multiplier = 1.0
@@ -315,6 +325,7 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 		return
 	}
 
+	var wg sync.WaitGroup
 	for _, t := range ats {
 		vals, _, err := r.getRemindersForActorType(ctx, t, true)
 		if err != nil {
@@ -327,9 +338,9 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 		r.reminders[t] = vals
 		r.remindersLock.Unlock()
 
-		r.wg.Add(1)
+		wg.Add(1)
 		go func() {
-			defer r.wg.Done()
+			defer wg.Done()
 
 			for i := range vals {
 				rmd := vals[i].Reminder
@@ -339,9 +350,13 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 					ActorType: rmd.ActorType,
 					ActorID:   rmd.ActorID,
 				}) {
-					stop := make(chan struct{})
-					_, exists := r.activeReminders.LoadOrStore(reminderKey, stop)
+					_, exists := r.activeReminders.Load(reminderKey)
 					if !exists {
+						stop := &reminderStop{
+							stopCh:  make(chan struct{}),
+							stopped: make(chan struct{}),
+						}
+						r.activeReminders.Store(reminderKey, stop)
 						err := r.startReminder(&rmd, stop)
 						if err != nil {
 							log.Errorf("Error starting reminder %s: %v", reminderKey, err)
@@ -355,13 +370,14 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 					stopChan, exists := r.activeReminders.LoadAndDelete(reminderKey)
 					if exists {
 						log.Debugf("Stopping reminder %s  as it's active on host", reminderKey)
-						close(stopChan.(chan struct{}))
+						close(stopChan.stopCh)
+						<-stopChan.stopped
 					}
 				}
 			}
 		}()
 	}
-	r.wg.Wait()
+	wg.Wait()
 }
 
 func (r *Statestore) waitForEvaluationChan() bool {
@@ -408,7 +424,8 @@ func (r *Statestore) doDeleteReminder(ctx context.Context, actorType, actorID, n
 	stop, exists := r.activeReminders.LoadAndDelete(reminderKey)
 	if exists {
 		log.Debugf("Found reminder with key: %s. Deleting reminder", reminderKey)
-		close(stop.(chan struct{}))
+		close(stop.stopCh)
+		<-stop.stopped
 	}
 
 	var policyDef *resiliency.PolicyDefinition
@@ -504,15 +521,16 @@ func (r *Statestore) doDeleteReminder(ctx context.Context, actorType, actorID, n
 	return err
 }
 
-func (r *Statestore) storeReminder(ctx context.Context, reminder *api.Reminder, stopChannel chan struct{}) error {
+func (r *Statestore) storeReminder(ctx context.Context, reminder *api.Reminder, stop *reminderStop) error {
 	// Store the reminder in active reminders list
 	reminderKey := reminder.Key()
 
-	stored, loaded := r.activeReminders.LoadOrStore(reminderKey, stopChannel)
-	if loaded {
+	if _, ok := r.activeReminders.Load(reminderKey); ok {
 		// If the value was loaded, we have a race condition: another goroutine is trying to store the same reminder
 		return fmt.Errorf("failed to store reminder %s: reminder was created concurrently by another goroutine", reminderKey)
 	}
+
+	r.activeReminders.Store(reminderKey, stop)
 
 	var policyDef *resiliency.PolicyDefinition
 	if r.resiliency != nil && !r.resiliency.PolicyDefined(r.storeName, resiliency.ComponentOutboundPolicy) {
@@ -571,7 +589,7 @@ func (r *Statestore) storeReminder(ctx context.Context, reminder *api.Reminder, 
 	})
 	if err != nil {
 		// Remove the value from the in-memory cache
-		r.activeReminders.CompareAndDelete(reminderKey, stored)
+		r.activeReminders.Delete(reminderKey)
 		return err
 	}
 	return nil
@@ -984,7 +1002,7 @@ func (r *Statestore) migrateRemindersForActorType(ctx context.Context, actorType
 	return nil
 }
 
-func (r *Statestore) startReminder(reminder *api.Reminder, stopChannel chan struct{}) error {
+func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) error {
 	reminderKey := reminder.Key()
 
 	track, err := r.getReminderTrack(context.TODO(), reminderKey)
@@ -994,9 +1012,15 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stopChannel chan stru
 
 	reminder.UpdateFromTrack(track)
 
-	r.wg.Add(1)
 	go func() {
-		r.wg.Done()
+		defer func() {
+			select {
+			case <-stop.stopped:
+			default:
+				close(stop.stopped)
+			}
+		}()
+
 		var (
 			nextTimer clock.Timer
 			err       error
@@ -1021,7 +1045,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stopChannel chan stru
 			select {
 			case <-nextTimer.C():
 				// noop
-			case <-stopChannel:
+			case <-stop.stopCh:
 				// reminder has been already deleted
 				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has been deleted", reminderKey, reminder.DueTime, reminder.Period)
 				return
@@ -1051,13 +1075,13 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stopChannel chan stru
 				break loop
 			}
 
-			err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
-			if err != nil {
-				log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
-			}
-
 			_, exists = r.activeReminders.Load(reminderKey)
 			if exists {
+				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
+				if err != nil {
+					log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
+				}
+
 				track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
 				if gErr != nil {
 					log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
@@ -1065,7 +1089,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stopChannel chan stru
 					eTag = track.Etag
 				}
 			} else {
-				log.Error("Could not find active reminder with key: %s", reminderKey)
+				log.Error("Could not find active reminder with key after call: %s", reminderKey)
 				nextTimer = nil
 				return
 			}
@@ -1086,6 +1110,11 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stopChannel chan stru
 		}
 
 	delete:
+		select {
+		case <-stop.stopped:
+		default:
+			close(stop.stopped)
+		}
 		err = r.Delete(context.TODO(), &api.DeleteReminderRequest{
 			Name:      reminder.Name,
 			ActorID:   reminder.ActorID,
