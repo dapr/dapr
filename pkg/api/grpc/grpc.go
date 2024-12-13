@@ -768,32 +768,26 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Set, err == nil, elapsed)
 
 	if err != nil {
-		err, grpcCode := a.stateErrorResponse(err, messages.ErrStateSave, in.GetStoreName(), err.Error())
-		err = apierrors.Basic(grpcCode, http.StatusInternalServerError, errorcodes.StateSave, fmt.Sprintf(messages.ErrStateSave, in.GetStoreName(), err.Error()))
+		err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateSave, fmt.Sprintf(messages.ErrStateSave, in.GetStoreName(), err.Error()))
 		a.logger.Debug(err)
 		return empty, err
 	}
 	return empty, nil
 }
 
-// stateErrorResponse takes a state store error, format and args and returns a status code encoded gRPC error.
-func (a *api) stateErrorResponse(err error, format string, args ...interface{}) (error, codes.Code) {
+// getStateErrorCode takes a state store error and returns the associated etag's grpcCode, if applicable
+func (a *api) getStateErrorCode(err error) codes.Code {
 	var etagErr *state.ETagError
 	if errors.As(err, &etagErr) {
 		switch etagErr.Kind() {
 		case state.ETagMismatch:
-			return status.Errorf(codes.Aborted, format, args...), codes.Aborted
+			return codes.Aborted
 		case state.ETagInvalid:
-			return status.Errorf(codes.InvalidArgument, format, args...), codes.InvalidArgument
+			return codes.InvalidArgument
 		}
 	}
 
-	kerr, ok := kiterrors.FromError(err)
-	if ok {
-		return kerr, kerr.GrpcStatusCode()
-	}
-
-	return status.Errorf(codes.Internal, format, args...), codes.Internal
+	return codes.Internal
 }
 
 func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateRequest) (*emptypb.Empty, error) {
@@ -835,8 +829,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Delete, err == nil, elapsed)
 
 	if err != nil {
-		err, grpcCode := a.stateErrorResponse(err, messages.ErrStateDelete, in.GetKey(), err.Error())
-		err = apierrors.Basic(grpcCode, http.StatusInternalServerError, errorcodes.StateDelete, fmt.Sprintf(messages.ErrStateSave, in.GetStoreName(), err.Error()))
+		err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateDelete, fmt.Sprintf(messages.ErrStateSave, in.GetStoreName(), err.Error()))
 		a.logger.Debug(err)
 		return empty, err
 	}
@@ -886,8 +879,7 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.BulkDelete, err == nil, elapsed)
 
 	if err != nil {
-		err, grpcCode := a.stateErrorResponse(err, messages.ErrStateDeleteBulk, in.GetStoreName(), err.Error())
-		err = apierrors.Basic(grpcCode, http.StatusInternalServerError, errorcodes.StateBulkDelete, fmt.Sprintf(messages.ErrStateDeleteBulk, in.GetStoreName(), err.Error()))
+		err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateBulkDelete, fmt.Sprintf(messages.ErrStateDeleteBulk, in.GetStoreName(), err.Error()))
 		a.logger.Debug(err)
 		return empty, err
 	}
@@ -1195,7 +1187,7 @@ func stringValueOrEmpty(value *string) string {
 
 func (a *api) getConfigurationStore(name string) (configuration.Store, error) {
 	if a.CompStore().ConfigurationsLen() == 0 {
-		err := apierrors.Basic(codes.FailedPrecondition, http.StatusInternalServerError, errorcodes.ConfigurationStoreNotConfigured, fmt.Sprintf(messages.ErrConfigurationStoresNotConfigured))
+		err := apierrors.Basic(codes.FailedPrecondition, http.StatusInternalServerError, errorcodes.ConfigurationStoreNotConfigured, messages.ErrConfigurationStoresNotConfigured)
 		return nil, err
 	}
 
