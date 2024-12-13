@@ -118,16 +118,19 @@ func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(conte
 }
 
 func (r *Statestore) DrainRebalancedReminders() {
-	for _, remtypes := range r.reminders {
-		for _, rem := range remtypes {
-			reminderKey := rem.Reminder.Key()
-			stop, exists := r.activeReminders.LoadAndDelete(reminderKey)
-			if exists {
-				close(stop.stopCh)
-				<-stop.stopped
-			}
-		}
-	}
+	r.waitForEvaluationChan()
+	defer func() {
+		<-r.evaluationChan
+	}()
+
+	r.activeReminders.Range(func(_ string, value *reminderStop) bool {
+		close(value.stopCh)
+		<-value.stopped
+		return true
+	})
+
+	r.activeReminders = cmap.NewMap[string, *reminderStop]()
+	r.reminders = make(map[string][]ActorReminderReference)
 }
 
 func (r *Statestore) Create(ctx context.Context, req *api.CreateReminderRequest) error {
