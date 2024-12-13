@@ -416,7 +416,7 @@ func TestActorFeatures(t *testing.T) {
 			log.Printf("failed to get logs. Error='%v' Response='%s'", err, string(res))
 		}
 		require.NoError(t, err, "failed to get logs")
-		require.Equal(t, 1, countActorAction(res, actorID, reminderName), "condition failed")
+		require.Equalf(t, 1, countActorAction(res, actorID, reminderName), "condition failed: %s", string(res))
 	})
 
 	t.Run("Actor reminder with deactivate.", func(t *testing.T) {
