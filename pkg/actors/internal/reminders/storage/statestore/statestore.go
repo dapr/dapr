@@ -1113,11 +1113,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 		}
 
 	delete:
-		select {
-		case <-stop.stopped:
-		default:
-			close(stop.stopped)
-		}
+		r.activeReminders.Delete(reminderKey)
 		err = r.Delete(context.TODO(), &api.DeleteReminderRequest{
 			Name:      reminder.Name,
 			ActorID:   reminder.ActorID,
