@@ -14,11 +14,8 @@ limitations under the License.
 package placement
 
 import (
-	"strings"
 	"sync"
 	"sync/atomic"
-
-	"google.golang.org/grpc/metadata"
 
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
@@ -28,7 +25,6 @@ type daprdStream struct {
 	hostName      string
 	hostID        string
 	hostNamespace string
-	needsVNodes   bool
 	stream        placementv1pb.Placement_ReportDaprStatusServer
 }
 
@@ -38,7 +34,6 @@ func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_Rep
 		hostName:      host.GetName(),
 		hostNamespace: host.GetNamespace(),
 		stream:        stream,
-		needsVNodes:   hostNeedsVNodes(stream),
 	}
 }
 
@@ -126,16 +121,4 @@ func (s *streamConnPool) getStream(stream placementv1pb.Placement_ReportDaprStat
 
 	daprdStream, ok := s.reverseLookup[stream]
 	return daprdStream, ok
-}
-
-func hostNeedsVNodes(stream placementv1pb.Placement_ReportDaprStatusServer) bool {
-	md, ok := metadata.FromIncomingContext(stream.Context())
-	if !ok {
-		// default to older versions that need vnodes
-		return true
-	}
-
-	// Extract apiLevel from metadata
-	vmd := md.Get(GRPCContextKeyAcceptVNodes)
-	return !(len(vmd) > 0 && strings.EqualFold(vmd[0], "false"))
 }

@@ -177,17 +177,6 @@ func (hc *VirtualNodesCache) setHashes(replicationFactor int64, host string) []u
 	return hashMap.hashes[host]
 }
 
-// NewFromExistingWithVirtNodes creates a new consistent hash from existing values with vnodes
-// It's a legacy function needed for backwards compatibility (daprd >= 1.13 with placement < 1.13)
-// TODO: @elena in v1.15 remove this function
-func NewFromExistingWithVirtNodes(hosts map[uint64]string, sortedSet []uint64, loadMap map[string]*Host) *Consistent {
-	return &Consistent{
-		hosts:     hosts,
-		sortedSet: sortedSet,
-		loadMap:   loadMap,
-	}
-}
-
 // ReadInternals returns the internal data structure of the consistent hash.
 func (c *Consistent) ReadInternals(reader func(map[uint64]string, []uint64, map[string]*Host, int64)) {
 	c.RLock()
@@ -206,24 +195,6 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 	}
 
 	c.loadMap[host] = &Host{Name: host, AppID: id, Load: 0, Port: port}
-
-	// TODO: @elena in v1.15
-	// The optimisation of not disseminating vnodes with the placement table was introduced
-	// in 1.13, and the API level was increased to 20, but we still have to support sidecars
-	// running on 1.12 with placement services on 1.13. That's why we are keeping the
-	// vhosts in the store in v1.13.
-	// This should be removed in 1.15.
-	// --Start remove--
-	for i := range int(c.replicationFactor) {
-		h := hash(host + strconv.Itoa(i))
-		c.hosts[h] = host
-		c.sortedSet = append(c.sortedSet, h)
-	}
-	// sort hashes in ascending order
-	sort.Slice(c.sortedSet, func(i int, j int) bool {
-		return c.sortedSet[i] < c.sortedSet[j]
-	})
-	// --End remove--
 
 	return false
 }

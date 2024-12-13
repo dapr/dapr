@@ -105,7 +105,7 @@ func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.T
 
 	client := v1pb.NewPlacementClient(conn)
 
-	bgCtx := metadata.NewOutgoingContext(context.Background(), metadata.Pairs(GRPCContextKeyAcceptVNodes, "false"))
+	bgCtx := metadata.NewOutgoingContext(context.Background(), nil)
 	stream, err := client.ReportDaprStatus(bgCtx)
 	require.NoError(t, err)
 
