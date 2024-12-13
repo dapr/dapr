@@ -60,7 +60,6 @@ type Options struct {
 type reminderStop struct {
 	stopCh  chan struct{}
 	stopped chan struct{}
-	lock    sync.Mutex
 }
 
 type Statestore struct {
@@ -119,19 +118,16 @@ func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(conte
 }
 
 func (r *Statestore) DrainRebalancedReminders() {
-	r.waitForEvaluationChan()
-	defer func() {
-		<-r.evaluationChan
-	}()
-
-	r.activeReminders.Range(func(_ string, value *reminderStop) bool {
-		close(value.stopCh)
-		<-value.stopped
-		return true
-	})
-
-	r.activeReminders = cmap.NewMap[string, *reminderStop]()
-	r.reminders = make(map[string][]ActorReminderReference)
+	for _, remtypes := range r.reminders {
+		for _, rem := range remtypes {
+			reminderKey := rem.Reminder.Key()
+			stop, exists := r.activeReminders.LoadAndDelete(reminderKey)
+			if exists {
+				close(stop.stopCh)
+				<-stop.stopped
+			}
+		}
+	}
 }
 
 func (r *Statestore) Create(ctx context.Context, req *api.CreateReminderRequest) error {
@@ -1016,7 +1012,6 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 
 	reminder.UpdateFromTrack(track)
 
-	stop.lock.Lock()
 	go func() {
 		defer func() {
 			select {
@@ -1024,7 +1019,6 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			default:
 				close(stop.stopped)
 			}
-			stop.lock.Unlock()
 		}()
 
 		var (
@@ -1081,16 +1075,23 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				break loop
 			}
 
-			err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
-			if err != nil {
-				log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
-			}
+			_, exists = r.activeReminders.Load(reminderKey)
+			if exists {
+				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
+				if err != nil {
+					log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
+				}
 
-			track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
-			if gErr != nil {
-				log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
+				track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
+				if gErr != nil {
+					log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
+				} else {
+					eTag = track.Etag
+				}
 			} else {
-				eTag = track.Etag
+				log.Error("Could not find active reminder with key after call: %s", reminderKey)
+				nextTimer = nil
+				return
 			}
 
 			if reminder.TickExecuted() {
