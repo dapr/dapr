@@ -71,6 +71,18 @@ func Empty(name string, metadata map[string]string, reason string, category erro
 		Build()
 }
 
+func Basic(grpcCode codes.Code, httpCode int, errorCode errorcodes.ErrorCode, msg string) error {
+	return kiterrors.NewBuilder(
+		grpcCode,
+		httpCode,
+		msg,
+		"",
+		string(errorCode.Category),
+	).
+		WithErrorInfo(errorCode.Code, nil).
+		Build()
+}
+
 func IncorrectNegative(name string, metadata map[string]string, reason string, category errorcodes.Category) error {
 	message := name + " cannot be negative"
 	return kiterrors.NewBuilder(
