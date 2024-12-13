@@ -2871,7 +2871,7 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("save etag mismatch", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
-		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
+		err2, _ := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
 
 		assert.Equal(t, "rpc error: code = Aborted desc = failed saving state in state store a: possible etag mismatch. error from state store: error", err2.Error())
 	})
@@ -2879,7 +2879,7 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("save etag invalid", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
-		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
+		err2, _ := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
 
 		assert.Equal(t, "rpc error: code = InvalidArgument desc = failed saving state in state store a: invalid etag value: error", err2.Error())
 	})
@@ -2887,7 +2887,7 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("save non etag", func(t *testing.T) {
 		a := &api{}
 		err := errors.New("error")
-		err2 := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
+		err2, _ := a.stateErrorResponse(err, messages.ErrStateSave, "a", err.Error())
 
 		assert.Equal(t, "rpc error: code = Internal desc = failed saving state in state store a: error", err2.Error())
 	})
@@ -2895,7 +2895,7 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("delete etag mismatch", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
-		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
+		err2, _ := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
 
 		assert.Equal(t, "rpc error: code = Aborted desc = failed deleting state with key a: possible etag mismatch. error from state store: error", err2.Error())
 	})
@@ -2903,7 +2903,7 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("delete etag invalid", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
-		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
+		err2, _ := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
 
 		assert.Equal(t, "rpc error: code = InvalidArgument desc = failed deleting state with key a: invalid etag value: error", err2.Error())
 	})
@@ -2911,7 +2911,7 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("delete non etag", func(t *testing.T) {
 		a := &api{}
 		err := errors.New("error")
-		err2 := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
+		err2, _ := a.stateErrorResponse(err, messages.ErrStateDelete, "a", err.Error())
 
 		assert.Equal(t, "rpc error: code = Internal desc = failed deleting state with key a: error", err2.Error())
 	})
@@ -2919,7 +2919,7 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("standardized error", func(t *testing.T) {
 		a := &api{}
 		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, http.StatusNotFound, "", "testReason", "testCategory")
-		err2 := a.stateErrorResponse(standardizedErr, messages.ErrStateSave, "a", standardizedErr.Error())
+		err2, _ := a.stateErrorResponse(standardizedErr, messages.ErrStateSave, "a", standardizedErr.Error())
 
 		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", err2.Error())
 	})
