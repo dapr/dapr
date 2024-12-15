@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -36,8 +37,10 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/concurrency/cmap"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.placement")
@@ -113,6 +116,9 @@ type Service struct {
 	// membershipCh is the channel to maintain Dapr runtime host membership update.
 	membershipCh chan hostMemberChange
 
+	// globalDisseminationLock is a lock protecting the disseminateLocks map, serving as a global lock for disseminating the hashing tables.
+	globalDisseminationLock sync.Mutex
+
 	// disseminateLocks is a map of lock per namespace for disseminating the hashing tables
 	disseminateLocks cmap.Mutex[string]
 
@@ -169,9 +175,8 @@ type Service struct {
 	wg       sync.WaitGroup
 }
 
-// ServiceOpts contains options for the NewPlacementService method.
+// ServiceOpts contains options for the New method.
 type ServiceOpts struct {
-	RaftNode           *raft.Server
 	MaxAPILevel        *uint32
 	MinAPILevel        uint32
 	SecProvider        security.Provider
@@ -181,43 +186,78 @@ type ServiceOpts struct {
 	KeepAliveTime      time.Duration
 	KeepAliveTimeout   time.Duration
 	DisseminateTimeout time.Duration
+	Raft               raft.Options
 }
 
-// NewPlacementService returns a new placement service.
-func NewPlacementService(opts ServiceOpts) *Service {
+func (o *ServiceOpts) SetMinAPILevel(apiLevel int) {
+	if apiLevel >= 0 && apiLevel < math.MaxInt32 {
+		// TODO: fix types
+		//nolint:gosec
+		o.MinAPILevel = uint32(apiLevel)
+	}
+}
+
+func (o *ServiceOpts) SetMaxAPILevel(apiLevel int) {
+	if apiLevel >= 0 && apiLevel < math.MaxInt32 {
+		// TODO: fix types
+		//nolint:gosec
+		o.MaxAPILevel = ptr.Of(uint32(apiLevel))
+	}
+}
+
+// New returns a new placement service.
+func New(opts ServiceOpts) *Service {
+
+	raftServer := raft.New(opts.Raft)
+	if raftServer == nil {
+		log.Fatal("Failed to create raft server.")
+	}
+
 	return &Service{
-		streamConnPool:      newStreamConnPool(),
-		membershipCh:        make(chan hostMemberChange, membershipChangeChSize),
-		raftNode:            opts.RaftNode,
-		maxAPILevel:         opts.MaxAPILevel,
-		minAPILevel:         opts.MinAPILevel,
-		clock:               &clock.RealClock{},
-		closedCh:            make(chan struct{}),
-		sec:                 opts.SecProvider,
-		disseminateLocks:    cmap.NewMutex[string](),
-		memberUpdateCount:   *haxmap.New[string, *atomic.Uint32](),
-		disseminateNextTime: *haxmap.New[string, *atomic.Int64](),
-		keepAliveTime:       opts.KeepAliveTime,
-		keepAliveTimeout:    opts.KeepAliveTimeout,
-		disseminateTimeout:  opts.DisseminateTimeout,
-		port:                opts.Port,
-		listenAddress:       opts.ListenAddress,
-		htarget:             opts.Healthz.AddTarget(),
+		streamConnPool:          newStreamConnPool(),
+		membershipCh:            make(chan hostMemberChange, membershipChangeChSize),
+		raftNode:                raftServer,
+		maxAPILevel:             opts.MaxAPILevel,
+		minAPILevel:             opts.MinAPILevel,
+		clock:                   &clock.RealClock{},
+		closedCh:                make(chan struct{}),
+		sec:                     opts.SecProvider,
+		globalDisseminationLock: sync.Mutex{},
+		disseminateLocks:        cmap.NewMutex[string](),
+		memberUpdateCount:       *haxmap.New[string, *atomic.Uint32](),
+		disseminateNextTime:     *haxmap.New[string, *atomic.Int64](),
+		keepAliveTime:           opts.KeepAliveTime,
+		keepAliveTimeout:        opts.KeepAliveTimeout,
+		disseminateTimeout:      opts.DisseminateTimeout,
+		port:                    opts.Port,
+		listenAddress:           opts.ListenAddress,
+		htarget:                 opts.Healthz.AddTarget(),
 	}
 }
 
-// Start starts the placement service gRPC server.
-// Blocks until the service is closed and all connections are drained.
-func (p *Service) Start(ctx context.Context) error {
-	defer p.htarget.NotReady()
-
-	if p.closed.Load() {
-		return errors.New("placement service is closed")
-	}
-
+func (p *Service) Run(ctx context.Context) error {
 	if !p.running.CompareAndSwap(false, true) {
 		return errors.New("placement service is already running")
 	}
+
+	log.Info("Placement service is starting...")
+
+	runners := []concurrency.Runner{
+		p.runServer,
+		p.raftNode.StartRaft,
+		p.MonitorLeadership,
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			close(p.closedCh)
+			return nil
+		},
+	}
+
+	return concurrency.NewRunnerManager(runners...).Run(ctx)
+}
+
+func (p *Service) runServer(ctx context.Context) error {
+	defer p.htarget.NotReady()
 
 	sec, err := p.sec.Handler(ctx)
 	if err != nil {
@@ -240,27 +280,64 @@ func (p *Service) Start(ctx context.Context) error {
 
 	log.Infof("Placement service started on port %d", serverListener.Addr().(*net.TCPAddr).Port)
 
-	errCh := make(chan error)
-	go func() {
-		errCh <- grpcServer.Serve(serverListener)
-		log.Info("Placement service stopped")
-	}()
-
 	p.htarget.Ready()
-	<-ctx.Done()
 
-	if p.closed.CompareAndSwap(false, true) {
-		close(p.closedCh)
-	}
+	return concurrency.NewRunnerManager(
+		func(ctx context.Context) error {
+			log.Infof("Running Placement gRPC server on port %d", p.port)
+			if err := grpcServer.Serve(serverListener); err != nil {
+				return fmt.Errorf("failed to serve: %w", err)
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			grpcServer.GracefulStop()
+			log.Info("Placement GRPC server stopped")
+			p.wg.Wait() // TODO: check if this is needed
+			return nil
+		},
+	).Run(ctx)
 
-	grpcServer.GracefulStop()
-	p.wg.Wait()
-
-	return <-errCh
 }
+
+//// Run starts the placement service gRPC server.
+//// Blocks until the service is closed and all connections are drained.
+//func (p *Service) RunOld(ctx context.Context) error {
+//	//defer p.htarget.NotReady()
+//
+//	//if p.closed.Load() {
+//	//	return errors.New("placement service is closed")
+//	//}
+//
+//	//if !p.running.CompareAndSwap(false, true) {
+//	//	return errors.New("placement service is already running")
+//	//}
+//
+//	go func() {
+//		errCh <- grpcServer.Serve(serverListener)
+//		log.Info("Placement service stopped")
+//	}()
+//
+//	p.htarget.Ready()
+//	<-ctx.Done()
+//
+//	if p.closed.CompareAndSwap(false, true) {
+//		close(p.closedCh)
+//	}
+//
+//	grpcServer.GracefulStop()
+//	p.wg.Wait()
+//
+//	return <-errCh
+//}
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
 func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
+	if !p.hasLeadership.Load() {
+		return status.Errorf(codes.FailedPrecondition, "node id=%s is not a leader. Only the leader can serve requests", p.raftNode.GetID())
+	}
+
 	registeredMemberID := ""
 	isActorHost := false
 

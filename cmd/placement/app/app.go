@@ -15,7 +15,6 @@ package app
 
 import (
 	"encoding/json"
-	"math"
 	"os"
 
 	"github.com/dapr/dapr/cmd/placement/options"
@@ -30,7 +29,6 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
-	"github.com/dapr/kit/ptr"
 	"github.com/dapr/kit/signals"
 )
 
@@ -78,8 +76,7 @@ func Run() {
 		log.Fatal(err)
 	}
 
-	// Start Raft cluster.
-	raftServer := raft.New(raft.Options{
+	raftOptions := raft.Options{
 		ID:                opts.RaftID,
 		InMem:             opts.RaftInMemEnabled,
 		Peers:             opts.RaftPeers,
@@ -92,38 +89,29 @@ func Run() {
 		MaxAPILevel: uint32(opts.MaxAPILevel),
 		Healthz:     healthz,
 		Security:    secProvider,
-	})
-	if raftServer == nil {
-		log.Fatal("Failed to create raft server.")
 	}
 
 	placementOpts := placement.ServiceOpts{
 		Port:               opts.PlacementPort,
-		RaftNode:           raftServer,
+		Raft:               raftOptions,
 		SecProvider:        secProvider,
 		Healthz:            healthz,
 		KeepAliveTime:      opts.KeepAliveTime,
 		KeepAliveTimeout:   opts.KeepAliveTimeout,
 		DisseminateTimeout: opts.DisseminateTimeout,
 	}
-	if opts.MinAPILevel >= 0 && opts.MinAPILevel < math.MaxInt32 {
-		// TODO: fix types
-		//nolint:gosec
-		placementOpts.MinAPILevel = uint32(opts.MinAPILevel)
-	}
-	if opts.MaxAPILevel >= 0 && opts.MaxAPILevel < math.MaxInt32 {
-		// TODO: fix types
-		//nolint:gosec
-		placementOpts.MaxAPILevel = ptr.Of(uint32(opts.MaxAPILevel))
-	}
-	apiServer := placement.NewPlacementService(placementOpts)
+	placementOpts.SetMinAPILevel(opts.MinAPILevel)
+	placementOpts.SetMaxAPILevel(opts.MaxAPILevel)
+
+	placementService := placement.New(placementOpts)
+
 	var healthzHandlers []server.Handler
 	if opts.MetadataEnabled {
 		healthzHandlers = append(healthzHandlers, server.Handler{
 			Path: "/placement/state",
 			Getter: func() ([]byte, error) {
 				var tables *placement.PlacementTables
-				tables, err = apiServer.GetPlacementTables()
+				tables, err = placementService.GetPlacementTables()
 				if err != nil {
 					return nil, err
 				}
@@ -132,18 +120,18 @@ func Run() {
 		})
 	}
 
+	healthServer := server.New(server.Options{
+		Log:      log,
+		Port:     opts.HealthzPort,
+		Healthz:  healthz,
+		Handlers: healthzHandlers,
+	})
+
 	err = concurrency.NewRunnerManager(
 		secProvider.Run,
-		raftServer.StartRaft,
 		metricsExporter.Start,
-		server.New(server.Options{
-			Log:      log,
-			Port:     opts.HealthzPort,
-			Healthz:  healthz,
-			Handlers: healthzHandlers,
-		}).Start,
-		apiServer.MonitorLeadership,
-		apiServer.Start,
+		healthServer.Start,
+		placementService.Run,
 	).Run(ctx)
 	if err != nil {
 		log.Fatal(err)
