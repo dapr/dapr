@@ -25,7 +25,7 @@ import (
 	"google.golang.org/protobuf/types/known/emptypb"
 
 	"github.com/dapr/dapr/pkg/acl"
-	"github.com/dapr/dapr/pkg/actors"
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -284,8 +284,21 @@ func (a *api) CallLocalStream(stream internalv1pb.ServiceInvocation_CallLocalStr
 // CallActor invokes a virtual actor.
 func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	// We don't do resiliency here as it is handled in the API layer. See InvokeActor().
-	res, err := a.Actors().Call(ctx, in)
+	var res *internalv1pb.InternalInvokeResponse
+	engine, err := a.ActorEngine(ctx)
+	if err == nil {
+		if in.Metadata == nil {
+			in.Metadata = make(map[string]*internalv1pb.ListStringValue)
+		}
+		in.Metadata["X-Dapr-Remote"] = &internalv1pb.ListStringValue{Values: []string{"true"}}
+		res, err = engine.Call(ctx, in)
+	}
+
 	if err != nil {
+		if _, ok := status.FromError(err); ok {
+			return nil, err
+		}
+
 		actorErr, isActorErr := actorerrors.As(err)
 		if res != nil && isActorErr {
 			// We have to remove the error to keep the body, so callers must re-inspect for the header in the actual response.
@@ -303,14 +316,22 @@ func (a *api) CallActor(ctx context.Context, in *internalv1pb.InternalInvokeRequ
 
 // CallActorReminder invokes an internal virtual actor.
 func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
-	return nil, a.Actors().ExecuteLocalOrRemoteActorReminder(ctx, &actors.CreateReminderRequest{
-		Name:      in.GetName(),
-		ActorType: in.GetActorType(),
-		ActorID:   in.GetActorId(),
-		Data:      in.GetData(),
-		DueTime:   in.GetDueTime(),
-		Period:    in.GetPeriod(),
-		TTL:       in.GetExpirationTime().String(),
+	engine, err := a.ActorEngine(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	period, _ := actorapi.NewReminderPeriod(in.GetPeriod())
+	return nil, engine.CallReminder(ctx, &actorapi.Reminder{
+		Name:           in.GetName(),
+		ActorType:      in.GetActorType(),
+		ActorID:        in.GetActorId(),
+		Data:           in.GetData(),
+		DueTime:        in.GetDueTime(),
+		Period:         period,
+		ExpirationTime: in.GetExpirationTime().AsTime(),
+		IsTimer:        in.GetIsTimer(),
+		IsRemote:       true,
 	})
 }
 
