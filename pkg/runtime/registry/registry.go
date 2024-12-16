@@ -27,8 +27,6 @@ import (
 	"github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/components/state"
-	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
-	"github.com/dapr/dapr/pkg/components/workflows"
 	messagingv1 "github.com/dapr/dapr/pkg/messaging/v1"
 	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
 	"github.com/dapr/dapr/pkg/runtime/compstore"
@@ -45,38 +43,34 @@ type Reporter func(context.Context, componentsapi.Component, *operatorv1.Resourc
 
 // Registry is a collection of component registries.
 type Registry struct {
-	secret          *secretstores.Registry
-	state           *state.Registry
-	config          *configuration.Registry
-	lock            *lock.Registry
-	pubsub          *pubsub.Registry
-	nameResolution  *nameresolution.Registry
-	binding         *bindings.Registry
-	httpMiddleware  *http.Registry
-	workflow        *workflows.Registry
-	workflowBackend *wfbe.Registry
-	crypto          *crypto.Registry
-	conversations   *conversation.Registry
-	componentCb     ComponentsCallback
-	reporter        Reporter
+	secret         *secretstores.Registry
+	state          *state.Registry
+	config         *configuration.Registry
+	lock           *lock.Registry
+	pubsub         *pubsub.Registry
+	nameResolution *nameresolution.Registry
+	binding        *bindings.Registry
+	httpMiddleware *http.Registry
+	crypto         *crypto.Registry
+	conversations  *conversation.Registry
+	componentCb    ComponentsCallback
+	reporter       Reporter
 }
 
 func New(opts *Options) *Registry {
 	return &Registry{
-		secret:          opts.secret,
-		state:           opts.state,
-		config:          opts.config,
-		lock:            opts.lock,
-		pubsub:          opts.pubsub,
-		nameResolution:  opts.nameResolution,
-		binding:         opts.binding,
-		httpMiddleware:  opts.httpMiddleware,
-		workflow:        opts.workflow,
-		workflowBackend: opts.workflowBackend,
-		crypto:          opts.crypto,
-		conversations:   opts.conversation,
-		componentCb:     opts.componentsCallback,
-		reporter:        opts.reporter,
+		secret:         opts.secret,
+		state:          opts.state,
+		config:         opts.config,
+		lock:           opts.lock,
+		pubsub:         opts.pubsub,
+		nameResolution: opts.nameResolution,
+		binding:        opts.binding,
+		httpMiddleware: opts.httpMiddleware,
+		crypto:         opts.crypto,
+		conversations:  opts.conversation,
+		componentCb:    opts.componentsCallback,
+		reporter:       opts.reporter,
 	}
 }
 
@@ -110,14 +104,6 @@ func (r *Registry) Bindings() *bindings.Registry {
 
 func (r *Registry) HTTPMiddlewares() *http.Registry {
 	return r.httpMiddleware
-}
-
-func (r *Registry) Workflows() *workflows.Registry {
-	return r.workflow
-}
-
-func (r *Registry) WorkflowBackends() *wfbe.Registry {
-	return r.workflowBackend
 }
 
 func (r *Registry) Crypto() *crypto.Registry {

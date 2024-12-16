@@ -49,7 +49,7 @@ func BuildAll(t *testing.T) {
 		if runtime.GOOS == "windows" {
 			build(t, name, options{
 				dir:  rootDir,
-				tags: []string{"allcomponents", "wfbackendsqlite"},
+				tags: []string{"allcomponents"},
 			})
 			wg.Done()
 		} else {
@@ -57,7 +57,7 @@ func BuildAll(t *testing.T) {
 				defer wg.Done()
 				build(t, name, options{
 					dir:  rootDir,
-					tags: []string{"allcomponents", "wfbackendsqlite"},
+					tags: []string{"allcomponents"},
 				})
 			}(name)
 		}
