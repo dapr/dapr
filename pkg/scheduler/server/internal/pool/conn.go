@@ -20,6 +20,8 @@ import (
 	"sync"
 
 	"github.com/diagridio/go-etcd-cron/api"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 )
@@ -61,8 +63,8 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 
 	go func() {
 		defer func() {
-			close(conn.closeCh)
 			p.remove(req, id, cancel)
+			close(conn.closeCh)
 			p.wg.Done()
 		}()
 		for {
@@ -84,7 +86,9 @@ func (p *Pool) newConn(req *schedulerv1pb.WatchJobsRequestInitial, stream schedu
 
 		for {
 			resp, err := stream.Recv()
-			if errors.Is(err, context.Canceled) || errors.Is(err, io.EOF) {
+
+			s, ok := status.FromError(err)
+			if (ok && s.Code() == codes.Canceled) || errors.Is(err, io.EOF) {
 				return
 			}
 			if err != nil {
