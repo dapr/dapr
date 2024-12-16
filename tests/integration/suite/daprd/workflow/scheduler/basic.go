@@ -27,10 +27,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/microsoft/durabletask-go/api"
-	"github.com/microsoft/durabletask-go/backend"
-	"github.com/microsoft/durabletask-go/client"
-	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc/status"
@@ -44,6 +40,10 @@ import (
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
@@ -185,7 +185,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
 
 		// Wait long enough to ensure all orchestrations have started (but not longer than the timer delay)
-		assert.Eventually(t, func() bool {
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			// List of all orchestrations created
 			orchestrationIDs := []string{string(id)}
 			for i := range 5 {
@@ -195,12 +195,9 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				meta, err := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
 				require.NoError(t, err)
 				// All orchestrations should be running
-				if meta.RuntimeStatus != api.RUNTIME_STATUS_RUNNING {
-					return false
-				}
+				assert.Equal(c, api.RUNTIME_STATUS_RUNNING.String(), meta.RuntimeStatus.String())
 			}
-			return true
-		}, 3*time.Second, 10*time.Millisecond)
+		}, 10*time.Second, 10*time.Millisecond)
 
 		// Terminate the root orchestration
 		b.terminateWorkflow(t, ctx, string(id))

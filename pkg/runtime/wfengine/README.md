@@ -8,10 +8,10 @@ This README is designed to be used by maintainers to help with getting started. 
 
 The workflow engine is entirely encapsulated within the [dapr sidecar (a.k.a. daprd)](https://docs.dapr.io/concepts/dapr-services/sidecar/). All dependencies are compiled directly into the binary.
 
-Internally, this engine depends on the [Durable Task Framework for Go](https://github.com/microsoft/durabletask-go), an MIT-licensed open-source project for authoring workflows (or "orchestrations") as code. Use the following command to get the latest build of this dependency:
+Internally, this engine depends on the [Durable Task Framework for Go](https://github.com/dapr/durabletask-go), an MIT-licensed open-source project for authoring workflows (or "orchestrations") as code. Use the following command to get the latest build of this dependency:
 
 ```bash
-go get github.com/microsoft/durabletask-go
+go get github.com/dapr/durabletask-go
 ```
 
 Be mindful that the above command will also pull in dependencies for sqlite, which we don't want or require. Those can be manually removed from go.mod and go.sum.

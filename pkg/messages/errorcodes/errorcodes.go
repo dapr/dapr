@@ -43,17 +43,22 @@ func (e *ErrorCode) Error() string {
 
 var (
 	// Actors (Building block)
-	ActorInstanceMissing      = ErrorCode{"ERR_ACTOR_INSTANCE_MISSING", CategoryActor}
-	ActorInvokeMethod         = ErrorCode{"ERR_ACTOR_INVOKE_METHOD", CategoryActor}
-	ActorRuntimeNotFound      = ErrorCode{"ERR_ACTOR_RUNTIME_NOT_FOUND", CategoryActor}
-	ActorStateGet             = ErrorCode{"ERR_ACTOR_STATE_GET", CategoryActor}
-	ActorStateTransactionSave = ErrorCode{"ERR_ACTOR_STATE_TRANSACTION_SAVE", CategoryActor}
-	ActorReminderCreate       = ErrorCode{"ERR_ACTOR_REMINDER_CREATE", CategoryActor}
-	ActorReminderDelete       = ErrorCode{"ERR_ACTOR_REMINDER_DELETE", CategoryActor}
-	ActorReminderGet          = ErrorCode{"ERR_ACTOR_REMINDER_GET", CategoryActor}
-	ActorReminderNonHosted    = ErrorCode{"ERR_ACTOR_REMINDER_NON_HOSTED", CategoryActor}
-	ActorTimerCreate          = ErrorCode{"ERR_ACTOR_TIMER_CREATE", CategoryActor}
-	ActorTimerDelete          = ErrorCode{"ERR_ACTOR_TIMER_DELETE", CategoryActor}
+	ActorInstanceMissing          = ErrorCode{"ERR_ACTOR_INSTANCE_MISSING", CategoryActor}
+	ErrActorNoAppChannel          = ErrorCode{"ERR_ACTOR_NO_APP_CHANNEL", CategoryActor}
+	ActorInvokeMethod             = ErrorCode{"ERR_ACTOR_INVOKE_METHOD", CategoryActor}
+	ActorRuntimeNotFound          = ErrorCode{"ERR_ACTOR_RUNTIME_NOT_FOUND", CategoryActor}
+	ActorStateGet                 = ErrorCode{"ERR_ACTOR_STATE_GET", CategoryActor}
+	ActorStateTransactionSave     = ErrorCode{"ERR_ACTOR_STATE_TRANSACTION_SAVE", CategoryActor}
+	ActorReminderCreate           = ErrorCode{"ERR_ACTOR_REMINDER_CREATE", CategoryActor}
+	ActorReminderDelete           = ErrorCode{"ERR_ACTOR_REMINDER_DELETE", CategoryActor}
+	ActorReminderGet              = ErrorCode{"ERR_ACTOR_REMINDER_GET", CategoryActor}
+	ActorReminderNonHosted        = ErrorCode{"ERR_ACTOR_REMINDER_NON_HOSTED", CategoryActor}
+	ActorTimerCreate              = ErrorCode{"ERR_ACTOR_TIMER_CREATE", CategoryActor}
+	ErrActorMaxStackDepthExceeded = ErrorCode{"ERR_ACTOR_STACK_DEPTH", CategoryActor}
+	ErrActorNoPlacement           = ErrorCode{"ERR_ACTOR_NO_PLACEMENT", CategoryActor}
+	ErrActorRuntimeClosed         = ErrorCode{"ERR_ACTOR_RUNTIME_CLOSED", CategoryActor}
+	ErrActorNamespaceRequired     = ErrorCode{"ERR_ACTOR_NAMESPACE_REQUIRED", CategoryActor}
+	ErrActorNoAddress             = ErrorCode{"ERR_ACTOR_NO_ADDRESS", CategoryActor}
 
 	// Workflows (Building block)
 	WorkflowGet                       = ErrorCode{"ERR_GET_WORKFLOW", CategoryWorkflow}
