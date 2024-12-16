@@ -24,8 +24,6 @@ import (
 	"github.com/dapr/dapr/pkg/components/pubsub"
 	"github.com/dapr/dapr/pkg/components/secretstores"
 	"github.com/dapr/dapr/pkg/components/state"
-	wfbe "github.com/dapr/dapr/pkg/components/wfbackend"
-	"github.com/dapr/dapr/pkg/components/workflows"
 )
 
 // Options is the options to configure the registries
@@ -38,8 +36,6 @@ type Options struct {
 	nameResolution     *nameresolution.Registry
 	binding            *bindings.Registry
 	httpMiddleware     *http.Registry
-	workflow           *workflows.Registry
-	workflowBackend    *wfbe.Registry
 	crypto             *crypto.Registry
 	conversation       *conversation.Registry
 	componentsCallback ComponentsCallback
@@ -106,18 +102,6 @@ func (o *Options) WithBindings(registry *bindings.Registry) *Options {
 // WithHTTPMiddlewares adds http middleware components to the runtime.
 func (o *Options) WithHTTPMiddlewares(registry *http.Registry) *Options {
 	o.httpMiddleware = registry
-	return o
-}
-
-// WithWorkflows adds workflow components to the runtime.
-func (o *Options) WithWorkflows(registry *workflows.Registry) *Options {
-	o.workflow = registry
-	return o
-}
-
-// WithWorkflows adds workflow components to the runtime.
-func (o *Options) WithWorkflowBackends(registry *wfbe.Registry) *Options {
-	o.workflowBackend = registry
 	return o
 }
 
