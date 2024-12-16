@@ -44,6 +44,7 @@ const (
 	numActorsPerThread           = 10                                 // Number of get calls before starting tests.
 	secondsToCheckReminderResult = 20                                 // How much time to wait to make sure the result is in logs.
 	actorName                    = "testactorreminder"                // Actor name
+	actorNameMis                 = "testactorremindermiss"            // Actor name
 	actorNameScheduler           = "testactorreminderscheduler"       // Actor name
 	actorInvokeURLFormat         = "%s/test/%s/%s/%s/%s"              // URL to invoke a Dapr's actor method in test app.
 	actorlogsURLFormat           = "%s/test/logs"                     // URL to fetch logs from test app.
@@ -139,7 +140,7 @@ func TestMain(m *testing.M) {
 			AppCPULimit:         "2.0",
 			AppCPURequest:       "0.1",
 			AppEnv: map[string]string{
-				"TEST_APP_ACTOR_TYPE": actorName,
+				"TEST_APP_ACTOR_TYPE": actorNameMis,
 			},
 		},
 		{
@@ -184,7 +185,7 @@ func TestActorMissingStateStore(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("Actor service should 500 when no state store is available.", func(t *testing.T) {
-		_, statusCode, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, "bogon-actor", "reminders", "failed-reminder"), reminderBody)
+		_, statusCode, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorNameMis, "bogon-actor", "reminders", "failed-reminder"), reminderBody)
 		require.NoError(t, err)
 		require.True(t, statusCode == 500)
 	})
