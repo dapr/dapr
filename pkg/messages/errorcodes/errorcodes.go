@@ -44,17 +44,22 @@ func (e *ErrorCode) Error() string {
 
 var (
 	// ### Actors (Building block)
-	ActorInstanceMissing      = ErrorCode{"ERR_ACTOR_INSTANCE_MISSING", "", CategoryActor}       // Missing actor instance
-	ActorInvokeMethod         = ErrorCode{"ERR_ACTOR_INVOKE_METHOD", "", CategoryActor}          // Error invoking actor method
-	ActorRuntimeNotFound      = ErrorCode{"ERR_ACTOR_RUNTIME_NOT_FOUND", "", CategoryActor}      // Actor runtime not found
-	ActorStateGet             = ErrorCode{"ERR_ACTOR_STATE_GET", "", CategoryActor}              // Error getting actor state
-	ActorStateTransactionSave = ErrorCode{"ERR_ACTOR_STATE_TRANSACTION_SAVE", "", CategoryActor} // Error saving actor transaction
-	ActorReminderCreate       = ErrorCode{"ERR_ACTOR_REMINDER_CREATE", "", CategoryActor}        // Error creating actor reminder
-	ActorReminderDelete       = ErrorCode{"ERR_ACTOR_REMINDER_DELETE", "", CategoryActor}        // Error deleting actor reminder
-	ActorReminderGet          = ErrorCode{"ERR_ACTOR_REMINDER_GET", "", CategoryActor}           // Error getting actor reminder
-	ActorReminderNonHosted    = ErrorCode{"ERR_ACTOR_REMINDER_NON_HOSTED", "", CategoryActor}    // Reminder operation on non-hosted actor type
-	ActorTimerCreate          = ErrorCode{"ERR_ACTOR_TIMER_CREATE", "", CategoryActor}           // Error creating actor timer
-	ActorTimerDelete          = ErrorCode{"ERR_ACTOR_TIMER_DELETE", "", CategoryActor}           // Error deleting actor timer
+	ActorInstanceMissing          = ErrorCode{"ERR_ACTOR_INSTANCE_MISSING", "", CategoryActor}       // Missing actor instance
+	ActorInvokeMethod             = ErrorCode{"ERR_ACTOR_INVOKE_METHOD", "", CategoryActor}          // Error invoking actor method
+	ActorRuntimeNotFound          = ErrorCode{"ERR_ACTOR_RUNTIME_NOT_FOUND", "", CategoryActor}      // Actor runtime not found
+	ActorStateGet                 = ErrorCode{"ERR_ACTOR_STATE_GET", "", CategoryActor}              // Error getting actor state
+	ActorStateTransactionSave     = ErrorCode{"ERR_ACTOR_STATE_TRANSACTION_SAVE", "", CategoryActor} // Error saving actor transaction
+	ActorReminderCreate           = ErrorCode{"ERR_ACTOR_REMINDER_CREATE", "", CategoryActor}        // Error creating actor reminder
+	ActorReminderDelete           = ErrorCode{"ERR_ACTOR_REMINDER_DELETE", "", CategoryActor}        // Error deleting actor reminder
+	ActorReminderGet              = ErrorCode{"ERR_ACTOR_REMINDER_GET", "", CategoryActor}           // Error getting actor reminder
+	ActorReminderNonHosted        = ErrorCode{"ERR_ACTOR_REMINDER_NON_HOSTED", "", CategoryActor}    // Reminder operation on non-hosted actor type
+	ActorTimerCreate              = ErrorCode{"ERR_ACTOR_TIMER_CREATE", "", CategoryActor}           // Error creating actor timer
+	ErrActorNoAppChannel          = ErrorCode{"ERR_ACTOR_NO_APP_CHANNEL", "", CategoryActor}         // App channel not initialized
+	ErrActorMaxStackDepthExceeded = ErrorCode{"ERR_ACTOR_STACK_DEPTH", "", CategoryActor}            // Maximum actor call stack depth exceeded
+	ErrActorNoPlacement           = ErrorCode{"ERR_ACTOR_NO_PLACEMENT", "", CategoryActor}           // Placement service not configured
+	ErrActorRuntimeClosed         = ErrorCode{"ERR_ACTOR_RUNTIME_CLOSED", "", CategoryActor}         // Actor runtime is closed
+	ErrActorNamespaceRequired     = ErrorCode{"ERR_ACTOR_NAMESPACE_REQUIRED", "", CategoryActor}     // Actors must have a namespace configured when running in Kubernetes mode
+	ErrActorNoAddress             = ErrorCode{"ERR_ACTOR_NO_ADDRESS", "", CategoryActor}             // No address found for actor
 
 	// ### Workflows (Building block)
 	WorkflowGet                       = ErrorCode{"ERR_GET_WORKFLOW", "", CategoryWorkflow}                 // Error getting workflow

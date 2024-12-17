@@ -47,8 +47,7 @@ func TestCryptoAlpha1(t *testing.T) {
 	}
 
 	// Run test server
-	server, lis := startDaprAPIServer(fakeAPI, "")
-	defer server.Stop()
+	lis := startDaprAPIServer(t, fakeAPI, "")
 
 	// Create gRPC test client
 	clientConn := createTestClient(lis)
