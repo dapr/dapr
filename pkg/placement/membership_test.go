@@ -25,7 +25,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/metadata"
 	clocktesting "k8s.io/utils/clock/testing"
 
 	"github.com/dapr/dapr/pkg/placement/raft"
@@ -571,10 +570,4 @@ type MockPlacementGRPCStream struct {
 
 func (m MockPlacementGRPCStream) Context() context.Context {
 	return m.ctx
-}
-
-// Utility function to create metadata and context for testing
-func createContextWithMetadata(key, value string) context.Context {
-	md := metadata.Pairs(key, value)
-	return metadata.NewIncomingContext(context.Background(), md)
 }
