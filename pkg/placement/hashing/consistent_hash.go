@@ -186,6 +186,7 @@ func (c *Consistent) ReadInternals(reader func(map[uint64]string, []uint64, map[
 }
 
 // Add adds a host with port to the table.
+// Used on the Placement side to add hosts to the ring. It doesn't calculate vnodes.
 func (c *Consistent) Add(host, id string, port int64) bool {
 	c.Lock()
 	defer c.Unlock()
@@ -200,10 +201,13 @@ func (c *Consistent) Add(host, id string, port int64) bool {
 }
 
 // Get returns the host that owns `key`.
+// It assumes that the struct was created on the Daprd side with NewFromExisting,
+// which is where the hashes are calculated
 //
 // As described in https://en.wikipedia.org/wiki/Consistent_hashing
 //
-// It returns ErrNoHosts if the ring has no hosts in it.
+// It returns ErrNoHosts if the ring has no hosts in it or the hashes haven't been calculated
+// (which how this struct is used on the Placement side)
 func (c *Consistent) Get(key string) (string, error) {
 	c.RLock()
 	defer c.RUnlock()
