@@ -67,7 +67,7 @@ func (f *failthird) Run(t *testing.T, ctx context.Context) {
 		ActorType: "helloworld",
 		ActorId:   "1234",
 		Name:      "test",
-		DueTime:   "0s",
+		DueTime:   "1s",
 	})
 	require.NoError(t, err)
 

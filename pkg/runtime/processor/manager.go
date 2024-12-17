@@ -17,7 +17,7 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/microsoft/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend"
 
 	"github.com/dapr/components-contrib/bindings"
 	componentsapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"

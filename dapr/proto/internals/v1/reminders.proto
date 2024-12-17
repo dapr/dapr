@@ -29,6 +29,7 @@ message Reminder {
   google.protobuf.Timestamp registered_time = 6;
   string due_time = 7;
   google.protobuf.Timestamp expiration_time = 8;
+  bool is_timer = 9;
 }
 
 // Reminders is a collection of reminders.
