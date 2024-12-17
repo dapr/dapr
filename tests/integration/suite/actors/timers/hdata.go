@@ -130,8 +130,6 @@ func (h *hdata) Run(t *testing.T, ctx context.Context) {
 	var i atomic.Int64
 	for name, test := range tests {
 		t.Run(name, func(t *testing.T) {
-			t.Parallel()
-
 			actorID := strconv.FormatInt(i.Add(1), 10)
 
 			h.lock.Lock()
