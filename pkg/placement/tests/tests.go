@@ -14,7 +14,6 @@ limitations under the License.
 package tests
 
 import (
-	"context"
 	"fmt"
 	"log"
 	"testing"
@@ -28,18 +27,18 @@ import (
 	daprtesting "github.com/dapr/dapr/pkg/testing"
 )
 
-func Raft(t *testing.T) *raft.Server {
+func RaftOpts(t *testing.T) (*raft.Options, error) {
 	t.Helper()
 
 	ports, err := daprtesting.GetFreePorts(1)
 	if err != nil {
 		log.Fatalf("failed to get test server port: %v", err)
-		return nil
+		return nil, nil
 	}
 
 	clock := clocktesting.NewFakeClock(time.Date(2023, 1, 1, 0, 0, 0, 0, time.UTC))
 
-	testRaftServer := raft.New(raft.Options{
+	return &raft.Options{
 		ID:    "testnode",
 		InMem: true,
 		Peers: []raft.PeerInfo{
@@ -52,38 +51,10 @@ func Raft(t *testing.T) *raft.Server {
 		Clock:        clock,
 		Security:     fake.New(),
 		Healthz:      healthz.New(),
-	})
-
-	ctx, cancel := context.WithCancel(context.Background())
-	serverStopped := make(chan struct{})
-	go func() {
-		defer close(serverStopped)
-		if err := testRaftServer.StartRaft(ctx); err != nil {
-			log.Fatalf("error running test raft server: %v", err)
-		}
-	}()
-	t.Cleanup(cancel)
-
-	// Wait until test raft node become a leader.
-	for range time.Tick(time.Microsecond) {
-		clock.Step(time.Second * 2)
-		if testRaftServer.IsLeader() {
-			break
-		}
-	}
-
-	// It is painful that we have to include a `time.Sleep` here, but due to the
-	// non-deterministic behaviour of the raft library we are using we will fail
-	// later fail on slower test runner machines. A clock timer wait means we
-	// have a _better_ chance of being in the right spot in the state machine and
-	// the network has died down. Ideally we should move to a different raft
-	// library that is more deterministic and reliable for our use case.
-	time.Sleep(time.Second * 3)
-
-	return testRaftServer
+	}, nil
 }
 
-func RaftCluster(t *testing.T, parentCtx context.Context) ([]*raft.Server, error) {
+func RaftClusterOpts(t *testing.T) ([]*raft.Options, error) {
 	t.Helper()
 
 	ports, err := daprtesting.GetFreePorts(3)
@@ -105,9 +76,9 @@ func RaftCluster(t *testing.T, parentCtx context.Context) ([]*raft.Server, error
 		})
 	}
 
-	testRaftServers := make([]*raft.Server, 0, len(raftIDs))
+	testRaftServersOpts := make([]*raft.Options, 0, len(raftIDs))
 	for i, id := range raftIDs {
-		testRaftServer := raft.New(raft.Options{
+		opts := &raft.Options{
 			ID:           id,
 			InMem:        true,
 			Peers:        peerInfo,
@@ -115,20 +86,9 @@ func RaftCluster(t *testing.T, parentCtx context.Context) ([]*raft.Server, error
 			Clock:        clocks[i],
 			Security:     fake.New(),
 			Healthz:      healthz.New(),
-		})
-		testRaftServers = append(testRaftServers, testRaftServer)
+		}
+		testRaftServersOpts = append(testRaftServersOpts, opts)
 	}
 
-	ctx, cancel := context.WithCancel(parentCtx)
-
-	for _, testRaftServer := range testRaftServers {
-		go func(server *raft.Server) {
-			if err := server.StartRaft(ctx); err != nil {
-				log.Fatalf("error running test raft server: %v", err)
-			}
-		}(testRaftServer)
-	}
-	t.Cleanup(cancel)
-
-	return testRaftServers, nil
+	return testRaftServersOpts, nil
 }
