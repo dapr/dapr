@@ -175,7 +175,7 @@ func (p *Placement) CurrentActorsAPILevel() int {
 	return 20 // Defined in pkg/actors/internal/api_level.go
 }
 
-// RegisterHost Registers a host with the placement service using default context metadata
+// RegisterHost Registers a host with the placement service
 func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host) chan *placementv1pb.PlacementTables {
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(parentCtx, p.Address(),
