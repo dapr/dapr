@@ -20,19 +20,22 @@ import (
 	"net/http"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
+
+type metadataActiveActors struct {
+	Type  string `json:"type"`
+	Count int    `json:"count"`
+}
 
 // Subset of data returned by the metadata endpoint.
 type metadataRes struct {
 	ActorRuntime struct {
-		RuntimeStatus string `json:"runtimeStatus"`
-		ActiveActors  []struct {
-			Type  string `json:"type"`
-			Count int    `json:"count"`
-		} `json:"activeActors"`
-		HostReady bool   `json:"hostReady"`
-		Placement string `json:"placement"`
+		RuntimeStatus string                 `json:"runtimeStatus"`
+		ActiveActors  []metadataActiveActors `json:"activeActors"`
+		HostReady     bool                   `json:"hostReady"`
+		Placement     string                 `json:"placement"`
 	} `json:"actorRuntime"`
 }
 
@@ -44,7 +47,10 @@ func getMetadata(t require.TestingT, ctx context.Context, client *http.Client, p
 	require.NoError(t, err)
 
 	resp, err := client.Do(req)
-	require.NoError(t, err)
+	//nolint:testifylint
+	if !assert.NoError(t, err) {
+		return res
+	}
 	defer resp.Body.Close()
 
 	err = json.NewDecoder(resp.Body).Decode(&res)

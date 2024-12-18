@@ -3,6 +3,9 @@ kind: Configuration
 metadata:
   name: omithealthchecksconfig
 spec:
+  features:
+  - name: SchedulerReminders
+    enabled: false
   logging:
     apiLogging:
       omitHealthChecks: true

@@ -18,8 +18,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/microsoft/durabletask-go/client"
-	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/require"
 
 	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
@@ -29,6 +27,8 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/framework/process/sqlite"
+	"github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
 )
 
 type Workflow struct {
@@ -136,5 +136,5 @@ func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient
 
 func (w *Workflow) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
-	return w.daprd.Metrics(t, ctx)
+	return w.daprd.Metrics(t, ctx).All()
 }

@@ -19,6 +19,7 @@ import (
 	"strconv"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
@@ -63,14 +64,14 @@ func (d *distributed) Setup(t *testing.T) []framework.Option {
 }
 
 func (d *distributed) Run(t *testing.T, ctx context.Context) {
-	schedConfig := `apiVersion: dapr.io/v1alpha1
+	schedOffConfig := `apiVersion: dapr.io/v1alpha1
 kind: Configuration
 metadata:
   name: schedulerreminders
 spec:
   features:
   - name: SchedulerReminders
-    enabled: true
+    enabled: false
 `
 
 	optsApp1 := []daprd.Option{
@@ -78,20 +79,19 @@ spec:
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithSchedulerAddresses(d.scheduler.Address()),
 		daprd.WithAppPort(d.app1.Port()),
+		daprd.WithConfigManifests(t, schedOffConfig),
 	}
 	optsApp2 := []daprd.Option{
 		daprd.WithResourceFiles(d.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithSchedulerAddresses(d.scheduler.Address()),
 		daprd.WithAppPort(d.app2.Port()),
-		daprd.WithConfigManifests(t, schedConfig),
 	}
 	optsApp1WithScheduler := []daprd.Option{
 		daprd.WithResourceFiles(d.db.GetComponent(t)),
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithSchedulerAddresses(d.scheduler.Address()),
 		daprd.WithAppPort(d.app1.Port()),
-		daprd.WithConfigManifests(t, schedConfig),
 	}
 
 	daprd1 := daprd.New(t, optsApp1...)
@@ -154,7 +154,9 @@ spec:
 
 	assert.Len(t, d.db.ActorReminders(t, ctx, "myactortype").Reminders, 100)
 	assert.Len(t, d.db.ActorReminders(t, ctx, "myactortype2").Reminders, 100)
-	assert.Len(t, d.scheduler.EtcdJobs(t, ctx), 100)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, d.scheduler.EtcdJobs(t, ctx), 100)
+	}, time.Second*5, time.Millisecond*10)
 
 	daprd6.Run(t, ctx)
 	t.Cleanup(func() { daprd6.Cleanup(t) })
@@ -162,7 +164,9 @@ spec:
 
 	assert.Len(t, d.db.ActorReminders(t, ctx, "myactortype").Reminders, 100)
 	assert.Len(t, d.db.ActorReminders(t, ctx, "myactortype2").Reminders, 100)
-	assert.Len(t, d.scheduler.EtcdJobs(t, ctx), 200)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, d.scheduler.EtcdJobs(t, ctx), 200)
+	}, time.Second*5, time.Millisecond*10)
 
 	daprd2.Cleanup(t)
 	daprd3.Cleanup(t)

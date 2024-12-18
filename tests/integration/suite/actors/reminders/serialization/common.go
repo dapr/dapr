@@ -80,6 +80,7 @@ func (h *httpServer) NewHandler() http.Handler {
 		}
 		w.WriteHeader(http.StatusOK)
 	})
+	r.HandleFunc("/actors/myactortype/myactorid", func(w http.ResponseWriter, r *http.Request) {})
 	r.HandleFunc("/actors/myactortype/myactorid/method/foo", func(w http.ResponseWriter, r *http.Request) {})
 	r.HandleFunc("/actors/myactortype/myactorid/method/remind/newreminder", func(w http.ResponseWriter, r *http.Request) {
 		h.remindersInvokeCount.Add(1)

@@ -29,7 +29,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/prometheus/common/expfmt"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
@@ -41,6 +40,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
@@ -126,10 +126,8 @@ func New(t *testing.T, fopts ...Option) *Daprd {
 	for _, dir := range opts.resourceDirs {
 		args = append(args, "--resources-path="+dir)
 	}
-	if len(opts.configs) > 0 {
-		for _, c := range opts.configs {
-			args = append(args, "--config="+c)
-		}
+	for _, c := range opts.configs {
+		args = append(args, "--config="+c)
 	}
 	if len(opts.placementAddresses) > 0 {
 		args = append(args, "--placement-host-address="+strings.Join(opts.placementAddresses, ","))
@@ -201,17 +199,18 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 }
 
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
+	t.Helper()
+
 	client := client.HTTP(t)
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
 	require.NoError(t, err)
-	require.Eventually(t, func() bool {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := client.Do(req)
-		if err != nil {
-			return false
+		if assert.NoError(c, err) {
+			defer resp.Body.Close()
+			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
 		}
-		defer resp.Body.Close()
-		return http.StatusNoContent == resp.StatusCode
-	}, 30*time.Second, 10*time.Millisecond)
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
@@ -329,56 +328,14 @@ func (d *Daprd) ProfilePort() int {
 }
 
 // Metrics Returns a subset of metrics scraped from the metrics endpoint
-func (d *Daprd) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
+func (d *Daprd) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
 	t.Helper()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()), nil)
-	require.NoError(t, err)
-
-	resp, err := d.httpClient.Do(req)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Extract the metrics
-	parser := expfmt.TextParser{}
-	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-
-	metrics := make(map[string]float64)
-	for _, mf := range metricFamilies {
-		for _, m := range mf.GetMetric() {
-			metricName := mf.GetName()
-			labels := ""
-			for _, l := range m.GetLabel() {
-				labels += "|" + l.GetName() + ":" + l.GetValue()
-			}
-			if counter := m.GetCounter(); counter != nil {
-				metrics[metricName+labels] = counter.GetValue()
-				continue
-			}
-			if gauge := m.GetGauge(); gauge != nil {
-				metrics[metricName+labels] = gauge.GetValue()
-				continue
-			}
-			h := m.GetHistogram()
-			if h == nil {
-				continue
-			}
-			for _, b := range h.GetBucket() {
-				bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.FormatUint(uint64(b.GetUpperBound()), 10)
-				metrics[bucketKey] = float64(b.GetCumulativeCount())
-			}
-			metrics[metricName+"_count"+labels] = float64(h.GetSampleCount())
-			metrics[metricName+"_sum"+labels] = h.GetSampleSum()
-		}
-	}
-
-	return metrics
+	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()))
 }
 
 func (d *Daprd) MetricResidentMemoryMi(t *testing.T, ctx context.Context) float64 {
-	return d.Metrics(t, ctx)["process_resident_memory_bytes"] * 1e-6
+	return d.Metrics(t, ctx).All()["process_resident_memory_bytes"] * 1e-6
 }
 
 func (d *Daprd) HTTPGet(t assert.TestingT, ctx context.Context, path string, expectedCode int) {

@@ -35,8 +35,6 @@ import (
 	pubsubLoader "github.com/dapr/dapr/pkg/components/pubsub"
 	secretstoresLoader "github.com/dapr/dapr/pkg/components/secretstores"
 	stateLoader "github.com/dapr/dapr/pkg/components/state"
-	wfbeLoader "github.com/dapr/dapr/pkg/components/wfbackend"
-	workflowsLoader "github.com/dapr/dapr/pkg/components/workflows"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -99,8 +97,6 @@ func Run() {
 	pubsubLoader.DefaultRegistry.Logger = logContrib
 	nrLoader.DefaultRegistry.Logger = logContrib
 	bindingsLoader.DefaultRegistry.Logger = logContrib
-	workflowsLoader.DefaultRegistry.Logger = logContrib
-	wfbeLoader.DefaultRegistry.Logger = logContrib
 	conversationLoader.DefaultRegistry.Logger = logContrib
 	httpMiddlewareLoader.DefaultRegistry.Logger = log // Note this uses log on purpose
 
@@ -114,8 +110,6 @@ func Run() {
 		WithBindings(bindingsLoader.DefaultRegistry).
 		WithCryptoProviders(cryptoLoader.DefaultRegistry).
 		WithHTTPMiddlewares(httpMiddlewareLoader.DefaultRegistry).
-		WithWorkflows(workflowsLoader.DefaultRegistry).
-		WithWorkflowBackends(wfbeLoader.DefaultRegistry).
 		WithConversations(conversationLoader.DefaultRegistry)
 
 	ctx := signals.Context()
