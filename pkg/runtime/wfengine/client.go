@@ -176,13 +176,12 @@ func (c *client) Get(ctx context.Context, req *workflows.GetRequest) (*workflows
 			CreatedAt:     metadata.GetCreatedAt().AsTime(),
 			LastUpdatedAt: metadata.GetLastUpdatedAt().AsTime(),
 			RuntimeStatus: getStatusString(int32(metadata.GetRuntimeStatus())),
+			Properties:    make(map[string]string),
 		},
 	}
 
 	if metadata.GetCustomStatus() != nil {
-		res.Workflow.Properties = map[string]string{
-			"dapr.workflow.custom_status": metadata.GetCustomStatus().GetValue(),
-		}
+		res.Workflow.Properties["dapr.workflow.custom_status"] = metadata.GetCustomStatus().GetValue()
 	}
 
 	// Status-specific fields
