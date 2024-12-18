@@ -118,8 +118,8 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 
 	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID(resp.GetInstanceId()))
 	require.NoError(t, err)
-	assert.True(t, metadata.IsComplete())
-	assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+	assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Empty(c, d.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix))

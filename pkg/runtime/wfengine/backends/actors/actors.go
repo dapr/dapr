@@ -16,16 +16,12 @@ limitations under the License.
 package actors
 
 import (
-	"bytes"
 	"context"
-	"encoding/gob"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
 
-	"github.com/dapr/durabletask-go/api"
-	"github.com/dapr/durabletask-go/backend"
+	"google.golang.org/protobuf/proto"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/table"
@@ -37,6 +33,8 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/state"
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/dapr/utils"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/logger"
 )
 
@@ -197,14 +195,9 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 		opt(policy)
 	}
 
-	eventData, err := backend.MarshalHistoryEvent(e)
-	if err != nil {
-		return err
-	}
-
-	requestBytes, err := json.Marshal(todo.CreateWorkflowInstanceRequest{
-		Policy:          policy,
-		StartEventBytes: eventData,
+	requestBytes, err := proto.Marshal(&backend.CreateWorkflowInstanceRequest{
+		Policy:     policy,
+		StartEvent: e,
 	})
 	if err != nil {
 		return fmt.Errorf("failed to marshal CreateWorkflowInstanceRequest: %w", err)
@@ -215,7 +208,7 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 	req := internalsv1pb.NewInternalInvokeRequest(todo.CreateWorkflowInstanceMethod).
 		WithActor(abe.workflowActorType, workflowInstanceID).
 		WithData(requestBytes).
-		WithContentType(invokev1.JSONContentType)
+		WithContentType(invokev1.ProtobufContentType)
 	start := time.Now()
 
 	engine, err := abe.actors.Engine(ctx)
@@ -236,7 +229,7 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 }
 
 // GetOrchestrationMetadata implements backend.Backend
-func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*api.OrchestrationMetadata, error) {
+func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*backend.OrchestrationMetadata, error) {
 	// Invoke the corresponding actor, which internally stores its own workflow metadata
 	req := internalsv1pb.
 		NewInternalInvokeRequest(todo.GetWorkflowMetadataMethod).
@@ -259,10 +252,11 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 	// successful request to GET workflow information, record count and latency metrics.
 	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.GetWorkflow, diag.StatusSuccess, elapsed)
 
-	var metadata api.OrchestrationMetadata
-	if err := gob.NewDecoder(bytes.NewReader(res.GetMessage().GetData().GetValue())).Decode(&metadata); err != nil {
-		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
+	var metadata backend.OrchestrationMetadata
+	if err := proto.Unmarshal(res.GetMessage().GetData().GetValue(), &metadata); err != nil {
+		return nil, fmt.Errorf("failed to decode the workflow actor response: %w", err)
 	}
+
 	return &metadata, nil
 }
 
@@ -292,7 +286,7 @@ func (*Actors) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.Orc
 
 // AddNewOrchestrationEvent implements backend.Backend and sends the event e to the workflow actor identified by id.
 func (abe *Actors) AddNewOrchestrationEvent(ctx context.Context, id api.InstanceID, e *backend.HistoryEvent) error {
-	data, err := backend.MarshalHistoryEvent(e)
+	data, err := proto.Marshal(e)
 	if err != nil {
 		return err
 	}
@@ -383,7 +377,7 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 	wfState := &state.State{}
 	err = wfState.DecodeWorkflowState(res.GetMessage().GetData().GetValue())
 	if err != nil {
-		return nil, fmt.Errorf("failed to decode the internal actor response: %w", err)
+		return nil, fmt.Errorf("failed to decode the workflow actor response: %w", err)
 	}
 	// TODO: Add caching when a good invalidation policy can be determined
 	runtimeState := backend.NewOrchestrationRuntimeState(owi.InstanceID, wfState.History)

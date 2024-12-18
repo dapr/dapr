@@ -35,7 +35,8 @@ func New(t *testing.T, fopts ...Option) *Workflow {
 	t.Helper()
 
 	opts := options{
-		registry: task.NewTaskRegistry(),
+		registry:        task.NewTaskRegistry(),
+		enableScheduler: true,
 	}
 	for _, fopt := range fopts {
 		fopt(&opts)
@@ -55,8 +56,8 @@ func (w *Workflow) Cleanup(t *testing.T) {
 	w.actors.Cleanup(t)
 }
 
-func (w *Workflow) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	w.actors.WaitUntilRunning(t, ctx)
+func (w *Workflow) Registry() *task.TaskRegistry {
+	return w.registry
 }
 
 func (w *Workflow) BackendClient(t *testing.T, ctx context.Context) *client.TaskHubGrpcClient {

@@ -18,7 +18,9 @@ import (
 	"encoding/json"
 	"errors"
 
+	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/emptypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/reminders"
@@ -32,6 +34,23 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 		return nil, err
 	}
 
+	var data *anypb.Any
+	if b := in.GetData(); b != nil {
+		b, err = json.Marshal(b)
+		if err != nil {
+			err = messages.ErrMalformedRequest.WithFormat(err)
+			a.logger.Debug(err)
+			return nil, err
+		}
+
+		data, err = anypb.New(wrapperspb.Bytes(b))
+		if err != nil {
+			err = messages.ErrMalformedRequest.WithFormat(err)
+			a.logger.Debug(err)
+			return nil, err
+		}
+	}
+
 	req := &api.CreateTimerRequest{
 		Name:      in.GetName(),
 		ActorID:   in.GetActorId(),
@@ -40,19 +59,9 @@ func (a *Universal) RegisterActorTimer(ctx context.Context, in *runtimev1pb.Regi
 		Period:    in.GetPeriod(),
 		TTL:       in.GetTtl(),
 		Callback:  in.GetCallback(),
-		Data:      in.GetData(),
+		Data:      data,
 	}
 
-	if in.GetData() != nil {
-		var j []byte
-		j, err = json.Marshal(in.GetData())
-		if err != nil {
-			err = messages.ErrMalformedRequest.WithFormat(err)
-			a.logger.Debug(err)
-			return nil, err
-		}
-		req.Data = j
-	}
 	err = timers.Create(ctx, req)
 	if err != nil {
 		err = messages.ErrActorTimerCreate.WithFormat(err)
@@ -84,6 +93,23 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		return nil, err
 	}
 
+	var data *anypb.Any
+	if b := in.GetData(); b != nil {
+		b, err = json.Marshal(b)
+		if err != nil {
+			err = messages.ErrMalformedRequest.WithFormat(err)
+			a.logger.Debug(err)
+			return nil, err
+		}
+
+		data, err = anypb.New(wrapperspb.Bytes(b))
+		if err != nil {
+			err = messages.ErrMalformedRequest.WithFormat(err)
+			a.logger.Debug(err)
+			return nil, err
+		}
+	}
+
 	req := &api.CreateReminderRequest{
 		Name:      in.GetName(),
 		ActorID:   in.GetActorId(),
@@ -91,18 +117,9 @@ func (a *Universal) RegisterActorReminder(ctx context.Context, in *runtimev1pb.R
 		DueTime:   in.GetDueTime(),
 		Period:    in.GetPeriod(),
 		TTL:       in.GetTtl(),
+		Data:      data,
 	}
 
-	if in.GetData() != nil {
-		var j []byte
-		j, err = json.Marshal(in.GetData())
-		if err != nil {
-			err = messages.ErrMalformedRequest.WithFormat(err)
-			a.logger.Debug(err)
-			return nil, err
-		}
-		req.Data = j
-	}
 	err = r.Create(ctx, req)
 	if err != nil {
 		if errors.Is(err, reminders.ErrReminderOpActorNotHosted) {

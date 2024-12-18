@@ -14,7 +14,6 @@ limitations under the License.
 package migration
 
 import (
-	"bytes"
 	"context"
 	"errors"
 	"fmt"
@@ -22,6 +21,7 @@ import (
 	"sync"
 	"time"
 
+	"google.golang.org/protobuf/proto"
 	"k8s.io/utils/clock"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -85,7 +85,7 @@ func ToScheduler(ctx context.Context, opts ToSchedulerOptions) error {
 				if stateReminder.ActorID == schedulerReminder.ActorID &&
 					stateReminder.Name == schedulerReminder.Name {
 					exists = stateReminder.DueTime == schedulerReminder.DueTime &&
-						bytes.Equal(stateReminder.Data, schedulerReminder.Data) &&
+						proto.Equal(stateReminder.Data, schedulerReminder.Data) &&
 						math.Abs(float64(stateReminder.ExpirationTime.Sub(schedulerReminder.ExpirationTime))) < float64(time.Minute)
 
 					break

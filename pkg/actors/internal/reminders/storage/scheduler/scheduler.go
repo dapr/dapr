@@ -14,16 +14,11 @@ limitations under the License.
 package scheduler
 
 import (
-	"bytes"
 	"context"
-	"encoding/json"
 	"fmt"
 	"time"
 
-	"google.golang.org/protobuf/encoding/protojson"
-	"google.golang.org/protobuf/types/known/anypb"
 	"google.golang.org/protobuf/types/known/durationpb"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/migration"
@@ -102,18 +97,6 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 		return err
 	}
 
-	var dataAny *anypb.Any
-	if len(reminder.Data) > 0 {
-		buf := &bytes.Buffer{}
-		if err = json.Compact(buf, reminder.Data); err != nil {
-			return fmt.Errorf("failed to compact reminder %s data: %w", reminder.Name, err)
-		}
-		dataAny, err = anypb.New(wrapperspb.Bytes(buf.Bytes()))
-		if err != nil {
-			return err
-		}
-	}
-
 	var failurePolicy *schedulerv1pb.FailurePolicy
 	if reminder.IsOneShot {
 		failurePolicy = &schedulerv1pb.FailurePolicy{
@@ -133,7 +116,7 @@ func (s *scheduler) Create(ctx context.Context, reminder *api.CreateReminderRequ
 			Repeats:       repeats,
 			DueTime:       dueTime,
 			Ttl:           ttl,
-			Data:          dataAny,
+			Data:          reminder.Data,
 			FailurePolicy: failurePolicy,
 		},
 		Metadata: &schedulerv1pb.JobMetadata{
@@ -223,29 +206,10 @@ func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 
-	var data json.RawMessage
-	//nolint:protogetter
-	if dd := job.GetJob().Data; dd != nil {
-		msg, err := dd.UnmarshalNew()
-		if err != nil {
-			return nil, err
-		}
-
-		switch msg := msg.(type) {
-		case *wrapperspb.BytesValue:
-			data = msg.Value
-		default:
-			data, err = protojson.Marshal(msg)
-			if err != nil {
-				return nil, err
-			}
-		}
-	}
-
 	reminder := &api.Reminder{
 		ActorID:   req.ActorID,
 		ActorType: req.ActorType,
-		Data:      data,
+		Data:      job.GetJob().GetData(),
 		Period:    api.NewSchedulerReminderPeriod(job.GetJob().GetSchedule(), job.GetJob().GetRepeats()),
 		DueTime:   job.GetJob().GetDueTime(),
 	}
@@ -313,16 +277,12 @@ func (s *scheduler) List(ctx context.Context, req *api.ListRemindersRequest) ([]
 		}
 
 		job := named.GetJob()
-		jsonBytes, err := protojson.Marshal(job.GetData())
-		if err != nil {
-			return nil, err
-		}
 
 		reminders[i] = &api.Reminder{
 			Name:      named.GetName(),
 			ActorID:   actor.GetId(),
 			ActorType: actor.GetType(),
-			Data:      jsonBytes,
+			Data:      job.GetData(),
 			Period:    api.NewSchedulerReminderPeriod(job.GetSchedule(), job.GetRepeats()),
 			DueTime:   job.GetDueTime(),
 		}
