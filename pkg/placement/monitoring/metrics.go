@@ -56,7 +56,7 @@ func RecordRuntimesCount(count int, ns string) {
 	)
 }
 
-// RecordActorRuntimesCount records the number of valid actor runtimes.
+// RecordActorRuntimesCount records the number of actor-hosting runtimes.
 func RecordActorRuntimesCount(count int, ns string) {
 	stats.RecordWithTags(
 		context.Background(),

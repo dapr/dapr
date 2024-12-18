@@ -141,5 +141,5 @@ func (w *Workflow) GRPCClient(t *testing.T, ctx context.Context) rtv1.DaprClient
 
 func (w *Workflow) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
 	t.Helper()
-	return w.daprd.Metrics(t, ctx)
+	return w.daprd.Metrics(t, ctx).All()
 }
