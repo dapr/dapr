@@ -89,7 +89,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		assert.Equal(t, "SCHEDULER_SCHEDULE_EMPTY", errCode)
+		assert.Equal(t, "DAPR_SCHEDULER_SCHEDULE_EMPTY", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -108,7 +108,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		detailsObject, ok := detailsArray[0].(map[string]interface{})
 		require.True(t, ok)
 		require.Equal(t, "dapr.io", detailsObject["domain"])
-		assert.Equal(t, "SCHEDULER_SCHEDULE_EMPTY", detailsObject["reason"])
+		assert.Equal(t, "DAPR_SCHEDULER_SCHEDULE_EMPTY", detailsObject["reason"])
 
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
@@ -138,7 +138,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		assert.Equal(t, "SCHEDULER_JOB_NAME_EMPTY", errCode)
+		assert.Equal(t, "DAPR_SCHEDULER_JOB_NAME_EMPTY", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -157,7 +157,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		detailsObject, ok := detailsArray[0].(map[string]interface{})
 		require.True(t, ok)
 		require.Equal(t, "dapr.io", detailsObject["domain"])
-		assert.Equal(t, "SCHEDULER_JOB_NAME_EMPTY", detailsObject["reason"])
+		assert.Equal(t, "DAPR_SCHEDULER_JOB_NAME_EMPTY", detailsObject["reason"])
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
@@ -186,7 +186,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		assert.Equal(t, "SCHEDULER_JOB_NAME", errCode)
+		assert.Equal(t, "DAPR_SCHEDULER_JOB_NAME", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -205,7 +205,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		detailsObject, ok := detailsArray[0].(map[string]interface{})
 		require.True(t, ok)
 		require.Equal(t, "dapr.io", detailsObject["domain"])
-		assert.Equal(t, "SCHEDULER_JOB_NAME", detailsObject["reason"])
+		assert.Equal(t, "DAPR_SCHEDULER_JOB_NAME", detailsObject["reason"])
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 
@@ -246,7 +246,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		// Confirm that the 'errorCode' field exists and contains the correct error code
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
-		assert.Equal(t, "SCHEDULER_GET_JOB", errCode)
+		assert.Equal(t, "DAPR_SCHEDULER_GET_JOB", errCode)
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -265,7 +265,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		detailsObject, ok := detailsArray[0].(map[string]interface{})
 		require.True(t, ok)
 		require.Equal(t, "dapr.io", detailsObject["domain"])
-		assert.Equal(t, "SCHEDULER_GET_JOB", detailsObject["reason"])
+		assert.Equal(t, "DAPR_SCHEDULER_GET_JOB", detailsObject["reason"])
 		require.Equal(t, ErrInfoType, detailsObject["@type"])
 	})
 }

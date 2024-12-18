@@ -76,7 +76,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		require.Equal(t, "SCHEDULER_EMPTY", errInfo.GetReason())
+		require.Equal(t, "DAPR_SCHEDULER_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
@@ -99,7 +99,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		assert.Equal(t, "SCHEDULER_JOB_NAME_EMPTY", errInfo.GetReason())
+		assert.Equal(t, "DAPR_SCHEDULER_JOB_NAME_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
@@ -122,7 +122,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		assert.Equal(t, "SCHEDULER_SCHEDULE_EMPTY", errInfo.GetReason())
+		assert.Equal(t, "DAPR_SCHEDULER_SCHEDULE_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
@@ -145,7 +145,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		assert.Equal(t, "SCHEDULER_JOB_NAME_EMPTY", errInfo.GetReason())
+		assert.Equal(t, "DAPR_SCHEDULER_JOB_NAME_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 
@@ -168,7 +168,7 @@ func (e *standardizedErrors) Run(t *testing.T, ctx context.Context) {
 		errInfo, ok = s.Details()[0].(*errdetails.ErrorInfo)
 
 		require.True(t, ok)
-		assert.Equal(t, "SCHEDULER_JOB_NAME_EMPTY", errInfo.GetReason())
+		assert.Equal(t, "DAPR_SCHEDULER_JOB_NAME_EMPTY", errInfo.GetReason())
 		require.Equal(t, "dapr.io", errInfo.GetDomain())
 	})
 }
