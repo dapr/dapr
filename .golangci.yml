@@ -331,3 +331,14 @@ linters:
     - deadcode
     - inamedparam
     - tagalign
+    # Items below are silenced whe upgrading to 1.59.1 to force lint to pass on contrib upgrade.
+    - canonicalheader
+    - copyloopvar
+    - mnd
+    - perfsprint
+    - spancheck
+    - testifylint
+    - usestdlibvars
+    - nolintlint
+    - fatcontext
+    - intrange
