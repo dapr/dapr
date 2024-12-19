@@ -390,8 +390,8 @@ test-integration-parallel: test-deps
 ################################################################################
 # Target: lint                                                                 #
 ################################################################################
-# Please use golangci-lint version v1.55.2 , otherwise you might encounter errors.
-# You can download version v1.55.2 at https://github.com/golangci/golangci-lint/releases/tag/v1.55.2
+# Please use golangci-lint version v1.59.1 , otherwise you might encounter errors.
+# You can download version v1.59.1 at https://github.com/golangci/golangci-lint/releases/tag/v1.59.1
 .PHONY: lint
 lint: check-linter
 	$(GOLANGCI_LINT) run --build-tags=$(GOLANGCI_LINT_TAGS) --timeout=20m

@@ -215,6 +215,7 @@ func (t *Table) Flush() error {
 		filePrefixOutput = "./test_report"
 	}
 
+	//nolint:gosec
 	err = os.WriteFile(filePath(filePrefixOutput, t.Test), bts, os.ModePerm)
 	if err != nil {
 		log.Errorf("error when saving table %s: %v", t.Test, err)
