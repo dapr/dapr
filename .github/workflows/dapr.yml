@@ -80,7 +80,7 @@ jobs:
         with:
           version: ${{ env.GOLANGCILINT_VER }}
           skip-cache: true
-          args: --build-tags allcomponents
+          args: --build-tags allcomponents,subtlecrypto --timeout=20m
       - name: Run go mod tidy check diff
         run: make modtidy check-diff
       - name: Check for retracted dependencies
