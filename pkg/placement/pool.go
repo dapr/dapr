@@ -17,6 +17,7 @@ import (
 	"sync"
 	"sync/atomic"
 
+	"github.com/dapr/dapr/pkg/placement/monitoring"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
@@ -75,6 +76,8 @@ func (s *streamConnPool) add(stream *daprdStream) {
 
 	s.streams[stream.hostNamespace][id] = stream
 	s.reverseLookup[stream.stream] = stream
+
+	monitoring.RecordRuntimesCount(len(s.streams[stream.hostNamespace]), stream.hostNamespace)
 }
 
 // delete removes a stream connection between runtime and placement
@@ -91,6 +94,8 @@ func (s *streamConnPool) delete(stream *daprdStream) {
 			delete(s.streams, stream.hostNamespace)
 		}
 	}
+
+	monitoring.RecordRuntimesCount(len(s.streams[stream.hostNamespace]), stream.hostNamespace)
 }
 
 func (s *streamConnPool) getStreamCount(namespace string) int {
