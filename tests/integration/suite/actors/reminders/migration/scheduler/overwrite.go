@@ -15,7 +15,6 @@ package scheduler
 
 import (
 	"context"
-	"encoding/base64"
 	"net/http"
 	"testing"
 	"time"
@@ -126,7 +125,7 @@ spec:
 	require.Len(t, resp.GetJobs(), 1)
 	njob := resp.GetJobs()[0]
 	assert.Equal(t, "myreminder", njob.GetName())
-	expAny, err := anypb.New(wrapperspb.Bytes([]byte(`"` + base64.URLEncoding.EncodeToString([]byte("mydata1")) + `"`)))
+	expAny, err := anypb.New(wrapperspb.Bytes([]byte(`"bXlkYXRhMQ=="`)))
 	require.NoError(t, err)
 	assert.Equal(t, &schedulerv1.Job{
 		Schedule: ptr.Of("@every 2h46m40s"),
@@ -180,7 +179,7 @@ spec:
 	require.Len(t, resp.GetJobs(), 1)
 	njob = resp.GetJobs()[0]
 	assert.Equal(t, "myreminder", njob.GetName())
-	expAny, err = anypb.New(wrapperspb.Bytes([]byte(`"` + base64.URLEncoding.EncodeToString([]byte("mydata1")) + `"`)))
+	expAny, err = anypb.New(wrapperspb.Bytes([]byte(`"bXlkYXRhMQ=="`)))
 	require.NoError(t, err)
 	assert.Equal(t, &schedulerv1.Job{
 		Schedule: ptr.Of("@every 2h46m40s"),
@@ -219,7 +218,7 @@ spec:
 	require.Len(t, resp.GetJobs(), 1)
 	njob = resp.GetJobs()[0]
 	assert.Equal(t, "myreminder", njob.GetName())
-	expAny, err = anypb.New(wrapperspb.Bytes([]byte(`"` + base64.URLEncoding.EncodeToString([]byte("mydata2")) + `"`)))
+	expAny, err = anypb.New(wrapperspb.Bytes([]byte(`"bXlkYXRhMg=="`)))
 	require.NoError(t, err)
 	assert.Equal(t, "@every 5h33m20s", njob.GetJob().GetSchedule())
 	assert.Equal(t, "20000s", njob.GetJob().GetDueTime())

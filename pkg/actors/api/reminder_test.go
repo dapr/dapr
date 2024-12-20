@@ -22,6 +22,8 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/anypb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 )
 
 func TestReminderProperties(t *testing.T) {
@@ -161,7 +163,6 @@ func TestReminderJSON(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			var err error
 			r := Reminder{
 				ActorID:        tt.fields.ActorID,
 				ActorType:      tt.fields.ActorType,
@@ -171,12 +172,12 @@ func TestReminderJSON(t *testing.T) {
 				ExpirationTime: tt.fields.ExpirationTime,
 			}
 			if tt.fields.Data != nil {
-				if j, ok := tt.fields.Data.(json.RawMessage); ok {
-					r.Data = compactJSON(t, j)
-				} else {
-					r.Data, _ = json.Marshal(tt.fields.Data)
-				}
+				bb, err := json.Marshal(tt.fields.Data)
+				require.NoError(t, err)
+				r.Data, err = anypb.New(wrapperspb.Bytes(bb))
+				require.NoError(t, err)
 			}
+			var err error
 			r.Period, err = NewReminderPeriod(tt.fields.Period)
 			require.NoError(t, err)
 
@@ -207,22 +208,6 @@ func TestReminderJSON(t *testing.T) {
 		enc, err := json.Marshal(dec)
 		require.NoError(t, err)
 		require.Equal(t, payload, string(enc))
-	})
-
-	t.Run("failed to marshal", func(t *testing.T) {
-		t.Run("invalid JSON in data", func(t *testing.T) {
-			r := Reminder{
-				ActorID:   "id",
-				ActorType: "type",
-				Name:      "name",
-				Data:      json.RawMessage("invalid_json"),
-			}
-
-			res, err := json.Marshal(r)
-			require.Error(t, err)
-			require.ErrorContains(t, err, "json: error calling MarshalJSON for type json.RawMessage")
-			assert.Empty(t, res)
-		})
 	})
 
 	t.Run("failed to unmarshal", func(t *testing.T) {
@@ -271,7 +256,12 @@ func TestReminderString(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
+			var data *anypb.Any
 			var err error
+			if len(tt.fields.Data) > 0 {
+				data, err = anypb.New(wrapperspb.Bytes(tt.fields.Data))
+				require.NoError(t, err)
+			}
 			r := Reminder{
 				ActorID:        tt.fields.ActorID,
 				ActorType:      tt.fields.ActorType,
@@ -279,7 +269,7 @@ func TestReminderString(t *testing.T) {
 				RegisteredTime: tt.fields.DueTime,
 				DueTime:        tt.fields.DueTimeReq,
 				ExpirationTime: tt.fields.ExpirationTime,
-				Data:           tt.fields.Data,
+				Data:           data,
 			}
 			r.Period, err = NewReminderPeriod(tt.fields.Period)
 			require.NoError(t, err)

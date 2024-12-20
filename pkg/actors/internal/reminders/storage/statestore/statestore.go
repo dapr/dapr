@@ -626,15 +626,13 @@ func (r *Statestore) serializeRemindersToProto(reminders []api.Reminder) ([]byte
 			Name:      rm.Name,
 			Period:    rm.Period.String(),
 			DueTime:   rm.DueTime,
+			Data:      rm.Data,
 		}
 		if !rm.RegisteredTime.IsZero() {
 			pb.Reminders[i].RegisteredTime = timestamppb.New(rm.RegisteredTime)
 		}
 		if !rm.ExpirationTime.IsZero() {
 			pb.Reminders[i].ExpirationTime = timestamppb.New(rm.ExpirationTime)
-		}
-		if len(rm.Data) > 0 && !bytes.Equal(rm.Data, []byte("null")) {
-			pb.Reminders[i].Data = rm.Data
 		}
 	}
 	res, err := proto.Marshal(pb)
@@ -679,11 +677,9 @@ func (r *Statestore) unserializeRemindersFromProto(data []byte) ([]api.Reminder,
 			Name:      rm.Name,
 			DueTime:   rm.DueTime,
 			Period:    api.NewEmptyReminderPeriod(),
+			Data:      rm.Data,
 		}
 
-		if len(rm.Data) > 0 {
-			res[i].Data = rm.Data
-		}
 		if rm.Period != "" {
 			err = res[i].Period.UnmarshalJSON([]byte(rm.Period))
 			if err != nil {

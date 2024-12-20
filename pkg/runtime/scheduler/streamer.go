@@ -20,7 +20,6 @@ import (
 	"io"
 	"sync"
 
-	"github.com/golang/protobuf/ptypes/wrappers"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -187,17 +186,10 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 
 	actor := job.GetMetadata().GetTarget().GetActor()
 
-	var jspb wrappers.BytesValue
-	if job.GetData() != nil {
-		if err := job.GetData().UnmarshalTo(&jspb); err != nil {
-			return fmt.Errorf("failed to unmarshal reminder data: %s", err)
-		}
-	}
-
 	return s.actors.CallReminder(ctx, &api.Reminder{
 		Name:      job.GetName(),
 		ActorType: actor.GetType(),
 		ActorID:   actor.GetId(),
-		Data:      jspb.GetValue(),
+		Data:      job.GetData(),
 	})
 }

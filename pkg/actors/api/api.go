@@ -15,6 +15,10 @@ package api
 
 import (
 	"encoding/json"
+
+	"github.com/golang/protobuf/ptypes/wrappers"
+	"google.golang.org/protobuf/encoding/protojson"
+	"google.golang.org/protobuf/types/known/anypb"
 )
 
 const (
@@ -70,9 +74,9 @@ func (r GetBulkStateRequest) ActorKey() string {
 
 // ReminderResponse is the payload that is sent to an Actor SDK API for execution.
 type ReminderResponse struct {
-	Data    any    `json:"data"`
-	DueTime string `json:"dueTime"`
-	Period  string `json:"period"`
+	Data    *anypb.Any `json:"data"`
+	DueTime string     `json:"dueTime"`
+	Period  string     `json:"period"`
 }
 
 // MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
@@ -87,15 +91,23 @@ func (r *ReminderResponse) MarshalJSON() ([]byte, error) {
 		responseAlias: (*responseAlias)(r),
 	}
 
-	if raw, ok := r.Data.(json.RawMessage); ok {
-		m.Data = raw
-	} else {
-		var err error
-		m.Data, err = json.Marshal(r.Data)
+	if r.Data != nil {
+		msg, err := r.Data.UnmarshalNew()
 		if err != nil {
 			return nil, err
 		}
+
+		switch msg := msg.(type) {
+		case *wrappers.BytesValue:
+			m.Data = msg.GetValue()
+		default:
+			m.Data, err = protojson.Marshal(msg)
+			if err != nil {
+				return nil, err
+			}
+		}
 	}
+
 	return json.Marshal(m)
 }
 
@@ -119,10 +131,10 @@ type BulkStateResponse map[string][]byte
 
 // TimerResponse is the response object send to an Actor SDK API when a timer fires.
 type TimerResponse struct {
-	Callback string `json:"callback"`
-	Data     any    `json:"data"`
-	DueTime  string `json:"dueTime"`
-	Period   string `json:"period"`
+	Callback string     `json:"callback"`
+	Data     *anypb.Any `json:"data"`
+	DueTime  string     `json:"dueTime"`
+	Period   string     `json:"period"`
 }
 
 // MarshalJSON is a custom JSON marshaler that encodes the data as JSON.
@@ -131,12 +143,28 @@ type TimerResponse struct {
 func (t *TimerResponse) MarshalJSON() ([]byte, error) {
 	type responseAlias TimerResponse
 	m := struct {
-		Data any `json:"data,omitempty"`
+		Data json.RawMessage `json:"data,omitempty"`
 		*responseAlias
 	}{
 		responseAlias: (*responseAlias)(t),
 	}
 
-	m.Data = t.Data
+	if t.Data != nil {
+		msg, err := t.Data.UnmarshalNew()
+		if err != nil {
+			return nil, err
+		}
+
+		switch msg := msg.(type) {
+		case *wrappers.BytesValue:
+			m.Data = msg.GetValue()
+		default:
+			m.Data, err = protojson.Marshal(msg)
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+
 	return json.Marshal(m)
 }
