@@ -191,23 +191,18 @@ type ServiceOpts struct {
 
 func (o *ServiceOpts) SetMinAPILevel(apiLevel int) {
 	if apiLevel >= 0 && apiLevel < math.MaxInt32 {
-		// TODO: fix types
-		//nolint:gosec
 		o.MinAPILevel = uint32(apiLevel)
 	}
 }
 
 func (o *ServiceOpts) SetMaxAPILevel(apiLevel int) {
 	if apiLevel >= 0 && apiLevel < math.MaxInt32 {
-		// TODO: fix types
-		//nolint:gosec
 		o.MaxAPILevel = ptr.Of(uint32(apiLevel))
 	}
 }
 
 // New returns a new placement service.
 func New(opts ServiceOpts) *Service {
-
 	raftServer := raft.New(opts.Raft)
 	if raftServer == nil {
 		log.Fatal("Failed to create raft server.")
@@ -298,39 +293,7 @@ func (p *Service) runServer(ctx context.Context) error {
 			return nil
 		},
 	).Run(ctx)
-
 }
-
-//// Run starts the placement service gRPC server.
-//// Blocks until the service is closed and all connections are drained.
-//func (p *Service) RunOld(ctx context.Context) error {
-//	//defer p.htarget.NotReady()
-//
-//	//if p.closed.Load() {
-//	//	return errors.New("placement service is closed")
-//	//}
-//
-//	//if !p.running.CompareAndSwap(false, true) {
-//	//	return errors.New("placement service is already running")
-//	//}
-//
-//	go func() {
-//		errCh <- grpcServer.Serve(serverListener)
-//		log.Info("Placement service stopped")
-//	}()
-//
-//	p.htarget.Ready()
-//	<-ctx.Done()
-//
-//	if p.closed.CompareAndSwap(false, true) {
-//		close(p.closedCh)
-//	}
-//
-//	grpcServer.GracefulStop()
-//	p.wg.Wait()
-//
-//	return <-errCh
-//}
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
 func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
