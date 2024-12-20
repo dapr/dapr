@@ -31,7 +31,6 @@ import (
 const (
 	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
 	raftApplyCommandMaxConcurrency = 10
-	GRPCContextKeyAcceptVNodes     = "dapr-accept-vnodes"
 )
 
 // membershipChangeWorker is the worker to change the state of membership
@@ -234,23 +233,10 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 		streams = append(streams, *stream)
 	})
 
-	// Check if the cluster has daprd hosts that expect vnodes;
-	// older daprd versions (pre 1.13) do expect them, and newer versions (1.13+) do not.
 	req := &tablesUpdateRequest{
 		hosts: streams,
 	}
-	// Loop through all streams and check what kind of tables to disseminate (with/without vnodes)
-	for _, stream := range streams {
-		if stream.needsVNodes && req.tablesWithVNodes == nil {
-			req.tablesWithVNodes = p.raftNode.FSM().PlacementState(true, ns)
-		}
-		if !stream.needsVNodes && req.tables == nil {
-			req.tables = p.raftNode.FSM().PlacementState(false, ns)
-		}
-		if req.tablesWithVNodes != nil && req.tables != nil {
-			break
-		}
-	}
+	req.tables = p.raftNode.FSM().PlacementState(ns)
 
 	numActorTypesInNamespace := p.raftNode.FSM().State().MemberCountInNamespace(ns)
 	log.Infof(
@@ -281,7 +267,7 @@ func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequ
 	startedAt := p.clock.Now()
 
 	// Enforce maximum API level
-	if req.tablesWithVNodes != nil || req.tables != nil {
+	if req.tables != nil {
 		req.SetAPILevel(p.minAPILevel, p.maxAPILevel)
 	}
 
@@ -311,14 +297,7 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, req *tablesUp
 
 	for i := range req.hosts {
 		go func(i int) {
-			var tableToSend *v1pb.PlacementTables
-			if req.hosts[i].needsVNodes && req.tablesWithVNodes != nil {
-				tableToSend = req.tablesWithVNodes
-			} else if !req.hosts[i].needsVNodes && req.tables != nil {
-				tableToSend = req.tables
-			}
-
-			errCh <- p.disseminateOperation(ctx, req.hosts[i], operation, tableToSend)
+			errCh <- p.disseminateOperation(ctx, req.hosts[i], operation, req.tables)
 		}(i)
 	}
 
