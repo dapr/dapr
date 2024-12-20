@@ -65,6 +65,7 @@ type Config struct {
 	RootCertPath     string
 	IssuerCertPath   string
 	IssuerKeyPath    string
+	SelfHostedCA     bool
 	Validators       map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
 	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
 	Features         []daprGlobalConfig.FeatureSpec

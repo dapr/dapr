@@ -43,6 +43,7 @@ type Options struct {
 	Kubeconfig            string
 	Logger                logger.Options
 	Metrics               *metrics.FlagOptions
+	SelfHostedCA          bool
 
 	RootCAFilename     string
 	IssuerCertFilename string
@@ -81,6 +82,7 @@ func New(origArgs []string) *Options {
 	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The listen address for the sentry server")
 	fs.IntVar(&opts.HealthzPort, "healthz-port", 8080, "The port for the healthz server to listen on")
 	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
+	fs.BoolVar(&opts.SelfHostedCA, "self-hosted-ca", false, "Runs the CA in self-hosted mode, ie. only arguments provided through command line are considered")
 
 	if home := homedir.HomeDir(); home != "" {
 		fs.StringVar(&opts.Kubeconfig, "kubeconfig", filepath.Join(home, ".kube", "config"), "(optional) absolute path to the kubeconfig file")
