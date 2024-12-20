@@ -46,6 +46,7 @@ func TestNew(t *testing.T) {
 			IssuerCertPath: issuerCertPath,
 			IssuerKeyPath:  issuerKeyPath,
 			TrustDomain:    "test.example.com",
+			SelfHostedCA:   true,
 		}
 
 		_, err := New(context.Background(), config)
@@ -90,6 +91,7 @@ func TestNew(t *testing.T) {
 			RootCertPath:   rootCertPath,
 			IssuerCertPath: issuerCertPath,
 			IssuerKeyPath:  issuerKeyPath,
+			SelfHostedCA:   true,
 		}
 
 		rootPEM, rootCrt, _, rootPK := genCrt(t, "root", nil, nil)

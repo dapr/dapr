@@ -83,7 +83,10 @@ type ca struct {
 
 func New(ctx context.Context, conf config.Config) (Signer, error) {
 	var castore store
-	if config.IsKubernetesHosted() {
+	if conf.SelfHostedCA || !config.IsKubernetesHosted() {
+		log.Info("Using local file system for trust bundle storage")
+		castore = &selfhosted{config: conf}
+	} else {
 		log.Info("Using kubernetes secret store for trust bundle storage")
 
 		client, err := kubernetes.NewForConfig(utils.GetConfig())
@@ -96,9 +99,6 @@ func New(ctx context.Context, conf config.Config) (Signer, error) {
 			namespace: security.CurrentNamespace(),
 			client:    client,
 		}
-	} else {
-		log.Info("Using local file system for trust bundle storage")
-		castore = &selfhosted{config: conf}
 	}
 
 	bundle, ok, err := castore.get(ctx)
