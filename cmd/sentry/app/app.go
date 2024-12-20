@@ -102,7 +102,6 @@ func Run() {
 	cfg.TrustDomain = opts.TrustDomain
 	cfg.Port = opts.Port
 	cfg.ListenAddress = opts.ListenAddress
-	cfg.RBACNamespaced = opts.RBACNamespaced
 	cfg.SelfHostedCA = opts.SelfHostedCA
 
 	// We use runner manager inception here since we want the inner manager to be
