@@ -7,9 +7,9 @@ Dapr metric name starts with `dapr_` prefix except for health metrics.
   * [Dapr Sidecar Injector metrics](#dapr-sidecar-injector-metrics)
   * [Dapr Placement metrics](#dapr-placement-metrics)
   * [Dapr Sentry metrics](#dapr-sentry-metrics)
+  * [Dapr Scheduler metrics](#dapr-scheduler-metrics)
   * [Dapr Runtime metrics](#dapr-runtime-metrics)
   * [Dapr Component metrics](#dapr-component-metrics)
-  * [Dapr Scheduler metrics](#dapr-scheduler-metrics)
 
 ## Dapr Common metrics
 
@@ -171,7 +171,7 @@ We support only server side metrics.
 * dapr_http_client_roundtrip_latency: End-to-end latency
 * dapr_http_client_completed_count: Count of completed requests
 
-## Dapr Component Metrics
+## Dapr Component metrics
 
 ### Pub/Sub metrics
 
