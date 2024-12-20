@@ -17,6 +17,7 @@ import (
 	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -64,8 +65,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		daprd.WithAppPort(b.app.Port()),
 	}
 
-	daprd1 := daprd.New(t, opts...)
-	daprd2 := daprd.New(t, append(opts,
+	daprd1 := daprd.New(t, append(opts,
 		daprd.WithConfigManifests(t, `
 apiVersion: dapr.io/v1alpha1
 kind: Configuration
@@ -74,8 +74,9 @@ metadata:
 spec:
   features:
   - name: SchedulerReminders
-    enabled: true
+    enabled: false
 `))...)
+	daprd2 := daprd.New(t, opts...)
 
 	daprd1.Run(t, ctx)
 	daprd1.WaitUntilRunning(t, ctx)
@@ -101,6 +102,8 @@ spec:
 	daprd2.Run(t, ctx)
 	daprd2.WaitUntilRunning(t, ctx)
 	assert.Len(t, b.db.ActorReminders(t, ctx, "myactortype").Reminders, 1)
-	assert.Len(t, b.scheduler.EtcdJobs(t, ctx), 1)
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Len(c, b.scheduler.EtcdJobs(t, ctx), 1)
+	}, time.Second*5, time.Millisecond*10)
 	daprd2.Cleanup(t)
 }

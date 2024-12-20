@@ -151,10 +151,6 @@ type internalConfig struct {
 	outboundHealthz              healthz.Healthz
 }
 
-func (i internalConfig) ActorsEnabled() bool {
-	return i.actorsService != ""
-}
-
 func (i internalConfig) SchedulerEnabled() bool {
 	return len(i.schedulerAddress) > 0
 }
@@ -231,6 +227,8 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		globalConfig = config.LoadDefaultConfiguration()
 	}
 	config.SetTracingSpecFromEnv(globalConfig)
+
+	globalConfig.SetDefaultFeatures()
 
 	globalConfig.LoadFeatures()
 	if enabledFeatures := globalConfig.EnabledFeatures(); len(enabledFeatures) > 0 {

@@ -180,6 +180,7 @@ func parseConfiguration(conf Config, daprConfig *daprGlobalConfig.Configuration)
 		conf.TrustDomain = daprConfig.Spec.MTLSSpec.ControlPlaneTrustDomain
 	}
 
+	daprConfig.SetDefaultFeatures()
 	conf.Features = daprConfig.Spec.Features
 
 	// Get token validators

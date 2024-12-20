@@ -31,10 +31,10 @@ import (
 	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/grpc/status"
 
-	"github.com/microsoft/durabletask-go/api"
-	"github.com/microsoft/durabletask-go/backend"
-	"github.com/microsoft/durabletask-go/client"
-	"github.com/microsoft/durabletask-go/task"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
 
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -42,6 +42,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -52,6 +53,7 @@ func init() {
 type basic struct {
 	daprd      *daprd.Daprd
 	place      *placement.Placement
+	sched      *scheduler.Scheduler
 	httpClient *http.Client
 	grpcClient runtimev1pb.DaprClient
 }
@@ -62,20 +64,23 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
 		w.Write([]byte(""))
 	})
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
+	b.sched = scheduler.New(t)
 	b.place = placement.New(t)
 	b.daprd = daprd.New(t,
 		daprd.WithAppPort(srv.Port()),
 		daprd.WithAppProtocol("http"),
 		daprd.WithPlacementAddresses(b.place.Address()),
 		daprd.WithInMemoryActorStateStore("mystore"),
+		daprd.WithSchedulerAddresses(b.sched.Address()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(b.place, srv, b.daprd),
+		framework.WithProcesses(b.place, b.sched, srv, b.daprd),
 	}
 }
 
 func (b *basic) Run(t *testing.T, ctx context.Context) {
+	b.sched.WaitUntilRunning(t, ctx)
 	b.place.WaitUntilRunning(t, ctx)
 	b.daprd.WaitUntilRunning(t, ctx)
 
@@ -117,8 +122,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		id := api.InstanceID(b.startWorkflow(ctx, t, "SingleActivity", "Dapr"))
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
-		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 
 	t.Run("terminate", func(t *testing.T) {
@@ -167,7 +172,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 				meta, err := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
 				require.NoError(t, err)
 				// All orchestrations should be running
-				if meta.RuntimeStatus != api.RUNTIME_STATUS_RUNNING {
+				if meta.GetRuntimeStatus() != api.RUNTIME_STATUS_RUNNING {
 					return false
 				}
 			}
@@ -180,7 +185,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		// Wait for the root orchestration to complete and verify its terminated status
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
-		require.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.RuntimeStatus)
+		require.Equal(t, api.RUNTIME_STATUS_TERMINATED, metadata.GetRuntimeStatus())
 
 		// Wait for all L2 suborchestrations to complete
 		orchIDs := []string{}
@@ -219,7 +224,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id)
 		require.NoError(t, err)
-		require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.RuntimeStatus)
+		require.Equal(t, api.RUNTIME_STATUS_COMPLETED, metadata.GetRuntimeStatus())
 
 		// Purge the root orchestration
 		b.purgeWorkflow(t, ctx, string(id))
@@ -261,8 +266,8 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		id := api.InstanceID(b.startWorkflow(ctx, t, "root", "Dapr"))
 		metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
 		require.NoError(t, err)
-		assert.True(t, metadata.IsComplete())
-		assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+		assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+		assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 	})
 }
 
