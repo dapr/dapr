@@ -154,7 +154,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 
 	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID("my-custom-instance-id"))
 	require.NoError(t, err)
-	assert.True(t, metadata.IsComplete())
+	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
 
 	_, err = gclient.PurgeWorkflowBeta1(ctx, &rtv1.PurgeWorkflowRequest{
 		InstanceId:        "my-custom-instance-id",
