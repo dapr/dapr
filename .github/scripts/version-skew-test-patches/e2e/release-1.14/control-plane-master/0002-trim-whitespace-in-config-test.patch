@@ -1,0 +1,28 @@
+diff --git a/tests/e2e/configuration/configuration_test.go b/tests/e2e/configuration/configuration_test.go
+index 4b76bdf0c..2a810d056 100644
+--- a/tests/e2e/configuration/configuration_test.go
++++ b/tests/e2e/configuration/configuration_test.go
+@@ -26,11 +26,12 @@ import (
+ 	"testing"
+ 	"time"
+ 
++	"github.com/google/uuid"
++	"github.com/stretchr/testify/require"
++
+ 	"github.com/dapr/dapr/tests/e2e/utils"
+ 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
+ 	"github.com/dapr/dapr/tests/runner"
+-	"github.com/google/uuid"
+-	"github.com/stretchr/testify/require"
+ )
+ 
+ const (
+@@ -183,7 +184,7 @@ func testGet(t *testing.T, appExternalUrl string, protocol string, endpointType
+ 	expectedItemsInBytes, _ := json.Marshal(items)
+ 	expectedItems := string(expectedItemsInBytes)
+ 	require.Equalf(t, 200, statusCode, "expected statuscode 200, got %d. Error: %s", statusCode, appResp.Message)
+-	require.Equalf(t, expectedItems, appResp.Message, "expected %s, got %s", expectedItems, appResp.Message)
++	require.JSONEq(t, expectedItems, appResp.Message, "expected %s, got %s", expectedItems, appResp.Message)
+ }
+ 
+ func testSubscribe(t *testing.T, appExternalUrl string, protocol string, endpointType string, component componentType) {
