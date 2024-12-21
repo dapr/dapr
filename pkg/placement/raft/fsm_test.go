@@ -101,41 +101,6 @@ func TestFSMApply(t *testing.T) {
 	})
 }
 
-func TestPlacementStateWithVirtualNodes(t *testing.T) {
-	fsm := newFSM(DaprHostMemberStateConfig{
-		replicationFactor: 5,
-	})
-
-	m := DaprHostMember{
-		Name:      "127.0.0.1:3030",
-		Namespace: "ns1",
-		AppID:     "fakeAppID",
-		Entities:  []string{"actorTypeOne", "actorTypeTwo"},
-		APILevel:  10,
-	}
-	cmdLog, err := makeRaftLogCommand(MemberUpsert, m)
-	require.NoError(t, err)
-
-	fsm.Apply(&raft.Log{
-		Index: 1,
-		Term:  1,
-		Type:  raft.LogCommand,
-		Data:  cmdLog,
-	})
-
-	newTable := fsm.PlacementState(true, "ns1")
-	assert.Equal(t, "1", newTable.GetVersion())
-	assert.Len(t, newTable.GetEntries(), 2)
-	assert.Equal(t, int64(5), newTable.GetReplicationFactor())
-
-	for _, host := range newTable.GetEntries() {
-		assert.Len(t, host.GetHosts(), 5)
-		assert.Len(t, host.GetSortedSet(), 5)
-		assert.Len(t, host.GetLoadMap(), 1)
-		assert.Contains(t, host.GetLoadMap(), "127.0.0.1:3030")
-	}
-}
-
 func TestPlacementState(t *testing.T) {
 	fsm := newFSM(DaprHostMemberStateConfig{
 		replicationFactor: 5,
@@ -156,7 +121,7 @@ func TestPlacementState(t *testing.T) {
 		Data:  cmdLog,
 	})
 
-	newTable := fsm.PlacementState(false, "ns1")
+	newTable := fsm.PlacementState("ns1")
 	assert.Equal(t, "1", newTable.GetVersion())
 	assert.Len(t, newTable.GetEntries(), 2)
 	assert.Equal(t, int64(5), newTable.GetReplicationFactor())
