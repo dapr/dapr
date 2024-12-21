@@ -26,14 +26,12 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/metadata"
 	"google.golang.org/grpc/status"
 
 	"github.com/dapr/dapr/pkg/actors/internal/placement/lock"
 	"github.com/dapr/dapr/pkg/actors/table"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/healthz"
-	"github.com/dapr/dapr/pkg/placement"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/logger"
@@ -199,7 +197,6 @@ func (c *Client) connect(ctx context.Context) error {
 		}
 	}
 
-	ctx = metadata.AppendToOutgoingContext(ctx, placement.GRPCContextKeyAcceptVNodes, "false")
 	stream, err := v1pb.NewPlacementClient(c.conn).ReportDaprStatus(ctx)
 	if err != nil {
 		return err

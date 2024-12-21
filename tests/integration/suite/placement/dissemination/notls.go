@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/require"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/metadata"
 
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/tests/integration/framework"
@@ -545,7 +544,6 @@ func (n *notls) getStream(t *testing.T, ctx context.Context) v1pb.Placement_Repo
 	)
 	require.NoError(t, err)
 	client := v1pb.NewPlacementClient(conn)
-	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-accept-vnodes", "false")
 
 	stream, err := client.ReportDaprStatus(ctx)
 	require.NoError(t, err)
