@@ -71,18 +71,14 @@ type hostMemberChange struct {
 }
 
 type tablesUpdateRequest struct {
-	hosts            []daprdStream
-	tables           *placementv1pb.PlacementTables
-	tablesWithVNodes *placementv1pb.PlacementTables // Temporary. Will be removed in 1.15
+	hosts  []daprdStream
+	tables *placementv1pb.PlacementTables
 }
 
 // GetVersion is used only for logs in membership.go
 func (r *tablesUpdateRequest) GetVersion() string {
 	if r.tables != nil {
 		return r.tables.GetVersion()
-	}
-	if r.tablesWithVNodes != nil {
-		return r.tablesWithVNodes.GetVersion()
 	}
 
 	return ""
@@ -100,7 +96,6 @@ func (r *tablesUpdateRequest) SetAPILevel(minAPILevel uint32, maxAPILevel *uint3
 		}
 	}
 
-	setAPILevel(r.tablesWithVNodes)
 	setAPILevel(r.tables)
 }
 
@@ -487,11 +482,7 @@ func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprd
 		updateReq := &tablesUpdateRequest{
 			hosts: []daprdStream{*daprStream},
 		}
-		if daprStream.needsVNodes {
-			updateReq.tablesWithVNodes = p.raftNode.FSM().PlacementState(false, namespace)
-		} else {
-			updateReq.tables = p.raftNode.FSM().PlacementState(true, namespace)
-		}
+		updateReq.tables = p.raftNode.FSM().PlacementState(req.GetNamespace())
 		err = p.performTablesUpdate(context.Background(), updateReq)
 		if err != nil {
 			return registeredMemberID, err

@@ -14,12 +14,10 @@ limitations under the License.
 package placement
 
 import (
-	"strings"
 	"sync"
 	"sync/atomic"
 
-	"google.golang.org/grpc/metadata"
-
+	"github.com/dapr/dapr/pkg/placement/monitoring"
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 )
 
@@ -28,7 +26,6 @@ type daprdStream struct {
 	hostName      string
 	hostID        string
 	hostNamespace string
-	needsVNodes   bool
 	stream        placementv1pb.Placement_ReportDaprStatusServer
 }
 
@@ -38,7 +35,6 @@ func newDaprdStream(host *placementv1pb.Host, stream placementv1pb.Placement_Rep
 		hostName:      host.GetName(),
 		hostNamespace: host.GetNamespace(),
 		stream:        stream,
-		needsVNodes:   hostNeedsVNodes(stream),
 	}
 }
 
@@ -80,6 +76,8 @@ func (s *streamConnPool) add(stream *daprdStream) {
 
 	s.streams[stream.hostNamespace][id] = stream
 	s.reverseLookup[stream.stream] = stream
+
+	monitoring.RecordRuntimesCount(len(s.streams[stream.hostNamespace]), stream.hostNamespace)
 }
 
 // delete removes a stream connection between runtime and placement
@@ -96,6 +94,8 @@ func (s *streamConnPool) delete(stream *daprdStream) {
 			delete(s.streams, stream.hostNamespace)
 		}
 	}
+
+	monitoring.RecordRuntimesCount(len(s.streams[stream.hostNamespace]), stream.hostNamespace)
 }
 
 func (s *streamConnPool) getStreamCount(namespace string) int {
@@ -126,16 +126,4 @@ func (s *streamConnPool) getStream(stream placementv1pb.Placement_ReportDaprStat
 
 	daprdStream, ok := s.reverseLookup[stream]
 	return daprdStream, ok
-}
-
-func hostNeedsVNodes(stream placementv1pb.Placement_ReportDaprStatusServer) bool {
-	md, ok := metadata.FromIncomingContext(stream.Context())
-	if !ok {
-		// default to older versions that need vnodes
-		return true
-	}
-
-	// Extract apiLevel from metadata
-	vmd := md.Get(GRPCContextKeyAcceptVNodes)
-	return !(len(vmd) > 0 && strings.EqualFold(vmd[0], "false"))
 }

@@ -109,17 +109,5 @@ func (c *components) verify(vcomp compapi.Component) bool {
 		}
 	}
 
-	for backendName := range c.store.ListWorkflowBackends() {
-		if backendName == vcomp.Name {
-			log.Errorf("Aborting to hot-reload a workflowbackend component which is not supported: %s", vcomp.LogName())
-			return false
-		}
-	}
-
-	if strings.HasPrefix(vcomp.Spec.Type, "workflowbackend.") {
-		log.Errorf("Aborting to hot-reload a workflowbackend component which is not supported: %s", vcomp.LogName())
-		return false
-	}
-
 	return true
 }
