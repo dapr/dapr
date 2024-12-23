@@ -93,7 +93,7 @@ func (p *Service) MonitorLeadership(parentCtx context.Context) error {
 			} else {
 				select {
 				case <-loopNotRunning:
-					log.Error("Attempted to stop leader loop on raft node %s when it was not running", p.raftNode.GetID())
+					log.Errorf("Attempted to stop leader loop on raft node %s when it was not running", p.raftNode.GetID())
 					continue
 				default:
 				}
