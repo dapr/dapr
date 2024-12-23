@@ -21,11 +21,13 @@ import (
 	"github.com/google/uuid"
 	"google.golang.org/protobuf/types/known/emptypb"
 	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/kit/ptr"
 )
 
 // GetWorkflow is the API handler for getting workflow details
@@ -88,10 +90,12 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 	}
 
 	req := workflows.StartRequest{
-		InstanceID:    in.GetInstanceId(),
 		Options:       in.GetOptions(),
 		WorkflowName:  in.GetWorkflowName(),
-		WorkflowInput: in.GetInput(),
+		WorkflowInput: wrapperspb.String(string(in.GetInput())),
+	}
+	if iid := in.GetInstanceId(); iid != "" {
+		req.InstanceID = &iid
 	}
 
 	resp, err := a.workflowEngine.Client().Start(ctx, &req)
@@ -119,7 +123,7 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 
 	req := &workflows.TerminateRequest{
 		InstanceID: in.GetInstanceId(),
-		Recursive:  true,
+		Recursive:  ptr.Of(true),
 	}
 	if err := a.workflowEngine.Client().Terminate(ctx, req); err != nil {
 		if errors.Is(err, api.ErrInstanceNotFound) {
@@ -153,7 +157,10 @@ func (a *Universal) RaiseEventWorkflow(ctx context.Context, in *runtimev1pb.Rais
 	req := workflows.RaiseEventRequest{
 		InstanceID: in.GetInstanceId(),
 		EventName:  in.GetEventName(),
-		EventData:  in.GetEventData(),
+	}
+
+	if in.GetEventData() != nil {
+		req.EventData = wrapperspb.String(string(in.GetEventData()))
 	}
 
 	if err := a.workflowEngine.Client().RaiseEvent(ctx, &req); err != nil {
@@ -221,7 +228,7 @@ func (a *Universal) PurgeWorkflow(ctx context.Context, in *runtimev1pb.PurgeWork
 
 	req := workflows.PurgeRequest{
 		InstanceID: in.GetInstanceId(),
-		Recursive:  true,
+		Recursive:  ptr.Of(true),
 	}
 
 	if err := a.workflowEngine.Client().Purge(ctx, &req); err != nil {

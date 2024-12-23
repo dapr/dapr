@@ -1266,7 +1266,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      json.RawMessage("null"),
+			Data:      nil,
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -1292,7 +1292,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "reminder1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      json.RawMessage("null"),
+			Data:      nil,
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
@@ -1384,7 +1384,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		actors.WithReminders(func(context.Context) (reminders.Interface, error) {
 			return remindersfake.New().WithGet(func(context.Context, *actorsapi.GetReminderRequest) (*actorsapi.Reminder, error) {
 				return &actorsapi.Reminder{
-					Data: json.RawMessage("null"),
+					Data: nil,
 				}, nil
 			}), nil
 		})
@@ -1439,7 +1439,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      json.RawMessage("null"),
+			Data:      nil,
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 			Callback:  "",
@@ -1462,7 +1462,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 			Name:      "timer1",
 			ActorType: "fakeActorType",
 			ActorID:   "fakeActorID",
-			Data:      json.RawMessage("null"),
+			Data:      nil,
 			DueTime:   "0h0m3s0ms",
 			Period:    "0h0m7s0ms",
 		}
