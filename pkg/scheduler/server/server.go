@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strconv"
 	"sync/atomic"
 
 	"google.golang.org/grpc"
@@ -43,8 +44,6 @@ type Options struct {
 	Port                    int
 	Mode                    modes.DaprMode
 	KubeConfig              *string
-	ReplicaCount            uint32
-	ReplicaID               uint32
 	DataDir                 string
 	EtcdID                  string
 	EtcdInitialPeers        []string
@@ -82,10 +81,12 @@ func New(opts Options) (*Server, error) {
 	}
 
 	cron := cron.New(cron.Options{
-		ReplicaCount: opts.ReplicaCount,
-		ReplicaID:    opts.ReplicaID,
-		Config:       config,
-		Healthz:      opts.Healthz,
+		ID:      opts.EtcdID,
+		Config:  config,
+		Healthz: opts.Healthz,
+		Host: &schedulerv1pb.Host{
+			Address: net.JoinHostPort(opts.ListenAddress, strconv.Itoa(opts.Port)),
+		},
 	})
 
 	var ctrl concurrency.Runner

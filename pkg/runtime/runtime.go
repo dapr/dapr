@@ -79,7 +79,6 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/pubsub/streamer"
 	"github.com/dapr/dapr/pkg/runtime/registry"
 	"github.com/dapr/dapr/pkg/runtime/scheduler"
-	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
 	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
@@ -109,8 +108,7 @@ type DaprRuntime struct {
 	daprHTTPAPI           http.API
 	daprGRPCAPI           grpc.API
 	operatorClient        operatorv1pb.OperatorClient
-	schedulerClients      *clients.Clients
-	jobsManager           *scheduler.Manager
+	jobsManager           *scheduler.Scheduler
 	isAppHealthy          chan struct{}
 	appHealth             *apphealth.AppHealth
 	appHealthReady        func(context.Context) error // Invoked the first time the app health becomes ready
@@ -205,12 +203,6 @@ func newDaprRuntime(ctx context.Context,
 		Namespace:             namespace,
 	})
 
-	schedulerClients := clients.New(clients.Options{
-		Addresses: runtimeConfig.schedulerAddress,
-		Security:  sec,
-		Healthz:   runtimeConfig.healthz,
-	})
-
 	actors := actors.New(actors.Options{
 		AppID:     runtimeConfig.id,
 		Namespace: namespace,
@@ -221,7 +213,6 @@ func newDaprRuntime(ctx context.Context,
 		HealthEndpoint:     channels.AppHTTPEndpoint(),
 		Resiliency:         resiliencyProvider,
 		Security:           sec,
-		SchedulerClients:   schedulerClients,
 		Healthz:            runtimeConfig.healthz,
 		CompStore:          compStore,
 		StateTTLEnabled:    globalConfig.IsFeatureEnabled(config.ActorStateTTL),
@@ -315,13 +306,14 @@ func newDaprRuntime(ctx context.Context,
 		reloader:              reloader,
 		namespace:             namespace,
 		podName:               podName,
-		schedulerClients:      schedulerClients,
 		jobsManager: scheduler.New(scheduler.Options{
 			Namespace: namespace,
 			AppID:     runtimeConfig.id,
 			Channels:  channels,
-			Clients:   schedulerClients,
 			Actors:    actors,
+			Addresses: runtimeConfig.schedulerAddress,
+			Security:  sec,
+			Healthz:   runtimeConfig.healthz,
 		}),
 		initComplete:   make(chan struct{}),
 		isAppHealthy:   make(chan struct{}),
@@ -342,7 +334,6 @@ func newDaprRuntime(ctx context.Context,
 		rt.runtimeConfig.metricsExporter.Start,
 		rt.processor.Process,
 		rt.reloader.Run,
-		rt.schedulerClients.Run,
 		rt.actors.Run,
 		rt.wfengine.Run,
 		rt.jobsManager.Run,
@@ -609,7 +600,7 @@ func (a *DaprRuntime) initRuntime(ctx context.Context) error {
 		ShutdownFn:                  a.ShutdownWithWait,
 		AppConnectionConfig:         a.runtimeConfig.appConnectionConfig,
 		GlobalConfig:                a.globalConfig,
-		SchedulerClients:            a.schedulerClients,
+		Scheduler:                   a.jobsManager,
 		Actors:                      a.actors,
 		WorkflowEngine:              a.wfengine,
 	})
@@ -785,7 +776,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			log.Warnf("Failed to register hosted actors: %s", err)
 		}
 
-		a.jobsManager.StartApp()
+		a.jobsManager.StartApp(ctx)
 
 	case apphealth.AppStatusUnhealthy:
 		select {
@@ -794,7 +785,7 @@ func (a *DaprRuntime) appHealthChanged(ctx context.Context, status uint8) {
 			close(a.isAppHealthy)
 		}
 
-		a.jobsManager.StopApp()
+		a.jobsManager.StopApp(ctx)
 
 		// Stop topic subscriptions and input bindings
 		a.processor.Subscriber().StopAppSubscriptions()
@@ -1061,9 +1052,10 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 	}
 
 	if err := a.actors.Init(actors.InitOptions{
-		Hostname:       hostAddress,
-		StateStoreName: actorStateStoreName,
-		GRPC:           a.grpc,
+		Hostname:         hostAddress,
+		StateStoreName:   actorStateStoreName,
+		GRPC:             a.grpc,
+		SchedulerClients: a.jobsManager,
 	}); err != nil {
 		return err
 	}
