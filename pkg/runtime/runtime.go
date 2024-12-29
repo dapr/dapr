@@ -228,6 +228,7 @@ func newDaprRuntime(ctx context.Context,
 		Outbox:          outbox,
 		Adapter:         pubsubAdapter,
 		AdapterStreamer: pubsubAdapterStreamer,
+		Reporter:        runtimeConfig.registry.Reporter(),
 	})
 
 	var reloader *hotreload.Reloader
@@ -1088,6 +1089,7 @@ func (a *DaprRuntime) initActors(ctx context.Context) error {
 		Security:           a.sec,
 		SchedulerClients:   a.schedulerClients,
 		SchedulerReminders: a.globalConfig.IsFeatureEnabled(config.SchedulerReminders),
+		Healthz:            a.runtimeConfig.healthz,
 	})
 	if err != nil {
 		return rterrors.NewInit(rterrors.InitFailure, "actors", err)

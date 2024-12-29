@@ -133,6 +133,14 @@ $(error cannot find get minikube node ip address. ensure that you have minikube 
 endif
 endif
 
+ifeq ($(DAPR_TEST_KIND_CLUSTER_NAME),)
+DAPR_TEST_KIND_CLUSTER_NAME=kind
+endif
+
+ifeq ($(DAPR_TEST_REGISTRY_PORT),)
+DAPR_TEST_REGISTRY_PORT=5000
+endif
+
 
 ifeq ($(DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME),)
 DAPR_PERF_PUBSUB_SUBS_HTTP_TEST_CONFIG_FILE_NAME=test_all.yaml
@@ -622,24 +630,25 @@ setup-components-perf-test:
 
 # Setup kind
 setup-kind:
-	kind create cluster --config ./tests/config/kind.yaml --name kind
-	$(KUBECTL) cluster-info --context kind-kind
+	kind create cluster --config ./tests/config/kind.yaml --name $(DAPR_TEST_KIND_CLUSTER_NAME)
+	$(KUBECTL) cluster-info --context kind-$(DAPR_TEST_KIND_CLUSTER_NAME)
 	# Setup registry
-	docker run -d --restart=always -p 5000:5000 --name kind-registry registry:2
+	docker run -d --restart=always -p $(DAPR_TEST_REGISTRY_PORT):$(DAPR_TEST_REGISTRY_PORT) --name kind-registry registry:2
 	# Connect the registry to the KinD network.
 	docker network connect "kind" kind-registry
 	# Setup metrics-server
-	helm install ms stable/metrics-server -n kube-system --set=args={--kubelet-insecure-tls}
+	helm upgrade --install metrics-server metrics-server/metrics-server --namespace kube-system --set=args={--kubelet-insecure-tls}
 
 describe-kind-env:
 	@echo "\
 	export MINIKUBE_NODE_IP=`kubectl get nodes \
 	    -lkubernetes.io/hostname!=kind-control-plane \
         -ojsonpath='{.items[0].status.addresses[?(@.type=="InternalIP")].address}'`\n\
-	export DAPR_REGISTRY=$${DAPR_REGISTRY:-localhost:5000/dapr}\n\
-	export DAPR_TEST_REGISTRY=$${DAPR_TEST_REGISTRY:-localhost:5000/dapr}\n\
+	export DAPR_REGISTRY=$${DAPR_REGISTRY:-localhost:$(DAPR_TEST_REGISTRY_PORT)/dapr}\n\
+	export DAPR_TEST_REGISTRY=$${DAPR_TEST_REGISTRY:-localhost:$(DAPR_TEST_REGISTRY_PORT)/dapr}\n\
 	export DAPR_TAG=dev\n\
-	export DAPR_NAMESPACE=dapr-tests"
+	export DAPR_NAMESPACE=dapr-tests\n\
+	export DAPR_TEST_KIND_CLUSTER_NAME=$(DAPR_TEST_KIND_CLUSTER_NAME)"
 
 
 delete-kind:

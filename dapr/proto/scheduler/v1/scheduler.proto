@@ -2,6 +2,7 @@ syntax = "proto3";
 
 package dapr.proto.scheduler.v1;
 
+import "dapr/proto/scheduler/v1/failurepolicy.proto";
 import "google/protobuf/any.proto";
 
 option go_package = "github.com/dapr/dapr/pkg/proto/scheduler/v1;scheduler";
@@ -35,6 +36,13 @@ message Job {
 
   // Job data.
   google.protobuf.Any data = 5;
+
+
+  // failure_policy is the optional policy to apply when a job fails to
+  // trigger.
+  // By default, the failure policy is FailurePolicyConstant with a 1s interval
+  // and 3 maximum retries.
+  optional FailurePolicy failure_policy = 6;
 }
 
 // TargetJob is the message used by the daprd sidecar to schedule a job
@@ -94,11 +102,25 @@ message WatchJobsRequestInitial {
   repeated string actor_types = 3;
 }
 
+// WatchJobsRequestResultStatus is sent by clients to signal where the job
+// triggering was sucessful or failed, in which case should be handled by the
+// failure policy of the job.
+enum WatchJobsRequestResultStatus {
+  // The job was processed successfully.
+  SUCCESS = 0;
+
+  // The job was processed with an error.
+  FAILED = 1;
+}
+
 // WatchJobsRequestResult is the result of a job execution to allow the job to
 // be marked as processed.
 message WatchJobsRequestResult {
   // id is the id of the job that has finished processing, used as an incremental counter.
   uint64 id = 1;
+
+  // status is the status of the job processing.
+  WatchJobsRequestResultStatus status = 2;
 }
 
 // WatchJobsResponse is the response message to convey the details of a job.
@@ -165,8 +187,11 @@ message NamedJob {
  // name is the name of the job.
   string name = 1;
 
+  // The metadata associated with the job.
+  JobMetadata metadata = 2;
+
   // The job scheduled.
-  Job job = 2;
+  Job job = 3;
 }
 
 // ListJobsRequest is the message used by the daprd sidecar to list all jobs.
