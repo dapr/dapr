@@ -42,7 +42,7 @@ type healthz struct {
 	scheduler    *scheduler.Scheduler
 	jobCalled    atomic.Uint32
 	appHealthy   atomic.Bool
-	healthCalled atomic.Int64
+	healthCalled atomic.Uint32
 }
 
 func (h *healthz) Setup(t *testing.T) []framework.Option {
@@ -107,15 +107,15 @@ func (h *healthz) Run(t *testing.T, ctx context.Context) {
 
 	h.appHealthy.Store(true)
 
-	assert.Eventually(t, func() bool {
-		return h.jobCalled.Load() > jobCalled
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Greater(c, h.healthCalled.Load(), jobCalled)
 	}, time.Second*5, time.Millisecond*10)
 
 	healthzCalled = h.healthCalled.Load()
 	h.appHealthy.Store(false)
 
-	assert.Eventually(t, func() bool {
-		return h.healthCalled.Load() > healthzCalled+2
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.Greater(c, h.healthCalled.Load(), healthzCalled+2)
 	}, time.Second*5, time.Millisecond*10)
 
 	jobCalled = h.jobCalled.Load()

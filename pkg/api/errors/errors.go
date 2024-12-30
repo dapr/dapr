@@ -19,6 +19,7 @@ import (
 
 	"google.golang.org/grpc/codes"
 
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	kiterrors "github.com/dapr/kit/errors"
 )
 
@@ -29,7 +30,7 @@ const (
 	PostFixEmpty  ReasonSegment = "EMPTY"
 )
 
-func NotFound(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string) error {
+func NotFound(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string, category errorcodes.Category) error {
 	message := fmt.Sprintf("%s %s is not found", componentType, name)
 
 	return kiterrors.NewBuilder(
@@ -37,12 +38,13 @@ func NotFound(name string, componentType string, metadata map[string]string, grp
 		httpCode,
 		message,
 		legacyTag,
+		string(category),
 	).
 		WithErrorInfo(reason, metadata).
 		Build()
 }
 
-func NotConfigured(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string) error {
+func NotConfigured(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string, category errorcodes.Category) error {
 	message := componentType + " " + name + " is not configured"
 
 	return kiterrors.NewBuilder(
@@ -50,30 +52,33 @@ func NotConfigured(name string, componentType string, metadata map[string]string
 		httpCode,
 		message,
 		legacyTag,
+		string(category),
 	).
 		WithErrorInfo(reason, metadata).
 		Build()
 }
 
-func Empty(name string, metadata map[string]string, reason string) error {
+func Empty(name string, metadata map[string]string, reason string, category errorcodes.Category) error {
 	message := name + " is empty"
 	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
 		"",
+		string(category),
 	).
 		WithErrorInfo(reason, metadata).
 		Build()
 }
 
-func IncorrectNegative(name string, metadata map[string]string, reason string) error {
+func IncorrectNegative(name string, metadata map[string]string, reason string, category errorcodes.Category) error {
 	message := name + " cannot be negative"
 	return kiterrors.NewBuilder(
 		codes.InvalidArgument,
 		http.StatusBadRequest,
 		message,
 		"",
+		string(category),
 	).
 		WithErrorInfo(reason, metadata).
 		Build()

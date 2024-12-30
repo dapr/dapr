@@ -56,7 +56,7 @@ type serializableWorkflowState struct {
 	Generation   uint64
 }
 
-type workflowStateMetadata struct {
+type WorkflowStateMetadata struct {
 	InboxLength   int
 	HistoryLength int
 	Generation    uint64
@@ -147,7 +147,7 @@ func (s *workflowState) GetSaveRequest(actorID string) (*actors.TransactionalReq
 
 	// Every time we save, we also update the metadata with information about the size of the history and inbox,
 	// as well as the generation of the workflow.
-	metadata := workflowStateMetadata{
+	metadata := WorkflowStateMetadata{
 		InboxLength:   len(s.Inbox),
 		HistoryLength: len(s.History),
 		Generation:    s.Generation,
@@ -312,7 +312,7 @@ func LoadWorkflowState(ctx context.Context, actorRuntime actors.Actors, actorID 
 		// no state found
 		return nil, nil
 	}
-	var metadata workflowStateMetadata
+	var metadata WorkflowStateMetadata
 	if err = json.Unmarshal(res.Data, &metadata); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
 	}

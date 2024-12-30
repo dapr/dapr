@@ -71,9 +71,10 @@ func (n *noapp) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, "helloworld", resp.GetJob().GetName())
 
 	time.Sleep(3 * time.Second)
+
 	resp, err = client.GetJobAlpha1(ctx, &rtv1.GetJobRequest{
 		Name: "helloworld",
 	})
-	require.Error(t, err)
-	assert.Nil(t, resp)
+	require.NoError(t, err)
+	assert.Equal(t, "helloworld", resp.GetJob().GetName())
 }

@@ -56,8 +56,6 @@ type SidecarConfig struct {
 	RemindersService            string
 	SentrySPIFFEID              string
 	SidecarHTTPPort             int32 `default:"3500"`
-	SidecarAPIGRPCPort          int32 `default:"50001"`
-	SidecarInternalGRPCPort     int32 `default:"50002"`
 	SidecarPublicPort           int32 `default:"3501"`
 
 	Enabled                             bool    `annotation:"dapr.io/enabled"`
@@ -77,6 +75,8 @@ type SidecarConfig struct {
 	EnableDebug                         bool    `annotation:"dapr.io/enable-debug" default:"false"`
 	SidecarDebugPort                    int32   `annotation:"dapr.io/debug-port" default:"40000"`
 	Env                                 string  `annotation:"dapr.io/env"`
+	SidecarAPIGRPCPort                  int32   `annotation:"dapr.io/grpc-port" default:"50001"`
+	SidecarInternalGRPCPort             int32   `annotation:"dapr.io/internal-grpc-port" default:"50002"`
 	SidecarCPURequest                   string  `annotation:"dapr.io/sidecar-cpu-request"`
 	SidecarCPULimit                     string  `annotation:"dapr.io/sidecar-cpu-limit"`
 	SidecarMemoryRequest                string  `annotation:"dapr.io/sidecar-memory-request"`

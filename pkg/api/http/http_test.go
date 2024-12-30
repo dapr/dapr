@@ -22,7 +22,7 @@ import (
 	"fmt"
 	"io"
 	"net"
-	gohttp "net/http"
+	nethttp "net/http"
 	"testing"
 	"time"
 
@@ -31,7 +31,6 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/valyala/fasthttp"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/test/bufconn"
 	apiextensionsV1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
@@ -59,6 +58,7 @@ import (
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/middleware"
 	middlewarehttp "github.com/dapr/dapr/pkg/middleware/http"
@@ -834,7 +834,7 @@ func TestGetStatusCodeFromMetadata(t *testing.T) {
 
 func TestGetMetadataFromRequest(t *testing.T) {
 	// set
-	r, _ := gohttp.NewRequest(gohttp.MethodGet, "http://test.example.com/resource?metadata.test=test&&other=other", nil)
+	r, _ := nethttp.NewRequest(nethttp.MethodGet, "http://test.example.com/resource?metadata.test=test&&other=other", nil)
 
 	// act
 	m := getMetadataFromRequest(r)
@@ -843,22 +843,6 @@ func TestGetMetadataFromRequest(t *testing.T) {
 	assert.NotEmpty(t, m, "expected map to be populated")
 	assert.Len(t, m, 1, "expected length to match")
 	assert.Equal(t, "test", m["test"], "test", "expected value to be equal")
-}
-
-func TestGetMetadataFromFastHTTPRequest(t *testing.T) {
-	t.Run("request with query args", func(t *testing.T) {
-		// set
-		ctx := &fasthttp.RequestCtx{}
-		ctx.Request.SetRequestURI("http://test.example.com/resource?metadata.test=test&&other=other")
-
-		// act
-		m := getMetadataFromFastHTTPRequest(ctx)
-
-		// assert
-		assert.NotEmpty(t, m, "expected map to be populated")
-		assert.Len(t, m, 1, "expected length to match")
-		assert.Equal(t, "test", m["test"], "test", "expected value to be equal")
-	})
 }
 
 func TestV1OutputBindingsEndpoints(t *testing.T) {
@@ -2107,7 +2091,7 @@ func TestEmptyPipelineWithTracer(t *testing.T) {
 
 	buffer := ""
 	spec := config.TracingSpec{SamplingRate: "1.0"}
-	pipe := func(next gohttp.Handler) gohttp.Handler { return next }
+	pipe := func(next nethttp.Handler) nethttp.Handler { return next }
 
 	createExporters(&buffer)
 	compStore := compstore.New()
@@ -2421,7 +2405,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
 
-		assert.Equal(t, gohttp.StatusNotFound, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
+		assert.Equal(t, nethttp.StatusNotFound, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
 	})
 
 	t.Run("error in unsubscribe configurations", func(t *testing.T) {
@@ -2437,7 +2421,7 @@ func TestV1Alpha1ConfigurationUnsubscribe(t *testing.T) {
 
 		resp2 := fakeServer.DoRequest("GET", apiPath2, nil, nil)
 
-		assert.Equal(t, gohttp.StatusNotFound, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
+		assert.Equal(t, nethttp.StatusNotFound, resp2.StatusCode, "Expected parameter store name can't be nil/empty")
 	})
 
 	t.Run("error in unsubscribe configurations - alpha1", func(t *testing.T) {
@@ -3070,13 +3054,13 @@ func newFakeHTTPServer() *fakeHTTPServer {
 
 type fakeHTTPServer struct {
 	ln     *bufconn.Listener
-	client gohttp.Client
+	client nethttp.Client
 }
 
 type fakeHTTPResponse struct {
 	StatusCode  int
 	ContentType string
-	RawHeader   gohttp.Header
+	RawHeader   nethttp.Header
 	RawBody     []byte
 	JSONBody    interface{}
 	ErrorBody   map[string]string
@@ -3097,7 +3081,7 @@ func (f *fakeHTTPServer) StartServer(endpoints []endpoints.Endpoint, opts *fakeH
 
 	r := f.getRouter(endpoints, opts.apiAuth)
 	go func() {
-		var handler gohttp.Handler = r
+		var handler nethttp.Handler = r
 		if opts.pipeline != nil {
 			handler = opts.pipeline(handler)
 		}
@@ -3105,14 +3089,14 @@ func (f *fakeHTTPServer) StartServer(endpoints []endpoints.Endpoint, opts *fakeH
 			handler = diag.HTTPTraceMiddleware(handler, "fakeAppID", *opts.spec)
 		}
 		//nolint:gosec
-		err := gohttp.Serve(f.ln, handler)
+		err := nethttp.Serve(f.ln, handler)
 		if err != nil && err.Error() != "closed" {
 			panic(fmt.Errorf("failed to start server: %v", err))
 		}
 	}()
 
-	f.client = gohttp.Client{
-		Transport: &gohttp.Transport{
+	f.client = nethttp.Client{
+		Transport: &nethttp.Transport{
 			DialContext: func(ctx context.Context, network, addr string) (net.Conn, error) {
 				return f.ln.DialContext(ctx)
 			},
@@ -3143,7 +3127,7 @@ func (f *fakeHTTPServer) Shutdown() {
 
 func (f *fakeHTTPServer) DoRequestWithAPIToken(method, path, token string, body []byte) fakeHTTPResponse {
 	url := "http://127.0.0.1/" + path
-	r, _ := gohttp.NewRequest(method, url, bytes.NewBuffer(body))
+	r, _ := nethttp.NewRequest(method, url, bytes.NewBuffer(body))
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("dapr-api-token", token)
 	res, err := f.client.Do(r)
@@ -3175,7 +3159,7 @@ func (f *fakeHTTPServer) doRequest(basicAuth, method, path string, body []byte, 
 	}
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
-	r, _ := gohttp.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
+	r, _ := nethttp.NewRequestWithContext(ctx, method, url, bytes.NewReader(body))
 	r.Header.Set("Content-Type", "application/json")
 
 	for i := 0; i < len(headers); i += 2 {
@@ -3685,7 +3669,7 @@ func TestV1StateEndpoints(t *testing.T) {
 
 		resp := fakeServer.DoRequest("POST", apiPath, body, nil)
 
-		assert.Equal(t, gohttp.StatusInternalServerError, resp.StatusCode)
+		assert.Equal(t, nethttp.StatusInternalServerError, resp.StatusCode)
 	})
 
 	t.Run("bulk state set recovers from single key failure with resiliency", func(t *testing.T) {
@@ -4565,7 +4549,7 @@ func TestV1TransactionEndpoints(t *testing.T) {
 		resp := fakeServer.DoRequest("POST", apiPath, inputBodyBytes, nil)
 
 		// assert
-		assert.Equal(t, gohttp.StatusBadRequest, resp.StatusCode, "Dapr should return 400")
+		assert.Equal(t, nethttp.StatusBadRequest, resp.StatusCode, "Dapr should return 400")
 		assert.Equal(t, "ERR_STATE_STORE_TOO_MANY_TRANSACTIONS", resp.ErrorBody["errorCode"], apiPath)
 	})
 
@@ -4634,31 +4618,34 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("non etag error", func(t *testing.T) {
 		a := &api{}
 		err := errors.New("error")
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m := a.stateErrorResponse(err)
+		apiResp := messages.NewAPIErrorHTTP(m, errorcodes.StateSave, c)
 
-		assert.Equal(t, 500, c)
-		assert.Equal(t, "error", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		assert.Equal(t, 500, apiResp.HTTPCode())
+		assert.Equal(t, "error", apiResp.Message())
+		assert.Equal(t, "ERR_STATE_SAVE", apiResp.Tag())
 	})
 
 	t.Run("etag mismatch error", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m := a.stateErrorResponse(err)
+		apiResp := messages.NewAPIErrorHTTP(m, errorcodes.StateSave, c)
 
-		assert.Equal(t, 409, c)
-		assert.Equal(t, "possible etag mismatch. error from state store: error", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		assert.Equal(t, 409, apiResp.HTTPCode())
+		assert.Equal(t, "possible etag mismatch. error from state store: error", apiResp.Message())
+		assert.Equal(t, "ERR_STATE_SAVE", apiResp.Tag())
 	})
 
 	t.Run("etag invalid error", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
-		c, m, r := a.stateErrorResponse(err, "ERR_STATE_SAVE")
+		c, m := a.stateErrorResponse(err)
+		apiResp := messages.NewAPIErrorHTTP(m, errorcodes.StateSave, c)
 
-		assert.Equal(t, 400, c)
-		assert.Equal(t, "invalid etag value: error", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		assert.Equal(t, 400, apiResp.HTTPCode())
+		assert.Equal(t, "invalid etag value: error", apiResp.Message())
+		assert.Equal(t, "ERR_STATE_SAVE", apiResp.Tag())
 	})
 
 	t.Run("etag error mismatch", func(t *testing.T) {
@@ -4683,43 +4670,40 @@ func TestStateStoreErrors(t *testing.T) {
 
 	t.Run("standardized error", func(t *testing.T) {
 		a := &api{}
-		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, gohttp.StatusNotFound, "", "testReason")
-		c, m, r := a.stateErrorResponse(standardizedErr, "ERR_STATE_SAVE")
-		assert.Equal(t, 404, c)
-		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", m)
-		assert.Equal(t, "ERR_STATE_SAVE", r.ErrorCode)
+		standardizedErr := daprerrors.NotFound("testName", "testComponent", nil, codes.InvalidArgument, nethttp.StatusNotFound, "", "testReason", "testCategory")
+		c, m := a.stateErrorResponse(standardizedErr)
+		apiResp := messages.NewAPIErrorHTTP(m, errorcodes.StateSave, c)
+		assert.Equal(t, 404, apiResp.HTTPCode())
+		assert.Equal(t, "api error: code = InvalidArgument desc = testComponent testName is not found", apiResp.Message())
+		assert.Equal(t, "ERR_STATE_SAVE", apiResp.Tag())
 	})
 }
 
 func TestExtractEtag(t *testing.T) {
 	t.Run("no etag present", func(t *testing.T) {
-		r := fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
-		}
-
-		ok, etag := extractEtag(&r)
+		r, err := nethttp.NewRequest("GET", "http://localhost", nil)
+		require.NoError(t, err)
+		ok, etag := extractEtag(r)
 		assert.False(t, ok)
 		assert.Empty(t, etag)
 	})
 
 	t.Run("empty etag exists", func(t *testing.T) {
-		r := fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
-		}
-		r.Request.Header.Add("If-Match", "")
+		r, err := nethttp.NewRequest("GET", "http://127.0.0.1", nil)
+		require.NoError(t, err)
+		r.Header.Add("If-Match", "")
 
-		ok, etag := extractEtag(&r)
+		ok, etag := extractEtag(r)
 		assert.True(t, ok)
 		assert.Empty(t, etag)
 	})
 
 	t.Run("non-empty etag exists", func(t *testing.T) {
-		r := fasthttp.RequestCtx{
-			Request: fasthttp.Request{},
-		}
-		r.Request.Header.Add("If-Match", "a")
+		r, err := nethttp.NewRequest("GET", "http://localhost", nil)
+		require.NoError(t, err)
+		r.Header.Add("If-Match", "a")
 
-		ok, etag := extractEtag(&r)
+		ok, etag := extractEtag(r)
 		assert.True(t, ok)
 		assert.Equal(t, "a", etag)
 	})
