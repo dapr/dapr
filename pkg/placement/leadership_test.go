@@ -58,6 +58,7 @@ func TestCleanupHeartBeats(t *testing.T) {
 func TestMonitorLeadership(t *testing.T) {
 	ctx, cancel := context.WithCancel(context.Background())
 	raftClusterOpts, err := tests.RaftClusterOpts(t)
+
 	require.NoError(t, err)
 
 	numServers := len(raftClusterOpts)
@@ -73,8 +74,6 @@ func TestMonitorLeadership(t *testing.T) {
 		require.NoError(t, err)
 
 		underlyingRaftServers[i] = raft
-
-		go placementServers[i].MonitorLeadership(ctx)
 	}
 
 	// firstServerID is the initial leader
@@ -112,14 +111,14 @@ func TestMonitorLeadership(t *testing.T) {
 
 		assert.False(c, placementServers[thirdServerID].raftNode.IsLeader())
 		assert.False(c, placementServers[thirdServerID].hasLeadership.Load())
-	}, time.Second*15, 10*time.Millisecond, "raft server was not properly re-elected in time")
+	}, time.Second*10, 10*time.Millisecond)
 
 	// Transfer leadership back to the original leader
 	var future hashicorpRaft.Future
 	require.Eventually(t, func() bool {
 		future = underlyingRaftServers[secondServerID].LeadershipTransferToServer(hashicorpRaft.ServerID(placementServers[firstServerID].raftNode.GetID()), hashicorpRaft.ServerAddress(placementServers[firstServerID].raftNode.GetRaftBind()))
 		return future.Error() == nil
-	}, time.Second*15, 500*time.Millisecond, "raft leadership transfer timeout")
+	}, time.Second*10, 10*time.Millisecond, "raft leadership transfer timeout")
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.True(c, placementServers[firstServerID].raftNode.IsLeader())
@@ -130,7 +129,7 @@ func TestMonitorLeadership(t *testing.T) {
 
 		assert.False(c, placementServers[thirdServerID].raftNode.IsLeader())
 		assert.False(c, placementServers[thirdServerID].hasLeadership.Load())
-	}, time.Second*15, 10*time.Millisecond, "raft server was not properly re-elected in time")
+	}, time.Second*10, 10*time.Millisecond, "raft server was not properly re-elected in time")
 
 	t.Cleanup(func() {
 		for i := range numServers {

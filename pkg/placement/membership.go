@@ -60,7 +60,6 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 		select {
 		case <-ctx.Done():
 			return
-
 		case <-faultyHostDetectCh:
 			// This only runs once when the placement service acquires leadership
 			// It loops through all the members in the raft store that have been connected to the
