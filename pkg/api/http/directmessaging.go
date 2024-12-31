@@ -32,6 +32,7 @@ import (
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
 	diagConsts "github.com/dapr/dapr/pkg/diagnostics/consts"
 	"github.com/dapr/dapr/pkg/messages"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 )
@@ -186,7 +187,7 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 				if rErr != nil {
 					return rResp, invokeError{
 						statusCode: http.StatusInternalServerError,
-						msg:        NewErrorResponse("ERR_MALFORMED_RESPONSE", rErr.Error()).JSONErrorValue(),
+						msg:        NewErrorResponse(errorcodes.CommonMalformedResponse, rErr.Error()).JSONErrorValue(),
 					}
 				}
 			} else {
@@ -195,12 +196,12 @@ func (a *api) onDirectMessage(w http.ResponseWriter, r *http.Request) {
 		} else if resStatus.GetCode() < 200 || resStatus.GetCode() > 399 {
 			msg, _ := rResp.RawDataFull()
 			// Returning a `codeError` here will cause Resiliency to retry the request (if retries are enabled), but if the request continues to fail, the response is sent to the user with whatever status code the app returned.
-			return rResp, codeError{
+			return rResp, resiliency.NewCodeError(resStatus.GetCode(), codeError{
 				headers:     rResp.Headers(),
 				statusCode:  int(resStatus.GetCode()),
 				msg:         msg,
 				contentType: rResp.ContentType(),
-			}
+			})
 		}
 
 		// If we get to this point, we must consider the operation as successful, so we invoke this only once and we consider all errors returned by this to be permanent (so the policy function doesn't retry)
@@ -401,6 +402,6 @@ type codeError struct {
 	contentType string
 }
 
-func (ce codeError) Error() string {
-	return fmt.Sprintf("received non-successful status code in response: %d", ce.statusCode)
+func (c codeError) Error() string {
+	return fmt.Sprintf("received non-successful status code in response: %d", c.statusCode)
 }

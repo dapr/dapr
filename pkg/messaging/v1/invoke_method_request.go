@@ -21,7 +21,6 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/valyala/fasthttp"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/anypb"
 
@@ -91,12 +90,6 @@ func (imr *InvokeMethodRequest) WithMetadata(md map[string][]string) *InvokeMeth
 // WithHTTPHeaders sets metadata from HTTP request headers.
 func (imr *InvokeMethodRequest) WithHTTPHeaders(header http.Header) *InvokeMethodRequest {
 	imr.r.Metadata = internalv1pb.HTTPHeadersToInternalMetadata(header)
-	return imr
-}
-
-// WithFastHTTPHeaders sets metadata from fasthttp request headers.
-func (imr *InvokeMethodRequest) WithFastHTTPHeaders(header *fasthttp.RequestHeader) *InvokeMethodRequest {
-	imr.r.Metadata = internalv1pb.FastHTTPHeadersToInternalMetadata(header)
 	return imr
 }
 

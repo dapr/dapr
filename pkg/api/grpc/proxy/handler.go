@@ -266,6 +266,10 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 			// If the error is errRetryOnStreamingRPC, then that's permanent and should not cause the policy to retry
 			if errors.Is(err, errRetryOnStreamingRPC) {
 				err = backoff.Permanent(errRetryOnStreamingRPC)
+			} else if code, ok := status.FromError(err); ok {
+				// TODO: Update types to uint32
+				//nolint:gosec
+				err = resiliency.NewCodeError(int32(code.Code()), err)
 			}
 			return nil, err
 		}
@@ -273,6 +277,11 @@ func (s *handler) handler(srv any, serverStream grpc.ServerStream) error {
 	})
 
 	if cErr != nil {
+		// If the error is a resiliency.CodeError, unwrap it so we can return the original error.
+		var rErr resiliency.CodeError
+		if errors.As(cErr, &rErr) {
+			return rErr.Unwrap()
+		}
 		return cErr
 	}
 

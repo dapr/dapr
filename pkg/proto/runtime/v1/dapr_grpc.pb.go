@@ -180,18 +180,25 @@ type DaprClient interface {
 	SubtleSignAlpha1(ctx context.Context, in *SubtleSignRequest, opts ...grpc.CallOption) (*SubtleSignResponse, error)
 	// SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
 	SubtleVerifyAlpha1(ctx context.Context, in *SubtleVerifyRequest, opts ...grpc.CallOption) (*SubtleVerifyResponse, error)
+	// Deprecated: Do not use.
 	// Starts a new instance of a workflow
 	StartWorkflowAlpha1(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error)
+	// Deprecated: Do not use.
 	// Gets details about a started workflow instance
 	GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error)
+	// Deprecated: Do not use.
 	// Purge Workflow
 	PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Terminates a running workflow instance
 	TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Pauses a running workflow instance
 	PauseWorkflowAlpha1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Resumes a paused workflow instance
 	ResumeWorkflowAlpha1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error)
 	// Starts a new instance of a workflow
@@ -217,7 +224,7 @@ type DaprClient interface {
 	// Delete a job
 	DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, opts ...grpc.CallOption) (*DeleteJobResponse, error)
 	// Converse with a LLM service
-	ConverseAlpha1(ctx context.Context, in *ConversationAlpha1Request, opts ...grpc.CallOption) (*ConversationAlpha1Response, error)
+	ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error)
 }
 
 type daprClient struct {
@@ -700,6 +707,7 @@ func (c *daprClient) SubtleVerifyAlpha1(ctx context.Context, in *SubtleVerifyReq
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) StartWorkflowAlpha1(ctx context.Context, in *StartWorkflowRequest, opts ...grpc.CallOption) (*StartWorkflowResponse, error) {
 	out := new(StartWorkflowResponse)
 	err := c.cc.Invoke(ctx, Dapr_StartWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -709,6 +717,7 @@ func (c *daprClient) StartWorkflowAlpha1(ctx context.Context, in *StartWorkflowR
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowRequest, opts ...grpc.CallOption) (*GetWorkflowResponse, error) {
 	out := new(GetWorkflowResponse)
 	err := c.cc.Invoke(ctx, Dapr_GetWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -718,6 +727,7 @@ func (c *daprClient) GetWorkflowAlpha1(ctx context.Context, in *GetWorkflowReque
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_PurgeWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -727,6 +737,7 @@ func (c *daprClient) PurgeWorkflowAlpha1(ctx context.Context, in *PurgeWorkflowR
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, in *TerminateWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_TerminateWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -736,6 +747,7 @@ func (c *daprClient) TerminateWorkflowAlpha1(ctx context.Context, in *TerminateW
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) PauseWorkflowAlpha1(ctx context.Context, in *PauseWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_PauseWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -745,6 +757,7 @@ func (c *daprClient) PauseWorkflowAlpha1(ctx context.Context, in *PauseWorkflowR
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) ResumeWorkflowAlpha1(ctx context.Context, in *ResumeWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_ResumeWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -754,6 +767,7 @@ func (c *daprClient) ResumeWorkflowAlpha1(ctx context.Context, in *ResumeWorkflo
 	return out, nil
 }
 
+// Deprecated: Do not use.
 func (c *daprClient) RaiseEventWorkflowAlpha1(ctx context.Context, in *RaiseEventWorkflowRequest, opts ...grpc.CallOption) (*emptypb.Empty, error) {
 	out := new(emptypb.Empty)
 	err := c.cc.Invoke(ctx, Dapr_RaiseEventWorkflowAlpha1_FullMethodName, in, out, opts...)
@@ -862,8 +876,8 @@ func (c *daprClient) DeleteJobAlpha1(ctx context.Context, in *DeleteJobRequest, 
 	return out, nil
 }
 
-func (c *daprClient) ConverseAlpha1(ctx context.Context, in *ConversationAlpha1Request, opts ...grpc.CallOption) (*ConversationAlpha1Response, error) {
-	out := new(ConversationAlpha1Response)
+func (c *daprClient) ConverseAlpha1(ctx context.Context, in *ConversationRequest, opts ...grpc.CallOption) (*ConversationResponse, error) {
+	out := new(ConversationResponse)
 	err := c.cc.Invoke(ctx, Dapr_ConverseAlpha1_FullMethodName, in, out, opts...)
 	if err != nil {
 		return nil, err
@@ -957,18 +971,25 @@ type DaprServer interface {
 	SubtleSignAlpha1(context.Context, *SubtleSignRequest) (*SubtleSignResponse, error)
 	// SubtleVerifyAlpha1 verifies the signature of a message using a key stored in the vault.
 	SubtleVerifyAlpha1(context.Context, *SubtleVerifyRequest) (*SubtleVerifyResponse, error)
+	// Deprecated: Do not use.
 	// Starts a new instance of a workflow
 	StartWorkflowAlpha1(context.Context, *StartWorkflowRequest) (*StartWorkflowResponse, error)
+	// Deprecated: Do not use.
 	// Gets details about a started workflow instance
 	GetWorkflowAlpha1(context.Context, *GetWorkflowRequest) (*GetWorkflowResponse, error)
+	// Deprecated: Do not use.
 	// Purge Workflow
 	PurgeWorkflowAlpha1(context.Context, *PurgeWorkflowRequest) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Terminates a running workflow instance
 	TerminateWorkflowAlpha1(context.Context, *TerminateWorkflowRequest) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Pauses a running workflow instance
 	PauseWorkflowAlpha1(context.Context, *PauseWorkflowRequest) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Resumes a paused workflow instance
 	ResumeWorkflowAlpha1(context.Context, *ResumeWorkflowRequest) (*emptypb.Empty, error)
+	// Deprecated: Do not use.
 	// Raise an event to a running workflow instance
 	RaiseEventWorkflowAlpha1(context.Context, *RaiseEventWorkflowRequest) (*emptypb.Empty, error)
 	// Starts a new instance of a workflow
@@ -994,7 +1015,7 @@ type DaprServer interface {
 	// Delete a job
 	DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error)
 	// Converse with a LLM service
-	ConverseAlpha1(context.Context, *ConversationAlpha1Request) (*ConversationAlpha1Response, error)
+	ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error)
 }
 
 // UnimplementedDaprServer should be embedded to have forward compatible implementations.
@@ -1175,7 +1196,7 @@ func (UnimplementedDaprServer) GetJobAlpha1(context.Context, *GetJobRequest) (*G
 func (UnimplementedDaprServer) DeleteJobAlpha1(context.Context, *DeleteJobRequest) (*DeleteJobResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method DeleteJobAlpha1 not implemented")
 }
-func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationAlpha1Request) (*ConversationAlpha1Response, error) {
+func (UnimplementedDaprServer) ConverseAlpha1(context.Context, *ConversationRequest) (*ConversationResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ConverseAlpha1 not implemented")
 }
 
@@ -2265,7 +2286,7 @@ func _Dapr_DeleteJobAlpha1_Handler(srv interface{}, ctx context.Context, dec fun
 }
 
 func _Dapr_ConverseAlpha1_Handler(srv interface{}, ctx context.Context, dec func(interface{}) error, interceptor grpc.UnaryServerInterceptor) (interface{}, error) {
-	in := new(ConversationAlpha1Request)
+	in := new(ConversationRequest)
 	if err := dec(in); err != nil {
 		return nil, err
 	}
@@ -2277,7 +2298,7 @@ func _Dapr_ConverseAlpha1_Handler(srv interface{}, ctx context.Context, dec func
 		FullMethod: Dapr_ConverseAlpha1_FullMethodName,
 	}
 	handler := func(ctx context.Context, req interface{}) (interface{}, error) {
-		return srv.(DaprServer).ConverseAlpha1(ctx, req.(*ConversationAlpha1Request))
+		return srv.(DaprServer).ConverseAlpha1(ctx, req.(*ConversationRequest))
 	}
 	return interceptor(ctx, in, info, handler)
 }
