@@ -260,7 +260,7 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 // It first locks so no further dapr can be taken it. Once placement table is locked
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
-func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequest) error {
+func (p *Service) performTablesUpdate(parentCtx context.Context, req *tablesUpdateRequest) error {
 	// TODO: error from disseminationOperation needs to be handled properly.
 	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
@@ -270,7 +270,7 @@ func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequ
 		req.SetAPILevel(p.minAPILevel, p.maxAPILevel)
 	}
 
-	ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
+	ctx, cancel := context.WithTimeout(parentCtx, 15*time.Second)
 	defer cancel()
 
 	// Perform each update on all hosts in sequence
@@ -321,7 +321,7 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 	config := retry.DefaultConfig()
 	config.MaxRetries = 3
 	backoff := config.NewBackOffWithContext(ctx)
-	return retry.NotifyRecover(func() error {
+	err := retry.NotifyRecover(func() error {
 		// Check stream in stream pool, if stream is not available, skip to next.
 		if _, ok := p.streamConnPool.getStream(target.stream); !ok {
 			remoteAddr := "n/a"
@@ -332,18 +332,48 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 			return nil
 		}
 
-		if err := target.stream.Send(o); err != nil {
-			remoteAddr := "n/a"
-			if p, ok := peer.FromContext(target.stream.Context()); ok {
-				remoteAddr = p.Addr.String()
+		sendCtx, sendCancelFn := context.WithTimeout(ctx, 2*time.Second) // We should make this configurable
+		defer sendCancelFn()
+
+		errCh := make(chan error)
+
+		go func() {
+			errCh <- target.stream.Send(o)
+		}()
+
+		select {
+		case <-sendCtx.Done():
+			// This code path is reached when the stream hangs or is slow to respond
+			// This can happen in some environments when the sidecar is not properly shutdown, or
+			// the sidecar is unresponsive, so the stream buffer fills up
+			// In this case, we should not wait for the stream to respond, but instead return an error
+			// and cancel the stream context
+
+			log.Errorf("timeout sending to target %s", target.hostID)
+			return fmt.Errorf("timeout sending to target %s", target.hostID)
+		case err := <-errCh:
+			if err != nil {
+				remoteAddr := "n/a"
+				if p, ok := peer.FromContext(target.stream.Context()); ok {
+					remoteAddr = p.Addr.String()
+				}
+				log.Errorf("Error updating runtime host %q on %q operation: %v", remoteAddr, operation, err)
+				return err
 			}
-			log.Errorf("Error updating runtime host %q on %q operation: %v", remoteAddr, operation, err)
-			return err
 		}
 		return nil
+
 	},
 		backoff,
 		func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
 		func() { log.Debug("Dissemination successful after failure") },
 	)
+
+	if err != nil {
+		if target.cancelFn != nil {
+			target.cancelFn()
+		}
+	}
+
+	return err
 }

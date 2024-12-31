@@ -18,6 +18,7 @@ import (
 	"errors"
 	"net"
 	"strconv"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -190,7 +191,9 @@ func TestRequiresUpdateInPlacementTables(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			assert.Equal(t, tt.expected, requiresUpdateInPlacementTables(tt.host, &tt.isActorHost))
+			var isActorHost atomic.Bool
+			isActorHost.Store(tt.isActorHost)
+			assert.Equal(t, tt.expected, requiresUpdateInPlacementTables(tt.host, &isActorHost))
 		})
 	}
 }
