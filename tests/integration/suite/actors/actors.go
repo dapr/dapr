@@ -14,10 +14,14 @@ limitations under the License.
 package actors
 
 import (
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/call"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/deactivation"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/grpc"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/healthz"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/http"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/lock"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/metadata"
 	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders"
-	_ "github.com/dapr/dapr/tests/integration/suite/actors/reminders/serialization"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/state"
+	_ "github.com/dapr/dapr/tests/integration/suite/actors/timers"
 )

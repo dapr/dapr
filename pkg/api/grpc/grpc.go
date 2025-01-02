@@ -39,7 +39,7 @@ import (
 	contribMetadata "github.com/dapr/components-contrib/metadata"
 	"github.com/dapr/components-contrib/pubsub"
 	"github.com/dapr/components-contrib/state"
-	"github.com/dapr/dapr/pkg/actors"
+	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
@@ -81,9 +81,6 @@ type API interface {
 
 	// Dapr Service methods
 	runtimev1pb.DaprServer
-
-	// Methods internal to the object
-	SetActorRuntime(actor actors.ActorRuntime)
 }
 
 type api struct {
@@ -1030,8 +1027,9 @@ func (a *api) ExecuteStateTransaction(ctx context.Context, in *runtimev1pb.Execu
 }
 
 func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRequest) (*runtimev1pb.GetActorStateResponse, error) {
-	err := a.Universal.ActorReadinessCheck(ctx)
+	astate, err := a.ActorState(ctx)
 	if err != nil {
+		apiServerLogger.Debug(err)
 		return nil, err
 	}
 
@@ -1039,25 +1037,19 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 	actorID := in.GetActorId()
 	key := in.GetKey()
 
-	hosted := a.Universal.Actors().IsActorHosted(ctx, &actors.ActorHostedRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-	})
-
-	if !hosted {
-		err = messages.ErrActorInstanceMissing
-		apiServerLogger.Debug(err)
-		return nil, err
-	}
-
-	req := actors.GetStateRequest{
+	req := actorapi.GetStateRequest{
 		ActorType: actorType,
 		ActorID:   actorID,
 		Key:       key,
 	}
 
-	resp, err := a.Universal.Actors().GetState(ctx, &req)
+	resp, err := astate.Get(ctx, &req)
 	if err != nil {
+		if _, ok := status.FromError(err); ok {
+			apiServerLogger.Debug(err)
+			return nil, err
+		}
+
 		err = messages.ErrActorStateGet.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
@@ -1070,17 +1062,18 @@ func (a *api) GetActorState(ctx context.Context, in *runtimev1pb.GetActorStateRe
 }
 
 func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.ExecuteActorStateTransactionRequest) (*emptypb.Empty, error) {
-	err := a.Universal.ActorReadinessCheck(ctx)
+	astate, err := a.ActorState(ctx)
 	if err != nil {
+		apiServerLogger.Debug(err)
 		return nil, err
 	}
 
 	actorType := in.GetActorType()
 	actorID := in.GetActorId()
-	actorOps := []actors.TransactionalOperation{}
+	actorOps := []actorapi.TransactionalOperation{}
 
 	for _, op := range in.GetOperations() {
-		var actorOp actors.TransactionalOperation
+		var actorOp actorapi.TransactionalOperation
 		switch op.GetOperationType() {
 		case string(state.OperationUpsert):
 			setReq := map[string]any{
@@ -1092,8 +1085,8 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 				setReq["metadata"] = meta
 			}
 
-			actorOp = actors.TransactionalOperation{
-				Operation: actors.Upsert,
+			actorOp = actorapi.TransactionalOperation{
+				Operation: actorapi.Upsert,
 				Request:   setReq,
 			}
 		case string(state.OperationDelete):
@@ -1102,8 +1095,8 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 				// Actor state do not user other attributes from state request.
 			}
 
-			actorOp = actors.TransactionalOperation{
-				Operation: actors.Delete,
+			actorOp = actorapi.TransactionalOperation{
+				Operation: actorapi.Delete,
 				Request:   delReq,
 			}
 
@@ -1116,25 +1109,19 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		actorOps = append(actorOps, actorOp)
 	}
 
-	hosted := a.Universal.Actors().IsActorHosted(ctx, &actors.ActorHostedRequest{
-		ActorType: actorType,
-		ActorID:   actorID,
-	})
-
-	if !hosted {
-		err = messages.ErrActorInstanceMissing
-		apiServerLogger.Debug(err)
-		return nil, err
-	}
-
-	req := actors.TransactionalRequest{
+	req := actorapi.TransactionalRequest{
 		ActorID:    actorID,
 		ActorType:  actorType,
 		Operations: actorOps,
 	}
 
-	err = a.Universal.Actors().TransactionalStateOperation(ctx, &req)
+	err = astate.TransactionalStateOperation(ctx, &req)
 	if err != nil {
+		if _, ok := status.FromError(err); ok {
+			apiServerLogger.Debug(err)
+			return nil, err
+		}
+
 		err = messages.ErrActorStateTransactionSave.WithFormat(err)
 		apiServerLogger.Debug(err)
 		return nil, err
@@ -1146,29 +1133,30 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorRequest) (*runtimev1pb.InvokeActorResponse, error) {
 	response := &runtimev1pb.InvokeActorResponse{}
 
-	if err := a.Universal.ActorReadinessCheck(ctx); err != nil {
-		return response, err
+	engine, err := a.ActorEngine(ctx)
+	if err != nil {
+		return nil, err
 	}
-
-	policyDef := a.Universal.Resiliency().ActorPreLockPolicy(in.GetActorType(), in.GetActorId())
 
 	req := in.ToInternalInvokeRequest()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
 	// This is due to actor invocation involving a lookup for the host.
-	// Having the retry here allows us to capture that and be resilient to host failure.
-	// Additionally, we don't perform timeouts at this level. This is because an actor
-	// should technically wait forever on the locking mechanism. If we timeout while
-	// waiting for the lock, we can also create a queue of calls that will try and continue
-	// after the timeout.
+	policyDef := a.Universal.Resiliency().ActorPreLockPolicy(in.GetActorType(), in.GetActorId())
 	policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, policyDef)
 	res, err := policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
-		return a.Universal.Actors().Call(ctx, req)
+		return engine.Call(ctx, req)
 	})
-	if err != nil && !actorerrors.Is(err) {
-		err = messages.ErrActorInvoke.WithFormat(err)
-		apiServerLogger.Debug(err)
-		return response, err
+	if err != nil {
+		if _, ok := status.FromError(err); ok {
+			apiServerLogger.Debug(err)
+			return nil, err
+		}
+		if !actorerrors.Is(err) {
+			err = messages.ErrActorInvoke.WithFormat(err)
+			apiServerLogger.Debug(err)
+			return response, err
+		}
 	}
 
 	if res != nil {

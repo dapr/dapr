@@ -79,6 +79,7 @@ spec:
   - name: SchedulerReminders
     enabled: false
 `),
+		daprd.WithAppHealthCheck(true),
 	)
 
 	return []framework.Option{

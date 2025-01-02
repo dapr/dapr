@@ -23,8 +23,6 @@ import (
 	"testing"
 	"time"
 
-	"google.golang.org/grpc/metadata"
-
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -38,6 +36,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 )
 
@@ -153,12 +152,27 @@ func (p *Placement) Port() int {
 	return p.port
 }
 
+func (p *Placement) ipPort(port int) string {
+	return "127.0.0.1:" + strconv.Itoa(port)
+}
+
 func (p *Placement) Address() string {
-	return "127.0.0.1:" + strconv.Itoa(p.port)
+	return p.ipPort(p.port)
 }
 
 func (p *Placement) HealthzPort() int {
 	return p.healthzPort
+}
+
+// Metrics returns a subset of metrics scraped from the metrics endpoint
+func (p *Placement) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
+	t.Helper()
+
+	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", p.MetricsAddress()))
+}
+
+func (p *Placement) MetricsAddress() string {
+	return p.ipPort(p.MetricsPort())
 }
 
 func (p *Placement) MetricsPort() int {
@@ -177,7 +191,8 @@ func (p *Placement) CurrentActorsAPILevel() int {
 	return 20 // Defined in pkg/actors/internal/api_level.go
 }
 
-func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host, contextMetadata map[string]string) chan *placementv1pb.PlacementTables {
+// RegisterHost Registers a host with the placement service
+func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *placementv1pb.Host) chan *placementv1pb.PlacementTables {
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(parentCtx, p.Address(),
 		grpc.WithBlock(),
@@ -185,10 +200,6 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 	)
 	require.NoError(t, err)
 	client := placementv1pb.NewPlacementClient(conn)
-
-	for k, v := range contextMetadata {
-		parentCtx = metadata.AppendToOutgoingContext(parentCtx, k, v)
-	}
 
 	var stream placementv1pb.Placement_ReportDaprStatusClient
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -261,12 +272,6 @@ func (p *Placement) RegisterHostWithMetadata(t *testing.T, parentCtx context.Con
 	}()
 
 	return placementUpdateCh
-}
-
-// RegisterHost Registers a host with the placement service using default context metadata
-func (p *Placement) RegisterHost(t *testing.T, ctx context.Context, msg *placementv1pb.Host) chan *placementv1pb.PlacementTables {
-	ctx = metadata.AppendToOutgoingContext(ctx, "dapr-accept-vnodes", "false")
-	return p.RegisterHostWithMetadata(t, ctx, msg, nil)
 }
 
 // AssertRegisterHostFails Expect the registration to fail with FailedPrecondition.

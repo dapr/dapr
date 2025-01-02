@@ -21,10 +21,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/microsoft/durabletask-go/api"
-	"github.com/microsoft/durabletask-go/backend"
-	"github.com/microsoft/durabletask-go/client"
-	"github.com/microsoft/durabletask-go/task"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -35,6 +31,10 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	procscheduler "github.com/dapr/dapr/tests/integration/framework/process/scheduler"
 	"github.com/dapr/dapr/tests/integration/suite"
+	"github.com/dapr/durabletask-go/api"
+	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/client"
+	"github.com/dapr/durabletask-go/task"
 )
 
 func init() {
@@ -118,8 +118,8 @@ func (d *deletereminder) Run(t *testing.T, ctx context.Context) {
 
 	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, api.InstanceID(resp.GetInstanceId()))
 	require.NoError(t, err)
-	assert.True(t, metadata.IsComplete())
-	assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+	assert.True(t, api.OrchestrationMetadataIsComplete(metadata))
+	assert.Equal(t, `"Hello, Dapr!"`, metadata.GetOutput().GetValue())
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		assert.Empty(c, d.scheduler.ListAllKeys(t, ctx, etcdKeysPrefix))
