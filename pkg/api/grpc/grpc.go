@@ -539,9 +539,9 @@ func (a *api) InvokeBinding(ctx context.Context, in *runtimev1pb.InvokeBindingRe
 	}
 
 	if err != nil {
-		err := apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.BindingInvokeOutputBinding, fmt.Sprintf(messages.ErrInvokeOutputBinding, in.GetName(), err.Error()))
-		apiServerLogger.Debug(err)
-		return r, err
+		richError := apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.BindingInvokeOutputBinding, fmt.Sprintf(messages.ErrInvokeOutputBinding, in.GetName(), err.Error()))
+		apiServerLogger.Debug(richError)
+		return r, richError
 	}
 
 	if resp != nil {
@@ -1213,9 +1213,9 @@ func (a *api) GetConfiguration(ctx context.Context, in *runtimev1pb.GetConfigura
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(ctx, in.GetStoreName(), diag.Get, err == nil, elapsed)
 
 	if err != nil {
-		err := apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.ConfigurationGet, fmt.Sprintf(messages.ErrConfigurationGet, req.Keys, in.GetStoreName(), err.Error()))
-		apiServerLogger.Debug(err)
-		return response, err
+		richError := apierrors.Basic(codes.Internal, http.StatusInternalServerError, errorcodes.ConfigurationGet, fmt.Sprintf(messages.ErrConfigurationGet, req.Keys, in.GetStoreName(), err.Error()))
+		apiServerLogger.Debug(richError)
+		return response, richError
 	}
 
 	if getResponse != nil {
@@ -1366,9 +1366,9 @@ func (a *api) subscribeConfiguration(ctx context.Context, request *runtimev1pb.S
 	diag.DefaultComponentMonitoring.ConfigurationInvoked(context.Background(), request.GetStoreName(), diag.ConfigurationSubscribe, err == nil, elapsed)
 
 	if err != nil {
-		err := apierrors.Basic(codes.InvalidArgument, http.StatusInternalServerError, errorcodes.ConfigurationSubscribe, fmt.Sprintf(messages.ErrConfigurationSubscribe, componentReq.Keys, request.GetStoreName(), err))
-		apiServerLogger.Debug(err)
-		return "", err
+		richError := apierrors.Basic(codes.InvalidArgument, http.StatusInternalServerError, errorcodes.ConfigurationSubscribe, fmt.Sprintf(messages.ErrConfigurationSubscribe, componentReq.Keys, request.GetStoreName(), err))
+		apiServerLogger.Debug(richError)
+		return "", richError
 	}
 
 	return subscribeID, nil

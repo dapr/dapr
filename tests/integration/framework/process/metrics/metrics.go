@@ -2,7 +2,6 @@ package metrics
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"strconv"
 	"strings"
@@ -113,13 +112,8 @@ func (m *Metrics) MatchMetricAndValue(value float64, substrings ...string) bool 
 	metrics := m.MatchMetric(substrings...)
 	matchSum := 0.0
 	for _, metric := range metrics {
-			matchSum += metric.Value
+		matchSum += metric.Value
 	}
 
-	if matchSum == value {
-		return true
-	} else {
-		fmt.Printf("metric.Value: %v, value: %v\n", matchSum, value)
-	}
-	return false
+	return matchSum == value
 }

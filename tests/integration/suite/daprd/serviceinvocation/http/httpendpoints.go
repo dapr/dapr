@@ -28,7 +28,6 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -129,7 +128,7 @@ spec:
 		strings.ReplaceAll(string(pki1.RootCertPEM), "\n", "\\n"),
 		strings.ReplaceAll(string(pki2.LeafCertPEM), "\n", "\\n"),
 		strings.ReplaceAll(string(pki2.LeafPKPEM), "\n", "\\n"))),
-	daprd.WithErrorCodeMetrics(t),
+		procdaprd.WithErrorCodeMetrics(t),
 	)
 	h.appPort = srv1.Port()
 

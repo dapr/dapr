@@ -126,7 +126,7 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 		})
 	}
 
-	//TODO: @jake-engelberg: parallel tests run during cleanup, can't check metrics within that
+	// TODO: @jake-engelberg: parallel tests run during cleanup, can't check metrics within that
 	t.Run("metrics", func(t *testing.T) {
 		for i, secretStoreName := range c.secretStoreNames {
 			if i > 10 {
