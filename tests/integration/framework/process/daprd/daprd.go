@@ -334,16 +334,6 @@ func (d *Daprd) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
 	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", d.MetricsAddress()))
 }
 
-// func (d *Daprd) FoundMetric(t *testing.T, ctx context.Context, desiredValue int, desiredNameAndLabelPairs ...string) bool {
-// 	metrics := d.Metrics(t, ctx, desiredNameAndLabelPairs...)
-// 	if len(metrics) == 1 {
-// 		for _, v := range metrics {
-// 			return v == float64(desiredValue)
-// 		}
-// 	}
-// 	return false
-// }
-
 func (d *Daprd) MetricResidentMemoryMi(t *testing.T, ctx context.Context) float64 {
 	return d.Metrics(t, ctx).All()["process_resident_memory_bytes"] * 1e-6
 }
