@@ -28,6 +28,7 @@ import (
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -127,7 +128,9 @@ spec:
 `, srv2.Port(),
 		strings.ReplaceAll(string(pki1.RootCertPEM), "\n", "\\n"),
 		strings.ReplaceAll(string(pki2.LeafCertPEM), "\n", "\\n"),
-		strings.ReplaceAll(string(pki2.LeafPKPEM), "\n", "\\n"))))
+		strings.ReplaceAll(string(pki2.LeafPKPEM), "\n", "\\n"))),
+	daprd.WithErrorCodeMetrics(t),
+	)
 	h.appPort = srv1.Port()
 
 	return []framework.Option{
@@ -234,6 +237,7 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 		invokeTests(t, http.StatusInternalServerError, func(c *assert.CollectT, body string) {
 			assert.Contains(c, body, `"errorCode":"ERR_DIRECT_INVOKE"`)
 			assert.Contains(c, body, "tls: unknown certificate authority")
+			assert.True(t, h.daprd2.Metrics(t, ctx).MatchMetricAndValue(1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
 		}, h.daprd2)
 	})
 }

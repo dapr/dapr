@@ -33,7 +33,9 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/file"
 	"github.com/dapr/dapr/tests/integration/framework/parallel"
+	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
+	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -92,7 +94,12 @@ spec:
 		)
 	}
 
-	c.daprd = procdaprd.New(t, procdaprd.WithResourceFiles(files...))
+	c.daprd = procdaprd.New(t, 
+		procdaprd.WithResourceFiles(files...), 
+		daprd.WithErrorCodeMetrics(t), 
+		daprd.WithLogLineStdout(logline.New(t, logline.WithStdoutLineContains(
+			"Initializing error code monitoring",))),
+	)
 
 	return []framework.Option{
 		framework.WithProcesses(c.daprd),
@@ -122,4 +129,6 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(t, string(respBody), "secret key1 not found")
 		})
 	}
+	// hmm := c.daprd.Metrics(t, ctx).MatchMetricAndValue(float64(len(c.secretStoreNames)), "dapr_error_code_total" /*"category:secret", "error_code:ERR_SECRET_GET"*/)
+	// t.Log(hmm)
 }

@@ -63,7 +63,6 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 	e.daprd.WaitUntilAppHealth(t, ctx)
 
 	t.Run("gRPC workflow error metrics", func(t *testing.T) {
-		t.Skip("TODO: @joshvanl: reenable")
 		// Try to get a non-existent workflow instance which should trigger "ERR_GET_WORKFLOW"
 		gclient := e.daprd.GRPCClient(t, ctx)
 		for range 2 {
@@ -75,9 +74,7 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Check for metric count and code
-		metrics := e.daprd.Metrics(t, ctx).All()
-		errorMetricName := "dapr_error_code_total|app_id:myapp|category:workflow|error_code:ERR_GET_WORKFLOW"
-		assert.Equal(t, 2, int(metrics[errorMetricName]), "Expected \"ERR_GET_WORKFLOW\" to be recorded")
+		assert.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndValue(2, "dapr_error_code_total", "category:workflow", "error_code:ERR_GET_WORKFLOW"))
 	})
 
 	t.Run("HTTP conversation error metrics", func(t *testing.T) {
@@ -87,8 +84,6 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Check for metric count and code
-		metrics := e.daprd.Metrics(t, ctx).All()
-		errorMetricName := "dapr_error_code_total|app_id:myapp|category:conversation|error_code:ERR_DIRECT_INVOKE"
-		assert.Equal(t, 3, int(metrics[errorMetricName]), "Expected \"ERR_DIRECT_INVOKE\" to be recorded")
+		assert.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndValue(3, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
 	})
 }
