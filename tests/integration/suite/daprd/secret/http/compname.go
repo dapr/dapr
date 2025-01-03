@@ -33,9 +33,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/file"
 	"github.com/dapr/dapr/tests/integration/framework/parallel"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -94,11 +92,9 @@ spec:
 		)
 	}
 
-	c.daprd = procdaprd.New(t, 
-		procdaprd.WithResourceFiles(files...), 
-		daprd.WithErrorCodeMetrics(t), 
-		daprd.WithLogLineStdout(logline.New(t, logline.WithStdoutLineContains(
-			"Initializing error code monitoring",))),
+	c.daprd = procdaprd.New(t,
+		procdaprd.WithResourceFiles(files...),
+		procdaprd.WithErrorCodeMetrics(t),
 	)
 
 	return []framework.Option{
@@ -129,6 +125,26 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			assert.Contains(t, string(respBody), "secret key1 not found")
 		})
 	}
-	// hmm := c.daprd.Metrics(t, ctx).MatchMetricAndValue(float64(len(c.secretStoreNames)), "dapr_error_code_total" /*"category:secret", "error_code:ERR_SECRET_GET"*/)
-	// t.Log(hmm)
+
+	//TODO: @jake-engelberg: parallel tests run during cleanup, can't check metrics within that
+	t.Run("metrics", func(t *testing.T) {
+		for i, secretStoreName := range c.secretStoreNames {
+			if i > 10 {
+				break
+			}
+
+			getURL := fmt.Sprintf("http://localhost:%d/v1.0/secrets/%s/key1", c.daprd.HTTPPort(), url.QueryEscape(secretStoreName))
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, getURL, nil)
+			require.NoError(t, err)
+			resp, err := client.Do(req)
+			require.NoError(t, err)
+			assert.Equal(t, http.StatusInternalServerError, resp.StatusCode)
+			respBody, err := io.ReadAll(resp.Body)
+			require.NoError(t, err)
+			require.NoError(t, resp.Body.Close())
+			assert.Contains(t, string(respBody), "ERR_SECRET_GET")
+			assert.Contains(t, string(respBody), "secret key1 not found")
+			assert.True(t, c.daprd.Metrics(t, ctx).MatchMetricAndValue(float64(i+1), "dapr_error_code_total", "category:secret", "error_code:ERR_SECRET_GET"))
+		}
+	})
 }
