@@ -362,6 +362,13 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				return
 			default:
 				req, recvErr := stream.Recv()
+				// Check if the context has been cancelled in the meantime
+				select {
+				case <-ctx.Done():
+					return
+				default:
+				}
+
 				daprStream.recvCh <- recvResult{host: req, err: recvErr}
 				if recvErr != nil {
 					return

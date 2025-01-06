@@ -289,7 +289,7 @@ func (s *Server) StartRaft(ctx context.Context) error {
 	close(s.raftReady)
 	s.htarget.Ready()
 
-	logging.Infof("Raft server %s is starting on %s...", s.GetID(), s.GetRaftBind())
+	logging.Infof("Raft server %s started on %s...", s.GetID(), s.GetRaftBind())
 	<-ctx.Done()
 	logging.Infof("Raft server %s is shutting down...", s.GetID())
 

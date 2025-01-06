@@ -17,6 +17,8 @@ import (
 	"context"
 	"sync"
 	"time"
+
+	"github.com/dapr/dapr/pkg/placement/monitoring"
 )
 
 // barrierWriteTimeout is the maximum duration to wait for the barrier command
@@ -81,6 +83,8 @@ func (p *Service) MonitorLeadership(ctx context.Context) error {
 	for {
 		select {
 		case isLeader := <-raftLeaderCh:
+			monitoring.RecordRaftPlacementLeaderStatus(isLeader)
+
 			if wasLeader != isLeader {
 				// Regular leadership change (node acquired or lost leadership)
 				wasLeader = isLeader
@@ -162,10 +166,12 @@ func (p *Service) leaderLoop(ctx context.Context) error {
 func (p *Service) establishLeadership() {
 	p.membershipCh = make(chan hostMemberChange, membershipChangeChSize)
 	p.hasLeadership.Store(true)
+	monitoring.RecordPlacementLeaderStatus(true)
 }
 
 func (p *Service) revokeLeadership() {
 	p.hasLeadership.Store(false)
+	monitoring.RecordPlacementLeaderStatus(false)
 
 	log.Info("Waiting until all connections are drained")
 	p.streamConnGroup.Wait()
