@@ -366,13 +366,12 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 				select {
 				case <-ctx.Done():
 					return
-				default:
+				case daprStream.recvCh <- recvResult{host: req, err: recvErr}:
+					if recvErr != nil {
+						return
+					}
 				}
 
-				daprStream.recvCh <- recvResult{host: req, err: recvErr}
-				if recvErr != nil {
-					return
-				}
 			}
 		}
 	}()

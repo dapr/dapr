@@ -56,7 +56,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 		Name:      "local/myapp1",
 		Namespace: "default",
 		Port:      1232,
-		Entities:  getActorsList(4000, "host1"),
+		Entities:  getActorsList(9000, "host1"),
 		Id:        "myapp1",
 		ApiLevel:  uint32(20),
 	}
@@ -110,7 +110,11 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 			}
 
 			if resp.GetOperation() == "update" {
-				updateCh2 <- resp.GetTables()
+				select {
+				case <-ctx.Done():
+					return
+				case updateCh2 <- resp.GetTables():
+				}
 			}
 		}
 		fmt.Println("Reading from stream2 done")
@@ -161,7 +165,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 		for {
 			select {
 			case <-ctx.Done():
-				return
+				break
 			default:
 			}
 
@@ -172,7 +176,11 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 			}
 
 			if resp.GetOperation() == "update" {
-				updateCh3 <- resp.GetTables()
+				select {
+				case <-ctx.Done():
+					break
+				case updateCh3 <- resp.GetTables():
+				}
 			}
 		}
 		fmt.Println("Reading from stream3 done")
