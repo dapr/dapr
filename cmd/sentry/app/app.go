@@ -63,7 +63,6 @@ func Run() {
 	}
 
 	var (
-		watchDirs   []string
 		issuerEvent = make(chan struct{})
 		mngr        = concurrency.NewRunnerManager()
 	)
@@ -92,6 +91,7 @@ func Run() {
 			m[dir] = struct{}{}
 		}
 	}
+	watchDirs := make([]string, 0, len(m))
 	for dir := range m {
 		watchDirs = append(watchDirs, dir)
 	}
