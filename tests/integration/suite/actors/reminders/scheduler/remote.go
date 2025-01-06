@@ -60,9 +60,9 @@ type remote struct {
 }
 
 func (r *remote) Setup(t *testing.T) []framework.Option {
-	//if runtime.GOOS == "windows" {
-	//	t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
-	//}
+	// if runtime.GOOS == "windows" {
+	// 	t.Skip("Flaky tests to fix before 1.15") // TODO: fix flaky tests before 1.15
+	// }
 
 	configFile := filepath.Join(t.TempDir(), "config.yaml")
 	require.NoError(t, os.WriteFile(configFile, []byte(`
@@ -177,7 +177,6 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	r.daprd1.Cleanup(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		fmt.Println(" ==== value during test: ", r.deleteCalled.Load())
 		assert.Equal(c, int64(r.actorIDsNum), r.deleteCalled.Load())
 	}, time.Second*20, 200*time.Millisecond)
 
