@@ -162,7 +162,6 @@ type Service struct {
 
 	htarget  healthz.Target
 	running  atomic.Bool
-	closed   atomic.Bool
 	closedCh chan struct{}
 	wg       sync.WaitGroup
 }
@@ -371,7 +370,6 @@ func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStat
 						return
 					}
 				}
-
 			}
 		}
 	}()

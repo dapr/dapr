@@ -102,10 +102,10 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 			default:
 			}
 
-			fmt.Println("Reading from stream2...")
-			resp, err := stream2.Recv()
-			fmt.Println("Received message from stream2 \t\t\t\t", resp.GetOperation(), len(resp.GetTables().GetEntries()), err, time.Now())
-			if err != nil {
+			// fmt.Println("Reading from stream2...")
+			resp, err2 := stream2.Recv()
+			// fmt.Println("Received message from stream2 \t\t\t\t", resp.GetOperation(), len(resp.GetTables().GetEntries()), err, time.Now())
+			if err2 != nil {
 				break
 			}
 
@@ -117,7 +117,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 				}
 			}
 		}
-		fmt.Println("Reading from stream2 done")
+		// fmt.Println("Reading from stream2 done")
 	}()
 
 	// The placement tables message that the Placement server will try to disseminate to stream1 will
@@ -129,7 +129,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		placementTables, ok := <-updateCh2
 		require.True(t, ok)
-		fmt.Println("Placement tables received on stream2", len(placementTables.GetEntries()))
+		// fmt.Println("Placement tables received on stream2", len(placementTables.GetEntries()))
 		assert.Len(c, placementTables.GetEntries(), 10)
 		assert.Contains(c, placementTables.GetEntries(), "host2-0")
 	}, 20*time.Second, 100*time.Millisecond)
@@ -170,7 +170,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 			}
 
 			resp, err := stream3.Recv()
-			fmt.Println("Received message from stream3\t\t\t\t\t\t", resp.GetOperation(), len(resp.GetTables().GetEntries()), err, time.Now())
+			// fmt.Println("Received message from stream3\t\t\t\t\t\t", resp.GetOperation(), len(resp.GetTables().GetEntries()), err, time.Now())
 			if err != nil {
 				break
 			}
@@ -183,7 +183,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 				}
 			}
 		}
-		fmt.Println("Reading from stream3 done")
+		// fmt.Println("Reading from stream3 done")
 	}()
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
@@ -196,15 +196,15 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	}, 15*time.Second, 500*time.Millisecond)
 
 	// Clean up
-	fmt.Println("Closing stream 1")
+	// fmt.Println("Closing stream 1")
 	streamCancel1()
-	fmt.Println("Closing stream 2")
+	// fmt.Println("Closing stream 2")
 	streamCancel2()
-	fmt.Println("Closing stream 3")
+	// fmt.Println("Closing stream 3")
 	streamCancel3()
-	fmt.Println("Closed all streams. Waiting on wg.")
+	// fmt.Println("Closed all streams. Waiting on wg.")
 	wg.Wait()
-	fmt.Println("wg.Wait done")
+	// fmt.Println("wg.Wait done")
 }
 
 func (n *streamHang) getStream(t *testing.T, ctx context.Context) (v1pb.Placement_ReportDaprStatusClient, func()) {
@@ -223,7 +223,7 @@ func (n *streamHang) getStream(t *testing.T, ctx context.Context) (v1pb.Placemen
 	require.NoError(t, err)
 
 	cancel := func() {
-		fmt.Println("Closing stream")
+		// fmt.Println("Closing stream")
 		stream.CloseSend()
 		conn.Close()
 	}
@@ -232,7 +232,7 @@ func (n *streamHang) getStream(t *testing.T, ctx context.Context) (v1pb.Placemen
 }
 
 func getActorsList(numActors int, prefix string) []string {
-	var actors []string
+	actors := make([]string, 0, numActors)
 	for i := range numActors {
 		actors = append(actors, fmt.Sprintf("%s-%d", prefix, i))
 	}

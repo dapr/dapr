@@ -22,7 +22,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	"github.com/dapr/dapr/tests/integration/framework"
-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/suite"
@@ -36,7 +35,6 @@ func init() {
 type leadership struct {
 	fp         *ports.Ports
 	placements []*placement.Placement
-	daprd      *daprd.Daprd
 }
 
 func (l *leadership) Setup(t *testing.T) []framework.Option {

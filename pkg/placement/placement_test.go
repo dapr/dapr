@@ -38,8 +38,6 @@ import (
 	securityfake "github.com/dapr/dapr/pkg/security/fake"
 )
 
-const testStreamSendLatency = time.Second
-
 func newTestPlacementServer(t *testing.T, raftOptions raft.Options) (string, *Service, *clocktesting.FakeClock, context.CancelFunc) {
 	t.Helper()
 

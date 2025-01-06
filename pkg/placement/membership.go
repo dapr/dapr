@@ -362,13 +362,11 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 			}
 		}
 		return nil
-
 	},
 		backoff,
 		func(err error, d time.Duration) { log.Debugf("Attempting to disseminate again after error: %v", err) },
 		func() { log.Debug("Dissemination successful after failure") },
 	)
-
 	if err != nil {
 		if target.cancelFn != nil {
 			target.cancelFn()
