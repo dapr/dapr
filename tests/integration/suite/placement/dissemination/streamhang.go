@@ -91,7 +91,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 	// Start reading from stream2
 	var wg sync.WaitGroup
 	wg.Add(1)
-	updateCh2 := make(chan *v1pb.PlacementTables)
+	updateCh2 := make(chan *v1pb.PlacementTables, 5)
 	go func() {
 		defer wg.Done()
 		defer close(updateCh2)
