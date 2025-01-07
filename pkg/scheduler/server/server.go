@@ -31,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
@@ -78,6 +79,14 @@ func New(opts Options) (*Server, error) {
 	config, err := config(opts)
 	if err != nil {
 		return nil, err
+	}
+
+	broadcastAddr := opts.ListenAddress
+	if !utils.IsLocalhost(broadcastAddr) {
+		broadcastAddr, err = utils.GetHostAddress()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get host address: %w", err)
+		}
 	}
 
 	cron := cron.New(cron.Options{

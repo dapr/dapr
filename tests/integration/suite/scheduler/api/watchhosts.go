@@ -124,24 +124,27 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*10, time.Millisecond*10)
 
 	w.scheduler2.Cleanup(t)
-	resp, err := stream.Recv()
-	require.NoError(t, err)
-	got := make([]string, 0, 2)
-	for _, host := range resp.GetHosts() {
-		got = append(got, host.GetAddress())
-	}
-	assert.ElementsMatch(t, []string{
-		w.s1addr,
-		w.s3addr,
-	}, got)
+
+	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := stream.Recv()
+		require.NoError(t, err)
+		got := make([]string, 0, 2)
+		for _, host := range resp.GetHosts() {
+			got = append(got, host.GetAddress())
+		}
+		assert.ElementsMatch(c, []string{
+			w.s1addr,
+			w.s3addr,
+		}, got)
+	}, time.Second*10, time.Millisecond*10)
 
 	w.scheduler4.Run(t, ctx)
 	w.scheduler4.WaitUntilRunning(t, ctx)
 	t.Cleanup(func() { w.scheduler4.Cleanup(t) })
-	resp, err = stream.Recv()
+	resp, err := stream.Recv()
 	require.NoError(t, err)
 
-	got = make([]string, 0, 3)
+	got := make([]string, 0, 3)
 	for _, host := range resp.GetHosts() {
 		got = append(got, host.GetAddress())
 	}
