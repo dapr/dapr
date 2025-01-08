@@ -26,6 +26,7 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/kit/crypto/pem"
 )
@@ -46,6 +47,7 @@ func TestNew(t *testing.T) {
 			IssuerCertPath: issuerCertPath,
 			IssuerKeyPath:  issuerKeyPath,
 			TrustDomain:    "test.example.com",
+			Mode:           modes.StandaloneMode,
 		}
 
 		_, err := New(context.Background(), config)
@@ -90,6 +92,7 @@ func TestNew(t *testing.T) {
 			RootCertPath:   rootCertPath,
 			IssuerCertPath: issuerCertPath,
 			IssuerKeyPath:  issuerKeyPath,
+			Mode:           modes.StandaloneMode,
 		}
 
 		rootPEM, rootCrt, _, rootPK := genCrt(t, "root", nil, nil)
