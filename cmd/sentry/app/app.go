@@ -24,6 +24,7 @@ import (
 	"github.com/dapr/dapr/pkg/healthz"
 	healthzserver "github.com/dapr/dapr/pkg/healthz/server"
 	"github.com/dapr/dapr/pkg/metrics"
+	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/sentry"
 	"github.com/dapr/dapr/pkg/sentry/config"
 	"github.com/dapr/dapr/pkg/sentry/monitoring"
@@ -38,6 +39,10 @@ var log = logger.NewLogger("dapr.sentry")
 
 func Run() {
 	opts := options.New(os.Args[1:])
+
+	if err := opts.Validate(); err != nil {
+		log.Fatalf("Invalid options: %s", err)
+	}
 
 	// Apply options to all loggers
 	if err := logger.ApplyOptionsToLoggers(&opts.Logger); err != nil {
@@ -57,9 +62,39 @@ func Run() {
 		log.Fatal(err)
 	}
 
+	var (
+		issuerEvent = make(chan struct{})
+		mngr        = concurrency.NewRunnerManager()
+	)
+
 	issuerCertPath := filepath.Join(opts.IssuerCredentialsPath, opts.IssuerCertFilename)
+	if filepath.IsAbs(opts.IssuerCertFilename) {
+		log.Debugf("Using user provided issuer cert path: %s", opts.IssuerCertFilename)
+		issuerCertPath = opts.IssuerCertFilename
+	}
 	issuerKeyPath := filepath.Join(opts.IssuerCredentialsPath, opts.IssuerKeyFilename)
+	if filepath.IsAbs(opts.IssuerKeyFilename) {
+		log.Debugf("Using user provided issuer key path: %s", opts.IssuerKeyFilename)
+		issuerKeyPath = opts.IssuerKeyFilename
+	}
 	rootCertPath := filepath.Join(opts.IssuerCredentialsPath, opts.RootCAFilename)
+	if filepath.IsAbs(opts.RootCAFilename) {
+		log.Debugf("Using user provided root cert path: %s", opts.RootCAFilename)
+		rootCertPath = opts.RootCAFilename
+	}
+
+	m := make(map[string]struct{})
+	// we need to watch over all these relevant directories
+	for _, path := range []string{issuerCertPath, issuerKeyPath, rootCertPath} {
+		dir := filepath.Dir(path)
+		if _, ok := m[dir]; !ok {
+			m[dir] = struct{}{}
+		}
+	}
+	watchDirs := make([]string, 0, len(m))
+	for dir := range m {
+		watchDirs = append(watchDirs, dir)
+	}
 
 	cfg, err := config.FromConfigName(opts.ConfigName)
 	if err != nil {
@@ -72,12 +107,7 @@ func Run() {
 	cfg.TrustDomain = opts.TrustDomain
 	cfg.Port = opts.Port
 	cfg.ListenAddress = opts.ListenAddress
-
-	var (
-		watchDir    = filepath.Dir(cfg.IssuerCertPath)
-		issuerEvent = make(chan struct{})
-		mngr        = concurrency.NewRunnerManager()
-	)
+	cfg.Mode = modes.DaprMode(opts.Mode)
 
 	// We use runner manager inception here since we want the inner manager to be
 	// restarted when the CA server needs to be restarted because of file events.
@@ -147,15 +177,15 @@ func Run() {
 		log.Fatal(err)
 	}
 
-	// Watch for changes in the watchDir
+	// Watch for changes in the watchDirs
 	fs, err := fswatcher.New(fswatcher.Options{
-		Targets: []string{watchDir},
+		Targets: watchDirs,
 	})
 	if err != nil {
 		log.Fatal(err)
 	}
 	if err = mngr.Add(func(ctx context.Context) error {
-		log.Infof("Starting watch on filesystem directory: %s", watchDir)
+		log.Infof("Starting watch on filesystem directories: %v", watchDirs)
 		return fs.Run(ctx, issuerEvent)
 	}); err != nil {
 		log.Fatal(err)

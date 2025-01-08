@@ -26,6 +26,7 @@ import (
 
 	scheme "github.com/dapr/dapr/pkg/client/clientset/versioned"
 	daprGlobalConfig "github.com/dapr/dapr/pkg/config"
+	"github.com/dapr/dapr/pkg/modes"
 	sentryv1pb "github.com/dapr/dapr/pkg/proto/sentry/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/utils"
@@ -65,6 +66,7 @@ type Config struct {
 	RootCertPath     string
 	IssuerCertPath   string
 	IssuerKeyPath    string
+	Mode             modes.DaprMode
 	Validators       map[sentryv1pb.SignCertificateRequest_TokenValidator]map[string]string
 	DefaultValidator sentryv1pb.SignCertificateRequest_TokenValidator
 	Features         []daprGlobalConfig.FeatureSpec

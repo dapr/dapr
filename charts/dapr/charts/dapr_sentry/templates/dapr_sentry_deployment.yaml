@@ -163,6 +163,8 @@ spec:
         - "/sentry"
         - "--"
 {{- end }}
+        - "--mode"
+        - "kubernetes"
         - "--log-level"
         - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
