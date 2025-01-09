@@ -21,9 +21,9 @@ import (
 	"path/filepath"
 	"strings"
 
-	"go.etcd.io/etcd/server/v3/embed"
-
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/client/pkg/transport"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/embed"
 	"github.com/dapr/dapr/pkg/security"
 )
 
@@ -44,6 +44,14 @@ func config(opts Options) (*embed.Config, error) {
 	}
 
 	config := embed.NewConfig()
+
+	config.ClientTLSInfo = transport.TLSInfo{
+		Security: opts.Security,
+	}
+
+	config.PeerTLSInfo = transport.TLSInfo{
+		Security: opts.Security,
+	}
 
 	config.Name = opts.EtcdID
 	config.InitialCluster = strings.Join(opts.EtcdInitialPeers, ",")
@@ -110,7 +118,6 @@ func config(opts Options) (*embed.Config, error) {
 	}
 
 	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.
-	// TODO: Look into etcd config and if we need to do any raft compacting
 
 	// TODO: Cassie do extra validation that the client port != peer port -> dont fail silently
 	// TODO: Cassie do extra validation if people forget to put http:// -> dont fail silently
