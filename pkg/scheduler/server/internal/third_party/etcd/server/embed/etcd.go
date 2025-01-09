@@ -38,7 +38,6 @@ import (
 	"go.etcd.io/etcd/client/v3/credentials"
 	"go.etcd.io/etcd/pkg/v3/debugutil"
 	runtimeutil "go.etcd.io/etcd/pkg/v3/runtime"
-	//"go.etcd.io/etcd/server/v3/config"
 	"go.etcd.io/etcd/server/v3/etcdserver"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/etcdhttp"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/rafthttp"
@@ -310,7 +309,9 @@ func print(lg *zap.Logger, ec Config, sc config.ServerConfig, memberInitialized 
 
 	quota := ec.QuotaBackendBytes
 	if quota == 0 {
-		quota = etcdserver.DefaultQuotaBytes
+		// quota is the number of bytes the backend Size may
+		// consume before exceeding the space quota.
+		quota = int64(2 * 1024 * 1024 * 1024) // 2GB
 	}
 
 	lg.Info(
