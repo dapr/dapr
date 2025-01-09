@@ -17,6 +17,7 @@ package embed
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io/ioutil"
 	defaultLog "log"
@@ -136,63 +137,6 @@ func (sctx *serveCtx) serve(
 		traffic = "grpc+http"
 	}
 
-	if sctx.insecure {
-		var gs *grpc.Server
-		var srv *http.Server
-		if httpEnabled {
-			httpmux := sctx.createMux(gwmux, handler)
-			srv = &http.Server{
-				Handler:  createAccessController(sctx.lg, s, httpmux),
-				ErrorLog: logger, // do not log user error
-			}
-			if err := configureHttpServer(srv, s.Cfg); err != nil {
-				sctx.lg.Error("Configure http server failed", zap.Error(err))
-				return err
-			}
-		}
-		if grpcEnabled {
-			gs = v3rpc.Server(s, nil, nil, gopts...)
-			v3electionpb.RegisterElectionServer(gs, servElection)
-			v3lockpb.RegisterLockServer(gs, servLock)
-			if sctx.serviceRegister != nil {
-				sctx.serviceRegister(gs)
-			}
-			defer func(gs *grpc.Server) {
-				if err != nil {
-					sctx.lg.Warn("stopping insecure grpc server due to error", zap.Error(err))
-					gs.Stop()
-					sctx.lg.Warn("stopped insecure grpc server due to error", zap.Error(err))
-				}
-			}(gs)
-		}
-		if onlyGRPC {
-			server = func() error {
-				return gs.Serve(sctx.l)
-			}
-		} else {
-			server = m.Serve
-
-			httpl := m.Match(cmux.HTTP1())
-			go func(srvhttp *http.Server, tlsLis net.Listener) {
-				errHandler(srvhttp.Serve(tlsLis))
-			}(srv, httpl)
-
-			if grpcEnabled {
-				grpcl := m.Match(cmux.HTTP2())
-				go func(gs *grpc.Server, l net.Listener) {
-					errHandler(gs.Serve(l))
-				}(gs, grpcl)
-			}
-		}
-
-		sctx.serversC <- &servers{grpc: gs, http: srv}
-		sctx.lg.Info(
-			"serving client traffic insecurely; this is strongly discouraged!",
-			zap.String("traffic", traffic),
-			zap.String("address", sctx.l.Addr().String()),
-		)
-	}
-
 	if sctx.secure {
 		var gs *grpc.Server
 		var srv *http.Server
@@ -254,6 +198,8 @@ func (sctx *serveCtx) serve(
 			zap.String("traffic", traffic),
 			zap.String("address", sctx.l.Addr().String()),
 		)
+	} else {
+		return errors.New("should be using mtls with etcd in dapr")
 	}
 
 	return server()
