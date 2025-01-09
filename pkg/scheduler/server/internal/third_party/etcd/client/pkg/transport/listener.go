@@ -21,13 +21,14 @@ import (
 	"crypto/tls"
 	"net"
 
-	"github.com/dapr/dapr/pkg/security"
 	"go.uber.org/zap"
+
+	"github.com/dapr/dapr/pkg/security"
 )
 
 // NewListener creates a new listener.
 func NewListener(addr, scheme string, tlsinfo *TLSInfo) (l net.Listener, err error) {
-	return newListener(addr, scheme, WithTLSInfo(tlsinfo)) // TODO cassie: ensure all listeners have WithTLSInfo
+	return newListener(addr, scheme, WithTLSInfo(tlsinfo))
 }
 
 // NewListenerWithOpts creates a new listener which accepts listener options.

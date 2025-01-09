@@ -27,7 +27,6 @@ import (
 	etcdservergw "go.etcd.io/etcd/api/v3/etcdserverpb/gw"
 	"go.etcd.io/etcd/pkg/v3/debugutil"
 	"go.etcd.io/etcd/pkg/v3/httputil"
-	"go.etcd.io/etcd/server/v3/config"
 	"go.etcd.io/etcd/server/v3/etcdserver"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3election"
@@ -47,6 +46,7 @@ import (
 	"google.golang.org/grpc"
 
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/client/pkg/transport"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/config"
 )
 
 type serveCtx struct {
