@@ -54,6 +54,8 @@ type Handler interface {
 	NetListenerID(net.Listener, spiffeid.ID) net.Listener
 	NetDialerID(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
 
+	MTLSClientConfig(spiffeid.ID) *tls.Config
+
 	ControlPlaneTrustDomain() spiffeid.TrustDomain
 	ControlPlaneNamespace() string
 	CurrentTrustAnchors(context.Context) ([]byte, error)
@@ -362,6 +364,11 @@ func (s *security) NetDialerID(ctx context.Context, spiffeID spiffeid.ID, timeou
 // MTLSEnabled returns true if mTLS is enabled.
 func (s *security) MTLSEnabled() bool {
 	return s.mtls
+}
+
+// MTLSClientConfig returns a mTLS client config
+func (s *security) MTLSClientConfig(id spiffeid.ID) *tls.Config {
+	return tlsconfig.MTLSClientConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id))
 }
 
 // CurrentNamespace returns the namespace of this workload.
