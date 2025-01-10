@@ -466,10 +466,6 @@ github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuA
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
 github.com/dapr/components-contrib v1.15.0-rc.1.0.20241216170750-aca5116d95c9 h1:y68C9PNQKZULAd+z9VsflNgpBGafwnrk+sYl57tBYeA=
 github.com/dapr/components-contrib v1.15.0-rc.1.0.20241216170750-aca5116d95c9/go.mod h1:jzKIWl+mK+iH2COvGMcc4sV1fFeB8RZ5q312CF2ZKok=
-github.com/dapr/durabletask-go v0.5.1-0.20241216172832-16da3e7c3530 h1:bfTcj9ewG6vYqV2Xm9fSGzXlLN5IzpeeBUUgoNiqcOg=
-github.com/dapr/durabletask-go v0.5.1-0.20241216172832-16da3e7c3530/go.mod h1:C4ykYCSNv1k2C4wvZv11h2ClkE/qsXw0tv6idOWVmDc=
-github.com/dapr/kit v0.13.1-0.20241127165251-30e2c24840b4 h1:8/ShPl4+AVF70mWcRWEAF/Hz6JDB0PEh6z3X0rJAyps=
-github.com/dapr/kit v0.13.1-0.20241127165251-30e2c24840b4/go.mod h1:HwFsBKEbcyLanWlDZE7u/jnaDCD/tU+n3pkFNUctQNw=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
 github.com/davecgh/go-spew v1.1.0/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
 github.com/davecgh/go-spew v1.1.1/go.mod h1:J7Y8YcW2NihsgmVo/mv3lAwl/skON4iLHjSsI+c5H38=
@@ -1054,6 +1050,10 @@ github.com/jonboulle/clockwork v0.4.0 h1:p4Cf1aMWXnXAUh8lVfewRBx1zaTSYKrKMF2g3ST
 github.com/jonboulle/clockwork v0.4.0/go.mod h1:xgRqUGwRcjKCO1vbZUEtSLrqKoPSsUpK7fnezOII0kc=
 github.com/josharian/intern v1.0.0 h1:vlS4z54oSdjm0bgjRigI+G1HpF+tI+9rE5LLzOg8HmY=
 github.com/josharian/intern v1.0.0/go.mod h1:5DoeVV0s6jJacbCEi61lwdGj/aVlrQvzHFFd8Hwg//Y=
+github.com/joshvanl/durabletask-go v0.0.0-20250110105320-77bb42e9ab09 h1:a8ZgrLGMGZH/7FfIRUQ4zt2COgEqmvzHstLq2yXDYsA=
+github.com/joshvanl/durabletask-go v0.0.0-20250110105320-77bb42e9ab09/go.mod h1:rc20tH7ypP3v0lueTvPj3MQLH3RzdiPbhAjNv/Ui2gk=
+github.com/joshvanl/kit v0.0.0-20250107093435-9b686e7493fc h1:4yesR1pCzerOBJ/eNCCOJf1OgD+b/BviNganB72XLpk=
+github.com/joshvanl/kit v0.0.0-20250107093435-9b686e7493fc/go.mod h1:HwFsBKEbcyLanWlDZE7u/jnaDCD/tU+n3pkFNUctQNw=
 github.com/jpillora/backoff v1.0.0/go.mod h1:J/6gKK9jxlEcS3zixgDgUAsiuZ7yrSoa/FX5e0EB2j4=
 github.com/json-iterator/go v1.1.5/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=
 github.com/json-iterator/go v1.1.6/go.mod h1:+SdeFBvtyEkXs7REEP0seUULqWtbJapLOCVDaaPEHmU=

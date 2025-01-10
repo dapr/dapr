@@ -304,3 +304,7 @@ func (a *app) ScheduledTime() time.Time {
 func (a *app) IdleAt(t time.Time) {
 	a.idleAt.Store(&t)
 }
+
+func (a *app) InvokeStream(context.Context, *internalv1pb.InternalInvokeRequest, chan<- *internalv1pb.InternalInvokeResponse) error {
+	return errors.New("not implemented")
+}

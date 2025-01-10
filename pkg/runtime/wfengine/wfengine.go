@@ -97,6 +97,10 @@ func New(opts Options) (Interface, error) {
 			lock.Lock()
 			defer lock.Unlock()
 
+			if ctx.Err() != nil {
+				ctx = context.Background()
+			}
+
 			activeConns--
 			if activeConns == 0 {
 				log.Debug("Unregistering workflow actors")
