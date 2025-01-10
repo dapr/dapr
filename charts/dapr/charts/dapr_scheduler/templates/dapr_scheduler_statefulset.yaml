@@ -10,6 +10,9 @@ metadata:
     {{- end }}
 spec:
   {{- $replicas := include "dapr_scheduler.get-replicas" . }}
+  {{- if and .Values.cluster.inMemoryStorage (gt (int $replicas) 1) }}
+  {{- fail "`inMemoryStorage` can only be enabled when running in non-HA mode)" }}
+  {{- end }}
   replicas: {{ $replicas }}
   serviceName: dapr-scheduler-server
   podManagementPolicy: Parallel

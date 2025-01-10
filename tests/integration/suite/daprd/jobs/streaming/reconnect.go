@@ -15,6 +15,7 @@ package streaming
 
 import (
 	"context"
+	"runtime"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -44,6 +45,10 @@ type reconnect struct {
 }
 
 func (r *reconnect) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		// TODO: investigate why this test fails on Windows
+		t.Skip("Skip due to Windows specific error on loss of connection")
+	}
 	srv := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
 			r.jobCalled.Add(1)

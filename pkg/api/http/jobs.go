@@ -21,6 +21,7 @@ import (
 
 	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/http/endpoints"
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 )
@@ -74,7 +75,7 @@ func (a *api) onCreateScheduleHandler() http.HandlerFunc {
 				// Users should set the name in the url, and not in the url and body
 				name := strings.TrimSpace(chi.URLParam(r, nameParam))
 				if len(name) == 0 {
-					apierrors.Empty("Job", map[string]string{"appID": a.universal.AppID()}, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty))
+					apierrors.Empty("Job", map[string]string{"appID": a.universal.AppID()}, apierrors.ConstructReason(apierrors.CodePrefixScheduler, apierrors.PostFixEmpty), errorcodes.CategoryJob)
 				}
 				if in.GetName() != "" {
 					return nil, apierrors.SchedulerURLName(map[string]string{"appID": a.universal.AppID()})

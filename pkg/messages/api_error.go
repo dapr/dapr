@@ -21,6 +21,8 @@ import (
 
 	grpcCodes "google.golang.org/grpc/codes"
 	grpcStatus "google.golang.org/grpc/status"
+
+	"github.com/dapr/dapr/pkg/messages/errorcodes"
 )
 
 const (
@@ -34,12 +36,17 @@ const (
 type APIError struct {
 	// Message is the human-readable error message.
 	message string
-	// Tag is a string identifying the error, used with HTTP responses only.
-	tag string
+	// Tag is an ErrorCode identifying the error, used with HTTP responses only.
+	tag errorcodes.ErrorCode
 	// Status code for HTTP responses.
 	httpCode int
 	// Status code for gRPC responses.
 	grpcCode grpcCodes.Code
+}
+
+// NewAPIErrorHTTP allows creation of a new APIError object for use in HTTP responses only
+func NewAPIErrorHTTP(message string, tag errorcodes.ErrorCode, httpCode int) APIError {
+	return APIError{message: message, tag: tag, httpCode: httpCode}
 }
 
 // WithFormat returns a copy of the error with the message going through fmt.Sprintf with the arguments passed to this method.
@@ -62,10 +69,7 @@ func (e APIError) Message() string {
 
 // Tag returns the value of the tag property.
 func (e APIError) Tag() string {
-	if e.tag == "" {
-		return defaultTag
-	}
-	return e.tag
+	return e.tag.Code
 }
 
 // HTTPCode returns the value of the HTTPCode property.
@@ -110,6 +114,14 @@ func (e APIError) Is(targetI error) bool {
 	return e.tag == target.tag &&
 		e.grpcCode == target.grpcCode &&
 		e.httpCode == target.httpCode
+}
+
+// Unwrap implements the interface that allows usage of error unwrapping with As()
+func (e APIError) Unwrap() error {
+	if e.tag.Code == "" {
+		return nil
+	}
+	return &e.tag
 }
 
 // String returns the string representation, useful for debugging.
