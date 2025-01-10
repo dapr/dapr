@@ -94,7 +94,7 @@ func New(opts Options) (*Server, error) {
 		Config:  config,
 		Healthz: opts.Healthz,
 		Host: &schedulerv1pb.Host{
-			Address: net.JoinHostPort(opts.ListenAddress, strconv.Itoa(opts.Port)),
+			Address: net.JoinHostPort(broadcastAddr, strconv.Itoa(opts.Port)),
 		},
 	})
 

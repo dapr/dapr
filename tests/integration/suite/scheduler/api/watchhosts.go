@@ -126,7 +126,8 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 	w.scheduler2.Cleanup(t)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := stream.Recv()
+		var resp *schedulerv1pb.WatchHostsResponse
+		resp, err = stream.Recv()
 		require.NoError(t, err)
 		got := make([]string, 0, 2)
 		for _, host := range resp.GetHosts() {

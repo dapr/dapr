@@ -164,7 +164,7 @@ func (s *Server) WatchJobs(stream schedulerv1pb.Scheduler_WatchJobsServer) error
 		return err
 	}
 
-	if err := s.cron.AddJobsWatch(initial, stream); err != nil {
+	if err := s.cron.JobsWatch(initial, stream); err != nil {
 		return err
 	}
 

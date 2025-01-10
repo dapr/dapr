@@ -220,6 +220,8 @@ func (s *Scheduler) callWhenReady(ctx context.Context, fn concurrency.Runner) er
 func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Scheduler_WatchHostsClient, []string, error) {
 	log.Infof("Attempting to connect to scheduler: %s", s.addresses[0])
 
+	// This is connecting to a DNS A rec which will return health scheduler
+	// hosts.
 	cl, err := client.New(ctx, s.addresses[0], s.security)
 	if err != nil {
 		return nil, nil, fmt.Errorf("scheduler client not initialized for address %s: %s", s.addresses[0], err)

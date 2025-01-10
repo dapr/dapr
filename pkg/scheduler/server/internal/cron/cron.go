@@ -53,8 +53,8 @@ type Interface interface {
 	// framework and database. Blocks until Etcd and the Cron library are ready.
 	Client(ctx context.Context) (api.Interface, error)
 
-	// AddJobsWatch adds a watch for jobs to the connection pool.
-	AddJobsWatch(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error
+	// JobsWatch adds a watch for jobs to the connection pool.
+	JobsWatch(*schedulerv1pb.WatchJobsRequestInitial, schedulerv1pb.Scheduler_WatchJobsServer) error
 
 	// HostsWatch adds a watch for hosts to the connection pool.
 	HostsWatch(schedulerv1pb.Scheduler_WatchHostsServer) error
@@ -120,7 +120,7 @@ func (c *cron) Run(ctx context.Context) error {
 		return err
 	}
 
-	ch := make(chan []*anypb.Any)
+	watchLeadershipCh := make(chan []*anypb.Any)
 
 	hostAny, err := anypb.New(c.host)
 	if err != nil {
@@ -134,7 +134,7 @@ func (c *cron) Run(ctx context.Context) error {
 		ID:              c.id,
 		TriggerFn:       c.triggerJob,
 		ReplicaData:     hostAny,
-		WatchLeadership: ch,
+		WatchLeadership: watchLeadershipCh,
 	})
 	if err != nil {
 		return fmt.Errorf("fail to create etcd-cron: %s", err)
@@ -153,7 +153,7 @@ func (c *cron) Run(ctx context.Context) error {
 				select {
 				case <-ctx.Done():
 					return ctx.Err()
-				case anyhosts, ok := <-ch:
+				case anyhosts, ok := <-watchLeadershipCh:
 					if !ok {
 						return nil
 					}
@@ -205,8 +205,8 @@ func (c *cron) Client(ctx context.Context) (api.Interface, error) {
 	}
 }
 
-// AddJobsWatch adds a watch for jobs to the connection pool.
-func (c *cron) AddJobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
+// JobsWatch adds a watch for jobs to the connection pool.
+func (c *cron) JobsWatch(req *schedulerv1pb.WatchJobsRequestInitial, stream schedulerv1pb.Scheduler_WatchJobsServer) error {
 	select {
 	case <-c.readyCh:
 		return c.connectionPool.Add(req, stream)
@@ -223,8 +223,8 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 		return stream.Context().Err()
 	}
 
-	ch := make(chan []*schedulerv1pb.Host)
-	c.hostBroadcaster.Subscribe(stream.Context(), ch)
+	watchHostsCh := make(chan []*schedulerv1pb.Host)
+	c.hostBroadcaster.Subscribe(stream.Context(), watchHostsCh)
 
 	// Always send the current hosts initially to catch up to broadcast
 	// subscribe.
@@ -243,7 +243,7 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 			return nil
 		case <-c.closeCh:
 			return nil
-		case hosts, ok := <-ch:
+		case hosts, ok := <-watchHostsCh:
 			if !ok {
 				return nil
 			}
