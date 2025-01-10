@@ -37,7 +37,7 @@ Dapr codifies the *best practices* for building microservice applications into o
 
 ![Dapr overview](./img/overview.png)
 
-We are a Cloud Native Computing Foundation (CNCF) incubation project.
+We are a Cloud Native Computing Foundation (CNCF) graduated project.
 <p align="center"><img src="https://raw.githubusercontent.com/kedacore/keda/main/images/logo-cncf.svg" height="75px"></p>
 
 ## Goals
