@@ -46,6 +46,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
 )
 
@@ -63,12 +64,17 @@ type workflow struct {
 	lock             *internal.Lock
 	reminderInterval time.Duration
 
-	state *wfenginestate.State
+	state            *wfenginestate.State
+	rstate           *backend.OrchestrationRuntimeState
+	ometa            *backend.OrchestrationMetadata
+	ometaBroadcaster *broadcaster.Broadcaster[*backend.OrchestrationMetadata]
 
 	scheduler             todo.WorkflowScheduler
 	activityResultAwaited atomic.Bool
 	completed             atomic.Bool
 	schedulerReminders    bool
+	closeCh               chan struct{}
+	closed                atomic.Bool
 
 	// TODO: @joshvanl: remove
 	defaultTimeout time.Duration
@@ -114,6 +120,8 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 			lock: internal.NewLock(internal.LockOptions{
 				ActorType: opts.WorkflowActorType,
 			}),
+			ometaBroadcaster: broadcaster.New[*backend.OrchestrationMetadata](),
+			closeCh:          make(chan struct{}),
 		}
 	}
 }
@@ -241,9 +249,14 @@ func (w *workflow) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 
 // DeactivateActor implements actors.InternalActor
 func (w *workflow) DeactivateActor(ctx context.Context) error {
-	// TODO: @joshvanl: Close everything else in this actor and wait
 	log.Debugf("Workflow actor '%s': deactivating", w.actorID)
+	if w.closed.CompareAndSwap(false, true) {
+		close(w.closeCh)
+	}
 	w.state = nil // A bit of extra caution, shouldn't be necessary
+	w.rstate = nil
+	w.ometa = nil
+	w.ometaBroadcaster.Close()
 	return nil
 }
 
@@ -261,6 +274,8 @@ func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) e
 			WorkflowActorType: w.actorType,
 			ActivityActorType: w.activityActorType,
 		})
+		w.rstate = backend.NewOrchestrationRuntimeState(api.InstanceID(w.actorID), state.History)
+		w.setOrchestrationMetadata(state, w.rstate)
 		created = true
 	}
 
@@ -287,7 +302,7 @@ func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) e
 	}
 
 	// orchestration already existed: apply reuse id policy
-	runtimeState := getRuntimeState(w.actorID, state)
+	runtimeState := w.rstate
 	runtimeStatus := runtimeState.RuntimeStatus()
 	// if target status doesn't match, fall back to original logic, create instance only if previous one is completed
 	if !isStatusMatch(reuseIDPolicy.GetOperationStatus(), runtimeStatus) {
@@ -384,6 +399,8 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 		return err
 	}
 	w.state = nil
+	w.rstate = nil
+	w.ometa = nil
 	return nil
 }
 
@@ -396,26 +413,7 @@ func (w *workflow) getWorkflowMetadata(ctx context.Context) (*backend.Orchestrat
 		return nil, api.ErrInstanceNotFound
 	}
 
-	runtimeState := getRuntimeState(w.actorID, state)
-
-	name, _ := runtimeState.Name()
-	createdAt, _ := runtimeState.CreatedTime()
-	lastUpdated, _ := runtimeState.LastUpdatedTime()
-	input, _ := runtimeState.Input()
-	output, _ := runtimeState.Output()
-	failureDetuils, _ := runtimeState.FailureDetails()
-
-	return &backend.OrchestrationMetadata{
-		InstanceId:     string(runtimeState.InstanceID()),
-		Name:           name,
-		RuntimeStatus:  runtimeState.RuntimeStatus(),
-		CreatedAt:      timestamppb.New(createdAt),
-		LastUpdatedAt:  timestamppb.New(lastUpdated),
-		Input:          wrapperspb.String(input),
-		Output:         wrapperspb.String(output),
-		CustomStatus:   state.CustomStatus,
-		FailureDetails: failureDetuils,
-	}, nil
+	return w.ometa, nil
 }
 
 func (w *workflow) getWorkflowState(ctx context.Context) (*wfenginestate.State, error) {
@@ -438,9 +436,8 @@ func (w *workflow) purgeWorkflowState(ctx context.Context) error {
 	if state == nil {
 		return api.ErrInstanceNotFound
 	}
-	runtimeState := getRuntimeState(w.actorID, state)
 	w.completed.Store(true)
-	return w.cleanupWorkflowStateInternal(ctx, state, !runtimeState.IsCompleted())
+	return w.cleanupWorkflowStateInternal(ctx, state, !w.rstate.IsCompleted())
 }
 
 func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byte) error {
@@ -562,7 +559,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		}
 	}
 
-	runtimeState := getRuntimeState(w.actorID, state)
+	runtimeState := w.rstate
 	wi := &backend.OrchestrationWorkItem{
 		InstanceID: runtimeState.InstanceID(),
 		NewEvents:  state.Inbox,
@@ -825,6 +822,10 @@ func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State,
 	}
 	// Update cached state
 	w.state = state
+	w.rstate = backend.NewOrchestrationRuntimeState(api.InstanceID(w.actorID), state.History)
+	w.setOrchestrationMetadata(w.state, w.rstate)
+	w.ometaBroadcaster.Broadcast(w.ometa)
+
 	return state, nil
 }
 
@@ -849,6 +850,9 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 
 	// Update cached state
 	w.state = state
+	w.rstate = backend.NewOrchestrationRuntimeState(api.InstanceID(w.actorID), state.History)
+	w.setOrchestrationMetadata(state, w.rstate)
+	w.ometaBroadcaster.Broadcast(w.ometa)
 	return nil
 }
 
@@ -894,11 +898,6 @@ func (w *workflow) createReliableReminder(ctx context.Context, namePrefix string
 	})
 }
 
-func getRuntimeState(actorID string, state *wfenginestate.State) *backend.OrchestrationRuntimeState {
-	// TODO: Add caching when a good invalidation policy can be determined
-	return backend.NewOrchestrationRuntimeState(api.InstanceID(actorID), state.History)
-}
-
 func getActivityActorID(workflowID string, taskID int32, generation uint64) string {
 	// An activity can be identified by its name followed by its task ID and generation. Example: SayHello::0::1, SayHello::1::1, etc.
 	return workflowID + "::" + strconv.Itoa(int(taskID)) + "::" + strconv.FormatUint(generation, 10)
@@ -942,7 +941,10 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfengine
 // DeactivateActor implements actors.InternalActor
 func (w *workflow) Deactivate(ctx context.Context) error {
 	log.Debugf("Workflow actor '%s': deactivating", w.actorID)
+	w.ometaBroadcaster.Close()
 	w.state = nil // A bit of extra caution, shouldn't be necessary
+	w.rstate = nil
+	w.ometa = nil
 	w.lock.Close()
 	return nil
 }
@@ -950,4 +952,103 @@ func (w *workflow) Deactivate(ctx context.Context) error {
 // CloseUntil closes the actor but backs out sooner if the duration is reached.
 func (w *workflow) CloseUntil(d time.Duration) {
 	w.lock.CloseUntil(d)
+}
+
+func (w *workflow) InvokeStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
+	if w.closed.Load() {
+		return nil
+	}
+
+	lockCancel, err := w.lock.Lock()
+	if err != nil {
+		return err
+	}
+
+	err = w.handleStreamInitial(ctx, req, stream)
+	if err != nil {
+		lockCancel()
+		return err
+	}
+
+	ctx, ctxCancel := context.WithCancel(ctx)
+	defer ctxCancel()
+
+	ch := make(chan *backend.OrchestrationMetadata)
+	w.ometaBroadcaster.Subscribe(ctx, ch)
+
+	lockCancel()
+
+	for {
+		select {
+		case <-ctx.Done():
+			return ctx.Err()
+		case <-w.closeCh:
+			return nil
+		case val, ok := <-ch:
+			if !ok {
+				return nil
+			}
+			d, err := anypb.New(val)
+			if err != nil {
+				return err
+			}
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-w.closeCh:
+				return nil
+			case stream <- &internalsv1pb.InternalInvokeResponse{
+				Status:  &internalsv1pb.Status{Code: http.StatusOK},
+				Message: &commonv1pb.InvokeResponse{Data: d},
+			}:
+			}
+		}
+	}
+}
+
+func (w *workflow) handleStreamInitial(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
+	if m := req.GetMessage().GetMethod(); m != todo.WaitForRuntimeStatus {
+		return fmt.Errorf("unsupported stream method: %s", m)
+	}
+
+	if _, err := w.loadInternalState(ctx); err != nil {
+		return err
+	}
+
+	if w.ometa != nil {
+		arstate, err := anypb.New(w.ometa)
+		if err != nil {
+			return err
+		}
+
+		select {
+		case <-ctx.Done():
+		case stream <- &internalsv1pb.InternalInvokeResponse{
+			Status:  &internalsv1pb.Status{Code: http.StatusOK},
+			Message: &commonv1pb.InvokeResponse{Data: arstate},
+		}:
+		}
+	}
+
+	return nil
+}
+
+func (w *workflow) setOrchestrationMetadata(state *wfenginestate.State, rstate *backend.OrchestrationRuntimeState) {
+	name, _ := rstate.Name()
+	createdAt, _ := rstate.CreatedTime()
+	lastUpdated, _ := rstate.LastUpdatedTime()
+	input, _ := rstate.Input()
+	output, _ := rstate.Output()
+	failureDetuils, _ := rstate.FailureDetails()
+	w.ometa = &backend.OrchestrationMetadata{
+		InstanceId:     string(rstate.InstanceID()),
+		Name:           name,
+		RuntimeStatus:  rstate.RuntimeStatus(),
+		CreatedAt:      timestamppb.New(createdAt),
+		LastUpdatedAt:  timestamppb.New(lastUpdated),
+		Input:          wrapperspb.String(input),
+		Output:         wrapperspb.String(output),
+		CustomStatus:   state.CustomStatus,
+		FailureDetails: failureDetuils,
+	}
 }
