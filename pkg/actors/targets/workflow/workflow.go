@@ -174,23 +174,6 @@ func (w *workflow) executeMethod(ctx context.Context, methodName string, request
 	case todo.CreateWorkflowInstanceMethod:
 		return nil, w.createWorkflowInstance(ctx, request)
 
-	case todo.GetWorkflowMetadataMethod:
-		meta, err := w.getWorkflowMetadata(ctx)
-		if err != nil {
-			log.Errorf("Workflow actor '%s': failed to get workflow metadata: %v", w.actorID, err)
-			return nil, err
-		}
-		return proto.Marshal(meta)
-
-	case todo.GetWorkflowStateMethod:
-		var state *wfenginestate.State
-		state, err := w.getWorkflowState(ctx)
-		if err != nil {
-			log.Errorf("Workflow actor '%s': failed to get workflow state: %v", w.actorID, err)
-			return nil, err
-		}
-		return state.EncodeWorkflowState()
-
 	case todo.AddWorkflowEventMethod:
 		return nil, w.addWorkflowEvent(ctx, request)
 
@@ -402,29 +385,6 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 	w.rstate = nil
 	w.ometa = nil
 	return nil
-}
-
-func (w *workflow) getWorkflowMetadata(ctx context.Context) (*backend.OrchestrationMetadata, error) {
-	state, err := w.loadInternalState(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if state == nil {
-		return nil, api.ErrInstanceNotFound
-	}
-
-	return w.ometa, nil
-}
-
-func (w *workflow) getWorkflowState(ctx context.Context) (*wfenginestate.State, error) {
-	state, err := w.loadInternalState(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if state == nil {
-		return nil, api.ErrInstanceNotFound
-	}
-	return state, nil
 }
 
 // This method purges all the completed activity data from a workflow associated with the given actorID
