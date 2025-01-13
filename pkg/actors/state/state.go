@@ -91,8 +91,11 @@ func New(opts Options) Interface {
 }
 
 func (s *state) Get(ctx context.Context, req *api.GetStateRequest) (*api.StateResponse, error) {
-	s.placement.Lock(ctx)
-	defer s.placement.Unlock()
+	ctx, cancel, err := s.placement.Lock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
 
 	storeName, store, err := s.stateStore()
 	if err != nil {
@@ -131,8 +134,11 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest) (*api.StateRe
 }
 
 func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error) {
-	s.placement.Lock(ctx)
-	defer s.placement.Unlock()
+	ctx, cancel, err := s.placement.Lock(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
 
 	storeName, store, err := s.stateStore()
 	if err != nil {
@@ -177,9 +183,12 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.
 	return bulkRes, nil
 }
 
-func (s *state) TransactionalStateOperation(ctx context.Context, req *api.TransactionalRequest) (err error) {
-	s.placement.Lock(ctx)
-	defer s.placement.Unlock()
+func (s *state) TransactionalStateOperation(ctx context.Context, req *api.TransactionalRequest) error {
+	ctx, cancel, err := s.placement.Lock(ctx)
+	if err != nil {
+		return err
+	}
+	defer cancel()
 
 	if _, ok := s.table.HostedTarget(req.ActorType, req.ActorID); !ok {
 		return messages.ErrActorInstanceMissing
