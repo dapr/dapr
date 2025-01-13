@@ -498,10 +498,14 @@ func (a *actors) WaitForRegisteredHosts(ctx context.Context) error {
 }
 
 func (a *actors) handleIdleActor(target targets.Idlable) {
-	if err := a.placement.Lock(context.Background()); err != nil {
+	// We don't use the placement context here as we are already deactivating the
+	// actor.
+	_, cancel, err := a.placement.Lock(context.Background())
+	if err != nil {
+		log.Errorf("Failed to lock placement for idle actor deactivation: %s", err)
 		return
 	}
-	defer a.placement.Unlock()
+	defer cancel()
 
 	log.Debugf("Actor %s is idle, deactivating", target.Key())
 
