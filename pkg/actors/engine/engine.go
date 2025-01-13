@@ -43,6 +43,7 @@ import (
 type Interface interface {
 	Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	CallReminder(ctx context.Context, reminder *api.Reminder) error
+	CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error
 }
 
 type Options struct {
@@ -256,6 +257,75 @@ func (e *engine) callLocalActor(ctx context.Context, req *internalv1pb.InternalI
 	}
 
 	return target.InvokeMethod(ctx, req)
+}
+
+func (e *engine) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+	if err := e.placement.Lock(ctx); err != nil {
+		return err
+	}
+
+	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
+		ActorType: req.GetActor().GetActorType(),
+		ActorID:   req.GetActor().GetActorId(),
+	})
+	if err != nil {
+		e.placement.Unlock()
+		return err
+	}
+
+	if !lar.Local {
+		return e.callRemoteActorStream(ctx, lar, req, stream)
+	}
+
+	return e.callLocalActorStream(ctx, req, stream)
+}
+
+func (e *engine) callLocalActorStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+	target, err := e.getOrCreateActor(req.GetActor().GetActorType(), req.GetActor().GetActorId())
+	if err != nil {
+		e.placement.Unlock()
+		return err
+	}
+
+	e.placement.Unlock()
+	return target.InvokeStream(ctx, req, stream)
+}
+
+func (e *engine) callRemoteActorStream(ctx context.Context,
+	lar *api.LookupActorResponse,
+	req *internalv1pb.InternalInvokeRequest,
+	stream chan<- *internalv1pb.InternalInvokeResponse,
+) error {
+	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
+	if err != nil {
+		e.placement.Unlock()
+		return err
+	}
+	defer cancel(false)
+
+	span := diagutils.SpanFromContext(ctx)
+	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
+	client := internalv1pb.NewServiceInvocationClient(conn)
+
+	rstream, err := client.CallActorStream(ctx, req)
+	if err != nil {
+		return err
+	}
+
+	e.placement.Unlock()
+
+	for {
+		resp, err := rstream.Recv()
+		if err != nil {
+			return err
+		}
+
+		select {
+		case stream <- resp:
+		case <-ctx.Done():
+			return ctx.Err()
+		}
+	}
 }
 
 func (e *engine) getOrCreateActor(actorType, actorID string) (targets.Interface, error) {

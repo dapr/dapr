@@ -14,6 +14,7 @@ const (
 	AddWorkflowEventMethod       = "AddWorkflowEvent"
 	PurgeWorkflowStateMethod     = "PurgeWorkflowState"
 	GetWorkflowStateMethod       = "GetWorkflowState"
+	WaitForRuntimeStatus         = "WaitForRuntimeStatus"
 )
 
 // WorkflowScheduler is a func interface for pushing workflow (orchestration) work items into the backend

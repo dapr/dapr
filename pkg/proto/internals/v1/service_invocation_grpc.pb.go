@@ -36,6 +36,7 @@ const (
 	ServiceInvocation_CallLocal_FullMethodName         = "/dapr.proto.internals.v1.ServiceInvocation/CallLocal"
 	ServiceInvocation_CallActorReminder_FullMethodName = "/dapr.proto.internals.v1.ServiceInvocation/CallActorReminder"
 	ServiceInvocation_CallLocalStream_FullMethodName   = "/dapr.proto.internals.v1.ServiceInvocation/CallLocalStream"
+	ServiceInvocation_CallActorStream_FullMethodName   = "/dapr.proto.internals.v1.ServiceInvocation/CallActorStream"
 )
 
 // ServiceInvocationClient is the client API for ServiceInvocation service.
@@ -58,6 +59,9 @@ type ServiceInvocationClient interface {
 	// - When the sender has completed sending the data, it MUST call `CloseSend` on the stream.
 	// The caller and callee must send at least one message in the stream. If only 1 message is sent in each direction, that message must contain both a `request`/`response` (the `payload` may be empty).
 	CallLocalStream(ctx context.Context, opts ...grpc.CallOption) (ServiceInvocation_CallLocalStreamClient, error)
+	// CallActorStream is used to invoke actor method with request and streaming
+	// response.
+	CallActorStream(ctx context.Context, in *InternalInvokeRequest, opts ...grpc.CallOption) (ServiceInvocation_CallActorStreamClient, error)
 }
 
 type serviceInvocationClient struct {
@@ -126,6 +130,38 @@ func (x *serviceInvocationCallLocalStreamClient) Recv() (*InternalInvokeResponse
 	return m, nil
 }
 
+func (c *serviceInvocationClient) CallActorStream(ctx context.Context, in *InternalInvokeRequest, opts ...grpc.CallOption) (ServiceInvocation_CallActorStreamClient, error) {
+	stream, err := c.cc.NewStream(ctx, &ServiceInvocation_ServiceDesc.Streams[1], ServiceInvocation_CallActorStream_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &serviceInvocationCallActorStreamClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type ServiceInvocation_CallActorStreamClient interface {
+	Recv() (*InternalInvokeResponse, error)
+	grpc.ClientStream
+}
+
+type serviceInvocationCallActorStreamClient struct {
+	grpc.ClientStream
+}
+
+func (x *serviceInvocationCallActorStreamClient) Recv() (*InternalInvokeResponse, error) {
+	m := new(InternalInvokeResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // ServiceInvocationServer is the server API for ServiceInvocation service.
 // All implementations should embed UnimplementedServiceInvocationServer
 // for forward compatibility
@@ -146,6 +182,9 @@ type ServiceInvocationServer interface {
 	// - When the sender has completed sending the data, it MUST call `CloseSend` on the stream.
 	// The caller and callee must send at least one message in the stream. If only 1 message is sent in each direction, that message must contain both a `request`/`response` (the `payload` may be empty).
 	CallLocalStream(ServiceInvocation_CallLocalStreamServer) error
+	// CallActorStream is used to invoke actor method with request and streaming
+	// response.
+	CallActorStream(*InternalInvokeRequest, ServiceInvocation_CallActorStreamServer) error
 }
 
 // UnimplementedServiceInvocationServer should be embedded to have forward compatible implementations.
@@ -163,6 +202,9 @@ func (UnimplementedServiceInvocationServer) CallActorReminder(context.Context, *
 }
 func (UnimplementedServiceInvocationServer) CallLocalStream(ServiceInvocation_CallLocalStreamServer) error {
 	return status.Errorf(codes.Unimplemented, "method CallLocalStream not implemented")
+}
+func (UnimplementedServiceInvocationServer) CallActorStream(*InternalInvokeRequest, ServiceInvocation_CallActorStreamServer) error {
+	return status.Errorf(codes.Unimplemented, "method CallActorStream not implemented")
 }
 
 // UnsafeServiceInvocationServer may be embedded to opt out of forward compatibility for this service.
@@ -256,6 +298,27 @@ func (x *serviceInvocationCallLocalStreamServer) Recv() (*InternalInvokeRequestS
 	return m, nil
 }
 
+func _ServiceInvocation_CallActorStream_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(InternalInvokeRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(ServiceInvocationServer).CallActorStream(m, &serviceInvocationCallActorStreamServer{stream})
+}
+
+type ServiceInvocation_CallActorStreamServer interface {
+	Send(*InternalInvokeResponse) error
+	grpc.ServerStream
+}
+
+type serviceInvocationCallActorStreamServer struct {
+	grpc.ServerStream
+}
+
+func (x *serviceInvocationCallActorStreamServer) Send(m *InternalInvokeResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // ServiceInvocation_ServiceDesc is the grpc.ServiceDesc for ServiceInvocation service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -282,6 +345,11 @@ var ServiceInvocation_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _ServiceInvocation_CallLocalStream_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "CallActorStream",
+			Handler:       _ServiceInvocation_CallActorStream_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "dapr/proto/internals/v1/service_invocation.proto",

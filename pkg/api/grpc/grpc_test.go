@@ -195,6 +195,10 @@ func (m *mockGRPCAPI) CallActor(ctx context.Context, in *internalv1pb.InternalIn
 	return resp.ProtoWithData()
 }
 
+func (m *mockGRPCAPI) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream internalv1pb.ServiceInvocation_CallActorStreamServer) error {
+	return nil
+}
+
 func (m *mockGRPCAPI) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) (*emptypb.Empty, error) {
 	return new(emptypb.Empty), nil
 }

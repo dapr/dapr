@@ -507,7 +507,7 @@ func (a *actors) handleIdleActor(target targets.Idlable) {
 
 	log.Debugf("Actor %s is idle, deactivating", target.Key())
 
-	if err := a.table.Halt(context.Background(), target); err != nil {
+	if err := a.table.HaltIdlable(context.Background(), target); err != nil {
 		log.Errorf("Failed to halt actor %s: %s", target.Key(), err)
 		return
 	}
