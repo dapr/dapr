@@ -234,7 +234,6 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 		return nil, api.ErrInstanceNotFound
 	}
 
-	// runtimeState := getRuntimeState(w.actorID, state)
 	runtimeState := backend.NewOrchestrationRuntimeState(id, state.History)
 
 	name, _ := runtimeState.Name()

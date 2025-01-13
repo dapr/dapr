@@ -94,16 +94,7 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest) (*api.StateRe
 	s.placement.Lock(ctx)
 	defer s.placement.Unlock()
 
-	// TODO is it ok to allow access (just read only) to an actor state even if the instance is not hosted?
-	// this is needed for LoadWorkflowState in pkg/runtime/wfengine/state/state.go to work
-	// since now the workflow state is not read from the actor but from the backend interface
-	// the final goal is to be able to fetch the workflow state and metadata even if there is no workflows stream connected
-	// which now if there are no workflows stream connected the actor types are unregistered, hence making it impossible to read the workflow state (because the actor is no longer hosted...)
-
 	// do not check if actor is hosted...
-	// if _, ok := s.table.HostedTarget(req.ActorType, req.ActorID); !ok {
-	// 	return nil, messages.ErrActorInstanceMissing
-	// }
 
 	storeName, store, err := s.stateStore()
 	if err != nil {
@@ -146,9 +137,6 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.
 	defer s.placement.Unlock()
 
 	// do not check if actor is hosted...
-	// if _, ok := s.table.HostedTarget(req.ActorType, req.ActorID); !ok {
-	// 	return nil, messages.ErrActorInstanceMissing
-	// }
 
 	storeName, store, err := s.stateStore()
 	if err != nil {
