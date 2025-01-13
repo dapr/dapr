@@ -38,13 +38,8 @@ import (
 	"go.etcd.io/etcd/client/v3/credentials"
 	"go.etcd.io/etcd/pkg/v3/debugutil"
 	runtimeutil "go.etcd.io/etcd/pkg/v3/runtime"
-	"go.etcd.io/etcd/server/v3/etcdserver"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/etcdhttp"
+	osetcdhttp "go.etcd.io/etcd/server/v3/etcdserver/api/etcdhttp"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/rafthttp"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/v2http"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/v2v3"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/v3rpc"
 	"go.etcd.io/etcd/server/v3/verify"
 
 	grpc_prometheus "github.com/grpc-ecosystem/go-grpc-prometheus"
@@ -56,7 +51,10 @@ import (
 
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/client/pkg/transport"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/config"
-	//"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/etcdserver"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/etcdserver"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/etcdserver/api/etcdhttp"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/etcdserver/api/v2http"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/etcdserver/api/v3rpc"
 )
 
 const (
@@ -309,9 +307,7 @@ func print(lg *zap.Logger, ec Config, sc config.ServerConfig, memberInitialized 
 
 	quota := ec.QuotaBackendBytes
 	if quota == 0 {
-		// quota is the number of bytes the backend Size may
-		// consume before exceeding the space quota.
-		quota = int64(2 * 1024 * 1024 * 1024) // 2GB
+		quota = etcdserver.DefaultQuotaBytes
 	}
 
 	lg.Info(
@@ -720,16 +716,17 @@ func (e *Etcd) serveClients() (err error) {
 		}
 		e.cfg.logger.Warn("Flag `enable-v2` is deprecated and will get removed in etcd 3.6.")
 		if len(e.Config().ExperimentalEnableV2V3) > 0 {
+			// not exposing in dapr
 			e.cfg.logger.Warn("Flag `experimental-enable-v2v3` is deprecated and will get removed in etcd 3.6.")
-			srv := v2v3.NewServer(e.cfg.logger, v3client.New(e.Server), e.cfg.ExperimentalEnableV2V3)
-			h = v2http.NewClientHandler(e.GetLogger(), srv, e.Server.Cfg.ReqTimeout())
+			//srv := v2v3.NewServer(e.cfg.logger, v3client.New(e.Server), e.cfg.ExperimentalEnableV2V3)
+			//h = v2http.NewClientHandler(e.GetLogger(), srv, e.Server.Cfg.ReqTimeout())
 		} else {
 			h = v2http.NewClientHandler(e.GetLogger(), e.Server, e.Server.Cfg.ReqTimeout())
 		}
 	} else {
 		mux := http.NewServeMux()
 		etcdhttp.HandleBasic(e.cfg.logger, mux, e.Server)
-		etcdhttp.HandleMetrics(mux)
+		osetcdhttp.HandleMetrics(mux)
 		etcdhttp.HandleHealth(e.cfg.logger, mux, e.Server)
 		h = mux
 	}
@@ -837,7 +834,7 @@ func (e *Etcd) serveMetrics() (err error) {
 
 	if len(e.cfg.ListenMetricsUrls) > 0 {
 		metricsMux := http.NewServeMux()
-		etcdhttp.HandleMetrics(metricsMux)
+		osetcdhttp.HandleMetrics(metricsMux)
 		etcdhttp.HandleHealth(e.cfg.logger, metricsMux, e.Server)
 
 		for _, murl := range e.cfg.ListenMetricsUrls {

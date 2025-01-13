@@ -27,16 +27,12 @@ import (
 
 	etcdservergw "go.etcd.io/etcd/api/v3/etcdserverpb/gw"
 	"go.etcd.io/etcd/pkg/v3/debugutil"
-	"go.etcd.io/etcd/pkg/v3/httputil"
-	"go.etcd.io/etcd/server/v3/etcdserver"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/v3client"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3election"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3election/v3electionpb"
 	v3electiongw "go.etcd.io/etcd/server/v3/etcdserver/api/v3election/v3electionpb/gw"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3lock"
 	"go.etcd.io/etcd/server/v3/etcdserver/api/v3lock/v3lockpb"
 	v3lockgw "go.etcd.io/etcd/server/v3/etcdserver/api/v3lock/v3lockpb/gw"
-	"go.etcd.io/etcd/server/v3/etcdserver/api/v3rpc"
 
 	gw "github.com/grpc-ecosystem/grpc-gateway/runtime"
 	"github.com/soheilhy/cmux"
@@ -48,6 +44,9 @@ import (
 
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/client/pkg/transport"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/config"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/etcdserver"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/etcdserver/api/v3client"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/server/etcdserver/api/v3rpc"
 )
 
 type serveCtx struct {
@@ -337,17 +336,17 @@ func (ac *accessController) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		req.URL.Path = strings.Replace(req.URL.Path, "/v3beta/", "/v3/", 1)
 	}
 
-	if req.TLS == nil { // check origin if client connection is not secure
-		host := httputil.GetHostname(req)
-		if !ac.s.AccessController.IsHostWhitelisted(host) {
-			ac.lg.Warn(
-				"rejecting HTTP request to prevent DNS rebinding attacks",
-				zap.String("host", host),
-			)
-			http.Error(rw, errCVE20185702(host), http.StatusMisdirectedRequest)
-			return
-		}
-	} else if ac.s.Cfg.ClientCertAuthEnabled && ac.s.Cfg.EnableGRPCGateway &&
+	//if req.TLS == nil { // check origin if client connection is not secure
+	//	host := httputil.GetHostname(req)
+	//if !ac.s.AccessController.IsHostWhitelisted(host) {
+	//	ac.lg.Warn(
+	//		"rejecting HTTP request to prevent DNS rebinding attacks",
+	//		zap.String("host", host),
+	//	)
+	//	http.Error(rw, errCVE20185702(host), http.StatusMisdirectedRequest)
+	//	return
+	//}
+	if ac.s.Cfg.ClientCertAuthEnabled && ac.s.Cfg.EnableGRPCGateway &&
 		ac.s.AuthStore().IsAuthEnabled() && strings.HasPrefix(req.URL.Path, "/v3/") {
 		for _, chains := range req.TLS.VerifiedChains {
 			if len(chains) < 1 {
@@ -361,11 +360,11 @@ func (ac *accessController) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 	}
 
 	// Write CORS header.
-	if ac.s.AccessController.OriginAllowed("*") {
-		addCORSHeader(rw, "*")
-	} else if origin := req.Header.Get("Origin"); ac.s.OriginAllowed(origin) {
-		addCORSHeader(rw, origin)
-	}
+	//if ac.s.AccessController.OriginAllowed("*") {
+	//	addCORSHeader(rw, "*")
+	//} else if origin := req.Header.Get("Origin"); ac.s.OriginAllowed(origin) {
+	//	addCORSHeader(rw, origin)
+	//}
 
 	if req.Method == "OPTIONS" {
 		rw.WriteHeader(http.StatusOK)
@@ -373,56 +372,6 @@ func (ac *accessController) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 	}
 
 	ac.mux.ServeHTTP(rw, req)
-}
-
-// addCORSHeader adds the correct cors headers given an origin
-func addCORSHeader(w http.ResponseWriter, origin string) {
-	w.Header().Add("Access-Control-Allow-Methods", "POST, GET, OPTIONS, PUT, DELETE")
-	w.Header().Add("Access-Control-Allow-Origin", origin)
-	w.Header().Add("Access-Control-Allow-Headers", "accept, content-type, authorization")
-}
-
-// https://github.com/transmission/transmission/pull/468
-func errCVE20185702(host string) string {
-	return fmt.Sprintf(`
-etcd received your request, but the Host header was unrecognized.
-
-To fix this, choose one of the following options:
-- Enable TLS, then any HTTPS request will be allowed.
-- Add the hostname you want to use to the whitelist in settings.
-  - e.g. etcd --host-whitelist %q
-
-This requirement has been added to help prevent "DNS Rebinding" attacks (CVE-2018-5702).
-`, host)
-}
-
-// WrapCORS wraps existing handler with CORS.
-// TODO: deprecate this after v2 proxy deprecate
-func WrapCORS(cors map[string]struct{}, h http.Handler) http.Handler {
-	return &corsHandler{
-		ac: &etcdserver.AccessController{CORS: cors},
-		h:  h,
-	}
-}
-
-type corsHandler struct {
-	ac *etcdserver.AccessController
-	h  http.Handler
-}
-
-func (ch *corsHandler) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
-	if ch.ac.OriginAllowed("*") {
-		addCORSHeader(rw, "*")
-	} else if origin := req.Header.Get("Origin"); ch.ac.OriginAllowed(origin) {
-		addCORSHeader(rw, origin)
-	}
-
-	if req.Method == "OPTIONS" {
-		rw.WriteHeader(http.StatusOK)
-		return
-	}
-
-	ch.h.ServeHTTP(rw, req)
 }
 
 func (sctx *serveCtx) registerUserHandler(s string, h http.Handler) {

@@ -20,6 +20,7 @@ import (
 	"context"
 	"crypto/tls"
 	"net"
+	"strings"
 
 	"go.uber.org/zap"
 
@@ -85,7 +86,6 @@ func (info TLSInfo) ServerConfig() (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-
 	if info.Logger == nil {
 		info.Logger = zap.NewNop()
 	}
@@ -106,4 +106,13 @@ func (info TLSInfo) ClientConfig() (*tls.Config, error) {
 	}
 
 	return cfg, nil
+}
+
+// IsClosedConnError returns true if the error is from closing listener, cmux.
+// copied from golang.org/x/net/http2/http2.go
+func IsClosedConnError(err error) bool {
+	// 'use of closed network connection' (Go <=1.8)
+	// 'use of closed file or network connection' (Go >1.8, internal/poll.ErrClosing)
+	// 'mux: listener closed' (cmux.ErrListenerClosed)
+	return err != nil && strings.Contains(err.Error(), "closed")
 }
