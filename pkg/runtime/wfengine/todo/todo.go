@@ -10,10 +10,8 @@ const (
 	CallbackChannelProperty = "dapr.callback"
 
 	CreateWorkflowInstanceMethod = "CreateWorkflowInstance"
-	GetWorkflowMetadataMethod    = "GetWorkflowMetadata"
 	AddWorkflowEventMethod       = "AddWorkflowEvent"
 	PurgeWorkflowStateMethod     = "PurgeWorkflowState"
-	GetWorkflowStateMethod       = "GetWorkflowState"
 	WaitForRuntimeStatus         = "WaitForRuntimeStatus"
 )
 

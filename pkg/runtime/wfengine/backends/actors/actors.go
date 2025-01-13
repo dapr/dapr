@@ -22,6 +22,8 @@ import (
 	"time"
 
 	"google.golang.org/protobuf/proto"
+	"google.golang.org/protobuf/types/known/timestamppb"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/actors/table"
@@ -224,34 +226,35 @@ func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.H
 
 // GetOrchestrationMetadata implements backend.Backend
 func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.InstanceID) (*backend.OrchestrationMetadata, error) {
-	// Invoke the corresponding actor, which internally stores its own workflow metadata
-	req := internalsv1pb.
-		NewInternalInvokeRequest(todo.GetWorkflowMetadataMethod).
-		WithActor(abe.workflowActorType, string(id)).
-		WithContentType(invokev1.OctetStreamContentType)
-
-	engine, err := abe.actors.Engine(ctx)
+	state, err := abe.loadInternalState(ctx, id)
 	if err != nil {
 		return nil, err
 	}
-
-	start := time.Now()
-	res, err := engine.Call(ctx, req)
-	elapsed := diag.ElapsedSince(start)
-	if err != nil {
-		// failed request to GET workflow Information, record count and latency metrics.
-		diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.GetWorkflow, diag.StatusFailed, elapsed)
-		return nil, err
-	}
-	// successful request to GET workflow information, record count and latency metrics.
-	diag.DefaultWorkflowMonitoring.WorkflowOperationEvent(ctx, diag.GetWorkflow, diag.StatusSuccess, elapsed)
-
-	var metadata backend.OrchestrationMetadata
-	if err := proto.Unmarshal(res.GetMessage().GetData().GetValue(), &metadata); err != nil {
-		return nil, fmt.Errorf("failed to decode the workflow actor response: %w", err)
+	if state == nil {
+		return nil, api.ErrInstanceNotFound
 	}
 
-	return &metadata, nil
+	// runtimeState := getRuntimeState(w.actorID, state)
+	runtimeState := backend.NewOrchestrationRuntimeState(id, state.History)
+
+	name, _ := runtimeState.Name()
+	createdAt, _ := runtimeState.CreatedTime()
+	lastUpdated, _ := runtimeState.LastUpdatedTime()
+	input, _ := runtimeState.Input()
+	output, _ := runtimeState.Output()
+	failureDetuils, _ := runtimeState.FailureDetails()
+
+	return &backend.OrchestrationMetadata{
+		InstanceId:     string(runtimeState.InstanceID()),
+		Name:           name,
+		RuntimeStatus:  runtimeState.RuntimeStatus(),
+		CreatedAt:      timestamppb.New(createdAt),
+		LastUpdatedAt:  timestamppb.New(lastUpdated),
+		Input:          wrapperspb.String(input),
+		Output:         wrapperspb.String(output),
+		CustomStatus:   state.CustomStatus,
+		FailureDetails: failureDetuils,
+	}, nil
 }
 
 // AbandonActivityWorkItem implements backend.Backend. It gets called by durabletask-go when there is
@@ -353,29 +356,14 @@ func (abe *Actors) GetActivityWorkItem(ctx context.Context) (*backend.ActivityWo
 
 // GetOrchestrationRuntimeState implements backend.Backend
 func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
-	// Invoke the corresponding actor, which internally stores its own workflow state.
-	req := internalsv1pb.
-		NewInternalInvokeRequest(todo.GetWorkflowStateMethod).
-		WithActor(abe.workflowActorType, string(owi.InstanceID)).
-		WithContentType(invokev1.OctetStreamContentType)
-
-	engine, err := abe.actors.Engine(ctx)
+	state, err := abe.loadInternalState(ctx, owi.InstanceID)
 	if err != nil {
 		return nil, err
 	}
-
-	res, err := engine.Call(ctx, req)
-	if err != nil {
-		return nil, err
+	if state == nil {
+		return nil, api.ErrInstanceNotFound
 	}
-	wfState := &state.State{}
-	err = wfState.DecodeWorkflowState(res.GetMessage().GetData().GetValue())
-	if err != nil {
-		return nil, fmt.Errorf("failed to decode the workflow actor response: %w", err)
-	}
-	// TODO: Add caching when a good invalidation policy can be determined
-	runtimeState := backend.NewOrchestrationRuntimeState(owi.InstanceID, wfState.History)
-
+	runtimeState := backend.NewOrchestrationRuntimeState(owi.InstanceID, state.History)
 	return runtimeState, nil
 }
 
@@ -470,4 +458,26 @@ func (*Actors) Stop(context.Context) error {
 // String displays the type information
 func (abe *Actors) String() string {
 	return "dapr.actors/v1"
+}
+
+func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*state.State, error) {
+	astate, err := abe.actors.State(ctx)
+	if err != nil {
+		return nil, err
+	}
+
+	// actor id is workflow instance id
+	state, err := state.LoadWorkflowState(ctx, astate, string(id), state.Options{
+		AppID:             abe.appID,
+		WorkflowActorType: abe.workflowActorType,
+		ActivityActorType: abe.activityActorType,
+	})
+	if err != nil {
+		return nil, err
+	}
+	if state == nil {
+		// No such state exists in the state store
+		return nil, nil
+	}
+	return state, nil
 }

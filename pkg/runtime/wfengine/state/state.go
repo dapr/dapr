@@ -212,33 +212,6 @@ func (s *State) String() string {
 	)
 }
 
-// EncodeWorkflowState encodes the workflow state into a byte array.
-// It only encodes the inbox, history, and custom status.
-func (s *State) EncodeWorkflowState() ([]byte, error) {
-	return proto.Marshal(&backend.WorkflowState{
-		Inbox:        s.Inbox,
-		History:      s.History,
-		CustomStatus: s.CustomStatus,
-		Generation:   s.Generation,
-	})
-}
-
-// DecodeWorkflowState decodes the workflow state from a byte array encoded using `EncodeWorkflowState`.
-// It only decodes the inbox, history, and custom status.
-func (s *State) DecodeWorkflowState(encodedState []byte) error {
-	var decodedState backend.WorkflowState
-	if err := proto.Unmarshal(encodedState, &decodedState); err != nil {
-		return err
-	}
-
-	s.Inbox = decodedState.GetInbox()
-	s.History = decodedState.GetHistory()
-	s.CustomStatus = decodedState.CustomStatus //nolint:protogetter
-	s.Generation = decodedState.GetGeneration()
-
-	return nil
-}
-
 func addStateOperations(req *api.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent, addedCount int, removedCount int) error {
 	// TODO: Investigate whether Dapr state stores put limits on batch sizes. It seems some storage
 	//       providers have limits and we need to know if that impacts this algorithm:
