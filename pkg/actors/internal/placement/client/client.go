@@ -124,11 +124,11 @@ func (c *Client) Run(ctx context.Context) error {
 		select {
 		case ch := <-c.reconnectCh:
 			c.ready.Store(false)
-			c.lock.LockTable()
+			unlock := c.lock.Lock()
 			connCancel()
 
 			if err := c.table.HaltAll(); err != nil {
-				c.lock.EnsureUnlockTable()
+				unlock()
 				return fmt.Errorf("failed to halt all actors: %s", err)
 			}
 
@@ -137,11 +137,11 @@ func (c *Client) Run(ctx context.Context) error {
 			}
 
 			connCtx, connCancel = context.WithCancel(ctx)
-			defer connCancel()
 			err := c.connectRoundRobin(connCtx)
 			ch <- err
-			c.lock.EnsureUnlockTable()
+			unlock()
 			if err != nil {
+				connCancel()
 				return err
 			}
 
@@ -150,8 +150,8 @@ func (c *Client) Run(ctx context.Context) error {
 		case <-ctx.Done():
 			c.ready.Store(false)
 			connCancel()
-			c.lock.LockTable()
-			defer c.lock.EnsureUnlockTable()
+			unlock := c.lock.Lock()
+			defer unlock()
 			if err := c.table.HaltAll(); err != nil {
 				log.Errorf("Error whilst deactivating all actors when shutting down client: %s", err)
 			}

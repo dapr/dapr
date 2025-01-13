@@ -118,10 +118,11 @@ func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
 }
 
 func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
-	if err := e.placement.Lock(ctx); err != nil {
+	ctx, cancel, err := e.placement.Lock(ctx)
+	if err != nil {
 		return err
 	}
-	defer e.placement.Unlock()
+	defer cancel()
 
 	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.ActorType,
@@ -154,10 +155,11 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 }
 
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	if err := e.placement.Lock(ctx); err != nil {
+	ctx, cancel, err := e.placement.Lock(ctx)
+	if err != nil {
 		return nil, err
 	}
-	defer e.placement.Unlock()
+	defer cancel()
 
 	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
