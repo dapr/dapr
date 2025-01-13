@@ -375,3 +375,7 @@ func (a *activity) Deactivate(ctx context.Context) error {
 func (a *activity) CloseUntil(d time.Duration) {
 	a.lock.CloseUntil(d)
 }
+
+func (a *activity) InvokeStream(context.Context, *internalsv1pb.InternalInvokeRequest, chan<- *internalsv1pb.InternalInvokeResponse) error {
+	return errors.New("not implemented")
+}
