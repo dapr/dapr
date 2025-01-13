@@ -228,14 +228,14 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 		errs = slice.New[error]()
 	)
 
-	t.table.Range(func(akey string, target targets.Interface) bool {
-		atype, _ := key.ActorTypeAndIDFromKey(akey)
+	t.table.Range(func(actorKey string, target targets.Interface) bool {
+		atype, _ := key.ActorTypeAndIDFromKey(actorKey)
 		if slices.Contains(actorTypes, atype) {
 			wg.Add(1)
-			go func(akey string) {
+			go func(actorKey string) {
 				defer wg.Done()
-				errs.Append(t.haltInLock(atype))
-			}(akey)
+				errs.Append(t.haltInLock(actorKey))
+			}(actorKey)
 		}
 
 		return true
