@@ -34,6 +34,8 @@ type Fake struct {
 	mtls                      bool
 
 	tlsServerConfigMTLSFn               func(spiffeid.TrustDomain) (*tls.Config, error)
+	mtlsServerConfigMTLSFn              func(id spiffeid.TrustDomain, ns, appID string) (*tls.Config, error)
+	mtlsClientConfigMTLSFn              func(id spiffeid.TrustDomain, ns, appID string) (*tls.Config, error)
 	tlsServerConfigNoClientAuthFn       func() *tls.Config
 	tlsServerConfigNoClientAuthOptionFn func(*tls.Config)
 	netListenerIDFn                     func(net.Listener, spiffeid.ID) net.Listener
@@ -148,6 +150,14 @@ func (f *Fake) ControlPlaneNamespace() string {
 
 func (f *Fake) TLSServerConfigMTLS(td spiffeid.TrustDomain) (*tls.Config, error) {
 	return f.tlsServerConfigMTLSFn(td)
+}
+
+func (f *Fake) MTLSServerConfig(td spiffeid.TrustDomain, ns, appID string) (*tls.Config, error) {
+	return f.mtlsServerConfigMTLSFn(td, ns, appID)
+}
+
+func (f *Fake) MTLSClientConfig(td spiffeid.TrustDomain, ns, appID string) (*tls.Config, error) {
+	return f.mtlsClientConfigMTLSFn(td, ns, appID)
 }
 
 func (f *Fake) TLSServerConfigNoClientAuth() *tls.Config {

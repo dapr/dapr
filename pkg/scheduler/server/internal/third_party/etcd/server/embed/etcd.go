@@ -521,7 +521,7 @@ func configurePeerListeners(cfg *Config) (peers []*peerListener, err error) {
 		}
 		peers[i] = &peerListener{close: func(context.Context) error { return nil }}
 		peers[i].Listener, err = transport.NewListenerWithOpts(u.Host, u.Scheme,
-			&cfg.PeerTLSInfo,
+			transport.WithTLSInfo(&cfg.PeerTLSInfo),
 			transport.WithSocketOpts(&cfg.SocketOpts),
 			transport.WithTimeout(rafthttp.ConnReadTimeout, rafthttp.ConnWriteTimeout),
 		)
@@ -615,20 +615,21 @@ func configureClientListeners(cfg *Config) (sctxs map[string]*serveCtx, err erro
 	}
 
 	for _, u := range cfg.ListenClientUrls {
-		addr, _, network := resolveUrl(u)
+		addr, secure, network := resolveUrl(u)
+		
 		sctx := sctxs[addr]
 		if sctx == nil {
 			sctx = newServeCtx(cfg.logger)
 			sctxs[addr] = sctx
 		}
-		sctx.secure = true
-		sctx.insecure = false
+		sctx.secure = sctx.secure || secure
+		sctx.insecure = sctx.insecure || !secure
 		sctx.scheme = u.Scheme
 		sctx.addr = addr
 		sctx.network = network
 	}
 	for _, u := range cfg.ListenClientHttpUrls {
-		addr, _, network := resolveUrl(u)
+		addr, secure, network := resolveUrl(u)
 
 		sctx := sctxs[addr]
 		if sctx == nil {
@@ -637,8 +638,8 @@ func configureClientListeners(cfg *Config) (sctxs map[string]*serveCtx, err erro
 		} else if !sctx.httpOnly {
 			return nil, fmt.Errorf("cannot bind both --client-listen-urls and --client-listen-http-urls on the same url %s", u.String())
 		}
-		sctx.secure = true
-		sctx.insecure = false
+		sctx.secure = sctx.secure || secure
+		sctx.insecure = sctx.insecure || !secure
 		sctx.scheme = u.Scheme
 		sctx.addr = addr
 		sctx.network = network
@@ -822,7 +823,7 @@ func (e *Etcd) createMetricsListener(murl url.URL) (net.Listener, error) {
 		}
 	}
 	return transport.NewListenerWithOpts(murl.Host, murl.Scheme,
-		tlsInfo,
+		transport.WithTLSInfo(tlsInfo),
 		transport.WithSocketOpts(&e.cfg.SocketOpts),
 	)
 }

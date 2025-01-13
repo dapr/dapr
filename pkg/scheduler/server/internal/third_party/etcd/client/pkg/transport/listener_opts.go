@@ -9,11 +9,11 @@ type ListenerOptions struct {
 	Listener     net.Listener
 	ListenConfig net.ListenConfig
 
-	socketOpts       *SocketOpts
-	tlsInfo          *TLSInfo
-	skipTLSInfoCheck bool
-	writeTimeout     time.Duration
-	readTimeout      time.Duration
+	socketOpts *SocketOpts
+	tlsInfo    *TLSInfo
+
+	writeTimeout time.Duration
+	readTimeout  time.Duration
 }
 
 func newListenOpts(opts ...ListenerOption) *ListenerOptions {
@@ -39,6 +39,14 @@ func (lo *ListenerOptions) IsSocketOpts() bool {
 	return lo.socketOpts.ReusePort || lo.socketOpts.ReuseAddress
 }
 
+// IsTLS returns true if listener options includes TLSInfo.
+func (lo *ListenerOptions) IsTLS() bool {
+	if lo.tlsInfo == nil {
+		return false
+	}
+	return lo.tlsInfo.Security.MTLSEnabled()
+}
+
 // ListenerOption are options which can be applied to the listener.
 type ListenerOption func(*ListenerOptions)
 
@@ -58,11 +66,4 @@ func WithSocketOpts(s *SocketOpts) ListenerOption {
 // WithTLSInfo adds TLS credentials to the listener.
 func WithTLSInfo(t *TLSInfo) ListenerOption {
 	return func(lo *ListenerOptions) { lo.tlsInfo = t }
-}
-
-// WithSkipTLSInfoCheck when true a transport can be created with an https scheme
-// without passing TLSInfo, circumventing not presented error. Skipping this check
-// also requires that TLSInfo is not passed.
-func WithSkipTLSInfoCheck(skip bool) ListenerOption {
-	return func(lo *ListenerOptions) { lo.skipTLSInfoCheck = skip }
 }

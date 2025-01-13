@@ -33,9 +33,8 @@ func NewListener(addr, scheme string, tlsinfo *TLSInfo) (l net.Listener, err err
 }
 
 // NewListenerWithOpts creates a new listener which accepts listener options.
-func NewListenerWithOpts(addr, scheme string, tlsinfo *TLSInfo, opts ...ListenerOption) (net.Listener, error) {
-	allOpts := append([]ListenerOption{WithTLSInfo(tlsinfo)}, opts...)
-	return newListener(addr, scheme, allOpts...)
+func NewListenerWithOpts(addr, scheme string, opts ...ListenerOption) (net.Listener, error) {
+	return newListener(addr, scheme, opts...)
 }
 
 func newListener(addr, scheme string, opts ...ListenerOption) (net.Listener, error) {
@@ -52,7 +51,21 @@ func newListener(addr, scheme string, opts ...ListenerOption) (net.Listener, err
 	}
 	lnOpts.Listener = ln
 
-	return lnOpts.Listener, nil
+	if !lnOpts.IsTLS() {
+		return lnOpts.Listener, nil
+	}
+
+	return wrapTLS(scheme, lnOpts.tlsInfo, lnOpts.Listener)
+}
+
+func wrapTLS(scheme string, tlsinfo *TLSInfo, l net.Listener) (net.Listener, error) {
+	if scheme != "https" && scheme != "unixs" {
+		return l, nil
+	}
+	if tlsinfo != nil {
+		return NewTLSListener(l, tlsinfo)
+	}
+	return newTLSListener(l, tlsinfo, checkSAN)
 }
 
 func newKeepAliveListener(cfg *net.ListenConfig, addr string) (ln net.Listener, err error) {
