@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -48,6 +49,10 @@ type watchhosts struct {
 }
 
 func (w *watchhosts) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Cleanup does not work cleanly on windows")
+	}
+
 	fp := ports.Reserve(t, 6)
 	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 
