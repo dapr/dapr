@@ -94,8 +94,6 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest) (*api.StateRe
 	s.placement.Lock(ctx)
 	defer s.placement.Unlock()
 
-	// do not check if actor is hosted...
-
 	storeName, store, err := s.stateStore()
 	if err != nil {
 		return nil, err
@@ -135,8 +133,6 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest) (*api.StateRe
 func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error) {
 	s.placement.Lock(ctx)
 	defer s.placement.Unlock()
-
-	// do not check if actor is hosted...
 
 	storeName, store, err := s.stateStore()
 	if err != nil {
