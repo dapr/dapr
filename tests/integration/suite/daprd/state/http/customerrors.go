@@ -172,7 +172,7 @@ func (c *customerrors) Run(t *testing.T, ctx context.Context) {
 	assert.Equal(t, 512, resp.StatusCode)
 	assert.Equal(t, `{"errorCode":"ERR_STATE_SAVE","message":"failed saving state in state store mystore: api error: code = ResourceExhausted desc = set-error"}`, string(b))
 
-	assert.True(t, c.daprd.Metrics(t, ctx).MatchMetricAndValue(2, "dapr_error_code_total", "category:state", "error_code:ERR_STATE_SAVE"))
-	assert.True(t, c.daprd.Metrics(t, ctx).MatchMetricAndValue(1, "dapr_error_code_total", "category:state", "error_code:ERR_STATE_GET"))
-	assert.True(t, c.daprd.Metrics(t, ctx).MatchMetricAndValue(1, "dapr_error_code_total", "category:state", "error_code:ERR_STATE_DELETE"))
+	assert.True(t, c.daprd.Metrics(t, ctx).MatchMetricAndSum(2, "dapr_error_code_total", "category:state", "error_code:ERR_STATE_SAVE"))
+	assert.True(t, c.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:state", "error_code:ERR_STATE_GET"))
+	assert.True(t, c.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:state", "error_code:ERR_STATE_DELETE"))
 }

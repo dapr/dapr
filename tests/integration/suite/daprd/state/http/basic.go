@@ -74,7 +74,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
 			assert.Contains(t, string(body), "ERR_MALFORMED_REQUEST")
-			assert.True(t, b.daprd.Metrics(t, ctx).MatchMetricAndValue(float64(i+1), "dapr_error_code_total", "error_code:ERR_MALFORMED_REQUEST"))
+			assert.True(t, b.daprd.Metrics(t, ctx).MatchMetricAndSum(float64(i+1), "dapr_error_code_total", "error_code:ERR_MALFORMED_REQUEST"))
 		}
 	})
 

@@ -74,7 +74,7 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Check for metric count and code
-		assert.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndValue(2, "dapr_error_code_total", "category:workflow", "error_code:ERR_GET_WORKFLOW"))
+		assert.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(2, "dapr_error_code_total", "category:workflow", "error_code:ERR_GET_WORKFLOW"))
 	})
 
 	t.Run("HTTP conversation error metrics", func(t *testing.T) {
@@ -84,6 +84,6 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Check for metric count and code
-		assert.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndValue(3, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
+		assert.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(3, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE"))
 	})
 }
