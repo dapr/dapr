@@ -194,7 +194,7 @@ func (h *hdata) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			select {
 			case got := <-ch:
-				assert.Equal(t, test.expHTTP, got, name)
+				assert.Equal(t, test.expGRPC, got, name)
 			case <-time.After(time.Second * 5):
 				require.Fail(t, "timeout waiting for reminder")
 			}
