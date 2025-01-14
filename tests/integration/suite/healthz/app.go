@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	procdaprd "github.com/dapr/dapr/tests/integration/framework/process/daprd"
-	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+	procapp "github.com/dapr/dapr/tests/integration/framework/process/http/app"
 	"github.com/dapr/dapr/tests/integration/suite"
 )
 
@@ -41,49 +41,46 @@ func init() {
 type app struct {
 	daprd   *procdaprd.Daprd
 	healthy atomic.Bool
-	srv     *prochttp.HTTP
+	app     *procapp.App
 }
 
 func (a *app) Setup(t *testing.T) []framework.Option {
 	a.healthy.Store(true)
 
-	mux := http.NewServeMux()
-	mux.HandleFunc("/foo", func(w http.ResponseWriter, r *http.Request) {
-		if a.healthy.Load() {
+	a.app = procapp.New(t,
+		procapp.WithHandlerFunc("/foo", func(w http.ResponseWriter, r *http.Request) {
+			if a.healthy.Load() {
+				w.WriteHeader(http.StatusOK)
+			} else {
+				w.WriteHeader(http.StatusServiceUnavailable)
+			}
+			fmt.Fprintf(w, "%s %s", r.Method, r.URL.Path)
+		}),
+		procapp.WithHandlerFunc("/myfunc", func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusOK)
-		} else {
-			w.WriteHeader(http.StatusServiceUnavailable)
-		}
-		fmt.Fprintf(w, "%s %s", r.Method, r.URL.Path)
-	})
+			fmt.Fprintf(w, "%s %s", r.Method, r.URL.Path)
+		}),
+	)
 
-	mux.HandleFunc("/myfunc", func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusOK)
-		fmt.Fprintf(w, "%s %s", r.Method, r.URL.Path)
-	})
-
-	a.srv = prochttp.New(t, prochttp.WithHandler(mux))
 	a.daprd = procdaprd.New(t,
 		procdaprd.WithAppHealthCheck(true),
 		procdaprd.WithAppHealthCheckPath("/foo"),
-		procdaprd.WithAppPort(a.srv.Port()),
+		procdaprd.WithAppPort(a.app.Port()),
 		procdaprd.WithAppHealthProbeInterval(1),
 		procdaprd.WithAppHealthProbeThreshold(1),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(a.daprd, a.srv),
+		framework.WithProcesses(a.app, a.daprd),
 	}
 }
 
 func (a *app) Run(t *testing.T, ctx context.Context) {
-	a.daprd.WaitUntilRunning(t, ctx)
-
-	a.healthy.Store(true)
-
 	reqURL := fmt.Sprintf("http://localhost:%d/v1.0/invoke/%s/method/myfunc", a.daprd.HTTPPort(), a.daprd.AppID())
 
 	a.healthy.Store(true)
+
+	a.daprd.WaitUntilRunning(t, ctx)
 
 	httpClient := client.HTTP(t)
 
