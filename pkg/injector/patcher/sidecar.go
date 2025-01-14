@@ -57,6 +57,7 @@ type SidecarConfig struct {
 	SentrySPIFFEID              string
 	SidecarHTTPPort             int32 `default:"3500"`
 	SidecarPublicPort           int32 `default:"3501"`
+	SchedulerAddressDNSA        string
 
 	Enabled                             bool    `annotation:"dapr.io/enabled"`
 	AppPort                             int32   `annotation:"dapr.io/app-port"`

@@ -43,7 +43,7 @@ type Options struct {
 	ExtendedMetadata            map[string]string
 	AppConnectionConfig         config.AppConnectionConfig
 	GlobalConfig                *config.Configuration
-	SchedulerClients            *clients.Clients
+	Scheduler                   clients.Clients
 	Actors                      actors.Interface
 	WorkflowEngine              wfengine.Interface
 }
@@ -61,7 +61,7 @@ type Universal struct {
 	appConnectionConfig         config.AppConnectionConfig
 	globalConfig                *config.Configuration
 	workflowEngine              wfengine.Interface
-	schedulerClients            *clients.Clients
+	scheduler                   clients.Clients
 
 	extendedMetadataLock sync.RWMutex
 	actors               actors.Interface
@@ -79,7 +79,7 @@ func New(opts Options) *Universal {
 		extendedMetadata:            opts.ExtendedMetadata,
 		appConnectionConfig:         opts.AppConnectionConfig,
 		globalConfig:                opts.GlobalConfig,
-		schedulerClients:            opts.SchedulerClients,
+		scheduler:                   opts.Scheduler,
 		actors:                      opts.Actors,
 		workflowEngine:              opts.WorkflowEngine,
 	}
