@@ -1403,7 +1403,8 @@ func (a *api) UnsubscribeConfiguration(ctx context.Context, request *runtimev1pb
 	subscribeID := request.GetId()
 	_, ok := a.CompStore().GetConfigurationSubscribe(subscribeID)
 	if !ok {
-		diag.RecordErrorCodeEarly(&errorcodes.ConfigurationUnsubscribe)
+		// TODO: Make this response provide error codes (so it gets recorded at the end/middleware) so we don't have to record it early
+		diag.RecordErrorCode(&errorcodes.ConfigurationUnsubscribe)
 		return &runtimev1pb.UnsubscribeConfigurationResponse{
 			Ok:      false,
 			Message: fmt.Sprintf(messages.ErrConfigurationUnsubscribe, subscribeID, "subscription does not exist"),
