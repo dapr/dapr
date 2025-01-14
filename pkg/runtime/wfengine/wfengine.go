@@ -112,17 +112,17 @@ func New(opts Options) (Interface, error) {
 	)
 
 	// There are separate "workers" for executing orchestrations (workflows) and activities
-	orchestrationWorker := backend.NewOrchestrationWorker(
+	oworker := backend.NewOrchestrationWorker(
 		abackend,
 		executor,
 		wfBackendLogger,
 		backend.WithMaxParallelism(opts.Spec.GetMaxConcurrentWorkflowInvocations()))
-	activityWorker := backend.NewActivityTaskWorker(
+	aworker := backend.NewActivityTaskWorker(
 		abackend,
 		executor,
 		wfBackendLogger,
 		backend.WithMaxParallelism(opts.Spec.GetMaxConcurrentActivityInvocations()))
-	worker := backend.NewTaskHubWorker(abackend, orchestrationWorker, activityWorker, wfBackendLogger)
+	worker := backend.NewTaskHubWorker(abackend, oworker, aworker, wfBackendLogger)
 
 	return &engine{
 		appID:                opts.AppID,
