@@ -50,7 +50,8 @@ type Interface interface {
 	UnRegisterActorTypes(actorTypes ...string) error
 	SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []string)
 	HaltAll() error
-	Halt(ctx context.Context, target targets.Idlable) error
+	Halt(ctx context.Context, actorType, actorID string) error
+	HaltIdlable(ctx context.Context, target targets.Idlable) error
 	Drain(fn func(actorType, actorID string) bool)
 	Len() map[string]int
 }
@@ -227,14 +228,14 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 		errs = slice.New[error]()
 	)
 
-	t.table.Range(func(akey string, target targets.Interface) bool {
-		atype, _ := key.ActorTypeAndIDFromKey(akey)
+	t.table.Range(func(actorKey string, target targets.Interface) bool {
+		atype, _ := key.ActorTypeAndIDFromKey(actorKey)
 		if slices.Contains(actorTypes, atype) {
 			wg.Add(1)
-			go func(akey string) {
+			go func(actorKey string) {
 				defer wg.Done()
-				errs.Append(t.haltInLock(atype))
-			}(akey)
+				errs.Append(t.haltInLock(actorKey))
+			}(actorKey)
 		}
 
 		return true
@@ -247,12 +248,24 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 	return errors.Join(errs.Slice()...)
 }
 
-func (t *table) Halt(ctx context.Context, target targets.Idlable) error {
+func (t *table) HaltIdlable(ctx context.Context, target targets.Idlable) error {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	t.idlerQueue.Dequeue(target.Key())
 	t.table.Delete(target.Key())
 	return target.Deactivate(ctx)
+}
+
+func (t *table) Halt(ctx context.Context, actorType, actorID string) error {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	key := actorType + api.DaprSeparator + actorID
+	target, ok := t.table.LoadAndDelete(key)
+	if ok {
+		log.Debugf("Halting actor '%s'", key)
+		return target.Deactivate(ctx)
+	}
+	return nil
 }
 
 // HaltAll halts all actors currently in the table.

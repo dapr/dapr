@@ -51,9 +51,11 @@ func (n *notls) Setup(t *testing.T) []framework.Option {
 	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 
 	opts := []scheduler.Option{
-		scheduler.WithInitialCluster(fmt.Sprintf("scheduler-0=http://127.0.0.1:%d,scheduler-1=http://127.0.0.1:%d,scheduler-2=http://127.0.0.1:%d", port1, port2, port3)),
+		scheduler.WithInitialCluster(fmt.Sprintf(
+			"scheduler-0=http://127.0.0.1:%d,scheduler-1=http://127.0.0.1:%d,scheduler-2=http://127.0.0.1:%d",
+			port1, port2, port3),
+		),
 		scheduler.WithInitialClusterPorts(port1, port2, port3),
-		scheduler.WithReplicaCount(3),
 	}
 
 	clientPorts := []string{
