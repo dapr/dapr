@@ -97,18 +97,18 @@ func (s *State) ResetChangeTracking() {
 	s.historyRemovedCount = 0
 }
 
-func (s *State) ApplyRuntimeStateChanges(runtimeState *backend.OrchestrationRuntimeState) {
-	if runtimeState.ContinuedAsNew() {
+func (s *State) ApplyRuntimeStateChanges(rs *backend.OrchestrationRuntimeState) {
+	if rs.GetContinuedAsNew() {
 		s.historyRemovedCount += len(s.History)
 		s.historyAddedCount = 0
 		s.History = nil
 	}
 
-	newHistoryEvents := runtimeState.NewEvents()
+	newHistoryEvents := rs.GetNewEvents()
 	s.History = append(s.History, newHistoryEvents...)
 	s.historyAddedCount += len(newHistoryEvents)
 
-	s.CustomStatus = runtimeState.CustomStatus
+	s.CustomStatus = rs.GetCustomStatus()
 }
 
 func (s *State) AddToInbox(e *backend.HistoryEvent) {

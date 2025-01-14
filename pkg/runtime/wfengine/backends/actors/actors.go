@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
@@ -381,7 +382,7 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 		return nil, fmt.Errorf("failed to decode the workflow actor response: %w", err)
 	}
 	// TODO: Add caching when a good invalidation policy can be determined
-	runtimeState := backend.NewOrchestrationRuntimeState(owi.InstanceID, wfState.History)
+	runtimeState := runtimestate.NewOrchestrationRuntimeState(string(owi.InstanceID), wfState.History)
 
 	return runtimeState, nil
 }
