@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -218,13 +219,15 @@ func (s *Scheduler) callWhenReady(ctx context.Context, fn concurrency.Runner) er
 }
 
 func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Scheduler_WatchHostsClient, []string, error) {
-	log.Infof("Attempting to connect to scheduler: %s", s.addresses[0])
+	//nolint:gosec
+	i := rand.Intn(len(s.addresses))
+	log.Infof("Attempting to connect to scheduler: %s", s.addresses[i])
 
 	// This is connecting to a DNS A rec which will return health scheduler
 	// hosts.
-	cl, err := client.New(ctx, s.addresses[0], s.security)
+	cl, err := client.New(ctx, s.addresses[i], s.security)
 	if err != nil {
-		return nil, nil, fmt.Errorf("scheduler client not initialized for address %s: %s", s.addresses[0], err)
+		return nil, nil, fmt.Errorf("scheduler client not initialized for address %s: %s", s.addresses[i], err)
 	}
 
 	var stream schedulerv1pb.Scheduler_WatchHostsClient

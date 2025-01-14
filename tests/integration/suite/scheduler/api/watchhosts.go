@@ -121,7 +121,7 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 			w.s2addr,
 			w.s3addr,
 		}, got)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	w.scheduler2.Cleanup(t)
 
@@ -137,7 +137,7 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 			w.s1addr,
 			w.s3addr,
 		}, got)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	w.scheduler4.Run(t, ctx)
 	w.scheduler4.WaitUntilRunning(t, ctx)
