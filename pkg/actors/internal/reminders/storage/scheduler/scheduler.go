@@ -38,7 +38,7 @@ var log = logger.NewLogger("dapr.runtime.actor.reminders.scheduler")
 type Options struct {
 	Namespace     string
 	AppID         string
-	Clients       *clients.Clients
+	Clients       clients.Clients
 	StateReminder storage.Interface
 	Table         table.Interface
 	Healthz       healthz.Healthz
@@ -48,7 +48,7 @@ type Options struct {
 type scheduler struct {
 	namespace     string
 	appID         string
-	clients       *clients.Clients
+	clients       clients.Clients
 	table         table.Interface
 	stateReminder storage.Interface
 	htarget       healthz.Target

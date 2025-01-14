@@ -101,8 +101,8 @@ func (u *unregister) Run(t *testing.T, ctx context.Context) {
 		})
 		if err != nil {
 			st, ok := status.FromError(err)
-			require.True(c, ok, "expected a gRPC status error, got %v", err)
-			require.Equal(c, codes.Unavailable, st.Code(), "the only allowed error is 'Unavailable', but got %v", err)
+			assert.True(c, ok, "expected a gRPC status error, got %v", err)
+			assert.Equal(c, codes.Unavailable, st.Code(), "the only allowed error is 'Unavailable', but got %v", err)
 		}
 	}, time.Second*10, time.Millisecond*10)
 

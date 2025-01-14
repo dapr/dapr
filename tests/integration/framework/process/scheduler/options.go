@@ -24,7 +24,6 @@ type options struct {
 	execOpts []exec.Option
 
 	id                  string
-	replicaCount        uint32
 	initialCluster      string
 	initialClusterPorts []int
 	etcdClientPorts     []string
@@ -56,12 +55,6 @@ func WithPort(port int) Option {
 func WithID(id string) Option {
 	return func(o *options) {
 		o.id = id
-	}
-}
-
-func WithReplicaCount(count uint32) Option {
-	return func(o *options) {
-		o.replicaCount = count
 	}
 }
 

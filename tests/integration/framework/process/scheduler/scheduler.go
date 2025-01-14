@@ -88,7 +88,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		logLevel:        "info",
 		listenAddress:   "localhost",
 		id:              uids,
-		replicaCount:    1,
 		port:            fp.Port(t),
 		healthzPort:     fp.Port(t),
 		metricsPort:     fp.Port(t),
@@ -112,7 +111,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--id=" + opts.id,
-		"--replica-count=" + strconv.FormatUint(uint64(opts.replicaCount), 10),
 		"--port=" + strconv.Itoa(opts.port),
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),

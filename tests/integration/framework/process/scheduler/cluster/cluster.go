@@ -70,7 +70,6 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 			scheduler.WithMetricsPort(metricsPorts[i]),
 			scheduler.WithInitialCluster(strings.Join(initialCluster, ",")),
 			scheduler.WithEtcdClientPorts(clientPorts),
-			scheduler.WithReplicaCount(opts.count),
 		)
 	}
 

@@ -65,7 +65,6 @@ type Options struct {
 	HealthEndpoint     string
 	Resiliency         resiliency.Provider
 	Security           security.Handler
-	SchedulerClients   *clients.Clients
 	Healthz            healthz.Healthz
 	CompStore          *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
@@ -73,9 +72,10 @@ type Options struct {
 }
 
 type InitOptions struct {
-	StateStoreName string
-	Hostname       string
-	GRPC           *manager.Manager
+	StateStoreName   string
+	Hostname         string
+	GRPC             *manager.Manager
+	SchedulerClients clients.Clients
 }
 
 // Interface is the main runtime for the actors subsystem.
@@ -104,7 +104,6 @@ type actors struct {
 	healthEndpoint     string
 	resiliency         resiliency.Provider
 	security           security.Handler
-	schedulerClients   *clients.Clients
 	healthz            healthz.Healthz
 	compStore          *compstore.ComponentStore
 	// TODO: @joshvanl Remove in Dapr 1.12 when ActorStateTTL is finalized.
@@ -150,7 +149,6 @@ func New(opts Options) Interface {
 		healthEndpoint:     opts.HealthEndpoint,
 		resiliency:         opts.Resiliency,
 		security:           opts.Security,
-		schedulerClients:   opts.SchedulerClients,
 		compStore:          opts.CompStore,
 		stateTTLEnabled:    opts.StateTTLEnabled,
 		clock:              clock.RealClock{},
@@ -201,7 +199,7 @@ func (a *actors) Init(opts InitOptions) error {
 		a.reminderStore = scheduler.New(scheduler.Options{
 			Namespace:     a.namespace,
 			AppID:         a.appID,
-			Clients:       a.schedulerClients,
+			Clients:       opts.SchedulerClients,
 			StateReminder: a.stateReminders,
 			Table:         a.table,
 			Healthz:       a.healthz,

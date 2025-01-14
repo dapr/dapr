@@ -33,6 +33,7 @@ import (
 	"github.com/dapr/dapr/pkg/placement/hashing"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/concurrency/fifo"
 	"github.com/dapr/kit/logger"
@@ -345,13 +346,9 @@ func (p *placement) isActorLocal(targetActorAddress, hostAddress string, port st
 		return true
 	}
 
-	if isLocalhost(hostAddress) && strings.HasSuffix(targetActorAddress, ":"+port) {
-		return isLocalhost(targetActorAddress[0 : len(targetActorAddress)-len(port)-1])
+	if utils.IsLocalhost(hostAddress) && strings.HasSuffix(targetActorAddress, ":"+port) {
+		return utils.IsLocalhost(targetActorAddress[0 : len(targetActorAddress)-len(port)-1])
 	}
 
 	return false
-}
-
-func isLocalhost(addr string) bool {
-	return addr == "localhost" || addr == "127.0.0.1" || addr == "[::1]" || addr == "::1"
 }

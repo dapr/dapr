@@ -28,7 +28,8 @@ spec:
   publishNotReadyAddresses: true
   ports:
   - name: api
-    port: 50006
+    port: 443
+    targetPort: 50006
   - name: etcd-client
     port: {{ .Values.ports.etcdGRPCClientPort }}
   - name: etcd-httpclient
@@ -41,5 +42,5 @@ spec:
     targetPort: {{ .Values.global.prometheus.port }}
     protocol: TCP
   {{- end}}
-  clusterIP: None # make the service headless
+  type: ClusterIP
 {{- end }}

@@ -107,7 +107,6 @@ spec:
         {{- end }}
         ports:
           - containerPort: 50006
-            name: api
           - containerPort: {{ .Values.ports.etcdGRPCClientPort }}
             name: etcd-client
           - containerPort: {{ .Values.ports.etcdHTTPClientPort }}
@@ -138,12 +137,6 @@ spec:
         - "--listen-address=0.0.0.0"
         - "--id"
         - "$(SCHEDULER_ID)"
-        - "--replica-count"
-        {{- if (eq .Values.global.scheduler.enabled true) }}
-        - "{{ $replicas }}"
-        {{- else }}
-        - "0"
-        {{- end }}
         - "--initial-cluster"
         - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
         - "--etcd-client-ports"
@@ -246,7 +239,6 @@ spec:
                     values:
                     - {{ .Values.global.daprControlPlaneArch }}
 {{- end }}
-{{- if (gt (int $replicas) 1) }}
         podAntiAffinity:
           preferredDuringSchedulingIgnoredDuringExecution:
           - weight: 100
@@ -258,7 +250,6 @@ spec:
                   values:
                   - dapr-scheduler-server
               topologyKey: topology.kubernetes.io/zone
-{{- end }}
 {{- if .Values.global.imagePullSecrets }}
       imagePullSecrets:
         {{- include "dapr.imagePullSecrets" (dict "imagePullSecrets" .Values.global.imagePullSecrets) | nindent 8 -}}

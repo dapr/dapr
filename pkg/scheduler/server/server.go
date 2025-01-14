@@ -19,6 +19,7 @@ import (
 	"fmt"
 	"math"
 	"net"
+	"strconv"
 	"sync/atomic"
 
 	"google.golang.org/grpc"
@@ -30,6 +31,7 @@ import (
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/cron"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/serialize"
 	"github.com/dapr/dapr/pkg/security"
+	"github.com/dapr/dapr/utils"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
@@ -43,8 +45,6 @@ type Options struct {
 	Port                    int
 	Mode                    modes.DaprMode
 	KubeConfig              *string
-	ReplicaCount            uint32
-	ReplicaID               uint32
 	DataDir                 string
 	EtcdID                  string
 	EtcdInitialPeers        []string
@@ -81,11 +81,21 @@ func New(opts Options) (*Server, error) {
 		return nil, err
 	}
 
+	broadcastAddr := opts.ListenAddress
+	if !utils.IsLocalhost(broadcastAddr) {
+		broadcastAddr, err = utils.GetHostAddress()
+		if err != nil {
+			return nil, fmt.Errorf("failed to get host address: %w", err)
+		}
+	}
+
 	cron := cron.New(cron.Options{
-		ReplicaCount: opts.ReplicaCount,
-		ReplicaID:    opts.ReplicaID,
-		Config:       config,
-		Healthz:      opts.Healthz,
+		ID:      opts.EtcdID,
+		Config:  config,
+		Healthz: opts.Healthz,
+		Host: &schedulerv1pb.Host{
+			Address: net.JoinHostPort(broadcastAddr, strconv.Itoa(opts.Port)),
+		},
 	})
 
 	var ctrl concurrency.Runner

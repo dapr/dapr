@@ -172,7 +172,7 @@ LOOP:
 		metrics := b.daprd.Metrics(t, ctx).All()
 		assert.Equal(c, 1, int(metrics[egressMetric]))
 		assert.Equal(c, 1, int(metrics[ingressMetric]))
-	}, time.Second*5, time.Millisecond*10)
+	}, time.Second*10, time.Millisecond*10)
 
 	b.appHealth.Store(false)
 }
