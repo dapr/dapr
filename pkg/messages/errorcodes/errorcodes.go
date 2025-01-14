@@ -137,7 +137,7 @@ var (
 	ConversationNotFound      = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}      // Conversation not found
 
 	// ### Service Invocation / Direct Messaging API
-	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service directly
+	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service
 
 	// ### Bindings API
 	BindingInvokeOutputBinding = ErrorCode{"ERR_INVOKE_OUTPUT_BINDING", "", CategoryBinding} // Error invoking output binding

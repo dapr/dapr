@@ -826,7 +826,7 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Delete, err == nil, elapsed)
 
 	if err != nil {
-		err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateDelete, fmt.Sprintf(messages.ErrStateSave, in.GetStoreName(), err.Error()))
+		err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateDelete, fmt.Sprintf(messages.ErrStateDelete, in.GetKey(), err.Error()))
 		a.logger.Debug(err)
 		return empty, err
 	}
