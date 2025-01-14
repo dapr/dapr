@@ -63,62 +63,26 @@ type Actors struct {
 	workflowActorType string
 	activityActorType string
 
-	// TODO: @joshvanl
 	defaultReminderInterval *time.Duration
 	resiliency              resiliency.Provider
 	actors                  actors.Interface
 	schedulerReminders      bool
 
-	// TODO: @joshvanl: remove
 	orchestrationWorkItemChan chan *backend.OrchestrationWorkItem
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 }
 
 func New(opts Options) (*Actors, error) {
 	return &Actors{
-		appID:              opts.AppID,
-		workflowActorType:  ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
-		activityActorType:  ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
-		actors:             opts.Actors,
-		resiliency:         opts.Resiliency,
-		schedulerReminders: opts.SchedulerReminders,
-
-		// TODO: @joshvanl: remove
+		appID:                     opts.AppID,
+		workflowActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
+		activityActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + ActivityNameLabelKey,
+		actors:                    opts.Actors,
+		resiliency:                opts.Resiliency,
+		schedulerReminders:        opts.SchedulerReminders,
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem),
 	}, nil
-}
-
-// getWorkflowScheduler returns a WorkflowScheduler func that sends an orchestration work item to the Durable Task Framework.
-// TODO: @joshvanl: remove
-func getWorkflowScheduler(orchestrationWorkItemChan chan *backend.OrchestrationWorkItem) todo.WorkflowScheduler {
-	return func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
-		log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
-		select {
-		case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
-			return ctx.Err()
-		case orchestrationWorkItemChan <- wi: // blocks until the engine is ready to process the work item
-			return nil
-		}
-	}
-}
-
-// getActivityScheduler returns an activityScheduler func that sends an activity work item to the Durable Task Framework.
-// TODO: @joshvanl: remove
-func getActivityScheduler(activityWorkItemChan chan *backend.ActivityWorkItem) todo.ActivityScheduler {
-	return func(ctx context.Context, wi *backend.ActivityWorkItem) error {
-		log.Debugf(
-			"%s: scheduling [%s#%d] activity execution with durabletask engine",
-			wi.InstanceID,
-			wi.NewEvent.GetTaskScheduled().GetName(),
-			wi.NewEvent.GetEventId())
-		select {
-		case <-ctx.Done(): // engine is shutting down
-			return ctx.Err()
-		case activityWorkItemChan <- wi: // blocks until the engine is ready to process the work item
-			return nil
-		}
-	}
 }
 
 func (abe *Actors) RegisterActors(ctx context.Context) error {
@@ -133,24 +97,45 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 				{
 					Type: abe.workflowActorType,
 					Factory: workflow.WorkflowFactory(workflow.WorkflowOptions{
-						AppID:              abe.appID,
-						WorkflowActorType:  abe.workflowActorType,
-						ActivityActorType:  abe.activityActorType,
-						ReminderInterval:   abe.defaultReminderInterval,
-						Resiliency:         abe.resiliency,
-						Actors:             abe.actors,
-						Scheduler:          getWorkflowScheduler(abe.orchestrationWorkItemChan),
+						AppID:             abe.appID,
+						WorkflowActorType: abe.workflowActorType,
+						ActivityActorType: abe.activityActorType,
+						ReminderInterval:  abe.defaultReminderInterval,
+						Resiliency:        abe.resiliency,
+						Actors:            abe.actors,
+						Scheduler: func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
+							log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
+							select {
+							case <-ctx.Done(): // <-- engine is shutting down or a caller timeout expired
+								return ctx.Err()
+							case abe.orchestrationWorkItemChan <- wi: // blocks until the engine is ready to process the work item
+								return nil
+							}
+						},
 						SchedulerReminders: abe.schedulerReminders,
 					}),
 				},
 				{
 					Type: abe.activityActorType,
 					Factory: workflow.ActivityFactory(workflow.ActivityOptions{
-						AppID:              abe.appID,
-						ActivityActorType:  abe.activityActorType,
-						WorkflowActorType:  abe.workflowActorType,
-						ReminderInterval:   abe.defaultReminderInterval,
-						Scheduler:          getActivityScheduler(abe.activityWorkItemChan),
+						AppID:             abe.appID,
+						ActivityActorType: abe.activityActorType,
+						WorkflowActorType: abe.workflowActorType,
+						ReminderInterval:  abe.defaultReminderInterval,
+						Scheduler:         getActivityScheduler(abe.activityWorkItemChan),
+						Scheduler: func(ctx context.Context, wi *backend.ActivityWorkItem) error {
+							log.Debugf(
+								"%s: scheduling [%s#%d] activity execution with durabletask engine",
+								wi.InstanceID,
+								wi.NewEvent.GetTaskScheduled().GetName(),
+								wi.NewEvent.GetEventId())
+							select {
+							case <-ctx.Done(): // engine is shutting down
+								return ctx.Err()
+							case abe.activityWorkItemChan <- wi: // blocks until the engine is ready to process the work item
+								return nil
+							}
+						},
 						Actors:             abe.actors,
 						SchedulerReminders: abe.schedulerReminders,
 					}),
@@ -274,6 +259,7 @@ func (*Actors) AbandonOrchestrationWorkItem(ctx context.Context, wi *backend.Orc
 	log.Warnf("%s: aborting workflow execution", wi.InstanceID)
 
 	// Sending false signals the waiting workflow actor to abort the workflow execution.
+	// TODO: @joshvanl: remove
 	if channel, ok := wi.Properties[todo.CallbackChannelProperty]; ok {
 		channel.(chan bool) <- false
 	}
@@ -336,23 +322,6 @@ func (*Actors) DeleteTaskHub(context.Context) error {
 	return errors.New("not supported")
 }
 
-// GetActivityWorkItem implements backend.Backend
-func (abe *Actors) GetActivityWorkItem(ctx context.Context) (*backend.ActivityWorkItem, error) {
-	// Wait for the activity actor to signal us with some work to do
-	log.Debug("Actor backend is waiting for an activity actor to schedule an invocation.")
-	select {
-	case wi := <-abe.activityWorkItemChan:
-		log.Debugf(
-			"Actor backend received a [%s#%d] activity task for workflow '%s'.",
-			wi.NewEvent.GetTaskScheduled().GetName(),
-			wi.NewEvent.GetEventId(),
-			wi.InstanceID)
-		return wi, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
-}
-
 // GetOrchestrationRuntimeState implements backend.Backend
 func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backend.OrchestrationWorkItem) (*backend.OrchestrationRuntimeState, error) {
 	state, err := abe.loadInternalState(ctx, owi.InstanceID)
@@ -405,19 +374,6 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 			}
 		},
 	).Run(ctx)
-}
-
-// GetOrchestrationWorkItem implements backend.Backend
-func (abe *Actors) GetOrchestrationWorkItem(ctx context.Context) (*backend.OrchestrationWorkItem, error) {
-	// Wait for the workflow actor to signal us with some work to do
-	log.Debug("Actor backend is waiting for a workflow actor to schedule an invocation.")
-	select {
-	case wi := <-abe.orchestrationWorkItemChan:
-		log.Debugf("Actor backend received a workflow task for workflow '%s'.", wi.InstanceID)
-		return wi, nil
-	case <-ctx.Done():
-		return nil, ctx.Err()
-	}
 }
 
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.
@@ -479,4 +435,34 @@ func (abe *Actors) loadInternalState(ctx context.Context, id api.InstanceID) (*s
 		return nil, nil
 	}
 	return state, nil
+}
+
+// NextOrchestrationWorkItem implements backend.Backend
+func (abe *Actors) NextOrchestrationWorkItem(ctx context.Context) (*backend.OrchestrationWorkItem, error) {
+	// Wait for the workflow actor to signal us with some work to do
+	log.Debug("Actor backend is waiting for a workflow actor to schedule an invocation.")
+	select {
+	case wi := <-abe.orchestrationWorkItemChan:
+		log.Debugf("Actor backend received a workflow task for workflow '%s'.", wi.InstanceID)
+		return wi, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
+}
+
+// NextActivityWorkItem implements backend.Backend
+func (abe *Actors) NextActivityWorkItem(ctx context.Context) (*backend.ActivityWorkItem, error) {
+	// Wait for the activity actor to signal us with some work to do
+	log.Debug("Actor backend is waiting for an activity actor to schedule an invocation.")
+	select {
+	case wi := <-abe.activityWorkItemChan:
+		log.Debugf(
+			"Actor backend received a [%s#%d] activity task for workflow '%s'.",
+			wi.NewEvent.GetTaskScheduled().GetName(),
+			wi.NewEvent.GetEventId(),
+			wi.InstanceID)
+		return wi, nil
+	case <-ctx.Done():
+		return nil, ctx.Err()
+	}
 }
