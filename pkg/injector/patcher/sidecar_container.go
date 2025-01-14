@@ -271,11 +271,17 @@ func (c *SidecarConfig) getSidecarContainer(opts getSidecarContainerOpts) (*core
 	}
 
 	// Scheduler address could be empty if scheduler service is disabled
+	// TODO: remove in v1.16 when daprd no longer needs all scheduler pod
+	// addresses for serving.
 	if c.SchedulerAddress != "" {
 		env = append(env,
 			corev1.EnvVar{
 				Name:  injectorConsts.SchedulerHostAddressEnvVar,
 				Value: c.SchedulerAddress,
+			},
+			corev1.EnvVar{
+				Name:  injectorConsts.SchedulerHostAddressDNSAEnvVar,
+				Value: c.SchedulerAddressDNSA,
 			},
 		)
 	}
