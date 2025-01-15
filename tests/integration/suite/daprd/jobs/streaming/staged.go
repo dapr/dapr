@@ -115,11 +115,27 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 	t.Cleanup(func() { s.daprdB.Cleanup(t) })
 	s.daprdB.WaitUntilRunning(t, ctx)
 
+	numOf := func(ss []string, k string) int {
+		var j int
+		for _, s := range ss {
+			if s == k {
+				j++
+			}
+		}
+
+		return j
+	}
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"test", "test", "test2"}, s.triggered.Slice())
+		// Allow for greater that three "test"s because a trigger may have failed
+		// on the backend due to scheduler shutting down during tick execution.
+		assert.GreaterOrEqual(c, numOf(s.triggered.Slice(), "test"), 2)
+		assert.Contains(t, s.triggered.Slice(), "test2")
 	}, 10*time.Second, 10*time.Millisecond)
 
+	got := s.triggered.Slice()
+
 	time.Sleep(2 * time.Second)
-	assert.ElementsMatch(t, []string{"test", "test", "test2"}, s.triggered.Slice())
+	assert.ElementsMatch(t, got, s.triggered.Slice())
 	s.daprdB.Cleanup(t)
 }
