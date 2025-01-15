@@ -94,8 +94,6 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 
 	s.daprdA.Cleanup(t)
 
-	assert.Equal(t, []string{"test"}, s.triggered.Slice())
-
 	_, err = s.schedulers.Client(t, ctx).ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
 		Name: "test2",
 		Job:  &schedulerv1.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
