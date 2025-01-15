@@ -55,3 +55,7 @@ func GetHostAddress() (string, error) {
 	defer conn.Close()
 	return conn.LocalAddr().(*net.UDPAddr).IP.String(), nil
 }
+
+func IsLocalhost(addr string) bool {
+	return addr == "localhost" || addr == "127.0.0.1" || addr == "[::1]" || addr == "::1"
+}

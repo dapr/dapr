@@ -96,7 +96,7 @@ func (a *Universal) scheduleJob(ctx context.Context, job *runtimev1pb.Job) (*run
 	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	client, err := a.schedulerClients.Next(ctx)
+	client, err := a.scheduler.Next(ctx)
 	if err != nil {
 		a.logger.Errorf("Error getting scheduler client: %s", err)
 		return &runtimev1pb.ScheduleJobResponse{}, apierrors.SchedulerScheduleJob(errMetadata, err)
@@ -138,7 +138,7 @@ func (a *Universal) DeleteJobAlpha1(ctx context.Context, inReq *runtimev1pb.Dele
 	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	client, err := a.schedulerClients.Next(ctx)
+	client, err := a.scheduler.Next(ctx)
 	if err != nil {
 		a.logger.Errorf("Error getting scheduler client: %s", err)
 		return &runtimev1pb.DeleteJobResponse{}, apierrors.SchedulerDeleteJob(errMetadata, err)
@@ -180,7 +180,7 @@ func (a *Universal) GetJobAlpha1(ctx context.Context, inReq *runtimev1pb.GetJobR
 	schedCtx, cancel := context.WithTimeout(ctx, rpcTimeout)
 	defer cancel()
 
-	client, err := a.schedulerClients.Next(ctx)
+	client, err := a.scheduler.Next(ctx)
 	if err != nil {
 		a.logger.Errorf("Error getting scheduler client: %s", err)
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)

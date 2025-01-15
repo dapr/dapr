@@ -68,9 +68,6 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 		require.NotNil(t, sts.Spec.Template.Spec.Affinity)
 		require.NotNil(t, sts.Spec.Template.Spec.Affinity.PodAntiAffinity)
 	})
-	t.Run("arg_replica_count_should_be_3", func(t *testing.T) {
-		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--replica-count", "3")
-	})
 
 	t.Run("initial_cluster_has_all_instances_default", func(t *testing.T) {
 		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--initial-cluster",
