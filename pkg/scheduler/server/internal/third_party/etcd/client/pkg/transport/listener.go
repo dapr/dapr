@@ -19,22 +19,32 @@ package transport
 import (
 	"context"
 	"crypto/tls"
+	"fmt"
 	"net"
 	"strings"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"go.uber.org/zap"
 
 	"github.com/dapr/dapr/pkg/security"
 )
 
-// NewListener creates a new listener.
-func NewListener(addr, scheme string, tlsinfo *TLSInfo) (l net.Listener, err error) {
-	return newListener(addr, scheme, WithTLSInfo(tlsinfo))
-}
-
 // NewListenerWithOpts creates a new listener which accepts listener options.
-func NewListenerWithOpts(addr, scheme string, opts ...ListenerOption) (net.Listener, error) {
-	return newListener(addr, scheme, opts...)
+func NewListenerWithOpts(addr, scheme string, tlsinfo *TLSInfo, opts ...ListenerOption) (net.Listener, error) {
+	if tlsinfo.Security != nil {
+		opts = append(opts, WithTLSInfo(tlsinfo))
+	}
+
+	id, err := spiffeid.FromPath(tlsinfo.Security.ControlPlaneTrustDomain(), "/ns/"+tlsinfo.Security.ControlPlaneNamespace()+"/"+"dapr-scheduler")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create SPIFFE ID for server: %w", err)
+	}
+	l, err := newListener(addr, scheme, opts...)
+	if err != nil {
+		return l, err
+	}
+
+	return tlsinfo.Security.NetListenerID(l, id), err
 }
 
 func newListener(addr, scheme string, opts ...ListenerOption) (net.Listener, error) {
@@ -49,23 +59,9 @@ func newListener(addr, scheme string, opts ...ListenerOption) (net.Listener, err
 	if err != nil {
 		return nil, err
 	}
+
 	lnOpts.Listener = ln
-
-	if !lnOpts.IsTLS() {
-		return lnOpts.Listener, nil
-	}
-
-	return wrapTLS(scheme, lnOpts.tlsInfo, lnOpts.Listener)
-}
-
-func wrapTLS(scheme string, tlsinfo *TLSInfo, l net.Listener) (net.Listener, error) {
-	if scheme != "https" && scheme != "unixs" {
-		return l, nil
-	}
-	if tlsinfo != nil {
-		return NewTLSListener(l, tlsinfo)
-	}
-	return newTLSListener(l, tlsinfo, checkSAN)
+	return ln, err
 }
 
 func newKeepAliveListener(cfg *net.ListenConfig, addr string) (ln net.Listener, err error) {
@@ -99,14 +95,6 @@ func (info TLSInfo) ServerConfig() (*tls.Config, error) {
 	if err != nil {
 		return nil, err
 	}
-	if info.Logger == nil {
-		info.Logger = zap.NewNop()
-	}
-
-	cfg.ClientAuth = tls.RequireAndVerifyClientCert
-
-	// "h2" NextProtos is necessary for enabling HTTP2 for go's HTTP server
-	cfg.NextProtos = []string{"h2"}
 
 	return cfg, nil
 }
