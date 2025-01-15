@@ -182,19 +182,21 @@ func (s *Scheduler) Cleanup(t *testing.T) {
 }
 
 func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := client.HTTP(t)
+	cl := client.HTTP(t)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", s.healthzPort), nil)
-		require.NoError(t, err)
-		resp, err := client.Do(req)
-		if !assert.NoError(c, err) {
-			return
+		if err != nil {
+			return false
 		}
-		body, err := io.ReadAll(resp.Body)
-		assert.NoError(t, err)
-		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
-		assert.NoError(t, resp.Body.Close())
+
+		resp, err := cl.Do(req)
+		if err != nil {
+			return false
+		}
+
+		defer resp.Body.Close()
+		return resp.StatusCode == http.StatusOK
 	}, time.Second*10, 10*time.Millisecond)
 }
 

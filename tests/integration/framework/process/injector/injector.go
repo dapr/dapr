@@ -138,18 +138,20 @@ func (i *Injector) Cleanup(t *testing.T) {
 }
 
 func (i *Injector) WaitUntilRunning(t *testing.T, ctx context.Context) {
-	client := client.HTTP(t)
-	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+	cl := client.HTTP(t)
+	assert.Eventually(t, func() bool {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://localhost:%d/healthz", i.healthzPort), nil)
-		if !assert.NoError(t, err) {
-			return
+		if err != nil {
+			return false
 		}
-		resp, err := client.Do(req)
-		if !assert.NoError(t, err) {
-			return
+
+		resp, err := cl.Do(req)
+		if err != nil {
+			return false
 		}
-		assert.NoError(t, resp.Body.Close())
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		defer resp.Body.Close()
+		return http.StatusOK == resp.StatusCode
 	}, time.Second*30, 100*time.Millisecond)
 }
 

@@ -131,17 +131,22 @@ func (p *Placement) Cleanup(t *testing.T) {
 
 func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	t.Helper()
+	cl := client.HTTP(t)
 
-	client := client.HTTP(t)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", p.healthzPort), nil)
-	require.NoError(t, err)
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := client.Do(req)
-		if assert.NoError(c, err) {
-			defer resp.Body.Close()
-			assert.Equal(c, http.StatusOK, resp.StatusCode)
+	assert.Eventually(t, func() bool {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", p.healthzPort), nil)
+		if err != nil {
+			return false
 		}
+
+		resp, err := cl.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		return resp.StatusCode == http.StatusOK
 	}, time.Second*25, 10*time.Millisecond)
+
 }
 
 func (p *Placement) ID() string {

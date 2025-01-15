@@ -201,26 +201,33 @@ func (d *Daprd) WaitUntilTCPReady(t *testing.T, ctx context.Context) {
 func (d *Daprd) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	t.Helper()
 
-	client := client.HTTP(t)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
-	require.NoError(t, err)
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := client.Do(req)
-		if assert.NoError(c, err) {
-			defer resp.Body.Close()
-			assert.Equal(c, http.StatusNoContent, resp.StatusCode)
+	cl := client.HTTP(t)
+
+	require.Eventually(t, func() bool {
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
+		if err != nil {
+			return false
 		}
+
+		resp, err := cl.Do(req)
+		if err != nil {
+			return false
+		}
+		defer resp.Body.Close()
+		return http.StatusNoContent == resp.StatusCode
 	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 	switch d.appProtocol {
 	case "http":
-		client := client.HTTP(t)
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
-		require.NoError(t, err)
+		cl := client.HTTP(t)
 		assert.Eventually(t, func() bool {
-			resp, err := client.Do(req)
+			req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/v1.0/healthz", d.HTTPAddress()), nil)
+			if err != nil {
+				return false
+			}
+			resp, err := cl.Do(req)
 			if err != nil {
 				return false
 			}
@@ -234,13 +241,12 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			conn, err := grpc.Dial(d.AppAddress(t),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock())
-			if conn != nil {
-				defer conn.Close()
-			}
 
 			if err != nil {
 				return false
 			}
+			defer conn.Close()
+
 			in := emptypb.Empty{}
 			out := rtv1.HealthCheckResponse{}
 			err = conn.Invoke(ctx, "/dapr.proto.runtime.v1.AppCallbackHealthCheck/HealthCheck", &in, &out)
