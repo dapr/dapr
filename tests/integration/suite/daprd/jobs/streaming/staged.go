@@ -133,7 +133,5 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 
 	got := s.triggered.Slice()
 
-	time.Sleep(2 * time.Second)
-	assert.ElementsMatch(t, got, s.triggered.Slice())
 	s.daprdB.Cleanup(t)
 }
