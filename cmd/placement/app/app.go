@@ -20,7 +20,7 @@ import (
 	"github.com/dapr/dapr/cmd/placement/options"
 	"github.com/dapr/dapr/pkg/buildinfo"
 	"github.com/dapr/dapr/pkg/healthz"
-	"github.com/dapr/dapr/pkg/healthz/server"
+	healthzserver "github.com/dapr/dapr/pkg/healthz/server"
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
 	"github.com/dapr/dapr/pkg/placement"
@@ -103,11 +103,14 @@ func Run() {
 	placementOpts.SetMinAPILevel(opts.MinAPILevel)
 	placementOpts.SetMaxAPILevel(opts.MaxAPILevel)
 
-	placementService := placement.New(placementOpts)
+	placementService, err := placement.New(placementOpts)
+	if err != nil {
+		log.Fatal("failed to create placement service: ", err)
+	}
 
-	var healthzHandlers []server.Handler
+	var healthzHandlers []healthzserver.Handler
 	if opts.MetadataEnabled {
-		healthzHandlers = append(healthzHandlers, server.Handler{
+		healthzHandlers = append(healthzHandlers, healthzserver.Handler{
 			Path: "/placement/state",
 			Getter: func() ([]byte, error) {
 				var tables *placement.PlacementTables
@@ -120,7 +123,7 @@ func Run() {
 		})
 	}
 
-	healthServer := server.New(server.Options{
+	healthSrv := healthzserver.New(healthzserver.Options{
 		Log:      log,
 		Port:     opts.HealthzPort,
 		Healthz:  healthz,
@@ -130,7 +133,7 @@ func Run() {
 	err = concurrency.NewRunnerManager(
 		secProvider.Run,
 		metricsExporter.Start,
-		healthServer.Start,
+		healthSrv.Start,
 		placementService.Run,
 	).Run(ctx)
 	if err != nil {

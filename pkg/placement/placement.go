@@ -193,10 +193,10 @@ func (o *ServiceOpts) SetMaxAPILevel(apiLevel int) {
 }
 
 // New returns a new placement service.
-func New(opts ServiceOpts) *Service {
+func New(opts ServiceOpts) (*Service, error) {
 	raftServer, err := raft.New(opts.Raft)
 	if err != nil {
-		log.Fatal("failed to create raft server: ", err)
+		return nil, fmt.Errorf("failed to create raft server: %w", err)
 	}
 
 	return &Service{
@@ -217,7 +217,7 @@ func New(opts ServiceOpts) *Service {
 		port:                opts.Port,
 		listenAddress:       opts.ListenAddress,
 		htarget:             opts.Healthz.AddTarget(),
-	}
+	}, nil
 }
 
 func (p *Service) Run(ctx context.Context) error {
@@ -504,6 +504,14 @@ func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
 }
 
 func (p *Service) handleErrorOnStream(err error, hostName string, isActorHost *atomic.Bool, namespace string) error {
+
+	// Unwrap and check if it's a gRPC status error
+	if st, ok := status.FromError(err); ok {
+		if st.Code() == codes.Canceled {
+			err = context.Canceled
+		}
+	}
+
 	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 		log.Infof("Stream connection for app %s is disconnected gracefully: %s", hostName, err)
 	} else {
