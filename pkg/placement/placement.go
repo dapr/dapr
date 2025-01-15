@@ -504,7 +504,6 @@ func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
 }
 
 func (p *Service) handleErrorOnStream(err error, hostName string, isActorHost *atomic.Bool, namespace string) error {
-
 	// Unwrap and check if it's a gRPC status error
 	if st, ok := status.FromError(err); ok {
 		if st.Code() == codes.Canceled {
