@@ -15,6 +15,7 @@ package state
 
 import (
 	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"time"
@@ -24,6 +25,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/state"
+	"github.com/dapr/durabletask-go/api/protos"
 	"github.com/dapr/durabletask-go/backend"
 	"github.com/dapr/kit/logger"
 )
@@ -58,6 +60,13 @@ type State struct {
 	inboxRemovedCount   int
 	historyAddedCount   int
 	historyRemovedCount int
+}
+
+// TODO: @joshvanl: remove in v1.16
+type legacyWorkflowStateMetadata struct {
+	InboxLength   uint64
+	HistoryLength uint64
+	Generation    uint64
 }
 
 func NewState(opts Options) *State {
@@ -139,21 +148,34 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 	// we're saving changes only to the workflow inbox.
 	// CONSIDER: Only save custom status if it has changed. However, need a way to track this.
 	if s.historyAddedCount > 0 || s.historyRemovedCount > 0 {
+		cs := s.CustomStatus
+		if cs == nil {
+			cs = &wrapperspb.StringValue{}
+		}
+		csProto, err := proto.Marshal(cs)
+		if err != nil {
+			return nil, err
+		}
 		req.Operations = append(req.Operations, api.TransactionalOperation{
 			Operation: api.Upsert,
-			Request:   api.TransactionalUpsert{Key: customStatusKey, Value: s.CustomStatus},
+			Request:   api.TransactionalUpsert{Key: customStatusKey, Value: csProto},
 		})
+	}
+
+	metaProto, err := proto.Marshal(&backend.WorkflowStateMetadata{
+		InboxLength:   uint64(len(s.Inbox)),
+		HistoryLength: uint64(len(s.History)),
+		Generation:    s.Generation,
+	})
+	if err != nil {
+		return nil, err
 	}
 
 	// Every time we save, we also update the metadata with information about the size of the history and inbox,
 	// as well as the generation of the workflow.
 	req.Operations = append(req.Operations, api.TransactionalOperation{
 		Operation: api.Upsert,
-		Request: api.TransactionalUpsert{Key: metadataKey, Value: &backend.WorkflowStateMetadata{
-			InboxLength:   uint64(len(s.Inbox)),
-			HistoryLength: uint64(len(s.History)),
-			Generation:    s.Generation,
-		}},
+		Request:   api.TransactionalUpsert{Key: metadataKey, Value: metaProto},
 	})
 
 	return req, nil
@@ -258,7 +280,6 @@ func addPurgeStateOperations(req *api.TransactionalRequest, keyPrefix string, ev
 
 func LoadWorkflowState(ctx context.Context, state state.Interface, actorID string, opts Options) (*State, error) {
 	loadStartTime := time.Now()
-	loadedRecords := 0
 
 	// Load metadata
 	req := api.GetStateRequest{
@@ -267,7 +288,6 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		Key:       metadataKey,
 	}
 	res, err := state.Get(ctx, &req)
-	loadedRecords++
 	if err != nil {
 		return nil, fmt.Errorf("failed to load workflow metadata: %w", err)
 	}
@@ -277,7 +297,16 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	}
 	var metadata backend.WorkflowStateMetadata
 	if err = proto.Unmarshal(res.Data, &metadata); err != nil {
-		return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
+		// TODO: @joshvanl: remove in v1.16
+		var metadataJSON legacyWorkflowStateMetadata
+		if jerr := json.Unmarshal(res.Data, &metadataJSON); jerr != nil {
+			return nil, fmt.Errorf("failed to unmarshal workflow metadata: %w", err)
+		}
+
+		wfLogger.Debugf("Loaded legacy workflow state metadata: %s", res.Data)
+		metadata.Generation = metadataJSON.Generation
+		metadata.InboxLength = metadataJSON.InboxLength
+		metadata.HistoryLength = metadataJSON.HistoryLength
 	}
 
 	// Load inbox, history, and custom status using a bulk request
@@ -311,14 +340,22 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		return nil, fmt.Errorf("failed to load workflow state: %w", err)
 	}
 
+	defer func() {
+		// TODO: @joshvanl: remove in v1.16 where we will no longer have legacy
+		// state parsing issues.
+		if recover() != nil {
+			wfLogger.Warnf("Found legacy workflow state, ignoring and overwriting with new storage API: %s", actorID)
+		}
+	}()
+
 	// Parse responses
-	loadedRecords += len(bulkRes)
 	var key string
 	for i := range metadata.GetInboxLength() {
 		key = getMultiEntryKeyName(inboxKeyPrefix, i)
 		if bulkRes[key] == nil {
 			return nil, fmt.Errorf("failed to load inbox state key '%s': not found", key)
 		}
+		wState.Inbox[i] = &protos.HistoryEvent{}
 		if err = proto.Unmarshal(bulkRes[key], wState.Inbox[i]); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
 		}
@@ -328,19 +365,25 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 		if bulkRes[key] == nil {
 			return nil, fmt.Errorf("failed to load history state key '%s': not found", key)
 		}
+		wState.History[i] = &protos.HistoryEvent{}
 		if err = proto.Unmarshal(bulkRes[key], wState.History[i]); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)
 		}
 	}
 
 	if len(bulkRes[customStatusKey]) > 0 {
+		wState.CustomStatus = &wrapperspb.StringValue{}
 		err = proto.Unmarshal(bulkRes[customStatusKey], wState.CustomStatus)
 		if err != nil {
-			return nil, fmt.Errorf("failed to unmarshal JSON from custom status key entry: %w", err)
+			// TODO: @famarting: remove in v1.16
+			err = proto.Unmarshal(bulkRes[customStatusKey], wState.CustomStatus)
+			if err != nil {
+				return nil, fmt.Errorf("failed to unmarshal custom status key entry: %w", err)
+			}
 		}
 	}
 
-	wfLogger.Infof("%s: loaded %d state records in %v", actorID, loadedRecords, time.Since(loadStartTime))
+	wfLogger.Infof("%s: loaded %d state records in %v", actorID, 1+len(bulkRes), time.Since(loadStartTime))
 	return wState, nil
 }
 
