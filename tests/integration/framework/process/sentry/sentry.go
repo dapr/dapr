@@ -174,7 +174,6 @@ func (s *Sentry) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusOK
 	}, time.Second*20, 10*time.Millisecond)
-
 }
 
 func (s *Sentry) TrustAnchorsFile(t *testing.T) string {

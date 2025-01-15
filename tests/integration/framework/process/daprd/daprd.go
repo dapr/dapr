@@ -241,7 +241,6 @@ func (d *Daprd) WaitUntilAppHealth(t *testing.T, ctx context.Context) {
 			conn, err := grpc.Dial(d.AppAddress(t),
 				grpc.WithTransportCredentials(insecure.NewCredentials()),
 				grpc.WithBlock())
-
 			if err != nil {
 				return false
 			}

@@ -146,7 +146,6 @@ func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		defer resp.Body.Close()
 		return resp.StatusCode == http.StatusOK
 	}, time.Second*25, 10*time.Millisecond)
-
 }
 
 func (p *Placement) ID() string {
