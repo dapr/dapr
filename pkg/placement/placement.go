@@ -507,7 +507,7 @@ func (p *Service) handleErrorOnStream(err error, hostName string, isActorHost *a
 	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
 		log.Infof("Stream connection for app %s is disconnected gracefully: %s", hostName, err)
 	} else {
-		log.Infof("Stream connection for app %s is disconnected with the error: %v.", hostName, err)
+		log.Errorf("Stream connection for app %s is disconnected with the error: %v.", hostName, err)
 	}
 
 	if isActorHost.Load() {
