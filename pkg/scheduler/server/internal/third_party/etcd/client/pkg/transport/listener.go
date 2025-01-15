@@ -29,7 +29,7 @@ import (
 	"github.com/dapr/dapr/pkg/security"
 )
 
-// NewListenerWithOpts creates a new listener which accepts listener options.
+// NewListenerWithOpts creates a new creating a server-side listener which accepts listener options.
 func NewListenerWithOpts(addr, scheme string, tlsinfo *TLSInfo, opts ...ListenerOption) (net.Listener, error) {
 	if tlsinfo.Security != nil {
 		opts = append(opts, WithTLSInfo(tlsinfo))
@@ -39,7 +39,7 @@ func NewListenerWithOpts(addr, scheme string, tlsinfo *TLSInfo, opts ...Listener
 	if err != nil {
 		return nil, fmt.Errorf("failed to create SPIFFE ID for server: %w", err)
 	}
-	l, err := newListener(addr, scheme, opts...)
+	l, err := newListener(tlsinfo, addr, scheme, opts...)
 	if err != nil {
 		return l, err
 	}
@@ -47,7 +47,7 @@ func NewListenerWithOpts(addr, scheme string, tlsinfo *TLSInfo, opts ...Listener
 	return tlsinfo.Security.NetListenerID(l, id), err
 }
 
-func newListener(addr, scheme string, opts ...ListenerOption) (net.Listener, error) {
+func newListener(tlsinfo *TLSInfo, addr, scheme string, opts ...ListenerOption) (net.Listener, error) {
 	if scheme == "unix" || scheme == "unixs" {
 		// unix sockets via unix://laddr
 		return NewUnixListener(addr)
@@ -55,7 +55,7 @@ func newListener(addr, scheme string, opts ...ListenerOption) (net.Listener, err
 
 	lnOpts := newListenOpts(opts...)
 
-	ln, err := newKeepAliveListener(nil, addr)
+	ln, err := newKeepAliveListener(&lnOpts.ListenConfig, addr, tlsinfo)
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +64,7 @@ func newListener(addr, scheme string, opts ...ListenerOption) (net.Listener, err
 	return ln, err
 }
 
-func newKeepAliveListener(cfg *net.ListenConfig, addr string) (ln net.Listener, err error) {
+func newKeepAliveListener(cfg *net.ListenConfig, addr string, tlsinfo *TLSInfo) (ln net.Listener, err error) {
 	if cfg != nil {
 		ln, err = cfg.Listen(context.TODO(), "tcp", addr)
 	} else {
@@ -73,8 +73,11 @@ func newKeepAliveListener(cfg *net.ListenConfig, addr string) (ln net.Listener, 
 	if err != nil {
 		return
 	}
-
-	return NewKeepAliveListener(ln, "tcp", nil)
+	tlscfg, err := tlsinfo.ServerConfig()
+	if err != nil {
+		return
+	}
+	return NewKeepAliveListener(ln, "tcp", tlscfg)
 }
 
 type TLSInfo struct {

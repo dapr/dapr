@@ -92,7 +92,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		port:            fp.Port(t),
 		healthzPort:     fp.Port(t),
 		metricsPort:     fp.Port(t),
-		initialCluster:  uids + "=http://127.0.0.1:" + strconv.Itoa(fp.Port(t)),
 		etcdClientPorts: []string{uids + "=" + strconv.Itoa(fp.Port(t))},
 		namespace:       "default",
 	}
@@ -100,6 +99,12 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	for _, fopt := range fopts {
 		fopt(&opts)
 	}
+
+	scheme := "http"
+	if opts.sentry != nil {
+		scheme = "https"
+	}
+	opts.initialCluster = uids + "=" + scheme + "://127.0.0.1:" + strconv.Itoa(fp.Port(t))
 
 	var dataDir string
 	if opts.dataDir != nil {

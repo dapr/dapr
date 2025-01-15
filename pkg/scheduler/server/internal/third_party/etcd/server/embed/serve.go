@@ -13,6 +13,7 @@
 // limitations under the License.
 
 // grabbed https://raw.githubusercontent.com/etcd-io/etcd/refs/tags/v3.5.16/server/embed/serve.go
+
 package embed
 
 import (
@@ -134,8 +135,6 @@ func (sctx *serveCtx) serve(
 	default:
 		traffic = "grpc+http"
 	}
-
-	// cassie the below is somehow insecure if im setting mtls to be enabled... why?
 
 	if sctx.insecure {
 		var gs *grpc.Server
@@ -392,28 +391,6 @@ func (ac *accessController) ServeHTTP(rw http.ResponseWriter, req *http.Request)
 		req.URL.Path = strings.Replace(req.URL.Path, "/v3beta/", "/v3/", 1)
 	}
 
-	if ac.s.Cfg.ClientCertAuthEnabled && ac.s.Cfg.EnableGRPCGateway &&
-		ac.s.AuthStore().IsAuthEnabled() && strings.HasPrefix(req.URL.Path, "/v3/") {
-		for _, chains := range req.TLS.VerifiedChains {
-			if len(chains) < 1 {
-				continue
-			}
-			if len(chains[0].Subject.CommonName) != 0 {
-				http.Error(rw, "CommonName of client sending a request against gateway will be ignored and not used as expected", http.StatusBadRequest)
-				return
-			}
-		}
-	}
-	//if req.TLS == nil { // check origin if client connection is not secure
-	//	host := httputil.GetHostname(req)
-	//if !ac.s.AccessController.IsHostWhitelisted(host) {
-	//	ac.lg.Warn(
-	//		"rejecting HTTP request to prevent DNS rebinding attacks",
-	//		zap.String("host", host),
-	//	)
-	//	http.Error(rw, errCVE20185702(host), http.StatusMisdirectedRequest)
-	//	return
-	//}
 	if ac.s.Cfg.ClientCertAuthEnabled && ac.s.Cfg.EnableGRPCGateway &&
 		ac.s.AuthStore().IsAuthEnabled() && strings.HasPrefix(req.URL.Path, "/v3/") {
 		for _, chains := range req.TLS.VerifiedChains {

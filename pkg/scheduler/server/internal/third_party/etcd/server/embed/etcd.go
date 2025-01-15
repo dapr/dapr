@@ -521,7 +521,7 @@ func configurePeerListeners(cfg *Config) (peers []*peerListener, err error) {
 		}
 		peers[i] = &peerListener{close: func(context.Context) error { return nil }}
 		peers[i].Listener, err = transport.NewListenerWithOpts(u.Host, u.Scheme,
-			transport.WithTLSInfo(&cfg.PeerTLSInfo),
+			&cfg.PeerTLSInfo,
 			transport.WithSocketOpts(&cfg.SocketOpts),
 			transport.WithTimeout(rafthttp.ConnReadTimeout, rafthttp.ConnWriteTimeout),
 		)
@@ -615,21 +615,21 @@ func configureClientListeners(cfg *Config) (sctxs map[string]*serveCtx, err erro
 	}
 
 	for _, u := range cfg.ListenClientUrls {
-		addr, secure, network := resolveUrl(u)
-		
+		addr, _, network := resolveUrl(u)
+
 		sctx := sctxs[addr]
 		if sctx == nil {
 			sctx = newServeCtx(cfg.logger)
 			sctxs[addr] = sctx
 		}
-		sctx.secure = sctx.secure || secure
-		sctx.insecure = sctx.insecure || !secure
+		sctx.secure = cfg.ClientTLSInfo.Security.MTLSEnabled()
+		sctx.insecure = !cfg.ClientTLSInfo.Security.MTLSEnabled()
 		sctx.scheme = u.Scheme
 		sctx.addr = addr
 		sctx.network = network
 	}
 	for _, u := range cfg.ListenClientHttpUrls {
-		addr, secure, network := resolveUrl(u)
+		addr, _, network := resolveUrl(u)
 
 		sctx := sctxs[addr]
 		if sctx == nil {
@@ -638,8 +638,8 @@ func configureClientListeners(cfg *Config) (sctxs map[string]*serveCtx, err erro
 		} else if !sctx.httpOnly {
 			return nil, fmt.Errorf("cannot bind both --client-listen-urls and --client-listen-http-urls on the same url %s", u.String())
 		}
-		sctx.secure = sctx.secure || secure
-		sctx.insecure = sctx.insecure || !secure
+		sctx.secure = cfg.ClientTLSInfo.Security.MTLSEnabled()
+		sctx.insecure = !cfg.ClientTLSInfo.Security.MTLSEnabled()
 		sctx.scheme = u.Scheme
 		sctx.addr = addr
 		sctx.network = network
@@ -647,7 +647,7 @@ func configureClientListeners(cfg *Config) (sctxs map[string]*serveCtx, err erro
 	}
 
 	for _, sctx := range sctxs {
-		if sctx.l, err = transport.NewListener(sctx.addr, sctx.scheme, &cfg.ClientTLSInfo); err != nil {
+		if sctx.l, err = transport.NewListenerWithOpts(sctx.addr, sctx.scheme, &cfg.ClientTLSInfo); err != nil {
 			return nil, err
 		}
 		// net.Listener will rewrite ipv4 0.0.0.0 to ipv6 [::], breaking
@@ -823,7 +823,7 @@ func (e *Etcd) createMetricsListener(murl url.URL) (net.Listener, error) {
 		}
 	}
 	return transport.NewListenerWithOpts(murl.Host, murl.Scheme,
-		transport.WithTLSInfo(tlsInfo),
+		tlsInfo,
 		transport.WithSocketOpts(&e.cfg.SocketOpts),
 	)
 }

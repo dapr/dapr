@@ -57,18 +57,23 @@ func config(opts Options) (*embed.Config, error) {
 	config.InitialCluster = strings.Join(opts.EtcdInitialPeers, ",")
 	config.MaxRequestBytes = math.MaxInt32
 
-	etcdURL, peerPort, err := peerHostAndPort(opts.EtcdID, opts.EtcdInitialPeers)
+	scheme := "http"
+	if opts.Security.MTLSEnabled() {
+		scheme = "https"
+	}
+
+	etcdURL, peerPort, err := peerHostAndPort(opts.EtcdID, scheme, opts.EtcdInitialPeers)
 	if err != nil {
 		return nil, fmt.Errorf("invalid format for initial cluster. Make sure to include 'http://' in Scheduler URL: %s", err)
 	}
 
 	config.AdvertisePeerUrls = []url.URL{{
-		Scheme: "http",
+		Scheme: scheme,
 		Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
 	}}
 
 	config.AdvertiseClientUrls = []url.URL{{
-		Scheme: "http",
+		Scheme: scheme,
 		Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
 	}}
 
@@ -78,16 +83,16 @@ func config(opts Options) (*embed.Config, error) {
 		config.Dir = opts.DataDir
 		etcdIP := "0.0.0.0"
 		config.ListenPeerUrls = []url.URL{{
-			Scheme: "http",
+			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdIP, peerPort),
 		}}
 		config.ListenClientUrls = []url.URL{{
-			Scheme: "http",
+			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdIP, clientPorts[opts.EtcdID]),
 		}}
 		if len(clientHTTPPorts) > 0 {
 			config.ListenClientHttpUrls = []url.URL{{
-				Scheme: "http",
+				Scheme: scheme,
 				Host:   fmt.Sprintf("%s:%s", etcdIP, clientHTTPPorts[opts.EtcdID]),
 			}}
 		}
@@ -102,16 +107,16 @@ func config(opts Options) (*embed.Config, error) {
 		config.Dir = filepath.Join(opts.DataDir, security.CurrentNamespace()+"-"+opts.EtcdID)
 
 		config.ListenPeerUrls = []url.URL{{
-			Scheme: "http",
+			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
 		}}
 		config.ListenClientUrls = []url.URL{{
-			Scheme: "http",
+			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
 		}}
 		if len(clientHTTPPorts) > 0 {
 			config.ListenClientHttpUrls = []url.URL{{
-				Scheme: "http",
+				Scheme: scheme,
 				Host:   fmt.Sprintf("%s:%s", etcdURL, clientHTTPPorts[opts.EtcdID]),
 			}}
 		}
@@ -133,14 +138,14 @@ func config(opts Options) (*embed.Config, error) {
 	return config, nil
 }
 
-func peerHostAndPort(name string, initialCluster []string) (string, string, error) {
+func peerHostAndPort(name, scheme string, initialCluster []string) (string, string, error) {
 	for _, scheduler := range initialCluster {
 		idAndAddress := strings.SplitN(scheduler, "=", 2)
 		if len(idAndAddress) != 2 {
 			return "", "", fmt.Errorf("incorrect format for initialPeerList: %s. Should contain <id>=http://<ip>:<peer-port>", initialCluster)
 		}
 
-		id := strings.TrimPrefix(idAndAddress[0], "http://")
+		id := strings.TrimPrefix(idAndAddress[0], scheme+"://")
 		if id == name {
 			address, err := url.Parse(idAndAddress[1])
 			if err != nil {

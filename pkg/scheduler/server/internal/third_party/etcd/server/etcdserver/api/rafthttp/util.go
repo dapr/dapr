@@ -43,7 +43,7 @@ var (
 // NewListener returns a listener for raft message transfer between peers.
 // It uses timeout listener to identify broken streams promptly.
 func NewListener(u url.URL, tlsinfo *transport.TLSInfo) (net.Listener, error) {
-	return transport.NewListenerWithOpts(u.Host, u.Scheme, transport.WithTLSInfo(tlsinfo), transport.WithTimeout(osrafthttp.ConnReadTimeout, osrafthttp.ConnWriteTimeout))
+	return transport.NewListenerWithOpts(u.Host, u.Scheme, tlsinfo, transport.WithTimeout(osrafthttp.ConnReadTimeout, osrafthttp.ConnWriteTimeout))
 }
 
 // NewRoundTripper returns a roundTripper used to send requests

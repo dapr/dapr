@@ -16,10 +16,13 @@ package transport
 
 import (
 	"context"
+	"fmt"
 	"net"
 	"net/http"
 	"strings"
 	"time"
+
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 )
 
 type unixTransport struct{ *http.Transport }
@@ -42,14 +45,16 @@ func NewTransport(info TLSInfo, dialtimeoutd time.Duration) (*http.Transport, er
 		TLSClientConfig:     cfg,
 	}
 
-	dialer := &net.Dialer{
-		Timeout:   dialtimeoutd,
-		KeepAlive: 30 * time.Second,
+	id, err := spiffeid.FromPath(info.Security.ControlPlaneTrustDomain(), "/ns/"+info.Security.ControlPlaneNamespace()+"/"+"dapr-scheduler")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create SPIFFE ID for server: %w", err)
 	}
 
 	dialContext := func(ctx context.Context, net, addr string) (net.Conn, error) {
-		return dialer.DialContext(ctx, "unix", addr)
+		dialer := info.Security.NetDialerID(ctx, id, dialtimeoutd)
+		return dialer("unix", addr)
 	}
+
 	tu := &http.Transport{
 		Proxy:               http.ProxyFromEnvironment,
 		DialContext:         dialContext,
@@ -57,7 +62,7 @@ func NewTransport(info TLSInfo, dialtimeoutd time.Duration) (*http.Transport, er
 		TLSClientConfig:     cfg,
 		// Cost of reopening connection on sockets is low, and they are mostly used in testing.
 		// Long living unix-transport connections were leading to 'leak' test flakes.
-		// Alternativly the returned Transport (t) should override CloseIdleConnections to
+		// Alternatively the returned Transport (t) should override CloseIdleConnections to
 		// forward it to 'tu' as well.
 		IdleConnTimeout: time.Microsecond,
 	}
