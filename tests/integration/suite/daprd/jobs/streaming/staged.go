@@ -131,7 +131,5 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 		assert.Contains(t, s.triggered.Slice(), "test2")
 	}, 10*time.Second, 10*time.Millisecond)
 
-	got := s.triggered.Slice()
-
 	s.daprdB.Cleanup(t)
 }
