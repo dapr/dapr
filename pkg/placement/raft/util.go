@@ -16,6 +16,7 @@ package raft
 import (
 	"bytes"
 	"errors"
+	"fmt"
 	"os"
 
 	"github.com/hashicorp/go-msgpack/v2/codec"
@@ -61,12 +62,12 @@ func unmarshalMsgPack(in []byte, out interface{}) error {
 	return dec.Decode(out)
 }
 
-func raftAddressForID(id string, nodes []PeerInfo) string {
+func raftAddressForID(id string, nodes []PeerInfo) (string, error) {
 	for _, node := range nodes {
 		if node.ID == id {
-			return node.Address
+			return node.Address, nil
 		}
 	}
 
-	return ""
+	return "", fmt.Errorf("address for node %s not found in raft peers %s", id, nodes)
 }

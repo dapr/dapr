@@ -194,9 +194,9 @@ func (o *ServiceOpts) SetMaxAPILevel(apiLevel int) {
 
 // New returns a new placement service.
 func New(opts ServiceOpts) *Service {
-	raftServer := raft.New(opts.Raft)
-	if raftServer == nil {
-		log.Fatal("Failed to create raft server.")
+	raftServer, err := raft.New(opts.Raft)
+	if err != nil {
+		log.Fatal("failed to create raft server: ", err)
 	}
 
 	return &Service{

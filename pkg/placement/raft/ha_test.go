@@ -253,7 +253,7 @@ func TestRaftHA(t *testing.T) {
 func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-chan struct{}, context.CancelFunc) {
 	clock := clocktesting.NewFakeClock(time.Now())
 
-	srv := New(Options{
+	srv, err := New(Options{
 		ID:           fmt.Sprintf("mynode-%d", nodeID),
 		InMem:        true,
 		Peers:        peers,
@@ -275,6 +275,7 @@ func createRaftServer(t *testing.T, nodeID int, peers []PeerInfo) (*Server, <-ch
 		Security: fake.New(),
 		Healthz:  healthz.New(),
 	})
+	require.NoError(t, err)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
