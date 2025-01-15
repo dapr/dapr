@@ -27,11 +27,8 @@ import (
 // that the FSM state reflects all queued writes.
 const barrierWriteTimeout = 2 * time.Minute
 
-// MonitorLeadership is used to monitor if we acquire or lose our role
-// as the leader in the Raft cluster. There is some work the leader is
-// expected to do, so we must react to changes
-//
-// reference: https://github.com/hashicorp/consul/blob/master/agent/consul/leader.go
+// MonitorLeadership is used to monitor leadership changes in the Raft cluster
+// so we can update the leadership status of the Placement server
 func (p *Service) MonitorLeadership(ctx context.Context) error {
 	var leaderLoopWg sync.WaitGroup
 	var leaderCtx context.Context
@@ -79,21 +76,21 @@ func (p *Service) MonitorLeadership(ctx context.Context) error {
 		log.Info("raft cluster leadership lost", p.raftNode.GetID())
 	}
 
-	wasLeader := false
+	currentLeadershipStatus := false
 	for {
 		select {
-		case isLeader := <-raftLeaderCh:
-			monitoring.RecordRaftPlacementLeaderStatus(isLeader)
+		case newLeadershipStatus := <-raftLeaderCh:
+			monitoring.RecordRaftPlacementLeaderStatus(newLeadershipStatus)
 
-			if wasLeader != isLeader {
+			if currentLeadershipStatus != newLeadershipStatus {
 				// Regular leadership change (node acquired or lost leadership)
-				wasLeader = isLeader
-				if isLeader {
+				currentLeadershipStatus = newLeadershipStatus
+				if newLeadershipStatus {
 					startLeaderLoop()
 				} else {
 					stopLeaderLoop()
 				}
-			} else if wasLeader && isLeader {
+			} else if currentLeadershipStatus && newLeadershipStatus {
 				// Leadership Flapping:
 				// Server lost and then gained leadership shortly after
 				//
