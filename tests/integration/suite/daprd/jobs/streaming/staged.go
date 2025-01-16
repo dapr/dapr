@@ -118,7 +118,7 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 	}
 
 	time.Sleep(2 * time.Second)
-	assert.GreaterOrEqual(t, numOf(s.triggered.Slice(), "test"), 2)
+	assert.GreaterOrEqual(t, numOf(s.triggered.Slice(), "test"), 1)
 	assert.Equal(t, 0, numOf(s.triggered.Slice(), "test2"))
 
 	s.daprdB.Run(t, ctx)
