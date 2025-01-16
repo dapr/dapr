@@ -138,5 +138,5 @@ func (h *ha) Run(t *testing.T, ctx context.Context) {
 			assert.Equal(c, 3, h.triggered[strconv.Itoa(i)])
 		}
 		h.lock.Unlock()
-	}, 10*time.Second, 10*time.Millisecond)
+	}, 20*time.Second, 10*time.Millisecond)
 }

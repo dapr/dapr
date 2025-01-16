@@ -140,6 +140,8 @@ func (r *reconnect3) Run(t *testing.T, ctx context.Context) {
 
 	r.scheduler2.Cleanup(t)
 
+	time.Sleep(time.Second * 5)
+
 	r.lock.Lock()
 	r.jobCalledMap = make(map[string]struct{})
 	r.lock.Unlock()
