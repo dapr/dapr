@@ -18,6 +18,7 @@ import (
 	"crypto/x509"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/require"
 )
@@ -27,6 +28,7 @@ type options struct {
 	handler      http.Handler
 	handlerFuncs map[string]http.HandlerFunc
 	tlsConfig    *tls.Config
+	cleanupDelay *time.Duration
 }
 
 func WithHandler(handler http.Handler) Option {
@@ -74,5 +76,13 @@ func WithMTLS(t *testing.T, ca, cert, key []byte) Option {
 		}
 
 		o.tlsConfig = tlsConfig
+	}
+}
+
+// WithCleanupDelay sets the delay after shutdown and before finishing cleanup
+// Useful for tests that need to wait for a graceful shutdown that might be running in the background
+func WithCleanupDelay(cleanupDelay time.Duration) Option {
+	return func(o *options) {
+		o.cleanupDelay = &cleanupDelay
 	}
 }

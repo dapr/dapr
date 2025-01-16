@@ -43,8 +43,9 @@ func init() {
 }
 
 type duetime struct {
-	daprd *daprd.Daprd
-	place *placement.Placement
+	daprd     *daprd.Daprd
+	place     *placement.Placement
+	scheduler *scheduler.Scheduler
 
 	reminderCalled     atomic.Int64
 	stopReminderCalled atomic.Int64
@@ -81,23 +82,24 @@ spec:
 	})
 	handler.HandleFunc("/actors/myactortype/myactorid/method/foo", func(w http.ResponseWriter, r *http.Request) {})
 
-	scheduler := scheduler.New(t)
+	d.scheduler = scheduler.New(t)
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
 	d.place = placement.New(t)
 	d.daprd = daprd.New(t,
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(d.place.Address()),
 		daprd.WithAppPort(srv.Port()),
-		daprd.WithSchedulerAddresses(scheduler.Address()),
+		daprd.WithSchedulerAddresses(d.scheduler.Address()),
 		daprd.WithConfigs(configFile),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(scheduler, d.place, srv, d.daprd),
+		framework.WithProcesses(d.scheduler, d.place, srv, d.daprd),
 	}
 }
 
 func (d *duetime) Run(t *testing.T, ctx context.Context) {
+	d.scheduler.WaitUntilRunning(t, ctx)
 	d.place.WaitUntilRunning(t, ctx)
 	d.daprd.WaitUntilRunning(t, ctx)
 

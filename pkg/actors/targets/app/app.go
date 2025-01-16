@@ -264,7 +264,21 @@ func (a *app) Deactivate(ctx context.Context) error {
 		WithContentType(invokev1.ProtobufContentType)
 	defer req.Close()
 
-	resp, err := a.appChannel.InvokeMethod(ctx, req, "")
+	policyDef := a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries)
+
+	if policyDef != nil && !policyDef.HasRetries() {
+		req.WithReplay(true)
+	}
+
+	policyRunner := resiliency.NewRunnerWithOptions(ctx, policyDef,
+		resiliency.RunnerOpts[*invokev1.InvokeMethodResponse]{
+			Disposer: resiliency.DisposerCloser[*invokev1.InvokeMethodResponse],
+		},
+	)
+
+	resp, err := policyRunner(func(ctx context.Context) (*invokev1.InvokeMethodResponse, error) {
+		return a.appChannel.InvokeMethod(ctx, req, "")
+	})
 	if err != nil {
 		diag.DefaultMonitoring.ActorDeactivationFailed(a.actorType, "invoke")
 		return err

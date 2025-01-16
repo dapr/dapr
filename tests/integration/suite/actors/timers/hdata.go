@@ -44,6 +44,7 @@ func init() {
 type hdata struct {
 	daprd *daprd.Daprd
 	place *placement.Placement
+	sched *scheduler.Scheduler
 
 	lock sync.Mutex
 	data map[string]chan string
@@ -72,21 +73,22 @@ func (h *hdata) Setup(t *testing.T) []framework.Option {
 	handler.HandleFunc("/actors/myactortype/{id}/method/foo", func(w nethttp.ResponseWriter, r *nethttp.Request) {})
 
 	srv := prochttp.New(t, prochttp.WithHandler(handler))
-	sched := scheduler.New(t)
+	h.sched = scheduler.New(t)
 	h.place = placement.New(t)
 	h.daprd = daprd.New(t,
-		daprd.WithScheduler(sched),
+		daprd.WithScheduler(h.sched),
 		daprd.WithInMemoryActorStateStore("mystore"),
 		daprd.WithPlacementAddresses(h.place.Address()),
 		daprd.WithAppPort(srv.Port()),
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(sched, h.place, srv, h.daprd),
+		framework.WithProcesses(h.sched, h.place, srv, h.daprd),
 	}
 }
 
 func (h *hdata) Run(t *testing.T, ctx context.Context) {
+	h.sched.WaitUntilRunning(t, ctx)
 	h.place.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 

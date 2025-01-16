@@ -15,7 +15,6 @@ package scheduler
 
 import (
 	"context"
-	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -54,8 +53,9 @@ type remote struct {
 	actorIDsNum int
 	actorIDs    []string
 
-	lock         sync.Mutex
-	methodcalled atomic.Value
+	lock           sync.Mutex
+	methodcalled   atomic.Value
+	actorIDsCalled []string
 }
 
 func (r *remote) Setup(t *testing.T) []framework.Option {
@@ -75,7 +75,7 @@ spec:
     enabled: true`), 0o600))
 
 	r.actorIDsNum = 500
-	r.methodcalled.Store(make([]string, 0, r.actorIDsNum))
+	r.actorIDsCalled = make([]string, 0, r.actorIDsNum)
 	r.actorIDs = make([]string, r.actorIDsNum)
 	for i := range r.actorIDsNum {
 		uid, err := uuid.NewUUID()
@@ -92,17 +92,14 @@ spec:
 			w.WriteHeader(http.StatusOK)
 		})
 
-		for _, id := range r.actorIDs {
-			handler.HandleFunc("/actors/myactortype/"+id, func(http.ResponseWriter, *http.Request) {
-			})
-			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/remind/remindermethod", id), func(http.ResponseWriter, *http.Request) {
-				r.lock.Lock()
-				defer r.lock.Unlock()
-				r.methodcalled.Store(append(r.methodcalled.Load().([]string), id))
-				called.Add(1)
-			})
-			handler.HandleFunc(fmt.Sprintf("/actors/myactortype/%s/method/foo", id), func(http.ResponseWriter, *http.Request) {})
-		}
+		handler.HandleFunc("DELETE /actors/myactortype/{id}", func(http.ResponseWriter, *http.Request) {})
+		handler.HandleFunc("PUT /actors/myactortype/{id}/method/remind/remindermethod", func(rw http.ResponseWriter, req *http.Request) {
+			r.lock.Lock()
+			defer r.lock.Unlock()
+			r.actorIDsCalled = append(r.actorIDsCalled, req.PathValue("id"))
+			called.Add(1)
+		})
+		handler.HandleFunc("GET /actors/myactortype/{id}/method/foo", func(http.ResponseWriter, *http.Request) {})
 
 		return prochttp.New(t, prochttp.WithHandler(handler))
 	}
@@ -128,7 +125,7 @@ spec:
 	)
 
 	return []framework.Option{
-		framework.WithProcesses(srv1, srv2, r.scheduler, r.place, r.daprd1, r.daprd2),
+		framework.WithProcesses(r.place, r.scheduler, srv1, r.daprd1, srv2, r.daprd2),
 	}
 }
 
@@ -153,11 +150,11 @@ func (r *remote) Run(t *testing.T, ctx context.Context) {
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
 		r.lock.Lock()
 		defer r.lock.Unlock()
-		assert.Len(c, r.methodcalled.Load().([]string), r.actorIDsNum)
+		assert.Len(c, r.actorIDsCalled, r.actorIDsNum)
 	}, time.Second*5, time.Millisecond*10)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, r.actorIDs, r.methodcalled.Load().([]string))
+		assert.ElementsMatch(c, r.actorIDs, r.actorIDsCalled)
 	}, time.Second*10, time.Millisecond*10)
 
 	assert.GreaterOrEqual(t, r.daprd1called.Load(), uint64(0))
