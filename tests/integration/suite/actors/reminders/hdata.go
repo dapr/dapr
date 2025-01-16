@@ -73,7 +73,7 @@ spec:
 	})
 	handler.HandleFunc("/actors/myactortype/{id}", func(w http.ResponseWriter, r *http.Request) {
 	})
-	handler.HandleFunc("/actors/myactortype/{id}/method/remind/remindermethod", func(w http.ResponseWriter, r *http.Request) {
+	handler.HandleFunc("/actors/myactortype/{id}/method/remind/", func(w http.ResponseWriter, r *http.Request) {
 		b, err := io.ReadAll(r.Body)
 		assert.NoError(t, err)
 		h.lock.Lock()
@@ -168,7 +168,7 @@ func (h *hdata) Run(t *testing.T, ctx context.Context) {
 				body += `,"data": ` + name
 			}
 			body += `}`
-			aurl := h.daprd.ActorReminderURL("myactortype", actorID, "remindermethod")
+			aurl := h.daprd.ActorReminderURL("myactortype", actorID, "remindermethod-http")
 			req, err := http.NewRequestWithContext(ctx, http.MethodPost, aurl, strings.NewReader(body))
 			require.NoError(t, err)
 
@@ -181,7 +181,7 @@ func (h *hdata) Run(t *testing.T, ctx context.Context) {
 			_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 				ActorType: "myactortype",
 				ActorId:   actorID,
-				Name:      "remindermethod",
+				Name:      "remindermethod-grpc",
 				DueTime:   "0s",
 				Data:      []byte(name),
 			})
