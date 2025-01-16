@@ -24,6 +24,7 @@ const (
 	Scheduler_DeleteJob_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/DeleteJob"
 	Scheduler_WatchJobs_FullMethodName   = "/dapr.proto.scheduler.v1.Scheduler/WatchJobs"
 	Scheduler_ListJobs_FullMethodName    = "/dapr.proto.scheduler.v1.Scheduler/ListJobs"
+	Scheduler_WatchHosts_FullMethodName  = "/dapr.proto.scheduler.v1.Scheduler/WatchHosts"
 )
 
 // SchedulerClient is the client API for Scheduler service.
@@ -41,6 +42,10 @@ type SchedulerClient interface {
 	WatchJobs(ctx context.Context, opts ...grpc.CallOption) (Scheduler_WatchJobsClient, error)
 	// ListJobs is used by the daprd sidecar to list all jobs.
 	ListJobs(ctx context.Context, in *ListJobsRequest, opts ...grpc.CallOption) (*ListJobsResponse, error)
+	// WatchHosts is used by the daprd sidecar to retrieve the list of active
+	// scheduler hosts so that it can connect to each. Receives an updated list
+	// on leadership changes.
+	WatchHosts(ctx context.Context, in *WatchHostsRequest, opts ...grpc.CallOption) (Scheduler_WatchHostsClient, error)
 }
 
 type schedulerClient struct {
@@ -118,6 +123,38 @@ func (c *schedulerClient) ListJobs(ctx context.Context, in *ListJobsRequest, opt
 	return out, nil
 }
 
+func (c *schedulerClient) WatchHosts(ctx context.Context, in *WatchHostsRequest, opts ...grpc.CallOption) (Scheduler_WatchHostsClient, error) {
+	stream, err := c.cc.NewStream(ctx, &Scheduler_ServiceDesc.Streams[1], Scheduler_WatchHosts_FullMethodName, opts...)
+	if err != nil {
+		return nil, err
+	}
+	x := &schedulerWatchHostsClient{stream}
+	if err := x.ClientStream.SendMsg(in); err != nil {
+		return nil, err
+	}
+	if err := x.ClientStream.CloseSend(); err != nil {
+		return nil, err
+	}
+	return x, nil
+}
+
+type Scheduler_WatchHostsClient interface {
+	Recv() (*WatchHostsResponse, error)
+	grpc.ClientStream
+}
+
+type schedulerWatchHostsClient struct {
+	grpc.ClientStream
+}
+
+func (x *schedulerWatchHostsClient) Recv() (*WatchHostsResponse, error) {
+	m := new(WatchHostsResponse)
+	if err := x.ClientStream.RecvMsg(m); err != nil {
+		return nil, err
+	}
+	return m, nil
+}
+
 // SchedulerServer is the server API for Scheduler service.
 // All implementations should embed UnimplementedSchedulerServer
 // for forward compatibility
@@ -133,6 +170,10 @@ type SchedulerServer interface {
 	WatchJobs(Scheduler_WatchJobsServer) error
 	// ListJobs is used by the daprd sidecar to list all jobs.
 	ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error)
+	// WatchHosts is used by the daprd sidecar to retrieve the list of active
+	// scheduler hosts so that it can connect to each. Receives an updated list
+	// on leadership changes.
+	WatchHosts(*WatchHostsRequest, Scheduler_WatchHostsServer) error
 }
 
 // UnimplementedSchedulerServer should be embedded to have forward compatible implementations.
@@ -153,6 +194,9 @@ func (UnimplementedSchedulerServer) WatchJobs(Scheduler_WatchJobsServer) error {
 }
 func (UnimplementedSchedulerServer) ListJobs(context.Context, *ListJobsRequest) (*ListJobsResponse, error) {
 	return nil, status.Errorf(codes.Unimplemented, "method ListJobs not implemented")
+}
+func (UnimplementedSchedulerServer) WatchHosts(*WatchHostsRequest, Scheduler_WatchHostsServer) error {
+	return status.Errorf(codes.Unimplemented, "method WatchHosts not implemented")
 }
 
 // UnsafeSchedulerServer may be embedded to opt out of forward compatibility for this service.
@@ -264,6 +308,27 @@ func _Scheduler_ListJobs_Handler(srv interface{}, ctx context.Context, dec func(
 	return interceptor(ctx, in, info, handler)
 }
 
+func _Scheduler_WatchHosts_Handler(srv interface{}, stream grpc.ServerStream) error {
+	m := new(WatchHostsRequest)
+	if err := stream.RecvMsg(m); err != nil {
+		return err
+	}
+	return srv.(SchedulerServer).WatchHosts(m, &schedulerWatchHostsServer{stream})
+}
+
+type Scheduler_WatchHostsServer interface {
+	Send(*WatchHostsResponse) error
+	grpc.ServerStream
+}
+
+type schedulerWatchHostsServer struct {
+	grpc.ServerStream
+}
+
+func (x *schedulerWatchHostsServer) Send(m *WatchHostsResponse) error {
+	return x.ServerStream.SendMsg(m)
+}
+
 // Scheduler_ServiceDesc is the grpc.ServiceDesc for Scheduler service.
 // It's only intended for direct use with grpc.RegisterService,
 // and not to be introspected or modified (even as a copy)
@@ -294,6 +359,11 @@ var Scheduler_ServiceDesc = grpc.ServiceDesc{
 			Handler:       _Scheduler_WatchJobs_Handler,
 			ServerStreams: true,
 			ClientStreams: true,
+		},
+		{
+			StreamName:    "WatchHosts",
+			Handler:       _Scheduler_WatchHosts_Handler,
+			ServerStreams: true,
 		},
 	},
 	Metadata: "dapr/proto/scheduler/v1/scheduler.proto",

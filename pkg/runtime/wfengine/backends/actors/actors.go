@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
 
@@ -385,6 +386,47 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 	return runtimeState, nil
 }
 
+func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.InstanceID, ch chan<- *backend.OrchestrationMetadata) error {
+	log.Debug("Actor backend streaming OrchestrationRuntimeStatus %s", id)
+
+	engine, err := abe.actors.Engine(ctx)
+	if err != nil {
+		return err
+	}
+
+	req := internalsv1pb.
+		NewInternalInvokeRequest(todo.WaitForRuntimeStatus).
+		WithActor(abe.workflowActorType, string(id)).
+		WithContentType(invokev1.ProtobufContentType)
+
+	stream := make(chan *internalsv1pb.InternalInvokeResponse, 1)
+
+	return concurrency.NewRunnerManager(
+		func(ctx context.Context) error {
+			return engine.CallStream(ctx, req, stream)
+		},
+		func(ctx context.Context) error {
+			for {
+				select {
+				case <-ctx.Done():
+					return ctx.Err()
+				case val := <-stream:
+					var meta backend.OrchestrationMetadata
+					if err := val.GetMessage().GetData().UnmarshalTo(&meta); err != nil {
+						log.Errorf("Failed to unmarshal orchestration metadata: %s", err)
+						return err
+					}
+					select {
+					case ch <- &meta:
+					case <-ctx.Done():
+						return ctx.Err()
+					}
+				}
+			}
+		},
+	).Run(ctx)
+}
+
 // GetOrchestrationWorkItem implements backend.Backend
 func (abe *Actors) GetOrchestrationWorkItem(ctx context.Context) (*backend.OrchestrationWorkItem, error) {
 	// Wait for the workflow actor to signal us with some work to do
@@ -434,5 +476,5 @@ func (*Actors) Stop(context.Context) error {
 
 // String displays the type information
 func (abe *Actors) String() string {
-	return "dapr.actors/v1-beta"
+	return "dapr.actors/v1"
 }

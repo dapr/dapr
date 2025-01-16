@@ -86,9 +86,8 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	opts := options{
 		logLevel:        "info",
-		listenAddress:   "localhost",
+		listenAddress:   "127.0.0.1",
 		id:              uids,
-		replicaCount:    1,
 		port:            fp.Port(t),
 		healthzPort:     fp.Port(t),
 		metricsPort:     fp.Port(t),
@@ -112,7 +111,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--id=" + opts.id,
-		"--replica-count=" + strconv.FormatUint(uint64(opts.replicaCount), 10),
 		"--port=" + strconv.Itoa(opts.port),
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
@@ -197,7 +195,7 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		assert.NoError(t, err)
 		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
 		assert.NoError(t, resp.Body.Close())
-	}, time.Second*10, 10*time.Millisecond)
+	}, time.Second*20, 10*time.Millisecond)
 }
 
 func (s *Scheduler) ID() string {
