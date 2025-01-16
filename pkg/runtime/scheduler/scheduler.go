@@ -92,7 +92,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		// connected.
 		stream, addresses, err := s.connSchedulerHosts(ctx)
 		if err != nil {
-			log.Errorf("Failed to connect to scheduler hosts: %s", err)
+			log.Errorf("Failed to connect to scheduler host: %s", err)
 			select {
 			case <-ctx.Done():
 				return ctx.Err()

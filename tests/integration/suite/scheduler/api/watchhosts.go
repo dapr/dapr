@@ -133,7 +133,9 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		var resp *schedulerv1pb.WatchHostsResponse
 		resp, err = stream.Recv()
-		require.NoError(t, err)
+		if !assert.NoError(c, err) {
+			return
+		}
 		got := make([]string, 0, 2)
 		for _, host := range resp.GetHosts() {
 			got = append(got, host.GetAddress())
