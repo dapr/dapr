@@ -170,7 +170,7 @@ func (l *ttl) Run(t *testing.T, ctx context.Context) {
 				ActorId:   "myactorid",
 				Key:       "mykey",
 			})
-			require.NoError(c, err)
+			assert.NoError(c, err)
 			assert.Empty(c, resp.GetData())
 			assert.Empty(c, resp.GetMetadata())
 		}, 5*time.Second, 10*time.Millisecond)

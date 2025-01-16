@@ -30,7 +30,6 @@ import (
 	"time"
 
 	"github.com/google/uuid"
-	"github.com/prometheus/common/expfmt"
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -49,6 +48,7 @@ import (
 	"github.com/dapr/dapr/tests/integration/framework/client"
 	"github.com/dapr/dapr/tests/integration/framework/process"
 	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+	"github.com/dapr/dapr/tests/integration/framework/process/metrics"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
 	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
 	"github.com/dapr/kit/ptr"
@@ -86,9 +86,8 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	opts := options{
 		logLevel:        "info",
-		listenAddress:   "localhost",
+		listenAddress:   "127.0.0.1",
 		id:              uids,
-		replicaCount:    1,
 		port:            fp.Port(t),
 		healthzPort:     fp.Port(t),
 		metricsPort:     fp.Port(t),
@@ -117,7 +116,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	args := []string{
 		"--log-level=" + opts.logLevel,
 		"--id=" + opts.id,
-		"--replica-count=" + strconv.FormatUint(uint64(opts.replicaCount), 10),
 		"--port=" + strconv.Itoa(opts.port),
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
@@ -202,7 +200,7 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		assert.NoError(t, err)
 		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
 		assert.NoError(t, resp.Body.Close())
-	}, time.Second*10, 10*time.Millisecond)
+	}, time.Second*20, 10*time.Millisecond)
 }
 
 func (s *Scheduler) ID() string {
@@ -304,52 +302,10 @@ func (s *Scheduler) MetricsAddress() string {
 }
 
 // Metrics returns a subset of metrics scraped from the metrics endpoint
-func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) map[string]float64 {
+func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics {
 	t.Helper()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()), nil)
-	require.NoError(t, err)
-
-	resp, err := s.httpClient.Do(req)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	// Extract the metrics
-	parser := expfmt.TextParser{}
-	metricFamilies, err := parser.TextToMetricFamilies(resp.Body)
-	require.NoError(t, err)
-	require.NoError(t, resp.Body.Close())
-
-	metrics := make(map[string]float64)
-	for _, mf := range metricFamilies {
-		for _, m := range mf.GetMetric() {
-			metricName := mf.GetName()
-			labels := ""
-			for _, l := range m.GetLabel() {
-				labels += "|" + l.GetName() + ":" + l.GetValue()
-			}
-			if counter := m.GetCounter(); counter != nil {
-				metrics[metricName+labels] = counter.GetValue()
-				continue
-			}
-			if gauge := m.GetGauge(); gauge != nil {
-				metrics[metricName+labels] = gauge.GetValue()
-				continue
-			}
-			h := m.GetHistogram()
-			if h == nil {
-				continue
-			}
-			for _, b := range h.GetBucket() {
-				bucketKey := metricName + "_bucket" + labels + "|le:" + strconv.FormatUint(uint64(b.GetUpperBound()), 10)
-				metrics[bucketKey] = float64(b.GetCumulativeCount())
-			}
-			metrics[metricName+"_count"+labels] = float64(h.GetSampleCount())
-			metrics[metricName+"_sum"+labels] = h.GetSampleSum()
-		}
-	}
-
-	return metrics
+	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
 
 func (s *Scheduler) ETCDClient(t *testing.T) *clientv3.Client {

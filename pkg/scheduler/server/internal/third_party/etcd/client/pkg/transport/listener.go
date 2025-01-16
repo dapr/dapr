@@ -94,22 +94,22 @@ type TLSInfo struct {
 
 // ServerConfig generates a tls.Config object for use by an HTTP server.
 func (info TLSInfo) ServerConfig() (*tls.Config, error) {
-	cfg, err := info.Security.MTLSServerConfig(info.Security.ControlPlaneTrustDomain(), info.Security.ControlPlaneNamespace(), "dapr-scheduler")
+	id, err := spiffeid.FromPath(info.Security.ControlPlaneTrustDomain(), "/ns/"+info.Security.ControlPlaneNamespace()+"/"+"dapr-scheduler")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create SPIFFE ID for server: %w", err)
 	}
 
-	return cfg, nil
+	return info.Security.MTLSServerConfig(id), nil
 }
 
 // ClientConfig generates a tls.Config object for use by an HTTP client.
 func (info TLSInfo) ClientConfig() (*tls.Config, error) {
-	cfg, err := info.Security.MTLSClientConfig(info.Security.ControlPlaneTrustDomain(), info.Security.ControlPlaneNamespace(), "dapr-scheduler")
+	id, err := spiffeid.FromPath(info.Security.ControlPlaneTrustDomain(), "/ns/"+info.Security.ControlPlaneNamespace()+"/"+"dapr-scheduler")
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("failed to create SPIFFE ID for server: %w", err)
 	}
 
-	return cfg, nil
+	return info.Security.MTLSClientConfig(id), nil
 }
 
 // IsClosedConnError returns true if the error is from closing listener, cmux.

@@ -31,7 +31,6 @@ import (
 const (
 	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
 	raftApplyCommandMaxConcurrency = 10
-	GRPCContextKeyAcceptVNodes     = "dapr-accept-vnodes"
 )
 
 // membershipChangeWorker is the worker to change the state of membership
@@ -149,16 +148,31 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 					p.disseminateLocks.Lock(op.host.Namespace)
 					defer p.disseminateLocks.Unlock(op.host.Namespace)
 
+					// ApplyCommand returns true only if the command changes the hashing table.
 					updateCount, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
+
 					if raftErr != nil {
 						log.Errorf("fail to apply command: %v", raftErr)
 					} else {
+						numActorTypesInNamespace := p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace)
+
+						var lastMemberInNamespace bool
 						if op.cmdType == raft.MemberRemove {
-							updateCount = p.handleDisconnectedMember(op, updateCount)
+							lastMemberInNamespace = p.isLastMemberInNamespace(op)
+							p.lastHeartBeat.Delete(op.host.NamespaceAndName())
+							if lastMemberInNamespace {
+								p.handleLastDisconnectedMemberInNamespace(op)
+							}
 						}
 
-						// ApplyCommand returns true only if the command changes the hashing table.
-						if updateCount {
+						if updateCount || lastMemberInNamespace {
+							monitoring.RecordActorRuntimesCount(numActorTypesInNamespace, op.host.Namespace)
+						}
+
+						// If the change is removing the last member in the namespace,
+						// we can skip the dissemination, because there are no more
+						// hosts in the namespace to disseminate to
+						if updateCount && !lastMemberInNamespace {
 							c, _ := p.memberUpdateCount.GetOrSet(op.host.Namespace, &atomic.Uint32{})
 							c.Add(1)
 
@@ -183,19 +197,17 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 	}
 }
 
-func (p *Service) handleDisconnectedMember(op hostMemberChange, updated bool) bool {
-	p.lastHeartBeat.Delete(op.host.NamespaceAndName())
+func (p *Service) isLastMemberInNamespace(op hostMemberChange) bool {
+	return p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace) == 0
+}
 
+func (p *Service) handleLastDisconnectedMemberInNamespace(op hostMemberChange) {
 	// If this is the last host in the namespace, we should:
 	// - remove namespace-specific data structures to prevent memory-leaks
 	// - prevent next dissemination, because there are no more hosts in the namespace
-	if p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace) == 0 {
-		p.disseminateLocks.Delete(op.host.Namespace)
-		p.disseminateNextTime.Del(op.host.Namespace)
-		p.memberUpdateCount.Del(op.host.Namespace)
-		updated = false
-	}
-	return updated
+	p.disseminateLocks.Delete(op.host.Namespace)
+	p.disseminateNextTime.Del(op.host.Namespace)
+	p.memberUpdateCount.Del(op.host.Namespace)
 }
 
 func (p *Service) performTableDissemination(ctx context.Context, ns string) error {
@@ -203,11 +215,6 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 	if nStreamConnPool == 0 {
 		return nil
 	}
-
-	nTargetConns := p.raftNode.FSM().State().MemberCountInNamespace(ns)
-
-	monitoring.RecordRuntimesCount(nStreamConnPool, ns)
-	monitoring.RecordActorRuntimesCount(nTargetConns, ns)
 
 	// Ignore dissemination if there is no member update
 	ac, _ := p.memberUpdateCount.GetOrSet(ns, &atomic.Uint32{})
@@ -226,35 +233,23 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 		streams = append(streams, *stream)
 	})
 
-	// Check if the cluster has daprd hosts that expect vnodes;
-	// older daprd versions (pre 1.13) do expect them, and newer versions (1.13+) do not.
 	req := &tablesUpdateRequest{
 		hosts: streams,
 	}
-	// Loop through all streams and check what kind of tables to disseminate (with/without vnodes)
-	for _, stream := range streams {
-		if stream.needsVNodes && req.tablesWithVNodes == nil {
-			req.tablesWithVNodes = p.raftNode.FSM().PlacementState(true, ns)
-		}
-		if !stream.needsVNodes && req.tables == nil {
-			req.tables = p.raftNode.FSM().PlacementState(false, ns)
-		}
-		if req.tablesWithVNodes != nil && req.tables != nil {
-			break
-		}
-	}
+	req.tables = p.raftNode.FSM().PlacementState(ns)
 
+	numActorTypesInNamespace := p.raftNode.FSM().State().MemberCountInNamespace(ns)
 	log.Infof(
-		"Start disseminating tables for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion())
+		"Start disseminating tables for namespace %s. memberUpdateCount: %d, streams: %d, actor types: %d, table generation: %s",
+		ns, cnt, nStreamConnPool, numActorTypesInNamespace, req.GetVersion())
 
 	if err := p.performTablesUpdate(ctx, req); err != nil {
 		return err
 	}
 
 	log.Infof(
-		"Completed dissemination for namespace %s. memberUpdateCount: %d, streams: %d, targets: %d, table generation: %s",
-		ns, cnt, nStreamConnPool, nTargetConns, req.GetVersion())
+		"Completed dissemination for namespace %s. memberUpdateCount: %d, streams: %d, actor types: %d, table generation: %s",
+		ns, cnt, nStreamConnPool, numActorTypesInNamespace, req.GetVersion())
 	if val, ok := p.memberUpdateCount.Get(ns); ok {
 		val.Store(0)
 	}
@@ -272,7 +267,7 @@ func (p *Service) performTablesUpdate(ctx context.Context, req *tablesUpdateRequ
 	startedAt := p.clock.Now()
 
 	// Enforce maximum API level
-	if req.tablesWithVNodes != nil || req.tables != nil {
+	if req.tables != nil {
 		req.SetAPILevel(p.minAPILevel, p.maxAPILevel)
 	}
 
@@ -302,14 +297,7 @@ func (p *Service) disseminateOperationOnHosts(ctx context.Context, req *tablesUp
 
 	for i := range req.hosts {
 		go func(i int) {
-			var tableToSend *v1pb.PlacementTables
-			if req.hosts[i].needsVNodes && req.tablesWithVNodes != nil {
-				tableToSend = req.tablesWithVNodes
-			} else if !req.hosts[i].needsVNodes && req.tables != nil {
-				tableToSend = req.tables
-			}
-
-			errCh <- p.disseminateOperation(ctx, req.hosts[i], operation, tableToSend)
+			errCh <- p.disseminateOperation(ctx, req.hosts[i], operation, req.tables)
 		}(i)
 	}
 

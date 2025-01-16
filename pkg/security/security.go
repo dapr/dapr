@@ -54,8 +54,8 @@ type Handler interface {
 	NetListenerID(net.Listener, spiffeid.ID) net.Listener
 	NetDialerID(context.Context, spiffeid.ID, time.Duration) func(network, addr string) (net.Conn, error)
 
-	MTLSServerConfig(td spiffeid.TrustDomain, ns, appID string) (*tls.Config, error)
-	MTLSClientConfig(td spiffeid.TrustDomain, ns, appID string) (*tls.Config, error)
+	MTLSServerConfig(spiffeid.ID) *tls.Config
+	MTLSClientConfig(spiffeid.ID) *tls.Config
 
 	ControlPlaneTrustDomain() spiffeid.TrustDomain
 	ControlPlaneNamespace() string
@@ -338,29 +338,21 @@ func (s *security) TLSServerConfigNoClientAuth() *tls.Config {
 }
 
 // MTLSServerConfig returns the TLS server config that enforces mTLS auth for client conns.
-func (s *security) MTLSServerConfig(td spiffeid.TrustDomain, ns, appID string) (*tls.Config, error) {
+func (s *security) MTLSServerConfig(id spiffeid.ID) *tls.Config {
 	if !s.mtls {
-		return new(tls.Config), nil
-	}
-	id, err := spiffeid.FromPath(td, "/ns/"+ns+"/"+appID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create SPIFFE ID for server: %w", err)
+		return new(tls.Config)
 	}
 
-	return tlsconfig.MTLSServerConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id)), nil
+	return tlsconfig.MTLSServerConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id))
 }
 
 // MTLSClientConfig returns the TLS client config that enforces mTLS auth for server conns.
-func (s *security) MTLSClientConfig(td spiffeid.TrustDomain, ns, appID string) (*tls.Config, error) {
+func (s *security) MTLSClientConfig(id spiffeid.ID) *tls.Config {
 	if !s.mtls {
-		return new(tls.Config), nil
-	}
-	id, err := spiffeid.FromPath(td, "/ns/"+ns+"/"+appID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create SPIFFE ID for client: %w", err)
+		return new(tls.Config)
 	}
 
-	return tlsconfig.MTLSClientConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id)), nil
+	return tlsconfig.MTLSClientConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id))
 }
 
 // NetListenerID returns a mTLS net listener which instruments using the

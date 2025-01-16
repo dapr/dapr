@@ -297,10 +297,6 @@ func Test_Diff(t *testing.T) {
 						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes"},
 						Spec:       componentsapi.ComponentSpec{Type: "secretstores.kubernetes"},
 					},
-					{
-						ObjectMeta: metav1.ObjectMeta{Name: "dapr"},
-						Spec:       componentsapi.ComponentSpec{Type: "workflow.dapr"},
-					},
 				}...),
 				Remote: append(components, componentsDiff2...),
 			})
@@ -349,10 +345,6 @@ func Test_Diff(t *testing.T) {
 					{
 						ObjectMeta: metav1.ObjectMeta{Name: "kubernetes"},
 						Spec:       componentsapi.ComponentSpec{Type: "secretstores.kubernetes"},
-					},
-					{
-						ObjectMeta: metav1.ObjectMeta{Name: "dapr"},
-						Spec:       componentsapi.ComponentSpec{Type: "workflow.dapr"},
 					},
 				}...),
 				Remote: append(remote, componentsDiff2...),

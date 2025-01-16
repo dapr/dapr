@@ -57,6 +57,7 @@ type SidecarConfig struct {
 	SentrySPIFFEID              string
 	SidecarHTTPPort             int32 `default:"3500"`
 	SidecarPublicPort           int32 `default:"3501"`
+	SchedulerAddressDNSA        string
 
 	Enabled                             bool    `annotation:"dapr.io/enabled"`
 	AppPort                             int32   `annotation:"dapr.io/app-port"`
@@ -75,6 +76,7 @@ type SidecarConfig struct {
 	EnableDebug                         bool    `annotation:"dapr.io/enable-debug" default:"false"`
 	SidecarDebugPort                    int32   `annotation:"dapr.io/debug-port" default:"40000"`
 	Env                                 string  `annotation:"dapr.io/env"`
+	EnvFromSecret                       string  `annotation:"dapr.io/env-from-secret"`
 	SidecarAPIGRPCPort                  int32   `annotation:"dapr.io/grpc-port" default:"50001"`
 	SidecarInternalGRPCPort             int32   `annotation:"dapr.io/internal-grpc-port" default:"50002"`
 	SidecarCPURequest                   string  `annotation:"dapr.io/sidecar-cpu-request"`

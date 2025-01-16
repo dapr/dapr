@@ -16,8 +16,6 @@ package options
 import (
 	"errors"
 	"fmt"
-	"strconv"
-	"strings"
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -46,8 +44,6 @@ type Options struct {
 	KubeConfig       *string
 
 	ID                      string
-	ReplicaID               uint32
-	ReplicaCount            uint32
 	EtcdInitialPeers        []string
 	EtcdDataDir             string
 	EtcdClientPorts         []string
@@ -88,11 +84,10 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
 	fs.StringVar(&opts.kubeconfig, "kubeconfig", "", "Kubernetes mode only. Absolute path to the kubeconfig file.")
 	if err := fs.MarkHidden("kubeconfig"); err != nil {
-		panic(err)
+		log.Fatal(err)
 	}
 
 	fs.StringVar(&opts.ID, "id", "dapr-scheduler-server-0", "Scheduler server ID")
-	fs.Uint32Var(&opts.ReplicaCount, "replica-count", 1, "The total number of scheduler replicas in the cluster")
 	fs.StringSliceVar(&opts.EtcdInitialPeers, "initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
@@ -111,21 +106,6 @@ func New(origArgs []string) (*Options, error) {
 	opts.Metrics.AttachCmdFlags(fs.StringVar, fs.BoolVar)
 
 	_ = fs.Parse(origArgs)
-
-	replicaID, err := strconv.ParseUint(opts.ID, 10, 32)
-	if err != nil {
-		x := strings.LastIndex(opts.ID, "-")
-		if x == -1 {
-			return nil, fmt.Errorf("replica ID is not contained in '-id' flag: %s", err)
-		}
-		suffix := opts.ID[x+1:]
-		replicaID, err = strconv.ParseUint(suffix, 10, 32)
-		if err != nil {
-			return nil, fmt.Errorf("failed to parse '--replica-id' flag: %s", err)
-		}
-	}
-
-	opts.ReplicaID = uint32(replicaID)
 
 	if fs.Changed("trust-anchors-file") {
 		opts.TrustAnchorsFile = &opts.taFile
