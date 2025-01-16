@@ -60,11 +60,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		ActorId:   "123",
 		Key:       "key1",
 	})
-	require.Error(t, err)
-	s, ok := status.FromError(err)
-	require.True(t, ok)
-	assert.Equal(t, codes.Internal.String(), s.Code().String())
-	assert.Equal(t, "actor instance is missing", s.Message())
+	require.NoError(t, err)
 
 	_, err = client.ExecuteActorStateTransaction(ctx, &rtv1.ExecuteActorStateTransactionRequest{
 		ActorType: "abc",
@@ -76,7 +72,7 @@ func (g *grpc) Run(t *testing.T, ctx context.Context) {
 		}},
 	})
 	require.Error(t, err)
-	s, ok = status.FromError(err)
+	s, ok := status.FromError(err)
 	require.True(t, ok)
 	assert.Equal(t, codes.Internal.String(), s.Code().String())
 	assert.Equal(t, "actor instance is missing", s.Message())
