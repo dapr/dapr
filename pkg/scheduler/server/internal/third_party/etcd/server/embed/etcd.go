@@ -33,9 +33,9 @@ import (
 	"sync"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"go.etcd.io/etcd/api/v3/version"
 	"go.etcd.io/etcd/client/pkg/v3/types"
-	"go.etcd.io/etcd/client/v3/credentials"
 	"go.etcd.io/etcd/pkg/v3/debugutil"
 	runtimeutil "go.etcd.io/etcd/pkg/v3/runtime"
 	osetcdhttp "go.etcd.io/etcd/server/v3/etcdserver/api/etcdhttp"
@@ -549,6 +549,7 @@ func (e *Etcd) servePeers() (err error) {
 
 	for _, p := range e.Peers {
 		u := p.Listener.Addr().String()
+
 		gs := v3rpc.Server(e.Server, peerTLScfg, nil)
 		m := cmux.New(p.Listener)
 		go gs.Serve(m.Match(cmux.HTTP2()))
@@ -573,7 +574,7 @@ func (e *Etcd) servePeers() (err error) {
 				"stopping serving peer traffic",
 				zap.String("address", u),
 			)
-			stopServers(ctx, &servers{secure: peerTLScfg != nil, grpc: gs, http: srv})
+			stopServers(ctx, &servers{secure: e.cfg.PeerTLSInfo.Security.MTLSEnabled(), grpc: gs, http: srv})
 			e.cfg.logger.Info(
 				"stopped serving peer traffic",
 				zap.String("address", u),
@@ -701,7 +702,7 @@ func resolveUrl(u url.URL) (addr string, secure bool, network string) {
 }
 
 func (e *Etcd) serveClients() (err error) {
-	if e.cfg.ClientTLSInfo.Security != nil {
+	if e.cfg.ClientTLSInfo.Security.MTLSEnabled() {
 		e.cfg.logger.Info(
 			"starting with client TLS",
 			zap.String("tls-info", fmt.Sprintf("%+v", e.cfg.ClientTLSInfo)),
@@ -774,19 +775,17 @@ func (e *Etcd) grpcGatewayDial(splitHttp bool) (grpcDial func(ctx context.Contex
 		addr = fmt.Sprintf("%s:%s", network, addr)
 	}
 
-	opts := []grpc.DialOption{grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32))}
-	if sctx.secure {
-		tlscfg, tlsErr := e.cfg.ClientTLSInfo.ServerConfig()
-		if tlsErr != nil {
+	opts := []grpc.DialOption{
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
+	}
+	if e.cfg.ClientTLSInfo.Security.MTLSEnabled() {
+		id, err := spiffeid.FromSegments(e.cfg.ClientTLSInfo.Security.ControlPlaneTrustDomain(), "ns", e.cfg.ClientTLSInfo.Security.ControlPlaneNamespace(), "dapr-scheduler")
+		if err != nil {
 			return func(ctx context.Context) (*grpc.ClientConn, error) {
-				return nil, tlsErr
+				return nil, err
 			}
 		}
-		dtls := tlscfg.Clone()
-		// trust local server
-		dtls.InsecureSkipVerify = true
-		bundle := credentials.NewBundle(credentials.Config{TLSConfig: dtls})
-		opts = append(opts, grpc.WithTransportCredentials(bundle.TransportCredentials()))
+		opts = append(opts, e.cfg.ClientTLSInfo.Security.GRPCDialOptionMTLS(id))
 	} else {
 		opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	}
