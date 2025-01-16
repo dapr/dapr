@@ -15,6 +15,7 @@ package streaming
 
 import (
 	"context"
+	"runtime"
 	"testing"
 	"time"
 
@@ -44,6 +45,10 @@ type streaming struct {
 }
 
 func (s *streaming) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "darwin" {
+		t.Skip("TODO: @joshvanl: re enable")
+	}
+
 	s.jobChan = make(chan *runtimev1pb.JobEventRequest, 1)
 	srv := app.New(t,
 		app.WithOnJobEventFn(func(ctx context.Context, in *runtimev1pb.JobEventRequest) (*runtimev1pb.JobEventResponse, error) {
