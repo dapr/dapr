@@ -162,7 +162,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 		id := api.InstanceID(b.startWorkflow(ctx, t, "Root", ""))
 
 		// Wait long enough to ensure all orchestrations have started (but not longer than the timer delay)
-		assert.Eventually(t, func() bool {
+		assert.EventuallyWithT(t, func(c *assert.CollectT) {
 			// List of all orchestrations created
 			orchestrationIDs := []string{string(id)}
 			for i := range 5 {
@@ -170,13 +170,10 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			}
 			for _, orchID := range orchestrationIDs {
 				meta, err := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
-				require.NoError(t, err)
+				assert.NoError(c, err)
 				// All orchestrations should be running
-				if meta.GetRuntimeStatus() != api.RUNTIME_STATUS_RUNNING {
-					return false
-				}
+				assert.Equal(c, api.RUNTIME_STATUS_RUNNING, meta.GetRuntimeStatus())
 			}
-			return true
 		}, 2*time.Second, 10*time.Millisecond)
 
 		// Terminate the root orchestration
