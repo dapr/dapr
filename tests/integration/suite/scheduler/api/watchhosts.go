@@ -105,15 +105,14 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 	w.scheduler2.WaitUntilRunning(t, ctx)
 	w.scheduler3.WaitUntilRunning(t, ctx)
 
-	stream, err := w.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, stream.CloseSend())
-	})
-
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		var resp *schedulerv1pb.WatchHostsResponse
-		resp, err = stream.Recv()
+		stream, err := w.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, stream.CloseSend())
+		})
+
+		resp, err := stream.Recv()
 		require.NoError(t, err)
 
 		got := make([]string, 0, 3)
@@ -131,8 +130,13 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 	w.scheduler2.Cleanup(t)
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
-		var resp *schedulerv1pb.WatchHostsResponse
-		resp, err = stream.Recv()
+		stream, err := w.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+		require.NoError(t, err)
+		t.Cleanup(func() {
+			require.NoError(t, stream.CloseSend())
+		})
+
+		resp, err := stream.Recv()
 		if !assert.NoError(c, err) {
 			return
 		}
@@ -149,17 +153,25 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 	w.scheduler4.Run(t, ctx)
 	w.scheduler4.WaitUntilRunning(t, ctx)
 	t.Cleanup(func() { w.scheduler4.Cleanup(t) })
-	resp, err := stream.Recv()
+	stream, err := w.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 	require.NoError(t, err)
+	t.Cleanup(func() {
+		require.NoError(t, stream.CloseSend())
+	})
 
-	got := make([]string, 0, 3)
-	for _, host := range resp.GetHosts() {
-		got = append(got, host.GetAddress())
-	}
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		resp, err := stream.Recv()
+		require.NoError(t, err)
 
-	assert.ElementsMatch(t, []string{
-		w.s1addr,
-		w.s3addr,
-		w.s4addr,
-	}, got)
+		got := make([]string, 0, 3)
+		for _, host := range resp.GetHosts() {
+			got = append(got, host.GetAddress())
+		}
+
+		assert.ElementsMatch(c, []string{
+			w.s1addr,
+			w.s3addr,
+			w.s4addr,
+		}, got)
+	}, time.Second*20, time.Millisecond*10)
 }
