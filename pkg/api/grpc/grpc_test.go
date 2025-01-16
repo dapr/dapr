@@ -20,7 +20,6 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"net/http"
 	"strconv"
 	"testing"
 	"time"
@@ -52,7 +51,6 @@ import (
 	"github.com/dapr/components-contrib/state"
 	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/fake"
-	apierrors "github.com/dapr/dapr/pkg/api/errors"
 	"github.com/dapr/dapr/pkg/api/grpc/metadata"
 	"github.com/dapr/dapr/pkg/api/universal"
 	commonapi "github.com/dapr/dapr/pkg/apis/common"
@@ -66,7 +64,6 @@ import (
 	"github.com/dapr/dapr/pkg/encryption"
 	"github.com/dapr/dapr/pkg/expr"
 	"github.com/dapr/dapr/pkg/messages"
-	"github.com/dapr/dapr/pkg/messages/errorcodes"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	outboxfake "github.com/dapr/dapr/pkg/outbox/fake"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -2873,49 +2870,44 @@ func TestStateStoreErrors(t *testing.T) {
 	t.Run("save etag mismatch", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
-		richError := apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateSave, fmt.Sprintf(messages.ErrStateSave, "a", err.Error()))
+		eTagCode := a.getStateErrorCode(err)
 
-		assert.Equal(t, "api error: code = Aborted desc = failed saving state in state store a: possible etag mismatch. error from state store: error", richError.Error())
+		assert.Equal(t, codes.Aborted, eTagCode)
 	})
 
 	t.Run("save etag invalid", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
-		richError := apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateSave, fmt.Sprintf(messages.ErrStateSave, "a", err.Error()))
-
-		assert.Equal(t, "api error: code = InvalidArgument desc = failed saving state in state store a: invalid etag value: error", richError.Error())
+		eTagCode := a.getStateErrorCode(err)
+		assert.Equal(t, codes.InvalidArgument, eTagCode)
 	})
 
 	t.Run("save non etag", func(t *testing.T) {
 		a := &api{}
 		err := errors.New("error")
-		richError := apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateSave, fmt.Sprintf(messages.ErrStateSave, "a", err.Error()))
-
-		assert.Equal(t, "api error: code = Internal desc = failed saving state in state store a: error", richError.Error())
+		eTagCode := a.getStateErrorCode(err)
+		assert.Equal(t, codes.Internal, eTagCode)
 	})
 
 	t.Run("delete etag mismatch", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagMismatch, errors.New("error"))
-		richError := apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateDelete, fmt.Sprintf(messages.ErrStateDelete, "a", err.Error()))
-
-		assert.Equal(t, "api error: code = Aborted desc = failed deleting state with key a: possible etag mismatch. error from state store: error", richError.Error())
+		eTagCode := a.getStateErrorCode(err)
+		assert.Equal(t, codes.Aborted, eTagCode)
 	})
 
 	t.Run("delete etag invalid", func(t *testing.T) {
 		a := &api{}
 		err := state.NewETagError(state.ETagInvalid, errors.New("error"))
-		richError := apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateDelete, fmt.Sprintf(messages.ErrStateDelete, "a", err.Error()))
-
-		assert.Equal(t, "api error: code = InvalidArgument desc = failed deleting state with key a: invalid etag value: error", richError.Error())
+		eTagCode := a.getStateErrorCode(err)
+		assert.Equal(t, codes.InvalidArgument, eTagCode)
 	})
 
 	t.Run("delete non etag", func(t *testing.T) {
 		a := &api{}
 		err := errors.New("error")
-		richError := apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateDelete, fmt.Sprintf(messages.ErrStateDelete, "a", err.Error()))
-
-		assert.Equal(t, "api error: code = Internal desc = failed deleting state with key a: error", richError.Error())
+		eTagCode := a.getStateErrorCode(err)
+		assert.Equal(t, codes.Internal, eTagCode)
 	})
 }
 
