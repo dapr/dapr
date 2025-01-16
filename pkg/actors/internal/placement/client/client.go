@@ -152,7 +152,10 @@ func (c *Client) Run(ctx context.Context) error {
 			connCancel()
 			c.lock.LockTable()
 			defer c.lock.EnsureUnlockTable()
-			return c.table.HaltAll()
+			if err := c.table.HaltAll(); err != nil {
+				log.Errorf("Error whilst deactivating all actors when shutting down client: %s", err)
+			}
+			return nil
 		}
 	}
 }
