@@ -105,7 +105,7 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 	w.scheduler2.WaitUntilRunning(t, ctx)
 	w.scheduler3.WaitUntilRunning(t, ctx)
 
-	stream, err := w.scheduler1.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+	stream, err := w.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, stream.CloseSend())
