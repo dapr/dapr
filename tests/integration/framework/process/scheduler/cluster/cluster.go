@@ -20,8 +20,11 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	clientv3 "go.etcd.io/etcd/client/v3"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/tests/integration/framework/process/ports"
@@ -106,6 +109,12 @@ func (c *Cluster) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	for _, s := range c.schedulers {
 		s.WaitUntilRunning(t, ctx)
 	}
+
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
+		resp, err := c.schedulers[0].ETCDClient(t).Get(ctx, "dapr/leadership", clientv3.WithPrefix())
+		assert.NoError(col, err)
+		assert.Len(col, resp.Kvs, len(c.schedulers))
+	}, 10*time.Second, 10*time.Millisecond)
 }
 
 func (c *Cluster) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
