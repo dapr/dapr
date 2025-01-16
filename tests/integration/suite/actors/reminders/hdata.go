@@ -180,7 +180,7 @@ func (h *hdata) Run(t *testing.T, ctx context.Context) {
 			case <-time.After(time.Second * 10):
 				require.FailNow(t, "timeout")
 			case got := <-ch:
-				assert.Equal(t, got, test.expHTTP, name)
+				assert.Equal(t, test.expHTTP, got, name)
 			}
 
 			_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
@@ -195,7 +195,7 @@ func (h *hdata) Run(t *testing.T, ctx context.Context) {
 			case <-time.After(time.Second * 10):
 				require.FailNow(t, "timeout")
 			case got := <-ch:
-				assert.Equal(t, got, test.expGRPC, name)
+				assert.Equal(t, test.expGRPC, got, name)
 			}
 		})
 	}
