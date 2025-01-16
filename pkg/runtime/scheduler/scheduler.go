@@ -92,7 +92,13 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		// connected.
 		stream, addresses, err := s.connSchedulerHosts(ctx)
 		if err != nil {
-			return err
+			log.Errorf("Failed to connect to scheduler hosts: %s", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
+			continue
 		}
 
 		err = concurrency.NewRunnerManager(
@@ -230,26 +236,15 @@ func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Sched
 		return nil, nil, fmt.Errorf("scheduler client not initialized for address %s: %s", s.addresses[i], err)
 	}
 
-	var stream schedulerv1pb.Scheduler_WatchHostsClient
-	for {
-		stream, err = cl.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
-		if err != nil {
-			if status.Code(err) == codes.Unimplemented {
-				// Ignore unimplemented error code as we are talking to an old server.
-				// TODO: @joshvanl: remove special case in v1.16.
-				return nil, s.addresses, nil
-			}
-
-			log.Errorf("Failed to watch scheduler hosts: %s", err)
-			select {
-			case <-time.After(time.Second):
-			case <-ctx.Done():
-				return nil, nil, ctx.Err()
-			}
-			continue
+	stream, err := cl.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			// Ignore unimplemented error code as we are talking to an old server.
+			// TODO: @joshvanl: remove special case in v1.16.
+			return nil, s.addresses, nil
 		}
 
-		break
+		return nil, nil, fmt.Errorf("failed to watch scheduler hosts: %s", err)
 	}
 
 	resp, err := stream.Recv()
