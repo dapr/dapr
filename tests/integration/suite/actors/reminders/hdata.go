@@ -176,7 +176,12 @@ func (h *hdata) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, err)
 			require.NoError(t, resp.Body.Close())
 			assert.Equal(t, http.StatusNoContent, resp.StatusCode)
-			assert.Equal(t, test.expHTTP, <-ch, name)
+			select {
+			case <-time.After(time.Second * 10):
+				require.FailNow(t, "timeout")
+			case got := <-ch:
+				assert.Equal(t, got, test.expHTTP, name)
+			}
 
 			_, err = gclient.RegisterActorReminder(ctx, &rtv1.RegisterActorReminderRequest{
 				ActorType: "myactortype",
@@ -186,7 +191,12 @@ func (h *hdata) Run(t *testing.T, ctx context.Context) {
 				Data:      []byte(name),
 			})
 			require.NoError(t, err)
-			assert.Equal(t, test.expGRPC, <-ch, name)
+			select {
+			case <-time.After(time.Second * 10):
+				require.FailNow(t, "timeout")
+			case got := <-ch:
+				assert.Equal(t, got, test.expGRPC, name)
+			}
 		})
 	}
 }
