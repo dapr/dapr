@@ -154,8 +154,8 @@ func (c *Client) Run(ctx context.Context) error {
 			defer c.lock.EnsureUnlockTable()
 			if err := c.table.HaltAll(); err != nil {
 				log.Errorf("Error whilst deactivating all actors when shutting down client: %s", err)
-				return nil
 			}
+			return nil
 		}
 	}
 }
