@@ -94,8 +94,8 @@ func clientConfig(kubeConfigPath string, clusterName string) (*rest.Config, *api
 	}
 
 	// Reduce the QPS to avoid rate-limiting
-	clConfig.QPS = 10
-	clConfig.Burst = 50
+	clConfig.QPS = 50
+	clConfig.Burst = 250
 	return clConfig, &rawConfig, nil
 }
 
