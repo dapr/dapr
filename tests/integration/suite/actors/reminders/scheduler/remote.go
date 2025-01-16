@@ -54,7 +54,6 @@ type remote struct {
 	actorIDs    []string
 
 	lock           sync.Mutex
-	methodcalled   atomic.Value
 	actorIDsCalled []string
 }
 
