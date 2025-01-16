@@ -82,10 +82,10 @@ func (w *watchhosts) Setup(t *testing.T) []framework.Option {
 		scheduler.WithPort(w.scheduler2.Port()),
 	)
 
-	w.s1addr = net.JoinHostPort("localhost", strconv.Itoa(w.scheduler1.Port()))
-	w.s2addr = net.JoinHostPort("localhost", strconv.Itoa(w.scheduler2.Port()))
-	w.s3addr = net.JoinHostPort("localhost", strconv.Itoa(w.scheduler3.Port()))
-	w.s4addr = net.JoinHostPort("localhost", strconv.Itoa(w.scheduler4.Port()))
+	w.s1addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler1.Port()))
+	w.s2addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler2.Port()))
+	w.s3addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler3.Port()))
+	w.s4addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler4.Port()))
 
 	return []framework.Option{
 		framework.WithProcesses(fp),
@@ -130,7 +130,7 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 
 	w.scheduler2.Cleanup(t)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		var resp *schedulerv1pb.WatchHostsResponse
 		resp, err = stream.Recv()
 		require.NoError(t, err)

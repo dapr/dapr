@@ -86,7 +86,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	opts := options{
 		logLevel:        "info",
-		listenAddress:   "localhost",
+		listenAddress:   "127.0.0.1",
 		id:              uids,
 		port:            fp.Port(t),
 		healthzPort:     fp.Port(t),
