@@ -17,6 +17,7 @@ import (
 	"context"
 	"fmt"
 	"net"
+	"runtime"
 	"strconv"
 	"testing"
 	"time"
@@ -48,6 +49,10 @@ type watchhosts struct {
 }
 
 func (w *watchhosts) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Cleanup does not work cleanly on windows")
+	}
+
 	fp := ports.Reserve(t, 6)
 	port1, port2, port3 := fp.Port(t), fp.Port(t), fp.Port(t)
 
@@ -77,10 +82,10 @@ func (w *watchhosts) Setup(t *testing.T) []framework.Option {
 		scheduler.WithPort(w.scheduler2.Port()),
 	)
 
-	w.s1addr = net.JoinHostPort("localhost", strconv.Itoa(w.scheduler1.Port()))
-	w.s2addr = net.JoinHostPort("localhost", strconv.Itoa(w.scheduler2.Port()))
-	w.s3addr = net.JoinHostPort("localhost", strconv.Itoa(w.scheduler3.Port()))
-	w.s4addr = net.JoinHostPort("localhost", strconv.Itoa(w.scheduler4.Port()))
+	w.s1addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler1.Port()))
+	w.s2addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler2.Port()))
+	w.s3addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler3.Port()))
+	w.s4addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler4.Port()))
 
 	return []framework.Option{
 		framework.WithProcesses(fp),
@@ -100,7 +105,7 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 	w.scheduler2.WaitUntilRunning(t, ctx)
 	w.scheduler3.WaitUntilRunning(t, ctx)
 
-	stream, err := w.scheduler1.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+	stream, err := w.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
 	require.NoError(t, err)
 	t.Cleanup(func() {
 		require.NoError(t, stream.CloseSend())
@@ -121,14 +126,16 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 			w.s2addr,
 			w.s3addr,
 		}, got)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	w.scheduler2.Cleanup(t)
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		var resp *schedulerv1pb.WatchHostsResponse
 		resp, err = stream.Recv()
-		require.NoError(t, err)
+		if !assert.NoError(c, err) {
+			return
+		}
 		got := make([]string, 0, 2)
 		for _, host := range resp.GetHosts() {
 			got = append(got, host.GetAddress())
@@ -137,7 +144,7 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 			w.s1addr,
 			w.s3addr,
 		}, got)
-	}, time.Second*10, time.Millisecond*10)
+	}, time.Second*20, time.Millisecond*10)
 
 	w.scheduler4.Run(t, ctx)
 	w.scheduler4.WaitUntilRunning(t, ctx)

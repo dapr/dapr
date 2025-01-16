@@ -43,6 +43,8 @@ type remote struct {
 
 func (r *remote) Setup(t *testing.T) []framework.Option {
 	r.holdCall = make(chan struct{})
+	t.Cleanup(func() { close(r.holdCall) })
+
 	r.called.Store(0)
 
 	r.app1 = actors.New(t,
