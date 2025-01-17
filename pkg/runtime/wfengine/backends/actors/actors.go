@@ -37,6 +37,7 @@ import (
 	"github.com/dapr/dapr/utils"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
@@ -219,19 +220,19 @@ func (abe *Actors) GetOrchestrationMetadata(ctx context.Context, id api.Instance
 		return nil, api.ErrInstanceNotFound
 	}
 
-	runtimeState := backend.NewOrchestrationRuntimeState(id, state.History)
+	rstate := runtimestate.NewOrchestrationRuntimeState(string(id), state.History)
 
-	name, _ := runtimeState.Name()
-	createdAt, _ := runtimeState.CreatedTime()
-	lastUpdated, _ := runtimeState.LastUpdatedTime()
-	input, _ := runtimeState.Input()
-	output, _ := runtimeState.Output()
-	failureDetuils, _ := runtimeState.FailureDetails()
+	name, _ := runtimestate.Name(rstate)
+	createdAt, _ := runtimestate.CreatedTime(rstate)
+	lastUpdated, _ := runtimestate.LastUpdatedTime(rstate)
+	input, _ := runtimestate.Input(rstate)
+	output, _ := runtimestate.Output(rstate)
+	failureDetuils, _ := runtimestate.FailureDetails(rstate)
 
 	return &backend.OrchestrationMetadata{
-		InstanceId:     string(runtimeState.InstanceID()),
+		InstanceId:     string(id),
 		Name:           name,
-		RuntimeStatus:  runtimeState.RuntimeStatus(),
+		RuntimeStatus:  runtimestate.RuntimeStatus(rstate),
 		CreatedAt:      timestamppb.New(createdAt),
 		LastUpdatedAt:  timestamppb.New(lastUpdated),
 		Input:          wrapperspb.String(input),
@@ -331,7 +332,7 @@ func (abe *Actors) GetOrchestrationRuntimeState(ctx context.Context, owi *backen
 	if state == nil {
 		return nil, api.ErrInstanceNotFound
 	}
-	runtimeState := backend.NewOrchestrationRuntimeState(owi.InstanceID, state.History)
+	runtimeState := runtimestate.NewOrchestrationRuntimeState(string(owi.InstanceID), state.History)
 	return runtimeState, nil
 }
 
@@ -348,32 +349,41 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 		WithActor(abe.workflowActorType, string(id)).
 		WithContentType(invokev1.ProtobufContentType)
 
-	stream := make(chan *internalsv1pb.InternalInvokeResponse, 1)
+	stream := make(chan *internalsv1pb.InternalInvokeResponse, 5)
 
-	return concurrency.NewRunnerManager(
-		func(ctx context.Context) error {
-			return engine.CallStream(ctx, req, stream)
-		},
-		func(ctx context.Context) error {
-			for {
-				select {
-				case <-ctx.Done():
-					return ctx.Err()
-				case val := <-stream:
-					var meta backend.OrchestrationMetadata
-					if err := val.GetMessage().GetData().UnmarshalTo(&meta); err != nil {
-						log.Errorf("Failed to unmarshal orchestration metadata: %s", err)
-						return err
-					}
+	for {
+		err = concurrency.NewRunnerManager(
+			func(ctx context.Context) error {
+				return engine.CallStream(ctx, req, stream)
+			},
+			func(ctx context.Context) error {
+				for {
 					select {
-					case ch <- &meta:
 					case <-ctx.Done():
 						return ctx.Err()
+					case val := <-stream:
+						var meta backend.OrchestrationMetadata
+						if perr := val.GetMessage().GetData().UnmarshalTo(&meta); perr != nil {
+							log.Errorf("Failed to unmarshal orchestration metadata: %s", perr)
+							return perr
+						}
+						select {
+						case ch <- &meta:
+						case <-ctx.Done():
+							return ctx.Err()
+						}
 					}
 				}
-			}
-		},
-	).Run(ctx)
+			},
+		).Run(ctx)
+		if err != nil {
+			return err
+		}
+
+		if ctx.Err() != nil {
+			return ctx.Err()
+		}
+	}
 }
 
 // PurgeOrchestrationState deletes all saved state for the specific orchestration instance.

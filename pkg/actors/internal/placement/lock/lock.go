@@ -66,7 +66,6 @@ func (l *Lock) Run(ctx context.Context) {
 		for _, cancel := range l.rcancels {
 			cancel()
 		}
-		l.wg.Wait()
 	}()
 
 	go func() {
