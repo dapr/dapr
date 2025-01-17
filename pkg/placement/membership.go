@@ -261,8 +261,6 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 // in runtime, it proceeds to update new table to Dapr runtimes and then unlock
 // once all runtimes have been updated.
 func (p *Service) performTablesUpdate(parentCtx context.Context, req *tablesUpdateRequest) error {
-	// TODO: error from disseminationOperation needs to be handled properly.
-	// Otherwise, each Dapr runtime will have inconsistent hashing table.
 	startedAt := p.clock.Now()
 
 	// Enforce maximum API level
@@ -332,7 +330,7 @@ func (p *Service) disseminateOperation(ctx context.Context, target daprdStream, 
 			return nil
 		}
 
-		sendCtx, sendCancelFn := context.WithTimeout(ctx, 2*time.Second) // We should make this configurable
+		sendCtx, sendCancelFn := context.WithTimeout(ctx, 5*time.Second) // Timeout for dissemination to a single host
 		defer sendCancelFn()
 
 		errCh := make(chan error)
