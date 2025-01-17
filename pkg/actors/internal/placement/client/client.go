@@ -16,7 +16,6 @@ package client
 import (
 	"context"
 	"errors"
-	"fmt"
 	"io"
 	"net"
 	"strings"
@@ -129,7 +128,8 @@ func (c *Client) Run(ctx context.Context) error {
 
 			if err := c.table.HaltAll(); err != nil {
 				unlock()
-				return fmt.Errorf("failed to halt all actors: %s", err)
+				log.Errorf("Error whilst deactivating all actors when shutting down client: %s", err)
+				return nil
 			}
 
 			if ctx.Err() != nil {
