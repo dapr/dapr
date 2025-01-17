@@ -105,9 +105,14 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 	w.scheduler2.WaitUntilRunning(t, ctx)
 	w.scheduler3.WaitUntilRunning(t, ctx)
 
+	var stream schedulerv1pb.Scheduler_WatchHostsClient
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		stream, err := w.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
-		require.NoError(t, err)
+		var err error
+		stream, err = w.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+		if !assert.NoError(c, err) {
+			return
+		}
+
 		t.Cleanup(func() {
 			require.NoError(t, stream.CloseSend())
 		})
@@ -128,12 +133,6 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 	}, time.Second*20, time.Millisecond*10)
 
 	w.scheduler2.Cleanup(t)
-
-	stream, err := w.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
-	require.NoError(t, err)
-	t.Cleanup(func() {
-		require.NoError(t, stream.CloseSend())
-	})
 
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := stream.Recv()
