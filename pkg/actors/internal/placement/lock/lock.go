@@ -51,7 +51,7 @@ type Lock struct {
 func New() *Lock {
 	return &Lock{
 		lock:         make(chan struct{}, 1),
-		ch:           make(chan *hold),
+		ch:           make(chan *hold, 1),
 		rcancels:     make(map[uint64]context.CancelFunc),
 		closeCh:      make(chan struct{}),
 		shutdownLock: fifo.New(),
@@ -129,7 +129,7 @@ func (l *Lock) handleHold(h *hold) {
 func (l *Lock) Lock() context.CancelFunc {
 	h := hold{
 		writeLock: true,
-		respCh:    make(chan *holdresp),
+		respCh:    make(chan *holdresp, 1),
 	}
 
 	select {
@@ -152,7 +152,7 @@ func (l *Lock) RLock(ctx context.Context) (context.Context, context.CancelFunc, 
 	h := hold{
 		writeLock: false,
 		rctx:      ctx,
-		respCh:    make(chan *holdresp),
+		respCh:    make(chan *holdresp, 1),
 	}
 
 	select {
