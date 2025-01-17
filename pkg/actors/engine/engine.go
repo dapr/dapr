@@ -120,7 +120,7 @@ func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
 func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 	ctx, cancel, err := e.placement.Lock(ctx)
 	if err != nil {
-		return err
+		return backoff.Permanent(err)
 	}
 	defer cancel()
 
@@ -157,7 +157,7 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	ctx, cancel, err := e.placement.Lock(ctx)
 	if err != nil {
-		return nil, err
+		return nil, backoff.Permanent(err)
 	}
 	defer cancel()
 
