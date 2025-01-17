@@ -25,6 +25,7 @@ import (
 	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	etcdclientv3 "go.etcd.io/etcd/client/v3"
 	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/insecure"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/healthz"
@@ -132,6 +133,8 @@ func (c *cron) Run(ctx context.Context) error {
 		}
 		cfg.TLS = c.config.ClientTLSInfo.Security.MTLSClientConfig(id)
 
+	} else {
+		cfg.DialOptions = []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 	}
 	client, err := clientv3.New(cfg)
 	if err != nil {

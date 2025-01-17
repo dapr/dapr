@@ -18,8 +18,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"log"
-	"reflect"
 	"strconv"
 	"strings"
 	"sync"
@@ -165,21 +163,21 @@ func (c *Client) Sync(ctx context.Context) error {
 	return nil
 }
 
-func (c *Client) autoSync() {
+func (c *MyClient) autoSync() {
 	if c.cfg.AutoSyncInterval == time.Duration(0) {
 		return
 	}
 
 	for {
 		select {
-		case <-c.ctx.Done():
+		case <-c.internalClient.Ctx().Done():
 			return
 		case <-time.After(c.cfg.AutoSyncInterval):
-			ctx, cancel := context.WithTimeout(c.ctx, 5*time.Second)
-			err := c.Sync(ctx)
+			ctx, cancel := context.WithTimeout(c.internalClient.Ctx(), 5*time.Second)
+			err := c.internalClient.Sync(ctx)
 			cancel()
-			if err != nil && err != c.ctx.Err() {
-				c.lg.Info("Auto sync endpoints failed.", zap.Error(err))
+			if err != nil && err != c.internalClient.Ctx().Err() {
+				c.internalClient.GetLogger().Info("Auto sync endpoints failed.", zap.Error(err))
 			}
 		}
 	}
@@ -228,12 +226,10 @@ func (c *MyClient) dialSetupOpts(dopts ...grpc.DialOption) (opts []grpc.DialOpti
 }
 
 // Dial connects to a single endpoint using the client's config.
-func (c *Client) Dial(ep string) (*grpc.ClientConn, error) {
-	creds := c.credentialsForEndpoint(ep)
-
+func (c *MyClient) Dial(ep string) (*grpc.ClientConn, error) {
 	// Using ad-hoc created resolver, to guarantee only explicitly given
 	// endpoint is used.
-	return c.dial(creds, grpc.WithResolvers(resolver.New(ep)))
+	return c.dial(grpc.WithResolvers(resolver.New(ep)))
 }
 
 func (c *Client) getToken(ctx context.Context) error {
@@ -274,20 +270,16 @@ func (c *MyClient) dial(dopts ...grpc.DialOption) (*grpc.ClientConn, error) {
 
 	opts = append(opts, c.cfg.DialOptions...)
 
-	dctx := c.ctx
+	dctx := c.internalClient.Ctx()
 	if c.cfg.DialTimeout > 0 {
 		var cancel context.CancelFunc
-		dctx, cancel = context.WithTimeout(c.ctx, c.cfg.DialTimeout)
+		dctx, cancel = context.WithTimeout(c.cfg.Context, c.cfg.DialTimeout)
 		defer cancel() // TODO: Is this right for cases where grpc.WithBlock() is not set on the dial options?
 	}
-	target := fmt.Sprintf("%s://%p/%s", resolver.Schema, c, authority(c.Endpoints()[0]))
-	fmt.Printf("cassie opts: %+v\n", opts)
-	for i, opt := range opts {
-		val := reflect.ValueOf(opt).Elem()
-		fmt.Printf("Option %d: %+v\n", i, val)
-	}
+	target := fmt.Sprintf("%s://%p/%s", resolver.Schema, c, authority(c.internalClient.Endpoints()[0]))
+	// cassie todo: here need to ensure we are using the security pkg NetDialerID
+
 	conn, err := grpc.DialContext(dctx, target, opts...)
-	fmt.Printf("cassie client err: %s\n", err)
 
 	if err != nil {
 		return nil, err
@@ -331,6 +323,7 @@ type MyClient struct {
 	conn           grpc.ClientConnInterface
 	resolver       *resolver.EtcdManualResolver
 	cfg            *etcdclient.Config
+	callOpts       []grpc.CallOption
 }
 
 func newClient(cfg *etcdclient.Config) (*etcdclient.Client, error) {
@@ -346,23 +339,37 @@ func newClient(cfg *etcdclient.Config) (*etcdclient.Client, error) {
 
 	ctx, cancel := context.WithCancel(baseCtx)
 
-	//opts := []etcdclient.Option{
-	//	func(c *etcdclient.Client) {
-	//		//client := &etcdclient.Client{
-	//		c.conn = nil
-	//		c.cfg = *cfg
-	//		c.creds = creds
-	//		c.ctx = ctx
-	//		c.cancel = cancel
-	//		c.mu = new(sync.RWMutex)
-	//		c.callOpts = defaultCallOpts
-	//		c.lgMu = new(sync.RWMutex)
-	//		//}
-	//	},
-	//}
-	var myClient MyClient
-	//client := etcdclient.NewCtxClient(ctx, opts...)
-	internalClient := etcdclient.NewCtxClient(ctx, nil)
+	myClient := &MyClient{
+		resolver: resolver.New(cfg.Endpoints...),
+		cfg:      cfg,
+	}
+
+	etcdclientCfg := &etcdclient.Config{
+		Endpoints:             cfg.Endpoints,
+		AutoSyncInterval:      cfg.AutoSyncInterval,
+		DialTimeout:           cfg.DialTimeout,
+		DialKeepAliveTime:     cfg.DialKeepAliveTime,
+		DialKeepAliveTimeout:  cfg.DialKeepAliveTimeout,
+		MaxCallSendMsgSize:    cfg.MaxCallSendMsgSize,
+		MaxCallRecvMsgSize:    cfg.MaxCallRecvMsgSize,
+		TLS:                   cfg.TLS,
+		Username:              cfg.Username,
+		Password:              cfg.Password,
+		RejectOldCluster:      cfg.RejectOldCluster,
+		DialOptions:           cfg.DialOptions,
+		Context:               cfg.Context,
+		Logger:                cfg.Logger,
+		LogConfig:             cfg.LogConfig,
+		PermitWithoutStream:   cfg.PermitWithoutStream,
+		MaxUnaryRetries:       cfg.MaxUnaryRetries,
+		BackoffWaitBetween:    cfg.BackoffWaitBetween,
+		BackoffJitterFraction: cfg.BackoffJitterFraction,
+	}
+	internalClient, err := etcdclient.New(*etcdclientCfg)
+	if err != nil {
+		return nil, err
+	}
+	myClient.internalClient = internalClient
 
 	//var err error
 	//if cfg.Logger != nil {
@@ -378,8 +385,6 @@ func newClient(cfg *etcdclient.Config) (*etcdclient.Client, error) {
 	//if err != nil {
 	//	return nil, err
 	//}
-	fmt.Printf("cassie 1")
-	log.Printf("cassie 1")
 
 	if cfg.MaxCallSendMsgSize > 0 || cfg.MaxCallRecvMsgSize > 0 {
 		if cfg.MaxCallRecvMsgSize > 0 && cfg.MaxCallSendMsgSize > cfg.MaxCallRecvMsgSize {
@@ -396,82 +401,64 @@ func newClient(cfg *etcdclient.Config) (*etcdclient.Client, error) {
 		if cfg.MaxCallRecvMsgSize > 0 {
 			callOpts[2] = grpc.MaxCallRecvMsgSize(cfg.MaxCallRecvMsgSize)
 		}
-		//client.callOpts = callOpts
+		myClient.callOpts = callOpts
 	}
-	fmt.Printf("cassie 2")
-	log.Printf("cassie 2")
-
-	myClient.resolver = resolver.New(cfg.Endpoints...)
-	fmt.Printf("cassie 3")
 
 	if len(cfg.Endpoints) < 1 {
 		cancel()
 		return nil, fmt.Errorf("at least one Endpoint is required in client config")
 	}
+
 	// Use a provided endpoint target so that for https:// without any tls config given, then
 	// grpc will assume the certificate server name is the endpoint host.
-	fmt.Printf("cassie 4")
-
 	conn, err := myClient.dialWithBalancer(cfg.DialOptions...)
-	for i, opt := range cfg.DialOptions {
-		val := reflect.ValueOf(opt).Elem()
-		fmt.Printf("Option %d: %+v\n", i, val)
-	}
-	fmt.Printf("CASSSSS ERR: %s\n", err)
-	if err != nil {
-		cancel()
-		myClient.resolver.Close()
-		// TODO: Error like `fmt.Errorf(dialing [%s] failed: %v, strings.Join(cfg.Endpoints, ";"), err)` would help with debugging a lot.
-		return nil, err
-	}
-	myClient.conn = conn
-	myClient.internalClient = internalClient
 
-	panic(err)
-	//client.Cluster = NewCluster(client)
-	//client.KV = NewKV(client)
-	//client.Lease = NewLease(client)
-	//client.Watcher = NewWatcher(client)
-	//client.Auth = NewAuth(client)
-	//client.Maintenance = NewMaintenance(client)
+	myClient.conn = conn
+	myClient.internalClient.Cluster = etcdclient.NewCluster(myClient.internalClient)
+	myClient.internalClient.KV = etcdclient.NewKV(myClient.internalClient)
+	myClient.internalClient.Lease = etcdclient.NewLease(myClient.internalClient)
+	myClient.internalClient.Watcher = etcdclient.NewWatcher(myClient.internalClient)
+	myClient.internalClient.Auth = etcdclient.NewAuth(myClient.internalClient)
+	myClient.internalClient.Maintenance = etcdclient.NewMaintenance(myClient.internalClient)
 
 	//get token with established connection
-	ctx, cancel = client.ctx, func() {}
-	if client.cfg.DialTimeout > 0 {
-		ctx, cancel = context.WithTimeout(ctx, client.cfg.DialTimeout)
+	ctx, cancel = myClient.internalClient.Ctx(), func() {}
+	if myClient.cfg.DialTimeout > 0 {
+		ctx, cancel = context.WithTimeout(ctx, myClient.cfg.DialTimeout)
 	}
-	err = client.getToken(ctx)
-	if err != nil {
-		client.Close()
-		cancel()
-		//TODO: Consider fmt.Errorf("communicating with [%s] failed: %v", strings.Join(cfg.Endpoints, ";"), err)
-		return nil, err
-	}
+	//err = client.getToken(ctx)
+	//if err != nil {
+	//	client.Close()
+	//	cancel()
+	//	//TODO: Consider fmt.Errorf("communicating with [%s] failed: %v", strings.Join(cfg.Endpoints, ";"), err)
+	//	return nil, err
+	//}
 	cancel()
 
-	if cfg.RejectOldCluster {
-		if err := client.checkVersion(); err != nil {
-			client.Close()
-			return nil, err
-		}
-	}
+	//if cfg.RejectOldCluster {
+	//	if err := client.checkVersion(); err != nil {
+	//		client.Close()
+	//		return nil, err
+	//	}
+	//}
 
-	go client.autoSync()
-	return client, nil
+	go myClient.autoSync()
+	return myClient.internalClient, nil
 }
 
 // roundRobinQuorumBackoff retries against quorum between each backoff.
 // This is intended for use with a round robin load balancer.
-func (c *Client) roundRobinQuorumBackoff(waitBetween time.Duration, jitterFraction float64) backoffFunc {
+func (c *MyClient) roundRobinQuorumBackoff(waitBetween time.Duration, jitterFraction float64) backoffFunc {
 	return func(attempt uint) time.Duration {
 		// after each round robin across quorum, backoff for our wait between duration
-		n := uint(len(c.Endpoints()))
+		n := uint(len(c.internalClient.Endpoints()))
 		quorum := (n/2 + 1)
 		if attempt%quorum == 0 {
-			c.lg.Debug("backoff", zap.Uint("attempt", attempt), zap.Uint("quorum", quorum), zap.Duration("waitBetween", waitBetween), zap.Float64("jitterFraction", jitterFraction))
+
+			c.internalClient.GetLogger().Debug("backoff", zap.Uint("attempt", attempt), zap.Uint("quorum", quorum), zap.Duration("waitBetween", waitBetween), zap.Float64("jitterFraction", jitterFraction))
 			return jitterUp(waitBetween, jitterFraction)
 		}
-		c.lg.Debug("backoff skipped", zap.Uint("attempt", attempt), zap.Uint("quorum", quorum))
+		c.internalClient.GetLogger().Debug("backoff skipped", zap.Uint("attempt", attempt), zap.Uint("quorum", quorum))
 		return 0
 	}
 }
