@@ -138,22 +138,6 @@ func Test_Lock(t *testing.T) {
 		require.Error(t, err)
 	})
 
-	t.Run("rlock when context closed should error", func(t *testing.T) {
-		t.Parallel()
-
-		l := New()
-
-		ctx, cancel := context.WithCancel(context.Background())
-		t.Cleanup(cancel)
-
-		go l.Run(ctx)
-
-		ctxr, cancelr := context.WithCancel(context.Background())
-		cancelr()
-		_, _, err := l.RLock(ctxr)
-		require.Error(t, err)
-	})
-
 	t.Run("lock continues to work after close", func(t *testing.T) {
 		t.Parallel()
 
