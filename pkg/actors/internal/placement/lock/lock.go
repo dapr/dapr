@@ -64,7 +64,7 @@ func (l *Lock) Run(ctx context.Context) {
 		defer l.rcancelLock.Unlock()
 
 		for _, cancel := range l.rcancels {
-			cancel()
+			go cancel()
 		}
 	}()
 
