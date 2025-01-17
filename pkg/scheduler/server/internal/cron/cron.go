@@ -22,7 +22,9 @@ import (
 
 	"github.com/diagridio/go-etcd-cron/api"
 	etcdcron "github.com/diagridio/go-etcd-cron/cron"
-	clientv3 "go.etcd.io/etcd/client/v3"
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
+	etcdclientv3 "go.etcd.io/etcd/client/v3"
+	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/anypb"
 
 	"github.com/dapr/dapr/pkg/healthz"
@@ -33,6 +35,8 @@ import (
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
+
+	clientv3 "github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/client"
 )
 
 var log = logger.NewLogger("dapr.scheduler.server.cron")
@@ -113,9 +117,23 @@ func (c *cron) Run(ctx context.Context) error {
 		endpoints = append(endpoints, peer.Addr().String())
 	}
 
-	client, err := clientv3.New(clientv3.Config{
+	cfg := etcdclientv3.Config{
 		Endpoints: endpoints,
-	})
+	}
+
+	id, err := spiffeid.FromPath(c.config.ClientTLSInfo.Security.ControlPlaneTrustDomain(), "/ns/"+c.config.ClientTLSInfo.Security.ControlPlaneNamespace()+"/"+"dapr-scheduler")
+	if err != nil {
+		return fmt.Errorf("failed to create SPIFFE ID for server: %w", err)
+	}
+
+	if c.config.ClientTLSInfo.Security.MTLSEnabled() {
+		cfg.DialOptions = []grpc.DialOption{
+			c.config.ClientTLSInfo.Security.GRPCDialOptionMTLS(id),
+		}
+		cfg.TLS = c.config.ClientTLSInfo.Security.MTLSClientConfig(id)
+
+	}
+	client, err := clientv3.New(cfg)
 	if err != nil {
 		return err
 	}
