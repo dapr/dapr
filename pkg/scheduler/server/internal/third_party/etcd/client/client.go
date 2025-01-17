@@ -18,11 +18,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"strconv"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/spiffe/go-spiffe/v2/spiffeid"
 	"go.etcd.io/etcd/api/v3/v3rpc/rpctypes"
 	etcdclient "go.etcd.io/etcd/client/v3"
 	"go.etcd.io/etcd/client/v3/credentials"
@@ -33,8 +35,8 @@ import (
 	"google.golang.org/grpc/keepalive"
 	"google.golang.org/grpc/status"
 
-	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/client/internal/endpoint"
 	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/client/internal/resolver"
+	"github.com/dapr/dapr/pkg/scheduler/server/internal/third_party/etcd/client/pkg/transport"
 )
 
 var (
@@ -74,13 +76,12 @@ type Client struct {
 }
 
 // New creates a new etcdv3 client from a given configuration.
-// func New(cfg etcdclient.Config) (*Client, error) {
-func New(cfg etcdclient.Config) (*etcdclient.Client, error) {
+func New(cfg etcdclient.Config, tlsinfo transport.TLSInfo) (*etcdclient.Client, error) {
 	if len(cfg.Endpoints) == 0 {
 		return nil, ErrNoAvailableEndpoints
 	}
 
-	return newClient(&cfg)
+	return newClient(&cfg, tlsinfo)
 }
 
 // Option is a function type that can be passed as argument to NewCtxClient to configure client
@@ -184,7 +185,6 @@ func (c *MyClient) autoSync() {
 }
 
 // dialSetupOpts gives the dial opts prior to any authentication.
-// func (c *Client) dialSetupOpts(creds grpccredentials.TransportCredentials, dopts ...grpc.DialOption) (opts []grpc.DialOption, err error) {
 func (c *MyClient) dialSetupOpts(dopts ...grpc.DialOption) (opts []grpc.DialOption, err error) {
 	if c.cfg.DialKeepAliveTime > 0 {
 		params := keepalive.ClientParameters{
@@ -251,17 +251,21 @@ func (c *Client) getToken(ctx context.Context) error {
 	return nil
 }
 
-// dialWithBalancer dials the client's current load balanced resolver group.  The scheme of the host
+// dialWithBalancer dials the client's current load balanced resolver group. The scheme of the host
 // of the provided endpoint determines the scheme used for all endpoints of the client connection.
-// func (c *Client) dialWithBalancer(dopts ...grpc.DialOption) (*grpc.ClientConn, error) {
 func (c *MyClient) dialWithBalancer(dopts ...grpc.DialOption) (*grpc.ClientConn, error) {
-	//creds := c.credentialsForEndpoint(c.Endpoints()[0])
 	opts := append(dopts, grpc.WithResolvers(c.resolver))
 	return c.dial(opts...)
 }
 
+// Wrapper function for NetDialerID
+func wrapDialer(dialer func(network, addr string) (net.Conn, error)) func(ctx context.Context, addr string) (net.Conn, error) {
+	return func(ctx context.Context, addr string) (net.Conn, error) {
+		return dialer("tcp", addr)
+	}
+}
+
 // dial configures and dials any grpc balancer target.
-// func (c *Client) dial(creds grpccredentials.TransportCredentials, dopts ...grpc.DialOption) (*grpc.ClientConn, error) {
 func (c *MyClient) dial(dopts ...grpc.DialOption) (*grpc.ClientConn, error) {
 	opts, err := c.dialSetupOpts(dopts...)
 	if err != nil {
@@ -277,13 +281,23 @@ func (c *MyClient) dial(dopts ...grpc.DialOption) (*grpc.ClientConn, error) {
 		defer cancel() // TODO: Is this right for cases where grpc.WithBlock() is not set on the dial options?
 	}
 	target := fmt.Sprintf("%s://%p/%s", resolver.Schema, c, authority(c.internalClient.Endpoints()[0]))
-	// cassie todo: here need to ensure we are using the security pkg NetDialerID
+
+	id, err := spiffeid.FromPath(c.tlsinfo.Security.ControlPlaneTrustDomain(), "/ns/"+c.tlsinfo.Security.ControlPlaneNamespace()+"/"+"dapr-scheduler")
+	if err != nil {
+		return nil, fmt.Errorf("failed to create SPIFFE ID for server: %w", err)
+	}
+	// Create the dialer using the security package
+	dialer := c.tlsinfo.Security.NetDialerID(dctx, id, 5*time.Second)
+	wrappedDialer := wrapDialer(dialer)
+
+	// Wrap the dialer in gRPC options
+	opts = append(opts, grpc.WithContextDialer(wrappedDialer))
 
 	conn, err := grpc.DialContext(dctx, target, opts...)
-
 	if err != nil {
 		return nil, err
 	}
+
 	return conn, nil
 }
 
@@ -301,22 +315,23 @@ func authority(endpoint string) string {
 	return spl[1]
 }
 
-func (c *Client) credentialsForEndpoint(ep string) grpccredentials.TransportCredentials {
-	r := endpoint.RequiresCredentials(ep)
-	switch r {
-	case endpoint.CREDS_DROP:
-		return nil
-	case endpoint.CREDS_OPTIONAL:
-		return c.creds
-	case endpoint.CREDS_REQUIRE:
-		if c.creds != nil {
-			return c.creds
-		}
-		return credentials.NewBundle(credentials.Config{}).TransportCredentials()
-	default:
-		panic(fmt.Errorf("unsupported CredsRequirement: %v", r))
-	}
-}
+//
+//func (c *Client) credentialsForEndpoint(ep string) grpccredentials.TransportCredentials {
+//	r := endpoint.RequiresCredentials(ep)
+//	switch r {
+//	case endpoint.CREDS_DROP:
+//		return nil
+//	case endpoint.CREDS_OPTIONAL:
+//		return c.creds
+//	case endpoint.CREDS_REQUIRE:
+//		if c.creds != nil {
+//			return c.creds
+//		}
+//		return credentials.NewBundle(credentials.Config{}).TransportCredentials()
+//	default:
+//		panic(fmt.Errorf("unsupported CredsRequirement: %v", r))
+//	}
+//}
 
 type MyClient struct {
 	internalClient *etcdclient.Client
@@ -324,9 +339,10 @@ type MyClient struct {
 	resolver       *resolver.EtcdManualResolver
 	cfg            *etcdclient.Config
 	callOpts       []grpc.CallOption
+	tlsinfo        transport.TLSInfo
 }
 
-func newClient(cfg *etcdclient.Config) (*etcdclient.Client, error) {
+func newClient(cfg *etcdclient.Config, tlsinfo transport.TLSInfo) (*etcdclient.Client, error) {
 	if cfg == nil {
 		cfg = &etcdclient.Config{}
 	}
@@ -342,6 +358,7 @@ func newClient(cfg *etcdclient.Config) (*etcdclient.Client, error) {
 	myClient := &MyClient{
 		resolver: resolver.New(cfg.Endpoints...),
 		cfg:      cfg,
+		tlsinfo:  tlsinfo,
 	}
 
 	etcdclientCfg := &etcdclient.Config{

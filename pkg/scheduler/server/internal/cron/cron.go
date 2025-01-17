@@ -131,12 +131,13 @@ func (c *cron) Run(ctx context.Context) error {
 		cfg.DialOptions = []grpc.DialOption{
 			c.config.ClientTLSInfo.Security.GRPCDialOptionMTLS(id),
 		}
-		cfg.TLS = c.config.ClientTLSInfo.Security.MTLSClientConfig(id)
-
 	} else {
 		cfg.DialOptions = []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
 	}
-	client, err := clientv3.New(cfg)
+
+	cfg.TLS = c.config.ClientTLSInfo.Security.MTLSClientConfig(id)
+
+	client, err := clientv3.New(cfg, c.config.ClientTLSInfo)
 	if err != nil {
 		return err
 	}
