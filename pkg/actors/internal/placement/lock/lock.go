@@ -102,15 +102,19 @@ func (l *Lock) handleHold(h *hold) {
 	}
 
 	l.wg.Add(1)
+	var done bool
 	rctx, cancel := context.WithCancel(h.rctx)
 	i := l.rcancelx
 
 	rcancel := func() {
 		l.rcancelLock.Lock()
-		cancel()
-		delete(l.rcancels, i)
+		if !done {
+			cancel()
+			delete(l.rcancels, i)
+			l.wg.Done()
+			done = true
+		}
 		l.rcancelLock.Unlock()
-		l.wg.Done()
 	}
 
 	l.rcancels[i] = rcancel
