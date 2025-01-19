@@ -251,7 +251,7 @@ func purgeTest(url string, instanceID string) func(t *testing.T) {
 		resp, err = utils.HTTPPost(fmt.Sprintf("%s/StartWorkflow/dapr/placeOrder/%s", url, instanceID), nil)
 		require.NoError(t, err, "failure starting workflow")
 
-		require.Equal(t, instanceID, string(resp))
+		assert.Equal(t, instanceID, string(resp))
 
 		require.EventuallyWithT(t, func(t *assert.CollectT) {
 			resp, err = utils.HTTPGet(getString)
