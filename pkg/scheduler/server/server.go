@@ -137,7 +137,9 @@ func (s *Server) Run(ctx context.Context) error {
 		func(ctx context.Context) error {
 			err := s.cron.Run(ctx)
 			if ctx.Err() != nil {
-				log.Errorf("Error running scheduler cron: %s", err)
+				if err != nil {
+					log.Errorf("Error running scheduler cron: %s", err)
+				}
 				return ctx.Err()
 			}
 			return err

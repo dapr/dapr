@@ -123,7 +123,6 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 						ActivityActorType: abe.activityActorType,
 						WorkflowActorType: abe.workflowActorType,
 						ReminderInterval:  abe.defaultReminderInterval,
-						Scheduler:         getActivityScheduler(abe.activityWorkItemChan),
 						Scheduler: func(ctx context.Context, wi *backend.ActivityWorkItem) error {
 							log.Debugf(
 								"%s: scheduling [%s#%d] activity execution with durabletask engine",
