@@ -62,8 +62,6 @@ type activity struct {
 	lock   *internal.Lock
 
 	scheduler          todo.ActivityScheduler
-	cachingDisabled    bool
-	defaultTimeout     time.Duration
 	reminderInterval   time.Duration
 	completed          atomic.Bool
 	schedulerReminders bool
@@ -73,8 +71,6 @@ type ActivityOptions struct {
 	AppID              string
 	ActivityActorType  string
 	WorkflowActorType  string
-	CachingDisabled    bool
-	DefaultTimeout     *time.Duration
 	ReminderInterval   *time.Duration
 	Scheduler          todo.ActivityScheduler
 	Actors             actors.Interface
@@ -84,23 +80,17 @@ type ActivityOptions struct {
 func ActivityFactory(opts ActivityOptions) targets.Factory {
 	return func(actorID string) targets.Interface {
 		reminderInterval := time.Minute * 1
-		defaultTimeout := time.Hour * 1
 
 		if opts.ReminderInterval != nil {
 			reminderInterval = *opts.ReminderInterval
-		}
-		if opts.DefaultTimeout != nil {
-			defaultTimeout = *opts.DefaultTimeout
 		}
 
 		return &activity{
 			appID:              opts.AppID,
 			actorID:            actorID,
 			actorType:          opts.ActivityActorType,
-			cachingDisabled:    opts.CachingDisabled,
 			workflowActorType:  opts.WorkflowActorType,
 			reminderInterval:   reminderInterval,
-			defaultTimeout:     defaultTimeout,
 			actors:             opts.Actors,
 			scheduler:          opts.Scheduler,
 			schedulerReminders: opts.SchedulerReminders,
@@ -159,10 +149,7 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 		return fmt.Errorf("failed to decode activity reminder: %w", err)
 	}
 
-	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, a.defaultTimeout)
-	defer cancelTimeout()
-
-	completed, err := a.executeActivity(timeoutCtx, reminder.Name, &state)
+	completed, err := a.executeActivity(ctx, reminder.Name, &state)
 	if completed == runCompletedTrue {
 		a.completed.Store(true)
 	}

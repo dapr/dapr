@@ -62,9 +62,6 @@ type Actors struct {
 	activityActorType string
 
 	// TODO: @joshvanl
-	cachingDisabled         bool
-	defaultWorkflowTimeout  *time.Duration
-	defaultActivityTimeout  *time.Duration
 	defaultReminderInterval *time.Duration
 	resiliency              resiliency.Provider
 	actors                  actors.Interface
@@ -137,8 +134,6 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 						AppID:              abe.appID,
 						WorkflowActorType:  abe.workflowActorType,
 						ActivityActorType:  abe.activityActorType,
-						CachingDisabled:    abe.cachingDisabled,
-						DefaultTimeout:     abe.defaultWorkflowTimeout,
 						ReminderInterval:   abe.defaultReminderInterval,
 						Resiliency:         abe.resiliency,
 						Actors:             abe.actors,
@@ -152,8 +147,6 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 						AppID:              abe.appID,
 						ActivityActorType:  abe.activityActorType,
 						WorkflowActorType:  abe.workflowActorType,
-						CachingDisabled:    abe.cachingDisabled,
-						DefaultTimeout:     abe.defaultActivityTimeout,
 						ReminderInterval:   abe.defaultReminderInterval,
 						Scheduler:          getActivityScheduler(abe.activityWorkItemChan),
 						Actors:             abe.actors,
