@@ -466,8 +466,8 @@ github.com/danieljoos/wincred v1.1.2 h1:QLdCxFs1/Yl4zduvBdcHB8goaYk9RARS2SgLLRuA
 github.com/danieljoos/wincred v1.1.2/go.mod h1:GijpziifJoIBfYh+S7BbkdUTU4LfM+QnGqR5Vl2tAx0=
 github.com/dapr/components-contrib v1.15.0-rc.1.0.20241216170750-aca5116d95c9 h1:y68C9PNQKZULAd+z9VsflNgpBGafwnrk+sYl57tBYeA=
 github.com/dapr/components-contrib v1.15.0-rc.1.0.20241216170750-aca5116d95c9/go.mod h1:jzKIWl+mK+iH2COvGMcc4sV1fFeB8RZ5q312CF2ZKok=
-github.com/dapr/durabletask-go v0.5.1-0.20250110210942-3c1cc0f50d3e h1:imTVKzBePUuM22ksh9KC+6k/8i7C5oWYkwV1TIB4dKs=
-github.com/dapr/durabletask-go v0.5.1-0.20250110210942-3c1cc0f50d3e/go.mod h1:9OKiBAxWjwVct4YaxoLLOlDGGJxCC3a5zi8zCX4AAQY=
+github.com/dapr/durabletask-go v0.5.1-0.20250115143652-bb9397142c68 h1:QClE+zvTxyK/JmQSmyFRrCLGaG8xcTP6PNCGBMXOv74=
+github.com/dapr/durabletask-go v0.5.1-0.20250115143652-bb9397142c68/go.mod h1:uXofzwmQ68j1GflMILMiJfvwi1eZKM5OYLRDp7k1+GI=
 github.com/dapr/kit v0.13.1-0.20250110192255-fb195706966f h1:gugkO8r833phJ31v/HhCUOHxznAkuxdsC6KMh391NOE=
 github.com/dapr/kit v0.13.1-0.20250110192255-fb195706966f/go.mod h1:HwFsBKEbcyLanWlDZE7u/jnaDCD/tU+n3pkFNUctQNw=
 github.com/dave/jennifer v1.4.0/go.mod h1:fIb+770HOpJ2fmN9EPPKOqm1vMGhB+TwXKMZhrIygKg=
@@ -1165,8 +1165,6 @@ github.com/mailru/easyjson v0.0.0-20190626092158-b2ccc519800e/go.mod h1:C1wdFJiN
 github.com/mailru/easyjson v0.7.6/go.mod h1:xzfreul335JAWq5oZzymOObrkdz5UnU4kGfJJLY9Nlc=
 github.com/mailru/easyjson v0.7.7 h1:UGYAvKxe3sBsEDzO8ZeWOSlIQfWFlxbzLZe7hwFURr0=
 github.com/mailru/easyjson v0.7.7/go.mod h1:xzfreul335JAWq5oZzymOObrkdz5UnU4kGfJJLY9Nlc=
-github.com/marusama/semaphore/v2 v2.5.0 h1:o/1QJD9DBYOWRnDhPwDVAXQn6mQYD0gZaS1Tpx6DJGM=
-github.com/marusama/semaphore/v2 v2.5.0/go.mod h1:z9nMiNUekt/LTpTUQdpp+4sJeYqUGpwMHfW0Z8V8fnQ=
 github.com/matoous/go-nanoid v1.5.0/go.mod h1:zyD2a71IubI24efhpvkJz+ZwfwagzgSO6UNiFsZKN7U=
 github.com/matoous/go-nanoid/v2 v2.0.0 h1:d19kur2QuLeHmJBkvYkFdhFBzLoo1XVm2GgTpL+9Tj0=
 github.com/matoous/go-nanoid/v2 v2.0.0/go.mod h1:FtS4aGPVfEkxKxhdWPAspZpZSh1cOjtM7Ej/So3hR0g=

@@ -111,11 +111,12 @@ func (s *Scheduler) Run(ctx context.Context) error {
 					return nil
 				}
 
+				defer stream.CloseSend()
+
 				var resp *schedulerv1pb.WatchHostsResponse
 				resp, err = stream.Recv()
 				if err != nil {
 					log.Errorf("Failed to receive scheduler hosts: %s", err)
-					//nolint:nilerr
 					return nil
 				}
 				addresses = make([]string, 0, len(resp.GetHosts()))
@@ -128,10 +129,6 @@ func (s *Scheduler) Run(ctx context.Context) error {
 				return nil
 			},
 		).Run(ctx)
-
-		if stream != nil {
-			stream.CloseSend()
-		}
 
 		if err != nil || ctx.Err() != nil {
 			return err

@@ -51,7 +51,6 @@ func (i *timer) Run(t *testing.T, ctx context.Context) {
 		if err := ctx.CreateTimer(time.Second * 4).Await(nil); err != nil {
 			return nil, err
 		}
-
 		require.NoError(t, ctx.CallActivity("abc", task.WithActivityInput("abc")).Await(nil))
 		return nil, nil
 	})

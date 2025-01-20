@@ -16,7 +16,9 @@ package placement
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"io"
 	"net/http"
 	"strconv"
 	"sync"
@@ -228,7 +230,9 @@ func (p *Placement) RegisterHost(t *testing.T, parentCtx context.Context, msg *p
 		cancel()
 		select {
 		case err := <-doneCh:
-			require.NoError(t, err)
+			if !errors.Is(err, io.EOF) {
+				require.NoError(t, err)
+			}
 		case <-time.After(time.Second * 5):
 			assert.Fail(t, "timeout waiting for stream to close")
 		}

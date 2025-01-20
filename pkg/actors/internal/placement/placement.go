@@ -52,8 +52,7 @@ const (
 type Interface interface {
 	Run(context.Context) error
 	Ready() bool
-	Lock(context.Context) error
-	Unlock()
+	Lock(context.Context) (context.Context, context.CancelFunc, error)
 	LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, error)
 }
 
@@ -85,6 +84,8 @@ type placement struct {
 	lockVersion   atomic.Uint64
 	updateVersion atomic.Uint64
 	operationLock *fifo.Mutex
+
+	tableUnlock context.CancelFunc
 
 	appID     string
 	namespace string
@@ -133,6 +134,10 @@ func (p *placement) Run(ctx context.Context) error {
 	err := concurrency.NewRunnerManager(
 		p.client.Run,
 		func(ctx context.Context) error {
+			p.lock.Run(ctx)
+			return nil
+		},
+		func(ctx context.Context) error {
 			ch, actorTypes := p.actorTable.SubscribeToTypeUpdates(ctx)
 			log.Infof("Reporting actor types: %v", actorTypes)
 			if err := p.sendHost(ctx, actorTypes); err != nil {
@@ -161,7 +166,6 @@ func (p *placement) Run(ctx context.Context) error {
 		},
 		func(ctx context.Context) error {
 			defer p.wg.Wait()
-			defer p.lock.EnsureUnlockTable()
 
 			for {
 				in, err := p.client.Recv(ctx)
@@ -175,7 +179,14 @@ func (p *placement) Run(ctx context.Context) error {
 	).Run(ctx)
 
 	p.closed.Store(true)
-	p.lock.EnsureUnlockTable()
+
+	p.operationLock.Lock()
+	if p.tableUnlock != nil {
+		p.tableUnlock()
+		p.tableUnlock = nil
+	}
+	p.operationLock.Unlock()
+
 	return err
 }
 
@@ -238,22 +249,17 @@ func (p *placement) handleReceive(ctx context.Context, in *v1pb.PlacementOrder) 
 	}
 }
 
-func (p *placement) Lock(ctx context.Context) error {
+func (p *placement) Lock(ctx context.Context) (context.Context, context.CancelFunc, error) {
 	select {
 	case <-p.readyCh:
 	case <-ctx.Done():
-		return ctx.Err()
+		return nil, nil, ctx.Err()
 	}
-	p.lock.LockLookup()
-	return nil
-}
-
-func (p *placement) Unlock() {
-	p.lock.UnlockLookup()
+	return p.lock.RLock(ctx)
 }
 
 func (p *placement) handleLockOperation(ctx context.Context) {
-	p.lock.LockTable()
+	p.tableUnlock = p.lock.Lock()
 	lockVersion := p.lockVersion.Add(1)
 
 	clear(p.hashTable.Entries)
@@ -270,7 +276,10 @@ func (p *placement) handleLockOperation(ctx context.Context) {
 			if p.updateVersion.Load() < lockVersion {
 				p.updateVersion.Store(lockVersion)
 				clear(p.hashTable.Entries)
-				p.lock.EnsureUnlockTable()
+				if p.tableUnlock != nil {
+					p.tableUnlock()
+					p.tableUnlock = nil
+				}
 			}
 		}
 	}()
@@ -337,7 +346,8 @@ func (p *placement) handleUnlockOperation(ctx context.Context) {
 	}
 
 	p.htarget.Ready()
-	p.lock.EnsureUnlockTable()
+	p.tableUnlock()
+	p.tableUnlock = nil
 }
 
 func (p *placement) isActorLocal(targetActorAddress, hostAddress string, port string) bool {

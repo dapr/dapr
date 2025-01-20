@@ -193,7 +193,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			}
 			for _, orchID := range orchestrationIDs {
 				meta, err := backendClient.FetchOrchestrationMetadata(ctx, api.InstanceID(orchID))
-				require.NoError(t, err)
+				assert.NoError(c, err)
 				// All orchestrations should be running
 				assert.Equal(c, api.RUNTIME_STATUS_RUNNING.String(), meta.GetRuntimeStatus().String())
 			}
