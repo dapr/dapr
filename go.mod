@@ -48,7 +48,7 @@ require (
 	github.com/spf13/cast v1.6.0
 	github.com/spf13/pflag v1.0.5
 	github.com/spiffe/go-spiffe/v2 v2.1.7
-	github.com/stretchr/testify v1.9.0
+	github.com/stretchr/testify v1.10.0
 	go.etcd.io/etcd/api/v3 v3.5.16
 	go.etcd.io/etcd/client/v3 v3.5.16
 	go.etcd.io/etcd/server/v3 v3.5.16
@@ -494,9 +494,6 @@ replace (
 
 // update retracted indirect dependencies if necessary
 // check for retracted versions: go list -mod=mod -f '{{if .Retracted}}{{.}}{{end}}' -u -m all
-
-// Needed due to a deprecated method used in functional tests
-replace github.com/stretchr/testify => github.com/stretchr/testify v1.8.4
 
 // Uncomment for local development for testing with changes in the components-contrib && kit repositories.
 // Don't commit with this uncommented!
