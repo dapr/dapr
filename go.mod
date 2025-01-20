@@ -1,6 +1,6 @@
 module github.com/dapr/dapr
 
-go 1.23.1
+go 1.23.5
 
 require (
 	contrib.go.opencensus.io/exporter/prometheus v0.4.2
@@ -63,9 +63,9 @@ require (
 	go.opentelemetry.io/otel/trace v1.32.0
 	go.uber.org/automaxprocs v1.5.3
 	go.uber.org/ratelimit v0.3.0
-	golang.org/x/crypto v0.31.0
+	golang.org/x/crypto v0.32.0
 	golang.org/x/exp v0.0.0-20241204233417-43b7b7cde48d
-	golang.org/x/net v0.32.0
+	golang.org/x/net v0.34.0
 	golang.org/x/sync v0.10.0
 	google.golang.org/genproto/googleapis/api v0.0.0-20240924160255-9d4c2d233b61
 	google.golang.org/genproto/googleapis/rpc v0.0.0-20241202173237-19429a94021a
@@ -242,7 +242,7 @@ require (
 	github.com/go-playground/universal-translator v0.18.0 // indirect
 	github.com/go-playground/validator/v10 v10.11.0 // indirect
 	github.com/go-redis/redis/v8 v8.11.5 // indirect
-	github.com/go-resty/resty/v2 v2.7.0 // indirect
+	github.com/go-resty/resty/v2 v2.11.0 // indirect
 	github.com/go-sql-driver/mysql v1.7.1 // indirect
 	github.com/go-zookeeper/zk v1.0.3 // indirect
 	github.com/gobwas/glob v0.2.3 // indirect
@@ -438,8 +438,8 @@ require (
 	golang.org/x/arch v0.10.0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
 	golang.org/x/oauth2 v0.23.0 // indirect
-	golang.org/x/sys v0.28.0 // indirect
-	golang.org/x/term v0.27.0 // indirect
+	golang.org/x/sys v0.29.0 // indirect
+	golang.org/x/term v0.28.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/time v0.6.0 // indirect
 	golang.org/x/tools v0.28.0 // indirect
