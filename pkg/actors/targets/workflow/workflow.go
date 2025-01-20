@@ -46,6 +46,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/wfengine/todo"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/durabletask-go/backend"
+	"github.com/dapr/durabletask-go/backend/runtimestate"
 	"github.com/dapr/kit/events/broadcaster"
 	"github.com/dapr/kit/logger"
 )
@@ -164,23 +165,6 @@ func (w *workflow) executeMethod(ctx context.Context, methodName string, request
 	case todo.CreateWorkflowInstanceMethod:
 		return nil, w.createWorkflowInstance(ctx, request)
 
-	case todo.GetWorkflowMetadataMethod:
-		meta, err := w.getWorkflowMetadata(ctx)
-		if err != nil {
-			log.Errorf("Workflow actor '%s': failed to get workflow metadata: %v", w.actorID, err)
-			return nil, err
-		}
-		return proto.Marshal(meta)
-
-	case todo.GetWorkflowStateMethod:
-		var state *wfenginestate.State
-		state, err := w.getWorkflowState(ctx)
-		if err != nil {
-			log.Errorf("Workflow actor '%s': failed to get workflow state: %v", w.actorID, err)
-			return nil, err
-		}
-		return state.EncodeWorkflowState()
-
 	case todo.AddWorkflowEventMethod:
 		return nil, w.addWorkflowEvent(ctx, request)
 
@@ -261,7 +245,7 @@ func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) e
 			WorkflowActorType: w.actorType,
 			ActivityActorType: w.activityActorType,
 		})
-		w.rstate = backend.NewOrchestrationRuntimeState(api.InstanceID(w.actorID), state.History)
+		w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.History)
 		w.setOrchestrationMetadata(state, w.rstate)
 		created = true
 	}
@@ -289,11 +273,11 @@ func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) e
 	}
 
 	// orchestration already existed: apply reuse id policy
-	runtimeState := w.rstate
-	runtimeStatus := runtimeState.RuntimeStatus()
+	rs := w.rstate
+	runtimeStatus := runtimestate.RuntimeStatus(rs)
 	// if target status doesn't match, fall back to original logic, create instance only if previous one is completed
 	if !isStatusMatch(reuseIDPolicy.GetOperationStatus(), runtimeStatus) {
-		return w.createIfCompleted(ctx, runtimeState, state, startEvent)
+		return w.createIfCompleted(ctx, rs, state, startEvent)
 	}
 
 	switch reuseIDPolicy.GetAction() {
@@ -312,7 +296,7 @@ func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) e
 		return w.scheduleWorkflowStart(ctx, startEvent, state)
 	}
 	// default Action ERROR, fall back to original logic
-	return w.createIfCompleted(ctx, runtimeState, state, startEvent)
+	return w.createIfCompleted(ctx, rs, state, startEvent)
 }
 
 func isStatusMatch(statuses []api.OrchestrationStatus, runtimeStatus api.OrchestrationStatus) bool {
@@ -328,10 +312,10 @@ func (w *workflow) Completed() bool {
 	return w.completed.Load()
 }
 
-func (w *workflow) createIfCompleted(ctx context.Context, runtimeState *backend.OrchestrationRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent) error {
+func (w *workflow) createIfCompleted(ctx context.Context, rs *backend.OrchestrationRuntimeState, state *wfenginestate.State, startEvent *backend.HistoryEvent) error {
 	// We block (re)creation of existing workflows unless they are in a completed state
 	// Or if they still have any pending activity result awaited.
-	if !runtimeState.IsCompleted() {
+	if !runtimestate.IsCompleted(rs) {
 		return fmt.Errorf("an active workflow with ID '%s' already exists", w.actorID)
 	}
 	if w.activityResultAwaited.Load() {
@@ -391,29 +375,6 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 	return nil
 }
 
-func (w *workflow) getWorkflowMetadata(ctx context.Context) (*backend.OrchestrationMetadata, error) {
-	state, err := w.loadInternalState(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if state == nil {
-		return nil, api.ErrInstanceNotFound
-	}
-
-	return w.ometa, nil
-}
-
-func (w *workflow) getWorkflowState(ctx context.Context) (*wfenginestate.State, error) {
-	state, err := w.loadInternalState(ctx)
-	if err != nil {
-		return nil, err
-	}
-	if state == nil {
-		return nil, api.ErrInstanceNotFound
-	}
-	return state, nil
-}
-
 // This method purges all the completed activity data from a workflow associated with the given actorID
 func (w *workflow) purgeWorkflowState(ctx context.Context) error {
 	state, err := w.loadInternalState(ctx)
@@ -424,7 +385,7 @@ func (w *workflow) purgeWorkflowState(ctx context.Context) error {
 		return api.ErrInstanceNotFound
 	}
 	w.completed.Store(true)
-	return w.cleanupWorkflowStateInternal(ctx, state, !w.rstate.IsCompleted())
+	return w.cleanupWorkflowStateInternal(ctx, state, !runtimestate.IsCompleted(w.rstate))
 }
 
 func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byte) error {
@@ -546,12 +507,12 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		}
 	}
 
-	runtimeState := w.rstate
+	rs := w.rstate
 	wi := &backend.OrchestrationWorkItem{
-		InstanceID: runtimeState.InstanceID(),
+		InstanceID: api.InstanceID(rs.GetInstanceId()),
 		NewEvents:  state.Inbox,
 		RetryCount: -1, // TODO
-		State:      runtimeState,
+		State:      rs,
 		Properties: make(map[string]any, 1),
 	}
 
@@ -561,7 +522,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 	wi.Properties[todo.CallbackChannelProperty] = callback
 	// Setting executionStatus to failed by default to record metrics for non-recoverable errors.
 	executionStatus := diag.StatusFailed
-	if runtimeState.IsCompleted() {
+	if runtimestate.IsCompleted(rs) {
 		// If workflow is already completed, set executionStatus to empty string
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
@@ -601,18 +562,18 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 			return runCompletedFalse, wferrors.NewRecoverable(errExecutionAborted)
 		}
 	}
-	log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", w.actorID, runtimeState.RuntimeStatus().String(), wi.InstanceID)
+	log.Debugf("Workflow actor '%s': workflow execution returned with status '%s' instanceId '%s'", w.actorID, runtimestate.RuntimeStatus(rs).String(), wi.InstanceID)
 
 	// Increment the generation counter if the workflow used continue-as-new. Subsequent actions below
 	// will use this updated generation value for their duplication execution handling.
-	if runtimeState.ContinuedAsNew() {
+	if rs.GetContinuedAsNew() {
 		log.Debugf("Workflow actor '%s': workflow with instanceId '%s' continued as new", w.actorID, wi.InstanceID)
 		state.Generation += 1
 	}
 
-	if !runtimeState.IsCompleted() {
+	if !runtimestate.IsCompleted(rs) {
 		// Create reminders for the durable timers. We only do this if the orchestration is still running.
-		for _, t := range runtimeState.PendingTimers() {
+		for _, t := range rs.GetPendingTimers() {
 			tf := t.GetTimerFired()
 			if tf == nil {
 				return runCompletedTrue, errors.New("invalid event in the PendingTimers list")
@@ -635,11 +596,11 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 	}
 
 	// Process the outbound orchestrator events
-	reqsByName := make(map[string][]backend.OrchestratorMessage, len(runtimeState.PendingMessages()))
-	for _, msg := range runtimeState.PendingMessages() {
-		if es := msg.HistoryEvent.GetExecutionStarted(); es != nil {
+	reqsByName := make(map[string][]*backend.OrchestrationRuntimeStateMessage, len(rs.GetPendingMessages()))
+	for _, msg := range rs.GetPendingMessages() {
+		if es := msg.GetHistoryEvent().GetExecutionStarted(); es != nil {
 			reqsByName[todo.CreateWorkflowInstanceMethod] = append(reqsByName[todo.CreateWorkflowInstanceMethod], msg)
-		} else if msg.HistoryEvent.GetSubOrchestrationInstanceCompleted() != nil || msg.HistoryEvent.GetSubOrchestrationInstanceFailed() != nil {
+		} else if msg.GetHistoryEvent().GetSubOrchestrationInstanceCompleted() != nil || msg.GetHistoryEvent().GetSubOrchestrationInstanceFailed() != nil {
 			reqsByName[todo.AddWorkflowEventMethod] = append(reqsByName[todo.AddWorkflowEventMethod], msg)
 		} else {
 			log.Warnf("Workflow actor '%s': don't know how to process outbound message '%v'", w.actorID, msg)
@@ -653,7 +614,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 
 	// Schedule activities
 	// TODO: Parallelism
-	for _, e := range runtimeState.PendingTasks() {
+	for _, e := range rs.GetPendingTasks() {
 		ts := e.GetTaskScheduled()
 		if ts == nil {
 			log.Warnf("Workflow actor '%s': unable to process task '%v'", w.actorID, e)
@@ -694,35 +655,35 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 			var requestBytes []byte
 			if method == todo.CreateWorkflowInstanceMethod {
 				requestBytes, err = proto.Marshal(&backend.CreateWorkflowInstanceRequest{
-					StartEvent: msg.HistoryEvent,
+					StartEvent: msg.GetHistoryEvent(),
 				})
 				if err != nil {
 					return runCompletedTrue, fmt.Errorf("failed to marshal createWorkflowInstanceRequest: %w", err)
 				}
 			} else {
-				requestBytes, err = proto.Marshal(msg.HistoryEvent)
+				requestBytes, err = proto.Marshal(msg.GetHistoryEvent())
 				if err != nil {
 					return runCompletedTrue, err
 				}
 			}
 
-			log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", w.actorID, method, msg.TargetInstanceID)
+			log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", w.actorID, method, msg.GetTargetInstanceID())
 
 			_, err = engine.Call(ctx, internalsv1pb.
 				NewInternalInvokeRequest(method).
-				WithActor(w.actorType, msg.TargetInstanceID).
+				WithActor(w.actorType, msg.GetTargetInstanceID()).
 				WithData(requestBytes).
 				WithContentType(invokev1.ProtobufContentType),
 			)
 			if err != nil {
 				executionStatus = diag.StatusRecoverable
 				// workflow-related actor methods are never expected to return errors
-				return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.TargetInstanceID, err))
+				return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.GetTargetInstanceID(), err))
 			}
 		}
 	}
 
-	state.ApplyRuntimeStateChanges(runtimeState)
+	state.ApplyRuntimeStateChanges(rs)
 	state.ClearInbox()
 
 	err = w.saveInternalState(ctx, state)
@@ -733,8 +694,8 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		// If workflow is not completed, set executionStatus to empty string
 		// which will skip recording metrics for this execution.
 		executionStatus = ""
-		if runtimeState.IsCompleted() {
-			if runtimeState.RuntimeStatus() == api.RUNTIME_STATUS_COMPLETED {
+		if runtimestate.IsCompleted(rs) {
+			if runtimestate.RuntimeStatus(rs) == api.RUNTIME_STATUS_COMPLETED {
 				executionStatus = diag.StatusSuccess
 			} else {
 				// Setting executionStatus to failed if workflow has failed/terminated/cancelled
@@ -743,8 +704,8 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 			wfExecutionElapsedTime = w.calculateWorkflowExecutionLatency(state)
 		}
 	}
-	if runtimeState.IsCompleted() {
-		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", w.actorID, runtimeState.RuntimeStatus().String(), workflowName)
+	if runtimestate.IsCompleted(rs) {
+		log.Infof("Workflow Actor '%s': workflow completed with status '%s' workflowName '%s'", w.actorID, runtimestate.RuntimeStatus(rs).String(), workflowName)
 		return runCompletedTrue, nil
 	}
 	return runCompletedFalse, nil
@@ -809,7 +770,7 @@ func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State,
 	}
 	// Update cached state
 	w.state = state
-	w.rstate = backend.NewOrchestrationRuntimeState(api.InstanceID(w.actorID), state.History)
+	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.History)
 	w.setOrchestrationMetadata(w.state, w.rstate)
 	w.ometaBroadcaster.Broadcast(w.ometa)
 
@@ -837,7 +798,7 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 
 	// Update cached state
 	w.state = state
-	w.rstate = backend.NewOrchestrationRuntimeState(api.InstanceID(w.actorID), state.History)
+	w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.History)
 	w.setOrchestrationMetadata(state, w.rstate)
 	w.ometaBroadcaster.Broadcast(w.ometa)
 	return nil
@@ -1021,16 +982,16 @@ func (w *workflow) handleStreamInitial(ctx context.Context, req *internalsv1pb.I
 }
 
 func (w *workflow) setOrchestrationMetadata(state *wfenginestate.State, rstate *backend.OrchestrationRuntimeState) {
-	name, _ := rstate.Name()
-	createdAt, _ := rstate.CreatedTime()
-	lastUpdated, _ := rstate.LastUpdatedTime()
-	input, _ := rstate.Input()
-	output, _ := rstate.Output()
-	failureDetuils, _ := rstate.FailureDetails()
+	name, _ := runtimestate.Name(rstate)
+	createdAt, _ := runtimestate.CreatedTime(rstate)
+	lastUpdated, _ := runtimestate.LastUpdatedTime(rstate)
+	input, _ := runtimestate.Input(rstate)
+	output, _ := runtimestate.Output(rstate)
+	failureDetuils, _ := runtimestate.FailureDetails(rstate)
 	w.ometa = &backend.OrchestrationMetadata{
-		InstanceId:     string(rstate.InstanceID()),
+		InstanceId:     rstate.GetInstanceId(),
 		Name:           name,
-		RuntimeStatus:  rstate.RuntimeStatus(),
+		RuntimeStatus:  runtimestate.RuntimeStatus(rstate),
 		CreatedAt:      timestamppb.New(createdAt),
 		LastUpdatedAt:  timestamppb.New(lastUpdated),
 		Input:          wrapperspb.String(input),

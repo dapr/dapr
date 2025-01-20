@@ -15,6 +15,7 @@ package cron
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"sync"
@@ -240,9 +241,9 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 	for {
 		select {
 		case <-stream.Context().Done():
-			return nil
+			return stream.Context().Err()
 		case <-c.closeCh:
-			return nil
+			return errors.New("cron closed")
 		case hosts, ok := <-watchHostsCh:
 			if !ok {
 				return nil
