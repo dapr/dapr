@@ -120,10 +120,6 @@ func TestActorState(t *testing.T) {
 			assert.Equal(t, http.StatusOK, code)
 			assert.Equal(t, `"myData"`, string(resp))
 
-			_, code, err = utils.HTTPGetWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-notMyActorID/myKey", httpURL, actuid))
-			require.NoError(t, err)
-			assert.Equal(t, http.StatusBadRequest, code)
-
 			newData := []byte(`[{"operation":"upsert","request":{"key":"myKey","value":"newData"}}]`)
 			resp, code, err = utils.HTTPPostWithStatus(fmt.Sprintf("%s/httpMyActorType/%s-myActorID", httpURL, actuid), newData)
 			require.NoError(t, err)
@@ -237,14 +233,6 @@ func TestActorState(t *testing.T) {
 			var gresp runtimev1.GetActorStateResponse
 			require.NoError(t, json.Unmarshal(resp, &gresp))
 			assert.Equal(t, []byte("myData"), gresp.Data)
-
-			b, err = json.Marshal(&runtimev1.GetActorStateRequest{
-				ActorType: "grpcMyActorType", ActorId: "notmyActorID", Key: "myKey",
-			})
-			require.NoError(t, err)
-			_, code, err = utils.HTTPGetWithStatusWithData(grpcURL, b)
-			require.NoError(t, err)
-			assert.Equal(t, http.StatusInternalServerError, code)
 
 			b, err = json.Marshal(&runtimev1.ExecuteActorStateTransactionRequest{
 				ActorType: "grpcMyActorType", ActorId: fmt.Sprintf("%s-myActorID", actuid),

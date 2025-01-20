@@ -12,9 +12,9 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.15.0-rc.1.0.20241216170750-aca5116d95c9
-	github.com/dapr/durabletask-go v0.5.1-0.20250110210942-3c1cc0f50d3e
+	github.com/dapr/durabletask-go v0.5.1-0.20250115143652-bb9397142c68
 	github.com/dapr/kit v0.13.1-0.20250110192255-fb195706966f
-	github.com/diagridio/go-etcd-cron v0.3.2-0.20250102204552-0df5048cbe04
+	github.com/diagridio/go-etcd-cron v0.3.2-0.20250114230631-fc7656460fe8
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
@@ -326,7 +326,6 @@ require (
 	github.com/machinebox/graphql v0.2.2 // indirect
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
-	github.com/marusama/semaphore/v2 v2.5.0 // indirect
 	github.com/matoous/go-nanoid/v2 v2.0.0 // indirect
 	github.com/mattn/go-colorable v0.1.13 // indirect
 	github.com/mattn/go-isatty v0.0.20 // indirect

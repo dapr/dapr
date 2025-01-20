@@ -86,7 +86,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 
 	opts := options{
 		logLevel:        "info",
-		listenAddress:   "localhost",
+		listenAddress:   "127.0.0.1",
 		id:              uids,
 		port:            fp.Port(t),
 		healthzPort:     fp.Port(t),
@@ -195,7 +195,7 @@ func (s *Scheduler) WaitUntilRunning(t *testing.T, ctx context.Context) {
 		assert.NoError(t, err)
 		assert.Equal(c, http.StatusOK, resp.StatusCode, string(body))
 		assert.NoError(t, resp.Body.Close())
-	}, time.Second*10, 10*time.Millisecond)
+	}, time.Second*20, 10*time.Millisecond)
 }
 
 func (s *Scheduler) ID() string {

@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math/rand"
 	"sync"
 	"time"
 
@@ -91,7 +92,13 @@ func (s *Scheduler) Run(ctx context.Context) error {
 		// connected.
 		stream, addresses, err := s.connSchedulerHosts(ctx)
 		if err != nil {
-			return err
+			log.Errorf("Failed to connect to scheduler host: %s", err)
+			select {
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-time.After(time.Second):
+			}
+			continue
 		}
 
 		err = concurrency.NewRunnerManager(
@@ -104,11 +111,12 @@ func (s *Scheduler) Run(ctx context.Context) error {
 					return nil
 				}
 
+				defer stream.CloseSend()
+
 				var resp *schedulerv1pb.WatchHostsResponse
 				resp, err = stream.Recv()
 				if err != nil {
 					log.Errorf("Failed to receive scheduler hosts: %s", err)
-					//nolint:nilerr
 					return nil
 				}
 				addresses = make([]string, 0, len(resp.GetHosts()))
@@ -121,10 +129,6 @@ func (s *Scheduler) Run(ctx context.Context) error {
 				return nil
 			},
 		).Run(ctx)
-
-		if stream != nil {
-			stream.CloseSend()
-		}
 
 		if err != nil || ctx.Err() != nil {
 			return err
@@ -218,35 +222,26 @@ func (s *Scheduler) callWhenReady(ctx context.Context, fn concurrency.Runner) er
 }
 
 func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Scheduler_WatchHostsClient, []string, error) {
-	log.Infof("Attempting to connect to scheduler: %s", s.addresses[0])
+	//nolint:gosec
+	i := rand.Intn(len(s.addresses))
+	log.Infof("Attempting to connect to scheduler: %s", s.addresses[i])
 
 	// This is connecting to a DNS A rec which will return health scheduler
 	// hosts.
-	cl, err := client.New(ctx, s.addresses[0], s.security)
+	cl, err := client.New(ctx, s.addresses[i], s.security)
 	if err != nil {
-		return nil, nil, fmt.Errorf("scheduler client not initialized for address %s: %s", s.addresses[0], err)
+		return nil, nil, fmt.Errorf("scheduler client not initialized for address %s: %s", s.addresses[i], err)
 	}
 
-	var stream schedulerv1pb.Scheduler_WatchHostsClient
-	for {
-		stream, err = cl.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
-		if err != nil {
-			if status.Code(err) == codes.Unimplemented {
-				// Ignore unimplemented error code as we are talking to an old server.
-				// TODO: @joshvanl: remove special case in v1.16.
-				return nil, s.addresses, nil
-			}
-
-			log.Errorf("Failed to watch scheduler hosts: %s", err)
-			select {
-			case <-time.After(time.Second):
-			case <-ctx.Done():
-				return nil, nil, ctx.Err()
-			}
-			continue
+	stream, err := cl.WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented {
+			// Ignore unimplemented error code as we are talking to an old server.
+			// TODO: @joshvanl: remove special case in v1.16.
+			return nil, s.addresses, nil
 		}
 
-		break
+		return nil, nil, fmt.Errorf("failed to watch scheduler hosts: %s", err)
 	}
 
 	resp, err := stream.Recv()

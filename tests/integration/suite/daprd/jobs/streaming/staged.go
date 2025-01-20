@@ -94,8 +94,6 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 
 	s.daprdA.Cleanup(t)
 
-	assert.Equal(t, []string{"test"}, s.triggered.Slice())
-
 	_, err = s.schedulers.Client(t, ctx).ScheduleJob(ctx, &schedulerv1.ScheduleJobRequest{
 		Name: "test2",
 		Job:  &schedulerv1.Job{DueTime: ptr.Of(time.Now().Format(time.RFC3339))},
@@ -108,18 +106,31 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
+	numOf := func(ss []string, k string) int {
+		var j int
+		for _, s := range ss {
+			if s == k {
+				j++
+			}
+		}
+
+		return j
+	}
+
 	time.Sleep(2 * time.Second)
-	assert.Equal(t, []string{"test"}, s.triggered.Slice())
+	assert.GreaterOrEqual(t, numOf(s.triggered.Slice(), "test"), 1)
+	assert.Equal(t, 0, numOf(s.triggered.Slice(), "test2"))
 
 	s.daprdB.Run(t, ctx)
 	t.Cleanup(func() { s.daprdB.Cleanup(t) })
 	s.daprdB.WaitUntilRunning(t, ctx)
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.ElementsMatch(c, []string{"test", "test", "test2"}, s.triggered.Slice())
+		// Allow for greater that three "test"s because a trigger may have failed
+		// on the backend due to scheduler shutting down during tick execution.
+		assert.GreaterOrEqual(c, numOf(s.triggered.Slice(), "test"), 2)
+		assert.Contains(c, s.triggered.Slice(), "test2")
 	}, 10*time.Second, 10*time.Millisecond)
 
-	time.Sleep(2 * time.Second)
-	assert.ElementsMatch(t, []string{"test", "test", "test2"}, s.triggered.Slice())
 	s.daprdB.Cleanup(t)
 }
