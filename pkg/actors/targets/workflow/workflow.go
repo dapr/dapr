@@ -75,17 +75,12 @@ type workflow struct {
 	schedulerReminders    bool
 	closeCh               chan struct{}
 	closed                atomic.Bool
-
-	// TODO: @joshvanl: remove
-	defaultTimeout time.Duration
 }
 
 type WorkflowOptions struct {
 	AppID             string
 	WorkflowActorType string
 	ActivityActorType string
-	CachingDisabled   bool
-	DefaultTimeout    *time.Duration
 	ReminderInterval  *time.Duration
 
 	Resiliency         resiliency.Provider
@@ -97,13 +92,9 @@ type WorkflowOptions struct {
 func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 	return func(actorID string) targets.Interface {
 		reminderInterval := time.Minute * 1
-		defaultTimeout := time.Second * 30
 
 		if opts.ReminderInterval != nil {
 			reminderInterval = *opts.ReminderInterval
-		}
-		if opts.DefaultTimeout != nil {
-			defaultTimeout = *opts.DefaultTimeout
 		}
 
 		return &workflow{
@@ -113,7 +104,6 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 			activityActorType:  opts.ActivityActorType,
 			scheduler:          opts.Scheduler,
 			reminderInterval:   reminderInterval,
-			defaultTimeout:     defaultTimeout,
 			resiliency:         opts.Resiliency,
 			actors:             opts.Actors,
 			schedulerReminders: opts.SchedulerReminders,
@@ -212,10 +202,7 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 
 	log.Debugf("Workflow actor '%s': invoking reminder '%s'", w.actorID, reminder.Name)
 
-	// Workflow executions should never take longer than a few seconds at the most
-	timeoutCtx, cancelTimeout := context.WithTimeout(ctx, w.defaultTimeout)
-	defer cancelTimeout()
-	completed, err := w.runWorkflow(timeoutCtx, reminder)
+	completed, err := w.runWorkflow(ctx, reminder)
 
 	if completed == runCompletedTrue {
 		w.completed.Store(true)
