@@ -97,18 +97,18 @@ func (s *State) ResetChangeTracking() {
 	s.historyRemovedCount = 0
 }
 
-func (s *State) ApplyRuntimeStateChanges(runtimeState *backend.OrchestrationRuntimeState) {
-	if runtimeState.ContinuedAsNew() {
+func (s *State) ApplyRuntimeStateChanges(rs *backend.OrchestrationRuntimeState) {
+	if rs.GetContinuedAsNew() {
 		s.historyRemovedCount += len(s.History)
 		s.historyAddedCount = 0
 		s.History = nil
 	}
 
-	newHistoryEvents := runtimeState.NewEvents()
+	newHistoryEvents := rs.GetNewEvents()
 	s.History = append(s.History, newHistoryEvents...)
 	s.historyAddedCount += len(newHistoryEvents)
 
-	s.CustomStatus = runtimeState.CustomStatus
+	s.CustomStatus = rs.GetCustomStatus()
 }
 
 func (s *State) AddToInbox(e *backend.HistoryEvent) {
@@ -210,33 +210,6 @@ func (s *State) String() string {
 		s.historyAddedCount, s.historyRemovedCount,
 		fmt.Sprintf("AppID='%s' workflowActorType='%s' activityActorType='%s'", s.appID, s.workflowActorType, s.activityActorType),
 	)
-}
-
-// EncodeWorkflowState encodes the workflow state into a byte array.
-// It only encodes the inbox, history, and custom status.
-func (s *State) EncodeWorkflowState() ([]byte, error) {
-	return proto.Marshal(&backend.WorkflowState{
-		Inbox:        s.Inbox,
-		History:      s.History,
-		CustomStatus: s.CustomStatus,
-		Generation:   s.Generation,
-	})
-}
-
-// DecodeWorkflowState decodes the workflow state from a byte array encoded using `EncodeWorkflowState`.
-// It only decodes the inbox, history, and custom status.
-func (s *State) DecodeWorkflowState(encodedState []byte) error {
-	var decodedState backend.WorkflowState
-	if err := proto.Unmarshal(encodedState, &decodedState); err != nil {
-		return err
-	}
-
-	s.Inbox = decodedState.GetInbox()
-	s.History = decodedState.GetHistory()
-	s.CustomStatus = decodedState.CustomStatus //nolint:protogetter
-	s.Generation = decodedState.GetGeneration()
-
-	return nil
 }
 
 func addStateOperations(req *api.TransactionalRequest, keyPrefix string, events []*backend.HistoryEvent, addedCount int, removedCount int) error {

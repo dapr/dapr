@@ -129,7 +129,7 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 		// Allow for greater that three "test"s because a trigger may have failed
 		// on the backend due to scheduler shutting down during tick execution.
 		assert.GreaterOrEqual(c, numOf(s.triggered.Slice(), "test"), 2)
-		assert.Contains(t, s.triggered.Slice(), "test2")
+		assert.Contains(c, s.triggered.Slice(), "test2")
 	}, 10*time.Second, 10*time.Millisecond)
 
 	s.daprdB.Cleanup(t)

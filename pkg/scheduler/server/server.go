@@ -134,7 +134,16 @@ func (s *Server) Run(ctx context.Context) error {
 
 	runners := []concurrency.Runner{
 		s.runServer,
-		s.cron.Run,
+		func(ctx context.Context) error {
+			err := s.cron.Run(ctx)
+			if ctx.Err() != nil {
+				if err != nil {
+					log.Errorf("Error running scheduler cron: %s", err)
+				}
+				return ctx.Err()
+			}
+			return err
+		},
 		func(ctx context.Context) error {
 			<-ctx.Done()
 			close(s.closeCh)
