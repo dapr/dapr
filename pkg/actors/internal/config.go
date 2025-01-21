@@ -14,13 +14,13 @@ limitations under the License.
 package internal
 
 import (
+	"maps"
 	"net"
 	"net/http"
+	"slices"
 	"strconv"
 	"sync"
 	"time"
-
-	"golang.org/x/exp/maps"
 
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/clients"
@@ -114,7 +114,7 @@ func (ha *hostedActors) IsActorTypeHosted(actorType string) bool {
 func (ha *hostedActors) ListActorTypes() []string {
 	ha.lock.RLock()
 	defer ha.lock.RUnlock()
-	return maps.Keys(ha.actors)
+	return slices.Collect(maps.Keys(ha.actors))
 }
 
 // GetActorIdleTimeout fetches idle timeout stored against an actor type.

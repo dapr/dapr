@@ -24,7 +24,6 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
-	"golang.org/x/exp/maps"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
@@ -532,7 +531,7 @@ func (p *actorPlacement) resetPlacementTables() {
 		close(p.hasPlacementTablesCh)
 	}
 	p.hasPlacementTablesCh = make(chan struct{})
-	maps.Clear(p.placementTables.Entries)
+	clear(p.placementTables.Entries)
 	p.placementTables.Version = ""
 }
 
@@ -581,7 +580,7 @@ func (p *actorPlacement) updatePlacements(in *v1pb.PlacementTables) {
 			return
 		}
 
-		maps.Clear(p.placementTables.Entries)
+		clear(p.placementTables.Entries)
 		p.placementTables.Version = in.GetVersion()
 		p.placementTables.Entries = entries
 
