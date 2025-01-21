@@ -96,6 +96,7 @@ func New(opts Options) (*Server, error) {
 		Host: &schedulerv1pb.Host{
 			Address: net.JoinHostPort(broadcastAddr, strconv.Itoa(opts.Port)),
 		},
+		Security: opts.Security,
 	})
 
 	var ctrl concurrency.Runner

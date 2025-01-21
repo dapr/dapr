@@ -63,6 +63,7 @@ type Handler interface {
 
 	MTLSEnabled() bool
 	WatchTrustAnchors(context.Context, chan<- []byte)
+	IdentityDir() *string
 }
 
 // Provider is the security provider.
@@ -114,6 +115,12 @@ type Options struct {
 
 	// Healthz is used to signal the health of the security provider.
 	Healthz healthz.Healthz
+
+	// WriteIdentityToFile is used to write the identity private key and
+	// certificate chain to file. The certificate chain and private key will be
+	// written to the `tls.cert` and `tls.key` files respectively in the given
+	// directory.
+	WriteIdentityToFile *string
 }
 
 type provider struct {
@@ -131,6 +138,9 @@ type security struct {
 	trustAnchors trustanchors.Interface
 	spiffe       *spiffe.SPIFFE
 	mtls         bool
+
+	identityDir      *string
+	trustAnchorsFile *string
 }
 
 func New(ctx context.Context, opts Options) (Provider, error) {
@@ -181,7 +191,12 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 				return nil, err
 			}
 		}
-		spf = spiffe.New(spiffe.Options{Log: log, RequestSVIDFn: reqFn})
+		spf = spiffe.New(spiffe.Options{
+			Log:                 log,
+			RequestSVIDFn:       reqFn,
+			WriteIdentityToFile: opts.WriteIdentityToFile,
+			TrustAnchors:        trustAnchors,
+		})
 	} else {
 		log.Warn("mTLS is disabled. Skipping certificate request and tls validation")
 	}
@@ -195,6 +210,8 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 			mtls:                    opts.MTLSEnabled,
 			controlPlaneTrustDomain: cptd,
 			controlPlaneNamespace:   opts.ControlPlaneNamespace,
+			identityDir:             opts.WriteIdentityToFile,
+			trustAnchorsFile:        opts.TrustAnchorsFile,
 		},
 	}, nil
 }
@@ -368,6 +385,10 @@ func (s *security) MTLSEnabled() bool {
 
 // MTLSClientConfig returns a mTLS client config
 func (s *security) MTLSClientConfig(id spiffeid.ID) *tls.Config {
+	if !s.mtls {
+		return nil
+	}
+
 	return tlsconfig.MTLSClientConfig(s.spiffe.SVIDSource(), s.trustAnchors, tlsconfig.AuthorizeID(id))
 }
 
@@ -411,4 +432,8 @@ func (s *security) WithSVIDContext(ctx context.Context) context.Context {
 	}
 
 	return spiffecontext.With(ctx, s.spiffe)
+}
+
+func (s *security) IdentityDir() *string {
+	return s.identityDir
 }

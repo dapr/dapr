@@ -22,6 +22,7 @@ import (
 	"strings"
 	"time"
 
+	"go.etcd.io/etcd/client/pkg/v3/transport"
 	"go.etcd.io/etcd/server/v3/embed"
 
 	"github.com/dapr/dapr/pkg/modes"
@@ -51,18 +52,42 @@ func config(opts Options) (*embed.Config, error) {
 	config.MaxRequestBytes = math.MaxInt32
 	config.ExperimentalWarningApplyDuration = time.Second * 5
 
+	if opts.Security.MTLSEnabled() {
+		hostName := "dapr-scheduler." + opts.Security.ControlPlaneNamespace() + ".svc"
+		info := transport.TLSInfo{
+			ClientCertAuth:      true,
+			InsecureSkipVerify:  false,
+			SkipClientSANVerify: false,
+			AllowedHostname:     hostName,
+			EmptyCN:             true,
+			CertFile:            filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
+			KeyFile:             filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
+			ClientCertFile:      filepath.Join(*opts.Security.IdentityDir(), "cert.pem"),
+			ClientKeyFile:       filepath.Join(*opts.Security.IdentityDir(), "key.pem"),
+			TrustedCAFile:       filepath.Join(*opts.Security.IdentityDir(), "ca.pem"),
+			ServerName:          hostName,
+		}
+		config.ClientTLSInfo = info
+		config.PeerTLSInfo = info
+	}
+
 	etcdURL, peerPort, err := peerHostAndPort(opts.EtcdID, opts.EtcdInitialPeers)
 	if err != nil {
-		return nil, fmt.Errorf("invalid format for initial cluster. Make sure to include 'http://' in Scheduler URL: %s", err)
+		return nil, fmt.Errorf("invalid format for initial cluster. Make sure to include 'http://' or 'https://' in Scheduler URL: %s", err)
+	}
+
+	scheme := "http"
+	if opts.Security.MTLSEnabled() {
+		scheme = "https"
 	}
 
 	config.AdvertisePeerUrls = []url.URL{{
-		Scheme: "http",
+		Scheme: scheme,
 		Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
 	}}
 
 	config.AdvertiseClientUrls = []url.URL{{
-		Scheme: "http",
+		Scheme: scheme,
 		Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
 	}}
 
@@ -72,16 +97,16 @@ func config(opts Options) (*embed.Config, error) {
 		config.Dir = opts.DataDir
 		etcdIP := "0.0.0.0"
 		config.ListenPeerUrls = []url.URL{{
-			Scheme: "http",
+			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdIP, peerPort),
 		}}
 		config.ListenClientUrls = []url.URL{{
-			Scheme: "http",
+			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdIP, clientPorts[opts.EtcdID]),
 		}}
 		if len(clientHTTPPorts) > 0 {
 			config.ListenClientHttpUrls = []url.URL{{
-				Scheme: "http",
+				Scheme: scheme,
 				Host:   fmt.Sprintf("%s:%s", etcdIP, clientHTTPPorts[opts.EtcdID]),
 			}}
 		}
@@ -96,16 +121,16 @@ func config(opts Options) (*embed.Config, error) {
 		config.Dir = filepath.Join(opts.DataDir, security.CurrentNamespace()+"-"+opts.EtcdID)
 
 		config.ListenPeerUrls = []url.URL{{
-			Scheme: "http",
+			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdURL, peerPort),
 		}}
 		config.ListenClientUrls = []url.URL{{
-			Scheme: "http",
+			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
 		}}
 		if len(clientHTTPPorts) > 0 {
 			config.ListenClientHttpUrls = []url.URL{{
-				Scheme: "http",
+				Scheme: scheme,
 				Host:   fmt.Sprintf("%s:%s", etcdURL, clientHTTPPorts[opts.EtcdID]),
 			}}
 		}
@@ -136,6 +161,10 @@ func peerHostAndPort(name string, initialCluster []string) (string, string, erro
 		}
 
 		id := strings.TrimPrefix(idAndAddress[0], "http://")
+		if len(id) == 0 {
+			id = strings.TrimPrefix(idAndAddress[0], "https://")
+		}
+
 		if id == name {
 			address, err := url.Parse(idAndAddress[1])
 			if err != nil {
