@@ -29,7 +29,7 @@ type PodPortForwarder struct {
 	readyChannel chan struct{}
 }
 
-// PortForwardRequest encapsulates data required to establish a Kuberentes tunnel.
+// PortForwardRequest encapsulates data required to establish a Kubernetes tunnel.
 type PortForwardRequest struct {
 	// restConfig is the kubernetes config
 	restConfig *rest.Config
