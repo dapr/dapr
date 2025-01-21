@@ -23,12 +23,13 @@ import (
 
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/security/fake"
 )
 
 func TestServerConf(t *testing.T) {
 	t.Run("KubernetesMode", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.KubernetesMode,
@@ -63,7 +64,7 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -103,7 +104,7 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode without client http ports", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -134,7 +135,7 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode listen on 0.0.0.0 when a host", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -163,7 +164,7 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode listen on IP when an IP", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -192,7 +193,7 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode listen on HTTP IP when an IP", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -223,7 +224,7 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("expect error when giving bad client ports", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -243,7 +244,7 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("expect error when giving bad HTTP client ports", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
