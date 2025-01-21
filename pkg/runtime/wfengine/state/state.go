@@ -136,10 +136,12 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		Operations: make([]api.TransactionalOperation, 0, 100),
 	}
 
+	// save inbox
 	if err := addStateOperations(req, inboxKeyPrefix, s.Inbox, s.inboxAddedCount, s.inboxRemovedCount); err != nil {
 		return nil, err
 	}
 
+	// save history
 	if err := addStateOperations(req, historyKeyPrefix, s.History, s.historyAddedCount, s.historyRemovedCount); err != nil {
 		return nil, err
 	}
@@ -162,6 +164,7 @@ func (s *State) GetSaveRequest(actorID string) (*api.TransactionalRequest, error
 		})
 	}
 
+	// add metadata
 	metaProto, err := proto.Marshal(&backend.WorkflowStateMetadata{
 		InboxLength:   uint64(len(s.Inbox)),
 		HistoryLength: uint64(len(s.History)),
@@ -285,8 +288,8 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	// Load inbox, history, and custom status using a bulk request
 	wState := NewState(opts)
 	wState.Generation = metadata.GetGeneration()
-	wState.Inbox = make([]*backend.HistoryEvent, metadata.GetInboxLength())
-	wState.History = make([]*backend.HistoryEvent, metadata.GetHistoryLength())
+	wState.Inbox = make([]*backend.HistoryEvent, 0, metadata.GetInboxLength())
+	wState.History = make([]*backend.HistoryEvent, 0, metadata.GetHistoryLength())
 
 	bulkReq := &api.GetBulkStateRequest{
 		ActorType: opts.WorkflowActorType,
@@ -326,22 +329,28 @@ func LoadWorkflowState(ctx context.Context, state state.Interface, actorID strin
 	for i := range metadata.GetInboxLength() {
 		key = getMultiEntryKeyName(inboxKeyPrefix, i)
 		if bulkRes[key] == nil {
-			return nil, fmt.Errorf("failed to load inbox state key '%s': not found", key)
+			// If an inbox entry is missing, it means we caught the state in between saves.
+			// Return the state we have so far. This likely happened due to the reminder firing
+			// before all the inbox entries from the previous transactions went thru in the state store
+			wfLogger.Warnf("Inbox entry '%s' not found, state may be partially saved", key)
+			break
 		}
-		wState.Inbox[i] = &protos.HistoryEvent{}
-		if err = proto.Unmarshal(bulkRes[key], wState.Inbox[i]); err != nil {
+		event := &protos.HistoryEvent{}
+		if err = proto.Unmarshal(bulkRes[key], event); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from inbox state key '%s': %w", key, err)
 		}
+		wState.Inbox = append(wState.Inbox, event)
 	}
 	for i := range metadata.GetHistoryLength() {
 		key = getMultiEntryKeyName(historyKeyPrefix, i)
 		if bulkRes[key] == nil {
 			return nil, fmt.Errorf("failed to load history state key '%s': not found", key)
 		}
-		wState.History[i] = &protos.HistoryEvent{}
-		if err = proto.Unmarshal(bulkRes[key], wState.History[i]); err != nil {
+		event := &protos.HistoryEvent{}
+		if err = proto.Unmarshal(bulkRes[key], event); err != nil {
 			return nil, fmt.Errorf("failed to unmarshal history event from history state key '%s': %w", key, err)
 		}
+		wState.History = append(wState.History, event)
 	}
 
 	if len(bulkRes[customStatusKey]) > 0 {
