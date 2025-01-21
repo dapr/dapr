@@ -709,7 +709,7 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	reqs := make([]state.SetRequest, l)
 	for i, s := range in.GetStates() {
 		if len(s.GetKey()) == 0 {
-			return empty, status.Errorf(codes.InvalidArgument, "state key cannot be empty")
+			return empty, apierrors.Basic(codes.InvalidArgument, http.StatusBadRequest, errorcodes.StateSave, "state key cannot be empty")
 		}
 
 		var key string
@@ -765,7 +765,11 @@ func (a *api) SaveState(ctx context.Context, in *runtimev1pb.SaveStateRequest) (
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Set, err == nil, elapsed)
 
 	if err != nil {
-		err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateSave, fmt.Sprintf(messages.ErrStateSave, in.GetStoreName(), err.Error()))
+		if kerr, ok := kiterrors.FromError(err); ok {
+			err = kerr
+		} else {
+			err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateSave, fmt.Sprintf(messages.ErrStateSave, in.GetStoreName(), err.Error()))
+		}
 		a.logger.Debug(err)
 		return empty, err
 	}
@@ -826,7 +830,11 @@ func (a *api) DeleteState(ctx context.Context, in *runtimev1pb.DeleteStateReques
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.Delete, err == nil, elapsed)
 
 	if err != nil {
-		err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateDelete, fmt.Sprintf(messages.ErrStateDelete, in.GetKey(), err.Error()))
+		if kerr, ok := kiterrors.FromError(err); ok {
+			err = kerr
+		} else {
+			err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateDelete, fmt.Sprintf(messages.ErrStateDelete, in.GetKey(), err.Error()))
+		}
 		a.logger.Debug(err)
 		return empty, err
 	}
@@ -876,7 +884,11 @@ func (a *api) DeleteBulkState(ctx context.Context, in *runtimev1pb.DeleteBulkSta
 	diag.DefaultComponentMonitoring.StateInvoked(ctx, in.GetStoreName(), diag.BulkDelete, err == nil, elapsed)
 
 	if err != nil {
-		err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateBulkDelete, fmt.Sprintf(messages.ErrStateDeleteBulk, in.GetStoreName(), err.Error()))
+		if kerr, ok := kiterrors.FromError(err); ok {
+			err = kerr
+		} else {
+			err = apierrors.Basic(a.getStateErrorCode(err), http.StatusInternalServerError, errorcodes.StateBulkDelete, fmt.Sprintf(messages.ErrStateDeleteBulk, in.GetStoreName(), err.Error()))
+		}
 		a.logger.Debug(err)
 		return empty, err
 	}

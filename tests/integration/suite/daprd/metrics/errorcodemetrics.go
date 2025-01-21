@@ -74,7 +74,7 @@ func (e *errorcodemetrics) Run(t *testing.T, ctx context.Context) {
 		}
 
 		// Check for metric count and code
-		assert.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(2, "dapr_error_code_total", "category:workflow", "error_code:ERR_GET_WORKFLOW"))
+		assert.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(2, "dapr_error_code_total", "category:workflow", "error_code:ERR_INSTANCE_ID_NOT_FOUND"))
 	})
 
 	t.Run("HTTP conversation error metrics", func(t *testing.T) {
