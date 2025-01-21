@@ -327,7 +327,10 @@ func (w *workflow) createIfCompleted(ctx context.Context, rs *backend.Orchestrat
 }
 
 func (w *workflow) scheduleWorkflowStart(ctx context.Context, startEvent *backend.HistoryEvent, state *wfenginestate.State) error {
+	// add start event to inbox
 	state.AddToInbox(startEvent)
+
+	// save all the state in 1 transaction
 	if err := w.saveInternalState(ctx, state); err != nil {
 		return fmt.Errorf("failed to save state: %w", err)
 	}
