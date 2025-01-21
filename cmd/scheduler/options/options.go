@@ -16,6 +16,8 @@ package options
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -56,6 +58,8 @@ type Options struct {
 	EtcdSnapshotCount       uint64
 	EtcdMaxSnapshots        uint
 	EtcdMaxWALs             uint
+
+	IdentityDirectoryWrite string
 
 	Logger  logger.Options
 	Metrics *metrics.FlagOptions
@@ -100,6 +104,12 @@ func New(origArgs []string) (*Options, error) {
 	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 10000, "Number of committed transactions to trigger a snapshot to disk.")
 	fs.UintVar(&opts.EtcdMaxSnapshots, "etcd-max-snapshots", 5, "Maximum number of snapshot files to retain (0 is unlimited).")
 	fs.UintVar(&opts.EtcdMaxWALs, "etcd-max-wals", 5, "Maximum number of write-ahead logs to retain (0 is unlimited).")
+
+	fs.StringVar(&opts.IdentityDirectoryWrite, "identity-directory-write", filepath.Join(os.TempDir(), "secrets/dapr.io/tls"), "Directory to write identity certificate certificate, private key and trust anchors")
+
+	if err := fs.MarkHidden("identity-directory-write"); err != nil {
+		log.Fatal(err)
+	}
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)

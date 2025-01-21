@@ -73,6 +73,7 @@ func Run() {
 		MTLSEnabled:             opts.TLSEnabled,
 		Mode:                    modes.DaprMode(opts.Mode),
 		Healthz:                 healthz,
+		WriteIdentityToFile:     &opts.IdentityDirectoryWrite,
 	})
 	if err != nil {
 		log.Fatal(err)
