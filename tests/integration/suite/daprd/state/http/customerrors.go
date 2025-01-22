@@ -105,6 +105,7 @@ spec:
   version: v1
 `, statestore.SocketName()),
 		),
+		daprd.WithErrorCodeMetrics(t),
 	)
 
 	return []framework.Option{
