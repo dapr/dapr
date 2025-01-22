@@ -95,7 +95,7 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			assert.NotNil(t, resp)
 			require.NoError(t, err)
 
-			metrics := b.scheduler.Metrics(t, ctx)
+			metrics := b.scheduler.Metrics(t, ctx).All()
 			assert.Equal(t, i, int(metrics["dapr_scheduler_jobs_created_total"]))
 		}
 	})
