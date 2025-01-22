@@ -441,7 +441,7 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 
-		t.Log("Checking if all reminders did trigger ...")
+		t.Logf("Checking if all reminders did trigger for app %s...", appName)
 		count := countActorAction(resp, actorID, reminderName)
 		require.Equal(t, 5, count, "response: %s", string(resp))
 	})
