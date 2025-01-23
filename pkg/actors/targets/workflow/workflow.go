@@ -23,6 +23,7 @@ import (
 	"net/http"
 	"strconv"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -501,16 +502,30 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		return runCompletedFalse, err
 	}
 
-	// TODO: for optimization make multiple go routines and run them in parallel
+	var lock sync.Mutex
+	var wg sync.WaitGroup
+	var errs []error
+
+	wg.Add(len(transactionalRequests))
 	for activityActorID, operations := range transactionalRequests {
-		err = astate.TransactionalStateOperation(ctx, true, &actorapi.TransactionalRequest{
-			ActorType:  w.activityActorType,
-			ActorID:    activityActorID,
-			Operations: operations,
-		})
-		if err != nil {
-			return runCompletedFalse, fmt.Errorf("failed to delete activity state for activity actor '%s' with error: %w", activityActorID, err)
-		}
+		go func(activityActorID string, operations []actorapi.TransactionalOperation) {
+			defer wg.Done()
+			aerr := astate.TransactionalStateOperation(ctx, true, &actorapi.TransactionalRequest{
+				ActorType:  w.activityActorType,
+				ActorID:    activityActorID,
+				Operations: operations,
+			})
+			if aerr != nil {
+				lock.Lock()
+				errs = append(errs, fmt.Errorf("failed to delete activity state for activity actor '%s' with error: %w", activityActorID, aerr))
+				lock.Unlock()
+				return
+			}
+		}(activityActorID, operations)
+	}
+	wg.Wait()
+	if len(errs) > 0 {
+		return runCompletedFalse, errors.Join(errs...)
 	}
 
 	rs := w.rstate
@@ -618,75 +633,114 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 		return runCompletedFalse, err
 	}
 
+	var compl runCompleted
+
 	// Schedule activities
-	// TODO: Parallelism
-	for _, e := range rs.GetPendingTasks() {
-		ts := e.GetTaskScheduled()
-		if ts == nil {
-			log.Warnf("Workflow actor '%s': unable to process task '%v'", w.actorID, e)
-			continue
-		}
+	pendingTasks := rs.GetPendingTasks()
+	wg.Add(len(pendingTasks))
+	for _, e := range pendingTasks {
+		go func(e *backend.HistoryEvent) {
+			defer wg.Done()
 
-		var eventData []byte
-		eventData, err = proto.Marshal(e)
-		if err != nil {
-			return runCompletedTrue, err
-		}
+			ts := e.GetTaskScheduled()
+			if ts == nil {
+				log.Warnf("Workflow actor '%s': unable to process task '%v'", w.actorID, e)
+				return
+			}
 
-		targetActorID := getActivityActorID(w.actorID, e.GetEventId(), state.Generation)
+			var eventData []byte
+			eventData, err = proto.Marshal(e)
+			if err != nil {
+				lock.Lock()
+				compl = runCompletedTrue
+				errs = append(errs, err)
+				lock.Unlock()
+				return
+			}
 
-		w.activityResultAwaited.Store(true)
+			targetActorID := getActivityActorID(w.actorID, e.GetEventId(), state.Generation)
 
-		log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", w.actorID, targetActorID)
+			w.activityResultAwaited.Store(true)
 
-		_, err = engine.Call(ctx, internalsv1pb.
-			NewInternalInvokeRequest("Execute").
-			WithActor(w.activityActorType, targetActorID).
-			WithData(eventData).
-			WithContentType(invokev1.ProtobufContentType),
-		)
+			log.Debugf("Workflow actor '%s': invoking execute method on activity actor '%s'", w.actorID, targetActorID)
 
-		if errors.Is(err, ErrDuplicateInvocation) {
-			log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", w.actorID, ts.GetName(), e.GetEventId())
-			continue
-		} else if err != nil {
-			executionStatus = diag.StatusRecoverable
-			return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.GetName(), err))
+			_, eerr := engine.Call(ctx, internalsv1pb.
+				NewInternalInvokeRequest("Execute").
+				WithActor(w.activityActorType, targetActorID).
+				WithData(eventData).
+				WithContentType(invokev1.ProtobufContentType),
+			)
+
+			if errors.Is(eerr, ErrDuplicateInvocation) {
+				log.Warnf("Workflow actor '%s': activity invocation '%s::%d' was flagged as a duplicate and will be skipped", w.actorID, ts.GetName(), e.GetEventId())
+				return
+			} else if eerr != nil {
+				lock.Lock()
+				executionStatus = diag.StatusRecoverable
+				errs = append(errs, fmt.Errorf("failed to invoke activity actor '%s' to execute '%s': %w", targetActorID, ts.GetName(), eerr))
+				lock.Unlock()
+				return
+			}
+		}(e)
+	}
+
+	wg.Wait()
+	if len(errs) > 0 {
+		return compl, errors.Join(errs...)
+	}
+
+	for method, msgList := range reqsByName {
+		wg.Add(len(msgList))
+		for _, msg := range msgList {
+			go func(method string, msg *backend.OrchestrationRuntimeStateMessage) {
+				defer wg.Done()
+
+				var requestBytes []byte
+				var perr error
+				if method == todo.CreateWorkflowInstanceMethod {
+					requestBytes, perr = proto.Marshal(&backend.CreateWorkflowInstanceRequest{
+						StartEvent: msg.GetHistoryEvent(),
+					})
+					if perr != nil {
+						lock.Lock()
+						errs = append(errs, fmt.Errorf("failed to marshal createWorkflowInstanceRequest: %w", perr))
+						compl = runCompletedTrue
+						lock.Unlock()
+						return
+					}
+				} else {
+					requestBytes, perr = proto.Marshal(msg.GetHistoryEvent())
+					if perr != nil {
+						lock.Lock()
+						errs = append(errs, perr)
+						compl = runCompletedTrue
+						lock.Unlock()
+						return
+					}
+				}
+
+				log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", w.actorID, method, msg.GetTargetInstanceID())
+
+				_, eerr := engine.Call(ctx, internalsv1pb.
+					NewInternalInvokeRequest(method).
+					WithActor(w.actorType, msg.GetTargetInstanceID()).
+					WithData(requestBytes).
+					WithContentType(invokev1.ProtobufContentType),
+				)
+				if eerr != nil {
+					lock.Lock()
+					executionStatus = diag.StatusRecoverable
+					errs = append(errs, fmt.Errorf("failed to invoke method '%s' on actor '%s': %w", method, msg.GetTargetInstanceID(), eerr))
+					lock.Unlock()
+					return
+				}
+			}(method, msg)
 		}
 	}
 
-	// TODO: Do these in parallel?
-	for method, msgList := range reqsByName {
-		for _, msg := range msgList {
-			var requestBytes []byte
-			if method == todo.CreateWorkflowInstanceMethod {
-				requestBytes, err = proto.Marshal(&backend.CreateWorkflowInstanceRequest{
-					StartEvent: msg.GetHistoryEvent(),
-				})
-				if err != nil {
-					return runCompletedTrue, fmt.Errorf("failed to marshal createWorkflowInstanceRequest: %w", err)
-				}
-			} else {
-				requestBytes, err = proto.Marshal(msg.GetHistoryEvent())
-				if err != nil {
-					return runCompletedTrue, err
-				}
-			}
-
-			log.Debugf("Workflow actor '%s': invoking method '%s' on workflow actor '%s'", w.actorID, method, msg.GetTargetInstanceID())
-
-			_, err = engine.Call(ctx, internalsv1pb.
-				NewInternalInvokeRequest(method).
-				WithActor(w.actorType, msg.GetTargetInstanceID()).
-				WithData(requestBytes).
-				WithContentType(invokev1.ProtobufContentType),
-			)
-			if err != nil {
-				executionStatus = diag.StatusRecoverable
-				// workflow-related actor methods are never expected to return errors
-				return runCompletedFalse, wferrors.NewRecoverable(fmt.Errorf("method %s on actor '%s' returned an error: %w", method, msg.GetTargetInstanceID(), err))
-			}
-		}
+	wg.Wait()
+	if len(errs) > 0 {
+		return compl, errors.Join(errs...)
 	}
 
 	state.ApplyRuntimeStateChanges(rs)
@@ -863,33 +917,47 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfengine
 		return err
 	}
 
+	var lock sync.Mutex
+	var wg sync.WaitGroup
+	var errs []error
+
 	// The logic/for loop below purges/removes any leftover state from a completed or failed activity
-	// TODO: for optimization make multiple go routines and run them in parallel
+	wg.Add(len(state.Inbox))
 	for _, e := range state.Inbox {
-		var taskID int32
-		if ts := e.GetTaskCompleted(); ts != nil {
-			taskID = ts.GetTaskScheduledId()
-		} else if tf := e.GetTaskFailed(); tf != nil {
-			taskID = tf.GetTaskScheduledId()
-		} else {
-			continue
-		}
-		req := actorapi.TransactionalRequest{
-			ActorType: w.activityActorType,
-			ActorID:   getActivityActorID(w.actorID, taskID, state.Generation),
-			Operations: []actorapi.TransactionalOperation{{
-				Operation: actorapi.Delete,
-				Request: actorapi.TransactionalDelete{
-					Key: activityStateKey,
-				},
-			}},
-		}
-		if err = astate.TransactionalStateOperation(ctx, true, &req); err != nil {
-			return fmt.Errorf("failed to delete activity state with error: %w", err)
-		}
+		go func(e *backend.HistoryEvent) {
+			defer wg.Done()
+
+			var taskID int32
+			if ts := e.GetTaskCompleted(); ts != nil {
+				taskID = ts.GetTaskScheduledId()
+			} else if tf := e.GetTaskFailed(); tf != nil {
+				taskID = tf.GetTaskScheduledId()
+			} else {
+				return
+			}
+
+			req := actorapi.TransactionalRequest{
+				ActorType: w.activityActorType,
+				ActorID:   getActivityActorID(w.actorID, taskID, state.Generation),
+				Operations: []actorapi.TransactionalOperation{{
+					Operation: actorapi.Delete,
+					Request: actorapi.TransactionalDelete{
+						Key: activityStateKey,
+					},
+				}},
+			}
+			if terr := astate.TransactionalStateOperation(ctx, true, &req); terr != nil {
+				lock.Lock()
+				errs = append(errs, fmt.Errorf("failed to delete activity state with error: %w", terr))
+				lock.Unlock()
+				return
+			}
+		}(e)
 	}
 
-	return err
+	wg.Wait()
+
+	return errors.Join(errs...)
 }
 
 // DeactivateActor implements actors.InternalActor
