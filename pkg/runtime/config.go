@@ -243,8 +243,8 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		}
 	}
 
-	// Add local scheduler address if not provided and reminders are enabled (which they are by default)
-	if intc.mode == modes.StandaloneMode && globalConfig.IsFeatureEnabled(config.SchedulerReminders) && len(intc.schedulerAddress) == 0 {
+	// Add local scheduler address if not provided in standalone mode
+	if intc.mode == modes.StandaloneMode && len(intc.schedulerAddress) == 0 {
 		intc.schedulerAddress = append(intc.schedulerAddress, ":50006")
 	}
 
