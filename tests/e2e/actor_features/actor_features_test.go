@@ -383,7 +383,7 @@ func TestActorFeatures(t *testing.T) {
 		req := actorReminderOrTimer{
 			Data:    "reminderdata",
 			DueTime: "1s",
-			Period:  "20s",
+			Period:  "10s",
 		}
 		reqBody, _ := json.Marshal(req)
 		res, err = httpPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorID, "reminders", reminderName), reqBody)
