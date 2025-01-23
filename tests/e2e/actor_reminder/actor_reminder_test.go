@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
@@ -399,8 +400,9 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 			}
 		}
 
-		_, err = utils.HTTPDelete(logsURL)
+		logs, err := utils.HTTPDelete(logsURL)
 		require.NoError(t, err)
+		assert.True(t, len(logs) == 0, "Logs are not cleared, lingering logs detected: %s", string(logs))
 
 		t.Log("Done.")
 	})
@@ -434,8 +436,10 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 		actorID := "repetable-reminder-actor"
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName))
 		require.NoError(t, err)
-		_, err = utils.HTTPDelete(logsURL)
+		logs, err := utils.HTTPDelete(logsURL)
 		require.NoError(t, err)
+		assert.True(t, len(logs) == 0, "Logs aren't cleared, lingering logs detected: %s", string(logs))
+
 		// Registering reminder
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName), reminderBody)
 		require.NoError(t, err)
@@ -449,7 +453,13 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 
 		t.Logf("Checking if all reminders did trigger for app %s...", appName)
 		count := countActorAction(resp, actorID, reminderName)
-		require.Equal(t, 5, count, "response: %s", string(resp))
+		require.Equal(t, 5, count, "Too many reminder triggers for app: %s. response: %s", appName, string(resp))
+
+		logs, err = utils.HTTPDelete(logsURL)
+		require.NoError(t, err)
+		require.True(t, len(logs) == 0, "Logs are not cleared, lingering logs detected: %s", string(logs))
+
+		t.Log("Done checking reminder repetition.")
 	})
 }
 
