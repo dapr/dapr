@@ -103,6 +103,7 @@ spec:
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsNonRoot: {{ .Values.runAsNonRoot }}
+          allowPrivilegeEscalation: {{ .Values.allowPrivilegeEscalation }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:
             add: ["SYS_PTRACE"]
