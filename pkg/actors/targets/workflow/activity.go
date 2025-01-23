@@ -211,7 +211,7 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 	// TODO: Need to come up with a design for timeouts. Some activities may need to run for hours but we also need
 	//       to handle the case where the app crashes and never responds to the workflow. It may be necessary to
 	//       introduce some kind of heartbeat protocol to help identify such cases.
-	callback := make(chan bool)
+	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
 	log.Debugf("Activity actor '%s': scheduling activity '%s' for workflow with instanceId '%s'", a.actorID, name, wi.InstanceID)
 	err := a.scheduler(ctx, wi)
