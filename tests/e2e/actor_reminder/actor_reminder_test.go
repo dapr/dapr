@@ -392,6 +392,10 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
 				require.NoError(t, err)
 				require.True(t, len(resp) != 0, "Reminder %s does not exist", reminderNameForGet)
+
+				// cleanup reminders
+				_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
+				require.NoError(t, err)
 			}
 		}
 
@@ -429,6 +433,8 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 		reminderName := "repeatable-reminder"
 		actorID := "repetable-reminder-actor"
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName))
+		require.NoError(t, err)
+		_, err = utils.HTTPDelete(logsURL)
 		require.NoError(t, err)
 		// Registering reminder
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName), reminderBody)
@@ -488,7 +494,7 @@ func testActorReminderTTL(t *testing.T, appName, actorName string) {
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 
-		t.Log("Checking if all reminders did trigger ...")
+		t.Logf("Checking if all reminders did trigger for app %s...", appName)
 		count := countActorAction(resp, actorID, reminderName)
 		require.InDelta(t, 10, count, 2)
 	})
