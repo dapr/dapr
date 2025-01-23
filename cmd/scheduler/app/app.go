@@ -104,7 +104,6 @@ func Run() {
 				EtcdID:                  opts.ID,
 				EtcdInitialPeers:        opts.EtcdInitialPeers,
 				EtcdClientPorts:         opts.EtcdClientPorts,
-				EtcdSpaceQuota:          opts.EtcdSpaceQuota,
 				EtcdCompactionMode:      opts.EtcdCompactionMode,
 				EtcdCompactionRetention: opts.EtcdCompactionRetention,
 				EtcdClientHTTPPorts:     opts.EtcdClientHTTPPorts,

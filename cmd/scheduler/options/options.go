@@ -18,7 +18,6 @@ import (
 	"fmt"
 
 	"github.com/spf13/pflag"
-	"k8s.io/apimachinery/pkg/api/resource"
 
 	"github.com/dapr/dapr/pkg/metrics"
 	"github.com/dapr/dapr/pkg/modes"
@@ -48,7 +47,6 @@ type Options struct {
 	EtcdDataDir             string
 	EtcdClientPorts         []string
 	EtcdClientHTTPPorts     []string
-	EtcdSpaceQuota          int64
 	EtcdCompactionMode      string
 	EtcdCompactionRetention string
 	EtcdSnapshotCount       uint64
@@ -58,15 +56,12 @@ type Options struct {
 	Logger  logger.Options
 	Metrics *metrics.FlagOptions
 
-	taFile         string
-	kubeconfig     string
-	etcdSpaceQuota string
+	taFile     string
+	kubeconfig string
 }
 
 func New(origArgs []string) (*Options, error) {
 	var opts Options
-
-	defaultEtcdStorageQuota := int64(16 * 1024 * 1024 * 1024)
 
 	// Create a flag set
 	fs := pflag.NewFlagSet("scheduler", pflag.ExitOnError)
@@ -92,7 +87,6 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
 	fs.StringSliceVar(&opts.EtcdClientHTTPPorts, "etcd-client-http-ports", nil, "Ports for etcd client http communication")
-	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", resource.NewQuantity(defaultEtcdStorageQuota, resource.BinarySI).String(), "Space quota for etcd")
 	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
 	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "10m", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")
 	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 10000, "Number of committed transactions to trigger a snapshot to disk.")
@@ -109,16 +103,6 @@ func New(origArgs []string) (*Options, error) {
 
 	if fs.Changed("trust-anchors-file") {
 		opts.TrustAnchorsFile = &opts.taFile
-	}
-
-	etcdSpaceQuota, err := resource.ParseQuantity(opts.etcdSpaceQuota)
-	if err != nil {
-		return nil, fmt.Errorf("failed to parse etcd space quota: %s", err)
-	}
-	opts.EtcdSpaceQuota, _ = etcdSpaceQuota.AsInt64()
-
-	if etcdSpaceQuota.Value() < defaultEtcdStorageQuota {
-		log.Warnf("--etcd-space-quota of %s may be too low for production use. Consider increasing the value to 16Gi or larger.", etcdSpaceQuota.String())
 	}
 
 	if fs.Changed("kubeconfig") {

@@ -158,7 +158,6 @@ spec:
         - "--enable-metrics=false"
 {{- end }}
         - "--etcd-data-dir={{ if eq .Values.global.daprControlPlaneOs "windows" }}{{ .Values.cluster.etcdDataDirWinPath }}{{- else }}{{ .Values.cluster.etcdDataDirPath }}{{- end }}/{{ .Release.Namespace }}/$(SCHEDULER_ID)"
-        - "--etcd-space-quota={{ .Values.etcdSpaceQuota }}"
         - "--etcd-compaction-mode={{ .Values.etcdCompactionMode }}"
         - "--etcd-compaction-retention={{ .Values.etcdCompactionRetention }}"
         - "--etcd-snapshot-count={{ .Values.etcdSnapshotCount }}"
