@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/dapr/kit/concurrency/fifo"
 )
@@ -102,12 +103,14 @@ func (l *Lock) handleHold(h *hold) {
 
 	l.wg.Add(1)
 	var done bool
+	doneCh := make(chan bool)
 	rctx, cancel := context.WithCancel(h.rctx)
 	i := l.rcancelx
 
 	rcancel := func() {
 		l.rcancelLock.Lock()
 		if !done {
+			close(doneCh)
 			cancel()
 			delete(l.rcancels, i)
 			l.wg.Done()
@@ -116,7 +119,16 @@ func (l *Lock) handleHold(h *hold) {
 		l.rcancelLock.Unlock()
 	}
 
-	l.rcancels[i] = rcancel
+	rcancelGrace := func() {
+		select {
+		case <-time.After(2 * time.Second):
+		case <-l.closeCh:
+		case <-doneCh:
+		}
+		rcancel()
+	}
+
+	l.rcancels[i] = rcancelGrace
 	l.rcancelx++
 
 	l.rcancelLock.Unlock()

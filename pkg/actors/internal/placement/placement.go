@@ -270,7 +270,7 @@ func (p *placement) handleLockOperation(ctx context.Context) {
 		defer p.wg.Done()
 		select {
 		case <-ctx.Done():
-		case <-time.After(time.Second * 10):
+		case <-time.After(time.Second * 15):
 			p.operationLock.Lock()
 			defer p.operationLock.Unlock()
 			if p.updateVersion.Load() < lockVersion {
