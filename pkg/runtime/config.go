@@ -151,10 +151,6 @@ type internalConfig struct {
 	outboundHealthz              healthz.Healthz
 }
 
-func (i internalConfig) SchedulerEnabled() bool {
-	return len(i.schedulerAddress) > 0
-}
-
 // FromConfig creates a new Dapr Runtime from a configuration.
 func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	intc, err := cfg.toInternal()
@@ -245,6 +241,11 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		if err != nil {
 			log.Errorf(rterrors.NewInit(rterrors.InitFailure, "metrics", err).Error())
 		}
+	}
+
+	// Add local scheduler address if not provided and reminders are enabled (which they are by default)
+	if intc.mode == modes.StandaloneMode && globalConfig.IsFeatureEnabled(config.SchedulerReminders) && len(intc.schedulerAddress) == 0 {
+		intc.schedulerAddress = append(intc.schedulerAddress, ":50006")
 	}
 
 	// Load Resiliency

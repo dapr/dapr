@@ -26,6 +26,7 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors"
 	"github.com/dapr/dapr/pkg/healthz"
+	"github.com/dapr/dapr/pkg/modes"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
@@ -46,6 +47,7 @@ type Options struct {
 	Addresses []string
 	Security  security.Handler
 	Healthz   healthz.Healthz
+	Mode      modes.DaprMode
 }
 
 // Scheduler manages the connection to the cluster of schedulers.
@@ -60,6 +62,7 @@ type Scheduler struct {
 	lock     sync.RWMutex
 	readyCh  chan struct{}
 	disabled chan struct{}
+	mode     modes.DaprMode
 }
 
 func New(opts Options) *Scheduler {
@@ -75,6 +78,7 @@ func New(opts Options) *Scheduler {
 		htarget:  opts.Healthz.AddTarget(),
 		readyCh:  make(chan struct{}),
 		disabled: make(chan struct{}),
+		mode:     opts.Mode,
 	}
 }
 
@@ -252,6 +256,13 @@ func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Sched
 	addresses := make([]string, 0, len(resp.GetHosts()))
 	for _, host := range resp.GetHosts() {
 		addresses = append(addresses, host.GetAddress())
+	}
+
+	// Let the code above run to this point to validate the connection and WatchHosts RPC call
+	// If we are in standalone mode and only one address is provided, we need to return the address as provided in config
+	// Otherwise the resolved address from response will have the address of the docker network
+	if len(s.addresses) == 1 && s.mode == modes.StandaloneMode {
+		addresses = s.addresses
 	}
 
 	log.Infof("Received scheduler hosts addresses: %v", addresses)
