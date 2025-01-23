@@ -20,6 +20,7 @@ import (
 	"net/url"
 	"path/filepath"
 	"strings"
+	"time"
 
 	"go.etcd.io/etcd/server/v3/embed"
 
@@ -48,6 +49,7 @@ func config(opts Options) (*embed.Config, error) {
 	config.Name = opts.EtcdID
 	config.InitialCluster = strings.Join(opts.EtcdInitialPeers, ",")
 	config.MaxRequestBytes = math.MaxInt32
+	config.ExperimentalWarningApplyDuration = time.Second * 5
 
 	etcdURL, peerPort, err := peerHostAndPort(opts.EtcdID, opts.EtcdInitialPeers)
 	if err != nil {
