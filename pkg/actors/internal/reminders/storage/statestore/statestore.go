@@ -1024,7 +1024,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 		eTag := track.Etag
 
 		nextTick, active := reminder.NextTick()
-		if !active {
+		if !active || reminder.RepeatsLeft() == 0 {
 			log.Infof("Reminder %s has expired", reminderKey)
 			goto delete
 		}
