@@ -24,7 +24,7 @@ webhookService:
   annotations: {}
 
 runAsNonRoot: true
-allowPrivilegeEscalation: true
+allowPrivilegeEscalation: false
 
 serviceReconciler:
   enabled: true
