@@ -83,8 +83,8 @@ func New(opts Options) (*Actors, error) {
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		schedulerReminders:        opts.SchedulerReminders,
-		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem),
-		activityWorkItemChan:      make(chan *backend.ActivityWorkItem),
+		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
+		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 	}, nil
 }
 

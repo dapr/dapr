@@ -524,7 +524,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 
 	// Executing workflow code is a one-way operation. We must wait for the app code to report its completion, which
 	// will trigger this callback channel.
-	callback := make(chan bool)
+	callback := make(chan bool, 1)
 	wi.Properties[todo.CallbackChannelProperty] = callback
 	// Setting executionStatus to failed by default to record metrics for non-recoverable errors.
 	executionStatus := diag.StatusFailed
