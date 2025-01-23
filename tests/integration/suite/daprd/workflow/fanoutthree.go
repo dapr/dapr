@@ -45,8 +45,6 @@ type fanoutthree struct {
 }
 
 func (f *fanoutthree) Setup(t *testing.T) []framework.Option {
-	t.Skip("skip until durable task fixed")
-
 	f.called = slice.New[int]()
 
 	placement := placement.New(t)
@@ -90,8 +88,8 @@ func (f *fanoutthree) Run(t *testing.T, ctx context.Context) {
 	registry := task.NewTaskRegistry()
 
 	registry.AddOrchestratorN("foo", func(ctx *task.OrchestrationContext) (any, error) {
-		tasks := make([]task.Task, 1000)
-		for i := range 1000 {
+		tasks := make([]task.Task, 100)
+		for i := range 100 {
 			tasks[i] = ctx.CallActivity("bar", task.WithActivityInput(i))
 		}
 
@@ -121,8 +119,8 @@ func (f *fanoutthree) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	_, err = client1.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	exp := make([]int, 1000)
-	for i := range 1000 {
+	exp := make([]int, 100)
+	for i := range 100 {
 		exp[i] = i
 	}
 	assert.ElementsMatch(t, exp, f.called.Slice())

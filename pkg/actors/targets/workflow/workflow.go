@@ -196,6 +196,9 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 	// Returning nil signals that we want the execution to be retried in the next period interval
 	switch {
 	case err == nil:
+		if w.schedulerReminders {
+			return nil
+		}
 		return actorerrors.ErrReminderCanceled
 	case errors.Is(err, context.DeadlineExceeded):
 		log.Warnf("Workflow actor '%s': execution timed-out and will be retried later: '%v'", w.actorID, err)
@@ -208,6 +211,9 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 		return nil
 	default: // Other error
 		log.Errorf("Workflow actor '%s': execution failed with a non-recoverable error: %v", w.actorID, err)
+		if w.schedulerReminders {
+			return nil
+		}
 		return actorerrors.ErrReminderCanceled
 	}
 }
@@ -365,7 +371,7 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 	if err != nil {
 		return err
 	}
-	err = s.TransactionalStateOperation(ctx, req)
+	err = s.TransactionalStateOperation(ctx, true, req)
 	if err != nil {
 		return err
 	}
@@ -497,7 +503,7 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 
 	// TODO: for optimization make multiple go routines and run them in parallel
 	for activityActorID, operations := range transactionalRequests {
-		err = astate.TransactionalStateOperation(ctx, &actorapi.TransactionalRequest{
+		err = astate.TransactionalStateOperation(ctx, true, &actorapi.TransactionalRequest{
 			ActorType:  w.activityActorType,
 			ActorID:    activityActorID,
 			Operations: operations,
@@ -789,7 +795,7 @@ func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.S
 	if err != nil {
 		return err
 	}
-	if err = astate.TransactionalStateOperation(ctx, req); err != nil {
+	if err = astate.TransactionalStateOperation(ctx, true, req); err != nil {
 		return err
 	}
 
@@ -878,7 +884,7 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfengine
 				},
 			}},
 		}
-		if err = astate.TransactionalStateOperation(ctx, &req); err != nil {
+		if err = astate.TransactionalStateOperation(ctx, true, &req); err != nil {
 			return fmt.Errorf("failed to delete activity state with error: %w", err)
 		}
 	}
@@ -912,14 +918,10 @@ func (w *workflow) InvokeStream(ctx context.Context, req *internalsv1pb.Internal
 		return err
 	}
 
-	err = w.handleStreamInitial(ctx, req, stream)
-	if err != nil {
+	if err = w.handleStreamInitial(ctx, req, stream); err != nil {
 		lockCancel()
 		return err
 	}
-
-	ctx, ctxCancel := context.WithCancel(ctx)
-	defer ctxCancel()
 
 	ch := make(chan *backend.OrchestrationMetadata)
 	w.ometaBroadcaster.Subscribe(ctx, ch)
