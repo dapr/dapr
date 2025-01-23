@@ -1118,7 +1118,7 @@ func (a *api) ExecuteActorStateTransaction(ctx context.Context, in *runtimev1pb.
 		Operations: actorOps,
 	}
 
-	err = astate.TransactionalStateOperation(ctx, &req)
+	err = astate.TransactionalStateOperation(ctx, false, &req)
 	if err != nil {
 		if _, ok := status.FromError(err); ok {
 			apiServerLogger.Debug(err)

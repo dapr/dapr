@@ -157,6 +157,9 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 	// Returning nil signals that we want the execution to be retried in the next period interval
 	switch {
 	case err == nil:
+		if a.schedulerReminders {
+			return nil
+		}
 		// We delete the reminder on success and on non-recoverable errors.
 		return actorerrors.ErrReminderCanceled
 	case errors.Is(err, context.DeadlineExceeded):
@@ -176,6 +179,9 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 		return nil
 	default: // Other error
 		log.Errorf("%s: execution failed with a non-recoverable error: %v", a.actorID, err)
+		if a.schedulerReminders {
+			return nil
+		}
 		// TODO: Reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 		return actorerrors.ErrReminderCanceled
 	}
@@ -300,7 +306,7 @@ func (a *activity) purgeActivityState(ctx context.Context) error {
 	}
 
 	log.Debugf("Activity actor '%s': purging activity state", a.actorID)
-	err = astate.TransactionalStateOperation(ctx, &actorapi.TransactionalRequest{
+	err = astate.TransactionalStateOperation(ctx, true, &actorapi.TransactionalRequest{
 		ActorType: a.actorType,
 		ActorID:   a.actorID,
 		Operations: []actorapi.TransactionalOperation{{
