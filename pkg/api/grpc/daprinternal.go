@@ -342,6 +342,11 @@ func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream in
 		return err
 	}
 
+	if req.Metadata == nil {
+		req.Metadata = make(map[string]*internalv1pb.ListStringValue)
+	}
+	req.Metadata["X-Dapr-Remote"] = &internalv1pb.ListStringValue{Values: []string{"true"}}
+
 	ch := make(chan *internalv1pb.InternalInvokeResponse)
 
 	return concurrency.NewRunnerManager(
@@ -349,7 +354,9 @@ func (a *api) CallActorStream(req *internalv1pb.InternalInvokeRequest, stream in
 			for {
 				select {
 				case <-ctx.Done():
+					return ctx.Err()
 				case <-a.closeCh:
+					return errors.New("server closed")
 				case val := <-ch:
 					if err := stream.Send(val); err != nil {
 						return err

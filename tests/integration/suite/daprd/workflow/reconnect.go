@@ -45,8 +45,6 @@ type reconnect struct {
 }
 
 func (d *reconnect) Setup(t *testing.T) []framework.Option {
-	t.Skip("Skip until durabletask is fixed")
-
 	handler := http.NewServeMux()
 	handler.HandleFunc("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte(""))

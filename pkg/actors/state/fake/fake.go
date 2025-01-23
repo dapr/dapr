@@ -22,7 +22,7 @@ import (
 type Fake struct {
 	getFn                         func(ctx context.Context, req *api.GetStateRequest) (*api.StateResponse, error)
 	getBulkFn                     func(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error)
-	transactionalStateOperationFn func(ctx context.Context, req *api.TransactionalRequest) error
+	transactionalStateOperationFn func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error
 }
 
 func New() *Fake {
@@ -33,7 +33,7 @@ func New() *Fake {
 		getBulkFn: func(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error) {
 			return api.BulkStateResponse{}, nil
 		},
-		transactionalStateOperationFn: func(ctx context.Context, req *api.TransactionalRequest) error {
+		transactionalStateOperationFn: func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error {
 			return nil
 		},
 	}
@@ -49,7 +49,7 @@ func (f *Fake) WithGetBulkFn(fn func(ctx context.Context, req *api.GetBulkStateR
 	return f
 }
 
-func (f *Fake) WithTransactionalStateOperationFn(fn func(ctx context.Context, req *api.TransactionalRequest) error) *Fake {
+func (f *Fake) WithTransactionalStateOperationFn(fn func(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error) *Fake {
 	f.transactionalStateOperationFn = fn
 	return f
 }
@@ -62,6 +62,6 @@ func (f *Fake) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.B
 	return f.getBulkFn(ctx, req)
 }
 
-func (f *Fake) TransactionalStateOperation(ctx context.Context, req *api.TransactionalRequest) error {
-	return f.transactionalStateOperationFn(ctx, req)
+func (f *Fake) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error {
+	return f.transactionalStateOperationFn(ctx, ignoreHosted, req)
 }

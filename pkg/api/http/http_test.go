@@ -1242,7 +1242,7 @@ func TestV1ActorEndpoints(t *testing.T) {
 		}
 
 		actors.WithState(func(context.Context) (actorsstate.Interface, error) {
-			return statefake.New().WithTransactionalStateOperationFn(func(context.Context, *actorsapi.TransactionalRequest) error {
+			return statefake.New().WithTransactionalStateOperationFn(func(context.Context, bool, *actorsapi.TransactionalRequest) error {
 				return errors.New("UPSTREAM_ERROR")
 			}), nil
 		})
