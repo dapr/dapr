@@ -45,6 +45,8 @@ spec:
   type: ClusterIP
 {{- end }}
 ---
+# TODO: v1.16: remove extra service for single after kube enforced backwards
+# compat.
 {{- if (eq .Values.global.scheduler.enabled true) }}
 kind: Service
 apiVersion: v1
