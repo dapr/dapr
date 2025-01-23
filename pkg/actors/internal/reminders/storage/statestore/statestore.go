@@ -1024,7 +1024,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 		eTag := track.Etag
 
 		nextTick, active := reminder.NextTick()
-		if !active || reminder.RepeatsLeft() == 0 {
+		if !active || reminder.RepeatsLeft() == 0 || time.Now().After(nextTick) {
 			log.Infof("Reminder %s has expired", reminderKey)
 			goto delete
 		}
@@ -1041,6 +1041,10 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			select {
 			case <-nextTimer.C():
 				// noop
+				if reminder.RepeatsLeft() == 0 {
+					log.Infof("Skipping execution as reminder %s is completed", reminderKey)
+					break loop
+				}
 			case <-stop.stopCh:
 				// reminder has been already deleted
 				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has been deleted", reminderKey, reminder.DueTime, reminder.Period)
@@ -1084,6 +1088,10 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				} else {
 					eTag = track.Etag
 				}
+				if reminder.RepeatsLeft() == 0 {
+					log.Infof("Reminder %s has completed", reminderKey)
+					break loop
+				}
 			} else {
 				log.Error("Could not find active reminder with key after call: %s", reminderKey)
 				nextTimer = nil
@@ -1096,7 +1104,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			}
 
 			nextTick, active = reminder.NextTick()
-			if !active {
+			if !active || reminder.RepeatsLeft() == 0 {
 				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has expired", reminderKey, reminder.DueTime, reminder.Period)
 				nextTimer = nil
 				break loop
