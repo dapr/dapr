@@ -26,7 +26,7 @@ fullnameOverride: ""
 webhookFailurePolicy: Ignore
 sidecarImagePullPolicy: IfNotPresent
 runAsNonRoot: true
-allowPrivilegeEscalation: true
+allowPrivilegeEscalation: false
 sidecarRunAsNonRoot: true
 sidecarReadOnlyRootFilesystem: true
 sidecarDropALLCapabilities: false

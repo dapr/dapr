@@ -45,7 +45,7 @@ debug:
   initialDelaySeconds: 30000
 
 runAsNonRoot: true
-allowPrivilegeEscalation: true
+allowPrivilegeEscalation: false
 resources: {}
 
 extraEnvVars: {}
