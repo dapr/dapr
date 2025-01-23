@@ -122,9 +122,10 @@ func (l *Lock) handleHold(h *hold) {
 	rcancelGrace := func() {
 		select {
 		case <-time.After(2 * time.Second):
-			rcancel()
+		case <-l.closeCh:
 		case <-doneCh:
 		}
+		rcancel()
 	}
 
 	l.rcancels[i] = rcancelGrace
