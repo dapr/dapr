@@ -1024,7 +1024,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 		eTag := track.Etag
 
 		nextTick, active := reminder.NextTick()
-		if !active || reminder.RepeatsLeft() == 0 {
+		if !active || reminder.RepeatsLeft() <= 0 {
 			log.Infof("Reminder %s has expired", reminderKey)
 			goto delete
 		}
@@ -1041,7 +1041,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			select {
 			case <-nextTimer.C():
 				// noop
-				if reminder.RepeatsLeft() == 0 {
+				if reminder.RepeatsLeft() <= 0 {
 					log.Infof("Skipping execution as reminder %s is completed", reminderKey)
 					break loop
 				}
@@ -1062,7 +1062,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			}
 
 			// If all repetitions are completed, delete the reminder and do not execute it
-			if reminder.RepeatsLeft() == 0 {
+			if reminder.RepeatsLeft() <= 0 {
 				log.Info("Reminder " + reminderKey + " has been completed")
 				nextTimer = nil
 				break loop

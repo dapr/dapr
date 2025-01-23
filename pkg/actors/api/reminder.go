@@ -78,7 +78,7 @@ func (r *Reminder) TickExecuted() (done bool) {
 		r.Period.repeats--
 	}
 
-	if !r.HasRepeats() {
+	if !r.HasRepeats() || r.RepeatsLeft() == 0 || r.Period.repeats == 0 {
 		return true
 	}
 
