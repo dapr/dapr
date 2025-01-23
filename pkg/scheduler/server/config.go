@@ -116,7 +116,7 @@ func config(opts Options) (*embed.Config, error) {
 	// TODO: Cassie do extra validation if people forget to put http:// -> dont fail silently
 	// TODO: Cassie do extra validation to ensure that the list of ids sent in for the clientPort == list of ids from initial cluster
 
-	config.QuotaBackendBytes = math.MaxInt64
+	config.QuotaBackendBytes = opts.EtcdSpaceQuota
 	config.AutoCompactionMode = opts.EtcdCompactionMode
 	config.AutoCompactionRetention = opts.EtcdCompactionRetention
 	config.MaxSnapFiles = opts.EtcdMaxSnapshots
