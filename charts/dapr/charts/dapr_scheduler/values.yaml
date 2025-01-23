@@ -58,6 +58,8 @@ debug:
 securityContext:
   runAsNonRoot: true
   fsGroup: 65532
+  readOnlyRootFilesystem: false
+  allowPrivilegeEscalation: true
 
 resources: {}
 

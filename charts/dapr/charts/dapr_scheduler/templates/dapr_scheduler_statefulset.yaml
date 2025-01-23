@@ -179,11 +179,12 @@ spec:
 {{- if eq .Values.global.daprControlPlaneOs "linux" }}
         securityContext:
           runAsNonRoot: {{ .Values.securityContext.runAsNonRoot }}
+          allowPrivilegeEscalation: {{ .Values.securityContext.allowPrivilegeEscalation }}
   {{- if eq .Values.debug.enabled true }}
           capabilities:
             add: ["SYS_PTRACE"]
   {{- else }}
-          readOnlyRootFilesystem: false
+          readOnlyRootFilesystem: {{ .Values.securityContext.readOnlyRootFilesystem }}
           capabilities:
             drop: ["ALL"]
   {{- end }}
