@@ -80,7 +80,7 @@ func TestExecuteActorStateTransaction(t *testing.T) {
 
 		actors := actorsfake.New()
 		actors.WithState(func(context.Context) (state.Interface, error) {
-			return statefake.New().WithTransactionalStateOperationFn(func(ctx context.Context, req *actorsapi.TransactionalRequest) error {
+			return statefake.New().WithTransactionalStateOperationFn(func(ctx context.Context, _ bool, req *actorsapi.TransactionalRequest) error {
 				return nil
 			}), nil
 		})
