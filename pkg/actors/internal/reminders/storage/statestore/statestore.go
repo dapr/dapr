@@ -1000,6 +1000,7 @@ func (r *Statestore) migrateRemindersForActorType(ctx context.Context, actorType
 
 func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) error {
 	reminderKey := reminder.Key()
+
 	track, err := r.getReminderTrack(context.TODO(), reminderKey)
 	if err != nil {
 		return fmt.Errorf("error getting reminder track: %w", err)
@@ -1023,7 +1024,6 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 		eTag := track.Etag
 
 		nextTick, active := reminder.NextTick()
-
 		if !active {
 			log.Infof("Reminder %s has expired", reminderKey)
 			goto delete
@@ -1066,7 +1066,6 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 
 			err = r.engine.CallReminder(context.TODO(), reminder)
 			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
-
 			if errors.Is(err, actorerrors.ErrReminderCanceled) {
 				nextTimer = nil
 				break loop
@@ -1112,7 +1111,6 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 		default:
 			close(stop.stopped)
 		}
-		log.Debugf("[startReminder] Deleting reminder %s", reminderKey)
 		err = r.Delete(context.TODO(), &api.DeleteReminderRequest{
 			Name:      reminder.Name,
 			ActorID:   reminder.ActorID,
