@@ -51,7 +51,6 @@ type Options struct {
 	EtcdInitialPeers        []string
 	EtcdDataDir             string
 	EtcdClientPorts         []string
-	EtcdClientHTTPPorts     []string
 	EtcdSpaceQuota          int64
 	EtcdCompactionMode      string
 	EtcdCompactionRetention string
@@ -97,7 +96,6 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringSliceVar(&opts.EtcdInitialPeers, "initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
-	fs.StringSliceVar(&opts.EtcdClientHTTPPorts, "etcd-client-http-ports", nil, "Ports for etcd client http communication")
 	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", "9.2E", "Space quota for etcd")
 	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
 	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "10m", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")

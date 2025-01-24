@@ -126,7 +126,6 @@ func (c *cron) Run(ctx context.Context) error {
 		Endpoints: []string{c.config.ListenClientUrls[0].Host},
 		Context:   ctx,
 		TLS:       c.security.MTLSClientConfig(id),
-		Context:   ctx,
 		Logger:    etcd.GetLogger(),
 	})
 	if err != nil {
