@@ -35,16 +35,6 @@ func config(opts Options) (*embed.Config, error) {
 		return nil, err
 	}
 
-	var clientHTTPPorts map[string]string
-	if len(opts.EtcdClientHTTPPorts) > 0 {
-		clientHTTPPorts, err = parseClientPorts(opts.EtcdClientHTTPPorts)
-		if err != nil {
-			return nil, err
-		}
-	} else {
-		log.Warnf("etcd client http ports not set. This is not recommended for production.")
-	}
-
 	config := embed.NewConfig()
 
 	config.Name = opts.EtcdID
@@ -53,7 +43,7 @@ func config(opts Options) (*embed.Config, error) {
 	config.ExperimentalWarningApplyDuration = time.Second * 5
 
 	if opts.Security.MTLSEnabled() {
-		hostName := "dapr-scheduler-server-a." + opts.Security.ControlPlaneNamespace() + ".svc"
+		hostName := "dapr-scheduler-server." + opts.Security.ControlPlaneNamespace() + ".svc"
 		info := transport.TLSInfo{
 			ClientCertAuth:      true,
 			InsecureSkipVerify:  false,
@@ -69,6 +59,7 @@ func config(opts Options) (*embed.Config, error) {
 		}
 		config.ClientTLSInfo = info
 		config.PeerTLSInfo = info
+		config.PeerAutoTLS = true
 	}
 
 	etcdURL, peerPort, err := peerHostAndPort(opts.EtcdID, opts.EtcdInitialPeers)
@@ -104,12 +95,6 @@ func config(opts Options) (*embed.Config, error) {
 			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdIP, clientPorts[opts.EtcdID]),
 		}}
-		if len(clientHTTPPorts) > 0 {
-			config.ListenClientHttpUrls = []url.URL{{
-				Scheme: scheme,
-				Host:   fmt.Sprintf("%s:%s", etcdIP, clientHTTPPorts[opts.EtcdID]),
-			}}
-		}
 	default:
 
 		// If not listening on an IP interface or localhost, replace host name with
@@ -128,12 +113,6 @@ func config(opts Options) (*embed.Config, error) {
 			Scheme: scheme,
 			Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
 		}}
-		if len(clientHTTPPorts) > 0 {
-			config.ListenClientHttpUrls = []url.URL{{
-				Scheme: scheme,
-				Host:   fmt.Sprintf("%s:%s", etcdURL, clientHTTPPorts[opts.EtcdID]),
-			}}
-		}
 	}
 
 	config.LogLevel = "info" // Only supports debug, info, warn, error, panic, or fatal. Default 'info'.

@@ -50,7 +50,6 @@ type Options struct {
 	EtcdID                    string
 	EtcdInitialPeers          []string
 	EtcdClientPorts           []string
-	EtcdClientHTTPPorts       []string
 	EtcdSpaceQuota            int64
 	EtcdCompactionMode        string
 	EtcdCompactionRetention   string

@@ -114,11 +114,6 @@ func (c *cron) Run(ctx context.Context) error {
 
 	log.Info("Starting EtcdCron")
 
-	endpoints := make([]string, 0, len(etcd.Clients))
-	for _, peer := range etcd.Clients {
-		endpoints = append(endpoints, peer.Addr().String())
-	}
-
 	id, err := spiffeid.FromSegments(
 		c.security.ControlPlaneTrustDomain(),
 		"ns", c.security.ControlPlaneNamespace(), "dapr-scheduler",
@@ -128,9 +123,11 @@ func (c *cron) Run(ctx context.Context) error {
 	}
 
 	client, err := clientv3.New(clientv3.Config{
-		Endpoints: endpoints,
+		Endpoints: []string{c.config.ListenClientUrls[0].Host},
 		Context:   ctx,
 		TLS:       c.security.MTLSClientConfig(id),
+		Context:   ctx,
+		Logger:    etcd.GetLogger(),
 	})
 	if err != nil {
 		return err
@@ -143,7 +140,6 @@ func (c *cron) Run(ctx context.Context) error {
 		return err
 	}
 
-	// pass in initial cluster endpoints, but with client ports
 	c.etcdcron, err = etcdcron.New(etcdcron.Options{
 		Client:          client,
 		Namespace:       "dapr",
