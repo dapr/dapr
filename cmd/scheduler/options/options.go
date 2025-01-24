@@ -66,8 +66,6 @@ type Options struct {
 func New(origArgs []string) (*Options, error) {
 	var opts Options
 
-	defaultEtcdStorageQuota := int64(16 * 1024 * 1024 * 1024)
-
 	// Create a flag set
 	fs := pflag.NewFlagSet("scheduler", pflag.ExitOnError)
 	fs.SortFlags = true
@@ -92,7 +90,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
 	fs.StringSliceVar(&opts.EtcdClientHTTPPorts, "etcd-client-http-ports", nil, "Ports for etcd client http communication")
-	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", resource.NewQuantity(defaultEtcdStorageQuota, resource.BinarySI).String(), "Space quota for etcd")
+	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", "9.2E", "Space quota for etcd")
 	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
 	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "10m", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")
 	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 10000, "Number of committed transactions to trigger a snapshot to disk.")
@@ -116,10 +114,6 @@ func New(origArgs []string) (*Options, error) {
 		return nil, fmt.Errorf("failed to parse etcd space quota: %s", err)
 	}
 	opts.EtcdSpaceQuota, _ = etcdSpaceQuota.AsInt64()
-
-	if etcdSpaceQuota.Value() < defaultEtcdStorageQuota {
-		log.Warnf("--etcd-space-quota of %s may be too low for production use. Consider increasing the value to 16Gi or larger.", etcdSpaceQuota.String())
-	}
 
 	if fs.Changed("kubeconfig") {
 		if opts.Mode != string(modes.KubernetesMode) {
