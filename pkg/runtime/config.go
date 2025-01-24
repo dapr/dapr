@@ -243,11 +243,6 @@ func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 		}
 	}
 
-	// Add local scheduler address if not provided in standalone mode
-	if intc.mode == modes.StandaloneMode && len(intc.schedulerAddress) == 0 {
-		intc.schedulerAddress = append(intc.schedulerAddress, ":50006")
-	}
-
 	// Load Resiliency
 	var resiliencyProvider *resiliencyConfig.Resiliency
 	switch intc.mode {
