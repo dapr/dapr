@@ -51,17 +51,19 @@ func TestMembershipChangeWorker(t *testing.T) {
 		clock         *clocktesting.FakeClock
 	)
 
+	raftOpts, err := tests.RaftOpts(t)
+	require.NoError(t, err)
+
 	setupEach := func(t *testing.T) context.CancelFunc {
 		ctx, cancel := context.WithCancel(context.Background())
 		var cancelServer context.CancelFunc
 
-		testRaftServer := tests.Raft(t)
-		serverAddress, testServer, clock, cancelServer = newTestPlacementServer(t, testRaftServer)
+		serverAddress, testServer, clock, cancelServer = newTestPlacementServer(t, *raftOpts)
 		testServer.hasLeadership.Store(true)
 		membershipStopCh := make(chan struct{})
 
-		cleanupStates(testRaftServer)
-		state := testRaftServer.FSM().State()
+		cleanupStates(testServer.raftNode)
+		state := testServer.raftNode.FSM().State()
 		require.Equal(t, 0, state.MemberCount())
 
 		go func() {
@@ -457,7 +459,11 @@ func TestMembershipChangeWorker(t *testing.T) {
 
 func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 	const testClients = 10
-	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, tests.Raft(t))
+
+	raftOpts, err := tests.RaftOpts(t)
+	require.NoError(t, err)
+
+	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, *raftOpts)
 	testServer.hasLeadership.Store(true)
 	var (
 		overArr       [testClients]int64

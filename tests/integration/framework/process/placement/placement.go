@@ -138,8 +138,8 @@ func (p *Placement) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, fmt.Sprintf("http://127.0.0.1:%d/healthz", p.healthzPort), nil)
 	require.NoError(t, err)
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		resp, err := client.Do(req)
-		if assert.NoError(c, err) {
+		resp, respErr := client.Do(req)
+		if assert.NoError(c, respErr) {
 			defer resp.Body.Close()
 			assert.Equal(c, http.StatusOK, resp.StatusCode)
 		}
