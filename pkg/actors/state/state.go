@@ -46,7 +46,7 @@ type Interface interface {
 	GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error)
 
 	// TransactionalStateOperation performs a transactional state operation with the actor state store.
-	TransactionalStateOperation(ctx context.Context, req *api.TransactionalRequest) error
+	TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error
 }
 
 type Backend interface {
@@ -183,15 +183,17 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.
 	return bulkRes, nil
 }
 
-func (s *state) TransactionalStateOperation(ctx context.Context, req *api.TransactionalRequest) error {
+func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error {
 	ctx, cancel, err := s.placement.Lock(ctx)
 	if err != nil {
 		return err
 	}
 	defer cancel()
 
-	if _, ok := s.table.HostedTarget(req.ActorType, req.ActorID); !ok {
-		return messages.ErrActorInstanceMissing
+	if !ignoreHosted {
+		if _, ok := s.table.HostedTarget(req.ActorType, req.ActorID); !ok {
+			return messages.ErrActorInstanceMissing
+		}
 	}
 
 	operations := make([]contribstate.TransactionalStateOperation, len(req.Operations))
