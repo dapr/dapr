@@ -74,27 +74,34 @@ func (r Reminder) RepeatsLeft() int {
 // If the reminder is not done, call "NextTick" to get the time it should tick next.
 // Note: this method is not concurrency-safe.
 func (r *Reminder) TickExecuted() (done bool) {
+	log.Debugf("[tickExecuted]")
 	if r.Period.repeats > 0 {
 		r.Period.repeats--
+		log.Debugf("[tickExecuted] Decrementing repeats, remaining: %d", r.Period.repeats)
 	}
 
 	if !r.HasRepeats() || r.RepeatsLeft() == 0 || r.Period.repeats == 0 {
+		log.Debugf("[tickExecuted] No more repeats left, returning true")
 		return true
 	}
 
 	r.RegisteredTime = r.Period.GetFollowing(r.RegisteredTime)
+	log.Debugf("[tickExecuted] Setting registered time: %v", r.RegisteredTime)
 
+	log.Debugf("[tickExecuted] Returning false, more repeats to execute")
 	return false
 }
 
 // UpdateFromTrack updates the reminder with data from the track object.
 func (r *Reminder) UpdateFromTrack(track *ReminderTrack) {
 	if track == nil || track.LastFiredTime.IsZero() {
+		log.Debugf("[updateFromTrack] Retrieved track: %+v", track)
 		return
 	}
 
 	r.Period.repeats = track.RepetitionLeft
 	r.RegisteredTime = r.Period.GetFollowing(track.LastFiredTime)
+	log.Debugf("[updateFromTrack] New r.Period.repeats: %+v && r.RegisteredTime: %+v", r.Period.repeats, r.RegisteredTime)
 }
 
 // ScheduledTime returns the time the reminder is scheduled to be executed at.
