@@ -194,8 +194,6 @@ func TestActorMissingStateStore(t *testing.T) {
 }
 
 func TestActorReminder(t *testing.T) {
-	fmt.Println("sleeping, port forward...")
-	time.Sleep(5 * time.Second)
 	for _, a := range []struct {
 		appName   string
 		actorName string
