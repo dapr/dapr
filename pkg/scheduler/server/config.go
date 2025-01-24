@@ -53,7 +53,7 @@ func config(opts Options) (*embed.Config, error) {
 	config.ExperimentalWarningApplyDuration = time.Second * 5
 
 	if opts.Security.MTLSEnabled() {
-		hostName := "dapr-scheduler." + opts.Security.ControlPlaneNamespace() + ".svc"
+		hostName := "dapr-scheduler-server-a." + opts.Security.ControlPlaneNamespace() + ".svc"
 		info := transport.TLSInfo{
 			ClientCertAuth:      true,
 			InsecureSkipVerify:  false,
