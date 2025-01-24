@@ -137,6 +137,8 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 	require.EventuallyWithT(t, func(c *assert.CollectT) {
 		resp, err := stream.Recv()
 		if !assert.NoError(c, err) {
+			stream, err = w.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+			require.NoError(t, err)
 			return
 		}
 		got := make([]string, 0, 2)

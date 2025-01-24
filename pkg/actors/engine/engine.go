@@ -117,6 +117,15 @@ func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
 	return err
 }
 
+func (e *engine) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+	policyRunner := resiliency.NewRunner[struct{}](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
+	_, err := policyRunner(func(ctx context.Context) (struct{}, error) {
+		return struct{}{}, e.callStream(ctx, req, stream)
+	})
+
+	return err
+}
+
 func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 	ctx, cancel, err := e.placement.Lock(ctx)
 	if err != nil {
@@ -261,36 +270,43 @@ func (e *engine) callLocalActor(ctx context.Context, req *internalv1pb.InternalI
 	return target.InvokeMethod(ctx, req)
 }
 
-func (e *engine) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
+func (e *engine) callStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
 	ctx, pcancel, err := e.placement.Lock(ctx)
 	if err != nil {
-		return err
+		return backoff.Permanent(err)
 	}
+	defer pcancel()
 
 	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
 		ActorID:   req.GetActor().GetActorId(),
 	})
 	if err != nil {
-		pcancel()
 		return err
 	}
 
 	if !lar.Local {
-		return e.callRemoteActorStream(ctx, pcancel, lar, req, stream)
+		// If this is a dapr-dapr call and the actor didn't pass the local check
+		// above, it means it has been moved in the meantime
+		if _, ok := req.GetMetadata()["X-Dapr-Remote"]; ok {
+			return backoff.Permanent(errors.New("remote actor moved"))
+		}
+
+		return e.callRemoteActorStream(ctx, lar, req, stream)
 	}
 
-	return e.callLocalActorStream(ctx, pcancel, req, stream)
+	if err = e.callLocalActorStream(ctx, req, stream); err != nil {
+		return backoff.Permanent(err)
+	}
+
+	return nil
 }
 
 func (e *engine) callLocalActorStream(ctx context.Context,
-	pcancel context.CancelFunc,
 	req *internalv1pb.InternalInvokeRequest,
 	stream chan<- *internalv1pb.InternalInvokeResponse,
 ) error {
 	target, err := e.getOrCreateActor(req.GetActor().GetActorType(), req.GetActor().GetActorId())
-	pcancel()
-
 	if err != nil {
 		return err
 	}
@@ -299,14 +315,12 @@ func (e *engine) callLocalActorStream(ctx context.Context,
 }
 
 func (e *engine) callRemoteActorStream(ctx context.Context,
-	pcancel context.CancelFunc,
 	lar *api.LookupActorResponse,
 	req *internalv1pb.InternalInvokeRequest,
 	stream chan<- *internalv1pb.InternalInvokeResponse,
 ) error {
 	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
 	if err != nil {
-		pcancel()
 		return err
 	}
 	defer cancel(false)
@@ -319,8 +333,6 @@ func (e *engine) callRemoteActorStream(ctx context.Context,
 	if err != nil {
 		return err
 	}
-
-	pcancel()
 
 	for {
 		resp, err := rstream.Recv()
