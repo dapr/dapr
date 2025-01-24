@@ -74,6 +74,11 @@ func (r Reminder) RepeatsLeft() int {
 // If the reminder is not done, call "NextTick" to get the time it should tick next.
 // Note: this method is not concurrency-safe.
 func (r *Reminder) TickExecuted() (done bool) {
+	// Empty period means execute once
+	if r.Period.value == "" {
+		return true
+	}
+
 	if r.Period.repeats > 0 {
 		r.Period.repeats--
 

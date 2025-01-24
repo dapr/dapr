@@ -56,6 +56,7 @@ func TestReminderProperties(t *testing.T) {
 		require.False(t, r.HasRepeats())
 		require.Equal(t, 0, r.RepeatsLeft())
 		require.Equal(t, 0, r.Period.repeats)
+		require.True(t, r.TickExecuted()) // It's done, no more repeats
 		require.Equal(t, 0, r.Period.repeats)
 	})
 
