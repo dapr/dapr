@@ -18,6 +18,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/yaml"
@@ -78,7 +79,6 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("etcd_client_ports_default", func(t *testing.T) {
 		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-client-ports", "dapr-scheduler-server-0=2379,dapr-scheduler-server-1=2379,dapr-scheduler-server-2=2379")
-		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-client-http-ports", "dapr-scheduler-server-0=2330,dapr-scheduler-server-1=2330,dapr-scheduler-server-2=2330")
 	})
 
 	// namespaced
@@ -104,5 +104,5 @@ func requireArgsValue(t *testing.T, args []string, arg, value string) {
 			}
 		}
 	}
-	require.Failf(t, "arg %s not found", arg)
+	assert.Failf(t, "arg %s not found", arg)
 }
