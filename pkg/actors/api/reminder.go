@@ -76,17 +76,18 @@ func (r Reminder) RepeatsLeft() int {
 func (r *Reminder) TickExecuted() (done bool) {
 	log.Debugf("[tickExecuted]")
 
-	// check repeats left before decrementing
-	if !r.HasRepeats() || r.RepeatsLeft() == 0 {
-		log.Debugf("[tickExecuted] No more repeats left, returning true")
-		return true
-	}
-
 	if r.Period.repeats > 0 {
 		r.Period.repeats--
 		log.Debugf("[tickExecuted] Decrementing repeats, remaining: %d", r.Period.repeats)
+
+		// 0 left means we're done, so exit & don't set any new times
+		if r.Period.repeats == 0 {
+			log.Debugf("[tickExecuted] No more repeats left after decrementing, returning true")
+			return true
+		}
 	}
 
+	// Only set next time if we have more repeats
 	r.RegisteredTime = r.Period.GetFollowing(r.RegisteredTime)
 	log.Debugf("[tickExecuted] Setting registered time: %v", r.RegisteredTime)
 
