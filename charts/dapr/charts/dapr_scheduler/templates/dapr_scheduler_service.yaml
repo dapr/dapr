@@ -32,8 +32,6 @@ spec:
     targetPort: 50006
   - name: etcd-client
     port: {{ .Values.ports.etcdGRPCClientPort }}
-  - name: etcd-httpclient
-    port: {{ .Values.ports.etcdHTTPClientPort }}
   - name: etcd-peer
     port: {{ .Values.ports.etcdGRPCPeerPort }}
   {{- if eq .Values.global.prometheus.enabled true }}
@@ -45,8 +43,6 @@ spec:
   type: ClusterIP
 {{- end }}
 ---
-# TODO: v1.16: remove extra service for single after kube enforced backwards
-# compat.
 {{- if (eq .Values.global.scheduler.enabled true) }}
 kind: Service
 apiVersion: v1
@@ -80,8 +76,6 @@ spec:
     port: 50006
   - name: etcd-client
     port: {{ .Values.ports.etcdGRPCClientPort }}
-  - name: etcd-httpclient
-    port: {{ .Values.ports.etcdHTTPClientPort }}
   - name: etcd-peer
     port: {{ .Values.ports.etcdGRPCPeerPort }}
   {{- if eq .Values.global.prometheus.enabled true }}
