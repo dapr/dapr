@@ -75,14 +75,16 @@ func (r Reminder) RepeatsLeft() int {
 // Note: this method is not concurrency-safe.
 func (r *Reminder) TickExecuted() (done bool) {
 	log.Debugf("[tickExecuted]")
+
+	// check repeats left before decrementing
+	if !r.HasRepeats() || r.RepeatsLeft() == 0 {
+		log.Debugf("[tickExecuted] No more repeats left, returning true")
+		return true
+	}
+
 	if r.Period.repeats > 0 {
 		r.Period.repeats--
 		log.Debugf("[tickExecuted] Decrementing repeats, remaining: %d", r.Period.repeats)
-	}
-
-	if !r.HasRepeats() || r.RepeatsLeft() == 0 || r.Period.repeats == 0 {
-		log.Debugf("[tickExecuted] No more repeats left, returning true")
-		return true
 	}
 
 	r.RegisteredTime = r.Period.GetFollowing(r.RegisteredTime)
