@@ -105,6 +105,7 @@ spec:
     value: false
 `, pubsubInMem.SocketName())),
 		daprd.WithSocket(t, socket),
+		daprd.WithErrorCodeMetrics(t),
 	)
 
 	return []framework.Option{
@@ -143,6 +144,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBSUB_NOT_FOUND", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_NOT_FOUND"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -190,6 +192,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBSUB_EVENTS_SER", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_EVENTS_SER"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -259,6 +262,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBSUB_REQUEST_METADATA", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_REQUEST_METADATA"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -330,6 +334,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBSUB_CLOUD_EVENTS_SER", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_CLOUD_EVENTS_SER"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -399,6 +404,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBSUB_EVENTS_SER", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(2, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBSUB_EVENTS_SER"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -467,6 +473,7 @@ func (e *errorcodes) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_PUBLISH_OUTBOX", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:pubsub", "error_code:ERR_PUBLISH_OUTBOX"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
