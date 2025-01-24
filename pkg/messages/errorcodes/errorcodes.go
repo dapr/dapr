@@ -17,19 +17,21 @@ package errorcodes
 type Category string
 
 const (
-	CategoryActor         Category = "actor"
-	CategoryWorkflow      Category = "workflow"
-	CategoryState         Category = "state"
-	CategoryConfiguration Category = "configuration"
-	CategoryCrypto        Category = "crypto"
-	CategorySecret        Category = "secret"
-	CategoryPubsub        Category = "pubsub"
-	CategoryConversation  Category = "conversation"
-	CategoryLock          Category = "lock"
-	CategoryJob           Category = "job"
-	CategoryHealth        Category = "health"
-	CategoryCommon        Category = "common"
-	CategoryPluggable     Category = "pluggable-component"
+	CategoryActor             Category = "actor"
+	CategoryWorkflow          Category = "workflow"
+	CategoryState             Category = "state"
+	CategoryConfiguration     Category = "configuration"
+	CategoryCrypto            Category = "crypto"
+	CategorySecret            Category = "secret"
+	CategoryPubsub            Category = "pubsub"
+	CategoryConversation      Category = "conversation"
+	CategoryServiceInvocation Category = "service-invocation"
+	CategoryBinding           Category = "binding"
+	CategoryLock              Category = "lock"
+	CategoryJob               Category = "job"
+	CategoryHealth            Category = "health"
+	CategoryCommon            Category = "common"
+	CategoryPluggable         Category = "pluggable-component"
 )
 
 type ErrorCode struct {
@@ -43,7 +45,7 @@ func (e *ErrorCode) Error() string {
 }
 
 var (
-	// ### Actors (Building block)
+	// ### Actors API
 	ActorInstanceMissing          = ErrorCode{"ERR_ACTOR_INSTANCE_MISSING", "", CategoryActor}       // Missing actor instance
 	ActorInvokeMethod             = ErrorCode{"ERR_ACTOR_INVOKE_METHOD", "", CategoryActor}          // Error invoking actor method
 	ActorRuntimeNotFound          = ErrorCode{"ERR_ACTOR_RUNTIME_NOT_FOUND", "", CategoryActor}      // Actor runtime not found
@@ -61,7 +63,7 @@ var (
 	ErrActorNamespaceRequired     = ErrorCode{"ERR_ACTOR_NAMESPACE_REQUIRED", "", CategoryActor}     // Actors must have a namespace configured when running in Kubernetes mode
 	ErrActorNoAddress             = ErrorCode{"ERR_ACTOR_NO_ADDRESS", "", CategoryActor}             // No address found for actor
 
-	// ### Workflows (Building block)
+	// ### Workflows API
 	WorkflowGet                       = ErrorCode{"ERR_GET_WORKFLOW", "", CategoryWorkflow}                 // Error getting workflow
 	WorkflowStart                     = ErrorCode{"ERR_START_WORKFLOW", "", CategoryWorkflow}               // Error starting workflow
 	WorkflowPause                     = ErrorCode{"ERR_PAUSE_WORKFLOW", "", CategoryWorkflow}               // Error pausing workflow
@@ -78,11 +80,12 @@ var (
 	WorkflowInstanceIDProvidedMissing = ErrorCode{"ERR_INSTANCE_ID_PROVIDED_MISSING", "", CategoryWorkflow} // Missing workflow instance ID
 	WorkflowInstanceIDTooLong         = ErrorCode{"ERR_INSTANCE_ID_TOO_LONG", "", CategoryWorkflow}         // Workflow instance ID too long
 
-	// ### State management (Building block)
+	// ### State management API
 	StateTransaction                   = ErrorCode{"ERR_STATE_TRANSACTION", "", CategoryState}                                                 // Error in state transaction
 	StateSave                          = ErrorCode{"ERR_STATE_SAVE", "", CategoryState}                                                        // Error saving state
 	StateGet                           = ErrorCode{"ERR_STATE_GET", "", CategoryState}                                                         // Error getting state
 	StateDelete                        = ErrorCode{"ERR_STATE_DELETE", "", CategoryState}                                                      // Error deleting state
+	StateBulkDelete                    = ErrorCode{"ERR_STATE_BULK_DELETE", "", CategoryState}                                                 // Error deleting state in bulk
 	StateBulkGet                       = ErrorCode{"ERR_STATE_BULK_GET", "", CategoryState}                                                    // Error getting state in bulk
 	StateNotSupportedOperation         = ErrorCode{"ERR_NOT_SUPPORTED_STATE_OPERATION", "", CategoryState}                                     // Operation not supported in transaction
 	StateQuery                         = ErrorCode{"ERR_STATE_QUERY", "DAPR_STATE_QUERY_FAILED", CategoryState}                                // Error querying state
@@ -93,20 +96,20 @@ var (
 	StateStoreTooManyTransactions      = ErrorCode{"ERR_STATE_STORE_TOO_MANY_TRANSACTIONS", "DAPR_STATE_TOO_MANY_TRANSACTIONS", CategoryState} // Too many operations per transaction
 	StateMalformedRequest              = ErrorCode{"ERR_MALFORMED_REQUEST", "DAPR_STATE_ILLEGAL_KEY", CategoryState}                           // Invalid key
 
-	// ### Configuration (Building block)
+	// ### Configuration API
 	ConfigurationGet                = ErrorCode{"ERR_CONFIGURATION_GET", "", CategoryConfiguration}                  // Error getting configuration
 	ConfigurationStoreNotConfigured = ErrorCode{"ERR_CONFIGURATION_STORE_NOT_CONFIGURED", "", CategoryConfiguration} // Configuration store not configured
 	ConfigurationStoreNotFound      = ErrorCode{"ERR_CONFIGURATION_STORE_NOT_FOUND", "", CategoryConfiguration}      // Configuration store not found
 	ConfigurationSubscribe          = ErrorCode{"ERR_CONFIGURATION_SUBSCRIBE", "", CategoryConfiguration}            // Error subscribing to configuration
 	ConfigurationUnsubscribe        = ErrorCode{"ERR_CONFIGURATION_UNSUBSCRIBE", "", CategoryConfiguration}          // Error unsubscribing from configuration
 
-	// ### Crypto (Building block)
+	// ### Crypto API
 	Crypto                       = ErrorCode{"ERR_CRYPTO", "", CategoryCrypto}                          // Error in crypto operation
 	CryptoKey                    = ErrorCode{"ERR_CRYPTO_KEY", "", CategoryCrypto}                      // Error retrieving crypto key
 	CryptoProviderNotFound       = ErrorCode{"ERR_CRYPTO_PROVIDER_NOT_FOUND", "", CategoryCrypto}       // Crypto provider not found
 	CryptoProvidersNotConfigured = ErrorCode{"ERR_CRYPTO_PROVIDERS_NOT_CONFIGURED", "", CategoryCrypto} // Crypto providers not configured
 
-	// ### Secrets (Building block)
+	// ### Secrets API
 	SecretGet                = ErrorCode{"ERR_SECRET_GET", "", CategorySecret}                   // Error getting secret
 	SecretStoreNotFound      = ErrorCode{"ERR_SECRET_STORE_NOT_FOUND", "", CategorySecret}       // Secret store not found
 	SecretStoreNotConfigured = ErrorCode{"ERR_SECRET_STORES_NOT_CONFIGURED", "", CategorySecret} // Secret store not configured
@@ -127,15 +130,19 @@ var (
 	PubSubEventsUnmarshalEvents = ErrorCode{"ERR_PUBSUB_EVENTS_SER", "DAPR_PUBSUB_UNMARSHAL_EVENTS", CategoryPubsub}               // Error unmarshalling events
 	PubsubPublishOutbox         = ErrorCode{"ERR_PUBLISH_OUTBOX", "", CategoryPubsub}                                              // Error publishing message to outbox
 
-	// ### Conversation (Building block)
-	ConversationInvalidParms        = ErrorCode{"ERR_CONVERSATION_INVALID_PARMS", "", CategoryConversation}  // Invalid parameters for conversation component
-	ConversationInvoke              = ErrorCode{"ERR_CONVERSATION_INVOKE", "", CategoryConversation}         // Error invoking conversation
-	ConversationMissingInputs       = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", "", CategoryConversation} // Missing inputs for conversation
-	ConversationNotFound            = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}      // Conversation not found
-	ConversationDirectInvoke        = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryConversation}               // Error on service invocation   #TODO - fix this after jake's PR is merged
-	ConversationInvokeOutputBinding = ErrorCode{"ERR_INVOKE_OUTPUT_BINDING", "", CategoryConversation}       // Error invoking output binding
+	// ### Conversation API
+	ConversationInvalidParms  = ErrorCode{"ERR_CONVERSATION_INVALID_PARMS", "", CategoryConversation}  // Invalid parameters for conversation component
+	ConversationInvoke        = ErrorCode{"ERR_CONVERSATION_INVOKE", "", CategoryConversation}         // Error invoking conversation
+	ConversationMissingInputs = ErrorCode{"ERR_CONVERSATION_MISSING_INPUTS", "", CategoryConversation} // Missing inputs for conversation
+	ConversationNotFound      = ErrorCode{"ERR_CONVERSATION_NOT_FOUND", "", CategoryConversation}      // Conversation not found
 
-	// ### Distributed Lock (Building block)
+	// ### Service Invocation / Direct Messaging API
+	ServiceInvocationDirectInvoke = ErrorCode{"ERR_DIRECT_INVOKE", "", CategoryServiceInvocation} // Error invoking service
+
+	// ### Bindings API
+	BindingInvokeOutputBinding = ErrorCode{"ERR_INVOKE_OUTPUT_BINDING", "", CategoryBinding} // Error invoking output binding
+
+	// ### Distributed Lock API
 	LockStoreNotConfigured = ErrorCode{"ERR_LOCK_STORE_NOT_CONFIGURED", "", CategoryLock} // Lock store not configured
 	LockStoreNotFound      = ErrorCode{"ERR_LOCK_STORE_NOT_FOUND", "", CategoryLock}      // Lock store not found
 	LockTry                = ErrorCode{"ERR_TRY_LOCK", "", CategoryLock}                  // Error acquiring lock
