@@ -17,6 +17,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"reflect"
+	"strings"
 	"time"
 
 	"go.mongodb.org/mongo-driver/bson"
@@ -74,16 +75,27 @@ func (r Reminder) RepeatsLeft() int {
 // If the reminder is not done, call "NextTick" to get the time it should tick next.
 // Note: this method is not concurrency-safe.
 func (r *Reminder) TickExecuted() (done bool) {
-	if r.Period.repeats > 0 {
-		r.Period.repeats--
-	}
-
-	if !r.HasRepeats() {
+	// Empty period means execute once, unless it's a workflow timer
+	if r.Period.value == "" {
+		// Workflow timers (prefixed with "timer-") need to continue executing
+		if r.IsTimer && strings.HasPrefix(r.Name, "timer-") {
+			r.RegisteredTime = r.Period.GetFollowing(r.RegisteredTime)
+			return false
+		}
 		return true
 	}
 
-	r.RegisteredTime = r.Period.GetFollowing(r.RegisteredTime)
+	if r.Period.repeats > 0 {
+		r.Period.repeats--
 
+		// 0 left means we're done, so exit & don't set any new times
+		if r.Period.repeats == 0 {
+			return true
+		}
+	}
+
+	// Only set next time if we have more repeats
+	r.RegisteredTime = r.Period.GetFollowing(r.RegisteredTime)
 	return false
 }
 
