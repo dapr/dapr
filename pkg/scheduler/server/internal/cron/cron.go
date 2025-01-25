@@ -116,6 +116,7 @@ func (c *cron) Run(ctx context.Context) error {
 
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints: endpoints,
+		Context:   ctx,
 	})
 	if err != nil {
 		return err

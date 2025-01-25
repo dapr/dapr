@@ -38,6 +38,8 @@ type options struct {
 	dataDir       *string
 	kubeconfig    *string
 	mode          *string
+
+	overrideBroadcastHostPort *string
 }
 
 func WithExecOptions(execOptions ...exec.Option) Option {
@@ -128,5 +130,11 @@ func WithKubeconfig(kubeconfig string) Option {
 func WithMode(mode string) Option {
 	return func(o *options) {
 		o.mode = &mode
+	}
+}
+
+func WithOverrideBroadcastHostPort(address string) Option {
+	return func(o *options) {
+		o.overrideBroadcastHostPort = &address
 	}
 }

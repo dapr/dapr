@@ -34,7 +34,9 @@ type Options struct {
 	HealthzPort          int
 	HealthzListenAddress string
 
-	ListenAddress    string
+	ListenAddress             string
+	OverrideBroadcastHostPort *string
+
 	TLSEnabled       bool
 	TrustDomain      string
 	TrustAnchorsFile *string
@@ -58,9 +60,10 @@ type Options struct {
 	Logger  logger.Options
 	Metrics *metrics.FlagOptions
 
-	taFile         string
-	kubeconfig     string
-	etcdSpaceQuota string
+	taFile                    string
+	kubeconfig                string
+	etcdSpaceQuota            string
+	overrideBroadcastHostPort string
 }
 
 func New(origArgs []string) (*Options, error) {
@@ -75,6 +78,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 
 	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The address for the Scheduler to listen on")
+	fs.StringVar(&opts.overrideBroadcastHostPort, "override-broadcast-host-port", "", "Override the address (host:port) which is broadcast by this scheduler host that daprd instances will use to connect to this scheduler. This option should only be set by the CLI when in standalone mode, or in exotic environments whereby the routable scheduler address (host:port) is different from its own understood routable address, i.e. in a layered or natted network.")
 	fs.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the scheduler gRPC server")
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	fs.StringVar(&opts.taFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
@@ -120,6 +124,10 @@ func New(origArgs []string) (*Options, error) {
 			return nil, errors.New("kubeconfig flag is only valid in --mode=kubernetes")
 		}
 		opts.KubeConfig = &opts.kubeconfig
+	}
+
+	if fs.Changed("override-broadcast-host-port") {
+		opts.OverrideBroadcastHostPort = &opts.overrideBroadcastHostPort
 	}
 
 	return &opts, nil
