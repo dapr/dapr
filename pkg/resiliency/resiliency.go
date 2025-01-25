@@ -89,9 +89,9 @@ type (
 	Provider interface {
 		// EndpointPolicy returns the policy for a service endpoint.
 		EndpointPolicy(service string, endpoint string) *PolicyDefinition
-		// ActorPolicy returns the policy for an actor instance to be used before the lock is acquired.
+		// ActorPreLockPolicy returns the policy for an actor instance to be used before the lock is acquired.
 		ActorPreLockPolicy(actorType string, id string) *PolicyDefinition
-		// ActorPolicy returns the policy for an actor instance to be used after the lock is acquired.
+		// ActorPostLockPolicy returns the policy for an actor instance to be used after the lock is acquired.
 		ActorPostLockPolicy(actorType string, id string) *PolicyDefinition
 		// ComponentOutboundPolicy returns the outbound policy for a component.
 		ComponentOutboundPolicy(name string, componentType ComponentType) *PolicyDefinition

@@ -58,7 +58,7 @@ type Options struct {
 	// GlobalConfig is the global configuration.
 	GlobalConfig *config.Configuration
 
-	// AppMiddlware is the application middleware.
+	// AppMiddleware is the application middleware.
 	AppMiddleware middleware.HTTP
 
 	// MaxRequestBodySize is the maximum request body size, in bytes.

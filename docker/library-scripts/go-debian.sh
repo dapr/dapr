@@ -175,7 +175,7 @@ fi
 usermod -a -G golang "${USERNAME}"
 mkdir -p "${TARGET_GOROOT}" "${TARGET_GOPATH}" 
 if [ "${TARGET_GO_VERSION}" != "none" ] && ! type go > /dev/null 2>&1; then
-    # Use a temporary locaiton for gpg keys to avoid polluting image
+    # Use a temporary location for gpg keys to avoid polluting image
     export GNUPGHOME="/tmp/tmp-gnupg"
     mkdir -p ${GNUPGHOME}
     chmod 700 ${GNUPGHOME}
