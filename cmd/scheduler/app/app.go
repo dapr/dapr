@@ -93,11 +93,13 @@ func Run() {
 			}
 
 			server, serr := server.New(server.Options{
-				Port:          opts.Port,
-				ListenAddress: opts.ListenAddress,
-				Mode:          modes.DaprMode(opts.Mode),
-				Security:      secHandler,
-				Healthz:       healthz,
+				Port:                      opts.Port,
+				ListenAddress:             opts.ListenAddress,
+				OverrideBroadcastHostPort: opts.OverrideBroadcastHostPort,
+
+				Mode:     modes.DaprMode(opts.Mode),
+				Security: secHandler,
+				Healthz:  healthz,
 
 				DataDir:                 opts.EtcdDataDir,
 				KubeConfig:              opts.KubeConfig,

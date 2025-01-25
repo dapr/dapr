@@ -39,23 +39,24 @@ import (
 var log = logger.NewLogger("dapr.scheduler.server")
 
 type Options struct {
-	Healthz                 healthz.Healthz
-	Security                security.Handler
-	ListenAddress           string
-	Port                    int
-	Mode                    modes.DaprMode
-	KubeConfig              *string
-	DataDir                 string
-	EtcdID                  string
-	EtcdInitialPeers        []string
-	EtcdClientPorts         []string
-	EtcdClientHTTPPorts     []string
-	EtcdSpaceQuota          int64
-	EtcdCompactionMode      string
-	EtcdCompactionRetention string
-	EtcdSnapshotCount       uint64
-	EtcdMaxSnapshots        uint
-	EtcdMaxWALs             uint
+	Healthz                   healthz.Healthz
+	Security                  security.Handler
+	ListenAddress             string
+	OverrideBroadcastHostPort *string
+	Port                      int
+	Mode                      modes.DaprMode
+	KubeConfig                *string
+	DataDir                   string
+	EtcdID                    string
+	EtcdInitialPeers          []string
+	EtcdClientPorts           []string
+	EtcdClientHTTPPorts       []string
+	EtcdSpaceQuota            int64
+	EtcdCompactionMode        string
+	EtcdCompactionRetention   string
+	EtcdSnapshotCount         uint64
+	EtcdMaxSnapshots          uint
+	EtcdMaxWALs               uint
 }
 
 // Server is the gRPC server for the Scheduler service.
@@ -81,21 +82,25 @@ func New(opts Options) (*Server, error) {
 		return nil, err
 	}
 
-	broadcastAddr := opts.ListenAddress
-	if !utils.IsLocalhost(broadcastAddr) {
-		broadcastAddr, err = utils.GetHostAddress()
+	var broadcastAddr string
+	switch {
+	case opts.OverrideBroadcastHostPort != nil:
+		broadcastAddr = *opts.OverrideBroadcastHostPort
+	case utils.IsLocalhost(opts.ListenAddress):
+		broadcastAddr = net.JoinHostPort(opts.ListenAddress, strconv.Itoa(opts.Port))
+	default:
+		haddr, err := utils.GetHostAddress()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get host address: %w", err)
 		}
+		broadcastAddr = net.JoinHostPort(haddr, strconv.Itoa(opts.Port))
 	}
 
 	cron := cron.New(cron.Options{
 		ID:      opts.EtcdID,
 		Config:  config,
 		Healthz: opts.Healthz,
-		Host: &schedulerv1pb.Host{
-			Address: net.JoinHostPort(broadcastAddr, strconv.Itoa(opts.Port)),
-		},
+		Host:    &schedulerv1pb.Host{Address: broadcastAddr},
 	})
 
 	var ctrl concurrency.Runner

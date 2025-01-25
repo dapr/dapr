@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,24 +11,8 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package cluster
+package watchhosts
 
-type Option func(*options)
-
-type options struct {
-	count uint32
-
-	overrideBroadcastHostPorts []string
-}
-
-func WithCount(count uint32) Option {
-	return func(o *options) {
-		o.count = count
-	}
-}
-
-func WithOverrideBroadcastHostPorts(addresses ...string) Option {
-	return func(o *options) {
-		o.overrideBroadcastHostPorts = append(o.overrideBroadcastHostPorts, addresses...)
-	}
-}
+import (
+	_ "github.com/dapr/dapr/tests/integration/suite/scheduler/api/watchhosts/override"
+)

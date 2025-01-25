@@ -45,6 +45,9 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 	}
 
 	require.Positive(t, opts.count, "count must be positive")
+	if len(opts.overrideBroadcastHostPorts) > 0 {
+		require.Len(t, opts.overrideBroadcastHostPorts, int(opts.count), "overrideBroadcastHostPorts must have the same length as count")
+	}
 
 	fp := ports.Reserve(t, int(opts.count)*5)
 
@@ -66,14 +69,22 @@ func New(t *testing.T, fopts ...Option) *Cluster {
 
 	schedulers := make([]*scheduler.Scheduler, opts.count)
 	for i := range opts.count {
-		schedulers[i] = scheduler.New(t,
+		sopts := []scheduler.Option{
 			scheduler.WithID(uids[i]),
 			scheduler.WithPort(ports[i]),
 			scheduler.WithHealthzPort(healthzPorts[i]),
 			scheduler.WithMetricsPort(metricsPorts[i]),
 			scheduler.WithInitialCluster(strings.Join(initialCluster, ",")),
 			scheduler.WithEtcdClientPorts(clientPorts),
-		)
+		}
+
+		if len(opts.overrideBroadcastHostPorts) > 0 {
+			sopts = append(sopts,
+				scheduler.WithOverrideBroadcastHostPort(opts.overrideBroadcastHostPorts[i]),
+			)
+		}
+
+		schedulers[i] = scheduler.New(t, sopts...)
 	}
 
 	return &Cluster{
