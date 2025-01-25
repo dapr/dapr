@@ -34,14 +34,15 @@ type Options struct {
 	HealthzPort          int
 	HealthzListenAddress string
 
-	ListenAddress    string
-	TLSEnabled       bool
-	TrustDomain      string
-	TrustAnchorsFile *string
-	SentryAddress    string
-	PlacementAddress string
-	Mode             string
-	KubeConfig       *string
+	ListenAddress         string
+	TLSEnabled            bool
+	TrustDomain           string
+	TrustAnchorsFile      *string
+	SentryAddress         string
+	PlacementAddress      string
+	Mode                  string
+	KubeConfig            *string
+	OverrideBroadcastHost string
 
 	ID                      string
 	EtcdInitialPeers        []string
@@ -80,6 +81,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.taFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
 	fs.StringVar(&opts.SentryAddress, "sentry-address", fmt.Sprintf("dapr-sentry.%s.svc:443", security.CurrentNamespace()), "Address of the Sentry service")
 	fs.StringVar(&opts.Mode, "mode", string(modes.StandaloneMode), "Runtime mode for Dapr Scheduler")
+	fs.StringVar(&opts.OverrideBroadcastHost, "override-broadcast-host", "", "Override broadcast host for Dapr Scheduler")
 	fs.StringVar(&opts.kubeconfig, "kubeconfig", "", "Kubernetes mode only. Absolute path to the kubeconfig file.")
 	if err := fs.MarkHidden("kubeconfig"); err != nil {
 		log.Fatal(err)

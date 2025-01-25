@@ -258,13 +258,6 @@ func (s *Scheduler) connSchedulerHosts(ctx context.Context) (schedulerv1pb.Sched
 		addresses = append(addresses, host.GetAddress())
 	}
 
-	// Let the code above run to this point to validate the connection and WatchHosts RPC call
-	// If we are in standalone mode and only one address is provided, we need to return the address as provided in config
-	// Otherwise the resolved address from response will have the address of the docker network
-	if len(s.addresses) > 0 && s.mode == modes.StandaloneMode {
-		addresses = s.addresses
-	}
-
 	log.Infof("Received scheduler hosts addresses: %v", addresses)
 
 	return stream, addresses, nil
