@@ -123,6 +123,7 @@ spec:
   version: v1
 `, storeWithNoTransactional.SocketName(), storeWithQuerier.SocketName(), storeWithMultiMaxSize.SocketName())),
 		procdaprd.WithSocket(t, socket),
+		procdaprd.WithErrorCodeMetrics(t),
 	)
 
 	return []framework.Option{
@@ -160,6 +161,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_STATE_STORE_NOT_FOUND", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:state", "error_code:ERR_STATE_STORE_NOT_FOUND"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -207,6 +209,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_MALFORMED_REQUEST", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:state", "error_code:ERR_MALFORMED_REQUEST"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -262,7 +265,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 	// Covers errutils.StateStoreNotConfigured()
 	t.Run("state store not configured", func(t *testing.T) {
 		// Start a new daprd without state store
-		daprdNoStateStore := procdaprd.New(t, procdaprd.WithAppID("daprd_no_state_store"))
+		daprdNoStateStore := procdaprd.New(t, procdaprd.WithAppID("daprd_no_state_store"), procdaprd.WithErrorCodeMetrics(t))
 		daprdNoStateStore.Run(t, ctx)
 		daprdNoStateStore.WaitUntilRunning(t, ctx)
 		defer daprdNoStateStore.Cleanup(t)
@@ -290,6 +293,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_STATE_STORE_NOT_CONFIGURED", errCode)
+		require.True(t, daprdNoStateStore.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -337,6 +341,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_STATE_STORE_NOT_SUPPORTED", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(3, "dapr_error_code_total"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -409,6 +414,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_STATE_QUERY", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:state", "error_code:ERR_STATE_QUERY"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -477,6 +483,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_STATE_STORE_TOO_MANY_TRANSACTIONS", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:state", "error_code:ERR_STATE_STORE_TOO_MANY_TRANSACTIONS"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
@@ -548,6 +555,7 @@ func (e *errors) Run(t *testing.T, ctx context.Context) {
 		errCode, exists := data["errorCode"]
 		require.True(t, exists)
 		require.Equal(t, "ERR_STATE_STORE_NOT_SUPPORTED", errCode)
+		require.True(t, e.daprd.Metrics(t, ctx).MatchMetricAndSum(2, "dapr_error_code_total", "category:state", "error_code:ERR_STATE_STORE_NOT_SUPPORTED"))
 
 		// Confirm that the 'message' field exists and contains the correct error message
 		errMsg, exists := data["message"]
