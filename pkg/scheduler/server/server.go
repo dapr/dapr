@@ -43,6 +43,7 @@ type Options struct {
 	Security                security.Handler
 	ListenAddress           string
 	Port                    int
+	OverrideBroadcastHost   string
 	Mode                    modes.DaprMode
 	KubeConfig              *string
 	DataDir                 string
@@ -82,7 +83,10 @@ func New(opts Options) (*Server, error) {
 	}
 
 	broadcastAddr := opts.ListenAddress
-	if !utils.IsLocalhost(broadcastAddr) {
+	if opts.OverrideBroadcastHost != "" {
+		log.Infof("Overriding broadcast host to %s", opts.OverrideBroadcastHost)
+		broadcastAddr = opts.OverrideBroadcastHost
+	} else if !utils.IsLocalhost(broadcastAddr) {
 		broadcastAddr, err = utils.GetHostAddress()
 		if err != nil {
 			return nil, fmt.Errorf("failed to get host address: %w", err)

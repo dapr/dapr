@@ -151,10 +151,6 @@ type internalConfig struct {
 	outboundHealthz              healthz.Healthz
 }
 
-func (i internalConfig) SchedulerEnabled() bool {
-	return len(i.schedulerAddress) > 0
-}
-
 // FromConfig creates a new Dapr Runtime from a configuration.
 func FromConfig(ctx context.Context, cfg *Config) (*DaprRuntime, error) {
 	intc, err := cfg.toInternal()
