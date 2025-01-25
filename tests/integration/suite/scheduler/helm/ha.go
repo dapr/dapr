@@ -18,6 +18,7 @@ import (
 	"io"
 	"testing"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	appsv1 "k8s.io/api/apps/v1"
 	"sigs.k8s.io/yaml"
@@ -71,14 +72,13 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 
 	t.Run("initial_cluster_has_all_instances_default", func(t *testing.T) {
 		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--initial-cluster",
-			"dapr-scheduler-server-0=http://dapr-scheduler-server-0.dapr-scheduler-server.default.svc.cluster.local:2380,"+
-				"dapr-scheduler-server-1=http://dapr-scheduler-server-1.dapr-scheduler-server.default.svc.cluster.local:2380,"+
-				"dapr-scheduler-server-2=http://dapr-scheduler-server-2.dapr-scheduler-server.default.svc.cluster.local:2380")
+			"dapr-scheduler-server-0=https://dapr-scheduler-server-0.dapr-scheduler-server.default.svc.cluster.local:2380,"+
+				"dapr-scheduler-server-1=https://dapr-scheduler-server-1.dapr-scheduler-server.default.svc.cluster.local:2380,"+
+				"dapr-scheduler-server-2=https://dapr-scheduler-server-2.dapr-scheduler-server.default.svc.cluster.local:2380")
 	})
 
 	t.Run("etcd_client_ports_default", func(t *testing.T) {
 		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-client-ports", "dapr-scheduler-server-0=2379,dapr-scheduler-server-1=2379,dapr-scheduler-server-2=2379")
-		requireArgsValue(t, sts.Spec.Template.Spec.Containers[0].Args, "--etcd-client-http-ports", "dapr-scheduler-server-0=2330,dapr-scheduler-server-1=2330,dapr-scheduler-server-2=2330")
 	})
 
 	// namespaced
@@ -88,9 +88,9 @@ func (b *ha) Run(t *testing.T, ctx context.Context) {
 		require.NoError(t, err)
 		require.NoError(t, yaml.Unmarshal(bs, &stsNamespaced))
 		requireArgsValue(t, stsNamespaced.Spec.Template.Spec.Containers[0].Args, "--initial-cluster",
-			"dapr-scheduler-server-0=http://dapr-scheduler-server-0.dapr-scheduler-server.dapr-system.svc.cluster.local:2380,"+
-				"dapr-scheduler-server-1=http://dapr-scheduler-server-1.dapr-scheduler-server.dapr-system.svc.cluster.local:2380,"+
-				"dapr-scheduler-server-2=http://dapr-scheduler-server-2.dapr-scheduler-server.dapr-system.svc.cluster.local:2380")
+			"dapr-scheduler-server-0=https://dapr-scheduler-server-0.dapr-scheduler-server.dapr-system.svc.cluster.local:2380,"+
+				"dapr-scheduler-server-1=https://dapr-scheduler-server-1.dapr-scheduler-server.dapr-system.svc.cluster.local:2380,"+
+				"dapr-scheduler-server-2=https://dapr-scheduler-server-2.dapr-scheduler-server.dapr-system.svc.cluster.local:2380")
 	})
 }
 
@@ -104,5 +104,5 @@ func requireArgsValue(t *testing.T, args []string, arg, value string) {
 			}
 		}
 	}
-	require.Failf(t, "arg %s not found", arg)
+	assert.Failf(t, "arg %s not found", arg)
 }
