@@ -22,6 +22,7 @@ import (
 )
 
 type Fake struct {
+	runFn          func(context.Context) error
 	callFn         func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)
 	callReminderFn func(context.Context, *api.Reminder) error
 	callStreamFn   func(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error
@@ -29,6 +30,10 @@ type Fake struct {
 
 func New() *Fake {
 	return &Fake{
+		runFn: func(ctx context.Context) error {
+			<-ctx.Done()
+			return ctx.Err()
+		},
 		callFn: func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 			return &internalv1pb.InternalInvokeResponse{
 				Message: &commonv1.InvokeResponse{},
@@ -41,6 +46,11 @@ func New() *Fake {
 			return nil
 		},
 	}
+}
+
+func (f *Fake) WithRunFn(fn func(context.Context) error) *Fake {
+	f.runFn = fn
+	return f
 }
 
 func (f *Fake) WithCallFn(fn func(context.Context, *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error)) *Fake {
@@ -68,4 +78,8 @@ func (f *Fake) CallReminder(ctx context.Context, reminder *api.Reminder) error {
 
 func (f *Fake) CallStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
 	return f.callStreamFn(ctx, req, stream)
+}
+
+func (f *Fake) Run(ctx context.Context) error {
+	return f.runFn(ctx)
 }
