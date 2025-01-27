@@ -106,3 +106,16 @@ func (m *Metrics) MatchMetric(substrings ...string) []Metric {
 
 	return result
 }
+
+// MatchMetricAndSum returns true if the set of metrics has a specific sum
+func (m *Metrics) MatchMetricAndSum(sum float64, substrings ...string) bool {
+	// The set of metrics is determined by all metrics that match the substrings
+	// The sum is the combined total of all the matching metrics' values
+	metrics := m.MatchMetric(substrings...)
+	matchSum := 0.0
+	for _, metric := range metrics {
+		matchSum += metric.Value
+	}
+
+	return matchSum == sum
+}
