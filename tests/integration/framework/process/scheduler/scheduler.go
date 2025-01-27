@@ -137,6 +137,9 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 	if opts.mode != nil {
 		args = append(args, "--mode="+*opts.mode)
 	}
+	if opts.overrideBroadcastHostPort != nil {
+		args = append(args, "--override-broadcast-host-port="+*opts.overrideBroadcastHostPort)
+	}
 
 	clientPorts := make(map[string]string)
 	for _, input := range opts.etcdClientPorts {
@@ -231,6 +234,8 @@ func (s *Scheduler) DataDir() string {
 }
 
 func (s *Scheduler) Client(t *testing.T, ctx context.Context) schedulerv1pb.SchedulerClient {
+	t.Helper()
+
 	//nolint:staticcheck
 	conn, err := grpc.DialContext(ctx, s.Address(),
 		grpc.WithDefaultCallOptions(grpc.MaxCallSendMsgSize(math.MaxInt32), grpc.MaxCallRecvMsgSize(math.MaxInt32)),

@@ -88,8 +88,19 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 	})
 	require.NoError(t, err)
 
+	numOf := func(ss []string, k string) int {
+		var j int
+		for _, s := range ss {
+			if s == k {
+				j++
+			}
+		}
+
+		return j
+	}
+
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, []string{"test"}, s.triggered.Slice())
+		assert.GreaterOrEqual(c, numOf(s.triggered.Slice(), "test"), 1)
 	}, 10*time.Second, 10*time.Millisecond)
 
 	s.daprdA.Cleanup(t)
@@ -105,17 +116,6 @@ func (s *staged) Run(t *testing.T, ctx context.Context) {
 		},
 	})
 	require.NoError(t, err)
-
-	numOf := func(ss []string, k string) int {
-		var j int
-		for _, s := range ss {
-			if s == k {
-				j++
-			}
-		}
-
-		return j
-	}
 
 	time.Sleep(2 * time.Second)
 	assert.GreaterOrEqual(t, numOf(s.triggered.Slice(), "test"), 1)

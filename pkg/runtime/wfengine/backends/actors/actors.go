@@ -21,6 +21,8 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
 	"google.golang.org/protobuf/types/known/timestamppb"
 	"google.golang.org/protobuf/types/known/wrapperspb"
@@ -81,8 +83,8 @@ func New(opts Options) (*Actors, error) {
 		actors:                    opts.Actors,
 		resiliency:                opts.Resiliency,
 		schedulerReminders:        opts.SchedulerReminders,
-		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem),
-		activityWorkItemChan:      make(chan *backend.ActivityWorkItem),
+		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
+		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 	}, nil
 }
 
@@ -376,6 +378,11 @@ func (abe *Actors) WatchOrchestrationRuntimeStatus(ctx context.Context, id api.I
 			},
 		).Run(ctx)
 		if err != nil {
+			status, ok := status.FromError(err)
+			if ok && status.Code() == codes.Canceled {
+				return nil
+			}
+
 			return err
 		}
 

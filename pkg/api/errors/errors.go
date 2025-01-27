@@ -23,6 +23,18 @@ import (
 	kiterrors "github.com/dapr/kit/errors"
 )
 
+func Basic(grpcCode codes.Code, httpCode int, errorCode errorcodes.ErrorCode, msg string) error {
+	return kiterrors.NewBuilder(
+		grpcCode,
+		httpCode,
+		msg,
+		"",
+		string(errorCode.Category),
+	).
+		WithErrorInfo(errorCode.Code, nil).
+		Build()
+}
+
 func NotFound(name string, componentType string, metadata map[string]string, grpcCode codes.Code, httpCode int, legacyTag string, reason string, category errorcodes.Category) error {
 	message := fmt.Sprintf("%s %s is not found", componentType, name)
 

@@ -34,7 +34,9 @@ type Options struct {
 	HealthzPort          int
 	HealthzListenAddress string
 
-	ListenAddress    string
+	ListenAddress             string
+	OverrideBroadcastHostPort *string
+
 	TLSEnabled       bool
 	TrustDomain      string
 	TrustAnchorsFile *string
@@ -58,15 +60,14 @@ type Options struct {
 	Logger  logger.Options
 	Metrics *metrics.FlagOptions
 
-	taFile         string
-	kubeconfig     string
-	etcdSpaceQuota string
+	taFile                    string
+	kubeconfig                string
+	etcdSpaceQuota            string
+	overrideBroadcastHostPort string
 }
 
 func New(origArgs []string) (*Options, error) {
 	var opts Options
-
-	defaultEtcdStorageQuota := int64(16 * 1024 * 1024 * 1024)
 
 	// Create a flag set
 	fs := pflag.NewFlagSet("scheduler", pflag.ExitOnError)
@@ -77,6 +78,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.HealthzListenAddress, "healthz-listen-address", "", "The listening address for the healthz server")
 
 	fs.StringVar(&opts.ListenAddress, "listen-address", "", "The address for the Scheduler to listen on")
+	fs.StringVar(&opts.overrideBroadcastHostPort, "override-broadcast-host-port", "", "Override the address (host:port) which is broadcast by this scheduler host that daprd instances will use to connect to this scheduler. This option should only be set by the CLI when in standalone mode, or in exotic environments whereby the routable scheduler address (host:port) is different from its own understood routable address, i.e. in a layered or natted network.")
 	fs.BoolVar(&opts.TLSEnabled, "tls-enabled", false, "Should TLS be enabled for the scheduler gRPC server")
 	fs.StringVar(&opts.TrustDomain, "trust-domain", "localhost", "Trust domain for the Dapr control plane")
 	fs.StringVar(&opts.taFile, "trust-anchors-file", securityConsts.ControlPlaneDefaultTrustAnchorsPath, "Filepath to the trust anchors for the Dapr control plane")
@@ -92,7 +94,7 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
 	fs.StringSliceVar(&opts.EtcdClientHTTPPorts, "etcd-client-http-ports", nil, "Ports for etcd client http communication")
-	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", resource.NewQuantity(defaultEtcdStorageQuota, resource.BinarySI).String(), "Space quota for etcd")
+	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", "9.2E", "Space quota for etcd")
 	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
 	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "10m", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")
 	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 10000, "Number of committed transactions to trigger a snapshot to disk.")
@@ -117,15 +119,15 @@ func New(origArgs []string) (*Options, error) {
 	}
 	opts.EtcdSpaceQuota, _ = etcdSpaceQuota.AsInt64()
 
-	if etcdSpaceQuota.Value() < defaultEtcdStorageQuota {
-		log.Warnf("--etcd-space-quota of %s may be too low for production use. Consider increasing the value to 16Gi or larger.", etcdSpaceQuota.String())
-	}
-
 	if fs.Changed("kubeconfig") {
 		if opts.Mode != string(modes.KubernetesMode) {
 			return nil, errors.New("kubeconfig flag is only valid in --mode=kubernetes")
 		}
 		opts.KubeConfig = &opts.kubeconfig
+	}
+
+	if fs.Changed("override-broadcast-host-port") {
+		opts.OverrideBroadcastHostPort = &opts.overrideBroadcastHostPort
 	}
 
 	return &opts, nil

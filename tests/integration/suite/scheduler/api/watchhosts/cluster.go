@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package api
+package watchhosts
 
 import (
 	"context"
@@ -33,10 +33,10 @@ import (
 )
 
 func init() {
-	suite.Register(new(watchhosts))
+	suite.Register(new(cluster))
 }
 
-type watchhosts struct {
+type cluster struct {
 	scheduler1 *scheduler.Scheduler
 	scheduler2 *scheduler.Scheduler
 	scheduler3 *scheduler.Scheduler
@@ -48,7 +48,7 @@ type watchhosts struct {
 	s4addr string
 }
 
-func (w *watchhosts) Setup(t *testing.T) []framework.Option {
+func (c *cluster) Setup(t *testing.T) []framework.Option {
 	if runtime.GOOS == "windows" {
 		t.Skip("Cleanup does not work cleanly on windows")
 	}
@@ -70,46 +70,46 @@ func (w *watchhosts) Setup(t *testing.T) []framework.Option {
 		"scheduler-2=" + strconv.Itoa(fp.Port(t)),
 	}
 
-	w.scheduler1 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...)
-	w.scheduler2 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...)
-	w.scheduler3 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...)
+	c.scheduler1 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-0"), scheduler.WithEtcdClientPorts(clientPorts))...)
+	c.scheduler2 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-1"), scheduler.WithEtcdClientPorts(clientPorts))...)
+	c.scheduler3 = scheduler.New(t, append(opts, scheduler.WithID("scheduler-2"), scheduler.WithEtcdClientPorts(clientPorts))...)
 
-	w.scheduler4 = scheduler.New(t,
-		scheduler.WithID(w.scheduler2.ID()),
+	c.scheduler4 = scheduler.New(t,
+		scheduler.WithID(c.scheduler2.ID()),
 		scheduler.WithEtcdClientPorts(clientPorts),
-		scheduler.WithInitialCluster(w.scheduler2.InitialCluster()),
-		scheduler.WithDataDir(w.scheduler2.DataDir()),
-		scheduler.WithPort(w.scheduler2.Port()),
+		scheduler.WithInitialCluster(c.scheduler2.InitialCluster()),
+		scheduler.WithDataDir(c.scheduler2.DataDir()),
+		scheduler.WithPort(c.scheduler2.Port()),
 	)
 
-	w.s1addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler1.Port()))
-	w.s2addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler2.Port()))
-	w.s3addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler3.Port()))
-	w.s4addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(w.scheduler4.Port()))
+	c.s1addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(c.scheduler1.Port()))
+	c.s2addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(c.scheduler2.Port()))
+	c.s3addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(c.scheduler3.Port()))
+	c.s4addr = net.JoinHostPort("127.0.0.1", strconv.Itoa(c.scheduler4.Port()))
 
 	return []framework.Option{
 		framework.WithProcesses(fp),
 	}
 }
 
-func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
-	w.scheduler1.Run(t, ctx)
-	w.scheduler2.Run(t, ctx)
-	w.scheduler3.Run(t, ctx)
+func (c *cluster) Run(t *testing.T, ctx context.Context) {
+	c.scheduler1.Run(t, ctx)
+	c.scheduler2.Run(t, ctx)
+	c.scheduler3.Run(t, ctx)
 	t.Cleanup(func() {
-		w.scheduler1.Cleanup(t)
-		w.scheduler2.Cleanup(t)
-		w.scheduler3.Cleanup(t)
+		c.scheduler1.Cleanup(t)
+		c.scheduler2.Cleanup(t)
+		c.scheduler3.Cleanup(t)
 	})
-	w.scheduler1.WaitUntilRunning(t, ctx)
-	w.scheduler2.WaitUntilRunning(t, ctx)
-	w.scheduler3.WaitUntilRunning(t, ctx)
+	c.scheduler1.WaitUntilRunning(t, ctx)
+	c.scheduler2.WaitUntilRunning(t, ctx)
+	c.scheduler3.WaitUntilRunning(t, ctx)
 
 	var stream schedulerv1pb.Scheduler_WatchHostsClient
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
+	assert.EventuallyWithT(t, func(col *assert.CollectT) {
 		var err error
-		stream, err = w.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
-		if !assert.NoError(c, err) {
+		stream, err = c.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+		if !assert.NoError(col, err) {
 			return
 		}
 
@@ -125,35 +125,37 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 			got = append(got, host.GetAddress())
 		}
 
-		assert.ElementsMatch(c, []string{
-			w.s1addr,
-			w.s2addr,
-			w.s3addr,
+		assert.ElementsMatch(col, []string{
+			c.s1addr,
+			c.s2addr,
+			c.s3addr,
 		}, got)
 	}, time.Second*20, time.Millisecond*10)
 
-	w.scheduler2.Cleanup(t)
+	c.scheduler2.Cleanup(t)
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(col *assert.CollectT) {
 		resp, err := stream.Recv()
-		if !assert.NoError(c, err) {
+		if !assert.NoError(col, err) {
+			stream, err = c.scheduler3.Client(t, ctx).WatchHosts(ctx, new(schedulerv1pb.WatchHostsRequest))
+			require.NoError(t, err)
 			return
 		}
 		got := make([]string, 0, 2)
 		for _, host := range resp.GetHosts() {
 			got = append(got, host.GetAddress())
 		}
-		assert.ElementsMatch(c, []string{
-			w.s1addr,
-			w.s3addr,
+		assert.ElementsMatch(col, []string{
+			c.s1addr,
+			c.s3addr,
 		}, got)
 	}, time.Second*20, time.Millisecond*10)
 
-	w.scheduler4.Run(t, ctx)
-	w.scheduler4.WaitUntilRunning(t, ctx)
-	t.Cleanup(func() { w.scheduler4.Cleanup(t) })
+	c.scheduler4.Run(t, ctx)
+	c.scheduler4.WaitUntilRunning(t, ctx)
+	t.Cleanup(func() { c.scheduler4.Cleanup(t) })
 
-	require.EventuallyWithT(t, func(c *assert.CollectT) {
+	require.EventuallyWithT(t, func(col *assert.CollectT) {
 		resp, err := stream.Recv()
 		require.NoError(t, err)
 
@@ -162,10 +164,10 @@ func (w *watchhosts) Run(t *testing.T, ctx context.Context) {
 			got = append(got, host.GetAddress())
 		}
 
-		assert.ElementsMatch(c, []string{
-			w.s1addr,
-			w.s3addr,
-			w.s4addr,
+		assert.ElementsMatch(col, []string{
+			c.s1addr,
+			c.s3addr,
+			c.s4addr,
 		}, got)
 	}, time.Second*20, time.Millisecond*10)
 }
