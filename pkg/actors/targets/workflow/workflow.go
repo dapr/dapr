@@ -334,19 +334,16 @@ func (w *workflow) createIfCompleted(ctx context.Context, rs *backend.Orchestrat
 }
 
 func (w *workflow) scheduleWorkflowStart(ctx context.Context, startEvent *backend.HistoryEvent, state *wfenginestate.State) error {
-	// add start event to inbox
 	state.AddToInbox(startEvent)
-
-	// save all the state in 1 transaction
 	if err := w.saveInternalState(ctx, state); err != nil {
-		return fmt.Errorf("failed to save state: %w", err)
+		return err
 	}
 
 	// Schedule a reminder to execute immediately after this operation. The reminder will trigger the actual
 	// workflow execution. This is preferable to using the current thread so that we don't block the client
 	// while the workflow logic is running.
 	if _, err := w.createReliableReminder(ctx, "start", nil, 0); err != nil {
-		return fmt.Errorf("failed to create reminder: %w", err)
+		return err
 	}
 
 	return nil

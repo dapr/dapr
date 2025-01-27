@@ -89,6 +89,9 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 		req, err := nethttp.NewRequestWithContext(ctx, nethttp.MethodPost, url, nil)
 		assert.NoError(t, err)
 		resp, err := client.Do(req)
+		if resp != nil {
+			defer resp.Body.Close()
+		}
 		errCh <- errors.Join(err, resp.Body.Close())
 	}()
 

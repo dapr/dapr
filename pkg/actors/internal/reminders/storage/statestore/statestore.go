@@ -1077,7 +1077,6 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				if err != nil {
 					log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
 				}
-
 				track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
 				if gErr != nil {
 					log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
