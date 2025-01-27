@@ -284,6 +284,7 @@ func (a *actors) Run(ctx context.Context) error {
 	log.Info("Actor runtime started")
 
 	mngr := concurrency.NewRunnerCloserManager(nil,
+		a.engine.Run,
 		func(ctx context.Context) error {
 			select {
 			case <-a.registerDoneCh:
