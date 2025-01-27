@@ -57,7 +57,7 @@ func (p *Service) MonitorLeadership(ctx context.Context) error {
 				log.Error("placement leader loop failed", "error", err)
 			}
 		}(leaderCtx)
-		log.Info("raft cluster leadership acquired", p.raftNode.GetID())
+		log.Infof("raft cluster leadership acquired - %s", p.raftNode.GetID())
 		return
 	}
 
@@ -73,7 +73,7 @@ func (p *Service) MonitorLeadership(ctx context.Context) error {
 		leaderCtx = nil
 		leaderCancelFn = nil
 
-		log.Info("raft cluster leadership lost", p.raftNode.GetID())
+		log.Infof("raft cluster leadership lost - %s", p.raftNode.GetID())
 	}
 
 	currentLeadershipStatus := false

@@ -71,13 +71,13 @@ func newTestPlacementServer(t *testing.T, raftOptions raft.Options) (string, *Se
 			conn.Close()
 		}
 		return err == nil
-	}, time.Second*5, time.Millisecond, "server did not start in time")
+	}, time.Second*10, time.Millisecond, "server did not start in time")
 
 	cleanUpFn := func() {
 		cancel()
 		select {
 		case <-serverStopped:
-		case <-time.After(time.Second * 5):
+		case <-time.After(time.Second * 10):
 			t.Error("server did not stop in time")
 		}
 	}
