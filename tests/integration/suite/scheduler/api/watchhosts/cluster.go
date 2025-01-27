@@ -114,11 +114,11 @@ func (c *cluster) Run(t *testing.T, ctx context.Context) {
 		}
 
 		t.Cleanup(func() {
-			require.NoError(t, stream.CloseSend())
+			assert.NoError(t, stream.CloseSend())
 		})
 
 		resp, err := stream.Recv()
-		require.NoError(t, err)
+		assert.NoError(t, err)
 
 		got := make([]string, 0, 3)
 		for _, host := range resp.GetHosts() {
