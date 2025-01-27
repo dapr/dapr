@@ -55,6 +55,9 @@ func (r Reminder) Key() string {
 // NextTick returns the time the reminder should tick again next.
 // If the reminder has a TTL and the next tick is beyond the TTL, the second returned value will be false.
 func (r Reminder) NextTick() (time.Time, bool) {
+	if r.Period.repeats == 0 {
+		return time.Time{}, false
+	}
 	active := r.ExpirationTime.IsZero() || r.RegisteredTime.Before(r.ExpirationTime)
 	return r.RegisteredTime, active
 }
