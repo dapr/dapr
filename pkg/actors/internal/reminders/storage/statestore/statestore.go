@@ -118,6 +118,15 @@ func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(conte
 }
 
 func (r *Statestore) DrainRebalancedReminders() {
+	select {
+	case r.evaluationChan <- struct{}{}:
+		defer func() {
+			<-r.evaluationChan
+		}()
+	case <-r.runningCh:
+		return
+	}
+
 	var toStop []string
 	r.activeReminders.Range(func(key string, value *reminderStop) bool {
 		toStop = append(toStop, key)
@@ -1002,6 +1011,10 @@ func (r *Statestore) migrateRemindersForActorType(ctx context.Context, actorType
 
 func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) error {
 	reminderKey := reminder.Key()
+	
+	if _, exists := r.activeReminders.Load(reminderKey); !exists {
+		return fmt.Errorf("reminder %s was deleted during rebalancing", reminderKey)
+	}
 
 	track, err := r.getReminderTrack(context.TODO(), reminderKey)
 	if err != nil {
