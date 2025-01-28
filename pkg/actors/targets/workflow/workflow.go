@@ -225,19 +225,6 @@ func (w *workflow) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder)
 	return errors.New("timers are not implemented")
 }
 
-// DeactivateActor implements actors.InternalActor
-func (w *workflow) DeactivateActor(ctx context.Context) error {
-	log.Debugf("Workflow actor '%s': deactivating", w.actorID)
-	if w.closed.CompareAndSwap(false, true) {
-		close(w.closeCh)
-	}
-	w.state = nil // A bit of extra caution, shouldn't be necessary
-	w.rstate = nil
-	w.ometa = nil
-	w.ometaBroadcaster.Close()
-	return nil
-}
-
 func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) error {
 	// create a new state entry if one doesn't already exist
 	state, err := w.loadInternalState(ctx)
@@ -963,6 +950,9 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfengine
 // DeactivateActor implements actors.InternalActor
 func (w *workflow) Deactivate(ctx context.Context) error {
 	log.Debugf("Workflow actor '%s': deactivating", w.actorID)
+	if w.closed.CompareAndSwap(false, true) {
+		close(w.closeCh)
+	}
 	w.ometaBroadcaster.Close()
 	w.state = nil // A bit of extra caution, shouldn't be necessary
 	w.rstate = nil

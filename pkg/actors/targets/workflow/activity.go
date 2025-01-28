@@ -136,16 +136,10 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 
 // InvokeReminder implements actors.InternalActor and executes the activity logic.
 func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	cancel, err := a.lock.Lock()
-	if err != nil {
-		return err
-	}
-	defer cancel()
-
 	log.Debugf("Activity actor '%s': invoking reminder '%s'", a.actorID, reminder.Name)
 
 	var state backend.HistoryEvent
-	if err = reminder.Data.UnmarshalTo(&state); err != nil {
+	if err := reminder.Data.UnmarshalTo(&state); err != nil {
 		return fmt.Errorf("failed to decode activity reminder: %w", err)
 	}
 
@@ -291,12 +285,6 @@ func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *
 // InvokeTimer implements actors.InternalActor
 func (a *activity) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder) error {
 	return errors.New("timers are not implemented")
-}
-
-// DeactivateActor implements actors.InternalActor
-func (a *activity) DeactivateActor(ctx context.Context) error {
-	log.Debugf("Activity actor '%s': deactivating", a.actorID)
-	return nil
 }
 
 func (a *activity) purgeActivityState(ctx context.Context) error {

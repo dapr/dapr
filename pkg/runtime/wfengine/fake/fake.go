@@ -116,6 +116,10 @@ func (f *Fake) Client() workflows.Workflow {
 	return f.clientFn()
 }
 
+func (f *Fake) ActivityActorType() string {
+	return ""
+}
+
 func (f *FakeClient) Init(metadata workflows.Metadata) error {
 	return f.initFn(metadata)
 }
