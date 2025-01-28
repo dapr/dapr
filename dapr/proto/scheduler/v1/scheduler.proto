@@ -41,7 +41,6 @@ message Job {
   // Job data.
   google.protobuf.Any data = 5;
 
-
   // failure_policy is the optional policy to apply when a job fails to
   // trigger.
   // By default, the failure policy is FailurePolicyConstant with a 1s interval
