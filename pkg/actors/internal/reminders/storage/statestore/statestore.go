@@ -1084,7 +1084,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 					eTag = track.Etag
 				}
 			} else {
-				log.Error("Could not find active reminder with key after call: %s", reminderKey)
+				log.Errorf("Could not find active reminder with key after call: %s", reminderKey)
 				nextTimer = nil
 				return
 			}
