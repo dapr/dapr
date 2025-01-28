@@ -793,7 +793,7 @@ func TestActorFeatures(t *testing.T) {
 		externalURL = tr.Platform.AcquireAppExternalURL(appName)
 		require.NotEmpty(t, externalURL, "external URL must not be empty!")
 
-		//logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
+		logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
 
 		newHostname := []byte{}
 		for i := 0; i <= actorInvokeRetriesAfterRestart; i++ {
