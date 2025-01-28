@@ -24,6 +24,7 @@ import (
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/logger"
 )
@@ -35,6 +36,7 @@ type Options struct {
 	AppID     string
 	Actors    actors.Interface
 	Channels  *channels.Channels
+	WFEngine  wfengine.Interface
 }
 
 // Cluster manages connections to multiple schedulers.
@@ -43,6 +45,7 @@ type Cluster struct {
 	namespace string
 	appID     string
 	channels  *channels.Channels
+	wfengine  wfengine.Interface
 
 	lock sync.Mutex
 
@@ -57,6 +60,7 @@ func New(opts Options) *Cluster {
 		namespace: opts.Namespace,
 		appID:     opts.AppID,
 		actors:    opts.Actors,
+		wfengine:  opts.WFEngine,
 		channels:  opts.Channels,
 		appCh:     make(chan struct{}),
 	}
@@ -184,6 +188,7 @@ func (c *Cluster) watchJobs(ctx context.Context, clients *clients.Clients, appTa
 			client:   cls[i],
 			channels: c.channels,
 			actors:   engine,
+			wfengine: c.wfengine,
 		}).run
 	}
 

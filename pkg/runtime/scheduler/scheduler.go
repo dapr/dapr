@@ -30,6 +30,7 @@ import (
 	"github.com/dapr/dapr/pkg/runtime/channels"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/clients"
 	"github.com/dapr/dapr/pkg/runtime/scheduler/internal/cluster"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/dapr/pkg/scheduler/client"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/kit/concurrency"
@@ -43,6 +44,7 @@ type Options struct {
 	AppID     string
 	Actors    actors.Interface
 	Channels  *channels.Channels
+	WFEngine  wfengine.Interface
 	Addresses []string
 	Security  security.Handler
 	Healthz   healthz.Healthz
@@ -71,6 +73,7 @@ func New(opts Options) *Scheduler {
 			AppID:     opts.AppID,
 			Actors:    opts.Actors,
 			Channels:  opts.Channels,
+			WFEngine:  opts.WFEngine,
 		}),
 		htarget:  opts.Healthz.AddTarget(),
 		readyCh:  make(chan struct{}),
