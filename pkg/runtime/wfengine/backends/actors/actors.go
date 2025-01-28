@@ -482,3 +482,7 @@ func (abe *Actors) NextActivityWorkItem(ctx context.Context) (*backend.ActivityW
 		return nil, ctx.Err()
 	}
 }
+
+func (abe *Actors) ActivityActorType() string {
+	return abe.activityActorType
+}
