@@ -1106,8 +1106,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				break loop
 			}
 
-			nextDuration := nextTick.Sub(r.clock.Now())
-			nextTimer.Reset(nextDuration)
+			nextTimer.Reset(nextTick.Sub(r.clock.Now()))
 		}
 
 	delete:
