@@ -53,6 +53,7 @@ type Interface interface {
 	Halt(ctx context.Context, actorType, actorID string) error
 	HaltIdlable(ctx context.Context, target targets.Idlable) error
 	Drain(fn func(actorType, actorID string) bool)
+	DeleteFromTable(actorType, actorID string)
 	Len() map[string]int
 }
 
@@ -266,6 +267,12 @@ func (t *table) Halt(ctx context.Context, actorType, actorID string) error {
 		return target.Deactivate(ctx)
 	}
 	return nil
+}
+
+func (t *table) DeleteFromTable(actorType, actorID string) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	t.table.Delete(actorType + api.DaprSeparator + actorID)
 }
 
 // HaltAll halts all actors currently in the table.
