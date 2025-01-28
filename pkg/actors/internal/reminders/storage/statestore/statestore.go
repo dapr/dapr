@@ -1078,6 +1078,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 
 			_, exists = r.activeReminders.Load(reminderKey)
 			if exists {
+				r.remindersLock.Lock()
 				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
 				if err != nil {
 					log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
@@ -1088,24 +1089,29 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				} else {
 					eTag = track.Etag
 				}
+				r.remindersLock.Unlock()
 			} else {
 				log.Errorf("Could not find active reminder with key after call: %s", reminderKey)
 				nextTimer = nil
 				return
 			}
-
+			r.remindersLock.Lock()
 			if reminder.TickExecuted() {
+				r.remindersLock.Unlock()
 				nextTimer = nil
 				break loop
 			}
+			r.remindersLock.Unlock()
 
+			r.remindersLock.RLock()
 			nextTick, active = reminder.NextTick()
 			if !active {
+				r.remindersLock.RUnlock()
 				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has expired", reminderKey, reminder.DueTime, reminder.Period)
 				nextTimer = nil
 				break loop
 			}
-
+			r.remindersLock.RUnlock()
 			nextTimer.Reset(nextTick.Sub(r.clock.Now()))
 		}
 
