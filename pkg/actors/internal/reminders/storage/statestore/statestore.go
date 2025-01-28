@@ -118,10 +118,13 @@ func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(conte
 }
 
 func (r *Statestore) DrainRebalancedReminders() {
+	log.Debug("[DrainRebalancedReminders] Starting to drain")
 	select {
 	case r.evaluationChan <- struct{}{}:
+		log.Debug("[DrainRebalancedReminders] Acquired evaluationChan lock")
 		defer func() {
 			<-r.evaluationChan
+			log.Debug("[DrainRebalancedReminders] Released evaluationChan lock")
 		}()
 	case <-r.runningCh:
 		return
@@ -132,13 +135,16 @@ func (r *Statestore) DrainRebalancedReminders() {
 		toStop = append(toStop, key)
 		return true
 	})
-
+	log.Debugf("[DrainRebalancedReminders] Found %d active reminders to stop", len(toStop))
 	for _, key := range toStop {
 		if stop, exists := r.activeReminders.LoadAndDelete(key); exists {
+			log.Debugf("[DrainRebalancedReminders] Stopping reminder: %s", key)
 			close(stop.stopCh)
 			<-stop.stopped
+			log.Debugf("[DrainRebalancedReminders] Reminder stopped: %s", key)
 		}
 	}
+	log.Debug("[DrainRebalancedReminders] Done w/ drain")
 }
 
 func (r *Statestore) Create(ctx context.Context, req *api.CreateReminderRequest) error {
@@ -313,10 +319,12 @@ func (r *Statestore) Delete(ctx context.Context, req *api.DeleteReminderRequest)
 }
 
 func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(context.Context, *api.LookupActorRequest) bool) {
+	log.Debug("[evaluateReminders] Starting reminder evaluation")
 	// Wait for the evaluation channel
 	select {
 	case r.evaluationChan <- struct{}{}:
 		// All good, continue
+		log.Debug("[evaluateReminders] Acquired evaluationChan lock")
 	case <-r.runningCh:
 		// Processor is shutting down
 		<-r.evaluationQueue
@@ -325,10 +333,12 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 	defer func() {
 		// Release the evaluation chan lock
 		<-r.evaluationChan
+		log.Debug("[evaluateReminders] Released evaluationChan lock")
 	}()
 
 	// Allow another evaluation operation to get queued up
 	<-r.evaluationQueue
+	log.Debug("[evaluateReminders] Released evaluation queue")
 
 	ats := r.table.Types()
 	if ats == nil {
@@ -1010,19 +1020,20 @@ func (r *Statestore) migrateRemindersForActorType(ctx context.Context, actorType
 }
 
 func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) error {
+	defer log.Debugf("[startReminder] exiting startReminder")
 	reminderKey := reminder.Key()
 	
 	if _, exists := r.activeReminders.Load(reminderKey); !exists {
 		return fmt.Errorf("reminder %s was deleted during rebalancing", reminderKey)
 	}
-
+	log.Debugf("[startReminder] Starting reminder with key: %s, repeats: %d", reminderKey, reminder.RepeatsLeft())
 	track, err := r.getReminderTrack(context.TODO(), reminderKey)
 	if err != nil {
 		return fmt.Errorf("error getting reminder track: %w", err)
 	}
 
 	reminder.UpdateFromTrack(track)
-
+	log.Debugf("[startReminder] Updated reminder from track: %+v && repeats left: %d", reminder, reminder.RepeatsLeft())
 	go func() {
 		defer func() {
 			select {
@@ -1043,8 +1054,9 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			log.Infof("Reminder %s has expired", reminderKey)
 			goto delete
 		}
-
+		log.Debugf("[startReminder] Initial nextTick: %v & active: %v for key: %s", nextTick, active, reminderKey)
 		nextTimer = r.clock.NewTimer(nextTick.Sub(r.clock.Now()))
+		log.Debugf("[startReminder] Created timer for reminder %s, duration: %v", reminderKey, nextTick.Sub(r.clock.Now()))
 		defer func() {
 			if nextTimer != nil && !nextTimer.Stop() {
 				<-nextTimer.C()
@@ -1056,43 +1068,51 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			select {
 			case <-nextTimer.C():
 				// noop
+				log.Debugf("[startReminder] Timer triggered for reminder: %s, current repeats left: %d", reminderKey, reminder.RepeatsLeft())
 			case <-stop.stopCh:
 				// reminder has been already deleted
-				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has been deleted", reminderKey, reminder.DueTime, reminder.Period)
+				log.Debugf("Reminder %s with parameters: dueTime: %s, period: %s has been deleted", reminderKey, reminder.DueTime, reminder.Period)
 				return
 			case <-r.runningCh:
 				// Reminders runtime is stopping
+				log.Debugf("[startReminder] Reminders runningCh stopping for %s", reminderKey)
 				return
 			}
 
 			_, exists := r.activeReminders.Load(reminderKey)
+			log.Debugf("[startReminder] Checking active reminder %s: exists=%v", reminderKey, exists)
 			if !exists {
 				log.Error("Could not find active reminder with key: " + reminderKey)
 				nextTimer = nil
 				return
 			}
-
+			log.Debugf("[startReminder] Current repeats left for %s: %d", reminderKey, reminder.RepeatsLeft())
 			// If all repetitions are completed, delete the reminder and do not execute it
 			if reminder.RepeatsLeft() == 0 {
 				log.Info("Reminder " + reminderKey + " has been completed")
 				nextTimer = nil
 				break loop
 			}
-
+			log.Debugf("[startReminder] Calling reminder %s, repeats left before call: %d", reminderKey, reminder.RepeatsLeft())
 			err = r.engine.CallReminder(context.TODO(), reminder)
+			log.Debugf("[startReminder] Finished calling reminder %s, error: %v", reminderKey, err)
 			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
 			if errors.Is(err, actorerrors.ErrReminderCanceled) {
+				log.Debugf("[startReminder] Reminder %s was canceled", reminderKey)
 				nextTimer = nil
 				break loop
 			}
 
 			_, exists = r.activeReminders.Load(reminderKey)
+			log.Debugf("[startReminder] activeReminders.Load check for active reminder %s: exists=%v", reminderKey, exists)
 			if exists {
+				log.Debugf("[startReminder] Exists. Updating track for reminder %s, repeats left: %d", reminderKey, reminder.RepeatsLeft())
 				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
 				if err != nil {
 					log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
 				}
 				track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
+				log.Debugf("[startReminder] After getReminderTrack -Retrieved track for %s: %+v", reminderKey, track)
 				if gErr != nil {
 					log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
 				} else {
@@ -1105,18 +1125,22 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			}
 
 			if reminder.TickExecuted() {
+				log.Debugf("[startReminder] Tick executed for reminder %s- breaking loop", reminderKey)
 				nextTimer = nil
 				break loop
 			}
 
 			nextTick, active = reminder.NextTick()
+			log.Debugf("[startReminder] Next tick for %s: time=%v, active=%v", reminderKey, nextTick, active)
 			if !active {
-				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has expired", reminderKey, reminder.DueTime, reminder.Period)
+				log.Debugf("Reminder %s with parameters: dueTime: %s, period: %s has expired", reminderKey, reminder.DueTime, reminder.Period)
 				nextTimer = nil
 				break loop
 			}
 
-			nextTimer.Reset(nextTick.Sub(r.clock.Now()))
+			nextDuration := nextTick.Sub(r.clock.Now())
+			log.Debugf("[startReminder] Resetting timer for %s, duration: %v", reminderKey, nextDuration)
+			nextTimer.Reset(nextDuration)
 		}
 
 	delete:
@@ -1125,6 +1149,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 		default:
 			close(stop.stopped)
 		}
+		log.Debugf("[startReminder] Calling to delete reminder: %s", reminderKey)
 		err = r.Delete(context.TODO(), &api.DeleteReminderRequest{
 			Name:      reminder.Name,
 			ActorID:   reminder.ActorID,
