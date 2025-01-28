@@ -118,14 +118,16 @@ func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(conte
 }
 
 func (r *Statestore) DrainRebalancedReminders() {
-	for _, remtypes := range r.reminders {
-		for _, rem := range remtypes {
-			reminderKey := rem.Reminder.Key()
-			stop, exists := r.activeReminders.LoadAndDelete(reminderKey)
-			if exists {
-				close(stop.stopCh)
-				<-stop.stopped
-			}
+	var toStop []string
+	r.activeReminders.Range(func(key string, value *reminderStop) bool {
+		toStop = append(toStop, key)
+		return true
+	})
+
+	for _, key := range toStop {
+		if stop, exists := r.activeReminders.LoadAndDelete(key); exists {
+			close(stop.stopCh)
+			<-stop.stopped
 		}
 	}
 }

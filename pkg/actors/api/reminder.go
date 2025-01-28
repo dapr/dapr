@@ -29,18 +29,17 @@ import (
 
 // Reminder represents a reminder or timer for a unique actor.
 type Reminder struct {
-	ActorID           string         `json:"actorID,omitempty"`
-	ActorType         string         `json:"actorType,omitempty"`
-	Name              string         `json:"name,omitempty"`
-	Data              *anypb.Any     `json:"data,omitempty"`
-	Period            ReminderPeriod `json:"period,omitempty"`
-	RegisteredTime    time.Time      `json:"registeredTime,omitempty"`
-	DueTime           string         `json:"dueTime,omitempty"` // Exact input value from user
-	ExpirationTime    time.Time      `json:"expirationTime,omitempty"`
-	Callback          string         `json:"callback,omitempty"` // Used by timers only
-	IsTimer           bool           `json:"-"`
-	IsRemote          bool           `json:"-"`
-	SkipPlacementLock bool           `json:"-"`
+	ActorID        string         `json:"actorID,omitempty"`
+	ActorType      string         `json:"actorType,omitempty"`
+	Name           string         `json:"name,omitempty"`
+	Data           *anypb.Any     `json:"data,omitempty"`
+	Period         ReminderPeriod `json:"period,omitempty"`
+	RegisteredTime time.Time      `json:"registeredTime,omitempty"`
+	DueTime        string         `json:"dueTime,omitempty"` // Exact input value from user
+	ExpirationTime time.Time      `json:"expirationTime,omitempty"`
+	Callback       string         `json:"callback,omitempty"` // Used by timers only
+	IsTimer        bool           `json:"-"`
+	IsRemote       bool           `json:"-"`
 }
 
 // ActorKey returns the key of the actor for this reminder.
@@ -56,9 +55,6 @@ func (r Reminder) Key() string {
 // NextTick returns the time the reminder should tick again next.
 // If the reminder has a TTL and the next tick is beyond the TTL, the second returned value will be false.
 func (r Reminder) NextTick() (time.Time, bool) {
-	if r.Period.repeats == 0 {
-		return time.Time{}, false
-	}
 	active := r.ExpirationTime.IsZero() || r.RegisteredTime.Before(r.ExpirationTime)
 	return r.RegisteredTime, active
 }
@@ -80,9 +76,6 @@ func (r Reminder) RepeatsLeft() int {
 func (r *Reminder) TickExecuted() (done bool) {
 	if r.Period.repeats > 0 {
 		r.Period.repeats--
-		if r.Period.repeats == 0 {
-			return true
-		}
 	}
 
 	if !r.HasRepeats() {
