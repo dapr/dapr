@@ -41,6 +41,8 @@ type Interface interface {
 	Run(context.Context) error
 	RegisterGrpcServer(*grpc.Server)
 	Client() workflows.Workflow
+
+	ActivityActorType() string
 }
 
 type Options struct {
@@ -161,4 +163,8 @@ func (wfe *engine) Run(ctx context.Context) error {
 
 func (wfe *engine) Client() workflows.Workflow {
 	return wfe.client
+}
+
+func (wfe *engine) ActivityActorType() string {
+	return wfe.backend.ActivityActorType()
 }

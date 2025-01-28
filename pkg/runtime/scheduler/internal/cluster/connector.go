@@ -20,6 +20,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/engine"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 )
 
 type connector struct {
@@ -27,6 +28,7 @@ type connector struct {
 	client   schedulerv1pb.SchedulerClient
 	channels *channels.Channels
 	actors   engine.Interface
+	wfengine wfengine.Interface
 }
 
 // run starts the scheduler connector. Attempts to re-connect to the Scheduler
@@ -65,6 +67,7 @@ func (c *connector) run(ctx context.Context) error {
 			resultCh: make(chan *schedulerv1pb.WatchJobsRequest),
 			channels: c.channels,
 			actors:   c.actors,
+			wfengine: c.wfengine,
 		}).run(ctx)
 
 		if err == nil {

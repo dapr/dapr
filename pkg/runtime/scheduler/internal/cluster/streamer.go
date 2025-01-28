@@ -28,6 +28,7 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/runtime/channels"
+	"github.com/dapr/dapr/pkg/runtime/wfengine"
 	"github.com/dapr/kit/concurrency"
 )
 
@@ -37,6 +38,7 @@ type streamer struct {
 
 	actors   engine.Interface
 	channels *channels.Channels
+	wfengine wfengine.Interface
 
 	wg sync.WaitGroup
 }
@@ -187,9 +189,10 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 	actor := job.GetMetadata().GetTarget().GetActor()
 
 	return s.actors.CallReminder(ctx, &api.Reminder{
-		Name:      job.GetName(),
-		ActorType: actor.GetType(),
-		ActorID:   actor.GetId(),
-		Data:      job.GetData(),
+		Name:              job.GetName(),
+		ActorType:         actor.GetType(),
+		ActorID:           actor.GetId(),
+		Data:              job.GetData(),
+		SkipPlacementLock: actor.GetType() == s.wfengine.ActivityActorType(),
 	})
 }
