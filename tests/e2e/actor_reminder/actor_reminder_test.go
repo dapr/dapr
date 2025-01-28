@@ -19,6 +19,7 @@ package actor_reminder_e2e
 import (
 	"encoding/json"
 	"fmt"
+	"log"
 	"os"
 	"sync"
 	"testing"
@@ -129,69 +130,69 @@ func TestMain(m *testing.M) {
 				"TEST_APP_ACTOR_TYPE": actorName,
 			},
 		},
-		//{
-		//	AppName:             misconfiguredAppName,
-		//	DaprEnabled:         true,
-		//	DebugLoggingEnabled: true,
-		//	ImageName:           "e2e-actorfeatures",
-		//	Config:              "omithealthchecksconfig",
-		//	Replicas:            1,
-		//	IngressEnabled:      true,
-		//	DaprCPULimit:        "2.0",
-		//	DaprCPURequest:      "0.1",
-		//	AppCPULimit:         "2.0",
-		//	AppCPURequest:       "0.1",
-		//	AppEnv: map[string]string{
-		//		"TEST_APP_ACTOR_TYPE": actorNameMis,
-		//	},
-		//},
-		//{
-		//	AppName:             appNameScheduler,
-		//	DaprEnabled:         true,
-		//	DebugLoggingEnabled: true,
-		//	ImageName:           "e2e-actorfeatures",
-		//	Config:              "featureactorreminderscheduler",
-		//	Replicas:            1,
-		//	IngressEnabled:      true,
-		//	DaprCPULimit:        "2.0",
-		//	DaprCPURequest:      "0.1",
-		//	AppCPULimit:         "2.0",
-		//	AppCPURequest:       "0.1",
-		//	AppEnv: map[string]string{
-		//		"TEST_APP_ACTOR_TYPE": actorNameScheduler,
-		//	},
-		//},
+		{
+			AppName:             misconfiguredAppName,
+			DaprEnabled:         true,
+			DebugLoggingEnabled: true,
+			ImageName:           "e2e-actorfeatures",
+			Config:              "omithealthchecksconfig",
+			Replicas:            1,
+			IngressEnabled:      true,
+			DaprCPULimit:        "2.0",
+			DaprCPURequest:      "0.1",
+			AppCPULimit:         "2.0",
+			AppCPURequest:       "0.1",
+			AppEnv: map[string]string{
+				"TEST_APP_ACTOR_TYPE": actorNameMis,
+			},
+		},
+		{
+			AppName:             appNameScheduler,
+			DaprEnabled:         true,
+			DebugLoggingEnabled: true,
+			ImageName:           "e2e-actorfeatures",
+			Config:              "featureactorreminderscheduler",
+			Replicas:            1,
+			IngressEnabled:      true,
+			DaprCPULimit:        "2.0",
+			DaprCPURequest:      "0.1",
+			AppCPULimit:         "2.0",
+			AppCPURequest:       "0.1",
+			AppEnv: map[string]string{
+				"TEST_APP_ACTOR_TYPE": actorNameScheduler,
+			},
+		},
 	}
 
 	tr = runner.NewTestRunner(appName, testApps, nil, nil)
 	os.Exit(tr.Start(m))
 }
 
-//func TestActorMissingStateStore(t *testing.T) {
-//	externalURL := tr.Platform.AcquireAppExternalURL(misconfiguredAppName)
-//	require.NotEmpty(t, externalURL, "external URL must not be empty!")
-//
-//	// This initial probe makes the test wait a little bit longer when needed,
-//	// making this test less flaky due to delays in the deployment.
-//	t.Logf("Checking if app is healthy ...")
-//	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
-//	require.NoError(t, err)
-//
-//	// Set reminder
-//	reminder := actorReminder{
-//		Data:    "reminderdata",
-//		DueTime: "1s",
-//		Period:  "1s",
-//	}
-//	reminderBody, err := json.Marshal(reminder)
-//	require.NoError(t, err)
-//
-//	t.Run("Actor service should 500 when no state store is available.", func(t *testing.T) {
-//		_, statusCode, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorNameMis, "bogon-actor", "reminders", "failed-reminder"), reminderBody)
-//		require.NoError(t, err)
-//		require.True(t, statusCode == 500)
-//	})
-//}
+func TestActorMissingStateStore(t *testing.T) {
+	externalURL := tr.Platform.AcquireAppExternalURL(misconfiguredAppName)
+	require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+	// This initial probe makes the test wait a little bit longer when needed,
+	// making this test less flaky due to delays in the deployment.
+	t.Logf("Checking if app is healthy ...")
+	_, err := utils.HTTPGetNTimes(externalURL, numHealthChecks)
+	require.NoError(t, err)
+
+	// Set reminder
+	reminder := actorReminder{
+		Data:    "reminderdata",
+		DueTime: "1s",
+		Period:  "1s",
+	}
+	reminderBody, err := json.Marshal(reminder)
+	require.NoError(t, err)
+
+	t.Run("Actor service should 500 when no state store is available.", func(t *testing.T) {
+		_, statusCode, err := utils.HTTPPostWithStatus(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorNameMis, "bogon-actor", "reminders", "failed-reminder"), reminderBody)
+		require.NoError(t, err)
+		require.True(t, statusCode == 500)
+	})
+}
 
 func TestActorReminder(t *testing.T) {
 	for _, a := range []struct {
@@ -199,7 +200,7 @@ func TestActorReminder(t *testing.T) {
 		actorName string
 	}{
 		{appName, actorName},
-		//{appNameScheduler, actorNameScheduler},
+		{appNameScheduler, actorNameScheduler},
 	} {
 		t.Run(a.appName, func(t *testing.T) {
 			testActorReminder(t, a.appName, a.actorName)
@@ -440,6 +441,7 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 	require.NoError(t, err)
 
 	t.Run("Actor reminder with repetition should run correct number of times", func(t *testing.T) {
+		log.Printf("Testing repeatable-reminder now...")
 		reminderName := "repeatable-reminder"
 		actorID := "repetable-reminder-actor"
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName))

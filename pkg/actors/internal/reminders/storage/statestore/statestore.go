@@ -119,16 +119,6 @@ func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(conte
 
 func (r *Statestore) DrainRebalancedReminders() {
 	log.Debug("[DrainRebalancedReminders] Starting to drain")
-	select {
-	case r.evaluationChan <- struct{}{}:
-		log.Debug("[DrainRebalancedReminders] Acquired evaluationChan lock")
-		defer func() {
-			<-r.evaluationChan
-			log.Debug("[DrainRebalancedReminders] Released evaluationChan lock")
-		}()
-	case <-r.runningCh:
-		return
-	}
 
 	var toStop []string
 	r.activeReminders.Range(func(key string, value *reminderStop) bool {
@@ -1022,12 +1012,14 @@ func (r *Statestore) migrateRemindersForActorType(ctx context.Context, actorType
 func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) error {
 	defer log.Debugf("[startReminder] exiting startReminder")
 	reminderKey := reminder.Key()
-	
+
 	if _, exists := r.activeReminders.Load(reminderKey); !exists {
 		return fmt.Errorf("reminder %s was deleted during rebalancing", reminderKey)
 	}
 	log.Debugf("[startReminder] Starting reminder with key: %s, repeats: %d", reminderKey, reminder.RepeatsLeft())
+	r.remindersLock.RLock()
 	track, err := r.getReminderTrack(context.TODO(), reminderKey)
+	r.remindersLock.RUnlock()
 	if err != nil {
 		return fmt.Errorf("error getting reminder track: %w", err)
 	}
