@@ -333,7 +333,7 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 		ExpirationTime:    in.GetExpirationTime().AsTime(),
 		IsTimer:           in.GetIsTimer(),
 		IsRemote:          true,
-		SkipPlacementLock: in.SkipPlacementLock,
+		SkipPlacementLock: in.GetSkipPlacementLock(),
 	})
 }
 
