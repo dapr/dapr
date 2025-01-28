@@ -302,6 +302,7 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 	clear(p.hashTable.Entries)
 	p.hashTable.Version = in.GetVersion()
 	p.hashTable.Entries = entries
+
 	p.reminders.DrainRebalancedReminders()
 	p.actorTable.Drain(func(actorType, actorID string) bool {
 		lar, err := p.LookupActor(ctx, &api.LookupActorRequest{
