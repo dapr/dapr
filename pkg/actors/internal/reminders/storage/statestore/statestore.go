@@ -118,14 +118,11 @@ func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(conte
 }
 
 func (r *Statestore) DrainRebalancedReminders() {
-	log.Debug("[DrainRebalancedReminders] Starting to drain")
-
 	var toStop []string
 	r.activeReminders.Range(func(key string, value *reminderStop) bool {
 		toStop = append(toStop, key)
 		return true
 	})
-	log.Debugf("[DrainRebalancedReminders] Found %d active reminders to stop", len(toStop))
 	for _, key := range toStop {
 		if stop, exists := r.activeReminders.LoadAndDelete(key); exists {
 			log.Debugf("[DrainRebalancedReminders] Stopping reminder: %s", key)
@@ -134,7 +131,6 @@ func (r *Statestore) DrainRebalancedReminders() {
 			log.Debugf("[DrainRebalancedReminders] Reminder stopped: %s", key)
 		}
 	}
-	log.Debug("[DrainRebalancedReminders] Done w/ drain")
 }
 
 func (r *Statestore) Create(ctx context.Context, req *api.CreateReminderRequest) error {
@@ -309,12 +305,10 @@ func (r *Statestore) Delete(ctx context.Context, req *api.DeleteReminderRequest)
 }
 
 func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(context.Context, *api.LookupActorRequest) bool) {
-	log.Debug("[evaluateReminders] Starting reminder evaluation")
 	// Wait for the evaluation channel
 	select {
 	case r.evaluationChan <- struct{}{}:
 		// All good, continue
-		log.Debug("[evaluateReminders] Acquired evaluationChan lock")
 	case <-r.runningCh:
 		// Processor is shutting down
 		<-r.evaluationQueue
@@ -323,12 +317,10 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 	defer func() {
 		// Release the evaluation chan lock
 		<-r.evaluationChan
-		log.Debug("[evaluateReminders] Released evaluationChan lock")
 	}()
 
 	// Allow another evaluation operation to get queued up
 	<-r.evaluationQueue
-	log.Debug("[evaluateReminders] Released evaluation queue")
 
 	ats := r.table.Types()
 	if ats == nil {
@@ -344,7 +336,6 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 			continue
 		}
 
-		log.Debugf("Loaded %d reminders for actor type %s", len(vals), t)
 		r.remindersLock.Lock()
 		r.reminders[t] = vals
 		r.remindersLock.Unlock()
@@ -380,7 +371,6 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 				} else {
 					stopChan, exists := r.activeReminders.LoadAndDelete(reminderKey)
 					if exists {
-						log.Debugf("Stopping reminder %s  as it's active on host", reminderKey)
 						close(stopChan.stopCh)
 						<-stopChan.stopped
 					}
@@ -1063,7 +1053,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				log.Debugf("[startReminder] Timer triggered for reminder: %s, current repeats left: %d", reminderKey, reminder.RepeatsLeft())
 			case <-stop.stopCh:
 				// reminder has been already deleted
-				log.Debugf("Reminder %s with parameters: dueTime: %s, period: %s has been deleted", reminderKey, reminder.DueTime, reminder.Period)
+				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has been deleted", reminderKey, reminder.DueTime, reminder.Period)
 				return
 			case <-r.runningCh:
 				// Reminders runtime is stopping
@@ -1125,7 +1115,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			nextTick, active = reminder.NextTick()
 			log.Debugf("[startReminder] Next tick for %s: time=%v, active=%v", reminderKey, nextTick, active)
 			if !active {
-				log.Debugf("Reminder %s with parameters: dueTime: %s, period: %s has expired", reminderKey, reminder.DueTime, reminder.Period)
+				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has expired", reminderKey, reminder.DueTime, reminder.Period)
 				nextTimer = nil
 				break loop
 			}
