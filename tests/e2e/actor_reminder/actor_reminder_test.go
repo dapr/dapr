@@ -333,6 +333,13 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 		t.Logf("Sleeping for %d seconds to see if reminders will trigger ...", secondsToCheckReminderResult)
 		time.Sleep(secondsToCheckReminderResult * time.Second)
 
+		// Re-establish port forwarding after app restart, likely connection would be lost to pod.
+		// replace externalUrl and Logs URL since the new port will be assigned
+		externalURL = tr.Platform.AcquireAppExternalURL(appName)
+		require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+		logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
+
 		// This initial probe makes the test wait a little bit longer when needed,
 		// making this test less flaky due to delays in the deployment.
 		t.Logf("Checking if app is healthy ...")
