@@ -261,9 +261,6 @@ func (c *cron) HostsWatch(stream schedulerv1pb.Scheduler_WatchHostsServer) error
 func (c *cron) triggerJob(ctx context.Context, req *api.TriggerRequest) *api.TriggerResponse {
 	log.Debugf("Triggering job: %s", req.GetName())
 
-	ctx, cancel := context.WithTimeout(ctx, time.Second*45)
-	defer cancel()
-
 	var meta schedulerv1pb.JobMetadata
 	if err := req.GetMetadata().UnmarshalTo(&meta); err != nil {
 		log.Errorf("Error unmarshalling metadata: %s", err)
