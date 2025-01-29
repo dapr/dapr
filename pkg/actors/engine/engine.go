@@ -127,18 +127,11 @@ func (e *engine) CallStream(ctx context.Context, req *internalv1pb.InternalInvok
 }
 
 func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
-	if !req.SkipPlacementLock {
-		var cancel context.CancelFunc
-		var err error
-		ctx, cancel, err = e.placement.Lock(ctx)
-		if err != nil {
-			if cancel != nil {
-				cancel()
-			}
-			return backoff.Permanent(err)
-		}
-		defer cancel()
+	ctx, cancel, err := e.placement.Lock(ctx)
+	if err != nil {
+		return backoff.Permanent(err)
 	}
+	defer cancel()
 
 	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.ActorType,
@@ -173,9 +166,6 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	ctx, cancel, err := e.placement.Lock(ctx)
 	if err != nil {
-		if cancel != nil {
-			cancel()
-		}
 		return nil, backoff.Permanent(err)
 	}
 	defer cancel()
@@ -225,9 +215,6 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 func (e *engine) callRemoteActor(ctx context.Context, lar *api.LookupActorResponse, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
 	if err != nil {
-		if cancel != nil {
-			cancel(false)
-		}
 		return nil, err
 	}
 	defer cancel(false)
@@ -251,9 +238,6 @@ func (e *engine) callRemoteActor(ctx context.Context, lar *api.LookupActorRespon
 func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupActorResponse, reminder *api.Reminder) error {
 	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
 	if err != nil {
-		if cancel != nil {
-			cancel(false)
-		}
 		return err
 	}
 	defer cancel(false)
@@ -263,16 +247,15 @@ func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 	client := internalv1pb.NewServiceInvocationClient(conn)
 
 	_, err = client.CallActorReminder(ctx, &internalv1pb.Reminder{
-		ActorId:           reminder.ActorID,
-		ActorType:         reminder.ActorType,
-		Name:              reminder.Name,
-		Data:              reminder.Data,
-		Period:            reminder.Period.String(),
-		DueTime:           reminder.DueTime,
-		RegisteredTime:    timestamppb.New(reminder.RegisteredTime),
-		ExpirationTime:    timestamppb.New(reminder.ExpirationTime),
-		IsTimer:           reminder.IsTimer,
-		SkipPlacementLock: reminder.SkipPlacementLock,
+		ActorId:        reminder.ActorID,
+		ActorType:      reminder.ActorType,
+		Name:           reminder.Name,
+		Data:           reminder.Data,
+		Period:         reminder.Period.String(),
+		DueTime:        reminder.DueTime,
+		RegisteredTime: timestamppb.New(reminder.RegisteredTime),
+		ExpirationTime: timestamppb.New(reminder.ExpirationTime),
+		IsTimer:        reminder.IsTimer,
 	})
 
 	return err
@@ -290,9 +273,6 @@ func (e *engine) callLocalActor(ctx context.Context, req *internalv1pb.InternalI
 func (e *engine) callStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
 	ctx, pcancel, err := e.placement.Lock(ctx)
 	if err != nil {
-		if pcancel != nil {
-			pcancel()
-		}
 		return backoff.Permanent(err)
 	}
 	defer pcancel()
@@ -341,9 +321,6 @@ func (e *engine) callRemoteActorStream(ctx context.Context,
 ) error {
 	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
 	if err != nil {
-		if cancel != nil {
-			cancel(false)
-		}
 		return err
 	}
 	defer cancel(false)
