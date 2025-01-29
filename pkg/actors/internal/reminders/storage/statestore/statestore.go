@@ -1021,7 +1021,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			default:
 				close(stop.stopped)
 			}
-			defer r.wg.Done()
+			r.wg.Done()
 		}()
 
 		var (
@@ -1078,6 +1078,8 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				break loop
 			}
 
+			tickExecuted := reminder.TickExecuted()
+
 			err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
 			if err != nil {
 				log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
@@ -1090,7 +1092,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				eTag = track.Etag
 			}
 
-			if reminder.TickExecuted() {
+			if tickExecuted {
 				nextTimer = nil
 				break loop
 			}
