@@ -106,6 +106,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 						ReminderInterval:  abe.defaultReminderInterval,
 						Resiliency:        abe.resiliency,
 						Actors:            abe.actors,
+						Table:             atable,
 						Scheduler: func(ctx context.Context, wi *backend.OrchestrationWorkItem) error {
 							log.Debugf("%s: scheduling workflow execution with durabletask engine", wi.InstanceID)
 							select {
@@ -139,6 +140,7 @@ func (abe *Actors) RegisterActors(ctx context.Context) error {
 							}
 						},
 						Actors:             abe.actors,
+						Table:              atable,
 						SchedulerReminders: abe.schedulerReminders,
 					}),
 				},
