@@ -78,7 +78,6 @@ func (b *basic) Run(t *testing.T, ctx context.Context) {
 			assert.Eventually(t, func() bool {
 				return b.daprd.Metrics(t, ctx).MatchMetricAndSum(float64(i+1), "dapr_error_code_total", "error_code:ERR_MALFORMED_REQUEST")
 			}, 5*time.Second, 100*time.Millisecond)
-
 		}
 	})
 

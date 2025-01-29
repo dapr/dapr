@@ -225,6 +225,9 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 func (e *engine) callRemoteActor(ctx context.Context, lar *api.LookupActorResponse, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
 	if err != nil {
+		if cancel != nil {
+			cancel(false)
+		}
 		return nil, err
 	}
 	defer cancel(false)
@@ -248,6 +251,9 @@ func (e *engine) callRemoteActor(ctx context.Context, lar *api.LookupActorRespon
 func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupActorResponse, reminder *api.Reminder) error {
 	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
 	if err != nil {
+		if cancel != nil {
+			cancel(false)
+		}
 		return err
 	}
 	defer cancel(false)
@@ -268,6 +274,7 @@ func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 		IsTimer:           reminder.IsTimer,
 		SkipPlacementLock: reminder.SkipPlacementLock,
 	})
+
 	return err
 }
 
@@ -334,6 +341,9 @@ func (e *engine) callRemoteActorStream(ctx context.Context,
 ) error {
 	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
 	if err != nil {
+		if cancel != nil {
+			cancel(false)
+		}
 		return err
 	}
 	defer cancel(false)

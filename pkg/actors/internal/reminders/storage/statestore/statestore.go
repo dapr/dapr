@@ -1010,6 +1010,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 	if err != nil {
 		return fmt.Errorf("error getting reminder track: %w", err)
 	}
+
 	reminder.UpdateFromTrack(track)
 
 	go func() {
@@ -1032,6 +1033,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			log.Infof("Reminder %s has expired", reminderKey)
 			goto delete
 		}
+
 		nextTimer = r.clock.NewTimer(nextTick.Sub(r.clock.Now()))
 		defer func() {
 			if nextTimer != nil && !nextTimer.Stop() {
@@ -1059,6 +1061,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				nextTimer = nil
 				return
 			}
+
 			// If all repetitions are completed, delete the reminder and do not execute it
 			if reminder.RepeatsLeft() == 0 {
 				log.Info("Reminder " + reminderKey + " has been completed")
@@ -1079,6 +1082,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				if err != nil {
 					log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
 				}
+
 				track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
 				if gErr != nil {
 					log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
@@ -1098,13 +1102,12 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 
 			nextTick, active = reminder.NextTick()
 			if !active {
-				log.Debugf("Reminder %s with parameters: dueTime: %s, period: %s has expired", reminderKey, reminder.DueTime, reminder.Period)
+				log.Infof("Reminder %s with parameters: dueTime: %s, period: %s has expired", reminderKey, reminder.DueTime, reminder.Period)
 				nextTimer = nil
 				break loop
 			}
 
-			nextDuration := nextTick.Sub(r.clock.Now())
-			nextTimer.Reset(nextDuration)
+			nextTimer.Reset(nextTick.Sub(r.clock.Now()))
 		}
 
 	delete:
@@ -1113,7 +1116,6 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 		default:
 			close(stop.stopped)
 		}
-
 		err = r.Delete(context.TODO(), &api.DeleteReminderRequest{
 			Name:      reminder.Name,
 			ActorID:   reminder.ActorID,
