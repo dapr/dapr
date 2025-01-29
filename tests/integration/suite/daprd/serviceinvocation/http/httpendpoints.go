@@ -239,7 +239,6 @@ func (h *httpendpoints) Run(t *testing.T, ctx context.Context) {
 			assert.Eventually(t, func() bool {
 				return h.daprd2.Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:service-invocation", "error_code:ERR_DIRECT_INVOKE")
 			}, 5*time.Second, 100*time.Millisecond)
-
 		}, h.daprd2)
 	})
 }
