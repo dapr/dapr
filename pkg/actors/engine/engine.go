@@ -38,6 +38,7 @@ import (
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/concurrency/fifo"
 	"github.com/dapr/kit/events/queue"
+	"github.com/dapr/kit/logger"
 )
 
 type Interface interface {
@@ -71,6 +72,7 @@ type engine struct {
 
 	lock  *fifo.Mutex
 	clock clock.Clock
+	log   logger.Logger
 }
 
 func New(opts Options) Interface {
@@ -85,6 +87,7 @@ func New(opts Options) Interface {
 		reminders:          opts.Reminders,
 		lock:               fifo.New(),
 		clock:              clock.RealClock{},
+		log:                logger.NewLogger("actors.engine"),
 	}
 }
 
@@ -104,6 +107,9 @@ func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 }
 
 func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
+	e.log.Debugf("[Engine.CallReminder] Starting reminder call for actor %s/%s & isTimer: %v",
+		req.ActorType, req.ActorID, req.IsTimer)
+
 	var err error
 	if e.resiliency.PolicyDefined(req.ActorType, resiliency.ActorPolicy{}) {
 		err = e.callReminder(ctx, req)
@@ -114,6 +120,13 @@ func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
 		})
 	}
 
+	if err != nil {
+		e.log.Debugf("[Engine.CallReminder] Error calling reminder for actor %s/%s: %v",
+			req.ActorType, req.ActorID, err)
+	} else {
+		e.log.Debugf("[Engine.CallReminder] Successfully completed reminder call for actor %s/%s",
+			req.ActorType, req.ActorID)
+	}
 	return err
 }
 
@@ -127,14 +140,24 @@ func (e *engine) CallStream(ctx context.Context, req *internalv1pb.InternalInvok
 }
 
 func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
+	e.log.Debugf("[Engine.callReminder] calling reminder for actor %s/%s w/ skipLock: %v && isRemote: %v",
+		req.ActorType, req.ActorID, req.SkipPlacementLock, req.IsRemote)
+
 	if !req.SkipPlacementLock {
 		var cancel context.CancelFunc
 		var err error
 		ctx, cancel, err = e.placement.Lock(ctx)
 		if err != nil {
+			if cancel != nil {
+				cancel()
+			}
+			e.log.Debugf("[Engine.callReminder] Failed to acquire placement lock for actor %s/%s: %v",
+				req.ActorType, req.ActorID, err)
 			return backoff.Permanent(err)
 		}
 		defer cancel()
+		e.log.Debugf("[Engine.callReminder] Acquired placement lock for actor %s/%s",
+			req.ActorType, req.ActorID)
 	}
 
 	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
@@ -142,34 +165,54 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 		ActorID:   req.ActorID,
 	})
 	if err != nil {
+		e.log.Debugf("[Engine.callReminder] Actor lookup failed for %s/%s: %v",
+			req.ActorType, req.ActorID, err)
 		return err
 	}
+	e.log.Debugf("[Engine.callReminder] Actor %s/%s lookup result - local: %v",
+		req.ActorType, req.ActorID, lar.Local)
 
 	if !lar.Local {
 		if req.IsRemote {
+			e.log.Debugf("[Engine.callReminder] Remote actor %s/%s has moved",
+				req.ActorType, req.ActorID)
 			return backoff.Permanent(errors.New("remote actor moved"))
 		}
-
+		e.log.Debugf("[Engine.callReminder] Forwarding to remote actor %s/%s",
+			req.ActorType, req.ActorID)
 		return e.callRemoteActorReminder(ctx, lar, req)
 	}
 
 	target, _, err := e.table.GetOrCreate(req.ActorType, req.ActorID)
 	if err != nil {
+		e.log.Debugf("[Engine.callReminder] Failed to get/create actor %s/%s: %v",
+			req.ActorType, req.ActorID, err)
 		return backoff.Permanent(err)
 	}
 
 	if req.IsTimer {
+		e.log.Debugf("[Engine.callReminder] Invoking timer for actor %s/%s",
+			req.ActorType, req.ActorID)
 		err = target.InvokeTimer(ctx, req)
 	} else {
+		e.log.Debugf("[Engine.callReminder] Invoking reminder for actor %s/%s",
+			req.ActorType, req.ActorID)
 		err = target.InvokeReminder(ctx, req)
 	}
 
+	if err != nil {
+		e.log.Debugf("[Engine.callReminder] Error invoking %v for actor %s/%s: %v",
+			req.IsTimer, req.ActorType, req.ActorID, err)
+	}
 	return backoff.Permanent(err)
 }
 
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
 	ctx, cancel, err := e.placement.Lock(ctx)
 	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
 		return nil, backoff.Permanent(err)
 	}
 	defer cancel()
@@ -240,8 +283,14 @@ func (e *engine) callRemoteActor(ctx context.Context, lar *api.LookupActorRespon
 }
 
 func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupActorResponse, reminder *api.Reminder) error {
+	e.log.Debugf("[Engine.callRemoteActorReminder] Starting remote reminder call for actor %s/%s to address %s",
+		reminder.ActorType, reminder.ActorID, lar.Address)
+
 	conn, cancel, err := e.grpc.GetGRPCConnection(ctx, lar.Address, lar.AppID, e.namespace)
 	if err != nil {
+		e.log.Debugf("[Engine.callRemoteActorReminder] Failed to get gRPC connection for actor %s/%s at %s: %v",
+			reminder.ActorType, reminder.ActorID, lar.Address, err)
+
 		return err
 	}
 	defer cancel(false)
@@ -249,7 +298,8 @@ func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 	span := diagutils.SpanFromContext(ctx)
 	ctx = diag.SpanContextToGRPCMetadata(ctx, span.SpanContext())
 	client := internalv1pb.NewServiceInvocationClient(conn)
-
+	e.log.Debugf("[Engine.callRemoteActorReminder] Calling actor reminder %s/%s at %s. Reminder: %s",
+		reminder.ActorType, reminder.ActorID, lar.Address, reminder)
 	_, err = client.CallActorReminder(ctx, &internalv1pb.Reminder{
 		ActorId:           reminder.ActorID,
 		ActorType:         reminder.ActorType,
@@ -262,7 +312,8 @@ func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 		IsTimer:           reminder.IsTimer,
 		SkipPlacementLock: reminder.SkipPlacementLock,
 	})
-
+	e.log.Debugf("[Engine.callRemoteActorReminder] Done calling actor reminder %s/%s at %s. err: %s. Reminder: %s",
+		reminder.ActorType, reminder.ActorID, lar.Address, err, reminder)
 	return err
 }
 
@@ -278,6 +329,9 @@ func (e *engine) callLocalActor(ctx context.Context, req *internalv1pb.InternalI
 func (e *engine) callStream(ctx context.Context, req *internalv1pb.InternalInvokeRequest, stream chan<- *internalv1pb.InternalInvokeResponse) error {
 	ctx, pcancel, err := e.placement.Lock(ctx)
 	if err != nil {
+		if pcancel != nil {
+			pcancel()
+		}
 		return backoff.Permanent(err)
 	}
 	defer pcancel()

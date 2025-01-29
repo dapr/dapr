@@ -93,6 +93,9 @@ func New(opts Options) Interface {
 func (s *state) Get(ctx context.Context, req *api.GetStateRequest) (*api.StateResponse, error) {
 	ctx, cancel, err := s.placement.Lock(ctx)
 	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
 		return nil, err
 	}
 	defer cancel()
@@ -136,6 +139,9 @@ func (s *state) Get(ctx context.Context, req *api.GetStateRequest) (*api.StateRe
 func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.BulkStateResponse, error) {
 	ctx, cancel, err := s.placement.Lock(ctx)
 	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
 		return nil, err
 	}
 	defer cancel()
@@ -186,6 +192,9 @@ func (s *state) GetBulk(ctx context.Context, req *api.GetBulkStateRequest) (api.
 func (s *state) TransactionalStateOperation(ctx context.Context, ignoreHosted bool, req *api.TransactionalRequest) error {
 	ctx, cancel, err := s.placement.Lock(ctx)
 	if err != nil {
+		if cancel != nil {
+			cancel()
+		}
 		return err
 	}
 	defer cancel()
