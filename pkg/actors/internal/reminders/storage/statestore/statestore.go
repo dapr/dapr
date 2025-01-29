@@ -890,6 +890,7 @@ func (r *Statestore) getActorTypeMetadata(ctx context.Context, actorType string,
 			metadataPartitionKey: key.ConstructComposite("actors", actorType),
 		},
 	}
+
 	return policyRunner(func(ctx context.Context) (*ActorMetadata, error) {
 		rResp, rErr := r.store.Get(ctx, getReq)
 		if rErr != nil {
@@ -1006,14 +1007,14 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 		return fmt.Errorf("reminder %s was deleted during rebalancing", reminderKey)
 	}
 
-	r.remindersLock.RLock()
+	r.remindersLock.Lock()
 	track, err := r.getReminderTrack(context.TODO(), reminderKey)
-	r.remindersLock.RUnlock()
 	if err != nil {
+		r.remindersLock.Unlock()
 		return fmt.Errorf("error getting reminder track: %w", err)
 	}
-
 	reminder.UpdateFromTrack(track)
+	r.remindersLock.Unlock()
 
 	go func() {
 		defer func() {
@@ -1063,12 +1064,14 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				nextTimer = nil
 				return
 			}
+
 			// If all repetitions are completed, delete the reminder and do not execute it
 			if reminder.RepeatsLeft() == 0 {
 				log.Info("Reminder " + reminderKey + " has been completed")
 				nextTimer = nil
 				break loop
 			}
+
 			err = r.engine.CallReminder(context.TODO(), reminder)
 			diag.DefaultMonitoring.ActorReminderFired(reminder.ActorType, err == nil)
 			if errors.Is(err, actorerrors.ErrReminderCanceled) {
@@ -1095,6 +1098,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				nextTimer = nil
 				return
 			}
+
 			r.remindersLock.Lock()
 			if reminder.TickExecuted() {
 				r.remindersLock.Unlock()
