@@ -69,8 +69,8 @@ const (
 	ActionPolicyApp     = "app"
 	ActionPolicyGlobal  = "global"
 
-	defaultMaxWorkflowConcurrentInvocations = 100
-	defaultMaxActivityConcurrentInvocations = 100
+	defaultMaxWorkflowConcurrentInvocations = 1000
+	defaultMaxActivityConcurrentInvocations = 1000
 )
 
 var defaultFeatures = map[Feature]bool{
