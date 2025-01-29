@@ -889,7 +889,6 @@ func (r *Statestore) getActorTypeMetadata(ctx context.Context, actorType string,
 			metadataPartitionKey: key.ConstructComposite("actors", actorType),
 		},
 	}
-
 	return policyRunner(func(ctx context.Context) (*ActorMetadata, error) {
 		rResp, rErr := r.store.Get(ctx, getReq)
 		if rErr != nil {
@@ -1002,10 +1001,6 @@ func (r *Statestore) migrateRemindersForActorType(ctx context.Context, actorType
 func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) error {
 	reminderKey := reminder.Key()
 
-	if _, exists := r.activeReminders.Load(reminderKey); !exists {
-		return fmt.Errorf("reminder %s was deleted during rebalancing", reminderKey)
-	}
-
 	track, err := r.getReminderTrack(context.TODO(), reminderKey)
 	if err != nil {
 		return fmt.Errorf("error getting reminder track: %w", err)
@@ -1090,7 +1085,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 					eTag = track.Etag
 				}
 			} else {
-				log.Errorf("Could not find active reminder with key after call: %s", reminderKey)
+				log.Error("Could not find active reminder with key after call: %s", reminderKey)
 				nextTimer = nil
 				return
 			}
