@@ -491,9 +491,6 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 					if placementOrder.GetOperation() == lockOperation {
 						if startFlag.Load() {
 							start = time.Now()
-							if clientID == 1 {
-								t.Log("client 1 lock", start)
-							}
 						}
 					}
 					if placementOrder.GetOperation() == updateOperation {
@@ -501,9 +498,6 @@ func PerformTableUpdateCostTime(t *testing.T) (wastedTime int64) {
 					}
 					if placementOrder.GetOperation() == unlockOperation {
 						if startFlag.Load() {
-							if clientID == 1 {
-								t.Log("client 1 unlock", time.Now())
-							}
 							overArrLock.Lock()
 							overArr[clientID] = time.Since(start).Nanoseconds()
 							overArrLock.Unlock()
