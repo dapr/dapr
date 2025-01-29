@@ -168,11 +168,19 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 }
 
 func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
-	ctx, cancel, err := e.placement.Lock(ctx)
-	if err != nil {
-		return nil, backoff.Permanent(err)
+	// If we are in a reentrancy which is local, skip the placement lock.
+	_, isDaprRemote := req.GetMetadata()["X-Dapr-Remote"]
+	_, isReentrancy := req.GetMetadata()["Dapr-Reentrancy-Id"]
+
+	if isDaprRemote || !isReentrancy {
+		var cancel context.CancelFunc
+		var err error
+		ctx, cancel, err = e.placement.Lock(ctx)
+		if err != nil {
+			return nil, backoff.Permanent(err)
+		}
+		defer cancel()
 	}
-	defer cancel()
 
 	lar, err := e.placement.LookupActor(ctx, &api.LookupActorRequest{
 		ActorType: req.GetActor().GetActorType(),
@@ -197,7 +205,7 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 
 	// If this is a dapr-dapr call and the actor didn't pass the local check
 	// above, it means it has been moved in the meantime
-	if _, ok := req.GetMetadata()["X-Dapr-Remote"]; ok {
+	if isDaprRemote {
 		return nil, backoff.Permanent(errors.New("remote actor moved"))
 	}
 
