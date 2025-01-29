@@ -152,12 +152,12 @@ func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
 		if req.IsRemote {
 			return backoff.Permanent(errors.New("remote actor moved"))
 		}
+
 		return e.callRemoteActorReminder(ctx, lar, req)
 	}
 
 	target, _, err := e.table.GetOrCreate(req.ActorType, req.ActorID)
 	if err != nil {
-
 		return backoff.Permanent(err)
 	}
 
