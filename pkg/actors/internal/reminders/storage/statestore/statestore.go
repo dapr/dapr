@@ -120,18 +120,12 @@ func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(conte
 func (r *Statestore) DrainRebalancedReminders() {
 	for _, remtypes := range r.reminders {
 		for _, rem := range remtypes {
-			go func(rem ActorReminderReference) {
-				reminderKey := rem.Reminder.Key()
-				stop, exists := r.activeReminders.LoadAndDelete(reminderKey)
-				if exists {
-					select {
-					case <-time.After(time.Second * 2):
-						close(stop.stopCh)
-					case <-stop.stopped:
-					}
-					<-stop.stopped
-				}
-			}(rem)
+			reminderKey := rem.Reminder.Key()
+			stop, exists := r.activeReminders.LoadAndDelete(reminderKey)
+			if exists {
+				close(stop.stopCh)
+				<-stop.stopped
+			}
 		}
 	}
 
