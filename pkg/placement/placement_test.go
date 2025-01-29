@@ -31,6 +31,7 @@ import (
 	"google.golang.org/grpc/status"
 	clocktesting "k8s.io/utils/clock/testing"
 
+	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/placement/raft"
 	"github.com/dapr/dapr/pkg/placement/tests"
 	v1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
@@ -47,7 +48,7 @@ func newTestPlacementServer(t *testing.T, raftOptions raft.Options) (string, *Se
 		Raft:               raftOptions,
 		SecProvider:        securityfake.New(),
 		Port:               port,
-		Healthz:            raftOptions.Healthz,
+		Healthz:            healthz.New(),
 		DisseminateTimeout: 2 * time.Second,
 	})
 	require.NoError(t, err)
