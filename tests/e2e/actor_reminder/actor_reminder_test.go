@@ -19,7 +19,6 @@ package actor_reminder_e2e
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"sync"
 	"testing"
@@ -441,7 +440,6 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 	require.NoError(t, err)
 
 	t.Run("Actor reminder with repetition should run correct number of times", func(t *testing.T) {
-		log.Printf("Testing repeatable-reminder now...")
 		reminderName := "repeatable-reminder"
 		actorID := "repetable-reminder-actor"
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName))
@@ -468,8 +466,6 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 		logs, err = utils.HTTPDelete(logsURL)
 		require.NoError(t, err)
 		require.True(t, len(logs) == 0, "Logs are not cleared, lingering logs detected: %s", string(logs))
-
-		t.Log("Done checking reminder repetition.")
 	})
 }
 
