@@ -193,7 +193,6 @@ func (p *placement) Run(ctx context.Context) error {
 // LookupActor returns the address of the actor.
 // Placement _must_ be locked before calling this method.
 func (p *placement) LookupActor(ctx context.Context, req *api.LookupActorRequest) (*api.LookupActorResponse, error) {
-	log.Debugf("[placement.LookupActor] for ActorType: %s", req.ActorType)
 	table, ok := p.hashTable.Entries[req.ActorType]
 	if !ok {
 		return nil, messages.ErrActorNoAddress
@@ -303,7 +302,7 @@ func (p *placement) handleUpdateOperation(ctx context.Context, in *v1pb.Placemen
 	clear(p.hashTable.Entries)
 	p.hashTable.Version = in.GetVersion()
 	p.hashTable.Entries = entries
-	log.Debugf("[placement.handleUpdateOperation] draining reminders...")
+
 	p.reminders.DrainRebalancedReminders()
 	p.actorTable.Drain(func(actorType, actorID string) bool {
 		lar, err := p.LookupActor(ctx, &api.LookupActorRequest{
