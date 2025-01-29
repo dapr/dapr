@@ -65,7 +65,8 @@ type reminderStop struct {
 type Statestore struct {
 	clock           clock.WithTicker
 	runningCh       chan struct{}
-	reminders       cmap.Map[string, []ActorReminderReference]
+	remindersLock   sync.RWMutex
+	reminders       map[string][]ActorReminderReference
 	activeReminders cmap.Map[string, *reminderStop]
 	evaluationChan  chan struct{}
 	evaluationQueue chan struct{}
@@ -87,7 +88,7 @@ func New(opts Options) *Statestore {
 	return &Statestore{
 		clock:           clock.RealClock{},
 		runningCh:       make(chan struct{}),
-		reminders:       cmap.NewMap[string, []ActorReminderReference](),
+		reminders:       make(map[string][]ActorReminderReference),
 		evaluationChan:  make(chan struct{}, 1),
 		evaluationQueue: make(chan struct{}, 1),
 		resiliency:      opts.Resiliency,
@@ -117,15 +118,14 @@ func (r *Statestore) OnPlacementTablesUpdated(ctx context.Context, fn func(conte
 }
 
 func (r *Statestore) DrainRebalancedReminders() {
-	var toStop []string
-	r.activeReminders.Range(func(key string, value *reminderStop) bool {
-		toStop = append(toStop, key)
-		return true
-	})
-	for _, key := range toStop {
-		if stop, exists := r.activeReminders.LoadAndDelete(key); exists {
-			close(stop.stopCh)
-			<-stop.stopped
+	for _, remtypes := range r.reminders {
+		for _, rem := range remtypes {
+			reminderKey := rem.Reminder.Key()
+			stop, exists := r.activeReminders.LoadAndDelete(reminderKey)
+			if exists {
+				close(stop.stopCh)
+				<-stop.stopped
+			}
 		}
 	}
 }
@@ -334,7 +334,9 @@ func (r *Statestore) evaluateReminders(ctx context.Context, lookupFn func(contex
 		}
 
 		log.Debugf("Loaded %d reminders for actor type %s", len(vals), t)
-		r.reminders.Store(t, vals)
+		r.remindersLock.Lock()
+		r.reminders[t] = vals
+		r.remindersLock.Unlock()
 
 		wg.Add(1)
 		go func() {
@@ -403,12 +405,13 @@ func (r *Statestore) waitForEvaluationChan() bool {
 }
 
 func (r *Statestore) getReminder(reminderName string, actorType string, actorID string) (*api.Reminder, bool) {
-	if val, ok := r.reminders.Load(actorType); ok {
-		reminders := val
-		for _, r := range reminders {
-			if r.Reminder.ActorID == actorID && r.Reminder.ActorType == actorType && r.Reminder.Name == reminderName {
-				return &r.Reminder, true
-			}
+	r.remindersLock.RLock()
+	reminders := r.reminders[actorType]
+	r.remindersLock.RUnlock()
+
+	for _, r := range reminders {
+		if r.Reminder.ActorID == actorID && r.Reminder.ActorType == actorType && r.Reminder.Name == reminderName {
+			return &r.Reminder, true
 		}
 	}
 
@@ -488,7 +491,9 @@ func (r *Statestore) doDeleteReminder(ctx context.Context, actorType, actorID, n
 		}
 
 		diag.DefaultMonitoring.ActorReminders(actorType, int64(len(reminders)))
-		r.reminders.Store(actorType, reminders)
+		r.remindersLock.Lock()
+		r.reminders[actorType] = reminders
+		r.remindersLock.Unlock()
 		return true, nil
 	})
 	if err != nil {
@@ -577,7 +582,9 @@ func (r *Statestore) storeReminder(ctx context.Context, reminder *api.Reminder, 
 		}
 
 		diag.DefaultMonitoring.ActorReminders(reminder.ActorType, int64(len(reminders)))
-		r.reminders.Store(reminder.ActorType, reminders)
+		r.remindersLock.Lock()
+		r.reminders[reminder.ActorType] = reminders
+		r.remindersLock.Unlock()
 		return struct{}{}, nil
 	})
 	if err != nil {
