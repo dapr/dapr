@@ -76,6 +76,7 @@ type Statestore struct {
 	table           table.Interface
 	engine          engine.Interface
 	closed          atomic.Bool
+	wg              sync.WaitGroup
 
 	storeName                  string
 	entityConfigs              map[string]api.EntityConfig
@@ -129,11 +130,8 @@ func (r *Statestore) DrainRebalancedReminders() {
 		}
 	}
 
-	select {
-	case r.evaluationQueue <- struct{}{}:
-	case <-r.runningCh:
-		return
-	}
+	r.wg.Wait()
+	r.evaluationQueue <- struct{}{}
 	<-r.evaluationQueue
 }
 
@@ -1015,6 +1013,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 
 	reminder.UpdateFromTrack(track)
 
+	r.wg.Add(1)
 	go func() {
 		defer func() {
 			select {
@@ -1022,6 +1021,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			default:
 				close(stop.stopped)
 			}
+			defer r.wg.Done()
 		}()
 
 		var (
@@ -1078,23 +1078,16 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				break loop
 			}
 
-			_, exists = r.activeReminders.Load(reminderKey)
-			if exists {
-				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
-				if err != nil {
-					log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
-				}
+			err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
+			if err != nil {
+				log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
+			}
 
-				track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
-				if gErr != nil {
-					log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
-				} else {
-					eTag = track.Etag
-				}
+			track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
+			if gErr != nil {
+				log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
 			} else {
-				log.Error("Could not find active reminder with key after call: %s", reminderKey)
-				nextTimer = nil
-				return
+				eTag = track.Etag
 			}
 
 			if reminder.TickExecuted() {
