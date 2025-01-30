@@ -16,6 +16,7 @@ package dissemination
 import (
 	"context"
 	"fmt"
+	"runtime"
 	"sync"
 	"testing"
 	"time"
@@ -41,6 +42,10 @@ type streamHang struct {
 }
 
 func (n *streamHang) Setup(t *testing.T) []framework.Option {
+	if runtime.GOOS == "windows" {
+		t.Skip("Sending big messages is unpredictable on Windows CI runners")
+	}
+
 	n.place = placement.New(t)
 
 	return []framework.Option{
