@@ -22,6 +22,9 @@ var (
 	stsDevNull = &appsv1.StatefulSet{
 		ObjectMeta: metav1.ObjectMeta{Name: randomName, Namespace: randomName},
 	}
+	dsDevNull = &appsv1.DaemonSet{
+		ObjectMeta: metav1.ObjectMeta{Name: randomName, Namespace: randomName},
+	}
 
 	podDevNull = &corev1.Pod{
 		ObjectMeta: metav1.ObjectMeta{Name: randomName, Namespace: randomName},
@@ -31,10 +34,11 @@ var (
 	podEmptySpec      = corev1.PodSpec{}
 	deployEmptyStatus = appsv1.DeploymentStatus{}
 	stsEmptyStatus    = appsv1.StatefulSetStatus{}
+	dsEmptyStatus     = appsv1.DaemonSetStatus{}
 )
 
 // GetFilteredCache creates a cache that slims down resources to the minimum that is needed for processing and also acts
-// as a sinkhole for deployment/statefulsets/pods that are not going to be processed but that cannot be filtered by labels
+// as a sinkhole for deployment/statefulsets/daemonsets/pods that are not going to be processed but that cannot be filtered by labels
 // to limit what items end up in the cache. The following is removed/clear from the resources:
 // - pods -> managed fields, status (we care for spec to find out containers, the rests are set to empty)
 // - deploy/sts -> template.spec, status, managedfields (we only care about template/metadata except for injector deployment)
@@ -117,6 +121,25 @@ func getTransformerFunctions(podSelector labels.Selector) map[client.Object]cach
 				}
 
 				return stsDevNull, nil
+			},
+		},
+		&appsv1.DaemonSet{}: {
+			Transform: func(i any) (any, error) {
+				obj, ok := i.(*appsv1.DaemonSet)
+				if !ok {
+					return i, nil
+				}
+
+				if operatormeta.IsAnnotatedForDapr(obj.Spec.Template.ObjectMeta.GetAnnotations()) {
+					// keep metadata but remove the rest
+					objClone := obj.DeepCopy()
+					objClone.ObjectMeta.ManagedFields = []metav1.ManagedFieldsEntry{}
+					objClone.Spec.Template.Spec = podEmptySpec
+					objClone.Status = dsEmptyStatus
+					return objClone, nil
+				}
+
+				return dsDevNull, nil
 			},
 		},
 	}

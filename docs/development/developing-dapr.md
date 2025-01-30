@@ -10,7 +10,7 @@ There are several options for getting an environment up and running for Dapr dev
 
 ## Forking the repo
 
-Contributing to Dapr often requires working with multiple repositories at once. We recommend creating a folder for Dapr and cloning all forked repositories in that folder. 
+Contributing to Dapr often requires working with multiple repositories at once. We recommend creating a folder for Dapr and cloning all forked repositories in that folder.
 
 For instructions on how to fork a repo, [see this video on forking the dapr/docs repo](https://youtu.be/uPYuXcaEs-c?t=289). The process is the same, just for different repositories.
 
@@ -31,20 +31,20 @@ You can build Dapr binaries with the `make` tool.
 
 - Once built, the release binaries will be found in `./dist/{os}_{arch}/release/`, where `{os}_{arch}` is your current OS and architecture.
 
-  For example, running `make build` on an Intel-based macOS will generate the directory `./dist/darwin_amd64/release`.
+    For example, running `make build` on an Intel-based macOS will generate the directory `./dist/darwin_amd64/release`.
 
 - To build for your current local environment:
 
-   ```sh
-   cd dapr/dapr
-   make build
-   ```
+    ```sh
+    cd dapr/dapr
+    make build
+    ```
 
 - To cross-compile for a different platform, use the `GOOS` and `GOARCH` environmental variables:
 
-   ```sh
-   make build GOOS=windows GOARCH=amd64
-   ```
+    ```sh
+    make build GOOS=windows GOARCH=amd64
+    ```
 
 > For example, developers on Windows who prefer to develop in [WSL2](https://docs.microsoft.com/en-us/windows/wsl/install-win10) can use the Linux development environment to cross-compile binaries like `daprd.exe` that run on Windows natively.
 
@@ -75,7 +75,7 @@ make check
 
 This command will:
 
-- format, test and lint all the code 
+- format, test and lint all the code
 - check if you forgot to `git commit` something
 
 Note: To run linter locally, please use golangci-lint version v1.51.2, otherwise you might encounter errors. You can download version v1.61.0 [here](https://github.com/golangci/golangci-lint/releases/tag/v1.61.0).
@@ -107,25 +107,25 @@ This is useful to debug Dapr when the process is running.
 
 1. Build Dapr binaries for debugging.
 
-   Use the `DEBUG=1` option to generate Dapr binaries without code optimization in `./dist/{os}_{arch}/debug/`
+    Use the `DEBUG=1` option to generate Dapr binaries without code optimization in `./dist/{os}_{arch}/debug/`
 
-   ```bash
-   make DEBUG=1 build
-   ```
+    ```bash
+    make DEBUG=1 build
+    ```
 
 2. Create a component YAML file under `./dist/{os}_{arch}/debug/components` (for example a statestore component YAML).
 
 3. Start the Dapr runtime
 
-   ```bash
-   /dist/{os}_{arch}/debug/daprd
-   ```
+    ```bash
+    /dist/{os}_{arch}/debug/daprd
+    ```
 
 4. Find the process ID (e.g. `PID` displayed by the `ps` command for `daprd`) and attach the debugger
 
-   ```bash
-   dlv attach {PID}
-   ```
+    ```bash
+    dlv attach {PID}
+    ```
 
 ### Debug Dapr With Goland IDE
 
