@@ -279,7 +279,7 @@ func (p *Service) runServer(ctx context.Context) error {
 			<-ctx.Done()
 			grpcServer.GracefulStop()
 			log.Info("Placement GRPC server stopped")
-			p.wg.Wait() // TODO: check if this is needed
+			p.wg.Wait()
 			return nil
 		},
 	).Run(ctx)

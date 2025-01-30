@@ -139,11 +139,10 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 				// until the state is consistent.
 
 				logApplyConcurrency <- struct{}{}
-				p.wg.Add(1)
-				go func() {
-					defer p.wg.Done()
 
-					// We lock dissemination to ensure the updates can complete before the table is disseminated.
+				func() {
+					defer func() { <-logApplyConcurrency }()
+
 					p.disseminateLocks.Lock(op.host.Namespace)
 					defer p.disseminateLocks.Unlock(op.host.Namespace)
 
@@ -182,7 +181,6 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 							val.Store(p.clock.Now().Add(p.disseminateTimeout).UnixNano())
 						}
 					}
-					<-logApplyConcurrency
 				}()
 
 			case raft.TableDisseminate:

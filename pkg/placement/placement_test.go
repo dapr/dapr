@@ -50,6 +50,8 @@ func newTestPlacementServer(t *testing.T, raftOptions raft.Options) (string, *Se
 		Port:               port,
 		Healthz:            healthz.New(),
 		DisseminateTimeout: 2 * time.Second,
+		KeepAliveTimeout:   1 * time.Minute,
+		KeepAliveTime:      1 * time.Minute,
 	})
 	require.NoError(t, err)
 	clock := clocktesting.NewFakeClock(time.Now())
@@ -89,16 +91,15 @@ func newTestPlacementServer(t *testing.T, raftOptions raft.Options) (string, *Se
 func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.TCPConn, v1pb.Placement_ReportDaprStatusClient) { //nolint:nosnakecase
 	t.Helper()
 
-	ctx, cancel := context.WithTimeout(context.Background(), time.Second*5)
-	defer cancel()
 	tcpConn, err := net.Dial("tcp", serverAddress)
 	require.NoError(t, err)
-	conn, err := grpc.DialContext(ctx, "", //nolint:staticcheck
+
+	conn, err := grpc.NewClient(
+		"passthrough:///",
 		grpc.WithContextDialer(func(ctx context.Context, s string) (net.Conn, error) {
 			return tcpConn, nil
 		}),
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
-		grpc.WithBlock(), //nolint:staticcheck
 	)
 	require.NoError(t, err)
 
