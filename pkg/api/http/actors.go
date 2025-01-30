@@ -370,6 +370,7 @@ func (a *api) onDirectActorMessage(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	r.Header.Add("Dapr-API-Call", "true")
 	req := internalsv1pb.NewInternalInvokeRequest(method).
 		WithActor(actorType, actorID).
 		WithHTTPExtension(verb, r.URL.RawQuery).
