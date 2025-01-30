@@ -14,10 +14,10 @@ limitations under the License.
 package actors
 
 import (
+	"maps"
 	"net/http"
+	"slices"
 	"time"
-
-	"golang.org/x/exp/maps"
 
 	"github.com/dapr/dapr/pkg/actors/internal"
 	daprAppConfig "github.com/dapr/dapr/pkg/config"
@@ -197,5 +197,5 @@ func (ha hostedActors) IsActorTypeHosted(actorType string) bool {
 
 // ListActorTypes returns a slice of hosted actor types (in indeterminate order).
 func (ha hostedActors) ListActorTypes() []string {
-	return maps.Keys(ha)
+	return slices.Collect(maps.Keys(ha))
 }
