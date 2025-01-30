@@ -19,11 +19,12 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/dapr/components-contrib/workflows"
 	actorsfake "github.com/dapr/dapr/pkg/actors/fake"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
-	wfenginefake "github.com/dapr/dapr/pkg/runtime/wfengine/fake"
+	"github.com/dapr/dapr/pkg/runtime/wfengine/fake"
 	"github.com/dapr/kit/logger"
 )
 
@@ -79,10 +80,18 @@ func TestStartWorkflowAPI(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
-		resiliency:     resiliency.New(nil),
-		workflowEngine: wfenginefake.New(),
-		actors:         actorsfake.New(),
+		logger:     logger.NewLogger("test"),
+		resiliency: resiliency.New(nil),
+		workflowEngine: fake.New().WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+				return &workflows.StateResponse{
+					Workflow: &workflows.WorkflowState{
+						RuntimeStatus: "RUNNING",
+					},
+				}, nil
+			})
+		}),
+		actors: actorsfake.New(),
 	}
 
 	for _, tt := range testCases {
@@ -127,7 +136,7 @@ func TestGetWorkflowAPI(t *testing.T) {
 	fakeAPI := &Universal{
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
-		workflowEngine: wfenginefake.New(),
+		workflowEngine: fake.New(),
 		actors:         actorsfake.New(),
 	}
 
@@ -170,10 +179,18 @@ func TestTerminateWorkflowAPI(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
-		resiliency:     resiliency.New(nil),
-		workflowEngine: wfenginefake.New(),
-		actors:         actorsfake.New(),
+		logger:     logger.NewLogger("test"),
+		resiliency: resiliency.New(nil),
+		workflowEngine: fake.New().WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+				return &workflows.StateResponse{
+					Workflow: &workflows.WorkflowState{
+						RuntimeStatus: "TERMINATED",
+					},
+				}, nil
+			})
+		}),
+		actors: actorsfake.New(),
 	}
 
 	for _, tt := range testCases {
@@ -229,7 +246,7 @@ func TestRaiseEventWorkflowApi(t *testing.T) {
 	fakeAPI := &Universal{
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
-		workflowEngine: wfenginefake.New(),
+		workflowEngine: fake.New(),
 		actors:         actorsfake.New(),
 	}
 
@@ -274,10 +291,18 @@ func TestPauseWorkflowApi(t *testing.T) {
 
 	// Setup universal dapr API
 	fakeAPI := &Universal{
-		logger:         logger.NewLogger("test"),
-		resiliency:     resiliency.New(nil),
-		workflowEngine: wfenginefake.New(),
-		actors:         actorsfake.New(),
+		logger:     logger.NewLogger("test"),
+		resiliency: resiliency.New(nil),
+		workflowEngine: fake.New().WithClient(func() workflows.Workflow {
+			return fake.NewClient().WithGet(func(ctx context.Context, req *workflows.GetRequest) (*workflows.StateResponse, error) {
+				return &workflows.StateResponse{
+					Workflow: &workflows.WorkflowState{
+						RuntimeStatus: "SUSPENDED",
+					},
+				}, nil
+			})
+		}),
+		actors: actorsfake.New(),
 	}
 
 	for _, tt := range testCases {
@@ -321,7 +346,7 @@ func TestResumeWorkflowApi(t *testing.T) {
 	fakeAPI := &Universal{
 		logger:         logger.NewLogger("test"),
 		resiliency:     resiliency.New(nil),
-		workflowEngine: wfenginefake.New(),
+		workflowEngine: fake.New(),
 		actors:         actorsfake.New(),
 	}
 
