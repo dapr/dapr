@@ -159,11 +159,9 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 		gresp, err := a.workflowEngine.Client().Get(ctx, &workflows.GetRequest{
 			InstanceID: in.GetInstanceId(),
 		})
-		if err != nil {
-			return nil, fmt.Errorf("workflow started, but failed to get status: %w", err)
-		}
 
-		if gresp.Workflow.RuntimeStatus == "TERMINATED" {
+		// Not found error so terminated.
+		if err != nil || gresp.Workflow.RuntimeStatus == "TERMINATED" {
 			return emptyResponse, nil
 		}
 
