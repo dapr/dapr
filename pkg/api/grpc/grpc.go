@@ -1150,6 +1150,11 @@ func (a *api) InvokeActor(ctx context.Context, in *runtimev1pb.InvokeActorReques
 		return nil, err
 	}
 
+	if in.Metadata == nil {
+		in.Metadata = make(map[string]string)
+	}
+	in.Metadata["Dapr-API-Call"] = "true"
+
 	req := in.ToInternalInvokeRequest()
 
 	// Unlike other actor calls, resiliency is handled here for invocation.
