@@ -124,6 +124,7 @@ func (s *Scheduler) Run(ctx context.Context) error {
 					log.Errorf("Failed to receive scheduler hosts: %s", err)
 					stream.CloseSend()
 					stream = nil
+					//nolint:nilerr
 					return nil
 				}
 				addresses = make([]string, 0, len(resp.GetHosts()))
