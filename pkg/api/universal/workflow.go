@@ -162,6 +162,7 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 
 		// Not found error so terminated.
 		if err != nil || gresp.Workflow.RuntimeStatus == "TERMINATED" {
+			//nolint:nilerr
 			return emptyResponse, nil
 		}
 
