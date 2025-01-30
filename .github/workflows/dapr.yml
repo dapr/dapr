@@ -738,3 +738,19 @@ jobs:
             echo "::error::There is no change for ${daprVersion} Helm chart. Did you forget to update the chart version before tagging?"
             exit -1
           fi
+  update-longhauls:
+    name: Update the dapr version in longhaul tests
+    needs: helmpublish
+    runs-on: ubuntu-latest
+    permissions: {}
+    if: startswith(github.ref, 'refs/tags/v') && github.repository_owner == 'dapr'
+    env:
+      GITHUB_TOKEN: ${{ secrets.DAPR_BOT_TOKEN }}
+    steps:
+      - name: Check out code into the Go module directory
+        uses: actions/checkout@v4
+      - name: Parse release version and set REL_VERSION and LATEST_RELEASE
+        run: python ./.github/scripts/get_release_version.py ${{ github.event_name }}
+      - name: Trigger GitHub workflow
+        run: gh api repos/dapr/test-infra/actions/workflows/version-update.yml/dispatches \
+             -X POST -f ref="master" -f inputs[rel_version]="${{ env.REL_VERSION }}"
