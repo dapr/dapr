@@ -46,7 +46,7 @@ const (
 	unlockOperation = "unlock"
 	updateOperation = "update"
 
-	statusReportHeartbeatInterval = 1 * time.Second
+	statusReportHeartbeatInterval = 120 * time.Second
 )
 
 type Interface interface {
@@ -151,9 +151,6 @@ func (p *placement) Run(ctx context.Context) error {
 				select {
 				case actorTypes = <-ch:
 					log.Infof("Updating actor types: %v", actorTypes)
-					// TODO: @joshvanl: it is a nonsense to be sending the same actor
-					// types over and over again, *every second*. This should be removed
-					// ASAP.
 				case <-tch.C:
 				case <-ctx.Done():
 					return nil
