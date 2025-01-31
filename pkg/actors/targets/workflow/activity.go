@@ -18,7 +18,6 @@ import (
 	"errors"
 	"fmt"
 	"strings"
-	"sync/atomic"
 	"time"
 
 	"google.golang.org/protobuf/proto"
@@ -27,6 +26,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -59,11 +59,11 @@ type activity struct {
 	workflowActorType string
 
 	actors actors.Interface
+	table  table.Interface
 	lock   *internal.Lock
 
 	scheduler          todo.ActivityScheduler
 	reminderInterval   time.Duration
-	completed          atomic.Bool
 	schedulerReminders bool
 }
 
@@ -74,6 +74,7 @@ type ActivityOptions struct {
 	ReminderInterval   *time.Duration
 	Scheduler          todo.ActivityScheduler
 	Actors             actors.Interface
+	Table              table.Interface
 	SchedulerReminders bool
 }
 
@@ -92,6 +93,7 @@ func ActivityFactory(opts ActivityOptions) targets.Factory {
 			workflowActorType:  opts.WorkflowActorType,
 			reminderInterval:   reminderInterval,
 			actors:             opts.Actors,
+			table:              opts.Table,
 			scheduler:          opts.Scheduler,
 			schedulerReminders: opts.SchedulerReminders,
 			lock:               internal.NewLock(internal.LockOptions{ActorType: opts.ActivityActorType}),
@@ -145,7 +147,7 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 
 	completed, err := a.executeActivity(ctx, reminder.Name, &state)
 	if completed == runCompletedTrue {
-		a.completed.Store(true)
+		a.table.DeleteFromTable(a.actorType, a.actorID)
 	}
 
 	// Returning nil signals that we want the execution to be retried in the next period interval
@@ -172,17 +174,13 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 		}
 		return nil
 	default: // Other error
-		log.Errorf("%s: execution failed with a non-recoverable error: %v", a.actorID, err)
+		log.Errorf("%s: execution failed with an error: %v", a.actorID, err)
 		if a.schedulerReminders {
-			return nil
+			return err
 		}
 		// TODO: Reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 		return actorerrors.ErrReminderCanceled
 	}
-}
-
-func (a *activity) Completed() bool {
-	return a.completed.Load()
 }
 
 func (a *activity) executeActivity(ctx context.Context, name string, taskEvent *backend.HistoryEvent) (runCompleted, error) {
@@ -346,7 +344,6 @@ func (a *activity) createReliableReminder(ctx context.Context, his *backend.Hist
 
 // DeactivateActor implements actors.InternalActor
 func (a *activity) Deactivate(ctx context.Context) error {
-	// TODO: @joshvanl: close everything else in this actor and wait
 	log.Debugf("Activity actor '%s': deactivating", a.actorID)
 	a.lock.Close()
 	return nil

@@ -35,6 +35,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors"
 	actorapi "github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
+	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
@@ -62,6 +63,7 @@ type workflow struct {
 
 	resiliency resiliency.Provider
 	actors     actors.Interface
+	table      table.Interface
 
 	lock             *internal.Lock
 	reminderInterval time.Duration
@@ -76,7 +78,6 @@ type workflow struct {
 	completed             atomic.Bool
 	schedulerReminders    bool
 	closeCh               chan struct{}
-	closed                atomic.Bool
 }
 
 type WorkflowOptions struct {
@@ -87,6 +88,7 @@ type WorkflowOptions struct {
 
 	Resiliency         resiliency.Provider
 	Actors             actors.Interface
+	Table              table.Interface
 	Scheduler          todo.WorkflowScheduler
 	SchedulerReminders bool
 }
@@ -108,6 +110,7 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 			reminderInterval:   reminderInterval,
 			resiliency:         opts.Resiliency,
 			actors:             opts.Actors,
+			table:              opts.Table,
 			schedulerReminders: opts.SchedulerReminders,
 			lock: internal.NewLock(internal.LockOptions{
 				ActorType: opts.WorkflowActorType,
@@ -190,7 +193,7 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 	completed, err := w.runWorkflow(ctx, reminder)
 
 	if completed == runCompletedTrue {
-		w.completed.Store(true)
+		w.table.DeleteFromTable(w.actorType, w.actorID)
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.
@@ -211,9 +214,9 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 		log.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", w.actorID, err)
 		return nil
 	default: // Other error
-		log.Errorf("Workflow actor '%s': execution failed with a non-recoverable error: %v", w.actorID, err)
+		log.Errorf("Workflow actor '%s': execution failed with an error: %v", w.actorID, err)
 		if w.schedulerReminders {
-			return nil
+			return err
 		}
 		return actorerrors.ErrReminderCanceled
 	}
@@ -363,9 +366,8 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 	if err != nil {
 		return err
 	}
-	w.state = nil
-	w.rstate = nil
-	w.ometa = nil
+	w.table.DeleteFromTable(w.actorType, w.actorID)
+	w.cleanup()
 	return nil
 }
 
@@ -950,15 +952,16 @@ func (w *workflow) removeCompletedStateData(ctx context.Context, state *wfengine
 // DeactivateActor implements actors.InternalActor
 func (w *workflow) Deactivate(ctx context.Context) error {
 	log.Debugf("Workflow actor '%s': deactivating", w.actorID)
-	if w.closed.CompareAndSwap(false, true) {
-		close(w.closeCh)
-	}
+	w.cleanup()
+	return nil
+}
+
+func (w *workflow) cleanup() {
 	w.ometaBroadcaster.Close()
 	w.state = nil // A bit of extra caution, shouldn't be necessary
 	w.rstate = nil
 	w.ometa = nil
 	w.lock.Close()
-	return nil
 }
 
 // CloseUntil closes the actor but backs out sooner if the duration is reached.
@@ -967,10 +970,6 @@ func (w *workflow) CloseUntil(d time.Duration) {
 }
 
 func (w *workflow) InvokeStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
-	if w.closed.Load() {
-		return nil
-	}
-
 	lockCancel, err := w.lock.Lock()
 	if err != nil {
 		return err
@@ -1035,6 +1034,11 @@ func (w *workflow) handleStreamInitial(ctx context.Context, req *internalsv1pb.I
 			Status:  &internalsv1pb.Status{Code: http.StatusOK},
 			Message: &commonv1pb.InvokeResponse{Data: arstate},
 		}:
+		}
+
+		if api.OrchestrationMetadataIsComplete(w.ometa) {
+			w.table.DeleteFromTable(w.actorType, w.actorID)
+			w.cleanup()
 		}
 	}
 

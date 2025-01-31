@@ -104,6 +104,10 @@ type Options struct {
 	// from. Default to an implementation requesting from Sentry.
 	OverrideCertRequestFn spiffe.RequestSVIDFn
 
+	// OverrideTrustAnchors is used to override where trust anchors are requested
+	// from.
+	OverrideTrustAnchors trustanchors.Interface
+
 	// Mode is the operation mode of this security instance (self-hosted or
 	// Kubernetes).
 	Mode modes.DaprMode
@@ -151,25 +155,28 @@ func New(ctx context.Context, opts Options) (Provider, error) {
 	var spf *spiffe.SPIFFE
 	var trustAnchors trustanchors.Interface
 	if opts.MTLSEnabled || opts.Mode == modes.KubernetesMode {
-		if len(opts.TrustAnchors) > 0 && opts.TrustAnchorsFile != nil {
-			return nil, errors.New("trust anchors cannot be specified in both TrustAnchors and TrustAnchorsFile")
-		}
-
-		if len(opts.TrustAnchors) == 0 && opts.TrustAnchorsFile == nil {
-			return nil, errors.New("trust anchors are required")
-		}
-
-		switch {
-		case len(opts.TrustAnchors) > 0:
-			trustAnchors, err = trustanchors.FromStatic(opts.TrustAnchors)
-			if err != nil {
-				return nil, err
+		trustAnchors = opts.OverrideTrustAnchors
+		if trustAnchors == nil {
+			if len(opts.TrustAnchors) > 0 && opts.TrustAnchorsFile != nil {
+				return nil, errors.New("trust anchors cannot be specified in both TrustAnchors and TrustAnchorsFile")
 			}
-		case opts.TrustAnchorsFile != nil:
-			trustAnchors = trustanchors.FromFile(trustanchors.OptionsFile{
-				Log:  log,
-				Path: *opts.TrustAnchorsFile,
-			})
+
+			if len(opts.TrustAnchors) == 0 && opts.TrustAnchorsFile == nil {
+				return nil, errors.New("trust anchors are required")
+			}
+
+			switch {
+			case len(opts.TrustAnchors) > 0:
+				trustAnchors, err = trustanchors.FromStatic(opts.TrustAnchors)
+				if err != nil {
+					return nil, err
+				}
+			case opts.TrustAnchorsFile != nil:
+				trustAnchors = trustanchors.FromFile(trustanchors.OptionsFile{
+					Log:  log,
+					Path: *opts.TrustAnchorsFile,
+				})
+			}
 		}
 
 		var reqFn spiffe.RequestSVIDFn

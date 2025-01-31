@@ -76,6 +76,7 @@ type Statestore struct {
 	table           table.Interface
 	engine          engine.Interface
 	closed          atomic.Bool
+	wg              sync.WaitGroup
 
 	storeName                  string
 	entityConfigs              map[string]api.EntityConfig
@@ -128,6 +129,10 @@ func (r *Statestore) DrainRebalancedReminders() {
 			}
 		}
 	}
+
+	r.wg.Wait()
+	r.evaluationQueue <- struct{}{}
+	<-r.evaluationQueue
 }
 
 func (r *Statestore) Create(ctx context.Context, req *api.CreateReminderRequest) error {
@@ -1008,6 +1013,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 
 	reminder.UpdateFromTrack(track)
 
+	r.wg.Add(1)
 	go func() {
 		defer func() {
 			select {
@@ -1015,6 +1021,7 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 			default:
 				close(stop.stopped)
 			}
+			r.wg.Done()
 		}()
 
 		var (
@@ -1071,26 +1078,21 @@ func (r *Statestore) startReminder(reminder *api.Reminder, stop *reminderStop) e
 				break loop
 			}
 
-			_, exists = r.activeReminders.Load(reminderKey)
-			if exists {
-				err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
-				if err != nil {
-					log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
-				}
+			tickExecuted := reminder.TickExecuted()
 
-				track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
-				if gErr != nil {
-					log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
-				} else {
-					eTag = track.Etag
-				}
-			} else {
-				log.Error("Could not find active reminder with key after call: %s", reminderKey)
-				nextTimer = nil
-				return
+			err = r.updateReminderTrack(context.TODO(), reminderKey, reminder.RepeatsLeft(), nextTick, eTag)
+			if err != nil {
+				log.Errorf("Error updating reminder track for reminder %s: %v", reminderKey, err)
 			}
 
-			if reminder.TickExecuted() {
+			track, gErr := r.getReminderTrack(context.TODO(), reminderKey)
+			if gErr != nil {
+				log.Errorf("Error retrieving reminder %s: %v", reminderKey, gErr)
+			} else {
+				eTag = track.Etag
+			}
+
+			if tickExecuted {
 				nextTimer = nil
 				break loop
 			}
