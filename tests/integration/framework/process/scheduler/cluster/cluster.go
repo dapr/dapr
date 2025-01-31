@@ -122,7 +122,7 @@ func (c *Cluster) WaitUntilRunning(t *testing.T, ctx context.Context) {
 	}
 
 	assert.EventuallyWithT(t, func(col *assert.CollectT) {
-		resp, err := c.schedulers[0].ETCDClient(t).Get(ctx, "dapr/leadership", clientv3.WithPrefix())
+		resp, err := c.schedulers[0].ETCDClient(t, ctx).Get(ctx, "dapr/leadership", clientv3.WithPrefix())
 		assert.NoError(col, err)
 		assert.Len(col, resp.Kvs, len(c.schedulers))
 	}, 10*time.Second, 10*time.Millisecond)
