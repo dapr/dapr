@@ -95,7 +95,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, metadata.IsComplete())
 
 		// Verify metrics
-		metrics := w.daprd.Metrics(t, ctx)
+		metrics := w.daprd.Metrics(t, ctx).All()
 		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
 		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:success|workflow_name:workflow"]))
 		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_success|app_id:myapp|namespace:|status:success"]))
@@ -110,7 +110,7 @@ func (w *workflow) Run(t *testing.T, ctx context.Context) {
 		assert.True(t, metadata.IsComplete())
 
 		// Verify metrics
-		metrics := w.daprd.Metrics(t, ctx)
+		metrics := w.daprd.Metrics(t, ctx).All()
 		assert.Equal(t, 2, int(metrics["dapr_runtime_workflow_operation_count|app_id:myapp|namespace:|operation:create_workflow|status:success"]))
 		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_execution_count|app_id:myapp|namespace:|status:failed|workflow_name:workflow"]))
 		assert.Equal(t, 1, int(metrics["dapr_runtime_workflow_activity_execution_count|activity_name:activity_failure|app_id:myapp|namespace:|status:failed"]))
