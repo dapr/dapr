@@ -1,0 +1,16 @@
+diff --git a/tests/integration/suite/actors/metadata/client.go b/tests/integration/suite/actors/metadata/client.go
+index dc26204e8..0d27ff3e9 100644
+--- a/tests/integration/suite/actors/metadata/client.go
++++ b/tests/integration/suite/actors/metadata/client.go
+@@ -89,9 +89,9 @@ func (m *client) Run(t *testing.T, ctx context.Context) {
+ 	close(m.blockConfig)
+ 	assert.EventuallyWithT(t, func(t *assert.CollectT) {
+ 		res := getMetadata(t, ctx, client, m.daprd.HTTPPort())
+-		assert.Equal(t, "RUNNING", res.ActorRuntime.RuntimeStatus)
++		assert.Equal(t, "DISABLED", res.ActorRuntime.RuntimeStatus)
+ 		assert.False(t, res.ActorRuntime.HostReady)
+-		assert.Equal(t, "placement: connected", res.ActorRuntime.Placement)
++		assert.Equal(t, "placement: disconnected", res.ActorRuntime.Placement)
+ 		assert.Empty(t, res.ActorRuntime.ActiveActors, 0)
+ 	}, 10*time.Second, 10*time.Millisecond)
+ }

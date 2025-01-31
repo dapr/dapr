@@ -1,0 +1,30 @@
+diff --git a/tests/integration/suite/daprd/metadata/metadata.go b/tests/integration/suite/daprd/metadata/metadata.go
+index 4a0955eff..f5f95891c 100644
+--- a/tests/integration/suite/daprd/metadata/metadata.go
++++ b/tests/integration/suite/daprd/metadata/metadata.go
+@@ -19,9 +19,11 @@ import (
+ 	"fmt"
+ 	"io"
+ 	"net/http"
++	"strings"
+ 	"testing"
+ 	"time"
+ 
++	"github.com/stretchr/testify/assert"
+ 	"github.com/stretchr/testify/require"
+ 
+ 	"github.com/dapr/dapr/tests/integration/framework"
+@@ -106,11 +108,11 @@ func validateResponse(t *testing.T, appID string, appPort int, body io.Reader) {
+ 	require.NoError(t, err)
+ 
+ 	require.Equal(t, appID, bodyMap["id"])
+-	require.Equal(t, "edge", bodyMap["runtimeVersion"])
++	assert.Truef(t, strings.HasPrefix(bodyMap["runtimeVersion"].(string), "1.14."), "expected runtimeVersion to have version 1.14.x (actual: %s)", bodyMap["runtimeVersion"])
+ 
+ 	extended, ok := bodyMap["extended"].(map[string]interface{})
+ 	require.True(t, ok)
+-	require.Equal(t, "edge", extended["daprRuntimeVersion"])
++	assert.Truef(t, strings.HasPrefix(extended["daprRuntimeVersion"].(string), "1.14."), "expected daprRuntimeVersion to have version 1.13.x (actual: %s)", extended["daprRuntimeVersion"])
+ 
+ 	appConnectionProperties, ok := bodyMap["appConnectionProperties"].(map[string]interface{})
+ 	require.True(t, ok)

@@ -1,0 +1,1216 @@
+diff --git a/tests/integration/suite/daprd/hotreload/operator/workflowbackend.go b/tests/integration/suite/daprd/hotreload/operator/workflowbackend.go
+deleted file mode 100644
+index d4cf43f09..000000000
+--- a/tests/integration/suite/daprd/hotreload/operator/workflowbackend.go
++++ /dev/null
+@@ -1,219 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package operator
+-
+-import (
+-	"context"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-	apiextv1 "k8s.io/apiextensions-apiserver/pkg/apis/apiextensions/v1"
+-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+-
+-	"github.com/dapr/dapr/pkg/apis/common"
+-	compapi "github.com/dapr/dapr/pkg/apis/components/v1alpha1"
+-	"github.com/dapr/dapr/pkg/operator/api"
+-	operatorv1 "github.com/dapr/dapr/pkg/proto/operator/v1"
+-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+-	"github.com/dapr/dapr/tests/integration/framework/process/grpc/operator"
+-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+-	"github.com/dapr/dapr/tests/integration/framework/process/sentry"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(workflowbackend))
+-}
+-
+-type workflowbackend struct {
+-	daprdCreate *daprd.Daprd
+-	daprdUpdate *daprd.Daprd
+-	daprdDelete *daprd.Daprd
+-
+-	operatorCreate *operator.Operator
+-	operatorUpdate *operator.Operator
+-	operatorDelete *operator.Operator
+-
+-	loglineCreate *logline.LogLine
+-	loglineUpdate *logline.LogLine
+-	loglineDelete *logline.LogLine
+-}
+-
+-func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
+-	sentry := sentry.New(t)
+-
+-	w.loglineCreate = logline.New(t, logline.WithStdoutLineContains(
+-		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
+-	))
+-	w.loglineUpdate = logline.New(t, logline.WithStdoutLineContains(
+-		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.sqlite/v1)",
+-	))
+-	w.loglineDelete = logline.New(t, logline.WithStdoutLineContains(
+-		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
+-	))
+-
+-	w.operatorCreate = operator.New(t,
+-		operator.WithSentry(sentry),
+-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
+-			return &operatorv1.GetConfigurationResponse{
+-				Configuration: []byte(
+-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
+-				),
+-			}, nil
+-		}),
+-	)
+-	w.operatorUpdate = operator.New(t,
+-		operator.WithSentry(sentry),
+-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
+-			return &operatorv1.GetConfigurationResponse{
+-				Configuration: []byte(
+-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
+-				),
+-			}, nil
+-		}),
+-	)
+-	w.operatorDelete = operator.New(t,
+-		operator.WithSentry(sentry),
+-		operator.WithGetConfigurationFn(func(context.Context, *operatorv1.GetConfigurationRequest) (*operatorv1.GetConfigurationResponse, error) {
+-			return &operatorv1.GetConfigurationResponse{
+-				Configuration: []byte(
+-					`{"kind":"Configuration","apiVersion":"dapr.io/v1alpha1","metadata":{"name":"hotreloading"},"spec":{"features":[{"name":"HotReload","enabled":true}]}}`,
+-				),
+-			}, nil
+-		}),
+-	)
+-
+-	inmemStore := compapi.Component{
+-		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
+-		ObjectMeta: metav1.ObjectMeta{Name: "mystore", Namespace: "default"},
+-		Spec: compapi.ComponentSpec{
+-			Type: "state.in-memory", Version: "v1",
+-			Metadata: []common.NameValuePair{{Name: "actorStateStore", Value: common.DynamicValue{JSON: apiextv1.JSON{Raw: []byte(`"true"`)}}}},
+-		},
+-	}
+-
+-	w.operatorCreate.SetComponents(inmemStore)
+-	w.operatorUpdate.SetComponents(inmemStore, compapi.Component{
+-		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
+-		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend", Namespace: "default"},
+-		Spec:       compapi.ComponentSpec{Type: "workflowbackend.actors", Version: "v1"},
+-	})
+-	w.operatorDelete.SetComponents(inmemStore, compapi.Component{
+-		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
+-		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend", Namespace: "default"},
+-		Spec:       compapi.ComponentSpec{Type: "workflowbackend.actors", Version: "v1"},
+-	})
+-
+-	w.daprdCreate = daprd.New(t,
+-		daprd.WithMode("kubernetes"),
+-		daprd.WithConfigs("hotreloading"),
+-		daprd.WithExecOptions(
+-			exec.WithEnvVars(t,
+-				"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+-			),
+-			exec.WithStdout(w.loglineCreate.Stdout()),
+-		),
+-		daprd.WithSentryAddress(sentry.Address()),
+-		daprd.WithControlPlaneAddress(w.operatorCreate.Address(t)),
+-		daprd.WithDisableK8sSecretStore(true),
+-	)
+-	w.daprdUpdate = daprd.New(t,
+-		daprd.WithMode("kubernetes"),
+-		daprd.WithConfigs("hotreloading"),
+-		daprd.WithExecOptions(
+-			exec.WithEnvVars(t,
+-				"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+-			),
+-			exec.WithStdout(w.loglineUpdate.Stdout()),
+-		),
+-		daprd.WithSentryAddress(sentry.Address()),
+-		daprd.WithControlPlaneAddress(w.operatorUpdate.Address(t)),
+-		daprd.WithDisableK8sSecretStore(true),
+-	)
+-	w.daprdDelete = daprd.New(t,
+-		daprd.WithMode("kubernetes"),
+-		daprd.WithConfigs("hotreloading"),
+-		daprd.WithExecOptions(
+-			exec.WithEnvVars(t,
+-				"DAPR_TRUST_ANCHORS", string(sentry.CABundle().TrustAnchors),
+-			),
+-			exec.WithStdout(w.loglineDelete.Stdout()),
+-		),
+-		daprd.WithSentryAddress(sentry.Address()),
+-		daprd.WithControlPlaneAddress(w.operatorDelete.Address(t)),
+-		daprd.WithDisableK8sSecretStore(true),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(sentry,
+-			w.operatorCreate, w.operatorUpdate, w.operatorDelete,
+-			w.loglineCreate, w.loglineUpdate, w.loglineDelete,
+-			w.daprdCreate, w.daprdUpdate, w.daprdDelete,
+-		),
+-	}
+-}
+-
+-func (w *workflowbackend) Run(t *testing.T, ctx context.Context) {
+-	w.daprdCreate.WaitUntilRunning(t, ctx)
+-	w.daprdUpdate.WaitUntilRunning(t, ctx)
+-	w.daprdDelete.WaitUntilRunning(t, ctx)
+-
+-	comps := w.daprdCreate.GetMetaRegisteredComponents(t, ctx)
+-	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
+-		{
+-			Name: "mystore", Type: "state.in-memory", Version: "v1",
+-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+-		},
+-	}, comps)
+-	actorsComp := compapi.Component{
+-		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
+-		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend", Namespace: "default"},
+-		Spec:       compapi.ComponentSpec{Type: "workflowbackend.actors", Version: "v1"},
+-	}
+-	w.operatorCreate.AddComponents(actorsComp)
+-	w.operatorCreate.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &actorsComp, EventType: operatorv1.ResourceEventType_CREATED})
+-	w.loglineCreate.EventuallyFoundAll(t)
+-
+-	comps = w.daprdUpdate.GetMetaRegisteredComponents(t, ctx)
+-	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
+-		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
+-		{
+-			Name: "mystore", Type: "state.in-memory", Version: "v1",
+-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+-		},
+-	}, comps)
+-	sqliteComp := compapi.Component{
+-		TypeMeta:   metav1.TypeMeta{Kind: "Component", APIVersion: "dapr.io/v1alpha1"},
+-		ObjectMeta: metav1.ObjectMeta{Name: "wfbackend", Namespace: "default"},
+-		Spec:       compapi.ComponentSpec{Type: "workflowbackend.sqlite", Version: "v1"},
+-	}
+-	w.operatorUpdate.SetComponents(sqliteComp)
+-	w.operatorUpdate.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &sqliteComp, EventType: operatorv1.ResourceEventType_UPDATED})
+-	w.loglineUpdate.EventuallyFoundAll(t)
+-
+-	comps = w.daprdDelete.GetMetaRegisteredComponents(t, ctx)
+-	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
+-		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
+-		{
+-			Name: "mystore", Type: "state.in-memory", Version: "v1",
+-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+-		},
+-	}, comps)
+-	w.operatorDelete.SetComponents()
+-	w.operatorDelete.ComponentUpdateEvent(t, ctx, &api.ComponentUpdateEvent{Component: &actorsComp, EventType: operatorv1.ResourceEventType_DELETED})
+-	w.loglineDelete.EventuallyFoundAll(t)
+-}
+diff --git a/tests/integration/suite/daprd/hotreload/selfhosted/workflowbackend.go b/tests/integration/suite/daprd/hotreload/selfhosted/workflowbackend.go
+deleted file mode 100644
+index 77309c859..000000000
+--- a/tests/integration/suite/daprd/hotreload/selfhosted/workflowbackend.go
++++ /dev/null
+@@ -1,191 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implieh.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package selfhosted
+-
+-import (
+-	"context"
+-	"os"
+-	"path/filepath"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(workflowbackend))
+-}
+-
+-type workflowbackend struct {
+-	daprdCreate *daprd.Daprd
+-	daprdUpdate *daprd.Daprd
+-	daprdDelete *daprd.Daprd
+-
+-	resDirCreate string
+-	resDirUpdate string
+-	resDirDelete string
+-
+-	loglineCreate *logline.LogLine
+-	loglineUpdate *logline.LogLine
+-	loglineDelete *logline.LogLine
+-}
+-
+-func (w *workflowbackend) Setup(t *testing.T) []framework.Option {
+-	configFile := filepath.Join(t.TempDir(), "config.yaml")
+-	require.NoError(t, os.WriteFile(configFile, []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Configuration
+-metadata:
+-  name: hotreloading
+-spec:
+-  features:
+-  - name: HotReload
+-    enabled: true`), 0o600))
+-
+-	w.loglineCreate = logline.New(t, logline.WithStdoutLineContains(
+-		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
+-	))
+-	w.loglineUpdate = logline.New(t, logline.WithStdoutLineContains(
+-		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (pubsub.in-memory/v1)",
+-	))
+-	w.loglineDelete = logline.New(t, logline.WithStdoutLineContains(
+-		"Aborting to hot-reload a workflowbackend component which is not supported: wfbackend (workflowbackend.actors/v1)",
+-	))
+-
+-	w.resDirCreate = t.TempDir()
+-	w.resDirUpdate = t.TempDir()
+-	w.resDirDelete = t.TempDir()
+-
+-	place := placement.New(t)
+-
+-	w.daprdCreate = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+-		daprd.WithResourcesDir(w.resDirCreate),
+-		daprd.WithPlacementAddresses(place.Address()),
+-		daprd.WithInMemoryActorStateStore("mystore"),
+-		daprd.WithExecOptions(
+-			exec.WithStdout(w.loglineCreate.Stdout()),
+-		),
+-	)
+-
+-	w.daprdUpdate = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+-		daprd.WithResourcesDir(w.resDirUpdate),
+-		daprd.WithPlacementAddresses(place.Address()),
+-		daprd.WithInMemoryActorStateStore("mystore"),
+-		daprd.WithExecOptions(
+-			exec.WithStdout(w.loglineUpdate.Stdout()),
+-		),
+-	)
+-
+-	require.NoError(t, os.WriteFile(filepath.Join(w.resDirUpdate, "wf.yaml"), []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend
+-spec:
+- type: workflowbackend.actors
+- version: v1
+-`), 0o600))
+-
+-	w.daprdDelete = daprd.New(t,
+-		daprd.WithConfigs(configFile),
+-		daprd.WithResourcesDir(w.resDirDelete),
+-		daprd.WithPlacementAddresses(place.Address()),
+-		daprd.WithInMemoryActorStateStore("mystore"),
+-		daprd.WithExecOptions(
+-			exec.WithStdout(w.loglineDelete.Stdout()),
+-		),
+-	)
+-
+-	require.NoError(t, os.WriteFile(filepath.Join(w.resDirDelete, "wf.yaml"), []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend
+-spec:
+- type: workflowbackend.actors
+- version: v1
+-`), 0o600))
+-
+-	return []framework.Option{
+-		framework.WithProcesses(place,
+-			w.loglineCreate, w.loglineUpdate, w.loglineDelete,
+-			w.daprdCreate, w.daprdUpdate, w.daprdDelete,
+-		),
+-	}
+-}
+-
+-func (w *workflowbackend) Run(t *testing.T, ctx context.Context) {
+-	w.daprdCreate.WaitUntilRunning(t, ctx)
+-	w.daprdUpdate.WaitUntilRunning(t, ctx)
+-	w.daprdDelete.WaitUntilRunning(t, ctx)
+-
+-	comps := w.daprdCreate.GetMetaRegisteredComponents(t, ctx)
+-	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
+-		{
+-			Name: "mystore", Type: "state.in-memory", Version: "v1",
+-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+-		},
+-	}, comps)
+-	require.NoError(t, os.WriteFile(filepath.Join(w.resDirCreate, "wf.yaml"), []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend
+-spec:
+- type: workflowbackend.actors
+- version: v1
+-`), 0o600))
+-	w.loglineCreate.EventuallyFoundAll(t)
+-
+-	comps = w.daprdUpdate.GetMetaRegisteredComponents(t, ctx)
+-	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
+-		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
+-		{
+-			Name: "mystore", Type: "state.in-memory", Version: "v1",
+-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+-		},
+-	}, comps)
+-
+-	require.NoError(t, os.WriteFile(filepath.Join(w.resDirUpdate, "wf.yaml"), []byte(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend
+-spec:
+- type: pubsub.in-memory
+- version: v1
+-`), 0o600))
+-	w.loglineUpdate.EventuallyFoundAll(t)
+-
+-	comps = w.daprdDelete.GetMetaRegisteredComponents(t, ctx)
+-	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
+-		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
+-		{
+-			Name: "mystore", Type: "state.in-memory", Version: "v1",
+-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+-		},
+-	}, comps)
+-
+-	require.NoError(t, os.Remove(filepath.Join(w.resDirDelete, "wf.yaml")))
+-	w.loglineDelete.EventuallyFoundAll(t)
+-}
+diff --git a/tests/integration/suite/daprd/workflow/backend/actors.go b/tests/integration/suite/daprd/workflow/backend/actors.go
+deleted file mode 100644
+index 956abba46..000000000
+--- a/tests/integration/suite/daprd/workflow/backend/actors.go
++++ /dev/null
+@@ -1,110 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package backend
+-
+-import (
+-	"context"
+-	"fmt"
+-	"testing"
+-
+-	"github.com/microsoft/durabletask-go/api"
+-	"github.com/microsoft/durabletask-go/backend"
+-	"github.com/microsoft/durabletask-go/client"
+-	"github.com/microsoft/durabletask-go/task"
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	"github.com/dapr/dapr/tests/integration/framework/process/placement"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(actors))
+-}
+-
+-type actors struct {
+-	daprd *daprd.Daprd
+-	place *placement.Placement
+-}
+-
+-func (a *actors) Setup(t *testing.T) []framework.Option {
+-	a.place = placement.New(t)
+-	a.daprd = daprd.New(t,
+-		daprd.WithPlacementAddresses(a.place.Address()),
+-		daprd.WithInMemoryActorStateStore("mystore"),
+-		daprd.WithResourceFiles(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend
+-spec:
+- type: workflowbackend.actors
+- version: v1
+-`),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(a.place, a.daprd),
+-	}
+-}
+-
+-func (a *actors) Run(t *testing.T, ctx context.Context) {
+-	a.daprd.WaitUntilRunning(t, ctx)
+-
+-	comps := a.daprd.GetMetaRegisteredComponents(t, ctx)
+-	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
+-		{Name: "wfbackend", Type: "workflowbackend.actors", Version: "v1"},
+-		{
+-			Name: "mystore", Type: "state.in-memory", Version: "v1",
+-			Capabilities: []string{"ETAG", "TRANSACTIONAL", "TTL", "DELETE_WITH_PREFIX", "ACTOR"},
+-		},
+-	}, comps)
+-
+-	r := task.NewTaskRegistry()
+-	r.AddOrchestratorN("SingleActivity", func(ctx *task.OrchestrationContext) (any, error) {
+-		var input string
+-		if err := ctx.GetInput(&input); err != nil {
+-			return nil, err
+-		}
+-		var output string
+-		err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
+-		return output, err
+-	})
+-	r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
+-		var name string
+-		if err := ctx.GetInput(&name); err != nil {
+-			return nil, err
+-		}
+-		return fmt.Sprintf("Hello, %s!", name), nil
+-	})
+-	backendClient := client.NewTaskHubGrpcClient(a.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+-	require.NoError(t, backendClient.StartWorkItemListener(ctx, r))
+-
+-	resp, err := a.daprd.GRPCClient(t, ctx).StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+-		WorkflowComponent: "dapr",
+-		WorkflowName:      "SingleActivity",
+-		Input:             []byte(`"Dapr"`),
+-		InstanceId:        "myinstance",
+-	})
+-	require.NoError(t, err)
+-
+-	id := api.InstanceID(resp.GetInstanceId())
+-	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+-	require.NoError(t, err)
+-	assert.True(t, metadata.IsComplete())
+-	assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+-}
+diff --git a/tests/integration/suite/daprd/workflow/backend/backend.go b/tests/integration/suite/daprd/workflow/backend/backend.go
+deleted file mode 100644
+index 8f116ee1f..000000000
+--- a/tests/integration/suite/daprd/workflow/backend/backend.go
++++ /dev/null
+@@ -1,18 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://www.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package backend
+-
+-import (
+-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/backend/singular"
+-)
+diff --git a/tests/integration/suite/daprd/workflow/backend/singular/actors.go b/tests/integration/suite/daprd/workflow/backend/singular/actors.go
+deleted file mode 100644
+index a55780c02..000000000
+--- a/tests/integration/suite/daprd/workflow/backend/singular/actors.go
++++ /dev/null
+@@ -1,80 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package singular
+-
+-import (
+-	"context"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(actors))
+-}
+-
+-// actors ensures that 2 actor workflow backends cannot be loaded at the same time.
+-type actors struct {
+-	logline *logline.LogLine
+-	daprd   *daprd.Daprd
+-}
+-
+-func (a *actors) Setup(t *testing.T) []framework.Option {
+-	a.logline = logline.New(t,
+-		logline.WithStdoutLineContains(
+-			"Fatal error from runtime: process component wfbackend2 error: [INIT_COMPONENT_FAILURE]: initialization error occurred for wfbackend2 (workflowbackend.actors/v1): cannot create more than one workflow backend component",
+-		),
+-	)
+-
+-	a.daprd = daprd.New(t,
+-		daprd.WithResourceFiles(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend1
+-spec:
+- type: workflowbackend.actors
+- version: v1
+----
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend2
+-spec:
+- type: workflowbackend.actors
+- version: v1
+-`),
+-		daprd.WithExecOptions(
+-			exec.WithExitCode(1),
+-			exec.WithRunError(func(t *testing.T, err error) {
+-				require.ErrorContains(t, err, "exit status 1")
+-			}),
+-			exec.WithStdout(a.logline.Stdout()),
+-		),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(a.logline, a.daprd),
+-	}
+-}
+-
+-func (a *actors) Run(t *testing.T, ctx context.Context) {
+-	a.logline.EventuallyFoundAll(t)
+-}
+diff --git a/tests/integration/suite/daprd/workflow/backend/singular/sqlite.go b/tests/integration/suite/daprd/workflow/backend/singular/sqlite.go
+deleted file mode 100644
+index f08890f25..000000000
+--- a/tests/integration/suite/daprd/workflow/backend/singular/sqlite.go
++++ /dev/null
+@@ -1,80 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package singular
+-
+-import (
+-	"context"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(sqlite))
+-}
+-
+-// sqlite ensures that 2 sqlite workflow backends cannot be loaded at the same time.
+-type sqlite struct {
+-	logline *logline.LogLine
+-	daprd   *daprd.Daprd
+-}
+-
+-func (s *sqlite) Setup(t *testing.T) []framework.Option {
+-	s.logline = logline.New(t,
+-		logline.WithStdoutLineContains(
+-			"Fatal error from runtime: process component wfbackend2 error: [INIT_COMPONENT_FAILURE]: initialization error occurred for wfbackend2 (workflowbackend.sqlite/v1): cannot create more than one workflow backend component",
+-		),
+-	)
+-
+-	s.daprd = daprd.New(t,
+-		daprd.WithResourceFiles(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend1
+-spec:
+- type: workflowbackend.sqlite
+- version: v1
+----
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend2
+-spec:
+- type: workflowbackend.sqlite
+- version: v1
+-`),
+-		daprd.WithExecOptions(
+-			exec.WithExitCode(1),
+-			exec.WithRunError(func(t *testing.T, err error) {
+-				require.ErrorContains(t, err, "exit status 1")
+-			}),
+-			exec.WithStdout(s.logline.Stdout()),
+-		),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(s.logline, s.daprd),
+-	}
+-}
+-
+-func (s *sqlite) Run(t *testing.T, ctx context.Context) {
+-	s.logline.EventuallyFoundAll(t)
+-}
+diff --git a/tests/integration/suite/daprd/workflow/backend/singular/sqliteactors.go b/tests/integration/suite/daprd/workflow/backend/singular/sqliteactors.go
+deleted file mode 100644
+index 608429f32..000000000
+--- a/tests/integration/suite/daprd/workflow/backend/singular/sqliteactors.go
++++ /dev/null
+@@ -1,81 +0,0 @@
+-/*
+-Copyright 2023 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package singular
+-
+-import (
+-	"context"
+-	"testing"
+-
+-	"github.com/stretchr/testify/require"
+-
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	"github.com/dapr/dapr/tests/integration/framework/process/exec"
+-	"github.com/dapr/dapr/tests/integration/framework/process/logline"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(sqliteactors))
+-}
+-
+-// sqliteactors ensures that 2 workflow backends of different type cannot be
+-// loaded at the same time.
+-type sqliteactors struct {
+-	logline *logline.LogLine
+-	daprd   *daprd.Daprd
+-}
+-
+-func (s *sqliteactors) Setup(t *testing.T) []framework.Option {
+-	s.logline = logline.New(t,
+-		logline.WithStdoutLineContains(
+-			"Fatal error from runtime: process component wfbackend2 error: [INIT_COMPONENT_FAILURE]: initialization error occurred for wfbackend2 (workflowbackend.actors/v1): cannot create more than one workflow backend component",
+-		),
+-	)
+-
+-	s.daprd = daprd.New(t,
+-		daprd.WithResourceFiles(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend1
+-spec:
+- type: workflowbackend.sqlite
+- version: v1
+----
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend2
+-spec:
+- type: workflowbackend.actors
+- version: v1
+-`),
+-		daprd.WithExecOptions(
+-			exec.WithExitCode(1),
+-			exec.WithRunError(func(t *testing.T, err error) {
+-				require.ErrorContains(t, err, "exit status 1")
+-			}),
+-			exec.WithStdout(s.logline.Stdout()),
+-		),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(s.logline, s.daprd),
+-	}
+-}
+-
+-func (s *sqliteactors) Run(t *testing.T, ctx context.Context) {
+-	s.logline.EventuallyFoundAll(t)
+-}
+diff --git a/tests/integration/suite/daprd/workflow/backend/sqlite.go b/tests/integration/suite/daprd/workflow/backend/sqlite.go
+deleted file mode 100644
+index 21c4cd452..000000000
+--- a/tests/integration/suite/daprd/workflow/backend/sqlite.go
++++ /dev/null
+@@ -1,108 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package backend
+-
+-import (
+-	"context"
+-	"fmt"
+-	"path/filepath"
+-	"testing"
+-
+-	"github.com/microsoft/durabletask-go/api"
+-	"github.com/microsoft/durabletask-go/backend"
+-	"github.com/microsoft/durabletask-go/client"
+-	"github.com/microsoft/durabletask-go/task"
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(sqlite))
+-}
+-
+-type sqlite struct {
+-	daprd *daprd.Daprd
+-	dir   string
+-}
+-
+-func (s *sqlite) Setup(t *testing.T) []framework.Option {
+-	s.dir = filepath.Join(t.TempDir(), "wf.db")
+-	s.daprd = daprd.New(t,
+-		daprd.WithResourceFiles(fmt.Sprintf(`
+-apiVersion: dapr.io/v1alpha1
+-kind: Component
+-metadata:
+- name: wfbackend
+-spec:
+- type: workflowbackend.sqlite
+- version: v1
+- metadata:
+- - name: connectionString
+-   value: %s
+-`, s.dir)),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(s.daprd),
+-	}
+-}
+-
+-func (s *sqlite) Run(t *testing.T, ctx context.Context) {
+-	s.daprd.WaitUntilRunning(t, ctx)
+-
+-	comps := s.daprd.GetMetaRegisteredComponents(t, ctx)
+-	require.ElementsMatch(t, []*rtv1.RegisteredComponents{
+-		{Name: "wfbackend", Type: "workflowbackend.sqlite", Version: "v1"},
+-	}, comps)
+-
+-	r := task.NewTaskRegistry()
+-	r.AddOrchestratorN("SingleActivity", func(ctx *task.OrchestrationContext) (any, error) {
+-		var input string
+-		if err := ctx.GetInput(&input); err != nil {
+-			return nil, err
+-		}
+-		var output string
+-		err := ctx.CallActivity("SayHello", task.WithActivityInput(input)).Await(&output)
+-		return output, err
+-	})
+-	r.AddActivityN("SayHello", func(ctx task.ActivityContext) (any, error) {
+-		var name string
+-		if err := ctx.GetInput(&name); err != nil {
+-			return nil, err
+-		}
+-		return fmt.Sprintf("Hello, %s!", name), nil
+-	})
+-	backendClient := client.NewTaskHubGrpcClient(s.daprd.GRPCConn(t, ctx), backend.DefaultLogger())
+-	require.NoError(t, backendClient.StartWorkItemListener(ctx, r))
+-
+-	resp, err := s.daprd.GRPCClient(t, ctx).
+-		StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+-			WorkflowComponent: "dapr",
+-			WorkflowName:      "SingleActivity",
+-			Input:             []byte(`"Dapr"`),
+-			InstanceId:        "myinstance",
+-		})
+-	require.NoError(t, err)
+-
+-	id := api.InstanceID(resp.GetInstanceId())
+-	metadata, err := backendClient.WaitForOrchestrationCompletion(ctx, id, api.WithFetchPayloads(true))
+-	require.NoError(t, err)
+-	assert.True(t, metadata.IsComplete())
+-	assert.Equal(t, `"Hello, Dapr!"`, metadata.SerializedOutput)
+-}
+diff --git a/tests/integration/suite/daprd/workflow/basic.go b/tests/integration/suite/daprd/workflow/basic.go
+index f0aaa09a5..f1f48d207 100644
+--- a/tests/integration/suite/daprd/workflow/basic.go
++++ b/tests/integration/suite/daprd/workflow/basic.go
+@@ -42,6 +42,7 @@ import (
+ 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+ 	prochttp "github.com/dapr/dapr/tests/integration/framework/process/http"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
++	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+ 	"github.com/dapr/dapr/tests/integration/suite"
+ )
+ 
+@@ -52,6 +53,7 @@ func init() {
+ type basic struct {
+ 	daprd      *daprd.Daprd
+ 	place      *placement.Placement
++	sched      *scheduler.Scheduler
+ 	httpClient *http.Client
+ 	grpcClient runtimev1pb.DaprClient
+ }
+@@ -63,19 +65,22 @@ func (b *basic) Setup(t *testing.T) []framework.Option {
+ 	})
+ 	srv := prochttp.New(t, prochttp.WithHandler(handler))
+ 	b.place = placement.New(t)
++	b.sched = scheduler.New(t)
+ 	b.daprd = daprd.New(t,
+ 		daprd.WithAppPort(srv.Port()),
+ 		daprd.WithAppProtocol("http"),
+ 		daprd.WithPlacementAddresses(b.place.Address()),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
++		daprd.WithSchedulerAddresses(b.sched.Address()),
+ 	)
+ 
+ 	return []framework.Option{
+-		framework.WithProcesses(b.place, srv, b.daprd),
++		framework.WithProcesses(b.place, b.sched, srv, b.daprd),
+ 	}
+ }
+ 
+ func (b *basic) Run(t *testing.T, ctx context.Context) {
++	b.sched.WaitUntilRunning(t, ctx)
+ 	b.place.WaitUntilRunning(t, ctx)
+ 	b.daprd.WaitUntilRunning(t, ctx)
+ 
+diff --git a/tests/integration/suite/daprd/workflow/memory/scheduler.go b/tests/integration/suite/daprd/workflow/memory/scheduler.go
+deleted file mode 100644
+index ebfc53d6f..000000000
+--- a/tests/integration/suite/daprd/workflow/memory/scheduler.go
++++ /dev/null
+@@ -1,86 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package memory
+-
+-import (
+-	"bytes"
+-	"context"
+-	"testing"
+-
+-	"github.com/microsoft/durabletask-go/api"
+-	"github.com/microsoft/durabletask-go/task"
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(scheduler))
+-}
+-
+-type scheduler struct {
+-	workflow *workflow.Workflow
+-}
+-
+-func (s *scheduler) Setup(t *testing.T) []framework.Option {
+-	// 2MB payload. Enough memory to be larger than the background variant memory
+-	// so we can measure (actor) workflow history memory does not leak.
+-	input := bytes.Repeat([]byte("0"), 2*1024*1024)
+-
+-	s.workflow = workflow.New(t,
+-		workflow.WithScheduler(true),
+-		workflow.WithAddOrchestratorN(t, "foo", func(ctx *task.OrchestrationContext) (any, error) {
+-			require.NoError(t, ctx.CallActivity("bar", task.WithActivityInput(input)).Await(new([]byte)))
+-			return "", nil
+-		}),
+-		workflow.WithAddActivityN(t, "bar", func(ctx task.ActivityContext) (any, error) { return "", nil }),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(s.workflow),
+-	}
+-}
+-
+-func (s *scheduler) Run(t *testing.T, ctx context.Context) {
+-	s.workflow.WaitUntilRunning(t, ctx)
+-	client := s.workflow.BackendClient(t, ctx)
+-	gclient := s.workflow.GRPCClient(t, ctx)
+-
+-	var actorMemBaseline float64
+-
+-	for i := 0; i < 10; i++ {
+-		resp, err := gclient.StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+-			WorkflowComponent: "dapr",
+-			WorkflowName:      "foo",
+-		})
+-		require.NoError(t, err)
+-		_, err = client.WaitForOrchestrationCompletion(ctx, api.InstanceID(resp.GetInstanceId()))
+-		require.NoError(t, err)
+-
+-		if i == 0 {
+-			actorMemBaseline = s.workflow.Metrics(t, ctx)["process_resident_memory_bytes"] * 1e-6
+-		}
+-	}
+-
+-	assert.InDelta(t,
+-		s.workflow.Metrics(t, ctx)["process_resident_memory_bytes"]*1e-6,
+-		actorMemBaseline,
+-		35,
+-		"workflow memory leak",
+-	)
+-}
+diff --git a/tests/integration/suite/daprd/workflow/memory/state.go b/tests/integration/suite/daprd/workflow/memory/state.go
+deleted file mode 100644
+index 9ddc27ead..000000000
+--- a/tests/integration/suite/daprd/workflow/memory/state.go
++++ /dev/null
+@@ -1,85 +0,0 @@
+-/*
+-Copyright 2024 The Dapr Authors
+-Licensed under the Apache License, Version 2.0 (the "License");
+-you may not use this file except in compliance with the License.
+-You may obtain a copy of the License at
+-    http://wwb.apache.org/licenses/LICENSE-2.0
+-Unless required by applicable law or agreed to in writing, software
+-distributed under the License is distributed on an "AS IS" BASIS,
+-WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+-See the License for the specific language governing permissions and
+-limitations under the License.
+-*/
+-
+-package memory
+-
+-import (
+-	"bytes"
+-	"context"
+-	"testing"
+-
+-	"github.com/microsoft/durabletask-go/api"
+-	"github.com/microsoft/durabletask-go/task"
+-	"github.com/stretchr/testify/assert"
+-	"github.com/stretchr/testify/require"
+-
+-	rtv1 "github.com/dapr/dapr/pkg/proto/runtime/v1"
+-	"github.com/dapr/dapr/tests/integration/framework"
+-	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
+-	"github.com/dapr/dapr/tests/integration/suite"
+-)
+-
+-func init() {
+-	suite.Register(new(state))
+-}
+-
+-type state struct {
+-	workflow *workflow.Workflow
+-}
+-
+-func (s *state) Setup(t *testing.T) []framework.Option {
+-	// 2MB payload. Enough memory to be larger than the background variant memory
+-	// so we can measure (actor) workflow history memory does not leak.
+-	input := bytes.Repeat([]byte("0"), 2*1024*1024)
+-
+-	s.workflow = workflow.New(t,
+-		workflow.WithAddOrchestratorN(t, "foo", func(ctx *task.OrchestrationContext) (any, error) {
+-			require.NoError(t, ctx.CallActivity("bar", task.WithActivityInput(input)).Await(new([]byte)))
+-			return "", nil
+-		}),
+-		workflow.WithAddActivityN(t, "bar", func(ctx task.ActivityContext) (any, error) { return "", nil }),
+-	)
+-
+-	return []framework.Option{
+-		framework.WithProcesses(s.workflow),
+-	}
+-}
+-
+-func (s *state) Run(t *testing.T, ctx context.Context) {
+-	s.workflow.WaitUntilRunning(t, ctx)
+-	client := s.workflow.BackendClient(t, ctx)
+-	gclient := s.workflow.GRPCClient(t, ctx)
+-
+-	var actorMemBaseline float64
+-
+-	for i := 0; i < 10; i++ {
+-		resp, err := gclient.StartWorkflowBeta1(ctx, &rtv1.StartWorkflowRequest{
+-			WorkflowComponent: "dapr",
+-			WorkflowName:      "foo",
+-		})
+-		require.NoError(t, err)
+-		_, err = client.WaitForOrchestrationCompletion(ctx, api.InstanceID(resp.GetInstanceId()))
+-		require.NoError(t, err)
+-
+-		if i == 0 {
+-			actorMemBaseline = s.workflow.Metrics(t, ctx)["process_resident_memory_bytes"] * 1e-6
+-		}
+-	}
+-
+-	assert.InDelta(t,
+-		s.workflow.Metrics(t, ctx)["process_resident_memory_bytes"]*1e-6,
+-		actorMemBaseline,
+-		35,
+-		"workflow memory leak",
+-	)
+-}
+diff --git a/tests/integration/suite/daprd/workflow/raise.go b/tests/integration/suite/daprd/workflow/raise.go
+index 64fcaa21b..ed32a0f68 100644
+--- a/tests/integration/suite/daprd/workflow/raise.go
++++ b/tests/integration/suite/daprd/workflow/raise.go
+@@ -31,6 +31,7 @@ import (
+ 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
++	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+ 	"github.com/dapr/dapr/tests/integration/suite"
+ )
+ 
+@@ -40,24 +41,28 @@ func init() {
+ 
+ type raise struct {
+ 	daprd *daprd.Daprd
++	sched *scheduler.Scheduler
+ }
+ 
+ func (r *raise) Setup(t *testing.T) []framework.Option {
+ 	app := app.New(t)
+ 	place := placement.New(t)
++	r.sched = scheduler.New(t)
+ 
+ 	r.daprd = daprd.New(t,
+ 		daprd.WithAppPort(app.Port()),
+ 		daprd.WithPlacementAddresses(place.Address()),
+ 		daprd.WithInMemoryActorStateStore("statestore"),
++		daprd.WithSchedulerAddresses(r.sched.Address()),
+ 	)
+ 
+ 	return []framework.Option{
+-		framework.WithProcesses(place, app, r.daprd),
++		framework.WithProcesses(place, r.sched, app, r.daprd),
+ 	}
+ }
+ 
+ func (r *raise) Run(t *testing.T, ctx context.Context) {
++	r.sched.WaitUntilRunning(t, ctx)
+ 	r.daprd.WaitUntilRunning(t, ctx)
+ 
+ 	gclient := r.daprd.GRPCClient(t, ctx)
+diff --git a/tests/integration/suite/daprd/workflow/workflow.go b/tests/integration/suite/daprd/workflow/workflow.go
+index afe76d460..b5d77d3d3 100644
+--- a/tests/integration/suite/daprd/workflow/workflow.go
++++ b/tests/integration/suite/daprd/workflow/workflow.go
+@@ -14,7 +14,5 @@ limitations under the License.
+ package workflow
+ 
+ import (
+-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/backend"
+-	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/memory"
+ 	_ "github.com/dapr/dapr/tests/integration/suite/daprd/workflow/scheduler"
+ )
