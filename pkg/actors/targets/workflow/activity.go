@@ -357,3 +357,8 @@ func (a *activity) CloseUntil(d time.Duration) {
 func (a *activity) InvokeStream(context.Context, *internalsv1pb.InternalInvokeRequest, chan<- *internalsv1pb.InternalInvokeResponse) error {
 	return errors.New("not implemented")
 }
+
+// Key returns the key for this unique actor.
+func (a *activity) Key() string {
+	return a.actorType + actorapi.DaprSeparator + a.actorID
+}

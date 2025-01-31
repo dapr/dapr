@@ -78,6 +78,7 @@ type workflow struct {
 	completed             atomic.Bool
 	schedulerReminders    bool
 	closeCh               chan struct{}
+	closed                atomic.Bool
 }
 
 type WorkflowOptions struct {
@@ -123,6 +124,8 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 
 // InvokeMethod implements actors.InternalActor
 func (w *workflow) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	w.table.RemoveIdler(w)
+
 	if req.GetMessage() == nil {
 		return nil, errors.New("message is nil in request")
 	}
@@ -193,7 +196,10 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 	completed, err := w.runWorkflow(ctx, reminder)
 
 	if completed == runCompletedTrue {
-		w.table.DeleteFromTable(w.actorType, w.actorID)
+		w.table.DeleteFromTableIn(w, time.Second*10)
+		if w.closed.CompareAndSwap(false, true) {
+			close(w.closeCh)
+		}
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.
@@ -431,7 +437,8 @@ func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder)
 	}
 	if state == nil {
 		// The assumption is that someone manually deleted the workflow state. This is non-recoverable.
-		return runCompletedTrue, errors.New("no workflow state found")
+		log.Warnf("No workflow state found for actor '%s', terminating execution", w.actorID)
+		return runCompletedTrue, nil
 	}
 
 	if strings.HasPrefix(reminder.Name, "timer-") {
@@ -962,6 +969,9 @@ func (w *workflow) cleanup() {
 	w.rstate = nil
 	w.ometa = nil
 	w.lock.Close()
+	if w.closed.CompareAndSwap(false, true) {
+		close(w.closeCh)
+	}
 }
 
 // CloseUntil closes the actor but backs out sooner if the duration is reached.
@@ -1037,8 +1047,7 @@ func (w *workflow) handleStreamInitial(ctx context.Context, req *internalsv1pb.I
 		}
 
 		if api.OrchestrationMetadataIsComplete(w.ometa) {
-			w.table.DeleteFromTable(w.actorType, w.actorID)
-			w.cleanup()
+			w.table.DeleteFromTableIn(w, time.Second*10)
 		}
 	}
 
@@ -1063,4 +1072,9 @@ func (w *workflow) setOrchestrationMetadata(state *wfenginestate.State, rstate *
 		CustomStatus:   state.CustomStatus,
 		FailureDetails: failureDetuils,
 	}
+}
+
+// Key returns the key for this unique actor.
+func (w *workflow) Key() string {
+	return w.actorType + actorapi.DaprSeparator + w.actorID
 }

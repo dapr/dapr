@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/idler"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/kit/concurrency/cmap"
 	"github.com/dapr/kit/concurrency/fifo"
@@ -53,8 +54,11 @@ type Interface interface {
 	Halt(ctx context.Context, actorType, actorID string) error
 	HaltIdlable(ctx context.Context, target targets.Idlable) error
 	Drain(fn func(actorType, actorID string) bool)
-	DeleteFromTable(actorType, actorID string)
 	Len() map[string]int
+
+	DeleteFromTable(actorType, actorID string)
+	DeleteFromTableIn(actor targets.Interface, in time.Duration)
+	RemoveIdler(actor targets.Interface)
 }
 
 type Options struct {
@@ -183,7 +187,9 @@ func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, bool,
 	t.actorTypesLock.Lock(actorType)
 	defer t.actorTypesLock.Unlock(actorType)
 
-	target, ok := t.table.Load(key.ConstructComposite(actorType, actorID))
+	akey := key.ConstructComposite(actorType, actorID)
+
+	target, ok := t.table.Load(akey)
 	if ok {
 		return target, false, nil
 	}
@@ -194,7 +200,7 @@ func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, bool,
 	}
 
 	target = factory(actorID)
-	t.table.Store(key.ConstructComposite(actorType, actorID), target)
+	t.table.Store(akey, target)
 
 	return target, true, nil
 }
@@ -273,6 +279,18 @@ func (t *table) DeleteFromTable(actorType, actorID string) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	t.table.Delete(actorType + api.DaprSeparator + actorID)
+}
+
+func (t *table) DeleteFromTableIn(actor targets.Interface, in time.Duration) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	t.idlerQueue.Enqueue(idler.New(actor, in))
+}
+
+func (t *table) RemoveIdler(actor targets.Interface) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	t.idlerQueue.Dequeue(actor.Key())
 }
 
 // HaltAll halts all actors currently in the table.
