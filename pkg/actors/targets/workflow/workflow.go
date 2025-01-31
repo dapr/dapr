@@ -214,9 +214,9 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 		log.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", w.actorID, err)
 		return nil
 	default: // Other error
-		log.Errorf("Workflow actor '%s': execution failed with a non-recoverable error: %v", w.actorID, err)
+		log.Errorf("Workflow actor '%s': execution failed with an error: %v", w.actorID, err)
 		if w.schedulerReminders {
-			return nil
+			return err
 		}
 		return actorerrors.ErrReminderCanceled
 	}
