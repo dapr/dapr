@@ -23,12 +23,13 @@ import (
 
 	"github.com/dapr/dapr/pkg/healthz"
 	"github.com/dapr/dapr/pkg/modes"
+	"github.com/dapr/dapr/pkg/security/fake"
 )
 
 func TestServerConf(t *testing.T) {
 	t.Run("KubernetesMode", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.KubernetesMode,
@@ -36,7 +37,6 @@ func TestServerConf(t *testing.T) {
 			EtcdID:                  "id2",
 			EtcdInitialPeers:        []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
 			EtcdClientPorts:         []string{"id1=5001", "id2=5002"},
-			EtcdClientHTTPPorts:     []string{"id1=5003", "id2=5004"},
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
@@ -54,16 +54,12 @@ func TestServerConf(t *testing.T) {
 		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
 
-		clientHTTPURL := url.URL{
-			Scheme: "http",
-			Host:   "0.0.0.0:5004",
-		}
-		assert.Equal(t, clientHTTPURL, config.ListenClientHttpUrls[0])
+		assert.Empty(t, config.ListenClientHttpUrls)
 	})
 
 	t.Run("StandaloneMode", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -71,7 +67,6 @@ func TestServerConf(t *testing.T) {
 			EtcdID:                  "id2",
 			EtcdInitialPeers:        []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
 			EtcdClientPorts:         []string{"id1=5001", "id2=5002"},
-			EtcdClientHTTPPorts:     []string{"id1=5003", "id2=5004"},
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
@@ -94,16 +89,12 @@ func TestServerConf(t *testing.T) {
 		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
 
-		clientHTTPURL := url.URL{
-			Scheme: "http",
-			Host:   "localhost:5004",
-		}
-		assert.Equal(t, clientHTTPURL, config.ListenClientHttpUrls[0])
+		assert.Empty(t, config.ListenClientHttpUrls)
 	})
 
 	t.Run("StandaloneMode without client http ports", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -111,7 +102,6 @@ func TestServerConf(t *testing.T) {
 			EtcdID:                  "id2",
 			EtcdInitialPeers:        []string{"id1=http://localhost:5001", "id2=http://localhost:5002"},
 			EtcdClientPorts:         []string{"id1=5001", "id2=5002"},
-			EtcdClientHTTPPorts:     nil,
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
@@ -134,7 +124,7 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode listen on 0.0.0.0 when a host", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -142,7 +132,6 @@ func TestServerConf(t *testing.T) {
 			EtcdID:                  "id2",
 			EtcdInitialPeers:        []string{"id1=http://hello1:5001", "id2=http://hello2:5002"},
 			EtcdClientPorts:         []string{"id1=5001", "id2=5002"},
-			EtcdClientHTTPPorts:     nil,
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
@@ -163,7 +152,7 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode listen on IP when an IP", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -171,7 +160,6 @@ func TestServerConf(t *testing.T) {
 			EtcdID:                  "id2",
 			EtcdInitialPeers:        []string{"id1=http://1.2.3.4:5001", "id2=http://1.2.3.4:5002"},
 			EtcdClientPorts:         []string{"id1=5001", "id2=5002"},
-			EtcdClientHTTPPorts:     nil,
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
@@ -192,7 +180,7 @@ func TestServerConf(t *testing.T) {
 
 	t.Run("StandaloneMode listen on HTTP IP when an IP", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -200,7 +188,6 @@ func TestServerConf(t *testing.T) {
 			EtcdID:                  "id2",
 			EtcdInitialPeers:        []string{"id1=http://1.2.3.4:5001", "id2=http://1.2.3.4:5002"},
 			EtcdClientPorts:         []string{"id1=5001", "id2=5002"},
-			EtcdClientHTTPPorts:     []string{"id1=5003", "id2=5004"},
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",
@@ -216,14 +203,12 @@ func TestServerConf(t *testing.T) {
 		}
 		assert.Equal(t, clientURL, config.ListenPeerUrls[0])
 		assert.Equal(t, clientURL, config.ListenClientUrls[0])
-		httpURL, err := url.Parse("http://1.2.3.4:5004")
-		require.NoError(t, err)
-		assert.Equal(t, []url.URL{*httpURL}, config.ListenClientHttpUrls)
+		assert.Empty(t, config.ListenClientHttpUrls)
 	})
 
 	t.Run("expect error when giving bad client ports", func(t *testing.T) {
 		config, err := config(Options{
-			Security:                nil,
+			Security:                fake.New(),
 			ListenAddress:           "",
 			Port:                    0,
 			Mode:                    modes.StandaloneMode,
@@ -231,27 +216,6 @@ func TestServerConf(t *testing.T) {
 			EtcdID:                  "id2",
 			EtcdInitialPeers:        []string{"id1=http://1.2.3.4:5001", "id2=http://1.2.3.4:5002"},
 			EtcdClientPorts:         []string{"id15001"},
-			EtcdClientHTTPPorts:     nil,
-			EtcdSpaceQuota:          0,
-			EtcdCompactionMode:      "",
-			EtcdCompactionRetention: "",
-			Healthz:                 healthz.New(),
-		})
-		require.Error(t, err)
-		assert.Nil(t, config)
-	})
-
-	t.Run("expect error when giving bad HTTP client ports", func(t *testing.T) {
-		config, err := config(Options{
-			Security:                nil,
-			ListenAddress:           "",
-			Port:                    0,
-			Mode:                    modes.StandaloneMode,
-			DataDir:                 "./data",
-			EtcdID:                  "id2",
-			EtcdInitialPeers:        []string{"id1=http://1.2.3.4:5001", "id2=http://1.2.3.4:5002"},
-			EtcdClientPorts:         []string{"id=5001"},
-			EtcdClientHTTPPorts:     []string{"id15001"},
 			EtcdSpaceQuota:          0,
 			EtcdCompactionMode:      "",
 			EtcdCompactionRetention: "",

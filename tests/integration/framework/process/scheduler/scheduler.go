@@ -15,6 +15,7 @@ package scheduler
 
 import (
 	"context"
+	"crypto/tls"
 	"errors"
 	"fmt"
 	"io"
@@ -91,7 +92,6 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		port:            fp.Port(t),
 		healthzPort:     fp.Port(t),
 		metricsPort:     fp.Port(t),
-		initialCluster:  uids + "=http://127.0.0.1:" + strconv.Itoa(fp.Port(t)),
 		etcdClientPorts: []string{uids + "=" + strconv.Itoa(fp.Port(t))},
 		namespace:       "default",
 	}
@@ -114,10 +114,10 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		"--port=" + strconv.Itoa(opts.port),
 		"--healthz-port=" + strconv.Itoa(opts.healthzPort),
 		"--metrics-port=" + strconv.Itoa(opts.metricsPort),
-		"--initial-cluster=" + opts.initialCluster,
 		"--etcd-data-dir=" + dataDir,
 		"--etcd-client-ports=" + strings.Join(opts.etcdClientPorts, ","),
 		"--listen-address=" + opts.listenAddress,
+		"--identity-directory-write=" + filepath.Join(t.TempDir(), "tls"),
 	}
 
 	if opts.sentry != nil {
@@ -130,6 +130,16 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 			"--trust-domain="+opts.sentry.TrustDomain(t),
 		)
 	}
+
+	if opts.initialCluster == nil {
+		if opts.sentry == nil {
+			opts.initialCluster = ptr.Of(uids + "=http://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
+		} else {
+			opts.initialCluster = ptr.Of(uids + "=https://127.0.0.1:" + strconv.Itoa(fp.Port(t)))
+		}
+	}
+
+	args = append(args, "--initial-cluster="+*opts.initialCluster)
 
 	if opts.kubeconfig != nil {
 		args = append(args, "--kubeconfig="+*opts.kubeconfig)
@@ -163,7 +173,7 @@ func New(t *testing.T, fopts ...Option) *Scheduler {
 		port:            opts.port,
 		healthzPort:     opts.healthzPort,
 		metricsPort:     opts.metricsPort,
-		initialCluster:  opts.initialCluster,
+		initialCluster:  *opts.initialCluster,
 		etcdClientPorts: clientPorts,
 		dataDir:         dataDir,
 		sentry:          opts.sentry,
@@ -253,6 +263,30 @@ func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) 
 
 	require.NotNil(t, s.sentry)
 
+	sech := s.security(t, ctx, appID)
+
+	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
+	require.NoError(t, err)
+
+	//nolint:staticcheck
+	conn, err := grpc.DialContext(ctx, s.Address(),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32), grpc.MaxCallSendMsgSize(math.MaxInt32)),
+		sech.GRPCDialOptionMTLS(id),
+		grpc.WithBlock(),
+	)
+	require.NoError(t, err)
+	t.Cleanup(func() { require.NoError(t, conn.Close()) })
+
+	return schedulerv1pb.NewSchedulerClient(conn)
+}
+
+func (s *Scheduler) ipPort(port int) string {
+	return "127.0.0.1:" + strconv.Itoa(port)
+}
+
+func (s *Scheduler) security(t *testing.T, ctx context.Context, appID string) security.Handler {
+	t.Helper()
+
 	sec, err := security.New(ctx, security.Options{
 		SentryAddress:           "localhost:" + strconv.Itoa(s.sentry.Port()),
 		ControlPlaneTrustDomain: s.sentry.TrustDomain(t),
@@ -278,23 +312,7 @@ func (s *Scheduler) ClientMTLS(t *testing.T, ctx context.Context, appID string) 
 	sech, err := sec.Handler(ctx)
 	require.NoError(t, err)
 
-	id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
-	require.NoError(t, err)
-
-	//nolint:staticcheck
-	conn, err := grpc.DialContext(ctx, s.Address(),
-		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32), grpc.MaxCallSendMsgSize(math.MaxInt32)),
-		sech.GRPCDialOptionMTLS(id),
-		grpc.WithBlock(),
-	)
-	require.NoError(t, err)
-	t.Cleanup(func() { require.NoError(t, conn.Close()) })
-
-	return schedulerv1pb.NewSchedulerClient(conn)
-}
-
-func (s *Scheduler) ipPort(port int) string {
-	return "127.0.0.1:" + strconv.Itoa(port)
+	return sech
 }
 
 func (s *Scheduler) MetricsAddress() string {
@@ -308,12 +326,21 @@ func (s *Scheduler) Metrics(t *testing.T, ctx context.Context) *metrics.Metrics 
 	return metrics.New(t, ctx, fmt.Sprintf("http://%s/metrics", s.MetricsAddress()))
 }
 
-func (s *Scheduler) ETCDClient(t *testing.T) *clientv3.Client {
+func (s *Scheduler) ETCDClient(t *testing.T, ctx context.Context) *clientv3.Client {
 	t.Helper()
+
+	var tlsCfg *tls.Config
+	if s.sentry != nil {
+		sech := s.security(t, ctx, "dapr-scheduler")
+		id, err := spiffeid.FromSegments(sech.ControlPlaneTrustDomain(), "ns", s.namespace, "dapr-scheduler")
+		require.NoError(t, err)
+		tlsCfg = sech.MTLSClientConfig(id)
+	}
 
 	client, err := clientv3.New(clientv3.Config{
 		Endpoints:   []string{"127.0.0.1:" + s.EtcdClientPort()},
 		DialTimeout: 40 * time.Second,
+		TLS:         tlsCfg,
 	})
 	require.NoError(t, err)
 
@@ -326,7 +353,7 @@ func (s *Scheduler) ETCDClient(t *testing.T) *clientv3.Client {
 
 func (s *Scheduler) EtcdJobs(t *testing.T, ctx context.Context) []*mvccpb.KeyValue {
 	t.Helper()
-	resp, err := s.ETCDClient(t).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	resp, err := s.ETCDClient(t, ctx).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
 	return resp.Kvs
 }

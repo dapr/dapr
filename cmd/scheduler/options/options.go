@@ -16,6 +16,8 @@ package options
 import (
 	"errors"
 	"fmt"
+	"os"
+	"path/filepath"
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -49,13 +51,14 @@ type Options struct {
 	EtcdInitialPeers        []string
 	EtcdDataDir             string
 	EtcdClientPorts         []string
-	EtcdClientHTTPPorts     []string
 	EtcdSpaceQuota          int64
 	EtcdCompactionMode      string
 	EtcdCompactionRetention string
 	EtcdSnapshotCount       uint64
 	EtcdMaxSnapshots        uint
 	EtcdMaxWALs             uint
+
+	IdentityDirectoryWrite string
 
 	Logger  logger.Options
 	Metrics *metrics.FlagOptions
@@ -93,13 +96,18 @@ func New(origArgs []string) (*Options, error) {
 	fs.StringSliceVar(&opts.EtcdInitialPeers, "initial-cluster", []string{"dapr-scheduler-server-0=http://localhost:2380"}, "Initial etcd cluster peers")
 	fs.StringVar(&opts.EtcdDataDir, "etcd-data-dir", "./data", "Directory to store scheduler etcd data")
 	fs.StringSliceVar(&opts.EtcdClientPorts, "etcd-client-ports", []string{"dapr-scheduler-server-0=2379"}, "Ports for etcd client communication")
-	fs.StringSliceVar(&opts.EtcdClientHTTPPorts, "etcd-client-http-ports", nil, "Ports for etcd client http communication")
 	fs.StringVar(&opts.etcdSpaceQuota, "etcd-space-quota", "9.2E", "Space quota for etcd")
 	fs.StringVar(&opts.EtcdCompactionMode, "etcd-compaction-mode", "periodic", "Compaction mode for etcd. Can be 'periodic' or 'revision'")
 	fs.StringVar(&opts.EtcdCompactionRetention, "etcd-compaction-retention", "10m", "Compaction retention for etcd. Can express time  or number of revisions, depending on the value of 'etcd-compaction-mode'")
 	fs.Uint64Var(&opts.EtcdSnapshotCount, "etcd-snapshot-count", 10000, "Number of committed transactions to trigger a snapshot to disk.")
 	fs.UintVar(&opts.EtcdMaxSnapshots, "etcd-max-snapshots", 5, "Maximum number of snapshot files to retain (0 is unlimited).")
 	fs.UintVar(&opts.EtcdMaxWALs, "etcd-max-wals", 5, "Maximum number of write-ahead logs to retain (0 is unlimited).")
+
+	fs.StringVar(&opts.IdentityDirectoryWrite, "identity-directory-write", filepath.Join(os.TempDir(), "secrets/dapr.io/tls"), "Directory to write identity certificate certificate, private key and trust anchors")
+
+	if err := fs.MarkHidden("identity-directory-write"); err != nil {
+		log.Fatal(err)
+	}
 
 	opts.Logger = logger.DefaultOptions()
 	opts.Logger.AttachCmdFlags(fs.StringVar, fs.BoolVar)

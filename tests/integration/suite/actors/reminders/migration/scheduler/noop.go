@@ -91,14 +91,14 @@ spec:
 		Ttl:       "10000s",
 	})
 	require.NoError(t, err)
-	resp, err := n.scheduler.ETCDClient(t).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	resp, err := n.scheduler.ETCDClient(t, ctx).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
 	assert.Empty(t, resp.Kvs)
 	daprd1.Cleanup(t)
 
 	daprd2.Run(t, ctx)
 	daprd2.WaitUntilRunning(t, ctx)
-	resp, err = n.scheduler.ETCDClient(t).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	resp, err = n.scheduler.ETCDClient(t, ctx).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
 	assert.Empty(t, resp.Kvs)
 	daprd2.Cleanup(t)
