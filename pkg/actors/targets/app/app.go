@@ -285,7 +285,6 @@ func (a *app) Deactivate(ctx context.Context) error {
 }
 
 // Key returns the key for this unique actor.
-// This is implemented to comply with the queueable interface.
 func (a *app) Key() string {
 	return a.actorType + api.DaprSeparator + a.actorID
 }
@@ -299,10 +298,6 @@ func (a *app) CloseUntil(d time.Duration) {
 // This is implemented to comply with the queueable interface.
 func (a *app) ScheduledTime() time.Time {
 	return *a.idleAt.Load()
-}
-
-func (a *app) IdleAt(t time.Time) {
-	a.idleAt.Store(&t)
 }
 
 func (a *app) InvokeStream(context.Context, *internalv1pb.InternalInvokeRequest, chan<- *internalv1pb.InternalInvokeResponse) error {
