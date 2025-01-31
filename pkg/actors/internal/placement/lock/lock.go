@@ -104,14 +104,14 @@ func (l *Lock) handleHold(h *hold) {
 	l.wg.Add(1)
 	var done bool
 	doneCh := make(chan bool)
-	rctx, cancel := context.WithCancel(h.rctx)
+	rctx, cancel := context.WithCancelCause(h.rctx)
 	i := l.rcancelx
 
 	rcancel := func() {
 		l.rcancelLock.Lock()
 		if !done {
 			close(doneCh)
-			cancel()
+			cancel(errors.New("placement is disseminating"))
 			delete(l.rcancels, i)
 			l.wg.Done()
 			done = true

@@ -174,9 +174,9 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 		}
 		return nil
 	default: // Other error
-		log.Errorf("%s: execution failed with a non-recoverable error: %v", a.actorID, err)
+		log.Errorf("%s: execution failed with an error: %v", a.actorID, err)
 		if a.schedulerReminders {
-			return nil
+			return err
 		}
 		// TODO: Reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 		return actorerrors.ErrReminderCanceled
