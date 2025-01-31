@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/resource"
@@ -136,6 +137,15 @@ func New(origArgs []string) (*Options, error) {
 
 	if fs.Changed("override-broadcast-host-port") {
 		opts.OverrideBroadcastHostPort = &opts.overrideBroadcastHostPort
+	}
+
+	if opts.Mode == string(modes.KubernetesMode) {
+		for _, c := range opts.EtcdInitialPeers {
+			if strings.HasPrefix(c, opts.ID) {
+				opts.ID = strings.Split(c, "=")[0]
+				break
+			}
+		}
 	}
 
 	return &opts, nil

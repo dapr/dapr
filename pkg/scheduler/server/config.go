@@ -81,10 +81,12 @@ func config(opts Options) (*embed.Config, error) {
 		Scheme: scheme,
 		Host:   fmt.Sprintf("%s:%s", etcdURL, clientPorts[opts.EtcdID]),
 	}}
+	config.ClusterState = embed.ClusterStateFlagNew
 
 	switch opts.Mode {
 	// can't use domain name for k8s for config.ListenPeerUrls && config.ListenClientUrls
 	case modes.KubernetesMode:
+		config.ForceNewCluster = true
 		config.Dir = opts.DataDir
 		etcdIP := "0.0.0.0"
 		config.ListenPeerUrls = []url.URL{{

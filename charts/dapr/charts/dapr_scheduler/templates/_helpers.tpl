@@ -27,30 +27,15 @@ If release name contains chart name it will be used as a full name.
 Create initial cluster peer list dynamically based on replicaCount.
 */}}
 {{- define "dapr_scheduler.initialcluster" -}}
+{{- $etcdClientPorts := "" -}}
 {{- $initialCluster := "" -}}
 {{- $namespace := .Release.Namespace -}}
 {{- $replicaCount := include "dapr_scheduler.get-replicas" . | int -}}
 {{- range $i, $e := until $replicaCount -}}
-{{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
-{{- $svcName := printf "%s.dapr-scheduler-server.%s.svc.cluster.local" $instanceName $namespace -}}
+{{- $instanceHost := printf "dapr-scheduler-server-%d" $i -}}
+{{- $instanceName := printf "%s-%s" $instanceHost (randAlphaNum 6) -}}
+{{- $svcName := printf "%s.dapr-scheduler-server.%s.svc.cluster.local" $instanceHost $namespace -}}
 {{- $peer := printf "%s=https://%s:%d" $instanceName $svcName (int $.Values.ports.etcdGRPCPeerPort) -}}
-{{- $initialCluster = printf "%s%s" $initialCluster $peer -}}
-{{- if ne (int $i) (sub $replicaCount 1) -}}
-{{- $initialCluster = printf "%s," $initialCluster -}}
-{{- end -}}
-{{- end -}}
-{{- $initialCluster -}}
-{{- end -}}
-
-{{/*
-Create etcd client ports list dynamically based on replicaCount.
-*/}}
-{{- define "dapr_scheduler.etcdclientports" -}}
-{{- $etcdClientPorts := "" -}}
-{{- $namespace := .Release.Namespace -}}
-{{- $replicaCount := include "dapr_scheduler.get-replicas" . | int -}}
-{{- range $i, $e := until $replicaCount -}}
-{{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
 {{- $clientPort := int $.Values.ports.etcdGRPCClientPort -}}
 {{- $instancePortPair := printf "%s=%d" $instanceName $clientPort -}}
 {{- if gt $i 0 -}}
@@ -58,28 +43,16 @@ Create etcd client ports list dynamically based on replicaCount.
 {{- else -}}
 {{- $etcdClientPorts = $instancePortPair -}}
 {{- end -}}
-{{- end -}}
-{{- $etcdClientPorts -}}
-{{- end -}}
-
-{{/*
-Create etcd client http ports list dynamically based on replicaCount.
-*/}}
-{{- define "dapr_scheduler.etcdclienthttpports" -}}
-{{- $etcdClientHttpPorts := "" -}}
-{{- $namespace := .Release.Namespace -}}
-{{- $replicaCount := include "dapr_scheduler.get-replicas" . | int -}}
-{{- range $i, $e := until $replicaCount -}}
-{{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
-{{- $clientPort := int $.Values.ports.etcdHTTPClientPort -}}
 {{- $instancePortPair := printf "%s=%d" $instanceName $clientPort -}}
-{{- if gt $i 0 -}}
-{{- $etcdClientHttpPorts = printf "%s,%s" $etcdClientHttpPorts $instancePortPair -}}
-{{- else -}}
-{{- $etcdClientHttpPorts = $instancePortPair -}}
+{{- $initialCluster = printf "%s%s" $initialCluster $peer -}}
+{{- if ne (int $i) (sub $replicaCount 1) -}}
+{{- $initialCluster = printf "%s," $initialCluster -}}
 {{- end -}}
 {{- end -}}
-{{- $etcdClientHttpPorts -}}
+{{- printf "- \"--initial-cluster\"\n" }}
+{{- printf "- \"%s\"\n" $initialCluster | indent 8 }}
+{{- printf "- \"--etcd-client-ports\"\n" }}
+{{- printf "- \"%s\"" $etcdClientPorts | indent 8 }}
 {{- end -}}
 
 {{/*

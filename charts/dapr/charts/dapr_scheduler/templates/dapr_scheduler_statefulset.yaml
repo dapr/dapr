@@ -135,10 +135,7 @@ spec:
         - "--listen-address=0.0.0.0"
         - "--id"
         - "$(SCHEDULER_ID)"
-        - "--initial-cluster"
-        - {{ include "dapr_scheduler.initialcluster" . | toYaml | trim }}
-        - "--etcd-client-ports"
-        - {{ include "dapr_scheduler.etcdclientports" . | toYaml | trim }}
+        {{ include "dapr_scheduler.initialcluster" . }}
         - "--log-level"
         - {{ .Values.logLevel }}
 {{- if eq .Values.global.logAsJson true }}
