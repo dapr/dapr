@@ -15,71 +15,117 @@ package monitoring
 
 import (
 	"context"
+	"fmt"
+	"os"
 	"time"
 
-	"go.opencensus.io/stats"
-	"go.opencensus.io/stats/view"
-	"go.opencensus.io/tag"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
+	"go.opentelemetry.io/otel/exporters/prometheus"
+	"go.opentelemetry.io/otel/metric"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+	"go.opentelemetry.io/otel/sdk/resource"
+	semconv "go.opentelemetry.io/otel/semconv/v1.17.0"
 
-	diagUtils "github.com/dapr/dapr/pkg/diagnostics/utils"
+	env "github.com/dapr/dapr/pkg/config/env"
 )
 
 var (
-	runtimesTotal = stats.Int64(
-		"placement/runtimes_total",
-		"The total number of runtimes reported to placement service.",
-		stats.UnitDimensionless)
-	actorRuntimesTotal = stats.Int64(
-		"placement/actor_runtimes_total",
-		"The total number of actor runtimes reported to placement service.",
-		stats.UnitDimensionless)
+	meter = otel.Meter("dapr/placement")
 
-	actorHeartbeatTimestamp = stats.Int64(
-		"placement/actor_heartbeat_timestamp",
-		"The actor's heartbeat timestamp (in seconds) was last reported to the placement service.",
-		stats.UnitDimensionless)
+	runtimesTotal       metric.Int64Gauge
+	actorRuntimesTotal  metric.Int64Gauge
+	actorHeartbeatTotal metric.Int64Gauge
 
-	// Metrics tags
-	appIDKey     = tag.MustNewKey("app_id")
-	actorTypeKey = tag.MustNewKey("actor_type")
-	hostNameKey  = tag.MustNewKey("host_name")
-	namespaceKey = tag.MustNewKey("host_namespace")
-	podNameKey   = tag.MustNewKey("pod_name")
+	// Metrics attributes
+	appIDKey     = attribute.Key("app_id")
+	actorTypeKey = attribute.Key("actor_type")
+	hostNameKey  = attribute.Key("host_name")
+	namespaceKey = attribute.Key("host_namespace")
+	podNameKey   = attribute.Key("pod_name")
 )
+
+// InitMetrics initializes the placement service metrics.
+func InitMetrics(ctx context.Context) error {
+	collectorEndpoint := os.Getenv(env.OtlpExporterEndpoint) // TODO: Update this to match dapr
+
+	// Set up the Prometheus exporter (for the /metrics endpoint)
+	promExporter, err := prometheus.New(prometheus.WithNamespace("dapr"))
+	if err != nil {
+		return fmt.Errorf("failed to create Prometheus exporter: %w", err)
+	}
+
+	// Create a new resource to associate metadata with metrics
+	res, err := resource.New(context.Background(),
+		resource.WithAttributes(semconv.ServiceNameKey.String("dapr-placement")),
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create resource: %w", err)
+	}
+
+	// Set up the OTLP exporter (for pushing to an OTLP receiver)
+	var mp *sdkmetric.MeterProvider
+	if collectorEndpoint != "" {
+		otlpExporter, err := otlpmetricgrpc.New(ctx,
+			otlpmetricgrpc.WithInsecure(),
+			otlpmetricgrpc.WithEndpoint("localhost:4317"), // TODO: hardcoding it temporarily
+		)
+		if err != nil {
+			return fmt.Errorf("failed to create OTLP exporter: %w", err)
+		}
+		// TODO: Support for TLS
+
+		mp = sdkmetric.NewMeterProvider(
+			sdkmetric.WithResource(res),
+			sdkmetric.WithReader(promExporter),                              // Add Prometheus exporter as a reader
+			sdkmetric.WithReader(sdkmetric.NewPeriodicReader(otlpExporter)), // Add OTLP exporter with periodic reading. Interval and timeout are provided through ENV variables
+		)
+
+	} else {
+		mp = sdkmetric.NewMeterProvider(
+			sdkmetric.WithResource(res),
+			sdkmetric.WithReader(promExporter), // Add Prometheus exporter as a reader
+		)
+	}
+
+	// Set the global MeterProvider
+	otel.SetMeterProvider(mp)
+
+	// Create metrics
+	runtimesTotal, err = meter.Int64Gauge("placement.runtimes_total",
+		metric.WithDescription("The total number of runtimes reported to placement service."))
+	if err != nil {
+		return fmt.Errorf("failed to create runtimes_total metric: %w", err)
+	}
+
+	actorRuntimesTotal, err = meter.Int64Gauge("placement.actor_runtimes_total",
+		metric.WithDescription("The total number of actor runtimes reported to placement service."))
+	if err != nil {
+		return fmt.Errorf("failed to create actor_runtimes_total metric: %w", err)
+	}
+
+	actorHeartbeatTotal, err = meter.Int64Gauge("placement.actor_heartbeat_timestamp",
+		metric.WithDescription("The actor's heartbeat timestamp (in seconds) was last reported to the placement service."))
+	if err != nil {
+		return fmt.Errorf("failed to create actor_heartbeat_timestamp metric: %w", err)
+	}
+
+	return nil
+}
 
 // RecordRuntimesCount records the number of connected runtimes.
 func RecordRuntimesCount(count int, ns string) {
-	stats.RecordWithTags(
-		context.Background(),
-		diagUtils.WithTags(actorHeartbeatTimestamp.Name(), namespaceKey, ns),
-		runtimesTotal.M(int64(count)),
-	)
+	//runtimesTotal.Record(context.Background(), int64(count), metric.WithAttributes(namespaceKey.String(ns)))
+	runtimesTotal.Record(context.Background(), int64(count), metric.WithAttributes(namespaceKey.String(ns)))
 }
 
-// RecordActorRuntimesCount records the number of valid actor runtimes.
+// RecordActorRuntimesCount records the number of actor-hosting runtimes.
 func RecordActorRuntimesCount(count int, ns string) {
-	stats.RecordWithTags(
-		context.Background(),
-		diagUtils.WithTags(actorHeartbeatTimestamp.Name(), namespaceKey, ns),
-		actorRuntimesTotal.M(int64(count)),
-	)
+	actorRuntimesTotal.Record(context.Background(), int64(count), metric.WithAttributes(namespaceKey.String(ns)))
 }
 
 // RecordActorHeartbeat records the actor heartbeat, in seconds since epoch, with actor type, host and pod name.
-func RecordActorHeartbeat(appID, actorType, host, namespace, pod string, heartbeatTime time.Time) {
-	stats.RecordWithTags(
-		context.Background(),
-		diagUtils.WithTags(actorHeartbeatTimestamp.Name(), appIDKey, appID, actorTypeKey, actorType, hostNameKey, host, namespaceKey, namespace, podNameKey, pod),
-		actorHeartbeatTimestamp.M(heartbeatTime.Unix()))
-}
-
-// InitMetrics initialize the placement service metrics.
-func InitMetrics() error {
-	err := view.Register(
-		diagUtils.NewMeasureView(runtimesTotal, []tag.Key{namespaceKey}, view.LastValue()),
-		diagUtils.NewMeasureView(actorRuntimesTotal, []tag.Key{namespaceKey}, view.LastValue()),
-		diagUtils.NewMeasureView(actorHeartbeatTimestamp, []tag.Key{appIDKey, actorTypeKey, hostNameKey, namespaceKey, podNameKey}, view.LastValue()),
-	)
-
-	return err
+func RecordActorHeartbeat(appID, actorType, host, ns, pod string, heartbeatTime time.Time) {
+	actorHeartbeatTotal.Record(context.Background(), heartbeatTime.Unix(), metric.WithAttributes(namespaceKey.String(ns), appIDKey.String(appID), actorTypeKey.String(actorType), hostNameKey.String(host), podNameKey.String(pod)))
 }

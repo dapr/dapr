@@ -59,11 +59,11 @@ func Run() {
 		Healthz:   healthz,
 	})
 
-	if e := monitoring.InitMetrics(); e != nil {
+	ctx := signals.Context()
+	if e := monitoring.InitMetrics(ctx); e != nil {
 		log.Fatal(e)
 	}
 
-	ctx := signals.Context()
 	secProvider, err := security.New(ctx, security.Options{
 		SentryAddress:           opts.SentryAddress,
 		ControlPlaneTrustDomain: opts.TrustDomain,
