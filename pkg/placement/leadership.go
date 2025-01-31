@@ -15,9 +15,10 @@ package placement
 
 import (
 	"context"
-	"errors"
-	"sync/atomic"
+	"sync"
 	"time"
+
+	"github.com/dapr/dapr/pkg/placement/monitoring"
 )
 
 // barrierWriteTimeout is the maximum duration to wait for the barrier command
@@ -26,90 +27,100 @@ import (
 // that the FSM state reflects all queued writes.
 const barrierWriteTimeout = 2 * time.Minute
 
-// MonitorLeadership is used to monitor if we acquire or lose our role
-// as the leader in the Raft cluster. There is some work the leader is
-// expected to do, so we must react to changes
-//
-// reference: https://github.com/hashicorp/consul/blob/master/agent/consul/leader.go
-func (p *Service) MonitorLeadership(parentCtx context.Context) error {
-	if p.closed.Load() {
-		return errors.New("placement is closed")
-	}
-
-	ctx, cancel := context.WithCancel(parentCtx)
-	p.wg.Add(1)
-	go func() {
-		defer p.wg.Done()
-		defer cancel()
-		select {
-		case <-parentCtx.Done():
-		case <-p.closedCh:
-		}
-	}()
+// MonitorLeadership is used to monitor leadership changes in the Raft cluster
+// so we can update the leadership status of the Placement server
+func (p *Service) MonitorLeadership(ctx context.Context) error {
+	var leaderLoopWg sync.WaitGroup
+	var leaderCtx context.Context
+	var leaderCancelFn context.CancelFunc
 
 	raft, err := p.raftNode.Raft(ctx)
 	if err != nil {
 		return err
 	}
-	var (
-		leaderCh          = raft.LeaderCh()
-		leaderLoopRunning atomic.Bool
-		loopNotRunning    = make(chan struct{})
-	)
-	close(loopNotRunning)
+	raftLeaderCh := raft.LeaderCh()
 
-	var leaderLoopCancel context.CancelFunc
-	var leaderCtx context.Context
+	startLeaderLoop := func() {
+		if leaderCtx != nil {
+			log.Error("attempted to start the leader loop while running", p.raftNode.GetID())
+			return
+		}
+
+		leaderCtx, leaderCancelFn = context.WithCancel(ctx)
+
+		leaderLoopWg.Add(1)
+
+		go func(ctx context.Context) {
+			defer leaderLoopWg.Done()
+			err := p.leaderLoop(ctx)
+			if err != nil {
+				log.Error("placement leader loop failed", "error", err)
+			}
+		}(leaderCtx)
+		log.Infof("raft cluster leadership acquired - %s", p.raftNode.GetID())
+		return
+	}
+
+	stopLeaderLoop := func() {
+		if leaderCtx == nil || leaderCancelFn == nil {
+			log.Error("attempted to stop the leader loop while not running", p.raftNode.GetID())
+			return
+		}
+
+		log.Debug("shutting down leader loop", p.raftNode.GetID())
+		leaderCancelFn()
+		leaderLoopWg.Wait()
+		leaderCtx = nil
+		leaderCancelFn = nil
+
+		log.Infof("raft cluster leadership lost - %s", p.raftNode.GetID())
+	}
+
+	currentLeadershipStatus := false
 	for {
 		select {
-		case <-ctx.Done():
-			return nil
-		case isLeader := <-leaderCh:
-			if isLeader {
-				if leaderLoopRunning.CompareAndSwap(false, true) {
-					loopNotRunning = make(chan struct{})
-					leaderCtx, leaderLoopCancel = context.WithCancel(ctx)
-					p.wg.Add(1)
-					go func() {
-						defer func() {
-							p.wg.Done()
-							close(loopNotRunning)
-							leaderLoopRunning.Store(false)
-							// If the placement server is restarted without receiving a leadership change event,
-							// the leaderLoopCancel will not be nil, so we need to cancel it here.
-							if leaderLoopCancel != nil {
-								leaderLoopCancel()
-								leaderLoopCancel = nil
-							}
-						}()
+		case newLeadershipStatus := <-raftLeaderCh:
+			monitoring.RecordRaftPlacementLeaderStatus(newLeadershipStatus)
 
-						log.Info("Cluster leadership acquired")
-						err := p.leaderLoop(leaderCtx)
-						if err != nil {
-							log.Error("placement leader loop failed", "error", err)
-						}
-					}()
+			if currentLeadershipStatus != newLeadershipStatus {
+				// Regular leadership change (node acquired or lost leadership)
+				currentLeadershipStatus = newLeadershipStatus
+				if newLeadershipStatus {
+					startLeaderLoop()
+				} else {
+					stopLeaderLoop()
 				}
+			} else if currentLeadershipStatus && newLeadershipStatus {
+				// Leadership Flapping:
+				// Server lost and then gained leadership shortly after
+				//
+				// The raft implementation will drop leadership events and only send the last one
+				// if the receiver blocks on the leadership chanel and the leadership changes
+				// multiple times during the block.
+				//
+				// Example:
+				//  - Node acquired leadership and "true" was sent on the leadership channel (msg 1)
+				//  - Client processes the leadership status change
+				//  - Before the client finishes the processing, leadership changes to false (msg2)
+				// 	- Leadership changes to true again (msg3)
+				//	- Client finishes processing the first leadership status change
+				//	- Next message received on the leadership channel is "true" (msg3).
+				// During this time, this server may have received Raft transitions that
+				// haven't been applied to the FSM yet.
+				// We need to ensure that FSM is caught up before we start processing as a leader.
+				log.Debugf("raft cluster leadership lost briefly on %s.  Waiting for FSM to catch up.", p.listenAddress)
+
+				stopLeaderLoop()
+				startLeaderLoop()
 			} else {
-				select {
-				case <-loopNotRunning:
-					log.Error("Attempted to stop leader loop when it was not running")
-					continue
-				default:
-				}
-
-				log.Info("Shutting down leader loop")
-				if leaderLoopCancel != nil {
-					leaderLoopCancel()
-					leaderLoopCancel = nil
-				}
-				select {
-				case <-loopNotRunning:
-				case <-ctx.Done():
-					return nil
-				}
-				log.Info("Cluster leadership lost")
+				// The node lost leadership, regained it shortly and lost it again, or is starting up as a follower
+				log.Debugf("cluster leadership gained and lost leadership immediately on %s", p.listenAddress)
 			}
+		case <-ctx.Done():
+			if leaderCtx != nil {
+				stopLeaderLoop()
+			}
+			return nil
 		}
 	}
 }
@@ -118,9 +129,9 @@ func (p *Service) leaderLoop(ctx context.Context) error {
 	// This loop is to ensure the FSM reflects all queued writes by applying Barrier
 	// and completes leadership establishment before becoming a leader.
 	for !p.hasLeadership.Load() {
-		// for earlier stop
 		select {
 		case <-ctx.Done():
+			p.revokeLeadership()
 			return nil
 		default:
 			// nop
@@ -133,30 +144,31 @@ func (p *Service) leaderLoop(ctx context.Context) error {
 
 		barrier := raft.Barrier(barrierWriteTimeout)
 		if err := barrier.Error(); err != nil {
-			log.Error("failed to wait for barrier", "error", err)
+			log.Error("failed to wait for raft barrier", "error", err)
 			continue
 		}
 
 		if !p.hasLeadership.Load() {
 			p.establishLeadership()
-			log.Info("leader is established.")
-			// revoke leadership process must be done before leaderLoop() ends.
-			defer p.revokeLeadership()
+			log.Info("placement server leadership acquired", p.listenAddress)
 		}
 	}
 
+	// revoke leadership process must be done before leaderLoop() ends.
+	defer p.revokeLeadership()
 	p.membershipChangeWorker(ctx)
 	return nil
 }
 
 func (p *Service) establishLeadership() {
-	// Give more time to let each runtime to find the leader and connect to the leader.
 	p.membershipCh = make(chan hostMemberChange, membershipChangeChSize)
 	p.hasLeadership.Store(true)
+	monitoring.RecordPlacementLeaderStatus(true)
 }
 
 func (p *Service) revokeLeadership() {
 	p.hasLeadership.Store(false)
+	monitoring.RecordPlacementLeaderStatus(false)
 
 	log.Info("Waiting until all connections are drained")
 	p.streamConnGroup.Wait()

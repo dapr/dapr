@@ -18,6 +18,7 @@ import (
 	"errors"
 	"fmt"
 	"io"
+	"math"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -36,8 +37,10 @@ import (
 	placementv1pb "github.com/dapr/dapr/pkg/proto/placement/v1"
 	"github.com/dapr/dapr/pkg/security"
 	"github.com/dapr/dapr/pkg/security/spiffe"
+	"github.com/dapr/kit/concurrency"
 	"github.com/dapr/kit/concurrency/cmap"
 	"github.com/dapr/kit/logger"
+	"github.com/dapr/kit/ptr"
 )
 
 var log = logger.NewLogger("dapr.placement")
@@ -159,14 +162,12 @@ type Service struct {
 
 	htarget  healthz.Target
 	running  atomic.Bool
-	closed   atomic.Bool
 	closedCh chan struct{}
 	wg       sync.WaitGroup
 }
 
-// ServiceOpts contains options for the NewPlacementService method.
+// ServiceOpts contains options for the New method.
 type ServiceOpts struct {
-	RaftNode           *raft.Server
 	MaxAPILevel        *uint32
 	MinAPILevel        uint32
 	SecProvider        security.Provider
@@ -176,14 +177,32 @@ type ServiceOpts struct {
 	KeepAliveTime      time.Duration
 	KeepAliveTimeout   time.Duration
 	DisseminateTimeout time.Duration
+	Raft               raft.Options
 }
 
-// NewPlacementService returns a new placement service.
-func NewPlacementService(opts ServiceOpts) *Service {
+func (o *ServiceOpts) SetMinAPILevel(apiLevel int) {
+	if apiLevel >= 0 && apiLevel < math.MaxInt32 {
+		o.MinAPILevel = uint32(apiLevel)
+	}
+}
+
+func (o *ServiceOpts) SetMaxAPILevel(apiLevel int) {
+	if apiLevel >= 0 && apiLevel < math.MaxInt32 {
+		o.MaxAPILevel = ptr.Of(uint32(apiLevel))
+	}
+}
+
+// New returns a new placement service.
+func New(opts ServiceOpts) (*Service, error) {
+	raftServer, err := raft.New(opts.Raft)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create raft server: %w", err)
+	}
+
 	return &Service{
 		streamConnPool:      newStreamConnPool(),
 		membershipCh:        make(chan hostMemberChange, membershipChangeChSize),
-		raftNode:            opts.RaftNode,
+		raftNode:            raftServer,
 		maxAPILevel:         opts.MaxAPILevel,
 		minAPILevel:         opts.MinAPILevel,
 		clock:               &clock.RealClock{},
@@ -198,21 +217,32 @@ func NewPlacementService(opts ServiceOpts) *Service {
 		port:                opts.Port,
 		listenAddress:       opts.ListenAddress,
 		htarget:             opts.Healthz.AddTarget(),
-	}
+	}, nil
 }
 
-// Start starts the placement service gRPC server.
-// Blocks until the service is closed and all connections are drained.
-func (p *Service) Start(ctx context.Context) error {
-	defer p.htarget.NotReady()
-
-	if p.closed.Load() {
-		return errors.New("placement service is closed")
-	}
-
+func (p *Service) Run(ctx context.Context) error {
 	if !p.running.CompareAndSwap(false, true) {
 		return errors.New("placement service is already running")
 	}
+
+	log.Info("Placement service is starting...")
+
+	runners := []concurrency.Runner{
+		p.runServer,
+		p.raftNode.StartRaft,
+		p.MonitorLeadership,
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			close(p.closedCh)
+			return nil
+		},
+	}
+
+	return concurrency.NewRunnerManager(runners...).Run(ctx)
+}
+
+func (p *Service) runServer(ctx context.Context) error {
+	defer p.htarget.NotReady()
 
 	sec, err := p.sec.Handler(ctx)
 	if err != nil {
@@ -235,151 +265,158 @@ func (p *Service) Start(ctx context.Context) error {
 
 	log.Infof("Placement service started on port %d", serverListener.Addr().(*net.TCPAddr).Port)
 
-	errCh := make(chan error)
-	go func() {
-		errCh <- grpcServer.Serve(serverListener)
-		log.Info("Placement service stopped")
-	}()
-
 	p.htarget.Ready()
-	<-ctx.Done()
 
-	if p.closed.CompareAndSwap(false, true) {
-		close(p.closedCh)
-	}
-
-	grpcServer.GracefulStop()
-	p.wg.Wait()
-
-	return <-errCh
+	return concurrency.NewRunnerManager(
+		func(ctx context.Context) error {
+			log.Infof("Running Placement gRPC server on port %d", p.port)
+			if err := grpcServer.Serve(serverListener); err != nil {
+				return fmt.Errorf("failed to serve: %w", err)
+			}
+			return nil
+		},
+		func(ctx context.Context) error {
+			<-ctx.Done()
+			grpcServer.GracefulStop()
+			log.Info("Placement GRPC server stopped")
+			p.wg.Wait()
+			return nil
+		},
+	).Run(ctx)
 }
 
 // ReportDaprStatus gets a heartbeat report from different Dapr hosts.
 func (p *Service) ReportDaprStatus(stream placementv1pb.Placement_ReportDaprStatusServer) error { //nolint:nosnakecase
-	registeredMemberID := ""
-	isActorHost := false
+	if !p.hasLeadership.Load() {
+		return status.Errorf(codes.FailedPrecondition, "node id=%s is not a leader. Only the leader can serve requests", p.raftNode.GetID())
+	}
 
-	clientID, err := p.validateClient(stream)
+	var isActorHost atomic.Bool // Does the daprd sidecar host any actor types
+
+	spiffeClientID, err := p.validateClient(stream)
 	if err != nil {
 		return err
 	}
 
-	firstMessage, err := p.receiveAndValidateFirstMessage(stream, clientID)
+	firstMessage, err := stream.Recv()
 	if err != nil {
+		log.Errorf("Failed to receive the first message: %v", err)
+		return status.Errorf(codes.Internal, "failed to receive the first message: %v", err)
+	}
+
+	err = p.validateFirstMessage(firstMessage, spiffeClientID)
+	if err != nil {
+		log.Errorf("First message validation failed: %v", err)
+		return err
+	}
+
+	// Attach a new context to the stream, so that we can cancel it if there's a problem
+	// during dissemination (outside of this go routine)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	daprStream := newDaprdStream(firstMessage, stream, cancel)
+	p.streamConnGroup.Add(1)
+	p.streamConnPool.add(daprStream)
+
+	// Clean up when a stream is disconnected or when the placement service loses leadership
+	defer func() {
+		p.streamConnGroup.Done()
+		p.streamConnPool.delete(daprStream)
+	}()
+
+	err = p.handleNewConnection(firstMessage, daprStream)
+	if err != nil {
+		log.Errorf("Handling new connection failed for host %s: %v", firstMessage.GetName(), err)
 		return err
 	}
 
 	// Older versions won't be sending the namespace in subsequent messages either,
 	// so we'll save this one in a separate variable
 	namespace := firstMessage.GetNamespace()
+	hostName := firstMessage.GetName()
+	appID := firstMessage.GetId()
 
-	daprStream := newDaprdStream(firstMessage, stream)
-	p.streamConnGroup.Add(1)
-	p.streamConnPool.add(daprStream)
+	// Read messages off the stream and send them to the recvCh
+	go func() {
+		defer func() {
+			close(daprStream.recvCh)
+		}()
 
-	defer func() {
-		// Runs when a stream is disconnected or when the placement service loses leadership
-		p.streamConnGroup.Done()
-		p.streamConnPool.delete(daprStream)
+		// Send the first message we read above
+		if p.hasLeadership.Load() {
+			select {
+			case daprStream.recvCh <- recvResult{host: firstMessage, err: nil}:
+				log.Debugf("received first message from %s: Id: %s, Name: %s, Namespace: %s, Actors: %s", hostName, appID, hostName, namespace, firstMessage.GetEntities())
+			case <-ctx.Done():
+				log.Debugf("stream connection is disconnected gracefully: %s", hostName)
+				return
+			}
+		}
+
+		// Start reading messages from the stream
+		for p.hasLeadership.Load() {
+			select {
+			case <-ctx.Done():
+				return
+			default:
+				req, recvErr := stream.Recv()
+				// Check if the context has been cancelled in the meantime
+				select {
+				case <-ctx.Done():
+					return
+				case daprStream.recvCh <- recvResult{host: req, err: recvErr}:
+					if recvErr != nil {
+						return
+					}
+				}
+			}
+		}
 	}()
 
 	for p.hasLeadership.Load() {
-		var req *placementv1pb.Host
-		if firstMessage != nil {
-			req, err = firstMessage, nil
-			firstMessage = nil
-		} else {
-			errCh := make(chan error, 2)
-			receivedCh := make(chan struct{})
-
-			p.wg.Add(2)
-			go func() {
-				defer p.wg.Done()
-				var rerr error
-				req, rerr = stream.Recv()
-				close(receivedCh)
-				errCh <- rerr
-			}()
-			go func() {
-				defer p.wg.Done()
-				select {
-				case <-p.closedCh:
-					errCh <- errors.New("placement service is closed")
-				case <-receivedCh:
-				}
-			}()
-			err = <-errCh
-		}
-
-		switch err {
-		case nil:
-
-			if clientID != nil && req.GetId() != clientID.AppID() {
-				return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", req.GetId())
+		select {
+		case <-ctx.Done():
+			return p.handleErrorOnStream(ctx.Err(), hostName, &isActorHost, namespace)
+		case <-p.closedCh:
+			return errors.New("placement service is closed")
+		case in := <-daprStream.recvCh:
+			if in.err != nil {
+				return p.handleErrorOnStream(in.err, hostName, &isActorHost, namespace)
 			}
 
-			if registeredMemberID == "" {
-				registeredMemberID, err = p.handleNewConnection(req, daprStream, namespace)
-				if err != nil {
-					return err
-				}
-			}
+			host := in.host
 
-			if !requiresUpdateInPlacementTables(req, &isActorHost) {
+			if !requiresUpdateInPlacementTables(host, &isActorHost) {
 				continue
 			}
 
 			now := p.clock.Now()
 
-			for _, entity := range req.GetEntities() {
-				monitoring.RecordActorHeartbeat(req.GetId(), entity, req.GetName(), req.GetNamespace(), req.GetPod(), now)
+			for _, entity := range host.GetEntities() {
+				monitoring.RecordActorHeartbeat(host.GetId(), entity, host.GetName(), host.GetNamespace(), host.GetPod(), now)
 			}
 
 			// Record the heartbeat timestamp. Used for metrics and for disconnecting faulty hosts
 			// on placement fail-over by comparing the member list in raft with the heartbeats
-			p.lastHeartBeat.Store(req.GetNamespace()+"||"+req.GetName(), now.UnixNano())
+			p.lastHeartBeat.Store(host.GetNamespace()+"||"+host.GetName(), now.UnixNano())
 
 			// Upsert incoming member only if the existing member info
 			// doesn't match with the incoming member info.
-			if p.raftNode.FSM().State().UpsertRequired(namespace, req) {
+			if p.raftNode.FSM().State().UpsertRequired(namespace, host) {
 				p.membershipCh <- hostMemberChange{
 					cmdType: raft.MemberUpsert,
 					host: raft.DaprHostMember{
-						Name:      req.GetName(),
-						AppID:     req.GetId(),
+						Name:      host.GetName(),
+						AppID:     appID,
 						Namespace: namespace,
-						Entities:  req.GetEntities(),
+						Entities:  host.GetEntities(),
 						UpdatedAt: now.UnixNano(),
-						APILevel:  req.GetApiLevel(),
+						APILevel:  host.GetApiLevel(),
 					},
 				}
-				log.Debugf("Member changed; upserting appid %s in namespace %s with entities %v", req.GetId(), namespace, req.GetEntities())
+				log.Debugf("Member changed; upserting appid %s in namespace %s with entities %v", appID, namespace, host.GetEntities())
 			}
-
-		default:
-			if registeredMemberID == "" {
-				log.Error("Stream is disconnected before member is added ", err)
-				return nil
-			}
-
-			if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
-				log.Debugf("Stream connection is disconnected gracefully: %s", registeredMemberID)
-			} else {
-				log.Debugf("Stream connection is disconnected with the error: %v", err)
-			}
-
-			if requiresUpdateInPlacementTables(req, &isActorHost) {
-				select {
-				case p.membershipCh <- hostMemberChange{
-					cmdType: raft.MemberRemove,
-					host:    raft.DaprHostMember{Name: registeredMemberID, Namespace: namespace},
-				}:
-				case <-p.closedCh:
-					return errors.New("placement service is closed")
-				}
-			}
-
-			return nil
 		}
 	}
 
@@ -405,14 +442,9 @@ func (p *Service) validateClient(stream placementv1pb.Placement_ReportDaprStatus
 	return clientID, nil
 }
 
-func (p *Service) receiveAndValidateFirstMessage(stream placementv1pb.Placement_ReportDaprStatusServer, clientID *spiffe.Parsed) (*placementv1pb.Host, error) {
-	firstMessage, err := stream.Recv()
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to receive the first message: %v", err)
-	}
-
+func (p *Service) validateFirstMessage(firstMessage *placementv1pb.Host, clientID *spiffe.Parsed) error {
 	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
-		return nil, status.Errorf(codes.PermissionDenied, "provided app ID %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetId(), clientID.AppID())
+		return status.Errorf(codes.PermissionDenied, "provided app ID %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetId(), clientID.AppID())
 	}
 
 	// For older versions that are not sending their namespace as part of the message
@@ -422,22 +454,26 @@ func (p *Service) receiveAndValidateFirstMessage(stream placementv1pb.Placement_
 	}
 
 	if clientID != nil && firstMessage.GetNamespace() != clientID.Namespace() {
-		return nil, status.Errorf(codes.PermissionDenied, "provided client namespace %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetNamespace(), clientID.Namespace())
+		return status.Errorf(codes.PermissionDenied, "provided client namespace %s doesn't match the one in the Spiffe ID (%s)", firstMessage.GetNamespace(), clientID.Namespace())
 	}
 
-	return firstMessage, nil
+	if clientID != nil && firstMessage.GetId() != clientID.AppID() {
+		log.Errorf("Client ID mismatch: %s != %s", firstMessage.GetId(), clientID.AppID())
+		return status.Errorf(codes.PermissionDenied, "client ID %s is not allowed", firstMessage.GetId())
+	}
+
+	return nil
 }
 
-func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprdStream, namespace string) (string, error) {
+func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprdStream) error {
 	err := p.checkAPILevel(req)
 	if err != nil {
-		return "", err
+		return err
 	}
 
-	registeredMemberID := req.GetName()
-
-	// If the member is not an actor runtime (len(req.GetEntities()) == 0) we disseminate the tables
-	// If it is, we'll disseminate in the next disseminate interval
+	// If the member is not an actor runtime (len(req.GetEntities()) == 0) we send it the placement table directly
+	// This is safe to do without locking all the streams, because we're not changing the state
+	// If the member does host actors, we need to update the state first, and then we'll disseminate in the next disseminate interval
 	if len(req.GetEntities()) == 0 {
 		updateReq := &tablesUpdateRequest{
 			hosts: []daprdStream{*daprStream},
@@ -445,11 +481,11 @@ func (p *Service) handleNewConnection(req *placementv1pb.Host, daprStream *daprd
 		updateReq.tables = p.raftNode.FSM().PlacementState(req.GetNamespace())
 		err = p.performTablesUpdate(context.Background(), updateReq)
 		if err != nil {
-			return registeredMemberID, err
+			return err
 		}
 	}
 
-	return registeredMemberID, nil
+	return nil
 }
 
 func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
@@ -467,7 +503,34 @@ func (p *Service) checkAPILevel(req *placementv1pb.Host) error {
 	return nil
 }
 
-func requiresUpdateInPlacementTables(req *placementv1pb.Host, isActorHost *bool) bool {
+func (p *Service) handleErrorOnStream(err error, hostName string, isActorHost *atomic.Bool, namespace string) error {
+	// Unwrap and check if it's a gRPC status error
+	if st, ok := status.FromError(err); ok {
+		if st.Code() == codes.Canceled {
+			err = context.Canceled
+		}
+	}
+
+	if errors.Is(err, io.EOF) || errors.Is(err, context.Canceled) {
+		log.Infof("Stream connection for app %s is disconnected gracefully: %s", hostName, err)
+	} else {
+		log.Errorf("Stream connection for app %s is disconnected with the error: %v.", hostName, err)
+	}
+
+	if isActorHost.Load() {
+		select {
+		case p.membershipCh <- hostMemberChange{
+			cmdType: raft.MemberRemove,
+			host:    raft.DaprHostMember{Name: hostName, Namespace: namespace},
+		}:
+		case <-p.closedCh:
+			return errors.New("placement service is closed")
+		}
+	}
+	return nil
+}
+
+func requiresUpdateInPlacementTables(req *placementv1pb.Host, isActorHost *atomic.Bool) bool {
 	// If the member is reporting no entities it's either a
 	// - non-actor runtime or
 	// - a host that used to have actors (isActorHost=true) but has now unregistered all its actors (common for workflows actors)
@@ -475,8 +538,8 @@ func requiresUpdateInPlacementTables(req *placementv1pb.Host, isActorHost *bool)
 	// In the latter case, we do need to update the placement tables, because we're removing a member that was previously registered
 
 	reportsActors := len(req.GetEntities()) > 0
-	existsInPlacementTables := *isActorHost // if the member had previously reported actors
-	*isActorHost = reportsActors
+	existsInPlacementTables := isActorHost.Load() // if the member had previously reported actors
+	isActorHost.Store(reportsActors)
 
 	return reportsActors || existsInPlacementTables
 }
