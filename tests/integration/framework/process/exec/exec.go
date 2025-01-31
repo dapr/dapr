@@ -66,7 +66,7 @@ func New(t *testing.T, binPath string, args []string, fopts ...Option) *exec {
 				// Windows returns 1 when we kill the process.
 				require.ErrorContains(t, err, "exit status 1")
 			} else {
-				require.NoError(t, err, "expected %q to run without error", binPath)
+				require.NoError(t, err, "expected %q %s to run without error", binPath, args)
 			}
 		},
 		exitCode: defaultExitCode,

@@ -102,6 +102,7 @@ spec:
 }
 
 func (h *hdata) Run(t *testing.T, ctx context.Context) {
+	h.scheduler.WaitUntilRunning(t, ctx)
 	h.place.WaitUntilRunning(t, ctx)
 	h.daprd.WaitUntilRunning(t, ctx)
 
