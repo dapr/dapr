@@ -23,6 +23,7 @@ import (
 	"regexp"
 	"strings"
 	"testing"
+	"time"
 
 	fuzz "github.com/google/gofuzz"
 	"github.com/stretchr/testify/assert"
@@ -144,7 +145,9 @@ func (c *componentName) Run(t *testing.T, ctx context.Context) {
 			require.NoError(t, resp.Body.Close())
 			assert.Contains(t, string(respBody), "ERR_SECRET_GET")
 			assert.Contains(t, string(respBody), "secret key1 not found")
-			assert.True(t, c.daprd.Metrics(t, ctx).MatchMetricAndSum(float64(i+1), "dapr_error_code_total", "category:secret", "error_code:ERR_SECRET_GET"))
+			assert.Eventually(t, func() bool {
+				return c.daprd.Metrics(t, ctx).MatchMetricAndSum(float64(i+1), "dapr_error_code_total", "category:secret", "error_code:ERR_SECRET_GET")
+			}, 5*time.Second, 100*time.Millisecond)
 		}
 	})
 }
