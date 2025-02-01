@@ -17,6 +17,7 @@ import (
 	"context"
 	"errors"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -653,4 +654,68 @@ func TestReporter(t *testing.T) {
 				t.Error("Timed out waiting for reporter result")
 			}
 		})
+}
+
+func TestProcessorWaitGroupError(t *testing.T) {
+	ctx, cancel := context.WithCancel(context.Background())
+	errCh := make(chan error)
+	t.Cleanup(func() {
+		cancel()
+		select {
+		case err := <-errCh:
+			require.NoError(t, err)
+		case <-time.After(time.Second * 5):
+			require.Fail(t, "timeout waiting for processor to return")
+		}
+	})
+	proc, _ := newTestProc()
+	// spin up the processor
+	go func() {
+		errCh <- proc.Process(ctx)
+	}()
+
+	comp1 := componentsapi.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testpubsub1",
+		},
+		Spec: componentsapi.ComponentSpec{
+			Type:         "pubsub.mockPubSub",
+			Version:      "v1",
+			Metadata:     daprt.GetFakeMetadataItems(),
+			InitTimeout:  "2",
+			IgnoreErrors: true,
+		},
+	}
+	comp2 := componentsapi.Component{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: "testpubsub2",
+		},
+		Spec: componentsapi.ComponentSpec{
+			Type:         "pubsub.mockPubSub",
+			Version:      "v1",
+			Metadata:     daprt.GetFakeMetadataItems(),
+			InitTimeout:  "2",
+			IgnoreErrors: true,
+		},
+	}
+
+	var wg sync.WaitGroup
+	wg.Add(10_000 * 2)
+
+	for range 10_000 {
+		go func() {
+			if proc.AddPendingComponent(ctx, comp1) {
+				proc.WaitForEmptyComponentQueue()
+				wg.Done()
+			}
+		}()
+		go func() {
+			if proc.AddPendingComponent(ctx, comp2) {
+				proc.WaitForEmptyComponentQueue()
+				wg.Done()
+			}
+		}()
+	}
+
+	wg.Wait()
 }

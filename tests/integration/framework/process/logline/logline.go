@@ -108,7 +108,12 @@ func (l *LogLine) checkOut(t *testing.T, ctx context.Context, expLines map[strin
 	t.Helper()
 
 	if len(expLines) == 0 {
-		go io.Copy(io.Discard, reader)
+		go func(t *testing.T) {
+			_, err := io.Copy(io.Discard, reader)
+			if err != nil {
+				t.Errorf("checkOut error draining reader: %v", err)
+			}
+		}(t)
 		l.done.Add(1)
 		return expLines
 	}
