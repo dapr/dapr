@@ -27,6 +27,7 @@ import (
 	"github.com/dapr/dapr/pkg/actors/api"
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
+	"github.com/dapr/dapr/pkg/actors/locker"
 	"github.com/dapr/dapr/pkg/actors/reminders"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
@@ -55,6 +56,7 @@ type Options struct {
 	GRPC               *manager.Manager
 	IdlerQueue         *queue.Processor[string, targets.Idlable]
 	SchedulerReminders bool
+	Locker             locker.Interface
 }
 
 type engine struct {
@@ -66,6 +68,7 @@ type engine struct {
 	resiliency resiliency.Provider
 	reminders  reminders.Interface
 	grpc       *manager.Manager
+	locker     locker.Interface
 
 	idlerQueue *queue.Processor[string, targets.Idlable]
 
@@ -83,14 +86,20 @@ func New(opts Options) Interface {
 		grpc:               opts.GRPC,
 		idlerQueue:         opts.IdlerQueue,
 		reminders:          opts.Reminders,
+		locker:             opts.Locker,
 		lock:               fifo.New(),
 		clock:              clock.RealClock{},
 	}
 }
 
 func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeRequest) (*internalv1pb.InternalInvokeResponse, error) {
+	cancel, err := e.locker.LockRequest(req)
+	if err != nil {
+		return nil, err
+	}
+	defer cancel()
+
 	var res *internalv1pb.InternalInvokeResponse
-	var err error
 	if e.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		res, err = e.callActor(ctx, req)
 	} else {
@@ -104,6 +113,14 @@ func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 }
 
 func (e *engine) CallReminder(ctx context.Context, req *api.Reminder) error {
+	if !req.SkipLock {
+		cancel, err := e.locker.Lock(req.ActorType, req.ActorID)
+		if err != nil {
+			return err
+		}
+		defer cancel()
+	}
+
 	var err error
 	if e.resiliency.PolicyDefined(req.ActorType, resiliency.ActorPolicy{}) {
 		err = e.callReminder(ctx, req)
@@ -127,7 +144,7 @@ func (e *engine) CallStream(ctx context.Context, req *internalv1pb.InternalInvok
 }
 
 func (e *engine) callReminder(ctx context.Context, req *api.Reminder) error {
-	if !req.SkipPlacementLock {
+	if !req.SkipLock {
 		var cancel context.CancelFunc
 		var err error
 		ctx, cancel, err = e.placement.Lock(ctx)
@@ -260,16 +277,16 @@ func (e *engine) callRemoteActorReminder(ctx context.Context, lar *api.LookupAct
 	client := internalv1pb.NewServiceInvocationClient(conn)
 
 	_, err = client.CallActorReminder(ctx, &internalv1pb.Reminder{
-		ActorId:           reminder.ActorID,
-		ActorType:         reminder.ActorType,
-		Name:              reminder.Name,
-		Data:              reminder.Data,
-		Period:            reminder.Period.String(),
-		DueTime:           reminder.DueTime,
-		RegisteredTime:    timestamppb.New(reminder.RegisteredTime),
-		ExpirationTime:    timestamppb.New(reminder.ExpirationTime),
-		IsTimer:           reminder.IsTimer,
-		SkipPlacementLock: reminder.SkipPlacementLock,
+		ActorId:        reminder.ActorID,
+		ActorType:      reminder.ActorType,
+		Name:           reminder.Name,
+		Data:           reminder.Data,
+		Period:         reminder.Period.String(),
+		DueTime:        reminder.DueTime,
+		RegisteredTime: timestamppb.New(reminder.RegisteredTime),
+		ExpirationTime: timestamppb.New(reminder.ExpirationTime),
+		IsTimer:        reminder.IsTimer,
+		SkipLock:       reminder.SkipLock,
 	})
 
 	return err
