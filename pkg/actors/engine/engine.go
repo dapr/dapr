@@ -101,6 +101,11 @@ func (e *engine) Call(ctx context.Context, req *internalv1pb.InternalInvokeReque
 	var res *internalv1pb.InternalInvokeResponse
 	if e.resiliency.PolicyDefined(req.GetActor().GetActorType(), resiliency.ActorPolicy{}) {
 		res, err = e.callActor(ctx, req)
+		// Don't bubble perminant errors up to the caller to interfere with top level
+		// retries.
+		if _, ok := err.(*backoff.PermanentError); ok {
+			err = errors.Unwrap(err)
+		}
 	} else {
 		policyRunner := resiliency.NewRunner[*internalv1pb.InternalInvokeResponse](ctx, e.resiliency.BuiltInPolicy(resiliency.BuiltInActorNotFoundRetries))
 		res, err = policyRunner(func(ctx context.Context) (*internalv1pb.InternalInvokeResponse, error) {
