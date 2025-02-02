@@ -30,9 +30,7 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
 	"github.com/dapr/dapr/pkg/actors/targets"
-	"github.com/dapr/dapr/pkg/actors/targets/internal"
 	"github.com/dapr/dapr/pkg/channel"
-	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -48,7 +46,6 @@ var log = logger.NewLogger("dapr.runtime.actors.targets.app")
 
 type Options struct {
 	ActorType   string
-	Reentrancy  config.ReentrancyConfig
 	AppChannel  channel.AppChannel
 	Resiliency  resiliency.Provider
 	IdleQueue   *queue.Processor[string, targets.Idlable]
@@ -63,10 +60,6 @@ type app struct {
 	appChannel channel.AppChannel
 	resiliency resiliency.Provider
 	idleQueue  *queue.Processor[string, targets.Idlable]
-
-	// lock is the lock to maintain actor's turn-based concurrency with
-	// allowance for reentrancy if configured.
-	lock *internal.Lock
 
 	// idleTimeout is the configured max idle time for actors of this kind.
 	idleTimeout time.Duration
@@ -86,14 +79,6 @@ func Factory(opts Options) targets.Factory {
 		var idleAt atomic.Pointer[time.Time]
 		idleAt.Store(ptr.Of(opts.clock.Now().Add(opts.IdleTimeout)))
 
-		lopts := internal.LockOptions{
-			ActorType:         opts.ActorType,
-			ReentrancyEnabled: opts.Reentrancy.Enabled,
-		}
-		if opts.Reentrancy.MaxStackDepth != nil {
-			lopts.MaxStackDepth = *opts.Reentrancy.MaxStackDepth
-		}
-
 		return &app{
 			actorType:   opts.ActorType,
 			actorID:     actorID,
@@ -103,7 +88,6 @@ func Factory(opts Options) targets.Factory {
 			idleTimeout: opts.IdleTimeout,
 			idleAt:      &idleAt,
 			clock:       opts.clock,
-			lock:        internal.NewLock(lopts),
 		}
 	}
 }
@@ -114,12 +98,6 @@ func (a *app) InvokeMethod(ctx context.Context, req *internalv1pb.InternalInvoke
 		return nil, fmt.Errorf("failed to create InvokeMethodRequest: %w", err)
 	}
 	defer imReq.Close()
-
-	cancel, err := a.lock.LockRequest(imReq)
-	if err != nil {
-		return nil, err
-	}
-	defer cancel()
 
 	a.idleAt.Store(ptr.Of(a.clock.Now().Add(a.idleTimeout)))
 	a.idleQueue.Enqueue(a)
@@ -256,8 +234,6 @@ func (a *app) InvokeTimer(ctx context.Context, reminder *api.Reminder) error {
 }
 
 func (a *app) Deactivate(ctx context.Context) error {
-	a.lock.Close()
-
 	req := invokev1.NewInvokeMethodRequest("actors/"+a.actorType+"/"+a.actorID).
 		WithActor(a.actorType, a.actorID).
 		WithHTTPExtension(http.MethodDelete, "").
@@ -287,11 +263,6 @@ func (a *app) Deactivate(ctx context.Context) error {
 // Key returns the key for this unique actor.
 func (a *app) Key() string {
 	return a.actorType + api.DaprSeparator + a.actorID
-}
-
-// CloseUntil closes the actor but backs out sooner if the duration is reached.
-func (a *app) CloseUntil(d time.Duration) {
-	a.lock.CloseUntil(d)
 }
 
 // ScheduledTime returns the time the actor becomes idle at.

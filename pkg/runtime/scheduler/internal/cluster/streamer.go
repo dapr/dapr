@@ -189,10 +189,10 @@ func (s *streamer) invokeActorReminder(ctx context.Context, job *schedulerv1pb.W
 	actor := job.GetMetadata().GetTarget().GetActor()
 
 	return s.actors.CallReminder(ctx, &api.Reminder{
-		Name:              job.GetName(),
-		ActorType:         actor.GetType(),
-		ActorID:           actor.GetId(),
-		Data:              job.GetData(),
-		SkipPlacementLock: actor.GetType() == s.wfengine.ActivityActorType(),
+		Name:      job.GetName(),
+		ActorType: actor.GetType(),
+		ActorID:   actor.GetId(),
+		Data:      job.GetData(),
+		SkipLock:  actor.GetType() == s.wfengine.ActivityActorType(),
 	})
 }
