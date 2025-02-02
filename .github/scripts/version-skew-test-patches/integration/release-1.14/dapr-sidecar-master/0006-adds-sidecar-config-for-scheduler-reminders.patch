@@ -130,3 +130,40 @@ index 1c65720a8..6c21b53fa 100644
  	)
  
  	return []framework.Option{
+diff --git a/tests/integration/suite/daprd/metrics/workflow.go b/tests/integration/suite/daprd/metrics/workflow.go
+index 23233babe..221dc0547 100644
+--- a/tests/integration/suite/daprd/metrics/workflow.go
++++ b/tests/integration/suite/daprd/metrics/workflow.go
+@@ -29,6 +29,7 @@ import (
+ 	"github.com/dapr/dapr/tests/integration/framework/process/daprd"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/http/app"
+ 	"github.com/dapr/dapr/tests/integration/framework/process/placement"
++	"github.com/dapr/dapr/tests/integration/framework/process/scheduler"
+ 	"github.com/dapr/dapr/tests/integration/suite"
+ )
+ 
+@@ -38,12 +39,14 @@ func init() {
+ 
+ // workflow tests daprd metrics for workflows
+ type workflow struct {
+-	daprd *daprd.Daprd
+-	place *placement.Placement
++	daprd     *daprd.Daprd
++	place     *placement.Placement
++	scheduler *scheduler.Scheduler
+ }
+ 
+ func (w *workflow) Setup(t *testing.T) []framework.Option {
+ 	w.place = placement.New(t)
++	w.scheduler = scheduler.New(t)
+ 
+ 	app := app.New(t)
+ 
+@@ -53,6 +56,7 @@ func (w *workflow) Setup(t *testing.T) []framework.Option {
+ 		daprd.WithAppID("myapp"),
+ 		daprd.WithPlacementAddresses(w.place.Address()),
+ 		daprd.WithInMemoryActorStateStore("mystore"),
++		daprd.WithSchedulerAddresses(w.scheduler.Address()),
+ 	)
+ 
+ 	return []framework.Option{

@@ -106,3 +106,28 @@ index 5ca476c7e..57198b2cf 100644
  		assert.Empty(t, res.ActorRuntime.ActiveActors)
  	}, 10*time.Second, 10*time.Millisecond)
  }
+diff --git a/tests/integration/suite/actors/http/ttl.go b/tests/integration/suite/actors/http/ttl.go
+index a82973d11..95633e711 100644
+--- a/tests/integration/suite/actors/http/ttl.go
++++ b/tests/integration/suite/actors/http/ttl.go
+@@ -83,6 +83,7 @@ spec:
+ 		daprd.WithConfigs(configFile),
+ 		daprd.WithPlacementAddresses(l.place.Address()),
+ 		daprd.WithAppPort(srv.Port()),
++		daprd.WithAppHealthCheck(true),
+ 	)
+ 
+ 	return []framework.Option{
+diff --git a/tests/integration/suite/daprd/resources/dapr.go b/tests/integration/suite/daprd/resources/dapr.go
+index 7ac79495a..23d17bf37 100644
+--- a/tests/integration/suite/daprd/resources/dapr.go
++++ b/tests/integration/suite/daprd/resources/dapr.go
+@@ -38,7 +38,7 @@ func (d *dapr) Setup(t *testing.T) []framework.Option {
+ 	d.logline = logline.New(t,
+ 		logline.WithStdoutLineContains(
+ 			"Component loaded: dapr (state.in-memory/v1)",
+-			"Workflow engine initialized.",
++			"Workflow engine started",
+ 		),
+ 	)
+ 
