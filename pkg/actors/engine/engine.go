@@ -34,7 +34,6 @@ import (
 	"github.com/dapr/dapr/pkg/api/grpc/manager"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	diagutils "github.com/dapr/dapr/pkg/diagnostics/utils"
-	"github.com/dapr/dapr/pkg/messages"
 	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/kit/concurrency/fifo"
@@ -209,16 +208,11 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if lar.Local {
-		var res *internalv1pb.InternalInvokeResponse
-		res, err = e.callLocalActor(ctx, req)
+		resp, err := e.callLocalActor(ctx, req)
 		if err != nil {
-			if merr, ok := err.(messages.APIError); ok &&
-				merr.Is(messages.ErrActorMaxStackDepthExceeded) {
-				return res, backoff.Permanent(err)
-			}
-			return res, err
+			return resp, backoff.Permanent(err)
 		}
-		return res, nil
+		return resp, nil
 	}
 
 	// If this is a dapr-dapr call and the actor didn't pass the local check
