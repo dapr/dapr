@@ -76,10 +76,10 @@ type Actors struct {
 	activityWorkItemChan      chan *backend.ActivityWorkItem
 
 	registeredCh chan struct{}
-	lock         sync.Mutex
+	lock         sync.RWMutex
 }
 
-func New(opts Options) (*Actors, error) {
+func New(opts Options) *Actors {
 	return &Actors{
 		appID:                     opts.AppID,
 		workflowActorType:         ActorTypePrefix + opts.Namespace + utils.DotDelimiter + opts.AppID + utils.DotDelimiter + WorkflowNameLabelKey,
@@ -90,7 +90,7 @@ func New(opts Options) (*Actors, error) {
 		orchestrationWorkItemChan: make(chan *backend.OrchestrationWorkItem, 1),
 		activityWorkItemChan:      make(chan *backend.ActivityWorkItem, 1),
 		registeredCh:              make(chan struct{}),
-	}, nil
+	}
 }
 
 func (abe *Actors) RegisterActors(ctx context.Context) error {
@@ -179,9 +179,9 @@ func (abe *Actors) UnRegisterActors(ctx context.Context) error {
 // request is saved into the actor's "inbox" and then executed via a reminder thread. If the app is
 // scaled out across multiple replicas, the actor might get assigned to a replicas other than this one.
 func (abe *Actors) CreateOrchestrationInstance(ctx context.Context, e *backend.HistoryEvent, opts ...backend.OrchestrationIdReusePolicyOptions) error {
-	abe.lock.Lock()
+	abe.lock.RLock()
 	ch := abe.registeredCh
-	abe.lock.Unlock()
+	abe.lock.RUnlock()
 
 	select {
 	case <-ch:
