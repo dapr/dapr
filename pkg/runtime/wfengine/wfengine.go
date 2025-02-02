@@ -67,18 +67,15 @@ type engine struct {
 	registerGrpcServerFn func(grpcServer grpc.ServiceRegistrar)
 }
 
-func New(opts Options) (Interface, error) {
+func New(opts Options) Interface {
 	// If no backend was initialized by the manager, create a backend backed by actors
-	abackend, err := backendactors.New(backendactors.Options{
+	abackend := backendactors.New(backendactors.Options{
 		AppID:              opts.AppID,
 		Namespace:          opts.Namespace,
 		Actors:             opts.Actors,
 		Resiliency:         opts.Resiliency,
 		SchedulerReminders: opts.SchedulerReminders,
 	})
-	if err != nil {
-		return nil, err
-	}
 
 	var activeConns uint64
 	var lock sync.Mutex
@@ -137,7 +134,7 @@ func New(opts Options) (Interface, error) {
 			logger: wfBackendLogger,
 			client: backend.NewTaskHubClient(abackend),
 		},
-	}, nil
+	}
 }
 
 func (wfe *engine) RegisterGrpcServer(server *grpc.Server) {

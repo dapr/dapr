@@ -26,8 +26,11 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
+	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
+	"github.com/dapr/dapr/pkg/actors/locker"
 	"github.com/dapr/dapr/pkg/actors/targets"
 	"github.com/dapr/dapr/pkg/actors/targets/idler"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/kit/concurrency/cmap"
 	"github.com/dapr/kit/concurrency/fifo"
@@ -62,12 +65,15 @@ type Interface interface {
 }
 
 type Options struct {
-	IdlerQueue *queue.Processor[string, targets.Idlable]
+	IdlerQueue      *queue.Processor[string, targets.Idlable]
+	Locker          locker.Interface
+	ReentrancyStore *reentrancystore.Store
 }
 
 type ActorTypeFactory struct {
-	Type    string
-	Factory targets.Factory
+	Type       string
+	Reentrancy config.ReentrancyConfig
+	Factory    targets.Factory
 }
 
 type ActorHostOptions struct {
@@ -95,6 +101,9 @@ type table struct {
 	drainOngoingCallTimeout time.Duration
 	idlerQueue              *queue.Processor[string, targets.Idlable]
 
+	locker          locker.Interface
+	reentrancyStore *reentrancystore.Store
+
 	lock  sync.RWMutex
 	clock clock.Clock
 }
@@ -110,6 +119,8 @@ func New(opts Options) Interface {
 		clock:                   clock.RealClock{},
 		typeUpdates:             batcher.New[int, []string](0),
 		idlerQueue:              opts.IdlerQueue,
+		locker:                  opts.Locker,
+		reentrancyStore:         opts.ReentrancyStore,
 	}
 }
 
@@ -148,15 +159,15 @@ func (t *table) Drain(fn func(actorType, actorID string) bool) {
 	defer t.lock.Unlock()
 
 	var wg sync.WaitGroup
-	t.table.Range(func(actorKey string, target targets.Interface) bool {
+	t.table.Range(func(actorKey string, _ targets.Interface) bool {
 		wg.Add(1)
-		go func(actorKey string, target targets.Interface) {
+		go func(actorKey string) {
 			defer wg.Done()
 			actorType, actorID := key.ActorTypeAndIDFromKey(actorKey)
 			if fn(actorType, actorID) {
-				t.drain(actorKey, actorType, target)
+				t.drain(actorKey, actorType)
 			}
-		}(actorKey, target)
+		}(actorKey)
 
 		return true
 	})
@@ -216,6 +227,7 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 	}
 
 	for _, opt := range opts.Factories {
+		t.reentrancyStore.Store(opt.Type, opt.Reentrancy)
 		t.factories.Store(opt.Type, opt.Factory)
 	}
 
@@ -228,6 +240,7 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 
 	for _, atype := range actorTypes {
 		t.factories.Delete(atype)
+		t.reentrancyStore.Delete(atype)
 	}
 
 	var (
@@ -349,14 +362,16 @@ func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []
 	return ch, t.factories.Keys()
 }
 
-func (t *table) drain(actorKey, actorType string, target targets.Interface) {
+func (t *table) drain(actorKey, actorType string) {
 	doDrain := t.drainRebalancedActors
 	if v, ok := t.entityConfigs[actorType]; ok {
 		doDrain = v.DrainRebalancedActors
 	}
 
 	if doDrain {
-		target.CloseUntil(t.drainOngoingCallTimeout)
+		t.locker.CloseUntil(actorKey, t.drainOngoingCallTimeout)
+	} else {
+		t.locker.Close(actorKey)
 	}
 
 	diag.DefaultMonitoring.ActorRebalanced(actorType)
