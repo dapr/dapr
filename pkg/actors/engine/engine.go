@@ -208,7 +208,8 @@ func (e *engine) callActor(ctx context.Context, req *internalv1pb.InternalInvoke
 	}
 
 	if lar.Local {
-		resp, err := e.callLocalActor(ctx, req)
+		var resp *internalv1pb.InternalInvokeResponse
+		resp, err = e.callLocalActor(ctx, req)
 		if err != nil {
 			return resp, backoff.Permanent(err)
 		}
