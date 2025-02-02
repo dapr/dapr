@@ -324,16 +324,16 @@ func (a *api) CallActorReminder(ctx context.Context, in *internalv1pb.Reminder) 
 
 	period, _ := actorapi.NewReminderPeriod(in.GetPeriod())
 	return nil, engine.CallReminder(ctx, &actorapi.Reminder{
-		Name:              in.GetName(),
-		ActorType:         in.GetActorType(),
-		ActorID:           in.GetActorId(),
-		Data:              in.GetData(),
-		DueTime:           in.GetDueTime(),
-		Period:            period,
-		ExpirationTime:    in.GetExpirationTime().AsTime(),
-		IsTimer:           in.GetIsTimer(),
-		IsRemote:          true,
-		SkipPlacementLock: in.GetSkipPlacementLock(),
+		Name:           in.GetName(),
+		ActorType:      in.GetActorType(),
+		ActorID:        in.GetActorId(),
+		Data:           in.GetData(),
+		DueTime:        in.GetDueTime(),
+		Period:         period,
+		ExpirationTime: in.GetExpirationTime().AsTime(),
+		IsTimer:        in.GetIsTimer(),
+		IsRemote:       true,
+		SkipLock:       in.GetSkipLock(),
 	})
 }
 

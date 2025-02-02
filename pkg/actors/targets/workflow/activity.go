@@ -28,7 +28,6 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
-	"github.com/dapr/dapr/pkg/actors/targets/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	internalsv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
@@ -60,7 +59,6 @@ type activity struct {
 
 	actors actors.Interface
 	table  table.Interface
-	lock   *internal.Lock
 
 	scheduler          todo.ActivityScheduler
 	reminderInterval   time.Duration
@@ -96,7 +94,6 @@ func ActivityFactory(opts ActivityOptions) targets.Factory {
 			table:              opts.Table,
 			scheduler:          opts.Scheduler,
 			schedulerReminders: opts.SchedulerReminders,
-			lock:               internal.NewLock(internal.LockOptions{ActorType: opts.ActivityActorType}),
 		}
 	}
 }
@@ -114,12 +111,6 @@ func (a *activity) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 		return nil, fmt.Errorf("failed to create InvokeMethodRequest: %w", err)
 	}
 	defer imReq.Close()
-
-	cancel, err := a.lock.LockRequest(imReq)
-	if err != nil {
-		return nil, err
-	}
-	defer cancel()
 
 	msg := imReq.Message()
 
@@ -174,9 +165,9 @@ func (a *activity) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 		}
 		return nil
 	default: // Other error
-		log.Errorf("%s: execution failed with a non-recoverable error: %v", a.actorID, err)
+		log.Errorf("%s: execution failed with an error: %v", a.actorID, err)
 		if a.schedulerReminders {
-			return nil
+			return err
 		}
 		// TODO: Reply with a failure - this requires support from durabletask-go to produce TaskFailure results
 		return actorerrors.ErrReminderCanceled
@@ -345,15 +336,14 @@ func (a *activity) createReliableReminder(ctx context.Context, his *backend.Hist
 // DeactivateActor implements actors.InternalActor
 func (a *activity) Deactivate(ctx context.Context) error {
 	log.Debugf("Activity actor '%s': deactivating", a.actorID)
-	a.lock.Close()
 	return nil
-}
-
-// CloseUntil closes the actor but backs out sooner if the duration is reached.
-func (a *activity) CloseUntil(d time.Duration) {
-	a.lock.CloseUntil(d)
 }
 
 func (a *activity) InvokeStream(context.Context, *internalsv1pb.InternalInvokeRequest, chan<- *internalsv1pb.InternalInvokeResponse) error {
 	return errors.New("not implemented")
+}
+
+// Key returns the key for this unique actor.
+func (a *activity) Key() string {
+	return a.actorType + actorapi.DaprSeparator + a.actorID
 }

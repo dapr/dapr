@@ -27,7 +27,9 @@ import (
 	"github.com/dapr/dapr/pkg/actors/engine"
 	"github.com/dapr/dapr/pkg/actors/hostconfig"
 	"github.com/dapr/dapr/pkg/actors/internal/apilevel"
+	"github.com/dapr/dapr/pkg/actors/internal/locker"
 	"github.com/dapr/dapr/pkg/actors/internal/placement"
+	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/scheduler"
 	"github.com/dapr/dapr/pkg/actors/internal/reminders/storage/statestore"
@@ -181,8 +183,20 @@ func (a *actors) Init(opts InitOptions) error {
 		a.disabled.Store(&err)
 		return nil
 	}
+
 	a.idlerQueue = queue.NewProcessor[string, targets.Idlable](a.handleIdleActor)
-	a.table = table.New(table.Options{IdlerQueue: a.idlerQueue})
+
+	rStore := reentrancystore.New()
+
+	locker := locker.New(locker.Options{
+		ConfigStore: rStore,
+	})
+
+	a.table = table.New(table.Options{
+		IdlerQueue:      a.idlerQueue,
+		Locker:          locker,
+		ReentrancyStore: rStore,
+	})
 
 	apiLevel := apilevel.New()
 
@@ -237,6 +251,7 @@ func (a *actors) Init(opts InitOptions) error {
 		Resiliency:         a.resiliency,
 		IdlerQueue:         a.idlerQueue,
 		Reminders:          a.reminders,
+		Locker:             locker,
 	})
 
 	a.timerStorage = inmemory.New(inmemory.Options{
@@ -438,10 +453,10 @@ func (a *actors) RegisterHosted(cfg hostconfig.Config) error {
 		}
 
 		factories = append(factories, table.ActorTypeFactory{
-			Type: actorType,
+			Type:       actorType,
+			Reentrancy: reentrancy,
 			Factory: app.Factory(app.Options{
 				ActorType:   actorType,
-				Reentrancy:  reentrancy,
 				AppChannel:  cfg.AppChannel,
 				Resiliency:  a.resiliency,
 				IdleQueue:   a.idlerQueue,
