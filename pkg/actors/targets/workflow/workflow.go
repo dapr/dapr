@@ -37,7 +37,6 @@ import (
 	actorerrors "github.com/dapr/dapr/pkg/actors/errors"
 	"github.com/dapr/dapr/pkg/actors/table"
 	"github.com/dapr/dapr/pkg/actors/targets"
-	"github.com/dapr/dapr/pkg/actors/targets/internal"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
 	commonv1pb "github.com/dapr/dapr/pkg/proto/common/v1"
@@ -65,7 +64,6 @@ type workflow struct {
 	actors     actors.Interface
 	table      table.Interface
 
-	lock             *internal.Lock
 	reminderInterval time.Duration
 
 	state            *wfenginestate.State
@@ -77,7 +75,9 @@ type workflow struct {
 	activityResultAwaited atomic.Bool
 	completed             atomic.Bool
 	schedulerReminders    bool
+	lock                  sync.Mutex
 	closeCh               chan struct{}
+	closed                atomic.Bool
 }
 
 type WorkflowOptions struct {
@@ -112,17 +112,16 @@ func WorkflowFactory(opts WorkflowOptions) targets.Factory {
 			actors:             opts.Actors,
 			table:              opts.Table,
 			schedulerReminders: opts.SchedulerReminders,
-			lock: internal.NewLock(internal.LockOptions{
-				ActorType: opts.WorkflowActorType,
-			}),
-			ometaBroadcaster: broadcaster.New[*backend.OrchestrationMetadata](),
-			closeCh:          make(chan struct{}),
+			ometaBroadcaster:   broadcaster.New[*backend.OrchestrationMetadata](),
+			closeCh:            make(chan struct{}),
 		}
 	}
 }
 
 // InvokeMethod implements actors.InternalActor
 func (w *workflow) InvokeMethod(ctx context.Context, req *internalsv1pb.InternalInvokeRequest) (*internalsv1pb.InternalInvokeResponse, error) {
+	w.table.RemoveIdler(w)
+
 	if req.GetMessage() == nil {
 		return nil, errors.New("message is nil in request")
 	}
@@ -133,12 +132,6 @@ func (w *workflow) InvokeMethod(ctx context.Context, req *internalsv1pb.Internal
 		return nil, fmt.Errorf("failed to create InvokeMethodRequest: %w", err)
 	}
 	defer imReq.Close()
-
-	cancel, err := w.lock.LockRequest(imReq)
-	if err != nil {
-		return nil, err
-	}
-	defer cancel()
 
 	policyDef := w.resiliency.ActorPostLockPolicy(w.actorType, w.actorID)
 	policyRunner := resiliency.NewRunner[*internalsv1pb.InternalInvokeResponse](ctx, policyDef)
@@ -182,18 +175,15 @@ func (w *workflow) executeMethod(ctx context.Context, methodName string, request
 
 // InvokeReminder implements actors.InternalActor
 func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Reminder) error {
-	cancel, err := w.lock.Lock()
-	if err != nil {
-		return err
-	}
-	defer cancel()
-
 	log.Debugf("Workflow actor '%s': invoking reminder '%s'", w.actorID, reminder.Name)
 
 	completed, err := w.runWorkflow(ctx, reminder)
 
 	if completed == runCompletedTrue {
-		w.table.DeleteFromTable(w.actorType, w.actorID)
+		w.table.DeleteFromTableIn(w, time.Second*10)
+		if w.closed.CompareAndSwap(false, true) {
+			close(w.closeCh)
+		}
 	}
 
 	// We delete the reminder on success and on non-recoverable errors.
@@ -224,13 +214,12 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 
 // InvokeTimer implements actors.InternalActor
 func (w *workflow) InvokeTimer(ctx context.Context, reminder *actorapi.Reminder) error {
-	// TODO: @joshvanl: lock actor
 	return errors.New("timers are not implemented")
 }
 
 func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) error {
 	// create a new state entry if one doesn't already exist
-	state, err := w.loadInternalState(ctx)
+	state, _, err := w.loadInternalState(ctx)
 	if err != nil {
 		return err
 	}
@@ -242,9 +231,11 @@ func (w *workflow) createWorkflowInstance(ctx context.Context, request []byte) e
 			WorkflowActorType: w.actorType,
 			ActivityActorType: w.activityActorType,
 		})
+		w.lock.Lock()
 		w.rstate = runtimestate.NewOrchestrationRuntimeState(w.actorID, state.History)
 		w.setOrchestrationMetadata(state, w.rstate)
 		created = true
+		w.lock.Unlock()
 	}
 
 	var createWorkflowInstanceRequest backend.CreateWorkflowInstanceRequest
@@ -373,7 +364,7 @@ func (w *workflow) cleanupWorkflowStateInternal(ctx context.Context, state *wfen
 
 // This method purges all the completed activity data from a workflow associated with the given actorID
 func (w *workflow) purgeWorkflowState(ctx context.Context) error {
-	state, err := w.loadInternalState(ctx)
+	state, _, err := w.loadInternalState(ctx)
 	if err != nil {
 		return err
 	}
@@ -385,7 +376,7 @@ func (w *workflow) purgeWorkflowState(ctx context.Context) error {
 }
 
 func (w *workflow) addWorkflowEvent(ctx context.Context, historyEventBytes []byte) error {
-	state, err := w.loadInternalState(ctx)
+	state, _, err := w.loadInternalState(ctx)
 	if err != nil {
 		return err
 	}
@@ -425,13 +416,14 @@ func (w *workflow) getWorkflowName(oldEvents, newEvents []*backend.HistoryEvent)
 }
 
 func (w *workflow) runWorkflow(ctx context.Context, reminder *actorapi.Reminder) (runCompleted, error) {
-	state, err := w.loadInternalState(ctx)
+	state, _, err := w.loadInternalState(ctx)
 	if err != nil {
 		return runCompletedTrue, fmt.Errorf("error loading internal state: %w", err)
 	}
 	if state == nil {
 		// The assumption is that someone manually deleted the workflow state. This is non-recoverable.
-		return runCompletedTrue, errors.New("no workflow state found")
+		log.Warnf("No workflow state found for actor '%s', terminating execution", w.actorID)
+		return runCompletedTrue, nil
 	}
 
 	if strings.HasPrefix(reminder.Name, "timer-") {
@@ -793,17 +785,20 @@ func (*workflow) recordWorkflowSchedulingLatency(ctx context.Context, esHistoryE
 	}
 }
 
-func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State, error) {
+func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State, *backend.OrchestrationMetadata, error) {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
 	// See if the state for this actor is already cached in memory
 	if w.state != nil {
-		return w.state, nil
+		return w.state, w.ometa, nil
 	}
 
 	// state is not cached, so try to load it from the state store
 	log.Debugf("Workflow actor '%s': loading workflow state", w.actorID)
 	astate, err := w.actors.State(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	state, err := wfenginestate.LoadWorkflowState(ctx, astate, w.actorID, wfenginestate.Options{
 		AppID:             w.appID,
@@ -811,11 +806,11 @@ func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State,
 		ActivityActorType: w.activityActorType,
 	})
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
 	if state == nil {
 		// No such state exists in the state store
-		return nil, nil
+		return nil, nil, nil
 	}
 	// Update cached state
 	w.state = state
@@ -823,10 +818,13 @@ func (w *workflow) loadInternalState(ctx context.Context) (*wfenginestate.State,
 	w.setOrchestrationMetadata(w.state, w.rstate)
 	w.ometaBroadcaster.Broadcast(w.ometa)
 
-	return state, nil
+	return state, w.ometa, nil
 }
 
 func (w *workflow) saveInternalState(ctx context.Context, state *wfenginestate.State) error {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
 	// generate and run a state store operation that saves all changes
 	req, err := state.GetSaveRequest(w.actorID)
 	if err != nil {
@@ -957,33 +955,25 @@ func (w *workflow) Deactivate(ctx context.Context) error {
 }
 
 func (w *workflow) cleanup() {
+	w.lock.Lock()
+	defer w.lock.Unlock()
+
 	w.ometaBroadcaster.Close()
 	w.state = nil // A bit of extra caution, shouldn't be necessary
 	w.rstate = nil
 	w.ometa = nil
-	w.lock.Close()
-}
-
-// CloseUntil closes the actor but backs out sooner if the duration is reached.
-func (w *workflow) CloseUntil(d time.Duration) {
-	w.lock.CloseUntil(d)
+	if w.closed.CompareAndSwap(false, true) {
+		close(w.closeCh)
+	}
 }
 
 func (w *workflow) InvokeStream(ctx context.Context, req *internalsv1pb.InternalInvokeRequest, stream chan<- *internalsv1pb.InternalInvokeResponse) error {
-	lockCancel, err := w.lock.Lock()
-	if err != nil {
-		return err
-	}
-
-	if err = w.handleStreamInitial(ctx, req, stream); err != nil {
-		lockCancel()
+	if err := w.handleStreamInitial(ctx, req, stream); err != nil {
 		return err
 	}
 
 	ch := make(chan *backend.OrchestrationMetadata)
 	w.ometaBroadcaster.Subscribe(ctx, ch)
-
-	lockCancel()
 
 	for {
 		select {
@@ -1018,12 +1008,13 @@ func (w *workflow) handleStreamInitial(ctx context.Context, req *internalsv1pb.I
 		return fmt.Errorf("unsupported stream method: %s", m)
 	}
 
-	if _, err := w.loadInternalState(ctx); err != nil {
+	_, ometa, err := w.loadInternalState(ctx)
+	if err != nil {
 		return err
 	}
 
-	if w.ometa != nil {
-		arstate, err := anypb.New(w.ometa)
+	if ometa != nil {
+		arstate, err := anypb.New(ometa)
 		if err != nil {
 			return err
 		}
@@ -1036,9 +1027,8 @@ func (w *workflow) handleStreamInitial(ctx context.Context, req *internalsv1pb.I
 		}:
 		}
 
-		if api.OrchestrationMetadataIsComplete(w.ometa) {
-			w.table.DeleteFromTable(w.actorType, w.actorID)
-			w.cleanup()
+		if api.OrchestrationMetadataIsComplete(ometa) {
+			w.table.DeleteFromTableIn(w, time.Second*10)
 		}
 	}
 
@@ -1063,4 +1053,9 @@ func (w *workflow) setOrchestrationMetadata(state *wfenginestate.State, rstate *
 		CustomStatus:   state.CustomStatus,
 		FailureDetails: failureDetuils,
 	}
+}
+
+// Key returns the key for this unique actor.
+func (w *workflow) Key() string {
+	return w.actorType + actorapi.DaprSeparator + w.actorID
 }

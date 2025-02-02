@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package internal
+package locker
 
 import (
 	"context"
@@ -24,21 +24,21 @@ import (
 
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/dapr/pkg/messages"
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 	"github.com/dapr/kit/concurrency/fifo"
 	"github.com/dapr/kit/ring"
 )
 
 var ErrLockClosed = errors.New("actor lock is closed")
 
-type LockOptions struct {
-	ActorType         string
-	ReentrancyEnabled bool
-	MaxStackDepth     int
+type lockOptions struct {
+	actorType         string
+	reentrancyEnabled bool
+	maxStackDepth     int
 }
 
-// Lock is a fifo Mutex which respects reentrancy and stack depth.
-type Lock struct {
+// lock is a fifo Mutex which respects reentrancy and stack depth.
+type lock struct {
 	actorType string
 
 	maxStackDepth     int
@@ -54,7 +54,7 @@ type Lock struct {
 }
 
 type req struct {
-	msg    *invokev1.InvokeMethodRequest
+	msg    *internalv1pb.InternalInvokeRequest
 	respCh chan *resp
 }
 
@@ -70,17 +70,17 @@ type inflight struct {
 	startCh chan struct{}
 }
 
-func NewLock(opts LockOptions) *Lock {
-	maxStackDepth := opts.MaxStackDepth
-	if opts.ReentrancyEnabled && opts.MaxStackDepth < 1 {
+func newLock(opts lockOptions) *lock {
+	maxStackDepth := opts.maxStackDepth
+	if opts.reentrancyEnabled && opts.maxStackDepth < 1 {
 		maxStackDepth = 1
 	}
 
-	l := &Lock{
-		actorType:         opts.ActorType,
+	l := &lock{
+		actorType:         opts.actorType,
 		reqCh:             make(chan *req),
 		maxStackDepth:     maxStackDepth,
-		reentrancyEnabled: opts.ReentrancyEnabled,
+		reentrancyEnabled: opts.reentrancyEnabled,
 		inflights:         ring.NewBuffered[inflight](1, 64),
 		lock:              fifo.New(),
 		closeCh:           make(chan struct{}),
@@ -93,7 +93,7 @@ func NewLock(opts LockOptions) *Lock {
 			select {
 			case <-l.closeCh:
 				// Ensure all pending requests are handled before closing.
-				l.LockRequest(nil)
+				l.lockRequest(nil)
 				return
 
 			case req := <-l.reqCh:
@@ -114,11 +114,11 @@ func NewLock(opts LockOptions) *Lock {
 	return l
 }
 
-func (l *Lock) Lock() (context.CancelFunc, error) {
-	return l.LockRequest(nil)
+func (l *lock) baseLock() (context.CancelFunc, error) {
+	return l.lockRequest(nil)
 }
 
-func (l *Lock) LockRequest(msg *invokev1.InvokeMethodRequest) (context.CancelFunc, error) {
+func (l *lock) lockRequest(msg *internalv1pb.InternalInvokeRequest) (context.CancelFunc, error) {
 	select {
 	case <-l.closeCh:
 		return nil, ErrLockClosed
@@ -150,7 +150,7 @@ func (l *Lock) LockRequest(msg *invokev1.InvokeMethodRequest) (context.CancelFun
 	return resp.cancel, nil
 }
 
-func (l *Lock) handleLock(req *req) *resp {
+func (l *lock) handleLock(req *req) *resp {
 	l.lock.Lock()
 	defer l.lock.Unlock()
 
@@ -174,7 +174,7 @@ func (l *Lock) handleLock(req *req) *resp {
 	return &resp{startCh: inflight.startCh, cancel: cancel}
 }
 
-func (l *Lock) handleInflight(req *req) (*inflight, error) {
+func (l *lock) handleInflight(req *req) (*inflight, error) {
 	id, ok := l.idFromRequest(req.msg)
 
 	// If this is:
@@ -228,34 +228,37 @@ func newInflight(id string) *inflight {
 	return &inflight{id: id, depth: 1, startCh: make(chan struct{})}
 }
 
-func (l *Lock) idFromRequest(req *invokev1.InvokeMethodRequest) (string, bool) {
+func (l *lock) idFromRequest(req *internalv1pb.InternalInvokeRequest) (string, bool) {
 	if req == nil {
 		return uuid.New().String(), false
 	}
 
-	if md := req.Metadata()["Dapr-Reentrancy-Id"]; md != nil && len(md.GetValues()) > 0 {
+	if md := req.GetMetadata()["Dapr-Reentrancy-Id"]; md != nil && len(md.GetValues()) > 0 {
 		return md.GetValues()[0], true
 	}
 
 	id := uuid.New().String()
-	req.AddMetadata(map[string][]string{
-		"Dapr-Reentrancy-Id": {id},
-	})
+	if req.Metadata == nil {
+		req.Metadata = make(map[string]*internalv1pb.ListStringValue)
+	}
+	req.Metadata["Dapr-Reentrancy-Id"] = &internalv1pb.ListStringValue{
+		Values: []string{id},
+	}
 
 	return id, true
 }
 
-func (l *Lock) Close() {
+func (l *lock) close() {
 	if l.closed.CompareAndSwap(false, true) {
 		close(l.closeCh)
 		l.wg.Wait()
 	}
 }
 
-func (l *Lock) CloseUntil(d time.Duration) {
+func (l *lock) closeUntil(d time.Duration) {
 	done := make(chan struct{})
 	go func() {
-		l.Close()
+		l.close()
 		close(done)
 	}()
 	select {
