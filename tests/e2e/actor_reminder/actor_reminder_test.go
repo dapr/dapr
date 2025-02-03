@@ -25,10 +25,12 @@ import (
 	"time"
 
 	"github.com/cenkalti/backoff/v4"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+
 	"github.com/dapr/dapr/tests/e2e/utils"
 	kube "github.com/dapr/dapr/tests/platforms/kubernetes"
 	"github.com/dapr/dapr/tests/runner"
-	"github.com/stretchr/testify/require"
 )
 
 const (
@@ -36,7 +38,7 @@ const (
 	appNameScheduler             = "actorreminderscheduler"           // App name in Dapr.
 	actorIDRestartTemplate       = "actor-reminder-restart-test-%d"   // Template for Actor ID
 	actorIDPartitionTemplate     = "actor-reminder-partition-test-%d" // Template for Actor ID
-	reminderName                 = "RestartTestReminder"              // Reminder name
+	restartReminderName          = "RestartTestReminder"              // Reminder name
 	actorIDGetTemplate           = "actor-reminder-get-test-%d"       // Template for Actor ID
 	reminderNameForGet           = "GetTestReminder"                  // Reminder name for getting tests
 	numIterations                = 7                                  // Number of times each test should run.
@@ -241,15 +243,15 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 
 				for i := 0; i < numActorsPerThread; i++ {
 					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
-					t.Logf("Registering reminder: %s %s ...", actorID, reminderName)
+					t.Logf("Registering reminder: %s %s ...", actorID, restartReminderName)
 
 					// Deleting pre-existing reminder, just in case…
-					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName))
-					require.NoError(t, err)
+					_, errInternal := utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", restartReminderName))
+					require.NoError(t, errInternal)
 
 					// Registering reminder
-					_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName), reminderBody)
-					require.NoError(t, err)
+					_, errInternal = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", restartReminderName), reminderBody)
+					require.NoError(t, errInternal)
 				}
 
 				t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
@@ -261,8 +263,8 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 
 					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
 					// Unregistering reminder
-					t.Logf("Unregistering reminder: %s %s ...", actorID, reminderName)
-					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName))
+					t.Logf("Unregistering reminder: %s %s ...", actorID, restartReminderName)
+					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", restartReminderName))
 					require.NoError(t, err)
 				}
 
@@ -275,10 +277,10 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 				// If there was no other error until now, there should be reminders triggered.
 				for i := 0; i < numActorsPerThread; i++ {
 					actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
-					count := countActorAction(resp, actorID, reminderName)
+					count := countActorAction(resp, actorID, restartReminderName)
 					// Due to possible load stress, we do not expect all reminders to be called at the same frequency.
 					// There are other E2E tests that validate the correct frequency of reminders in a happy path.
-					require.True(t, count >= 1, "Reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
+					require.True(t, count >= 1, "Reminder %s for Actor %s was invoked %d times.", restartReminderName, actorID, count)
 				}
 			}(iteration)
 		}
@@ -304,12 +306,12 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 					// This is useful to make sure the unregister call was processed.
 					for i := 0; i < numActorsPerThread; i++ {
 						actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
-						count1 := countActorAction(resp1, actorID, reminderName)
-						count2 := countActorAction(resp2, actorID, reminderName)
+						count1 := countActorAction(resp1, actorID, restartReminderName)
+						count2 := countActorAction(resp2, actorID, restartReminderName)
 						count := count2 - count1
 
 						if count > 0 {
-							return fmt.Errorf("after unregistration but before restart, reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
+							return fmt.Errorf("after unregistration but before restart, reminder %s for Actor %s was invoked %d times.", restartReminderName, actorID, count)
 						}
 					}
 				}
@@ -331,6 +333,13 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 		t.Logf("Sleeping for %d seconds to see if reminders will trigger ...", secondsToCheckReminderResult)
 		time.Sleep(secondsToCheckReminderResult * time.Second)
 
+		// Re-establish port forwarding after app restart, likely connection would be lost to pod.
+		// replace externalUrl and Logs URL since the new port will be assigned
+		externalURL = tr.Platform.AcquireAppExternalURL(appName)
+		require.NotEmpty(t, externalURL, "external URL must not be empty!")
+
+		logsURL = fmt.Sprintf(actorlogsURLFormat, externalURL)
+
 		// This initial probe makes the test wait a little bit longer when needed,
 		// making this test less flaky due to delays in the deployment.
 		t.Logf("Checking if app is healthy ...")
@@ -347,8 +356,8 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 			// After the app unregisters a reminder and is restarted, there should be no more reminders triggered.
 			for i := 0; i < numActorsPerThread; i++ {
 				actorID := fmt.Sprintf(actorIDRestartTemplate, i+(1000*iteration))
-				count := countActorAction(resp, actorID, reminderName)
-				require.True(t, count == 0, "After restart, reminder %s for Actor %s was invoked %d times.", reminderName, actorID, count)
+				count := countActorAction(resp, actorID, restartReminderName)
+				require.True(t, count == 0, "After restart, reminder %s for Actor %s was invoked %d times.", restartReminderName, actorID, count)
 			}
 		}
 
@@ -369,12 +378,12 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 				for i := 0; i < numActorsPerThread; i++ {
 					actorID := fmt.Sprintf(actorIDGetTemplate, i+(1000*iteration))
 					// Deleting pre-existing reminder
-					_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
-					require.NoError(t, err)
+					_, errInternal := utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
+					require.NoError(t, errInternal)
 
 					// Registering reminder
-					_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet), reminderBody)
-					require.NoError(t, err)
+					_, errInternal = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet), reminderBody)
+					require.NoError(t, errInternal)
 				}
 
 				t.Logf("Sleeping for %d seconds ...", secondsToCheckReminderResult)
@@ -392,11 +401,16 @@ func testActorReminder(t *testing.T, appName, actorName string) {
 					fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
 				require.NoError(t, err)
 				require.True(t, len(resp) != 0, "Reminder %s does not exist", reminderNameForGet)
+
+				// cleanup reminders
+				_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderNameForGet))
+				require.NoError(t, err)
 			}
 		}
 
-		_, err = utils.HTTPDelete(logsURL)
+		logs, err := utils.HTTPDelete(logsURL)
 		require.NoError(t, err)
+		assert.True(t, len(logs) == 0, "Logs are not cleared, lingering logs detected: %s", string(logs))
 
 		t.Log("Done.")
 	})
@@ -430,6 +444,10 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 		actorID := "repetable-reminder-actor"
 		_, err = utils.HTTPDelete(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName))
 		require.NoError(t, err)
+		logs, err := utils.HTTPDelete(logsURL)
+		require.NoError(t, err)
+		assert.True(t, len(logs) == 0, "Logs aren't cleared, lingering logs detected: %s", string(logs))
+
 		// Registering reminder
 		_, err = utils.HTTPPost(fmt.Sprintf(actorInvokeURLFormat, externalURL, actorName, actorID, "reminders", reminderName), reminderBody)
 		require.NoError(t, err)
@@ -441,9 +459,13 @@ func testActorReminderPeriod(t *testing.T, appName, actorName string) {
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 
-		t.Log("Checking if all reminders did trigger ...")
+		t.Logf("Checking if all reminders did trigger for app %s...", appName)
 		count := countActorAction(resp, actorID, reminderName)
-		require.Equal(t, 5, count, "response: %s", string(resp))
+		require.Equal(t, 5, count, "Too many reminder triggers for app: %s. response: %s", appName, string(resp))
+
+		logs, err = utils.HTTPDelete(logsURL)
+		require.NoError(t, err)
+		require.True(t, len(logs) == 0, "Logs are not cleared, lingering logs detected: %s", string(logs))
 	})
 }
 
@@ -488,7 +510,7 @@ func testActorReminderTTL(t *testing.T, appName, actorName string) {
 		resp, err := utils.HTTPGet(logsURL)
 		require.NoError(t, err)
 
-		t.Log("Checking if all reminders did trigger ...")
+		t.Logf("Checking if all reminders did trigger for app %s...", appName)
 		count := countActorAction(resp, actorID, reminderName)
 		require.InDelta(t, 10, count, 2)
 	})
