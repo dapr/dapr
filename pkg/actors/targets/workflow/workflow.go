@@ -199,9 +199,15 @@ func (w *workflow) InvokeReminder(ctx context.Context, reminder *actorapi.Remind
 		return err
 	case errors.Is(err, context.Canceled):
 		log.Warnf("Workflow actor '%s': execution was canceled (process shutdown?) and will be retried later: '%v'", w.actorID, err)
+		if w.schedulerReminders {
+			return err
+		}
 		return nil
 	case wferrors.IsRecoverable(err):
 		log.Warnf("Workflow actor '%s': execution failed with a recoverable error and will be retried later: '%v'", w.actorID, err)
+		if w.schedulerReminders {
+			return err
+		}
 		return nil
 	default: // Other error
 		log.Errorf("Workflow actor '%s': execution failed with an error: %v", w.actorID, err)
