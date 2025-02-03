@@ -1,5 +1,5 @@
 /*
-Copyright 2024 The Dapr Authors
+Copyright 2025 The Dapr Authors
 Licensed under the Apache License, Version 2.0 (the "License");
 you may not use this file except in compliance with the License.
 You may obtain a copy of the License at
@@ -11,7 +11,7 @@ See the License for the specific language governing permissions and
 limitations under the License.
 */
 
-package internal
+package locker
 
 import (
 	"context"
@@ -21,31 +21,31 @@ import (
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
-	invokev1 "github.com/dapr/dapr/pkg/messaging/v1"
+	internalv1pb "github.com/dapr/dapr/pkg/proto/internals/v1"
 )
 
 func Test_Lock(t *testing.T) {
 	t.Parallel()
 
-	l := NewLock(LockOptions{})
-	cancel, err := l.Lock()
+	l := newLock(lockOptions{})
+	cancel, err := l.baseLock()
 	require.NoError(t, err)
 	cancel()
 
-	cancel, err = l.Lock()
+	cancel, err = l.baseLock()
 	require.NoError(t, err)
 	cancel()
 
-	l.Close()
+	l.close()
 
-	l = NewLock(LockOptions{})
-	cancel1, err := l.Lock()
+	l = newLock(lockOptions{})
+	cancel1, err := l.baseLock()
 	require.NoError(t, err)
 
 	errCh := make(chan error)
 	var cancel2 context.CancelFunc
 	go func() {
-		cancel2, err = l.Lock()
+		cancel2, err = l.baseLock()
 		errCh <- err
 	}()
 
@@ -68,14 +68,14 @@ func Test_Lock(t *testing.T) {
 func Test_requestid(t *testing.T) {
 	t.Parallel()
 
-	l := NewLock(LockOptions{ReentrancyEnabled: true})
-	t.Cleanup(l.Close)
+	l := newLock(lockOptions{reentrancyEnabled: true})
+	t.Cleanup(l.close)
 
-	req := invokev1.NewInvokeMethodRequest("foo")
+	req := internalv1pb.NewInternalInvokeRequest("foo")
 
 	errCh := make(chan error)
 	go func() {
-		cancel, err := l.LockRequest(req)
+		cancel, err := l.lockRequest(req)
 		errCh <- err
 		cancel()
 	}()
@@ -88,7 +88,7 @@ func Test_requestid(t *testing.T) {
 		l.lock.Unlock()
 	}, time.Second*5, time.Millisecond*10)
 
-	_, err := l.LockRequest(req)
+	_, err := l.lockRequest(req)
 	require.Error(t, err)
 
 	select {
@@ -102,18 +102,18 @@ func Test_requestid(t *testing.T) {
 func Test_requestidcustom(t *testing.T) {
 	t.Parallel()
 
-	l := NewLock(LockOptions{
-		ReentrancyEnabled: true,
-		MaxStackDepth:     10,
+	l := newLock(lockOptions{
+		reentrancyEnabled: true,
+		maxStackDepth:     10,
 	})
-	t.Cleanup(l.Close)
+	t.Cleanup(l.close)
 
-	req := invokev1.NewInvokeMethodRequest("foo")
+	req := internalv1pb.NewInternalInvokeRequest("foo")
 
 	errCh := make(chan error)
 	for range 10 {
 		go func() {
-			cancel, err := l.LockRequest(req)
+			cancel, err := l.lockRequest(req)
 			errCh <- err
 			cancel()
 		}()
@@ -127,7 +127,7 @@ func Test_requestidcustom(t *testing.T) {
 		l.lock.Unlock()
 	}, time.Second*5, time.Millisecond*10)
 
-	_, err := l.LockRequest(req)
+	_, err := l.lockRequest(req)
 	require.Error(t, err)
 
 	for range 10 {
@@ -143,24 +143,24 @@ func Test_requestidcustom(t *testing.T) {
 func Test_ringid(t *testing.T) {
 	t.Parallel()
 
-	l := NewLock(LockOptions{
-		ReentrancyEnabled: true,
-		MaxStackDepth:     10,
+	l := newLock(lockOptions{
+		reentrancyEnabled: true,
+		maxStackDepth:     10,
 	})
-	t.Cleanup(l.Close)
+	t.Cleanup(l.close)
 
-	req1 := invokev1.NewInvokeMethodRequest("foo")
-	req2 := invokev1.NewInvokeMethodRequest("bar")
+	req1 := internalv1pb.NewInternalInvokeRequest("foo")
+	req2 := internalv1pb.NewInternalInvokeRequest("bar")
 
 	errCh := make(chan error)
 	for range 10 {
 		go func() {
-			cancel, err := l.LockRequest(req1)
+			cancel, err := l.lockRequest(req1)
 			errCh <- err
 			cancel()
 		}()
 		go func() {
-			cancel, err := l.LockRequest(req2)
+			cancel, err := l.lockRequest(req2)
 			errCh <- err
 			cancel()
 		}()
