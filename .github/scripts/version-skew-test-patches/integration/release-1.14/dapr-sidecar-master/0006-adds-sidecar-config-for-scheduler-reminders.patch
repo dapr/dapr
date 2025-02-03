@@ -131,7 +131,7 @@ index 1c65720a8..6c21b53fa 100644
  
  	return []framework.Option{
 diff --git a/tests/integration/suite/daprd/metrics/workflow.go b/tests/integration/suite/daprd/metrics/workflow.go
-index 23233babe..221dc0547 100644
+index 23233babe..c24da4975 100644
 --- a/tests/integration/suite/daprd/metrics/workflow.go
 +++ b/tests/integration/suite/daprd/metrics/workflow.go
 @@ -29,6 +29,7 @@ import (
@@ -159,7 +159,7 @@ index 23233babe..221dc0547 100644
  
  	app := app.New(t)
  
-@@ -53,6 +56,7 @@ func (w *workflow) Setup(t *testing.T) []framework.Option {
+@@ -53,14 +56,16 @@ func (w *workflow) Setup(t *testing.T) []framework.Option {
  		daprd.WithAppID("myapp"),
  		daprd.WithPlacementAddresses(w.place.Address()),
  		daprd.WithInMemoryActorStateStore("mystore"),
@@ -167,3 +167,13 @@ index 23233babe..221dc0547 100644
  	)
  
  	return []framework.Option{
+-		framework.WithProcesses(w.place, app, w.daprd),
++		framework.WithProcesses(w.scheduler, w.place, app, w.daprd),
+ 	}
+ }
+ 
+ func (w *workflow) Run(t *testing.T, ctx context.Context) {
++	w.scheduler.WaitUntilRunning(t, ctx)
+ 	w.place.WaitUntilRunning(t, ctx)
+ 	w.daprd.WaitUntilRunning(t, ctx)
+ 
