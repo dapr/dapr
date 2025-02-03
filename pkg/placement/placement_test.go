@@ -22,6 +22,7 @@ import (
 	"testing"
 	"time"
 
+	hashicorpRaft "github.com/hashicorp/raft"
 	"github.com/phayes/freeport"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -112,14 +113,44 @@ func newTestClient(t *testing.T, serverAddress string) (*grpc.ClientConn, *net.T
 }
 
 func TestMemberRegistration_NoLeadership(t *testing.T) {
-	raftOpts, err := tests.RaftOpts(t)
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+
+	raftClusterOpts, err := tests.RaftClusterOpts(t)
+
 	require.NoError(t, err)
 
-	serverAddress, testServer, _, cleanup := newTestPlacementServer(t, *raftOpts)
-	t.Cleanup(cleanup)
-	testServer.hasLeadership.Store(false)
+	numServers := len(raftClusterOpts)
+	placementServers := make([]*Service, numServers)
+	placementServerAddresses := make([]string, numServers)
+	cleanupFns := make([]context.CancelFunc, numServers)
+	underlyingRaftServers := make([]*hashicorpRaft.Raft, numServers)
 
-	conn, _, stream := newTestClient(t, serverAddress)
+	// Setup Raft and placement servers
+	for i := range numServers {
+		placementServerAddresses[i], placementServers[i], _, cleanupFns[i] = newTestPlacementServer(t, *raftClusterOpts[i])
+
+		raft, err := placementServers[i].raftNode.Raft(ctx)
+		require.NoError(t, err)
+
+		underlyingRaftServers[i] = raft
+	}
+
+	// firstServerID is the initial leader
+	i := 0
+	var firstServerID int
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		idx := i % numServers
+		i++
+		assert.True(c, placementServers[idx].raftNode.IsLeader())
+		assert.True(c, placementServers[idx].hasLeadership.Load())
+		firstServerID = idx
+	}, time.Second*15, 10*time.Millisecond, "leader was not elected in time")
+
+	secondServerID := (firstServerID + 1) % numServers
+	thirdServerID := (secondServerID + 1) % numServers
+
+	conn1, _, stream1 := newTestClient(t, placementServerAddresses[secondServerID])
 
 	host := &v1pb.Host{
 		Name:      "127.0.0.1:50102",
@@ -130,15 +161,27 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 		// Port is redundant because Name should include port number
 	}
 
-	stream.Send(host)
-	_, err = stream.Recv()
-	s, ok := status.FromError(err)
+	stream1.Send(host)
+	_, err = stream1.Recv()
+	s1, ok := status.FromError(err)
 
 	require.True(t, ok)
-	require.Equal(t, codes.FailedPrecondition, s.Code())
-	stream.CloseSend()
+	require.Equal(t, codes.FailedPrecondition, s1.Code())
+	stream1.CloseSend()
 
-	conn.Close()
+	conn1.Close()
+
+	conn2, _, stream2 := newTestClient(t, placementServerAddresses[thirdServerID])
+
+	stream2.Send(host)
+	_, err = stream2.Recv()
+	s2, ok := status.FromError(err)
+
+	require.True(t, ok)
+	require.Equal(t, codes.FailedPrecondition, s2.Code())
+	stream2.CloseSend()
+
+	conn2.Close()
 }
 
 func TestRequiresUpdateInPlacementTables(t *testing.T) {
