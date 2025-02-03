@@ -131,7 +131,7 @@ index 1c65720a8..6c21b53fa 100644
  
  	return []framework.Option{
 diff --git a/tests/integration/suite/daprd/metrics/workflow.go b/tests/integration/suite/daprd/metrics/workflow.go
-index 23233babe..c24da4975 100644
+index 23233babe..b6a5e93f6 100644
 --- a/tests/integration/suite/daprd/metrics/workflow.go
 +++ b/tests/integration/suite/daprd/metrics/workflow.go
 @@ -29,6 +29,7 @@ import (
@@ -168,7 +168,7 @@ index 23233babe..c24da4975 100644
  
  	return []framework.Option{
 -		framework.WithProcesses(w.place, app, w.daprd),
-+		framework.WithProcesses(w.scheduler, w.place, app, w.daprd),
++		framework.WithProcesses(w.place, w.scheduler, app, w.daprd),
  	}
  }
  
