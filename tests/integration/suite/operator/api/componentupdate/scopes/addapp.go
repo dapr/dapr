@@ -81,6 +81,10 @@ func (a *addapp) Run(t *testing.T, ctx context.Context) {
 	client := a.operator.Dial(t, ctx, a.sentry, "myapp")
 
 	comp := &compapi.Component{
+		TypeMeta: metav1.TypeMeta{
+			APIVersion: "dapr.io/v1alpha1",
+			Kind:       "Component",
+		},
 		ObjectMeta: metav1.ObjectMeta{Name: "mycomponent", Namespace: "default", CreationTimestamp: metav1.Time{}},
 		Spec: compapi.ComponentSpec{
 			Type:         "state.redis",
