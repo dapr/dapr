@@ -26,7 +26,11 @@ import (
 
 	"github.com/dapr/dapr/pkg/actors/api"
 	"github.com/dapr/dapr/pkg/actors/internal/key"
+	"github.com/dapr/dapr/pkg/actors/internal/reentrancystore"
+	"github.com/dapr/dapr/pkg/actors/locker"
 	"github.com/dapr/dapr/pkg/actors/targets"
+	"github.com/dapr/dapr/pkg/actors/targets/idler"
+	"github.com/dapr/dapr/pkg/config"
 	diag "github.com/dapr/dapr/pkg/diagnostics"
 	"github.com/dapr/kit/concurrency/cmap"
 	"github.com/dapr/kit/concurrency/fifo"
@@ -53,17 +57,23 @@ type Interface interface {
 	Halt(ctx context.Context, actorType, actorID string) error
 	HaltIdlable(ctx context.Context, target targets.Idlable) error
 	Drain(fn func(actorType, actorID string) bool)
-	DeleteFromTable(actorType, actorID string)
 	Len() map[string]int
+
+	DeleteFromTable(actorType, actorID string)
+	DeleteFromTableIn(actor targets.Interface, in time.Duration)
+	RemoveIdler(actor targets.Interface)
 }
 
 type Options struct {
-	IdlerQueue *queue.Processor[string, targets.Idlable]
+	IdlerQueue      *queue.Processor[string, targets.Idlable]
+	Locker          locker.Interface
+	ReentrancyStore *reentrancystore.Store
 }
 
 type ActorTypeFactory struct {
-	Type    string
-	Factory targets.Factory
+	Type       string
+	Reentrancy config.ReentrancyConfig
+	Factory    targets.Factory
 }
 
 type ActorHostOptions struct {
@@ -91,6 +101,9 @@ type table struct {
 	drainOngoingCallTimeout time.Duration
 	idlerQueue              *queue.Processor[string, targets.Idlable]
 
+	locker          locker.Interface
+	reentrancyStore *reentrancystore.Store
+
 	lock  sync.RWMutex
 	clock clock.Clock
 }
@@ -106,6 +119,8 @@ func New(opts Options) Interface {
 		clock:                   clock.RealClock{},
 		typeUpdates:             batcher.New[int, []string](0),
 		idlerQueue:              opts.IdlerQueue,
+		locker:                  opts.Locker,
+		reentrancyStore:         opts.ReentrancyStore,
 	}
 }
 
@@ -144,15 +159,15 @@ func (t *table) Drain(fn func(actorType, actorID string) bool) {
 	defer t.lock.Unlock()
 
 	var wg sync.WaitGroup
-	t.table.Range(func(actorKey string, target targets.Interface) bool {
+	t.table.Range(func(actorKey string, _ targets.Interface) bool {
 		wg.Add(1)
-		go func(actorKey string, target targets.Interface) {
+		go func(actorKey string) {
 			defer wg.Done()
 			actorType, actorID := key.ActorTypeAndIDFromKey(actorKey)
 			if fn(actorType, actorID) {
-				t.drain(actorKey, actorType, target)
+				t.drain(actorKey, actorType)
 			}
-		}(actorKey, target)
+		}(actorKey)
 
 		return true
 	})
@@ -183,7 +198,9 @@ func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, bool,
 	t.actorTypesLock.Lock(actorType)
 	defer t.actorTypesLock.Unlock(actorType)
 
-	target, ok := t.table.Load(key.ConstructComposite(actorType, actorID))
+	akey := key.ConstructComposite(actorType, actorID)
+
+	target, ok := t.table.Load(akey)
 	if ok {
 		return target, false, nil
 	}
@@ -194,7 +211,7 @@ func (t *table) GetOrCreate(actorType, actorID string) (targets.Interface, bool,
 	}
 
 	target = factory(actorID)
-	t.table.Store(key.ConstructComposite(actorType, actorID), target)
+	t.table.Store(akey, target)
 
 	return target, true, nil
 }
@@ -210,6 +227,7 @@ func (t *table) RegisterActorTypes(opts RegisterActorTypeOptions) {
 	}
 
 	for _, opt := range opts.Factories {
+		t.reentrancyStore.Store(opt.Type, opt.Reentrancy)
 		t.factories.Store(opt.Type, opt.Factory)
 	}
 
@@ -222,6 +240,7 @@ func (t *table) UnRegisterActorTypes(actorTypes ...string) error {
 
 	for _, atype := range actorTypes {
 		t.factories.Delete(atype)
+		t.reentrancyStore.Delete(atype)
 	}
 
 	var (
@@ -273,6 +292,18 @@ func (t *table) DeleteFromTable(actorType, actorID string) {
 	t.lock.Lock()
 	defer t.lock.Unlock()
 	t.table.Delete(actorType + api.DaprSeparator + actorID)
+}
+
+func (t *table) DeleteFromTableIn(actor targets.Interface, in time.Duration) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	t.idlerQueue.Enqueue(idler.New(actor, in))
+}
+
+func (t *table) RemoveIdler(actor targets.Interface) {
+	t.lock.Lock()
+	defer t.lock.Unlock()
+	t.idlerQueue.Dequeue(actor.Key())
 }
 
 // HaltAll halts all actors currently in the table.
@@ -331,14 +362,16 @@ func (t *table) SubscribeToTypeUpdates(ctx context.Context) (<-chan []string, []
 	return ch, t.factories.Keys()
 }
 
-func (t *table) drain(actorKey, actorType string, target targets.Interface) {
+func (t *table) drain(actorKey, actorType string) {
 	doDrain := t.drainRebalancedActors
 	if v, ok := t.entityConfigs[actorType]; ok {
 		doDrain = v.DrainRebalancedActors
 	}
 
 	if doDrain {
-		target.CloseUntil(t.drainOngoingCallTimeout)
+		t.locker.CloseUntil(actorKey, t.drainOngoingCallTimeout)
+	} else {
+		t.locker.Close(actorKey)
 	}
 
 	diag.DefaultMonitoring.ActorRebalanced(actorType)

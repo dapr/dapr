@@ -272,7 +272,7 @@ func newDaprRuntime(ctx context.Context,
 		return nil, fmt.Errorf("invalid mode: %s", runtimeConfig.mode)
 	}
 
-	wfe, err := wfengine.New(wfengine.Options{
+	wfe := wfengine.New(wfengine.Options{
 		AppID:              runtimeConfig.id,
 		Namespace:          namespace,
 		Actors:             actors,
@@ -281,9 +281,6 @@ func newDaprRuntime(ctx context.Context,
 		Resiliency:         resiliencyProvider,
 		SchedulerReminders: globalConfig.IsFeatureEnabled(config.SchedulerReminders),
 	})
-	if err != nil {
-		return nil, fmt.Errorf("failed to create workflow engine: %w", err)
-	}
 
 	rt := &DaprRuntime{
 		runtimeConfig:         runtimeConfig,
