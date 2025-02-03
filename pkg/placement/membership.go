@@ -28,11 +28,6 @@ import (
 	"github.com/dapr/kit/retry"
 )
 
-const (
-	// raftApplyCommandMaxConcurrency is the max concurrency to apply command log to raft.
-	raftApplyCommandMaxConcurrency = 10
-)
-
 // membershipChangeWorker is the worker to change the state of membership
 // and update the consistent hashing tables for actors.
 func (p *Service) membershipChangeWorker(ctx context.Context) {
@@ -120,7 +115,6 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 // - applies membership change commands to the raft state
 // - disseminates the latest hashing table to the connected dapr runtimes
 func (p *Service) processMembershipCommands(ctx context.Context) {
-
 	for {
 		select {
 		case <-ctx.Done():
@@ -190,6 +184,7 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 		}
 	}
 }
+
 func (p *Service) isLastMemberInNamespace(op hostMemberChange) bool {
 	return p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace) == 0
 }

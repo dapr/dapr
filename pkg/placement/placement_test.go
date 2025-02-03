@@ -117,7 +117,6 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 	defer cancel()
 
 	raftClusterOpts, err := tests.RaftClusterOpts(t)
-
 	require.NoError(t, err)
 
 	numServers := len(raftClusterOpts)
@@ -130,10 +129,10 @@ func TestMemberRegistration_NoLeadership(t *testing.T) {
 	for i := range numServers {
 		placementServerAddresses[i], placementServers[i], _, cleanupFns[i] = newTestPlacementServer(t, *raftClusterOpts[i])
 
-		raft, err := placementServers[i].raftNode.Raft(ctx)
-		require.NoError(t, err)
+		raftSrv, e := placementServers[i].raftNode.Raft(ctx)
+		require.NoError(t, e)
 
-		underlyingRaftServers[i] = raft
+		underlyingRaftServers[i] = raftSrv
 	}
 
 	// firstServerID is the initial leader
