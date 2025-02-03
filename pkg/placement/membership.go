@@ -120,15 +120,11 @@ func (p *Service) membershipChangeWorker(ctx context.Context) {
 // - applies membership change commands to the raft state
 // - disseminates the latest hashing table to the connected dapr runtimes
 func (p *Service) processMembershipCommands(ctx context.Context) {
-	// logApplyConcurrency is the buffered channel to limit the concurrency
-	// of raft apply command.
-	logApplyConcurrency := make(chan struct{}, raftApplyCommandMaxConcurrency)
 
 	for {
 		select {
 		case <-ctx.Done():
 			return
-
 		case op := <-p.membershipCh:
 			switch op.cmdType {
 			case raft.MemberUpsert, raft.MemberRemove:
@@ -137,49 +133,50 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 				// MemberRemove will be queued by faultHostDetectTimer.
 				// Even if ApplyCommand is failed, both commands will retry
 				// until the state is consistent.
-
-				logApplyConcurrency <- struct{}{}
-
 				func() {
-					defer func() { <-logApplyConcurrency }()
+					select {
+					case <-ctx.Done():
+						return
+					default:
+					}
 
 					p.disseminateLocks.Lock(op.host.Namespace)
 					defer p.disseminateLocks.Unlock(op.host.Namespace)
 
 					// ApplyCommand returns true only if the command changes the hashing table.
 					updateCount, raftErr := p.raftNode.ApplyCommand(op.cmdType, op.host)
-
 					if raftErr != nil {
 						log.Errorf("fail to apply command: %v", raftErr)
-					} else {
-						numActorTypesInNamespace := p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace)
+						return
+					}
 
-						var lastMemberInNamespace bool
-						if op.cmdType == raft.MemberRemove {
-							lastMemberInNamespace = p.isLastMemberInNamespace(op)
-							p.lastHeartBeat.Delete(op.host.NamespaceAndName())
-							if lastMemberInNamespace {
-								p.handleLastDisconnectedMemberInNamespace(op)
-							}
+					numActorTypesInNamespace := p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace)
+
+					var lastMemberInNamespace bool
+					if op.cmdType == raft.MemberRemove {
+						lastMemberInNamespace = p.isLastMemberInNamespace(op)
+						p.lastHeartBeat.Delete(op.host.NamespaceAndName())
+						if lastMemberInNamespace {
+							p.handleLastDisconnectedMemberInNamespace(op)
 						}
+					}
 
-						if updateCount || lastMemberInNamespace {
-							monitoring.RecordActorRuntimesCount(numActorTypesInNamespace, op.host.Namespace)
-						}
+					if updateCount || lastMemberInNamespace {
+						monitoring.RecordActorRuntimesCount(numActorTypesInNamespace, op.host.Namespace)
+					}
 
-						// If the change is removing the last member in the namespace,
-						// we can skip the dissemination, because there are no more
-						// hosts in the namespace to disseminate to
-						if updateCount && !lastMemberInNamespace {
-							c, _ := p.memberUpdateCount.GetOrSet(op.host.Namespace, &atomic.Uint32{})
-							c.Add(1)
+					// If the change is removing the last member in the namespace,
+					// we can skip the dissemination, because there are no more
+					// hosts in the namespace to disseminate to
+					if updateCount && !lastMemberInNamespace {
+						c, _ := p.memberUpdateCount.GetOrSet(op.host.Namespace, &atomic.Uint32{})
+						c.Add(1)
 
-							// disseminateNextTime will be updated whenever apply is done, so that
-							// it will keep moving the time to disseminate the table, which will
-							// reduce the unnecessary table dissemination.
-							val, _ := p.disseminateNextTime.GetOrSet(op.host.Namespace, &atomic.Int64{})
-							val.Store(p.clock.Now().Add(p.disseminateTimeout).UnixNano())
-						}
+						// disseminateNextTime will be updated whenever apply is done, so that
+						// it will keep moving the time to disseminate the table, which will
+						// reduce the unnecessary table dissemination.
+						val, _ := p.disseminateNextTime.GetOrSet(op.host.Namespace, &atomic.Int64{})
+						val.Store(p.clock.Now().Add(p.disseminateTimeout).UnixNano())
 					}
 				}()
 
@@ -193,7 +190,6 @@ func (p *Service) processMembershipCommands(ctx context.Context) {
 		}
 	}
 }
-
 func (p *Service) isLastMemberInNamespace(op hostMemberChange) bool {
 	return p.raftNode.FSM().State().MemberCountInNamespace(op.host.Namespace) == 0
 }
@@ -218,6 +214,12 @@ func (p *Service) performTableDissemination(ctx context.Context, ns string) erro
 	cnt := ac.Load()
 	if cnt == 0 {
 		return nil
+	}
+
+	select {
+	case <-ctx.Done():
+		return nil
+	default:
 	}
 
 	p.disseminateLocks.Lock(ns)
