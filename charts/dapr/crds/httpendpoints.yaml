@@ -1,8 +1,9 @@
-
 ---
 apiVersion: apiextensions.k8s.io/v1
 kind: CustomResourceDefinition
 metadata:
+  annotations:
+    controller-gen.kubebuilder.io/version: v0.16.2
   name: httpendpoints.dapr.io
   labels:
     app.kubernetes.io/part-of: "dapr"
@@ -18,14 +19,16 @@ spec:
   - name: v1alpha1
     schema:
       openAPIV3Schema:
-        description: HTTPEndpoint describes a Dapr HTTPEndpoint type for external
-          service invocation. This endpoint can be external to Dapr, or external to
-          the environment.
+        description: |-
+          HTTPEndpoint describes a Dapr HTTPEndpoint type for external service invocation.
+          This endpoint can be external to Dapr, or external to the environment.
         properties:
           apiVersion:
-            description: 'APIVersion defines the versioned schema of this representation
-              of an object. Servers should convert recognized schemas to the latest
-              internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources'
+            description: |-
+              APIVersion defines the versioned schema of this representation of an object.
+              Servers should convert recognized schemas to the latest internal value, and
+              may reject unrecognized values.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#resources
             type: string
           auth:
             description: Auth represents authentication details for the component.
@@ -36,9 +39,12 @@ spec:
             - secretStore
             type: object
           kind:
-            description: 'Kind is a string value representing the REST resource this
-              object represents. Servers may infer this from the endpoint the client
-              submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds'
+            description: |-
+              Kind is a string value representing the REST resource this object represents.
+              Servers may infer this from the endpoint the client submits requests to.
+              Cannot be updated.
+              In CamelCase.
+              More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#types-kinds
             type: string
           metadata:
             type: object
@@ -165,9 +171,3 @@ spec:
         type: object
     served: true
     storage: true
-status:
-  acceptedNames:
-    kind: ""
-    plural: ""
-  conditions: []
-  storedVersions: []
