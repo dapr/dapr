@@ -33,7 +33,7 @@ Create initial cluster peer list dynamically based on replicaCount.
 {{- range $i, $e := until $replicaCount -}}
 {{- $instanceName := printf "dapr-scheduler-server-%d" $i -}}
 {{- $svcName := printf "%s.dapr-scheduler-server.%s.svc.cluster.local" $instanceName $namespace -}}
-{{- $peer := printf "%s=http://%s:%d" $instanceName $svcName (int $.Values.ports.etcdGRPCPeerPort) -}}
+{{- $peer := printf "%s=https://%s:%d" $instanceName $svcName (int $.Values.ports.etcdGRPCPeerPort) -}}
 {{- $initialCluster = printf "%s%s" $initialCluster $peer -}}
 {{- if ne (int $i) (sub $replicaCount 1) -}}
 {{- $initialCluster = printf "%s," $initialCluster -}}
