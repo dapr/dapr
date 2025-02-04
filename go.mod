@@ -12,9 +12,9 @@ require (
 	github.com/cenkalti/backoff/v4 v4.3.0
 	github.com/cloudevents/sdk-go/v2 v2.15.2
 	github.com/dapr/components-contrib v1.15.0-rc.1.0.20241216170750-aca5116d95c9
-	github.com/dapr/durabletask-go v0.5.1-0.20250124181508-a1b42ae65aee
+	github.com/dapr/durabletask-go v0.6.0
 	github.com/dapr/kit v0.13.1-0.20250129050741-c46009f360b0
-	github.com/diagridio/go-etcd-cron v0.3.2-0.20250130202842-74ca1105c851
+	github.com/diagridio/go-etcd-cron v0.4.0
 	github.com/evanphx/json-patch/v5 v5.9.0
 	github.com/go-chi/chi/v5 v5.0.11
 	github.com/go-chi/cors v1.2.1
@@ -50,6 +50,7 @@ require (
 	github.com/spiffe/go-spiffe/v2 v2.1.7
 	github.com/stretchr/testify v1.10.0
 	go.etcd.io/etcd/api/v3 v3.5.16
+	go.etcd.io/etcd/client/pkg/v3 v3.5.16
 	go.etcd.io/etcd/client/v3 v3.5.16
 	go.etcd.io/etcd/server/v3 v3.5.16
 	go.mongodb.org/mongo-driver v1.14.0
@@ -422,7 +423,6 @@ require (
 	github.com/yusufpapurcu/wmi v1.2.3 // indirect
 	github.com/zeebo/errs v1.3.0 // indirect
 	go.etcd.io/bbolt v1.3.11 // indirect
-	go.etcd.io/etcd/client/pkg/v3 v3.5.16 // indirect
 	go.etcd.io/etcd/client/v2 v2.305.16 // indirect
 	go.etcd.io/etcd/pkg/v3 v3.5.16 // indirect
 	go.etcd.io/etcd/raft/v3 v3.5.16 // indirect

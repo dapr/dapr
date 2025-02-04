@@ -53,10 +53,18 @@ func (g *get) Run(t *testing.T, ctx context.Context) {
 	client := client.HTTP(t)
 
 	url := g.actors.Daprd().ActorReminderURL("foo", "1234", "helloworld")
-	body := `{"data":"reminderdata","dueTime":"1s","period":"1s"}`
-	req, err := http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
 	require.NoError(t, err)
 	resp, err := client.Do(req)
+	require.NoError(t, err)
+	// Not found returns 200.
+	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	require.NoError(t, resp.Body.Close())
+
+	body := `{"data":"reminderdata","dueTime":"1s","period":"1s"}`
+	req, err = http.NewRequestWithContext(ctx, http.MethodPost, url, strings.NewReader(body))
+	require.NoError(t, err)
+	resp, err = client.Do(req)
 	require.NoError(t, err)
 	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 	require.NoError(t, resp.Body.Close())

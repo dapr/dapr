@@ -28,6 +28,7 @@ import (
 	"github.com/dapr/components-contrib/workflows"
 	"github.com/dapr/dapr/pkg/messages"
 	runtimev1pb "github.com/dapr/dapr/pkg/proto/runtime/v1"
+	"github.com/dapr/dapr/pkg/resiliency"
 	"github.com/dapr/durabletask-go/api"
 	"github.com/dapr/kit/ptr"
 )
@@ -100,12 +101,18 @@ func (a *Universal) StartWorkflow(ctx context.Context, in *runtimev1pb.StartWork
 		req.InstanceID = &iid
 	}
 
-	resp, err := a.workflowEngine.Client().Start(ctx, &req)
+	policyRunner := resiliency.NewRunner[*workflows.StartResponse](ctx,
+		a.resiliency.BuiltInPolicy(resiliency.BuiltInActorRetries),
+	)
+	resp, err := policyRunner(func(ctx context.Context) (*workflows.StartResponse, error) {
+		return a.workflowEngine.Client().Start(ctx, &req)
+	})
 	if err != nil {
 		err := messages.ErrStartWorkflow.WithFormat(in.GetWorkflowName(), err)
 		a.logger.Debug(err)
 		return &runtimev1pb.StartWorkflowResponse{}, err
 	}
+
 	ret := &runtimev1pb.StartWorkflowResponse{
 		InstanceId: resp.InstanceID,
 	}
@@ -159,11 +166,10 @@ func (a *Universal) TerminateWorkflow(ctx context.Context, in *runtimev1pb.Termi
 		gresp, err := a.workflowEngine.Client().Get(ctx, &workflows.GetRequest{
 			InstanceID: in.GetInstanceId(),
 		})
-		if err != nil {
-			return nil, fmt.Errorf("workflow started, but failed to get status: %w", err)
-		}
 
-		if gresp.Workflow.RuntimeStatus == "TERMINATED" {
+		// Not found error so terminated.
+		if err != nil || gresp.Workflow.RuntimeStatus == "TERMINATED" {
+			//nolint:nilerr
 			return emptyResponse, nil
 		}
 
