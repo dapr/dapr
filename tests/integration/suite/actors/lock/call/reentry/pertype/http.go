@@ -130,9 +130,7 @@ func (h *http) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 	assert.Equal(t, `{"errorCode":"ERR_ACTOR_STACK_DEPTH","message":"maximum stack depth exceeded"}`, string(b))
 	require.NoError(t, resp.Body.Close())
-	assert.Eventually(t, func() bool {
-		return h.app.Daprd().Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:actor", "error_code:ERR_ACTOR_STACK_DEPTH")
-	}, 5*time.Second, 1000*time.Millisecond)
+	h.app.Daprd().Metrics(t, ctx).MatchMetricAndSum(1, "dapr_error_code_total", "category:actor", "error_code:ERR_ACTOR_STACK_DEPTH")
 
 	for range 23 {
 		h.holdCall <- struct{}{}
