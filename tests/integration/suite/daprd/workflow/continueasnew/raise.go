@@ -20,7 +20,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -51,19 +50,19 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	r.workflow.Registry().AddOrchestratorN("raise", func(ctx *task.OrchestrationContext) (any, error) {
 		ctx.WaitForSingleEvent("incr", time.Minute).Await(nil)
 
-		var inc wrapperspb.Int64Value
+		var inc int
 		require.NoError(t, ctx.GetInput(&inc))
-		if inc.GetValue() < 99 {
-			ctx.ContinueAsNew(wrapperspb.Int64(inc.GetValue()+1), task.WithKeepUnprocessedEvents())
+		if inc < 99 {
+			ctx.ContinueAsNew(inc+1, task.WithKeepUnprocessedEvents())
 		}
 
-		return wrapperspb.Int64(inc.GetValue() + 1), nil
+		return inc + 1, nil
 	})
 	client := r.workflow.BackendClient(t, ctx)
 
 	id, err := client.ScheduleNewOrchestration(ctx, "raise",
 		api.WithInstanceID("raisei"),
-		api.WithInput(wrapperspb.Int64(0)),
+		api.WithInput(0),
 	)
 	require.NoError(t, err)
 
@@ -74,5 +73,5 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	// TODO: @joshvanl: fix encoding on final completion fetch.
 	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
-	assert.Equal(t, `{"value":100}`, meta.GetOutput().GetValue())
+	assert.Equal(t, `100`, meta.GetOutput().GetValue())
 }
