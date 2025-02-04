@@ -157,7 +157,7 @@ spec:
 		Ttl:       "20000s",
 	})
 	require.NoError(t, err)
-	eresp, err := o.scheduler.ETCDClient(t).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
+	eresp, err := o.scheduler.ETCDClient(t, ctx).KV.Get(ctx, "dapr/jobs", clientv3.WithPrefix())
 	require.NoError(t, err)
 	assert.Len(t, eresp.Kvs, 1)
 
