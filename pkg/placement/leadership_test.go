@@ -32,7 +32,11 @@ func TestCleanupHeartBeats(t *testing.T) {
 	require.NoError(t, err)
 
 	_, testServer, clock, cleanup := newTestPlacementServer(t, *raftOpts)
-	testServer.hasLeadership.Store(true)
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		assert.True(c, testServer.raftNode.IsLeader())
+		assert.True(c, testServer.hasLeadership.Load())
+	}, time.Second*15, 10*time.Millisecond, "leader was not elected in time")
+
 	maxClients := 3
 
 	for i := range maxClients {
