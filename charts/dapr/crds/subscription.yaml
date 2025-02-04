@@ -9,6 +9,18 @@ metadata:
     app.kubernetes.io/part-of: "dapr"
 spec:
   group: dapr.io
+  conversion:
+    strategy: Webhook
+    webhook:
+      clientConfig:
+        service:
+          namespace: replaceme # Patched by post-install webhook
+          name: dapr-webhook
+          path: /convert
+        #caBundle: Patched by post-install webhook
+      conversionReviewVersions:
+      - v1
+      - v2alpha1
   names:
     kind: Subscription
     listKind: SubscriptionList
