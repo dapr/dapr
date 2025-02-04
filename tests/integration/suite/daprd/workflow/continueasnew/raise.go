@@ -15,12 +15,12 @@ package continueasnew
 
 import (
 	"context"
-	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"google.golang.org/protobuf/types/known/wrapperspb"
 
 	"github.com/dapr/dapr/tests/integration/framework"
 	"github.com/dapr/dapr/tests/integration/framework/process/workflow"
@@ -48,28 +48,31 @@ func (r *raise) Setup(t *testing.T) []framework.Option {
 func (r *raise) Run(t *testing.T, ctx context.Context) {
 	r.workflow.WaitUntilRunning(t, ctx)
 
-	var inc atomic.Int64
 	r.workflow.Registry().AddOrchestratorN("raise", func(ctx *task.OrchestrationContext) (any, error) {
 		ctx.WaitForSingleEvent("incr", time.Minute).Await(nil)
-		inc.Add(1)
-		if inc.Load() < 100 {
-			ctx.ContinueAsNew("", task.WithKeepUnprocessedEvents())
+
+		var inc wrapperspb.Int64Value
+		require.NoError(t, ctx.GetInput(&inc))
+		if inc.Value < 99 {
+			ctx.ContinueAsNew(wrapperspb.Int64(inc.Value+1), task.WithKeepUnprocessedEvents())
 		}
-		return nil, nil
+
+		return wrapperspb.Int64(inc.Value + 1), nil
 	})
 	client := r.workflow.BackendClient(t, ctx)
 
-	id, err := client.ScheduleNewOrchestration(ctx, "raise", api.WithInstanceID("raisei"))
+	id, err := client.ScheduleNewOrchestration(ctx, "raise",
+		api.WithInstanceID("raisei"),
+		api.WithInput(wrapperspb.Int64(0)),
+	)
 	require.NoError(t, err)
 
 	for range 100 {
 		go client.RaiseEvent(ctx, id, "incr")
 	}
 
-	assert.EventuallyWithT(t, func(c *assert.CollectT) {
-		assert.Equal(c, int64(100), inc.Load())
-	}, time.Second*10, time.Millisecond*10)
-
-	_, err = client.WaitForOrchestrationCompletion(ctx, id)
+	// TODO: @joshvanl: fix encoding on final completion fetch.
+	meta, err := client.WaitForOrchestrationCompletion(ctx, id)
 	require.NoError(t, err)
+	assert.Equal(t, `{"value":100}`, meta.GetOutput().GetValue())
 }
