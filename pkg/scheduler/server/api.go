@@ -20,6 +20,8 @@ import (
 	"strings"
 
 	"github.com/diagridio/go-etcd-cron/api"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 
 	schedulerv1pb "github.com/dapr/dapr/pkg/proto/scheduler/v1"
 	"github.com/dapr/dapr/pkg/scheduler/monitoring"
@@ -97,7 +99,7 @@ func (s *Server) GetJob(ctx context.Context, req *schedulerv1pb.GetJobRequest) (
 	}
 
 	if job == nil {
-		return nil, fmt.Errorf("job not found: %s", req.GetName())
+		return nil, status.Error(codes.NotFound, "job not found: "+req.GetName())
 	}
 
 	return &schedulerv1pb.GetJobResponse{
