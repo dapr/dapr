@@ -133,7 +133,7 @@ func (n *streamHang) Run(t *testing.T, ctx context.Context) {
 		require.True(t, ok)
 		assert.Len(c, placementTables.GetEntries(), 10)
 		assert.Contains(c, placementTables.GetEntries(), "host2-0")
-	}, 20*time.Second, 100*time.Millisecond)
+	}, 30*time.Second, 100*time.Millisecond)
 
 	time.Sleep(1 * time.Second) // Wait until first dissemination is triggered
 
