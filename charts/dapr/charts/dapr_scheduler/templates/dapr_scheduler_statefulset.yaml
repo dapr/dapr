@@ -171,7 +171,7 @@ spec:
           capabilities:
             add: ["SYS_PTRACE"]
   {{- else }}
-          readOnlyRootFilesystem: true
+          readOnlyRootFilesystem: false
           capabilities:
             drop: ["ALL"]
   {{- end }}
