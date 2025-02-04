@@ -96,6 +96,7 @@ func New(t *testing.T, fopts ...Option) *Actors {
 		daprd.WithConfigManifests(t, opts.daprdConfigs...),
 		daprd.WithScheduler(opts.scheduler),
 		daprd.WithResourceFiles(opts.resources...),
+		daprd.WithErrorCodeMetrics(t),
 	}
 
 	return &Actors{
