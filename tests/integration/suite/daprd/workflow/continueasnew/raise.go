@@ -63,7 +63,7 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 	require.NoError(t, err)
 
 	for range 100 {
-		client.RaiseEvent(ctx, id, "incr")
+		go client.RaiseEvent(ctx, id, "incr")
 	}
 
 	assert.EventuallyWithT(t, func(c *assert.CollectT) {
