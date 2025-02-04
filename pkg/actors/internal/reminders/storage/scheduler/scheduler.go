@@ -18,6 +18,8 @@ import (
 	"fmt"
 	"time"
 
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/types/known/durationpb"
 
 	"github.com/dapr/dapr/pkg/actors/api"
@@ -203,6 +205,11 @@ func (s *scheduler) Get(ctx context.Context, req *api.GetReminderRequest) (*api.
 			"jobType":   "reminder",
 		}
 		log.Errorf("Error getting reminder job %s due to: %s", req.Name, err)
+
+		if status, ok := status.FromError(err); ok && status.Code() == codes.NotFound {
+			return new(api.Reminder), nil
+		}
+
 		return nil, apierrors.SchedulerGetJob(errMetadata, err)
 	}
 
