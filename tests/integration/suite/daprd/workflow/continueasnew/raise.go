@@ -53,11 +53,11 @@ func (r *raise) Run(t *testing.T, ctx context.Context) {
 
 		var inc wrapperspb.Int64Value
 		require.NoError(t, ctx.GetInput(&inc))
-		if inc.Value < 99 {
-			ctx.ContinueAsNew(wrapperspb.Int64(inc.Value+1), task.WithKeepUnprocessedEvents())
+		if inc.GetValue() < 99 {
+			ctx.ContinueAsNew(wrapperspb.Int64(inc.GetValue()+1), task.WithKeepUnprocessedEvents())
 		}
 
-		return wrapperspb.Int64(inc.Value + 1), nil
+		return wrapperspb.Int64(inc.GetValue() + 1), nil
 	})
 	client := r.workflow.BackendClient(t, ctx)
 
