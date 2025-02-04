@@ -20,6 +20,10 @@ spec:
     matchLabels:
       app: dapr-scheduler-server
   {{- if not .Values.cluster.inMemoryStorage }}
+{{- if .Values.global.priorityClassName }}
+      priorityClassName:
+{{ toYaml .Values.global.priorityClassName | indent 8 }}
+{{- end }}
   volumeClaimTemplates:
   - apiVersion: v1
     kind: PersistentVolumeClaim
